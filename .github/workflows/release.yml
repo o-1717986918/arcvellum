@@ -1,0 +1,105 @@
+name: ArcVellum signed Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUTF8: "1"
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify signing configuration
+        shell: pwsh
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw "TAURI_SIGNING_PRIVATE_KEY is required for a release build."
+          }
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -e ".[api,test]"
+          python -m pip install "pyinstaller==6.21.0"
+          npm ci
+          python -m literary_engineering_studio opencode-install --destination build/vendor/opencode-v1.18.3/expanded
+
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version = python -c "from literary_engineering_studio import __version__; print(__version__)"
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          if ($version.Trim() -ne $tag) {
+            throw "Tag $tag does not match package version $version."
+          }
+
+      - name: Test Python and prompt contracts
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -v
+          python -m compileall -q src
+          python -m literary_engineering_studio_engine prompt-registry-validate --json
+          python -m literary_engineering_studio prompt-eval --live --runner opencode --model opencode/big-pickle --timeout 240 --output dist/prompt-evaluation.json
+
+      - name: Test Vue client and Rust shell
+        shell: pwsh
+        run: |
+          npm run client:test
+          npm run client:build
+          Push-Location desktop/src-tauri
+          cargo check --locked
+          Pop-Location
+
+      - name: Build signed updater and installer
+        shell: pwsh
+        run: |
+          ./packaging/build_desktop.ps1 -SkipPythonInstall -SkipNodeInstall
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArcVellum-${{ github.ref_name }}-windows-x64
+          path: dist/release/*
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = "docs/releases/${{ github.ref_name }}.md"
+          if (-not (Test-Path -LiteralPath $notes)) {
+            throw "Release notes are missing: $notes"
+          }
+          gh release view "${{ github.ref_name }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "${{ github.ref_name }}" dist/release/* --clobber
+          } else {
+            gh release create "${{ github.ref_name }}" dist/release/* --title "ArcVellum ${{ github.ref_name }}" --notes-file $notes
+          }
