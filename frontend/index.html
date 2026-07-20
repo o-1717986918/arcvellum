@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>文学工程 Agent Studio</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark"><img src="/ui/assets/editorial-icons/dashboard-board.png" alt="" /></div>
+          <div>
+            <h1>文学工程 Agent Studio</h1>
+            <p>让平台 Agent 在状态机与门禁内持续推进长篇创作。</p>
+          </div>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button data-view="dashboard" class="active">项目总控</button>
+          <button data-view="activity">Agent 执行</button>
+          <button data-view="library">作品档案</button>
+          <button data-view="style">文风挂载</button>
+        </nav>
+        <div class="side-note">
+          <span id="healthDot" class="dot"></span>
+          <span id="healthText">连接中</span>
+        </div>
+        <form class="token-box" autocomplete="off">
+          <label>访问口令<input id="apiToken" type="password" autocomplete="current-password" placeholder="未设置可留空" /></label>
+        </form>
+      </aside>
+
+      <main class="workspace">
+        <section id="view-dashboard" class="view active">
+          <header class="view-header hero-panel">
+            <div>
+              <span class="eyebrow">项目驾驶舱</span>
+              <h2>下一步该做什么，打开就知道。</h2>
+              <p class="muted">这里不会把机器记录原样摊开。系统会把状态机、审查门禁、待办任务、正文进度和导出链路翻译成可行动的中文说明。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="refreshDashboard" class="primary">刷新状态</button>
+              <button id="toggleDashboardPoll">观察项目变化</button>
+            </div>
+          </header>
+
+          <form id="dashboardForm" class="control-strip">
+            <label>当前项目<input name="project_root" placeholder="选择或粘贴文学项目目录" /></label>
+            <label>刷新间隔<input name="refresh_seconds" type="number" min="3" max="60" value="8" /></label>
+            <div class="dashboard-status" id="dashboardStatus">等待刷新</div>
+          </form>
+
+          <section class="status-brief" aria-live="polite">
+            <div class="brief-spine">当前判断</div>
+            <div>
+              <h3 id="dashboardHeadline">还没有读取项目状态</h3>
+              <p id="dashboardNarrative">填写项目目录后刷新，总控面板会告诉你：哪些流程已经就绪，哪些地方需要平台 Agent 继续处理。</p>
+            </div>
+          </section>
+
+          <section class="activity-mini" id="dashboardActivity" aria-live="polite">
+            <article class="task-beacon mini empty">
+              <span>当前任务</span>
+              <b>等待读取活动状态</b>
+              <p>刷新项目总控后，这里会显示平台 Agent 现在最应该处理的任务。</p>
+            </article>
+          </section>
+
+          <section class="completed-prose-panel" aria-live="polite">
+            <div class="panel-title">
+              <span>已完成正文</span>
+              <small>滑动阅览框，优先展示正式发布、正式导出和已晋升正文</small>
+            </div>
+            <div id="dashboardProse" class="completed-prose empty">
+              刷新项目总控后，这里会直接展示已完成的正文预览。候选稿、审查记录和状态变化不会混入正文。
+            </div>
+          </section>
+
+          <div class="metric-grid" id="dashboardSummary"></div>
+
+          <div class="dashboard-layout">
+            <section class="panel route-panel">
+              <div class="panel-title">
+                <span>流程健康度</span>
+                <small>按正式路线汇总</small>
+              </div>
+              <div id="dashboardRoutes" class="route-board empty">暂无流程数据</div>
+            </section>
+
+            <section class="panel action-panel">
+              <div class="panel-title">
+                <span>下一步建议</span>
+                <small>优先处理前几项</small>
+              </div>
+              <div id="dashboardNextActions" class="action-list empty">暂无下一步</div>
+            </section>
+          </div>
+
+          <div class="dashboard-layout lower">
+            <section class="panel">
+              <div class="panel-title">
+                <span>最近推进记录</span>
+                <small>来自状态机事件</small>
+              </div>
+              <div id="dashboardEvents" class="event-list empty">暂无事件</div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">
+                <span>流程证据柜</span>
+                <small>机器记录已包装成证据卡</small>
+              </div>
+              <div id="dashboardEvidence" class="evidence-grid">
+                <article class="evidence-card empty">等待刷新。刷新后会把路线状态、平台任务、报告路径和使用边界整理成可读证据。</article>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel architecture-note">
+            <div class="panel-title">
+              <span>执行架构</span>
+              <small>不在 Studio 内配置模型 API</small>
+            </div>
+            <p>文学工程 CLI 继续负责任务顺序、正式门禁与写回验收；智能执行由宿主 Agent、Claude Code 或 Codex CLI 提供。所有运行时都只能在隔离任务工作区中读取资料和写入预期产物。</p>
+          </section>
+        </section>
+
+        <section id="view-activity" class="view">
+          <header class="view-header hero-panel activity-hero">
+            <div>
+              <span class="eyebrow">任务推进</span>
+              <h2>看见平台 Agent 正在把项目推到哪里。</h2>
+              <p class="muted">这里读取真实任务事件、路线门禁和用户选择节点。亮起的任务不是装饰动画，而是 CLI 状态机给出的当前现场。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="refreshActivity" class="primary">刷新推进</button>
+              <button id="toggleActivityPoll">观察推进</button>
+            </div>
+          </header>
+
+          <form id="activityForm" class="control-strip">
+            <label>当前项目<input name="project_root" placeholder="选择或粘贴文学项目目录" /></label>
+            <label>刷新间隔<input name="refresh_seconds" type="number" min="3" max="60" value="4" /></label>
+            <div class="dashboard-status" id="activityStatus">等待刷新</div>
+          </form>
+
+          <section id="activityBeacon" class="activity-beacon-slot">
+            <article class="task-beacon empty">
+              <span>当前任务灯塔</span>
+              <b>还没有读取任务现场</b>
+              <p>刷新后会高亮阻塞、等待用户决定、等待平台 Agent 执行或等待 CLI 验收的任务。</p>
+            </article>
+          </section>
+
+          <section class="panel worker-center" aria-live="polite">
+            <div class="panel-title">
+              <span>Agent Worker</span>
+              <small>领取任务、隔离执行、提交产物、通过门禁</small>
+            </div>
+            <form id="workerForm" class="worker-controls">
+              <label>正式路线
+                <select name="route">
+                  <option value="scene-development">场景开发</option>
+                  <option value="longform-planning">长篇规划</option>
+                  <option value="style-engineering">文风工程</option>
+                  <option value="character-and-world-assets">人物与世界资产</option>
+                  <option value="review-and-audit">审查与审计</option>
+                  <option value="export-and-release">导出与发布</option>
+                  <option value="source-ingest">旧文导入</option>
+                </select>
+              </label>
+              <label>Agent 运行时
+                <select name="runtime">
+                  <option value="host-agent">当前宿主 Agent</option>
+                  <option value="claude-code">Claude Code</option>
+                  <option value="codex-cli">Codex CLI</option>
+                </select>
+              </label>
+              <div class="worker-actions">
+                <button id="detectRuntimes" type="button">检测运行时</button>
+                <button id="prepareWorkerTask" type="button">准备任务</button>
+                <button id="runWorkerTask" type="button" class="primary">执行下一步</button>
+              </div>
+            </form>
+            <div id="runtimeCards" class="runtime-grid empty">正在等待运行时检测。</div>
+            <div id="workerStatus" class="worker-status empty">
+              <b>尚未启动 Worker</b>
+              <p>系统会在需要人工审批时暂停，不会越过 Canon、发布或写回门禁。</p>
+            </div>
+          </section>
+
+          <div class="activity-grid">
+            <section class="panel">
+              <div class="panel-title">
+                <span>正式路线泳道</span>
+                <small>七条路线的实时状态</small>
+              </div>
+              <div id="activityLanes" class="route-lanes empty">暂无路线活动。</div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">
+                <span>推进时间线</span>
+                <small>来自 task events</small>
+              </div>
+              <div id="activityTimeline" class="activity-timeline empty">暂无推进记录。</div>
+            </section>
+          </div>
+
+          <div class="activity-grid lower">
+            <section class="panel">
+              <div class="panel-title">
+                <span>任务包摘要</span>
+                <small>默认展示人能读懂的执行要点</small>
+              </div>
+              <div id="activityPackage" class="task-package empty">还没有活跃任务包。领取并打开任务后，这里会显示必读资料、预期产物和禁止捷径。</div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">
+                <span>等待你决定</span>
+                <small>分支、审批、字数和发布节点</small>
+              </div>
+              <div id="activityChoices" class="choice-list compact empty">暂无等待用户选择的节点。</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-library" class="view">
+          <header class="view-header hero-panel library-hero">
+            <div>
+              <span class="eyebrow">作品档案</span>
+              <h2>像翻资料夹一样查看作品。</h2>
+              <p class="muted">这里展示草稿、人物、世界观、场景、推演分支、文风与审查证据。正文会过滤工作流痕迹；机器记录会被包装成卡片、标签和摘要。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="refreshLibrary" class="primary">刷新档案</button>
+              <button id="toggleLibraryPoll">观察档案变化</button>
+            </div>
+          </header>
+
+          <form id="libraryForm" class="control-strip library-strip">
+            <label>当前项目<input name="project_root" placeholder="选择或粘贴文学项目目录" /></label>
+            <label>档案视图
+              <select name="section">
+                <option value="drafts">正文草稿</option>
+                <option value="characters">人物设定</option>
+                <option value="world">世界观设定</option>
+                <option value="scenes">场景设定</option>
+                <option value="branches">推演分支</option>
+                <option value="style">文风挂载</option>
+                <option value="reviews">审查证据</option>
+                <option value="word_budget">字数预算</option>
+                <option value="rhythm">节奏衔接</option>
+                <option value="canon_patches">写回候选</option>
+              </select>
+            </label>
+            <label>搜索<input name="query" placeholder="搜索人物、场景、关键词" /></label>
+            <label>状态筛选
+              <select name="status_filter">
+                <option value="all">全部状态</option>
+                <option value="promoted">已晋升/完成</option>
+                <option value="candidate">候选</option>
+                <option value="waiting_user_choice">等待选择</option>
+                <option value="needs_review">需要审查</option>
+                <option value="formal">正式资料</option>
+                <option value="ready">可使用</option>
+              </select>
+            </label>
+            <label class="checkline"><input name="dedupe" type="checkbox" checked /> 合并相似条目</label>
+            <div class="dashboard-status" id="libraryStatus">等待读取</div>
+          </form>
+
+          <section class="library-summary" id="librarySummary">
+            <article class="summary-card empty">填写项目目录后刷新。这里会用普通创作者能看懂的方式整理作品资料。</article>
+          </section>
+
+          <div class="library-grid">
+            <section class="panel library-browser">
+              <div class="panel-title">
+                <span>档案目录</span>
+                <small>按作品资料分类</small>
+              </div>
+              <div id="libraryTabs" class="library-tabs"></div>
+              <div id="libraryList" class="library-list empty">暂无档案。</div>
+            </section>
+
+            <section class="panel library-reader">
+              <div class="panel-title">
+                <span>档案详情</span>
+                <small>正文使用滑动阅览框</small>
+              </div>
+              <div id="libraryDetail" class="library-detail empty">选择左侧条目后查看正文、设定或审查摘要。</div>
+            </section>
+          </div>
+
+          <div class="library-grid lower">
+            <section class="panel choice-panel">
+              <div class="panel-title">
+                <span>需要你决定的节点</span>
+                <small>分支、审批、规模和修订方向</small>
+              </div>
+              <div id="choiceList" class="choice-list empty">暂无等待用户选择的节点。</div>
+            </section>
+
+            <section class="panel edit-panel">
+              <div class="panel-title">
+                <span>我的备注</span>
+                <small>只写入前端备注层</small>
+              </div>
+              <form id="editForm" class="inline-edit-form">
+                <label>对象类型<input name="target_type" placeholder="scenes / characters / drafts" /></label>
+                <label>对象 ID<input name="target_id" placeholder="选择档案后自动填入" /></label>
+                <label>字段
+                  <select name="field">
+                    <option value="display_title">展示标题</option>
+                    <option value="display_summary">展示摘要</option>
+                    <option value="tags">标签</option>
+                    <option value="note">用户备注</option>
+                    <option value="word_count_target">目标字数提示</option>
+                  </select>
+                </label>
+                <label class="wide">内容<textarea name="value" rows="4" placeholder="写给自己和平台 Agent 看的备注。正式剧情改动仍要进入候选与审查。"></textarea></label>
+                <div class="hero-actions">
+                  <button id="saveDisplayField" class="primary">保存标注</button>
+                  <button id="saveUiNote">追加备注</button>
+                </div>
+              </form>
+              <div id="editStatus" class="dashboard-status">等待选择档案。</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-style" class="view">
+          <header class="view-header hero-panel compact-hero">
+            <div>
+              <span class="eyebrow">文风挂载</span>
+              <h2>确认创作是否已经带着正确的文风出发。</h2>
+              <p class="muted">这里只展示挂载结果和风险提示；作家项目、语料导入和提示词生成仍建议走 CLI 状态机。</p>
+            </div>
+            <button id="loadStyleStatus" class="primary">检查文风</button>
+          </header>
+
+          <form id="styleForm" class="control-strip">
+            <label>当前项目<input name="project_root" placeholder="C:\path\to\work" /></label>
+            <label>文风库<input name="style_library_root" placeholder="可选：全局文风库目录" /></label>
+            <div class="dashboard-status" id="styleStatusText">等待检查</div>
+          </form>
+
+          <section class="panel style-card">
+            <div class="panel-title">
+              <span>当前文风</span>
+              <small>生成前最高优先级表达约束</small>
+            </div>
+            <div id="styleStatus" class="style-status empty">还没有读取文风挂载状态。</div>
+          </section>
+
+          <section class="panel style-card">
+            <div class="panel-title">
+              <span>可挂载文风</span>
+              <small>选择会先写入人类选择证据</small>
+            </div>
+            <div id="styleLibrary" class="style-library empty">填写文风库目录后点击“检查文风”。如果留空，会尝试读取默认文风库。</div>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="/ui/app.js"></script>
+  </body>
+</html>

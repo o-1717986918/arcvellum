@@ -1,0 +1,28 @@
+[project]
+name = "literary-engineering-studio"
+version = "0.1.0"
+description = "CLI-bound Agent Worker and platform-agent studio for the Literary Engineering Workbench."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2",
+]
+test = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "pydantic>=2",
+]
+
+[project.scripts]
+les = "literary_engineering_studio.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
