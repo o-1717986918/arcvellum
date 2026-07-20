@@ -1,5 +1,59 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head><meta charset="utf-8"><title>文学工程 Agent Studio</title></head>
-  <body><p>正在启动文学工程 Agent Studio……</p></body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ArcVellum</title>
+    <style>
+      :root { color-scheme: dark; font-family: "Microsoft YaHei UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; overflow: hidden; color: #eaf1ee; background: #102621; }
+      main { display: grid; grid-template-columns: 1.12fr .88fr; min-height: 100vh; }
+      .manuscript { position: relative; overflow: hidden; background: #15362e; }
+      .manuscript::before { content: ""; position: absolute; inset: 0; opacity: .22; background-image: linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px); background-size: 52px 52px; }
+      .sheet { position: absolute; left: 27%; top: 17%; width: 44%; height: 65%; background: #edf2ef; box-shadow: 0 28px 80px rgba(4,16,13,.28); transform: rotate(-2deg); }
+      .sheet::before { content: ""; position: absolute; inset: 11% 12%; background: repeating-linear-gradient(to bottom,rgba(26,61,52,.11) 0 1px,transparent 1px 25px); }
+      .sheet.back { transform: rotate(8deg) translate(18%,2%); opacity: .52; }
+      .sheet.front { transform: rotate(-9deg) translate(-16%,5%); opacity: .36; }
+      .trace { position: absolute; left: 10%; right: 8%; top: 48%; height: 2px; background: #3d8a79; transform: rotate(-8deg); box-shadow: 150px -42px 0 #71668f; }
+      .trace i { position: absolute; width: 12px; height: 12px; top: -5px; background: #b8954b; border: 2px solid #fff; border-radius: 50%; animation: pulse 1.8s ease-in-out infinite; }
+      .trace i:nth-child(1) { left: 3%; }.trace i:nth-child(2) { left: 43%; }.trace i:nth-child(3) { right: 4%; }
+      .content { display: flex; flex-direction: column; justify-content: center; padding: clamp(48px,7vw,100px); background: #0d211c; }
+      .brand { font-family: Georgia,"Songti SC",serif; font-size: 23px; }
+      .brand::before { content: ""; display: inline-block; width: 17px; height: 24px; margin-right: 12px; vertical-align: -5px; border: 1px solid #b8954b; transform: skewY(-8deg); box-shadow: 5px -3px 0 -1px #0d211c,5px -3px 0 #3d8a79; }
+      .kicker { margin: 58px 0 18px; color: #78a596; font: 10px Bahnschrift,sans-serif; letter-spacing: .18em; }
+      h1 { max-width: 590px; margin: 0; font: 600 clamp(42px,5vw,68px)/1.16 Georgia,"Songti SC",serif; letter-spacing: 0; }
+      #status { margin: 25px 0 0; color: #9bb0a8; line-height: 1.7; }
+      .steps { display: flex; flex-wrap: wrap; gap: 13px 20px; margin-top: 28px; color: #708a81; font-size: 11px; }
+      .steps span { display: flex; align-items: center; gap: 7px; }
+      .steps i { width: 7px; height: 7px; background: #3d8a79; border-radius: 50%; box-shadow: 0 0 0 5px rgba(61,138,121,.1); }
+      button { display: none; align-self: flex-start; min-height: 40px; margin-top: 24px; padding: 0 16px; color: white; background: #2d7465; border: 0; border-radius: 6px; font: inherit; }
+      body.failed button { display: inline-flex; align-items: center; }
+      @keyframes pulse { 50% { transform: scale(1.5); box-shadow: 0 0 0 8px rgba(184,149,75,.14); } }
+      @media (max-width: 760px) { main { grid-template-columns: 1fr; }.manuscript { position: absolute; inset: 0; opacity: .2; }.content { position: relative; background: rgba(13,33,28,.9); } }
+      @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="manuscript" aria-hidden="true"><span class="sheet back"></span><span class="sheet front"></span><span class="sheet"></span><span class="trace"><i></i><i></i><i></i></span></section>
+      <section class="content" aria-live="polite">
+        <div class="brand">ArcVellum</div>
+        <p class="kicker">THE LIVING MANUSCRIPT</p>
+        <h1>让一部长篇作品，从脉络中醒来。</h1>
+        <p id="status">正在启动本地创作服务。作品仍然留在你的电脑里。</p>
+        <div class="steps"><span><i></i>本地数据库</span><span><i></i>文学工程内核</span><span><i></i>作品与任务</span></div>
+        <button id="restart" type="button">重新启动 ArcVellum</button>
+      </section>
+    </main>
+    <script>
+      window.addEventListener("arcvellum:startup-error", function () {
+        document.body.classList.add("failed");
+        document.getElementById("status").textContent = "本地创作服务没有按时启动。你可以重新启动应用；作品数据不会受影响。";
+      });
+      document.getElementById("restart").addEventListener("click", async function () {
+        try { await window.__TAURI__.process.relaunch(); } catch (_) { window.location.reload(); }
+      });
+    </script>
+  </body>
 </html>

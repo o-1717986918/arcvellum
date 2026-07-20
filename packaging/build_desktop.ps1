@@ -36,6 +36,9 @@ try {
         Assert-NativeSuccess "OpenCode installation"
     }
 
+    cmd /c npm run client:build
+    Assert-NativeSuccess "Vue client production build"
+
     python -m PyInstaller --noconfirm --clean (Join-Path $Root "packaging\studio_sidecar.spec")
     Assert-NativeSuccess "Python sidecar build"
     New-Item -ItemType Directory -Force -Path $BinaryDir, $ResourceDir | Out-Null
@@ -46,9 +49,30 @@ try {
 
     cmd /c npm run desktop:icons
     Assert-NativeSuccess "Desktop icon generation"
+    if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+        $LocalKey = Join-Path $HOME ".tauri\arcvellum.key"
+        $LocalPassword = Join-Path $HOME ".tauri\arcvellum.key.password.dpapi"
+        if (-not (Test-Path -LiteralPath $LocalKey) -or -not (Test-Path -LiteralPath $LocalPassword)) {
+            throw "Signed updater key is missing. Configure TAURI_SIGNING_PRIVATE_KEY or initialize the local ArcVellum release key."
+        }
+        # Tauri v2 expects the private-key payload, not a path to the key file.
+        # Keep the secret in this child process environment only and never print it.
+        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -LiteralPath $LocalKey -Raw
+        $SecurePassword = Get-Content -LiteralPath $LocalPassword | ConvertTo-SecureString
+        $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [System.Net.NetworkCredential]::new("", $SecurePassword).Password
+    }
     $env:PATH = "$HOME\.cargo\bin;$env:PATH"
     cmd /c npm run desktop:build
     Assert-NativeSuccess "Tauri desktop build"
+    $StudioVersion = python -c "from literary_engineering_studio import __version__; print(__version__)"
+    Assert-NativeSuccess "Read Studio version"
+    python (Join-Path $Root "packaging\build_update_manifest.py") `
+        --bundle-dir (Join-Path $TauriRoot "target\release\bundle") `
+        --output-dir (Join-Path $Root "dist\release") `
+        --version $StudioVersion.Trim() `
+        --base-url "https://github.com/o-1717986918/literary-engineering-studio/releases/latest/download" `
+        --notes "ArcVellum product experience update."
+    Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location
 }

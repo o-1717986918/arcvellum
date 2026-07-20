@@ -1,5 +1,21 @@
 # Studio Implementation Route
 
+## Delivered Roadmap: ArcVellum v0.4-v0.5
+
+The post-v0.3 product plan in `docs/roadmap/arcvellum-v0.4-v0.5-product-experience-and-autonomy-plan.md` is implemented in the v0.5.0 release candidate. The detailed verification record is `docs/releases/v0.5.0-verification.md`.
+
+It delivered the product baseline in this order:
+
+1. complete Prompt Asset transport and explicit task execution contracts;
+2. migrate the client to Vue 3, TypeScript, and Vite without replacing the FastAPI local-service boundary;
+3. make native directory selection, application bootstrap, model warmup, and user-facing language reliable;
+4. add a visible startup scene, application information, signed updates, and diagnostic export;
+5. replace the report-like advisor with a streaming, natural, read-only floating advisor and safe action proposals;
+6. add a deterministic AutopilotController and a no-filesystem CreativeSteward for delegated decisions;
+7. validate deterministic three-chapter whole-book delivery while retaining clean-VM and long-running live-project evidence as `v1.0.0` entry criteria.
+
+The working English product name is `ArcVellum`, subject to trademark and naming review. Preserve the existing Tauri identifier and application-data migration identity during any display-name change.
+
 ## v0.3.0 Productization Complete
 
 - Versioned Runner, Model Connection, task execution, output, human-gate and normalized-event contracts.

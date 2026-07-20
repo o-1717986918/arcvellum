@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -33,6 +34,36 @@ class ApiServerTests(unittest.TestCase):
         connections = self.client.get("/model-connections").json()
         self.assertEqual(connections["managed_by"], "agent-runner")
 
+    def test_bootstrap_endpoint_starts_background_model_warmup(self):
+        service = self.client.app.state.bootstrap
+        service._catalog_loader = lambda _config: {
+            "runner": "opencode",
+            "selected_model": "opencode/example-model",
+            "providers": [],
+            "connected_provider_count": 1,
+            "available_model_count": 1,
+        }
+        response = self.client.get("/application/bootstrap")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["can_enter_workspace"])
+        self.assertEqual(payload["schema"], "arcvellum/application-bootstrap/v0.1")
+        self.assertIn(payload["model_warmup"]["status"], {"loading", "ready"})
+
+    def test_bootstrap_stream_uses_named_sse_event(self):
+        service = self.client.app.state.bootstrap
+        service._catalog_loader = lambda _config: {
+            "providers": [],
+            "available_model_count": 0,
+        }
+        response = self.client.get(
+            "/application/bootstrap/stream",
+            params={"interval_seconds": 1, "max_events": 1},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: application.bootstrap", response.text)
+        self.assertIn("can_enter_workspace", response.text)
+
     def test_model_provider_disconnect_is_exposed_through_control_api(self):
         catalog = {
             "runner": "opencode",
@@ -51,10 +82,14 @@ class ApiServerTests(unittest.TestCase):
     def test_frontend_is_served(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Agent Studio", response.text)
-        icon = self.client.get("/ui/assets/lucide/folder-kanban.svg")
-        self.assertEqual(icon.status_code, 200)
-        self.assertIn("<svg", icon.text)
+        self.assertIn("ArcVellum", response.text)
+        self.assertIn("/ui/assets/", response.text)
+        script_path = re.search(r'<script[^>]+src="([^"]+)"', response.text).group(1)
+        stylesheet_path = re.search(r'<link[^>]+href="([^"]+\.css)"', response.text).group(1)
+        self.assertEqual(self.client.get(script_path).status_code, 200)
+        self.assertEqual(self.client.get(stylesheet_path).status_code, 200)
+        legacy = self.client.get("/legacy")
+        self.assertEqual(legacy.status_code, 404)
 
     def test_desktop_token_is_exchanged_for_http_only_session(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -163,6 +198,41 @@ class ApiServerTests(unittest.TestCase):
                 self.assertEqual(direction.status_code, 200)
                 history = self.client.get("/projects/directions", params={"project_root": project["path"]})
                 self.assertEqual(history.json()["items"][0]["message"], "先写日常秩序，再让异常逐步侵入。")
+
+    def test_autopilot_policy_is_user_configurable_and_persistent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            current = self.client.get("/autopilot/status", params={"project_root": str(project)})
+            self.assertEqual(current.status_code, 200)
+            policy = current.json()["policy"]
+            policy["mode"] = "supervised_auto"
+            policy["delegated_decisions"] = ["branch_selection"]
+            saved = self.client.put("/autopilot/policy", json={"project_root": str(project), "policy": policy})
+            self.assertEqual(saved.status_code, 200)
+            loaded = self.client.get("/autopilot/status", params={"project_root": str(project)}).json()
+            self.assertEqual(loaded["policy"]["mode"], "supervised_auto")
+            self.assertEqual(loaded["policy"]["delegated_decisions"], ["branch_selection"])
+
+    def test_advisor_stream_separates_visible_text_from_final_answer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            session = self.client.post("/advisor/sessions", json={"project_root": str(project)}).json()
+
+            def fake_ask(_advisor, _session_id, _question, **kwargs):
+                kwargs["event_sink"]("advisor.delta", {"text": "自然回答"})
+                return {"schema": "arcvellum/advisor-answer/v0.2", "message": "自然回答", "evidence": [], "uncertainties": [], "suggested_actions": []}
+
+            with patch("literary_engineering_studio.advisor.ProjectAdvisor.ask", new=fake_ask):
+                response = self.client.post(
+                    f"/advisor/sessions/{session['session_id']}/ask/stream",
+                    json={"question": "现在应该关注什么？"},
+                )
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("event: advisor.delta", response.text)
+            self.assertIn("自然回答", response.text)
+            self.assertIn("event: advisor.result", response.text)
 
 
 if __name__ == "__main__":

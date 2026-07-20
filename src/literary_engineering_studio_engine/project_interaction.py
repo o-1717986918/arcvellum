@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from .display_cleaner import read_json_file, read_jsonl_tail, truncate_text
+from .approval import record_workflow_approval
 from .workflow_dashboard import build_workflow_dashboard
 
 
@@ -285,6 +286,10 @@ def record_human_choice(project_root: Path, payload: dict[str, object]) -> dict[
     materialized = ""
     if bool(payload.get("materialize", True)) and decision_type == "branch_selection":
         materialized = _materialize_branch_selection(root, record, choice_path)
+    elif bool(payload.get("materialize", True)) and decision_type in {
+        "asset_approval", "release_approval", "canon_patch_approval", "state_patch_confirmation"
+    }:
+        materialized = _materialize_approval(root, record)
     return {
         "ok": True,
         "choice": record,
@@ -500,6 +505,34 @@ def _materialize_branch_selection(root: Path, record: dict[str, object], choice_
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return _rel(path, root)
+
+
+def _materialize_approval(root: Path, record: dict[str, object]) -> str:
+    selected = str(record.get("selected") or "").strip()
+    if selected == "defer":
+        return ""
+    if selected not in {"approve", "revise", "reject"}:
+        raise ValueError("approval choice must select approve, revise, reject, or defer")
+    decision_type = str(record.get("decision_type") or "")
+    target = record.get("target") if isinstance(record.get("target"), dict) else {}
+    run_id = str(target.get("target_id") or target.get("scene_id") or "").strip()
+    if decision_type == "release_approval" and run_id and not run_id.startswith("release-"):
+        run_id = f"release-{run_id}"
+    if decision_type == "canon_patch_approval":
+        patch_rel = str(target.get("patch") or "").strip()
+        patch = root / patch_rel if patch_rel else None
+        if patch is not None and patch.is_file():
+            run_id = str(read_json_file(patch).get("patch_id") or run_id)
+    if not run_id:
+        raise ValueError(f"{decision_type} choice does not identify its approval target")
+    result = record_workflow_approval(
+        root,
+        run_id,
+        selected,
+        actor=str(record.get("actor") or "user-ui"),
+        notes=str(record.get("rationale") or ""),
+    )
+    return _rel(result.approval_path, root)
 
 
 def _safe_mapping(value: dict[str, object]) -> dict[str, object]:

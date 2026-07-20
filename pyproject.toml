@@ -1,6 +1,6 @@
 [project]
 name = "literary-engineering-studio"
-version = "0.3.0"
+version = "0.5.0"
 description = "Standalone long-form literary project studio with an embedded workflow engine and controlled Agent runtimes."
 requires-python = ">=3.10"
 dependencies = []
@@ -29,9 +29,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 literary_engineering_studio = [
-    "frontend/*.html",
-    "frontend/*.css",
-    "frontend/*.js",
+    "frontend/dist/**/*.html",
+    "frontend/dist/**/*.css",
+    "frontend/dist/**/*.js",
+    "frontend/dist/**/*.map",
     "frontend/assets/**/*.png",
     "frontend/assets/**/*.jpg",
     "frontend/assets/**/*.jpeg",

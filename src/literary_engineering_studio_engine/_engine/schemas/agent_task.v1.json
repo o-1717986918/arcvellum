@@ -57,6 +57,77 @@
     "prompt_asset_id": {
       "type": "string"
     },
+    "prompt_asset": {
+      "type": "object",
+      "required": [
+        "requested_id",
+        "resolved_id",
+        "version",
+        "required_inputs",
+        "context_groups",
+        "hard_constraints",
+        "output_contract",
+        "review_requirements",
+        "forbidden_shortcuts",
+        "body"
+      ],
+      "properties": {
+        "requested_id": {"type": "string"},
+        "resolved_id": {"type": "string"},
+        "exact": {"type": "boolean"},
+        "match": {"type": "string"},
+        "version": {"type": "string"},
+        "route": {"type": "string"},
+        "task_type": {"type": "string"},
+        "title": {"type": "string"},
+        "body": {"type": "string"},
+        "required_inputs": {"type": "array", "items": {"type": "string"}},
+        "optional_inputs": {"type": "array", "items": {"type": "string"}},
+        "context_groups": {"type": "array", "items": {"type": "string"}},
+        "hard_constraints": {"type": "array", "items": {"type": "string"}},
+        "style_constraints": {"type": "array", "items": {"type": "string"}},
+        "output_contract": {"type": "array", "items": {"type": "string"}},
+        "review_requirements": {"type": "array", "items": {"type": "string"}},
+        "forbidden_shortcuts": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "execution_policy": {
+      "enum": ["deterministic", "agent-required", "human-required"]
+    },
+    "agent_role": {
+      "type": "string",
+      "minLength": 1
+    },
+    "human_gate": {
+      "type": "object",
+      "required": ["required", "reasons", "source"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "runtime_capabilities_required": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "output_contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "writeback_policy"],
+        "properties": {
+          "path": {"type": "string"},
+          "kind": {"type": "string"},
+          "writeback_policy": {
+            "enum": ["automatic", "preview-required", "approval-required", "none"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "command": {
       "type": "string"
     },

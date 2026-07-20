@@ -71,10 +71,47 @@ def advisor_profile(model: str) -> dict[str, Any]:
     return _base_profile("project-advisor", agent, model)
 
 
+def steward_profile(model: str) -> dict[str, Any]:
+    agent: dict[str, Any] = {
+        "description": "Selects among bounded literary decisions from a read-only project snapshot.",
+        "mode": "primary",
+        "prompt": (
+            "Act as the delegated Creative Steward. Read the supplied snapshot, compare only the declared options, "
+            "and return one auditable decision. Never edit files, execute tools, invent new options, or impersonate the user."
+        ),
+        "permission": {
+            "*": "deny",
+            "read": "allow",
+            "glob": "allow",
+            "grep": "allow",
+            "list": "allow",
+            "edit": "deny",
+            "bash": "deny",
+            "task": "deny",
+            "external_directory": "deny",
+            "todowrite": "deny",
+            "webfetch": "deny",
+            "websearch": "deny",
+            "lsp": "deny",
+            "skill": "deny",
+            "question": "deny",
+            "doom_loop": "deny",
+        },
+    }
+    if model:
+        agent["model"] = model
+    return _base_profile("creative-steward", agent, model)
+
+
 def write_profile(directory: Path, *, role: str, model: str) -> Path:
     root = directory.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
-    payload = advisor_profile(model) if role == "advisor" else worker_profile(model)
+    if role == "advisor":
+        payload = advisor_profile(model)
+    elif role == "steward":
+        payload = steward_profile(model)
+    else:
+        payload = worker_profile(model)
     path = root / "opencode.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path

@@ -229,13 +229,24 @@ def render_prompt_preview(preview: PromptPreview) -> str:
             f"- route: `{asset.route}`",
             f"- version: `{asset.version}`",
             f"- path: `{_rel(asset.path, preview.skill_root)}`",
-            "",
-            "## Output Contract",
-            "",
         ]
     )
-    for item in asset.metadata.get("output_contract") or []:
-        lines.append(f"- {item}")
+    sections = (
+        ("required_inputs", "Required Inputs"),
+        ("optional_inputs", "Optional Inputs"),
+        ("context_groups", "Context Groups"),
+        ("hard_constraints", "Hard Constraints"),
+        ("style_constraints", "Style Constraints"),
+        ("output_contract", "Output Contract"),
+        ("review_requirements", "Review Requirements"),
+        ("forbidden_shortcuts", "Forbidden Shortcuts"),
+    )
+    for field, title in sections:
+        values = [str(item) for item in asset.metadata.get(field) or []]
+        if not values and field in {"optional_inputs", "style_constraints"}:
+            continue
+        lines.extend(["", f"## {title}", ""])
+        lines.extend(f"- {item}" for item in values)
     lines.extend(["", "## Prompt Body", "", asset.body.strip()])
     return "\n".join(lines).rstrip() + "\n"
 

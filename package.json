@@ -1,14 +1,36 @@
 {
-  "name": "literary-engineering-studio-desktop",
+  "name": "arcvellum-studio",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.5.0",
   "scripts": {
+    "client:dev": "vite --config client/vite.config.ts",
+    "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
+    "client:test": "vitest run --config client/vitest.config.ts",
+    "client:test:watch": "vitest --config client/vitest.config.ts",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "desktop:icons": "tauri icon desktop/app-icon.svg --output desktop/src-tauri/icons"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.8.0"
+    "@tauri-apps/cli": "^2.8.0",
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "2.4",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7",
+    "vue-tsc": "^3.3.7"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "lucide-vue-next": "^0.468.0",
+    "pinia": "^3.0.4",
+    "vue": "3.5",
+    "vue-router": "4.5"
   }
 }

@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import queue
 import secrets
+import threading
 import time
 from typing import Any
 
 from . import __version__
+from .application_info import build_application_info, build_diagnostic_report, export_diagnostic_report
 from .advisor import ProjectAdvisor
+from .autopilot import AutopilotService
+from .bootstrap import ApplicationBootstrapService
 from .config import load_config
 from .core_bridge import CoreBridge
 from .core_read_models import (
@@ -39,6 +44,7 @@ from .project_manager import (
     read_directions,
     record_direction,
     register_project,
+    validate_project_location,
 )
 from .runtimes import agent_runner_status
 from .supervisor import project_lock_key
@@ -89,6 +95,13 @@ class ProjectOpenRequest(BaseModel):
     project_root: str
 
 
+class ProjectLocationRequest(BaseModel):
+    mode: str
+    project_root: str = ""
+    parent_directory: str = ""
+    folder_name: str = ""
+
+
 class DirectionRequest(BaseModel):
     project_root: str
     message: str
@@ -116,6 +129,21 @@ class AdvisorSessionRequest(BaseModel):
 class AdvisorQuestionRequest(BaseModel):
     question: str
     timeout: int = 180
+    context: dict[str, Any] | None = None
+
+
+class AutopilotPolicyRequest(BaseModel):
+    project_root: str
+    policy: dict[str, Any]
+
+
+class AutopilotStartRequest(BaseModel):
+    project_root: str
+    runtime: str = "opencode"
+
+
+class AutopilotControlRequest(BaseModel):
+    reason: str = "user-request"
 
 
 class WritebackDecisionRequest(BaseModel):
@@ -132,9 +160,11 @@ def create_app():
         raise RuntimeError("Studio API requires pip install -e .[api]")
     config = load_config()
     lifecycle = ApplicationLifecycleManager(config)
+    bootstrap = ApplicationBootstrapService(config, lifecycle)
     jobs = lifecycle.store
     advisor = ProjectAdvisor(config, jobs)
-    app = FastAPI(title="Literary Engineering Studio", version=__version__)
+    autopilot = AutopilotService(config, jobs)
+    app = FastAPI(title="ArcVellum", version=__version__)
     api_token = os.environ.get("LES_API_TOKEN", "").strip()
     desktop_session_token = secrets.token_urlsafe(32) if api_token else ""
 
@@ -150,10 +180,18 @@ def create_app():
                 return await call_next(request)
             return JSONResponse(status_code=401, content={"detail": "Studio desktop session is not authenticated"})
     app.state.lifecycle = lifecycle
+    app.state.bootstrap = bootstrap
+    app.state.autopilot = autopilot
+
+    def shutdown_application():
+        autopilot.shutdown()
+        bootstrap.shutdown()
+        lifecycle.shutdown()
+
     if hasattr(app, "add_event_handler"):
-        app.add_event_handler("shutdown", lifecycle.shutdown)
+        app.add_event_handler("shutdown", shutdown_application)
     else:  # FastAPI releases that expose lifecycle handlers only through the router
-        app.router.on_shutdown.append(lifecycle.shutdown)
+        app.router.on_shutdown.append(shutdown_application)
 
     @app.get("/", response_class=HTMLResponse)
     def ui_root():
@@ -188,6 +226,7 @@ def create_app():
             ".jpeg": "image/jpeg",
             ".svg": "image/svg+xml; charset=utf-8",
             ".webp": "image/webp",
+            ".map": "application/json; charset=utf-8",
         }.get(suffix, "text/plain; charset=utf-8")
         return _frontend_file(path, content_type)
 
@@ -214,6 +253,39 @@ def create_app():
     @app.get("/application/health")
     def application_health():
         return {"ok": True, **lifecycle.health()}
+
+    @app.get("/application/info")
+    def application_info():
+        return build_application_info(config)
+
+    @app.get("/application/diagnostics")
+    def application_diagnostics():
+        return {"ok": True, **build_diagnostic_report(config, lifecycle, bootstrap)}
+
+    @app.post("/application/diagnostics/export")
+    def application_diagnostics_export():
+        target = export_diagnostic_report(config, lifecycle, bootstrap)
+        return FileResponse(target, media_type="application/json", filename=target.name)
+
+    @app.get("/application/bootstrap")
+    def application_bootstrap():
+        bootstrap.start_warmup()
+        return bootstrap.snapshot()
+
+    @app.get("/application/bootstrap/stream")
+    def application_bootstrap_stream(interval_seconds: float = 1.0, max_events: int = 0):
+        bootstrap.start_warmup()
+        return _stream_read_model(
+            "application.bootstrap",
+            bootstrap.snapshot,
+            interval_seconds,
+            max_events,
+        )
+
+    @app.post("/application/warmup")
+    def application_warmup():
+        started = bootstrap.start_warmup(force=True)
+        return {"ok": True, "started": started, "bootstrap": bootstrap.snapshot()}
 
     @app.get("/agent-runners")
     def agent_runners():
@@ -289,8 +361,107 @@ def create_app():
             lambda: {
                 "ok": True,
                 "session_id": session_id,
-                "answer": advisor.ask(session_id, payload.question, timeout=max(10, min(600, payload.timeout))),
+                "answer": advisor.ask(
+                    session_id,
+                    payload.question,
+                    timeout=max(10, min(600, payload.timeout)),
+                    context=payload.context or {},
+                ),
             }
+        )
+
+    @app.post("/advisor/sessions/{session_id}/ask/stream")
+    def advisor_session_ask_stream(session_id: str, payload: AdvisorQuestionRequest):
+        events: queue.Queue[tuple[str, dict[str, Any]]] = queue.Queue()
+
+        def emit(event: str, data: dict[str, Any]) -> None:
+            events.put((event, data))
+
+        def run() -> None:
+            try:
+                result = advisor.ask(
+                    session_id,
+                    payload.question,
+                    timeout=max(10, min(600, payload.timeout)),
+                    context=payload.context or {},
+                    event_sink=emit,
+                )
+                events.put(("advisor.result", {"answer": result}))
+            except Exception as exc:
+                events.put(("advisor.error", {"message": _friendly_error(exc)}))
+            finally:
+                events.put(("advisor.closed", {}))
+
+        threading.Thread(target=run, name=f"arcvellum-advisor-{session_id}", daemon=True).start()
+
+        def stream():
+            yield _sse("advisor.opened", {"session_id": session_id})
+            while True:
+                try:
+                    event, data = events.get(timeout=15)
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+                    continue
+                yield _sse(event, data)
+                if event == "advisor.closed":
+                    break
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.get("/autopilot/status")
+    def autopilot_status(project_root: str):
+        def read():
+            payload = autopilot.status(_project(project_root))
+            run = payload.get("run")
+            payload["decisions"] = jobs.delegated_decisions(run["run_id"])[-20:] if run else []
+            return payload
+        return _call(read)
+
+    @app.put("/autopilot/policy")
+    def autopilot_policy_save(payload: AutopilotPolicyRequest):
+        return _call(lambda: {"ok": True, **autopilot.save_policy(_project(payload.project_root), payload.policy)})
+
+    @app.post("/autopilot/start")
+    def autopilot_start(payload: AutopilotStartRequest):
+        return _call(lambda: {"ok": True, "run": autopilot.start(_project(payload.project_root), runtime=payload.runtime)})
+
+    @app.post("/autopilot/runs/{run_id}/pause")
+    def autopilot_pause(run_id: str, payload: AutopilotControlRequest):
+        return _call(lambda: {"ok": True, "run": autopilot.pause(run_id, reason=payload.reason)})
+
+    @app.post("/autopilot/runs/{run_id}/resume")
+    def autopilot_resume(run_id: str):
+        return _call(lambda: {"ok": True, "run": autopilot.resume(run_id)})
+
+    @app.get("/autopilot/runs/{run_id}/events")
+    def autopilot_events(run_id: str, after: int = 0, limit: int = 300):
+        return _call(lambda: {"ok": True, "items": jobs.autopilot_events_since(run_id, after, limit=limit)})
+
+    @app.get("/autopilot/runs/{run_id}/stream")
+    def autopilot_stream(run_id: str, after: int = 0):
+        jobs.read_autopilot_run(run_id)
+
+        def stream():
+            cursor = max(0, int(after))
+            while True:
+                items = jobs.autopilot_events_since(run_id, cursor)
+                for item in items:
+                    cursor = max(cursor, int(item["sequence"]))
+                    yield _sse(str(item["event"]), item)
+                run = jobs.read_autopilot_run(run_id)
+                yield _sse("autopilot.status", {"run": run, "cursor": cursor})
+                if run["status"] in {"complete", "paused", "blocked", "cancelled", "failed"}:
+                    break
+                time.sleep(0.7)
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     @app.get("/runtime/adapters")
@@ -313,6 +484,11 @@ def create_app():
     @app.post("/projects/open")
     def projects_open(payload: ProjectOpenRequest):
         return _call(lambda: {"ok": True, "project": register_project(payload.project_root)})
+
+    @app.post("/projects/validate-location")
+    def projects_validate_location(payload: ProjectLocationRequest):
+        values = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+        return _call(lambda: {"ok": True, **validate_project_location(**values)})
 
     @app.post("/projects/create")
     def projects_create(payload: ProjectCreateRequest):
@@ -608,6 +784,21 @@ def _call(function):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _sse(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _friendly_error(exc: Exception) -> str:
+    value = str(exc).strip()
+    replacements = {
+        "bundled OpenCode Runner is not installed": "创作顾问尚未准备好，请先在“设置”中完成 Agent 连接。",
+        "select an OpenCode provider/model before using the advisor": "请先在“设置”中选择顾问使用的模型。",
+        "advisor answer timed out": "这次思考时间有点久，请稍后重试。",
+        "read-only advisor project integrity check failed": "作品在顾问思考期间发生了内容变化，请重新提问以读取最新版本。",
+    }
+    return replacements.get(value, value or "顾问暂时没有完成回答，请重试。")
+
+
 def _stream_read_model(event: str, function, interval_seconds: float, max_events: int):
     interval = max(1.0, min(60.0, float(interval_seconds or 4.0)))
     limit = max(0, int(max_events or 0))
@@ -635,8 +826,9 @@ def _project(value: str) -> Path:
 
 def _frontend_file(relative: str, content_type: str):
     root = Path(__file__).resolve().with_name("frontend")
-    target = (root / relative).resolve()
-    if not target.is_relative_to(root.resolve()) or not target.is_file():
+    candidates = [root / "dist" / relative]
+    target = next((candidate.resolve() for candidate in candidates if candidate.resolve().is_file()), None)
+    if target is None or not target.is_relative_to(root.resolve()):
         raise HTTPException(status_code=404, detail=f"frontend asset not found: {relative}")
     data = target.read_bytes()
     if content_type.startswith("text/") or "javascript" in content_type:

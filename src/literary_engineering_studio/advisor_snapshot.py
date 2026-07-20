@@ -25,6 +25,7 @@ ALLOWED_ROOTS = (
 )
 ALLOWED_SUFFIXES = {".md", ".txt", ".json", ".yaml", ".yml", ".csv"}
 DENIED_NAME_TOKENS = {"credential", "password", "secret", "api_key", "apikey", "token"}
+VOLATILE_RELATIVE_PREFIXES = ("workflow/dashboard/",)
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,8 @@ def _iter_project_files(root: Path) -> Iterable[Path]:
             relative_path = path.relative_to(root).as_posix()
             lower = relative_path.lower()
             if path.is_symlink() or path.suffix.lower() not in ALLOWED_SUFFIXES:
+                continue
+            if any(lower.startswith(prefix) for prefix in VOLATILE_RELATIVE_PREFIXES):
                 continue
             if any(token in lower for token in DENIED_NAME_TOKENS):
                 continue

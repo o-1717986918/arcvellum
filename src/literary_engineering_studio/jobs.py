@@ -16,7 +16,7 @@ from typing import Any
 JOB_SCHEMA = "literary-engineering-studio/worker-job/v0.3"
 EVENT_SCHEMA = "literary-engineering-studio/run-event/v0.3"
 EVENT_RETENTION_PER_JOB = 5000
-DATABASE_SCHEMA_VERSION = 2
+DATABASE_SCHEMA_VERSION = 4
 ACTIVE_STATUSES = {"queued", "running", "stopping"}
 TERMINAL_STATUSES = {
     "complete",
@@ -284,6 +284,14 @@ class JobStore:
                 """,
                 (session_id,),
             ).fetchall()
+            summary_row = connection.execute(
+                "SELECT summary, updated_at FROM advisor_session_summaries WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            preference_rows = connection.execute(
+                "SELECT preference FROM advisor_pinned_preferences WHERE session_id = ? ORDER BY position ASC, rowid ASC",
+                (session_id,),
+            ).fetchall()
         if row is None:
             raise FileNotFoundError(f"Advisor session not found: {session_id}")
         return {
@@ -293,6 +301,9 @@ class JobStore:
             "title": row["title"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+            "session_summary": summary_row["summary"] if summary_row is not None else "",
+            "summary_updated_at": summary_row["updated_at"] if summary_row is not None else "",
+            "pinned_user_preferences": [item["preference"] for item in preference_rows],
             "messages": [
                 {
                     "sequence": int(item["sequence"]),
@@ -338,6 +349,173 @@ class JobStore:
             )
             connection.execute("UPDATE advisor_sessions SET updated_at = ? WHERE session_id = ?", (now, session_id))
         return {"sequence": sequence, "role": role, "at": now, "payload": payload}
+
+    def save_advisor_memory(self, session_id: str, *, summary: str, preferences: list[str]) -> dict[str, Any]:
+        _validate_advisor_id(session_id)
+        now = _now()
+        safe_summary = str(summary or "").strip()[:6000]
+        safe_preferences = list(
+            dict.fromkeys(str(item).strip()[:500] for item in preferences if str(item).strip())
+        )[:30]
+        with self._write_lock, self._connection() as connection:
+            existing = connection.execute("SELECT 1 FROM advisor_sessions WHERE session_id = ?", (session_id,)).fetchone()
+            if existing is None:
+                raise FileNotFoundError(f"Advisor session not found: {session_id}")
+            if safe_summary:
+                connection.execute(
+                    """
+                    INSERT INTO advisor_session_summaries (session_id, summary, updated_at) VALUES (?, ?, ?)
+                    ON CONFLICT(session_id) DO UPDATE SET summary = excluded.summary, updated_at = excluded.updated_at
+                    """,
+                    (session_id, safe_summary, now),
+                )
+            connection.execute("DELETE FROM advisor_pinned_preferences WHERE session_id = ?", (session_id,))
+            for position, preference in enumerate(safe_preferences):
+                connection.execute(
+                    "INSERT INTO advisor_pinned_preferences (session_id, preference, position, updated_at) VALUES (?, ?, ?, ?)",
+                    (session_id, preference, position, now),
+                )
+        return {"session_id": session_id, "session_summary": safe_summary, "pinned_user_preferences": safe_preferences, "updated_at": now}
+
+    def save_delegation_policy(self, project_root: str, policy: dict[str, Any]) -> dict[str, Any]:
+        now = _now()
+        with self._write_lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO delegation_policies (project_root, policy_json, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(project_root) DO UPDATE SET policy_json = excluded.policy_json, updated_at = excluded.updated_at
+                """,
+                (project_root, _json(policy), now),
+            )
+        return {"project_root": project_root, "policy": policy, "updated_at": now}
+
+    def read_delegation_policy(self, project_root: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT project_root, policy_json, updated_at FROM delegation_policies WHERE project_root = ?",
+                (project_root,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {"project_root": row["project_root"], "policy": json.loads(row["policy_json"]), "updated_at": row["updated_at"]}
+
+    def create_autopilot_run(
+        self,
+        project_root: str,
+        *,
+        mode: str,
+        runtime: str,
+        policy: dict[str, Any],
+    ) -> dict[str, Any]:
+        run_id = f"autopilot-{uuid.uuid4().hex[:16]}"
+        now = _now()
+        with self._write_lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO autopilot_runs (
+                    run_id, project_root, mode, runtime, status, policy_json, created_at, updated_at, started_at
+                ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?)
+                """,
+                (run_id, project_root, mode, runtime, _json(policy), now, now, now),
+            )
+            self._append_autopilot_event_tx(connection, run_id, "autopilot.started", {"mode": mode, "runtime": runtime})
+        return self.read_autopilot_run(run_id)
+
+    def read_autopilot_run(self, run_id: str) -> dict[str, Any]:
+        _validate_autopilot_id(run_id)
+        with self._connection() as connection:
+            row = connection.execute("SELECT * FROM autopilot_runs WHERE run_id = ?", (run_id,)).fetchone()
+        if row is None:
+            raise FileNotFoundError(f"Autopilot run not found: {run_id}")
+        return self._autopilot_row(row)
+
+    def latest_autopilot_run(self, project_root: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM autopilot_runs WHERE project_root = ? ORDER BY created_at DESC LIMIT 1",
+                (project_root,),
+            ).fetchone()
+        return self._autopilot_row(row) if row is not None else None
+
+    def update_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]:
+        _validate_autopilot_id(run_id)
+        allowed = {
+            "status", "current_route", "current_task_id", "tasks_completed", "failures",
+            "consecutive_revisions", "estimated_cost", "last_error", "stop_reason", "finished_at",
+        }
+        values = {key: value for key, value in changes.items() if key in allowed}
+        if not values:
+            return self.read_autopilot_run(run_id)
+        values["updated_at"] = _now()
+        assignments = ", ".join(f"{key} = ?" for key in values)
+        with self._write_lock, self._connection() as connection:
+            cursor = connection.execute(
+                f"UPDATE autopilot_runs SET {assignments} WHERE run_id = ?",
+                (*values.values(), run_id),
+            )
+            if not cursor.rowcount:
+                raise FileNotFoundError(f"Autopilot run not found: {run_id}")
+        return self.read_autopilot_run(run_id)
+
+    def append_autopilot_event(self, run_id: str, event: str, data: dict[str, Any]) -> dict[str, Any]:
+        _validate_autopilot_id(run_id)
+        with self._write_lock, self._connection() as connection:
+            return self._append_autopilot_event_tx(connection, run_id, event, data)
+
+    def autopilot_events_since(self, run_id: str, after: int = 0, *, limit: int = 300) -> list[dict[str, Any]]:
+        _validate_autopilot_id(run_id)
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT sequence, run_id, event_type, at, data_json FROM autopilot_events
+                WHERE run_id = ? AND sequence > ? ORDER BY sequence ASC LIMIT ?
+                """,
+                (run_id, max(0, int(after)), max(1, min(2000, int(limit)))),
+            ).fetchall()
+        return [
+            {"sequence": int(row["sequence"]), "run_id": row["run_id"], "event": row["event_type"], "at": row["at"], "data": json.loads(row["data_json"])}
+            for row in rows
+        ]
+
+    def record_delegated_decision(self, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        _validate_autopilot_id(run_id)
+        decision_id = f"decision-{uuid.uuid4().hex[:16]}"
+        now = _now()
+        record = {**payload, "decision_id": decision_id, "run_id": run_id, "created_at": now, "revoked_at": ""}
+        with self._write_lock, self._connection() as connection:
+            connection.execute(
+                "INSERT INTO delegated_decisions (decision_id, run_id, project_root, decision_json, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, '')",
+                (decision_id, run_id, str(payload.get("project_root") or ""), _json(record), now),
+            )
+            self._append_autopilot_event_tx(connection, run_id, "decision.delegated", {"decision_id": decision_id, "decision_type": payload.get("decision_type"), "selected_option": payload.get("selected_option")})
+        return record
+
+    def delegated_decisions(self, run_id: str) -> list[dict[str, Any]]:
+        _validate_autopilot_id(run_id)
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT decision_json, revoked_at FROM delegated_decisions WHERE run_id = ? ORDER BY created_at ASC",
+                (run_id,),
+            ).fetchall()
+        records = []
+        for row in rows:
+            payload = json.loads(row["decision_json"])
+            payload["revoked_at"] = row["revoked_at"]
+            records.append(payload)
+        return records
+
+    def recover_autopilot_runs(self) -> int:
+        now = _now()
+        with self._write_lock, self._connection() as connection:
+            rows = connection.execute("SELECT run_id FROM autopilot_runs WHERE status IN ('running','stopping')").fetchall()
+            for row in rows:
+                connection.execute(
+                    "UPDATE autopilot_runs SET status = 'paused', stop_reason = 'application-restart', updated_at = ? WHERE run_id = ?",
+                    (now, row["run_id"]),
+                )
+                self._append_autopilot_event_tx(connection, row["run_id"], "autopilot.recovered", {"status": "paused", "reason": "application-restart"})
+        return len(rows)
 
     def health(self) -> dict[str, Any]:
         with self._connection() as connection:
@@ -444,9 +622,100 @@ class JobStore:
                     PRIMARY KEY(session_id, sequence),
                     FOREIGN KEY(session_id) REFERENCES advisor_sessions(session_id)
                 );
+                CREATE TABLE IF NOT EXISTS advisor_session_summaries (
+                    session_id TEXT PRIMARY KEY,
+                    summary TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES advisor_sessions(session_id)
+                );
+                CREATE TABLE IF NOT EXISTS advisor_pinned_preferences (
+                    session_id TEXT NOT NULL,
+                    preference TEXT NOT NULL,
+                    position INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(session_id, preference),
+                    FOREIGN KEY(session_id) REFERENCES advisor_sessions(session_id)
+                );
+                CREATE TABLE IF NOT EXISTS delegation_policies (
+                    project_root TEXT PRIMARY KEY,
+                    policy_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS autopilot_runs (
+                    run_id TEXT PRIMARY KEY,
+                    project_root TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    runtime TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    policy_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL DEFAULT '',
+                    current_route TEXT NOT NULL DEFAULT '',
+                    current_task_id TEXT NOT NULL DEFAULT '',
+                    tasks_completed INTEGER NOT NULL DEFAULT 0,
+                    failures INTEGER NOT NULL DEFAULT 0,
+                    consecutive_revisions INTEGER NOT NULL DEFAULT 0,
+                    estimated_cost REAL NOT NULL DEFAULT 0,
+                    last_error TEXT NOT NULL DEFAULT '',
+                    stop_reason TEXT NOT NULL DEFAULT ''
+                );
+                CREATE INDEX IF NOT EXISTS autopilot_runs_project_idx ON autopilot_runs(project_root, created_at);
+                CREATE TABLE IF NOT EXISTS autopilot_events (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    at TEXT NOT NULL,
+                    data_json TEXT NOT NULL,
+                    FOREIGN KEY(run_id) REFERENCES autopilot_runs(run_id)
+                );
+                CREATE INDEX IF NOT EXISTS autopilot_events_run_idx ON autopilot_events(run_id, sequence);
+                CREATE TABLE IF NOT EXISTS delegated_decisions (
+                    decision_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    project_root TEXT NOT NULL,
+                    decision_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    revoked_at TEXT NOT NULL DEFAULT '',
+                    FOREIGN KEY(run_id) REFERENCES autopilot_runs(run_id)
+                );
                 """
             )
+            preference_columns = {
+                str(row[1]) for row in connection.execute("PRAGMA table_info(advisor_pinned_preferences)").fetchall()
+            }
+            if "position" not in preference_columns:
+                connection.execute(
+                    "ALTER TABLE advisor_pinned_preferences ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
+                )
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
+
+    def _append_autopilot_event_tx(
+        self,
+        connection: sqlite3.Connection,
+        run_id: str,
+        event: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        if not event or any(char.isspace() for char in event):
+            raise ValueError(f"invalid autopilot event: {event}")
+        at = _now()
+        cursor = connection.execute(
+            "INSERT INTO autopilot_events (run_id, event_type, at, data_json) VALUES (?, ?, ?, ?)",
+            (run_id, event, at, _json(_redact(data))),
+        )
+        return {"sequence": int(cursor.lastrowid), "run_id": run_id, "event": event, "at": at, "data": _redact(data)}
+
+    @staticmethod
+    def _autopilot_row(row: sqlite3.Row) -> dict[str, Any]:
+        payload = dict(row)
+        payload["policy"] = json.loads(payload.pop("policy_json"))
+        payload["tasks_completed"] = int(payload.get("tasks_completed") or 0)
+        payload["failures"] = int(payload.get("failures") or 0)
+        payload["consecutive_revisions"] = int(payload.get("consecutive_revisions") or 0)
+        payload["estimated_cost"] = float(payload.get("estimated_cost") or 0)
+        return payload
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=30, isolation_level="DEFERRED")
@@ -543,6 +812,13 @@ def _validate_advisor_id(session_id: str) -> None:
         char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in session_id
     ):
         raise ValueError(f"invalid advisor session id: {session_id}")
+
+
+def _validate_autopilot_id(run_id: str) -> None:
+    if not run_id.startswith("autopilot-") or any(
+        char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in run_id
+    ):
+        raise ValueError(f"invalid autopilot run id: {run_id}")
 
 
 def _public_request(request: dict[str, Any]) -> dict[str, Any]:

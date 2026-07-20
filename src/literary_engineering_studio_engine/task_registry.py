@@ -37,6 +37,54 @@ SUPPORTED_ROUTES = {
     "review-and-audit",
     "export-and-release",
 }
+TASK_TYPE_EXECUTION = {
+    "deterministic-cli": ("deterministic", "deterministic-engine"),
+    "deterministic-review": ("deterministic", "deterministic-engine"),
+    "deterministic-cli-plus-platform-review": ("agent-required", "main-agent"),
+    "deterministic-cli-or-repair": ("agent-required", "main-agent"),
+    "manual-route-repair": ("agent-required", "main-agent"),
+    "human-approval-boundary": ("human-required", "human-decision"),
+    "main-platform-agent-prose": ("agent-required", "main-creative-agent"),
+    "platform-agent-asset-creation": ("agent-required", "main-creative-agent"),
+    "platform-agent-extraction": ("agent-required", "main-creative-agent"),
+    "platform-agent-revision": ("agent-required", "main-creative-agent"),
+    "platform-agent-style-prompt": ("agent-required", "main-creative-agent"),
+    "platform-agent-asset-review": ("agent-required", "main-review-agent"),
+    "platform-agent-evaluation": ("agent-required", "main-review-agent"),
+    "platform-agent-judgment": ("agent-required", "main-review-agent"),
+    "platform-agent-review": ("agent-required", "main-review-agent"),
+    # Historical task packages can be reopened and upgraded in place.
+    "deterministic-command": ("deterministic", "deterministic-engine"),
+    "human-choice": ("human-required", "human-decision"),
+    "platform-agent": ("agent-required", "main-agent"),
+    "platform-agent-creative": ("agent-required", "main-creative-agent"),
+    "platform-agent-prose": ("agent-required", "main-creative-agent"),
+}
+HIGH_IMPACT_OUTPUT_PREFIXES = (
+    "canon/",
+    "characters/",
+    "drafts/scenes/",
+    "manuscript/",
+    "releases/",
+    "state/",
+)
+PROMPT_METADATA_LIST_FIELDS = (
+    "required_inputs",
+    "optional_inputs",
+    "context_groups",
+    "hard_constraints",
+    "style_constraints",
+    "output_contract",
+    "review_requirements",
+    "forbidden_shortcuts",
+)
+EXPLICIT_TASK_CONTRACT_FIELDS = {
+    "execution_policy",
+    "agent_role",
+    "human_gate",
+    "runtime_capabilities_required",
+    "output_contracts",
+}
 
 
 @dataclass(frozen=True)
@@ -124,7 +172,7 @@ def issue_next_task(
             message=route_def.ready_message,
         )
 
-    task = route_def.build_task(root, normalized_route, work_item)
+    task = _enrich_task_payload(route_def.build_task(root, normalized_route, work_item))
     task_id = str(task["task_id"])
     task_json = _task_json_path(root, task_id)
     task_markdown = _task_markdown_path(root, task_id)
@@ -172,7 +220,7 @@ def open_task(project_root: Path, task_id: str) -> TaskRegistryResult:
 
     root = project_root.resolve()
     task_json = _task_json_path(root, task_id)
-    task = _load_task(task_json)
+    task = _enrich_task_payload(_load_task(task_json))
     task["status"] = "opened"
     task["opened_at"] = _now()
     task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1560,7 +1608,7 @@ def _asset_blueprint_for_state(root: Path, candidate_id: str, asset_type: str, c
             "source_paths": [candidate_rel, review, review_json, "workflow/approvals/index.jsonl"],
             "expected_outputs": ["workflow/approvals/index.jsonl"],
             "hard_constraints": [
-                "The platform agent must not self-approve candidate promotion.",
+                "The executing Worker must not self-approve candidate promotion. Approval may come from the user or a separately identified Creative Steward under an active DelegationPolicy.",
                 "If the user asks for revision or rejection, record that decision and do not promote.",
                 "Approval must reference the candidate_id/run_id that promote-candidate-asset will use.",
             ],
@@ -1778,7 +1826,7 @@ def _export_release_blueprint_for_state(root: Path, chapter_id: str, current_sta
             "source_paths": [f"exports/{chapter_id}/export_manifest.json", f"exports/{chapter_id}/{chapter_id}_novel.md", "workflow/approvals/index.jsonl"],
             "expected_outputs": ["workflow/approvals/index.jsonl"],
             "hard_constraints": [
-                "The platform agent must not self-approve release publication.",
+                "The executing Worker must not self-approve release publication. Approval may come from the user or a separately identified Creative Steward when the active DelegationPolicy explicitly delegates release.",
                 "If the user requests revision or rejection, record that decision and return to the relevant review/export task.",
                 f"Approval run_id must be `{approval_run_id}` so publish-chapter can verify it.",
             ],
@@ -1838,6 +1886,8 @@ def _render_task_markdown(task: dict[str, object], root: Path) -> str:
         f"- current_state: `{task.get('current_state', '')}`",
         f"- task_type: `{task.get('task_type', '')}`",
         f"- prompt_asset_id: `{task.get('prompt_asset_id', '')}`",
+        f"- execution_policy: `{task.get('execution_policy', '')}`",
+        f"- agent_role: `{task.get('agent_role', '')}`",
         f"- context_trace: `{task.get('context_trace', '') or 'n/a'}`",
         f"- status: `{task.get('status', '')}`",
         f"- completion_marker: `{_rel(completion, root)}`",
@@ -1931,15 +1981,109 @@ def _prompt_asset_lines(prompt_asset_id: str) -> list[str]:
             f"- match: `{asset.match}`",
             f"- version: `{asset.version}`",
             f"- title: {asset.title}",
-            "",
-            "### Prompt Output Contract",
-            "",
         ]
     )
-    for item in asset.metadata.get("output_contract") or []:
-        lines.append(f"- {item}")
+    prompt_sections = (
+        ("required_inputs", "Required Inputs"),
+        ("optional_inputs", "Optional Inputs"),
+        ("context_groups", "Context Groups"),
+        ("hard_constraints", "Hard Constraints"),
+        ("style_constraints", "Style Constraints"),
+        ("output_contract", "Output Contract"),
+        ("review_requirements", "Review Requirements"),
+        ("forbidden_shortcuts", "Forbidden Shortcuts"),
+    )
+    for field, title in prompt_sections:
+        values = [str(item) for item in asset.metadata.get(field) or []]
+        if not values and field in {"optional_inputs", "style_constraints"}:
+            continue
+        lines.extend(["", f"### Prompt {title}", ""])
+        lines.extend(f"- {item}" for item in values)
     lines.extend(["", "### Prompt Body", "", asset.body.strip()])
     return lines
+
+
+def _enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
+    enriched = dict(task)
+    prompt_id = str(enriched.get("prompt_asset_id") or "").strip()
+    if not prompt_id:
+        raise ValueError("formal task is missing prompt_asset_id")
+    preview = resolve_prompt_asset(prompt_id)
+    if preview.asset is None:
+        raise ValueError(f"formal task prompt asset is not registered: {prompt_id}")
+
+    asset = preview.asset
+    prompt_asset: dict[str, object] = {
+        "requested_id": prompt_id,
+        "resolved_id": asset.prompt_asset_id,
+        "exact": preview.exact,
+        "match": asset.match,
+        "version": asset.version,
+        "route": asset.route,
+        "task_type": str(asset.metadata.get("task_type") or ""),
+        "title": asset.title,
+        "body": asset.body.strip(),
+    }
+    for field in PROMPT_METADATA_LIST_FIELDS:
+        prompt_asset[field] = [str(item) for item in asset.metadata.get(field) or []]
+    enriched["prompt_asset"] = prompt_asset
+
+    expected_outputs = [str(item) for item in enriched.get("expected_outputs") or []]
+    present_contract_fields = EXPLICIT_TASK_CONTRACT_FIELDS & set(enriched)
+    if present_contract_fields == EXPLICIT_TASK_CONTRACT_FIELDS:
+        return enriched
+    if present_contract_fields:
+        missing = ", ".join(sorted(EXPLICIT_TASK_CONTRACT_FIELDS - present_contract_fields))
+        raise ValueError(f"formal task has a partial explicit execution contract; missing: {missing}")
+
+    task_type = str(enriched.get("task_type") or "").strip()
+    try:
+        execution_policy, agent_role = TASK_TYPE_EXECUTION[task_type]
+    except KeyError as exc:
+        raise ValueError(f"formal task has no explicit execution contract for task_type: {task_type}") from exc
+    human_required = execution_policy == "human-required"
+    human_reasons = [str(enriched.get("current_state") or "human-decision")] if human_required else []
+    if execution_policy == "deterministic":
+        capabilities = ["deterministic-command"]
+    elif human_required:
+        capabilities = []
+    else:
+        capabilities = ["read-task-sources"]
+        if expected_outputs:
+            capabilities.append("write-expected-outputs")
+
+    enriched.update(
+        {
+            "execution_policy": execution_policy,
+            "agent_role": agent_role,
+            "human_gate": {
+                "required": human_required,
+                "reasons": human_reasons,
+                "source": "task-registry",
+            },
+            "runtime_capabilities_required": capabilities,
+            "output_contracts": [_output_contract(item, execution_policy) for item in expected_outputs],
+        }
+    )
+    return enriched
+
+
+def _output_contract(path: str, execution_policy: str) -> dict[str, str]:
+    normalized = _normalize_rel(path)
+    lower = normalized.lower()
+    if lower.endswith("agent_completion.json") or ".agent_completion." in lower:
+        kind = "completion-evidence"
+        policy = "automatic"
+    elif "approval" in lower or lower.startswith("decisions/"):
+        kind = "human-approval"
+        policy = "approval-required"
+    elif execution_policy == "deterministic":
+        kind = "deterministic"
+        policy = "automatic"
+    else:
+        kind = "agent-authored"
+        policy = "approval-required" if lower.startswith(HIGH_IMPACT_OUTPUT_PREFIXES) else "preview-required"
+    return {"path": normalized, "kind": kind, "writeback_policy": policy}
 
 
 def _workflow_payload(root: Path, route: str) -> dict[str, object]:

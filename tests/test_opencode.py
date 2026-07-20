@@ -9,7 +9,7 @@ from literary_engineering_studio.config import default_config
 from literary_engineering_studio.opencode_binary import bundle_manifest, locate_opencode
 from literary_engineering_studio.opencode_client import OpenCodeClient, OpenCodeEndpoint, split_model
 from literary_engineering_studio.opencode_control import disconnect_provider
-from literary_engineering_studio.opencode_profiles import advisor_profile, worker_profile, write_profile
+from literary_engineering_studio.opencode_profiles import advisor_profile, steward_profile, worker_profile, write_profile
 from literary_engineering_studio.runtime_events import normalize_opencode_event
 
 
@@ -37,6 +37,10 @@ class OpenCodeFoundationTests(unittest.TestCase):
         advisor_permissions = advisor["agent"]["project-advisor"]["permission"]
         self.assertEqual(advisor_permissions["read"], "allow")
         self.assertEqual(advisor_permissions["edit"], "deny")
+        steward_permissions = steward_profile("opencode/big-pickle")["agent"]["creative-steward"]["permission"]
+        self.assertEqual(steward_permissions["read"], "allow")
+        self.assertEqual(steward_permissions["edit"], "deny")
+        self.assertEqual(steward_permissions["bash"], "deny")
 
     def test_profile_is_valid_json_and_model_is_explicit(self):
         with tempfile.TemporaryDirectory() as temporary:

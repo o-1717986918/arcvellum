@@ -1,0 +1,83 @@
+const API_PREFIX = import.meta.env.DEV ? "/api" : "";
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status = 0) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export async function bootstrapDesktopSession(): Promise<void> {
+  const token = window.__LES_API_TOKEN;
+  if (!token) return;
+  const response = await fetch(`${API_PREFIX}/desktop/session`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new ApiError("客户端身份验证失败，请重新启动 ArcVellum。", response.status);
+  delete window.__LES_API_TOKEN;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers || {});
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${API_PREFIX}${path}`, { ...init, headers, credentials: "include" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof payload?.detail === "string" ? payload.detail : `请求失败（${response.status}）`;
+    throw new ApiError(detail, response.status);
+  }
+  return payload as T;
+}
+
+export async function streamApi(
+  path: string,
+  init: RequestInit,
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+): Promise<void> {
+  const headers = new Headers(init.headers || {});
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${API_PREFIX}${path}`, { ...init, headers, credentials: "include" });
+  if (!response.ok || !response.body) {
+    const payload = await response.json().catch(() => ({}));
+    throw new ApiError(typeof payload?.detail === "string" ? payload.detail : "顾问连接没有成功。", response.status);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() || "";
+    for (const frame of frames) {
+      if (!frame.trim() || frame.startsWith(":")) continue;
+      let event = "message";
+      const data: string[] = [];
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+      }
+      if (!data.length) continue;
+      const payload = JSON.parse(data.join("\n")) as Record<string, unknown>;
+      onEvent(event, payload);
+    }
+    if (done) break;
+  }
+}
+
+export function sseUrl(path: string): string {
+  return `${API_PREFIX}${path}`;
+}
+
+export function query(values: Record<string, string | number | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  return params.toString();
+}

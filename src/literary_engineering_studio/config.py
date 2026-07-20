@@ -98,6 +98,10 @@ def default_config() -> dict[str, Any]:
             "host": "127.0.0.1",
             "port": 8791,
         },
+        "updates": {
+            "channel": "stable",
+            "last_checked_at": "",
+        },
     }
 
 

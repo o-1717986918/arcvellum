@@ -30,6 +30,8 @@ fn wait_for_server(port: u16, timeout: Duration) -> bool {
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -44,6 +46,15 @@ fn main() {
             let port_arg = port.to_string();
             let parent_pid = std::process::id().to_string();
             let token = Uuid::new_v4().simple().to_string();
+            let main_window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                .title("ArcVellum")
+                .inner_size(1320.0, 860.0)
+                .min_inner_size(980.0, 680.0)
+                .initialization_script(&format!(
+                    "window.__LES_API_TOKEN = '{}';",
+                    token
+                ))
+                .build()?;
             let opencode = app
                 .path()
                 .resolve("resources/opencode.exe", BaseDirectory::Resource)?;
@@ -66,23 +77,21 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 while events.recv().await.is_some() {}
             });
-            if !wait_for_server(port, Duration::from_secs(45)) {
-                return Err("Studio application service did not become ready".into());
-            }
-            let url = format!("http://127.0.0.1:{port}/").parse()?;
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("文学工程 Agent Studio")
-                .inner_size(1320.0, 860.0)
-                .min_inner_size(980.0, 680.0)
-                .initialization_script(&format!(
-                    "window.__LES_API_TOKEN = '{}';",
-                    token
-                ))
-                .build()?;
+            thread::spawn(move || {
+                if wait_for_server(port, Duration::from_secs(45)) {
+                    if let Ok(url) = format!("http://127.0.0.1:{port}/").parse() {
+                        let _ = main_window.navigate(url);
+                    }
+                } else {
+                    let _ = main_window.eval(
+                        "window.dispatchEvent(new CustomEvent('arcvellum:startup-error'));",
+                    );
+                }
+            });
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("failed to build Literary Engineering Studio");
+        .expect("failed to build ArcVellum");
 
     app.run(|app, event| {
         if matches!(event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {

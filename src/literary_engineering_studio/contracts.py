@@ -41,6 +41,23 @@ CREATIVE_TASK_TOKENS = (
     "character",
     "world",
 )
+EXPLICIT_EXECUTION_FIELDS = {
+    "execution_policy",
+    "agent_role",
+    "human_gate",
+    "runtime_capabilities_required",
+    "output_contracts",
+}
+PROMPT_ASSET_LIST_FIELDS = (
+    "required_inputs",
+    "optional_inputs",
+    "context_groups",
+    "hard_constraints",
+    "style_constraints",
+    "output_contract",
+    "review_requirements",
+    "forbidden_shortcuts",
+)
 
 
 @dataclass(frozen=True)
@@ -144,7 +161,8 @@ class TaskPackage:
         explicit = self.payload.get("human_gate")
         if isinstance(explicit, dict) and isinstance(explicit.get("required"), bool):
             reasons = tuple(str(item) for item in explicit.get("reasons") or [] if str(item).strip())
-            return HumanGate(bool(explicit["required"]), reasons, "task-package")
+            source = str(explicit.get("source") or "task-package")
+            return HumanGate(bool(explicit["required"]), reasons, source)
         haystack = " ".join(
             [
                 self.current_state,
@@ -251,6 +269,18 @@ def _validate_task_payload(payload: dict[str, Any]) -> None:
 
 
 def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:
+    present = EXPLICIT_EXECUTION_FIELDS & set(payload)
+    if present and present != EXPLICIT_EXECUTION_FIELDS:
+        missing = ", ".join(sorted(EXPLICIT_EXECUTION_FIELDS - present))
+        raise ValueError(f"partial explicit execution contract; missing: {missing}")
+    if "execution_policy" in payload and payload["execution_policy"] not in {
+        "deterministic",
+        "agent-required",
+        "human-required",
+    }:
+        raise ValueError("task package execution_policy is invalid")
+    if "agent_role" in payload and not str(payload["agent_role"] or "").strip():
+        raise ValueError("task package agent_role must not be empty")
     if "human_gate" in payload:
         gate = payload["human_gate"]
         if not isinstance(gate, dict) or not isinstance(gate.get("required"), bool):
@@ -262,6 +292,16 @@ def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:
             raise ValueError(f"task package field must be a list: {field}")
     if "output_contracts" in payload:
         _parse_output_contracts(payload["output_contracts"])
+    prompt_asset = payload.get("prompt_asset")
+    if prompt_asset is not None:
+        if not isinstance(prompt_asset, dict):
+            raise ValueError("task package prompt_asset must be an object")
+        for field in ("requested_id", "resolved_id", "version", "body"):
+            if not str(prompt_asset.get(field) or "").strip():
+                raise ValueError(f"task package prompt_asset.{field} must not be empty")
+        for field in PROMPT_ASSET_LIST_FIELDS:
+            if not isinstance(prompt_asset.get(field), list):
+                raise ValueError(f"task package prompt_asset.{field} must be a list")
 
 
 def _derive_execution_policy(payload: dict[str, Any], human_gate: HumanGate) -> str:

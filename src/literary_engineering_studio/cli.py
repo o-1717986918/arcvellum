@@ -34,8 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
     runner_probe.add_argument("--timeout", type=int, default=90)
     opencode_install = sub.add_parser("opencode-install", help="Install and verify the pinned bundled OpenCode Runner.")
     opencode_install.add_argument("--destination", default="")
-    prompt_eval = sub.add_parser("prompt-eval", help="Run deterministic regression checks for high-risk prompt assets.")
+    prompt_eval = sub.add_parser("prompt-eval", help="Run deterministic and optional live semantic prompt regressions.")
     prompt_eval.add_argument("--output", default="")
+    prompt_eval.add_argument("--live", action="store_true")
+    prompt_eval.add_argument("--runner", choices=["opencode", "claude-code", "codex-cli"], default="opencode")
+    prompt_eval.add_argument("--model", default="")
+    prompt_eval.add_argument("--timeout", type=int, default=240)
 
     project_list = sub.add_parser("project-list", help="List Studio projects and the current project.")
     project_list.set_defaults(project_command="list")
@@ -112,7 +116,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "prompt-eval":
-        report = write_prompt_evaluation(Path(args.output)) if args.output else evaluate_prompt_assets()
+        options = {
+            "config": config,
+            "live": bool(args.live),
+            "runner_id": args.runner,
+            "model": args.model,
+            "timeout": args.timeout,
+        }
+        report = write_prompt_evaluation(Path(args.output), **options) if args.output else evaluate_prompt_assets(**options)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report["status"] == "pass" else 1
 

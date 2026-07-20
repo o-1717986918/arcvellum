@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -15,6 +16,60 @@ from .config import default_config_path
 
 REGISTRY_SCHEMA = "literary-engineering-studio/project-registry/v0.1"
 DIRECTION_SCHEMA = "literary-engineering-studio/user-direction/v0.1"
+
+
+def validate_project_location(
+    *,
+    mode: str,
+    project_root: str = "",
+    parent_directory: str = "",
+    folder_name: str = "",
+) -> dict[str, Any]:
+    normalized_mode = mode.strip().lower()
+    if normalized_mode not in {"open", "create"}:
+        raise ValueError("目录验证模式必须是 open 或 create。")
+    conflicts: list[str] = []
+    warnings: list[str] = []
+    if normalized_mode == "open":
+        path = Path(project_root).expanduser().resolve()
+        exists = path.is_dir()
+        has_project = exists and (path / "project.yaml").is_file()
+        if exists and not has_project:
+            conflicts.append("这里没有找到 ArcVellum 作品。")
+        if not exists:
+            conflicts.append("选择的文件夹不存在。")
+        return {
+            "valid": has_project,
+            "mode": normalized_mode,
+            "resolved_path": str(path),
+            "writable": bool(exists and os.access(path, os.W_OK)),
+            "exists": exists,
+            "conflicts": conflicts,
+            "warnings": warnings,
+        }
+
+    parent = Path(parent_directory).expanduser().resolve()
+    folder = _safe_folder_name(folder_name or "untitled-work")
+    target = parent / folder
+    parent_exists = parent.is_dir()
+    writable = bool(parent_exists and os.access(parent, os.W_OK))
+    if not parent_exists:
+        conflicts.append("选择的保存位置不存在。")
+    elif not writable:
+        conflicts.append("ArcVellum 无法在这个位置建立作品。")
+    if target.exists():
+        conflicts.append("这个位置已经有同名文件夹。")
+    if len(str(target)) > 220:
+        warnings.append("目录较长，某些导出工具可能无法处理。")
+    return {
+        "valid": not conflicts,
+        "mode": normalized_mode,
+        "resolved_path": str(target),
+        "writable": writable,
+        "exists": target.exists(),
+        "conflicts": conflicts,
+        "warnings": warnings,
+    }
 
 
 def project_registry_path() -> Path:
