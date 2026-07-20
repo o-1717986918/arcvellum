@@ -23,6 +23,7 @@ from .core_read_models import (
     style_library,
     style_mounts,
 )
+from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
 from .jobs import JobStore
 from .project_manager import (
     create_project,
@@ -37,12 +38,13 @@ from .worker import AgentWorker
 
 try:
     from fastapi import FastAPI, HTTPException
-    from fastapi.responses import HTMLResponse, Response, StreamingResponse
+    from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
     from pydantic import BaseModel
 except ImportError:  # pragma: no cover
     FastAPI = None
     HTTPException = None
     HTMLResponse = None
+    FileResponse = None
     Response = None
     StreamingResponse = None
     BaseModel = object
@@ -283,6 +285,25 @@ def create_app():
     @app.post("/project/ui-note")
     def project_ui_note(payload: dict[str, Any]):
         return _call(lambda: record_ui_note(config, _project(str(payload.get("project_root") or "")), payload))
+
+    @app.get("/project/delivery")
+    def project_delivery(project_root: str):
+        return _call(lambda: build_delivery(config, _project(project_root)))
+
+    @app.get("/project/delivery/download")
+    def project_delivery_download(project_root: str, path: str):
+        root = _project(project_root)
+        try:
+            target = resolve_delivery_file(root, path)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return FileResponse(
+            target,
+            media_type=delivery_content_type(target),
+            filename=target.name,
+        )
 
     @app.get("/style-lab/library")
     def style_lab_library(style_library_root: str = ""):

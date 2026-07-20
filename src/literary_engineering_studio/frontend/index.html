@@ -11,7 +11,7 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="mark"><img src="/ui/assets/editorial-icons/dashboard-board.png" alt="" /></div>
+          <div class="mark" aria-hidden="true"><span class="ui-icon icon-feather"></span></div>
           <div>
             <h1>文学工程 Agent Studio</h1>
             <p>从一个创作方向开始，管理作品、Agent 与正式交付。</p>
@@ -21,14 +21,15 @@
           <span>当前作品</span>
           <strong id="currentProjectName">尚未选择</strong>
           <small id="currentProjectMeta">从项目中心创建或打开作品</small>
-          <button id="switchProject" type="button">切换作品</button>
+          <button id="switchProject" class="with-icon icon-switch" type="button">切换作品</button>
         </section>
         <nav class="nav" aria-label="主导航">
-          <button data-view="projects" class="active">项目中心</button>
-          <button data-view="dashboard">创作总控</button>
-          <button data-view="activity">Agent 工作台</button>
-          <button data-view="library">作品档案</button>
-          <button data-view="style">文风管理</button>
+          <button data-view="projects" class="active"><span class="ui-icon icon-projects"></span><span>项目中心</span></button>
+          <button data-view="dashboard"><span class="ui-icon icon-dashboard"></span><span>创作总控</span></button>
+          <button data-view="activity"><span class="ui-icon icon-agent"></span><span>Agent 工作台</span></button>
+          <button data-view="library"><span class="ui-icon icon-library"></span><span>作品档案</span></button>
+          <button data-view="style"><span class="ui-icon icon-style"></span><span>文风管理</span></button>
+          <button data-view="delivery"><span class="ui-icon icon-delivery"></span><span>交付中心</span></button>
         </nav>
         <div class="side-note">
           <span id="healthDot" class="dot"></span>
@@ -39,13 +40,16 @@
       <main class="workspace">
         <section id="view-projects" class="view active">
           <header class="view-header hero-panel project-hero">
-            <div>
+            <div class="hero-copy">
               <span class="eyebrow">项目中心</span>
               <h2>作品从这里建立，也从这里继续。</h2>
               <p class="muted">创建项目会同时建立人物、世界观、情节、审查、字数预算与导出所需的完整工程结构。选择作品后，其他页面会自动进入同一个项目上下文。</p>
             </div>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/dashboard-board.png" alt="" />
+            </div>
             <div class="hero-actions">
-              <button id="refreshProjects" class="primary" type="button">刷新项目</button>
+              <button id="refreshProjects" class="primary with-icon icon-refresh" type="button">刷新项目</button>
             </div>
           </header>
 
@@ -73,7 +77,7 @@
                 <label>类型与气质<input name="genre" placeholder="例如：近未来悬疑 / 克制 / 群像" /></label>
                 <label>最初创作方向<textarea name="premise" rows="5" placeholder="用自己的话说明想写什么。项目建立后仍可继续补充和改变方向。"></textarea></label>
                 <label class="optional-field">目录名（可选）<input name="folder_name" placeholder="留空时由作品名称生成" /></label>
-                <button class="primary" type="submit">建立完整项目</button>
+                <button class="primary with-icon icon-plus" type="submit">建立完整项目</button>
               </form>
             </article>
 
@@ -84,7 +88,7 @@
               </div>
               <form id="openProjectForm" class="project-open-form">
                 <label>项目目录<input name="project_root" required placeholder="包含 project.yaml 的作品目录" /></label>
-                <button type="submit">打开这个项目</button>
+                <button class="with-icon icon-folder-open" type="submit">打开这个项目</button>
               </form>
               <div class="project-client-note">
                 <b>一个客户端，管理完整创作过程</b>
@@ -104,14 +108,17 @@
 
         <section id="view-dashboard" class="view">
           <header class="view-header hero-panel">
-            <div>
+            <div class="hero-copy">
               <span class="eyebrow">项目驾驶舱</span>
               <h2>下一步该做什么，打开就知道。</h2>
               <p class="muted">这里不会把机器记录原样摊开。系统会把状态机、审查门禁、待办任务、正文进度和导出链路翻译成可行动的中文说明。</p>
             </div>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/manuscript-page.png" alt="" />
+            </div>
             <div class="hero-actions">
-              <button id="refreshDashboard" class="primary">刷新状态</button>
-              <button id="toggleDashboardPoll">观察项目变化</button>
+              <button id="refreshDashboard" class="primary with-icon icon-refresh">刷新状态</button>
+              <button id="toggleDashboardPoll" class="with-icon icon-radio">观察项目变化</button>
             </div>
           </header>
 
@@ -140,8 +147,8 @@
                 <textarea name="message" rows="4" placeholder="例如：第一卷先建立两位主角的互不信任，不要过早解释灾难真相。"></textarea>
               </label>
               <div class="direction-actions">
-                <button id="saveDirection" class="primary" type="submit">保存创作方向</button>
-                <button id="saveAndExecute" type="button">保存并前往 Agent 工作台</button>
+                <button id="saveDirection" class="primary with-icon icon-save" type="submit">保存创作方向</button>
+                <button id="saveAndExecute" class="with-icon icon-arrow-right" type="button">保存并前往 Agent 工作台</button>
               </div>
             </form>
           </section>
@@ -215,14 +222,17 @@
 
         <section id="view-activity" class="view">
           <header class="view-header hero-panel activity-hero">
-            <div>
+            <div class="hero-copy">
               <span class="eyebrow">任务推进</span>
               <h2>看见平台 Agent 正在把项目推到哪里。</h2>
               <p class="muted">这里读取真实任务事件、路线门禁和用户选择节点。亮起的任务不是装饰动画，而是 CLI 状态机给出的当前现场。</p>
             </div>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/branch-cards.png" alt="" />
+            </div>
             <div class="hero-actions">
-              <button id="refreshActivity" class="primary">刷新推进</button>
-              <button id="toggleActivityPoll">观察推进</button>
+              <button id="refreshActivity" class="primary with-icon icon-refresh">刷新推进</button>
+              <button id="toggleActivityPoll" class="with-icon icon-radio">观察推进</button>
             </div>
           </header>
 
@@ -265,9 +275,9 @@
                 </select>
               </label>
               <div class="worker-actions">
-                <button id="detectRuntimes" type="button">检测运行时</button>
-                <button id="prepareWorkerTask" type="button">准备任务</button>
-                <button id="runWorkerTask" type="button" class="primary">执行下一步</button>
+                <button id="detectRuntimes" class="with-icon icon-search" type="button">检测运行时</button>
+                <button id="prepareWorkerTask" class="with-icon icon-package" type="button">准备任务</button>
+                <button id="runWorkerTask" type="button" class="primary with-icon icon-play">执行下一步</button>
               </div>
             </form>
             <div id="runtimeCards" class="runtime-grid empty">正在等待运行时检测。</div>
@@ -316,14 +326,17 @@
 
         <section id="view-library" class="view">
           <header class="view-header hero-panel library-hero">
-            <div>
+            <div class="hero-copy">
               <span class="eyebrow">作品档案</span>
               <h2>像翻资料夹一样查看作品。</h2>
               <p class="muted">这里展示草稿、人物、世界观、场景、推演分支、文风与审查证据。正文会过滤工作流痕迹；机器记录会被包装成卡片、标签和摘要。</p>
             </div>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/archive-folder.png" alt="" />
+            </div>
             <div class="hero-actions">
-              <button id="refreshLibrary" class="primary">刷新档案</button>
-              <button id="toggleLibraryPoll">观察档案变化</button>
+              <button id="refreshLibrary" class="primary with-icon icon-refresh">刷新档案</button>
+              <button id="toggleLibraryPoll" class="with-icon icon-radio">观察档案变化</button>
             </div>
           </header>
 
@@ -410,8 +423,8 @@
                 </label>
                 <label class="wide">内容<textarea name="value" rows="4" placeholder="写给自己和平台 Agent 看的备注。正式剧情改动仍要进入候选与审查。"></textarea></label>
                 <div class="hero-actions">
-                  <button id="saveDisplayField" class="primary">保存标注</button>
-                  <button id="saveUiNote">追加备注</button>
+                  <button id="saveDisplayField" class="primary with-icon icon-save">保存标注</button>
+                  <button id="saveUiNote" class="with-icon icon-pencil">追加备注</button>
                 </div>
               </form>
               <div id="editStatus" class="dashboard-status">等待选择档案。</div>
@@ -419,14 +432,67 @@
           </div>
         </section>
 
+        <section id="view-delivery" class="view">
+          <header class="view-header hero-panel delivery-hero">
+            <div class="hero-copy">
+              <span class="eyebrow">交付中心</span>
+              <h2>把通过门禁的正文，交成真正可用的作品。</h2>
+              <p class="muted">这里汇总正式导出路线、阻塞原因和已经生成的 DOCX、PDF、HTML 或发布包。工作痕迹不会混进最终作品。</p>
+            </div>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/manuscript-page.png" alt="" />
+            </div>
+            <div class="hero-actions">
+              <button id="refreshDelivery" class="primary with-icon icon-refresh" type="button">刷新交付状态</button>
+              <button id="prepareDelivery" class="with-icon icon-package" type="button">准备交付任务</button>
+            </div>
+          </header>
+
+          <form id="deliveryForm" class="control-strip">
+            <label>当前项目<input name="project_root" readonly placeholder="请先在项目中心选择作品" /></label>
+            <div class="dashboard-status" id="deliveryStatus">等待读取</div>
+          </form>
+
+          <section id="deliveryBrief" class="delivery-brief empty" aria-live="polite">
+            <div class="delivery-seal"><span class="ui-icon icon-delivery"></span></div>
+            <div>
+              <span>正式交付状态</span>
+              <h3>选择作品后检查导出路线</h3>
+              <p>系统会说明哪些门禁尚未完成，并列出所有可以直接下载的正式文件。</p>
+            </div>
+          </section>
+
+          <div class="delivery-layout">
+            <section class="panel">
+              <div class="panel-title">
+                <span>可下载文件</span>
+                <small id="deliveryFileCount">暂无交付文件</small>
+              </div>
+              <div id="deliveryFiles" class="delivery-files empty">通过导出与发布门禁后，文件会按更新时间排列在这里。</div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">
+                <span>交付前检查</span>
+                <small>只显示真正影响发布的事项</small>
+              </div>
+              <div id="deliveryGates" class="delivery-gates empty">尚未读取导出路线。</div>
+              <button id="openDeliveryWorker" class="primary with-icon icon-arrow-right" type="button">前往 Agent 工作台处理</button>
+            </section>
+          </div>
+        </section>
+
         <section id="view-style" class="view">
           <header class="view-header hero-panel compact-hero">
-            <div>
+            <div class="hero-copy">
               <span class="eyebrow">文风挂载</span>
               <h2>确认创作是否已经带着正确的文风出发。</h2>
               <p class="muted">这里只展示挂载结果和风险提示；作家项目、语料导入和提示词生成仍建议走 CLI 状态机。</p>
             </div>
-            <button id="loadStyleStatus" class="primary">检查文风</button>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/style-card.png" alt="" />
+            </div>
+            <button id="loadStyleStatus" class="primary with-icon icon-refresh">检查文风</button>
           </header>
 
           <form id="styleForm" class="control-strip">

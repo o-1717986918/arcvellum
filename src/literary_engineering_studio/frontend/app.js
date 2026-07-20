@@ -1,6 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
-const UI_VERSION = "0.2.0";
+const UI_VERSION = "0.2.1";
 let dashboardTimer = null;
 let dashboardStream = null;
 let activityTimer = null;
@@ -8,6 +8,7 @@ let activityStream = null;
 let libraryTimer = null;
 let libraryStream = null;
 let librarySnapshot = null;
+let deliverySnapshot = null;
 let activitySnapshot = null;
 let activeLibraryKind = "drafts";
 let currentChoices = [];
@@ -106,7 +107,7 @@ function setSharedStyleLibraryRoot(value) {
 }
 
 function sharedProjectRoot() {
-  return currentProject?.path || $("#dashboardForm")?.project_root.value || $("#activityForm")?.project_root.value || $("#libraryForm")?.project_root.value || $("#styleForm")?.project_root.value || "";
+  return currentProject?.path || $("#dashboardForm")?.project_root.value || $("#activityForm")?.project_root.value || $("#libraryForm")?.project_root.value || $("#deliveryForm")?.project_root.value || $("#styleForm")?.project_root.value || "";
 }
 
 async function loadProjects() {
@@ -264,6 +265,77 @@ async function loadRuntimes() {
         </article>
       `).join("")
     : "没有发现可用的 Agent 运行时。";
+}
+
+async function loadDelivery() {
+  const root = sharedProjectRoot();
+  if (!root) throw new Error("请先在项目中心选择一个作品。");
+  $("#deliveryStatus").textContent = "正在检查交付路线";
+  const result = await api(`/project/delivery?project_root=${encodeURIComponent(root)}`);
+  deliverySnapshot = result;
+  renderDelivery(result);
+  $("#deliveryStatus").textContent = result.generated_at ? `已刷新 ${formatTime(result.generated_at)}` : "已刷新";
+  return result;
+}
+
+function renderDelivery(result) {
+  const summary = result.summary || {};
+  const route = result.route || {};
+  const files = Array.isArray(result.files) ? result.files : [];
+  const brief = $("#deliveryBrief");
+  brief.className = `delivery-brief status-${escapeHtml(result.status || "pending")}`;
+  brief.innerHTML = `
+    <div class="delivery-seal"><span class="ui-icon icon-delivery"></span></div>
+    <div>
+      <span>正式交付状态</span>
+      <h3>${escapeHtml(result.headline || "正在等待交付检查。")}</h3>
+      <p>${Number(summary.blocking_count || 0)} 项硬门禁，${Number(summary.pending_task_count || 0)} 项待办任务，${files.length} 个可下载文件。</p>
+    </div>
+  `;
+  $("#deliveryFileCount").textContent = files.length ? `${files.length} 个可下载文件` : "暂无交付文件";
+  $("#deliveryFiles").classList.toggle("empty", !files.length);
+  $("#deliveryFiles").innerHTML = files.length
+    ? files.map((item) => `
+        <article class="delivery-file">
+          <div class="delivery-file-icon"><span>${escapeHtml(item.format || "FILE")}</span></div>
+          <div>
+            <span>${escapeHtml(item.source || "导出文件")}</span>
+            <b>${escapeHtml(item.title || item.path)}</b>
+            <small>${escapeHtml(formatFileSize(item.size_bytes))} · ${escapeHtml(formatTime(item.modified_at))}</small>
+          </div>
+          <a class="download-link with-icon icon-download" href="/project/delivery/download?project_root=${encodeURIComponent(result.project_root)}&path=${encodeURIComponent(item.path)}">下载</a>
+        </article>
+      `).join("")
+    : `
+      <div class="delivery-empty">
+        <img src="${iconPath("manuscript-page")}" alt="" />
+        <div><b>还没有正式交付文件</b><p>先完成右侧列出的门禁，再让 Agent Worker 推进“导出与发布”路线。</p></div>
+      </div>
+    `;
+  const gates = Array.isArray(route.top_blocking_gates) ? route.top_blocking_gates : [];
+  $("#deliveryGates").classList.toggle("empty", !gates.length);
+  $("#deliveryGates").innerHTML = gates.length
+    ? gates.map((gate, index) => `
+        <article class="delivery-gate">
+          <span>${String(index + 1).padStart(2, "0")}</span>
+          <p>${escapeHtml(friendlyMessage(gate.message || gate.key || "需要继续处理"))}</p>
+        </article>
+      `).join("")
+    : `<article class="delivery-ready"><span class="ui-icon icon-delivery"></span><p>导出路线没有返回硬阻塞，可以检查最新文件或继续发布。</p></article>`;
+}
+
+function formatFileSize(value) {
+  const bytes = Number(value || 0);
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+async function openDeliveryWorker(prepare = false) {
+  activateView("activity");
+  $("#workerForm").route.value = "export-and-release";
+  await loadActivity();
+  if (prepare) await prepareWorkerTask();
 }
 
 function workerPayload() {
@@ -1845,6 +1917,7 @@ function bind() {
       }
       if (button.dataset.view === "activity" && sharedProjectRoot()) guarded(loadActivity);
       if (button.dataset.view === "library" && sharedProjectRoot()) guarded(loadLibrary);
+      if (button.dataset.view === "delivery" && sharedProjectRoot()) guarded(loadDelivery);
       if (button.dataset.view === "style" && sharedProjectRoot()) guarded(loadStyleStatus);
     });
   });
@@ -1883,6 +1956,9 @@ function bind() {
   });
   $("#refreshLibrary").addEventListener("click", () => guarded(loadLibrary));
   $("#toggleLibraryPoll").addEventListener("click", () => guarded(toggleLibraryPoll));
+  $("#refreshDelivery").addEventListener("click", () => guarded(loadDelivery));
+  $("#prepareDelivery").addEventListener("click", () => guarded(() => openDeliveryWorker(true)));
+  $("#openDeliveryWorker").addEventListener("click", () => guarded(() => openDeliveryWorker(false)));
   $("#libraryForm").section.addEventListener("change", (event) => {
     activeLibraryKind = event.target.value;
     if (librarySnapshot) renderLibrary(librarySnapshot);
