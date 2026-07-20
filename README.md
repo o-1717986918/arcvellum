@@ -60,7 +60,7 @@ Studio 内置的是 Agent Runner，不是某一家模型服务。用户可以使
 
 ### 1. 普通用户安装
 
-运行 Release 中的 `文学工程 Agent Studio_0.3.0_x64-setup.exe`。安装包已经包含应用服务、文学工程内核和 OpenCode，不要求预装 Python、Node.js 或 OpenCode。首次启动后，在“连接与模型”选择可用模型并执行真实连接测试。
+运行 Release 中的 `literary-engineering-agent-studio_0.3.0_x64-setup.exe`。安装包已经包含应用服务、文学工程内核和 OpenCode，不要求预装 Python、Node.js 或 OpenCode。首次启动后，在“连接与模型”选择可用模型并执行真实连接测试。
 
 当前构建尚未进行商业代码签名，Windows 可能显示来源确认；正式分发前应接入签名证书。
 
