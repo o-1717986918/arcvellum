@@ -4,7 +4,7 @@
 
 ArcVellum 是面向小说、剧本与伪记录作品的本地 Agent 创作平台。它把人物、世界观、情节、场景、文风、字数预算、审查证据和正式正文放进一条可恢复、可追溯的生产线；Agent 负责创作判断，文学工程内核负责签发任务、验证产物和阻止跳步。
 
-当前版本：**v0.7.0 Reader, Advisor & Narrative Observatory**。
+当前版本：**v0.7.1 Desktop Connectivity Hotfix**。
 
 ![ArcVellum 叙事观测仪](docs/images/arcvellum-overview-v070.png)
 
@@ -19,7 +19,7 @@ ArcVellum 是面向小说、剧本与伪记录作品的本地 Agent 创作平台
 - **Review 不能被跳过**：候选稿、审查、受限修订、晋升和导出使用同一份内容指纹。
 - **最终作品保持干净**：Markdown 与 DOCX 过滤任务标记、Scene ID、Canon 注释、状态补丁和审查记录。
 
-## v0.7.0 新体验
+## v0.7 系列新体验
 
 ### 一本会随创作生长的书
 
@@ -118,12 +118,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 
 ## 项目状态
 
-v0.7.0 已完成默认作品库、桌面稳定性、完整正文阅读器、顾问人格与主动消息、Narrative Observatory v1，以及对应的 Windows 发布链路。它仍属于 Beta：进入 v1.0 前还需持续积累多类型长篇样例、长时间无人值守恢复证据、Windows 10/11 干净虚拟机安装与商业代码签名验证。
+v0.7.1 修复了安装版 WebView 无法跨源连接本地创作服务的问题。v0.7 系列已经完成默认作品库、完整正文阅读器、顾问人格与主动消息、Narrative Observatory v1，以及对应的 Windows 发布链路。它仍属于 Beta：进入 v1.0 前还需持续积累多类型长篇样例、长时间无人值守恢复证据、Windows 10/11 干净虚拟机安装与商业代码签名验证。
 
 进一步阅读：
 
 - [v0.7.0 阅读、顾问与叙事观测计划](docs/roadmap/arcvellum-v0.5.1-v0.7-reader-advisor-observatory-plan.md)
 - [v0.7.0 发行说明](docs/releases/v0.7.0.md)
+- [v0.7.1-v0.8 创作控制与叙事星仪计划](docs/roadmap/arcvellum-v0.7.1-v0.8-creative-control-and-narrative-orrery-plan.md)
+- [v0.7.1 安装版连接热修](docs/releases/v0.7.1.md)
 - [当前内核审查](docs/architecture/current-core-review.md)
 - [发布与签名说明](docs/releases/RELEASING.md)
 

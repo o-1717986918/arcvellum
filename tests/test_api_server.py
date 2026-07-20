@@ -117,6 +117,28 @@ class ApiServerTests(unittest.TestCase):
                     self.assertIn("SameSite=strict", cookie)
                     self.assertEqual(desktop.get("/health").status_code, 200)
 
+    def test_packaged_tauri_origin_can_send_authenticated_cross_origin_requests(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env = {
+                "LES_API_TOKEN": "test-desktop-bootstrap-token",
+                "LES_CONFIG_PATH": str(root / "config.json"),
+                "LES_DATA_ROOT": str(root / "data"),
+            }
+            with patch.dict(os.environ, env):
+                with TestClient(create_app()) as desktop:
+                    response = desktop.options(
+                        "/application/bootstrap",
+                        headers={
+                            "Origin": "http://tauri.localhost",
+                            "Access-Control-Request-Method": "GET",
+                            "Access-Control-Request-Headers": "authorization",
+                        },
+                    )
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.headers.get("access-control-allow-origin"), "http://tauri.localhost")
+                    self.assertEqual(response.headers.get("access-control-allow-credentials"), "true")
+
     def test_worker_stream_resumes_after_last_event_id(self):
         store = self.client.app.state.lifecycle.store
         job = store.create({"project_root": "C:/test", "route": "scene-development"})

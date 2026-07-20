@@ -241,6 +241,9 @@ export const useAppStore = defineStore("app", () => {
 
 export function friendlyError(cause: unknown, fallback: string): string {
   if (cause instanceof Error && cause.message.trim()) {
+    if (/failed to fetch|cannot\s*fetch|load failed|networkerror/i.test(cause.message)) {
+      return "本地创作服务没有连接成功。请重新启动 ArcVellum；如果仍然失败，请在“使用帮助”中导出诊断信息。";
+    }
     return cause.message
       .replace("not a Literary Engineering work project", "这里没有找到 ArcVellum 作品")
       .replace("project.yaml", "作品入口文件");

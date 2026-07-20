@@ -102,4 +102,11 @@ describe("application store", () => {
     dashboardStream?.callback("dashboard", { ok: true, current_task: { title: "开始写第一场" } });
     expect(store.dashboard?.current_task).toEqual({ title: "开始写第一场" });
   });
+
+  it("explains a packaged desktop connection failure in user-facing language", async () => {
+    const { friendlyError } = await import("./app");
+
+    expect(friendlyError(new TypeError("Failed to fetch"), "启动失败")).toContain("本地创作服务没有连接成功");
+    expect(friendlyError(new TypeError("CannotFetch"), "启动失败")).toContain("本地创作服务没有连接成功");
+  });
 });

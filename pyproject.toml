@@ -1,6 +1,6 @@
 [project]
 name = "literary-engineering-studio"
-version = "0.7.0"
+version = "0.7.1"
 description = "Standalone long-form literary project studio with an embedded workflow engine and controlled Agent runtimes."
 requires-python = ">=3.10"
 dependencies = []

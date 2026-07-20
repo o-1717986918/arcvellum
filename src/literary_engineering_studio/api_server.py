@@ -215,7 +215,12 @@ def create_app():
         allow_origins=["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"],
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
-        allow_credentials=False,
+        # The packaged WebView talks to the loopback sidecar from a Tauri
+        # origin. Its authenticated requests use credentials="include" so the
+        # browser requires this response header even when Bearer auth is also
+        # present. Vite's same-origin proxy does not exercise this production
+        # CORS path, so keep it covered by an API regression test.
+        allow_credentials=True,
     )
     api_token = os.environ.get("LES_API_TOKEN", "").strip()
     desktop_session_token = secrets.token_urlsafe(32) if api_token else ""

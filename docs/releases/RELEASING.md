@@ -48,6 +48,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 6. 在干净的 Windows 10/11 虚拟机验证首次安装、覆盖升级、离线启动、中文路径和卸载。
 7. 用已安装旧版本检查应用内更新，确认签名、下载、安装与重启均通过。
 
+安装版验证必须通过真实 Tauri WebView 完成，不能只在 PowerShell 中请求冻结 sidecar 的 `/health`。最低证据包括：
+
+- WebView 完成 `/desktop/session`；
+- `/application/bootstrap` 和 `/projects` 成功返回并渲染作品页面；
+- Tauri Origin 的 CORS 预检同时返回准确 Origin 与 `Access-Control-Allow-Credentials: true`；
+- Dashboard 或 Reader 的 SSE 能持续接收；
+- sidecar 故障时显示中文恢复提示，不泄漏 `Failed to fetch`；
+- 关闭主窗口后 sidecar 自动退出。
+
 ## 回滚
 
 更新失败时 Tauri 保留当前安装。若正式版本存在严重问题，停止发布新的 `latest.json`，保留旧附件，修复后发布更高版本；不要用同一版本号覆盖不同二进制。
