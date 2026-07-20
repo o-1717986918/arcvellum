@@ -1,0 +1,60 @@
+{
+  "schema_id": "director_decision.v1",
+  "schema_value": "literary-engineering-workbench/director-decision/v0.1",
+  "required": [
+    "schema",
+    "run_id",
+    "user_direction",
+    "intent",
+    "chosen_workflow",
+    "rationale",
+    "actions",
+    "delegated_to",
+    "secondary_decisions",
+    "user_visible_decisions",
+    "constraints",
+    "risks",
+    "status"
+  ],
+  "recommended": ["fallback_policy", "confidence", "director_tools", "conversation_headline", "conversation_reply"],
+  "types": {
+    "schema": "str",
+    "run_id": "str",
+    "user_direction": "str",
+    "intent": "str",
+    "chosen_workflow": "str",
+    "rationale": "str",
+    "actions": "list",
+    "delegated_to": "list",
+    "secondary_decisions": "list",
+    "user_visible_decisions": "list",
+    "constraints": "list",
+    "risks": "list",
+    "fallback_policy": "str",
+    "confidence": "number",
+    "status": "str",
+    "director_tools": "list",
+    "conversation_headline": "str",
+    "conversation_reply": "str"
+  },
+  "enums": {
+    "intent": [
+      "status",
+      "conversation",
+      "project-seeding",
+      "character-lab",
+      "worldbuilding-lab",
+      "outline-lab",
+      "scene-loop"
+    ],
+    "chosen_workflow": [
+      "none",
+      "project-seeding",
+      "character-lab",
+      "worldbuilding-lab",
+      "outline-lab",
+      "scene-loop"
+    ],
+    "status": ["planned", "executed", "needs_user_direction", "failed"]
+  }
+}

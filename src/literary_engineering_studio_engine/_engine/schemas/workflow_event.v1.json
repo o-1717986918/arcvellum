@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "literary-engineering-workbench/workflow-event/v1",
+  "title": "CLI-mediated workflow event",
+  "type": "object",
+  "required": [
+    "schema",
+    "event_type",
+    "task_id",
+    "created_at",
+    "data"
+  ],
+  "properties": {
+    "schema": {
+      "const": "literary-engineering-workbench/workflow-event/v1"
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

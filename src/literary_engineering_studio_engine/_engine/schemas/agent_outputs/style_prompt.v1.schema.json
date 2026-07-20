@@ -1,0 +1,16 @@
+{
+  "schema_id": "style_prompt.v1",
+  "schema_value": "literary-engineering-workbench/style-prompt-agent/v1",
+  "required": ["schema", "prompt_markdown", "constraints", "avoid", "source_paths", "evaluation_plan"],
+  "recommended": ["risk_notes"],
+  "types": {
+    "schema": "str",
+    "prompt_markdown": "str",
+    "constraints": "list",
+    "avoid": "list",
+    "source_paths": "list",
+    "evaluation_plan": "list",
+    "risk_notes": "list"
+  },
+  "enums": {}
+}

@@ -10,6 +10,8 @@ class ConfigTests(unittest.TestCase):
         config = default_config()
         self.assertNotIn("model", config)
         self.assertNotIn("profiles", config)
+        self.assertNotIn("core", config)
+        self.assertEqual(config["engine"]["module"], "literary_engineering_studio_engine")
         self.assertIn("runtimes", config)
 
     def test_rejects_api_key_fields(self):
@@ -21,4 +23,3 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -1,0 +1,39 @@
+{
+  "schema": "literary-engineering-workbench/chapter-obligation-contract/v1",
+  "description": "Chapter-level promise, payoff, target-length, and reader-experience planning contract.",
+  "required_fields": [
+    "schema",
+    "chapter_id",
+    "status",
+    "target_chinese_chars",
+    "scene_count_target",
+    "chapter_function",
+    "must_payoff",
+    "must_setup",
+    "must_change",
+    "must_not_resolve",
+    "inherited_hooks",
+    "ending_hook",
+    "inventory_sufficiency",
+    "reader_experience_by_scene"
+  ],
+  "count_unit": "chinese_content_chars_including_chinese_punctuation",
+  "machine_count_unit": "machine_nonspace_chars",
+  "status_values": ["needs_agent", "pass", "ready", "pass_with_notes", "revise_required", "reject"],
+  "scene_required_fields": [
+    "scene_id",
+    "word_count_target",
+    "word_count_min",
+    "word_count_max",
+    "reader_question",
+    "promised_reward",
+    "withheld_information",
+    "payoff_or_delay",
+    "emotional_curve",
+    "tension_source",
+    "curiosity_hook",
+    "freshness_requirement",
+    "anti_summary_requirement",
+    "reader_aftertaste"
+  ]
+}

@@ -1,7 +1,7 @@
 [project]
 name = "literary-engineering-studio"
-version = "0.1.0"
-description = "CLI-bound Agent Worker and platform-agent studio for the Literary Engineering Workbench."
+version = "0.2.0"
+description = "Standalone long-form literary project studio with an embedded workflow engine and controlled Agent runtimes."
 requires-python = ">=3.10"
 dependencies = []
 
@@ -22,7 +22,28 @@ les = "literary_engineering_studio.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+literary_engineering_studio = [
+    "frontend/*.html",
+    "frontend/*.css",
+    "frontend/*.js",
+    "frontend/assets/**/*.png",
+    "frontend/assets/**/*.jpg",
+    "frontend/assets/**/*.jpeg",
+    "frontend/assets/**/*.svg",
+    "frontend/assets/**/*.webp",
+]
+literary_engineering_studio_engine = [
+    "_engine/*.md",
+    "_engine/*.yaml",
+    "_engine/docs/**/*.md",
+    "_engine/references/*.md",
+    "_engine/schemas/**/*.json",
+    "_engine/templates/**/*.md",
+    "_engine/templates/**/*.yaml",
+]

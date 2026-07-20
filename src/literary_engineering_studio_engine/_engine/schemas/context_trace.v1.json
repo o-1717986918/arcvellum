@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "literary-engineering-workbench/context-trace/v1",
+  "title": "Context Trace",
+  "type": "object",
+  "required": [
+    "schema",
+    "route",
+    "scene_id",
+    "context_packet",
+    "scene_file",
+    "required_context_groups",
+    "loaded_files",
+    "missing_required_context"
+  ],
+  "properties": {
+    "schema": {
+      "const": "literary-engineering-workbench/context-trace/v1"
+    },
+    "route": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "scene_id": {
+      "type": "string"
+    },
+    "context_packet": {
+      "type": "string"
+    },
+    "scene_file": {
+      "type": "string"
+    },
+    "required_context_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "required", "loaded", "files"],
+        "properties": {
+          "name": {"type": "string"},
+          "required": {"type": "boolean"},
+          "loaded": {"type": "boolean"},
+          "files": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "notes": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "loaded_files": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "summarized_files": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "excluded_files": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "style_mounts": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "word_budget_source": {
+      "type": "string"
+    },
+    "character_files": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "canon_files": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "previous_scene_tail": {
+      "type": "string"
+    },
+    "token_or_length_budget": {
+      "type": "object"
+    },
+    "missing_required_context": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": true
+}

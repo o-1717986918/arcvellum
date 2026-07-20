@@ -9,7 +9,7 @@ import shlex
 import subprocess
 from typing import Iterable
 
-from .config import core_repo_from_config
+from .config import repository_root
 
 
 FORBIDDEN_COMMAND_TOKENS = (
@@ -24,6 +24,19 @@ FORBIDDEN_COMMAND_TOKENS = (
     "--allow-missing-branch",
     "LEW_MAINTAINER_MODE",
 )
+
+FORBIDDEN_ENGINE_SUBCOMMANDS = {
+    "agent-run",
+    "agent-repair",
+    "config-init",
+    "config-set-profile",
+    "config-show",
+    "dify-dsl",
+    "director-chat",
+    "run-langgraph",
+    "run-workflow",
+    "serve-api",
+}
 
 
 @dataclass(frozen=True)
@@ -44,24 +57,23 @@ class CoreCommandResult:
 class CoreBridge:
     def __init__(self, config: dict[str, object]):
         self.config = config
-        self.core_repo = core_repo_from_config(config)
-        core = config.get("core", {}) if isinstance(config.get("core"), dict) else {}
-        self.python = str(core.get("python") or "python")
-        self.module = str(core.get("module") or "literary_engineering_workbench")
+        self.working_dir = repository_root()
+        engine = config.get("engine", {}) if isinstance(config.get("engine"), dict) else {}
+        self.python = str(engine.get("python") or "python")
+        self.module = str(engine.get("module") or "literary_engineering_studio_engine")
 
     def doctor(self) -> CoreCommandResult:
         return self.run(["--help"], timeout=30)
 
     def run(self, args: Iterable[str], *, timeout: int = 180) -> CoreCommandResult:
-        command = [self.python, "-m", self.module, *[str(item) for item in args]]
+        engine_args = [str(item) for item in args]
+        _assert_studio_engine_args(engine_args)
+        command = [self.python, "-m", self.module, *engine_args]
         env = os.environ.copy()
-        source_root = str(self.core_repo / "src")
-        current = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = source_root + (os.pathsep + current if current else "")
         env.pop("LEW_MAINTAINER_MODE", None)
         completed = subprocess.run(
             command,
-            cwd=self.core_repo,
+            cwd=self.working_dir,
             env=env,
             text=True,
             encoding="utf-8",
@@ -104,7 +116,7 @@ class CoreBridge:
         return self.run(["route-audit", str(project.resolve()), "--route", route]).require_success()
 
     def execute_task_command(self, command: str, project: Path, *, timeout: int = 600) -> CoreCommandResult:
-        """Execute only trusted core-generated `python -m literary_engineering_workbench` commands."""
+        """Execute only trusted core-generated `python -m literary_engineering_studio_engine` commands."""
 
         if not command.strip():
             raise ValueError("task command is empty")
@@ -116,7 +128,7 @@ class CoreBridge:
         try:
             module_index = parts.index("-m")
         except ValueError as exc:
-            raise ValueError("task command must use python -m literary_engineering_workbench") from exc
+            raise ValueError("task command must use python -m literary_engineering_studio_engine") from exc
         if module_index + 1 >= len(parts) or parts[module_index + 1] != self.module:
             raise ValueError(f"task command module is not allowed: {parts[module_index + 1:]}")
         args = [_replace_project_placeholder(item, project.resolve()) for item in parts[module_index + 2 :]]
@@ -146,3 +158,18 @@ def _unquote(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1]
     return value
+
+
+def _assert_studio_engine_args(args: list[str]) -> None:
+    if not args:
+        raise ValueError("embedded engine command is empty")
+    subcommand = next((item for item in args if item and not item.startswith("-")), "")
+    if subcommand in FORBIDDEN_ENGINE_SUBCOMMANDS:
+        raise ValueError(f"embedded model/provider command is not available in Studio: {subcommand}")
+    if any(item.startswith("--api-key") for item in args):
+        raise ValueError("model credentials are not accepted by the Studio engine bridge")
+    if "--provider" in args:
+        index = args.index("--provider")
+        provider = args[index + 1] if index + 1 < len(args) else ""
+        if provider != "platform-agent":
+            raise ValueError("Studio only permits platform-agent task generation; direct model providers are disabled")

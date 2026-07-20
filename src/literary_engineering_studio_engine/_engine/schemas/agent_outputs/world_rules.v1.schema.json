@@ -1,0 +1,22 @@
+{
+  "schema_id": "world_rules.v1",
+  "schema_value": "literary-engineering-workbench/world-rules-candidate/v1",
+  "required": ["schema", "candidate_id", "world_name", "core_rules", "constraints", "power_sources", "social_order", "taboos", "history_pressure", "open_questions", "risks", "source_paths"],
+  "recommended": ["promotion_notes"],
+  "types": {
+    "schema": "str",
+    "candidate_id": "str",
+    "world_name": "str",
+    "core_rules": "list",
+    "constraints": "list",
+    "power_sources": "list",
+    "social_order": "list",
+    "taboos": "list",
+    "history_pressure": "list",
+    "open_questions": "list",
+    "risks": "list",
+    "source_paths": "list",
+    "promotion_notes": "str"
+  },
+  "enums": {}
+}

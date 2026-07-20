@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "literary-engineering-workbench/agent-task-completion/v1",
+  "title": "Platform-agent task completion marker",
+  "type": "object",
+  "required": [
+    "schema",
+    "source_task",
+    "status",
+    "handled_by",
+    "completed_at",
+    "expected_artifacts_checked"
+  ],
+  "properties": {
+    "schema": {
+      "const": "literary-engineering-workbench/agent-task-completion/v1"
+    },
+    "source_task": {
+      "type": "string"
+    },
+    "status": {
+      "enum": ["complete", "completed", "done", "handled", "pass"]
+    },
+    "handled_by": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "expected_artifacts_checked": {
+      "type": "boolean",
+      "const": true
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

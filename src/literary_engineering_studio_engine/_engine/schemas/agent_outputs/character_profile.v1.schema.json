@@ -1,0 +1,25 @@
+{
+  "schema_id": "character_profile.v1",
+  "schema_value": "literary-engineering-workbench/character-profile-candidate/v1",
+  "required": ["schema", "candidate_id", "character_id", "name", "role", "identity", "background_story", "bdi", "psychology", "relationships", "speech_style", "arc", "state", "risks", "source_paths"],
+  "recommended": ["promotion_notes"],
+  "types": {
+    "schema": "str",
+    "candidate_id": "str",
+    "character_id": "str",
+    "name": "str",
+    "role": "str",
+    "identity": "dict",
+    "background_story": "dict",
+    "bdi": "dict",
+    "psychology": "dict",
+    "relationships": "list",
+    "speech_style": "dict",
+    "arc": "dict",
+    "state": "dict",
+    "risks": "list",
+    "source_paths": "list",
+    "promotion_notes": "str"
+  },
+  "enums": {}
+}

@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "literary-engineering-workbench/agent-task/v1",
+  "title": "CLI-mediated platform-agent task",
+  "type": "object",
+  "required": [
+    "schema",
+    "task_id",
+    "status",
+    "route",
+    "current_state",
+    "task_type",
+    "prompt_asset_id",
+    "required_reading",
+    "source_paths",
+    "expected_outputs",
+    "submission_command",
+    "completion_command",
+    "validation_gates",
+    "forbidden_shortcuts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "literary-engineering-workbench/agent-task/v1"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": ["issued", "opened", "submitted", "blocked", "complete"]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "opened_at": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "route": {
+      "type": "string"
+    },
+    "scene_id": {
+      "type": "string"
+    },
+    "scene": {
+      "type": "string"
+    },
+    "current_state": {
+      "type": "string"
+    },
+    "task_type": {
+      "type": "string"
+    },
+    "prompt_asset_id": {
+      "type": "string"
+    },
+    "command": {
+      "type": "string"
+    },
+    "required_reading": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context_trace": {
+      "type": "string"
+    },
+    "hard_constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "style_constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "word_count_target": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "word_count_min": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "word_count_max": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expected_outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "submission_command": {
+      "type": "string"
+    },
+    "completion_command": {
+      "type": "string"
+    },
+    "validation_gates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "forbidden_shortcuts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_allowed_states": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "task_json": {
+      "type": "string"
+    },
+    "task_markdown": {
+      "type": "string"
+    },
+    "submission": {
+      "type": "string"
+    },
+    "submitted_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "completion": {
+      "type": "string"
+    },
+    "validation": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

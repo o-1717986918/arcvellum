@@ -11,6 +11,8 @@ import re
 import shutil
 from typing import Iterable
 
+from literary_engineering_studio_engine.resources import engine_root
+
 from .contracts import TaskPackage
 
 
@@ -50,6 +52,10 @@ def stage_task(
     for relative in _unique([*task.required_reading, *task.source_paths]):
         source = task.resolve_project_path(relative)
         if not source.exists():
+            embedded = engine_root() / Path(relative)
+            if embedded.exists():
+                source = embedded
+        if not source.exists():
             missing_sources.append(relative)
             continue
         _copy_path(source, workspace / Path(relative))
@@ -61,6 +67,12 @@ def stage_task(
         destination.parent.mkdir(parents=True, exist_ok=True)
         if source.exists():
             _copy_path(source, destination)
+
+    direction_digest = task.project_root / "workflow" / "studio" / "user_directions.md"
+    if direction_digest.is_file():
+        relative = "workflow/studio/user_directions.md"
+        _copy_path(direction_digest, workspace / Path(relative))
+        copied_sources.append(relative)
 
     shutil.copy2(task.task_json_path, task_dir / "task.json")
     shutil.copy2(task.task_markdown_path, task_dir / "task.agent_tasks.md")
@@ -143,6 +155,9 @@ def update_run_manifest(path: Path, **updates: object) -> None:
 def _render_agent_prompt(task: TaskPackage) -> str:
     task_text = task.task_markdown_path.read_text(encoding="utf-8")
     outputs = "\n".join(f"- {item}" for item in task.expected_outputs) or "- 无固定文件输出"
+    direction_path = task.project_root / "workflow" / "studio" / "user_directions.md"
+    direction = direction_path.read_text(encoding="utf-8", errors="ignore").strip() if direction_path.is_file() else ""
+    direction_block = f"\n## Current User Direction\n\n{direction}\n" if direction else ""
     return f"""# Studio Agent Execution Contract
 
 你是本次任务的主 Agent。当前目录是隔离任务工作区，不是正式项目根目录。
@@ -159,6 +174,7 @@ def _render_agent_prompt(task: TaskPackage) -> str:
 ## Allowed Outputs
 
 {outputs}
+{direction_block}
 
 ## Core Task Package
 
@@ -229,4 +245,3 @@ def _project_key(project: Path) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-

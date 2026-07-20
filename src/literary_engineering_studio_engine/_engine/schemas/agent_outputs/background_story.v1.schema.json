@@ -1,0 +1,25 @@
+{
+  "schema_id": "background_story.v1",
+  "schema_value": "literary-engineering-workbench/background-story-candidate/v1",
+  "required": ["schema", "candidate_id", "target_character_id", "summary", "formative_events", "hidden_wound", "desire", "fear", "shame_or_secret", "behavior_influences", "reveal_policy", "risks", "source_paths"],
+  "recommended": ["promotion_notes"],
+  "types": {
+    "schema": "str",
+    "candidate_id": "str",
+    "target_character_id": "str",
+    "summary": "str",
+    "formative_events": "list",
+    "hidden_wound": "str",
+    "desire": "str",
+    "fear": "str",
+    "shame_or_secret": "str",
+    "behavior_influences": "list",
+    "reveal_policy": "str",
+    "risks": "list",
+    "source_paths": "list",
+    "promotion_notes": "str"
+  },
+  "enums": {
+    "reveal_policy": ["implicit_only", "delayed_reveal", "explicit_reveal_allowed"]
+  }
+}

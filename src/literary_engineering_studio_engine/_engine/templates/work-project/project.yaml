@@ -1,0 +1,49 @@
+project:
+  title: ""
+  type: novel
+  target_length: 30000
+  language: zh-CN
+  status: planning
+
+creative_brief:
+  premise: ""
+  genre: ""
+  audience: ""
+  central_question: ""
+  themes: []
+  forbidden_elements: []
+
+longform_budget:
+  target_words: 30000
+  volumes: 0
+  status: pending_word_budget
+  note: "正式长篇生成前运行 word-budget / longform-budget，并由平台 Agent 处理预算化大纲任务。"
+
+style:
+  mode: public_domain_or_authorized
+  target_profiles: []
+  blend_strategy: ""
+
+generation:
+  default_provider: auto
+  prompt_templates:
+    system: prompts/scene_generation_system.md
+    user: prompts/scene_generation_user.md
+  model_env:
+    api_base: LEW_MODEL_API_BASE
+    api_key: LEW_MODEL_API_KEY
+    model_name: LEW_MODEL_NAME
+
+workflow:
+  require_human_approval_for:
+    - confirmed_canon
+    - major_character_turn
+    - main_plot_branch_merge
+    - final_export
+
+quality_gates:
+  canon_test: required
+  character_test: required
+  plot_test: required
+  style_test: required
+  originality_test: required

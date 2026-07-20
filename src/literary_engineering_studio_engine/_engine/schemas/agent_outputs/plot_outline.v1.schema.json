@@ -1,0 +1,22 @@
+{
+  "schema_id": "plot_outline.v1",
+  "schema_value": "literary-engineering-workbench/plot-outline-candidate/v1",
+  "required": ["schema", "candidate_id", "title", "premise", "central_conflict", "acts", "chapters", "scene_list", "character_arcs", "foreshadowing", "risks", "source_paths"],
+  "recommended": ["promotion_notes"],
+  "types": {
+    "schema": "str",
+    "candidate_id": "str",
+    "title": "str",
+    "premise": "str",
+    "central_conflict": "str",
+    "acts": "list",
+    "chapters": "list",
+    "scene_list": "list",
+    "character_arcs": "list",
+    "foreshadowing": "list",
+    "risks": "list",
+    "source_paths": "list",
+    "promotion_notes": "str"
+  },
+  "enums": {}
+}

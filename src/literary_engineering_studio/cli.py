@@ -9,6 +9,7 @@ from pathlib import Path
 from . import __version__
 from .config import default_config_path, load_config, save_config
 from .core_bridge import CoreBridge
+from .project_manager import create_project, list_projects, record_direction, register_project
 from .runtimes import runtime_status
 from .worker import AgentWorker
 
@@ -16,15 +17,31 @@ from .worker import AgentWorker
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="les",
-        description="Literary Engineering Studio: CLI-bound Agent Worker and platform-agent adapters.",
+        description="Literary Engineering Studio: standalone project client, embedded workflow engine, and controlled Agent Worker.",
     )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("config-init", help="Write a credential-free Studio configuration.")
-    sub.add_parser("doctor", help="Check the core CLI and installed Agent runtimes.")
+    sub.add_parser("doctor", help="Check the embedded engine and installed Agent runtimes.")
 
-    prepare = sub.add_parser("task-prepare", help="Open a core task and create an isolated Agent workspace.")
+    project_list = sub.add_parser("project-list", help="List Studio projects and the current project.")
+    project_list.set_defaults(project_command="list")
+    project_open = sub.add_parser("project-open", help="Register and select an existing literary project.")
+    project_open.add_argument("project")
+    project_create = sub.add_parser("project-create", help="Create and select a self-contained literary project.")
+    project_create.add_argument("parent_directory")
+    project_create.add_argument("--title", required=True)
+    project_create.add_argument("--folder-name", default="")
+    project_create.add_argument("--work-type", default="novel")
+    project_create.add_argument("--target-length", type=int, default=30000)
+    project_create.add_argument("--premise", default="")
+    project_create.add_argument("--genre", default="")
+    direction = sub.add_parser("direction-add", help="Record a user creative direction for future Agent tasks.")
+    direction.add_argument("project")
+    direction.add_argument("message")
+
+    prepare = sub.add_parser("task-prepare", help="Open a formal task and create an isolated Agent workspace.")
     _task_arguments(prepare)
 
     run = sub.add_parser("task-run", help="Run one formal task through a selected platform Agent runtime.")
@@ -55,9 +72,9 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "version": __version__,
             "config": str(default_config_path()),
-            "core": {
+            "engine": {
                 "available": core.returncode == 0,
-                "repo": str(CoreBridge(config).core_repo),
+                "mode": "embedded",
                 "detail": core.stderr.strip() if core.returncode else "ready",
             },
             "runtimes": runtime_status(config),
@@ -65,6 +82,31 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0 if core.returncode == 0 else 1
+
+    if args.command == "project-list":
+        print(json.dumps(list_projects(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "project-open":
+        print(json.dumps(register_project(Path(args.project)), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "project-create":
+        result = create_project(
+            parent_directory=args.parent_directory,
+            title=args.title,
+            folder_name=args.folder_name,
+            work_type=args.work_type,
+            target_length=args.target_length,
+            premise=args.premise,
+            genre=args.genre,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "direction-add":
+        print(json.dumps(record_direction(Path(args.project), args.message), ensure_ascii=False, indent=2))
+        return 0
 
     if args.command in {"task-prepare", "task-run", "agent-worker-once"}:
         worker = AgentWorker(config)

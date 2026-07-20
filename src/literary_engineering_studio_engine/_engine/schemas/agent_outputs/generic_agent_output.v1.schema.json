@@ -1,0 +1,17 @@
+{
+  "schema_id": "generic_agent_output.v1",
+  "schema_value": "literary-engineering-workbench/agent-output/v0.1",
+  "required": ["schema", "agent_id", "task", "status", "findings", "recommendations"],
+  "recommended": [],
+  "types": {
+    "schema": "str",
+    "agent_id": "str",
+    "task": "str",
+    "status": "str",
+    "findings": "list",
+    "recommendations": "list"
+  },
+  "enums": {
+    "status": ["dry_run", "completed", "needs_repair", "failed"]
+  }
+}

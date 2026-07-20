@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "literary-engineering-workbench/formal-route-state/v1",
+  "title": "Derived formal route workflow state ledger",
+  "type": "object",
+  "required": [
+    "schema",
+    "generated_at",
+    "project_root",
+    "route",
+    "summary",
+    "rules"
+  ],
+  "properties": {
+    "schema": {
+      "const": "literary-engineering-workbench/formal-route-state/v1"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "project_root": {
+      "type": "string"
+    },
+    "route": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "longform": {
+      "type": "object"
+    },
+    "source_ingests": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "styles": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "audits": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "exports": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,21 @@
+{
+  "schema_id": "canon_review.v1",
+  "schema_value": "literary-engineering-workbench/canon-review-agent/v1",
+  "required": ["schema", "conclusion", "summary", "blocking_issues", "warnings", "unresolved_facts", "timeline_risks", "source_paths", "recommendations"],
+  "recommended": ["next_gate"],
+  "types": {
+    "schema": "str",
+    "conclusion": "str",
+    "summary": "str",
+    "blocking_issues": "list",
+    "warnings": "list",
+    "unresolved_facts": "list",
+    "timeline_risks": "list",
+    "source_paths": "list",
+    "recommendations": "list",
+    "next_gate": "str"
+  },
+  "enums": {
+    "conclusion": ["pass", "pass_with_notes", "revise_required", "reject"]
+  }
+}

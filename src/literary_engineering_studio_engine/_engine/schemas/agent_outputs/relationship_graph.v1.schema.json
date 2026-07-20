@@ -1,0 +1,18 @@
+{
+  "schema_id": "relationship_graph.v1",
+  "schema_value": "literary-engineering-workbench/relationship-graph-candidate/v1",
+  "required": ["schema", "candidate_id", "relationships", "tensions", "alliances", "hidden_links", "risks", "source_paths"],
+  "recommended": ["promotion_notes"],
+  "types": {
+    "schema": "str",
+    "candidate_id": "str",
+    "relationships": "list",
+    "tensions": "list",
+    "alliances": "list",
+    "hidden_links": "list",
+    "risks": "list",
+    "source_paths": "list",
+    "promotion_notes": "str"
+  },
+  "enums": {}
+}

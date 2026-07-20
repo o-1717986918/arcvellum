@@ -1,0 +1,19 @@
+{
+  "schema_id": "json_patch_plan.v1",
+  "schema_value": "literary-engineering-workbench/json-patch-plan-agent/v1",
+  "required": ["schema", "target", "operation", "approval_required", "changes", "risks", "source_paths"],
+  "recommended": ["rollback_notes"],
+  "types": {
+    "schema": "str",
+    "target": "str",
+    "operation": "str",
+    "approval_required": "bool",
+    "changes": "list",
+    "risks": "list",
+    "source_paths": "list",
+    "rollback_notes": "str"
+  },
+  "enums": {
+    "operation": ["patch_plan", "create_candidate", "repair_candidate"]
+  }
+}

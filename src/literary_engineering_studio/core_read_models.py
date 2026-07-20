@@ -5,18 +5,14 @@ from __future__ import annotations
 import importlib
 import json
 from pathlib import Path
-import sys
 from typing import Any, Callable
 
-from .config import core_repo_from_config
-
-
 def install_core_import_path(config: dict[str, Any]) -> Path:
-    core_repo = core_repo_from_config(config)
-    source_root = str(core_repo / "src")
-    if source_root not in sys.path:
-        sys.path.insert(0, source_root)
-    return core_repo
+    """Compatibility shim returning the location of the embedded engine."""
+
+    del config
+    module = importlib.import_module("literary_engineering_studio_engine")
+    return Path(module.__file__).resolve().parent
 
 
 def build_dashboard(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
@@ -127,7 +123,7 @@ def mount_style(config: dict[str, Any], project_root: Path, style_library_root: 
 
 def _module(config: dict[str, Any], name: str):
     install_core_import_path(config)
-    return importlib.import_module(f"literary_engineering_workbench.{name}")
+    return importlib.import_module(f"literary_engineering_studio_engine.{name}")
 
 
 def _function(config: dict[str, Any], module: str, name: str) -> Callable[..., Any]:

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "literary-engineering-workbench/prompt-asset/v1",
+  "title": "File-backed prompt asset",
+  "type": "object",
+  "required": [
+    "schema",
+    "prompt_asset_id",
+    "version",
+    "route",
+    "task_type",
+    "required_inputs",
+    "context_groups",
+    "hard_constraints",
+    "output_contract",
+    "review_requirements",
+    "forbidden_shortcuts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "literary-engineering-workbench/prompt-asset/v1"
+    },
+    "prompt_asset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "match": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "route": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "required_inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "optional_inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context_groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hard_constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "style_constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "output_contract": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "review_requirements": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "forbidden_shortcuts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

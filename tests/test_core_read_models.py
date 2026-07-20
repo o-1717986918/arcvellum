@@ -10,7 +10,7 @@ class CoreReadModelTests(unittest.TestCase):
     def test_reuses_core_dashboard_and_library(self):
         config = default_config()
         install_core_import_path(config)
-        from literary_engineering_workbench.init_project import InitOptions, init_work_project
+        from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "work"

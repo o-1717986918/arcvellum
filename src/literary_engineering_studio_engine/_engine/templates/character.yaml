@@ -1,0 +1,50 @@
+character_id: ""
+name: ""
+role: ""
+importance: secondary  # major | secondary | cameo
+
+identity:
+  age: null
+  gender: ""
+  occupation: ""
+  background: ""
+
+background_story:
+  summary: ""
+  formative_events: []
+  behavior_influences: []
+  reveal_policy: implicit_only
+
+bdi:
+  belief: []
+  desire: []
+  intention: []
+
+psychology:
+  fear: []
+  secret: []
+  wound: ""
+  mask: ""
+  moral_line: ""
+
+relationships: []
+
+speech_style:
+  vocabulary: ""
+  rhythm: ""
+  taboo_words: []
+  signature_patterns: []
+
+arc:
+  current_stage: ""
+  expected_change: ""
+  required_trigger_events: []
+
+state:
+  location: ""
+  health: ""
+  resources: []
+  known_facts: []
+  unknown_facts: []
+
+memory_refs: []

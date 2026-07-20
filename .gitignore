@@ -7,4 +7,4 @@ build/
 *.egg-info/
 .venv/
 .literary-engineering-studio/
-
+src/literary_engineering_studio_engine/_engine/workflow/

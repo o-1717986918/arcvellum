@@ -1,0 +1,21 @@
+{
+  "schema_id": "location.v1",
+  "schema_value": "literary-engineering-workbench/location-candidate/v1",
+  "required": ["schema", "candidate_id", "location_id", "name", "type", "description", "rules", "resources", "story_functions", "risks", "source_paths"],
+  "recommended": ["promotion_notes"],
+  "types": {
+    "schema": "str",
+    "candidate_id": "str",
+    "location_id": "str",
+    "name": "str",
+    "type": "str",
+    "description": "str",
+    "rules": "list",
+    "resources": "list",
+    "story_functions": "list",
+    "risks": "list",
+    "source_paths": "list",
+    "promotion_notes": "str"
+  },
+  "enums": {}
+}

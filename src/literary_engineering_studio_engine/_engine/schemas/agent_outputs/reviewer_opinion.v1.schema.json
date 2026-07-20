@@ -1,0 +1,17 @@
+{
+  "schema_id": "reviewer_opinion.v1",
+  "schema_value": "literary-engineering-workbench/reviewer-opinion-agent/v1",
+  "required": ["schema", "reviewer_id", "stance", "findings", "recommendations", "source_paths"],
+  "recommended": [],
+  "types": {
+    "schema": "str",
+    "reviewer_id": "str",
+    "stance": "str",
+    "findings": "list",
+    "recommendations": "list",
+    "source_paths": "list"
+  },
+  "enums": {
+    "stance": ["approve", "approve_with_notes", "revise", "reject"]
+  }
+}

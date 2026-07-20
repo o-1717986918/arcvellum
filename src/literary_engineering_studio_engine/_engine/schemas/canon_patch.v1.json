@@ -1,0 +1,25 @@
+{
+  "schema_id": "canon_patch.v1",
+  "schema_value": "literary-engineering-workbench/canon-patch-candidate/v0.1",
+  "required": ["schema", "scene_id", "canon_change", "items", "status", "applied", "source_paths"],
+  "recommended": ["created_at", "scene", "source", "no_canon_change_reason", "requires_user_approval"],
+  "types": {
+    "schema": "str",
+    "scene_id": "str",
+    "created_at": "str",
+    "scene": "str",
+    "source": "str",
+    "canon_change": "any",
+    "no_canon_change_reason": "str",
+    "items": "list",
+    "status": "str",
+    "applied": "bool",
+    "requires_user_approval": "bool",
+    "source_paths": "list"
+  },
+  "item_required": ["type", "summary", "source_evidence", "target_files", "risk_level", "requires_user_approval"],
+  "item_risk_levels": ["low", "medium", "high"],
+  "enums": {
+    "status": ["candidate", "reviewed", "approved", "rejected"]
+  }
+}

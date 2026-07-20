@@ -1,0 +1,7 @@
+schema: literary-engineering-studio/embedded-engine-reading/v0.1
+read_first:
+  - SKILL.md
+  - AGENTS.md
+  - references/agent-run-protocol.md
+  - references/cli-run-protocol.md
+rule: "Only read additional files when the current task package lists them."

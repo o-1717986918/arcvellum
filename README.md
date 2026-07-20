@@ -1,160 +1,138 @@
 # 文学工程 Agent Studio
 
-> 让 Agent 写长篇，不再依赖它“自觉记得流程”。
+> 把 AI 关进可检查、可恢复、不可跳步的长篇创作流水线。
 
-文学工程 Agent Studio 是一个面向长篇小说、剧本与伪记录作品的本地 Agent 执行工作台。它不重新发明写作模型，而是把已登录的宿主 Agent、Claude Code 或 Codex CLI 接入受控任务循环，让每一次推演、写作、审查、修订与写回都经过明确的状态和门禁。
+文学工程 Agent Studio 是一套独立运行的长篇小说、剧本与伪记录作品开发平台。它把人物、世界观、情节、场景、文风、字数预算、审查证据和最终正文当作同一个工程项目持续维护，并让 Agent 只能通过正式任务包推进作品。
 
-它解决的是一个很具体的问题：AI 能写出一段看似不错的文字，却很容易在几十章后遗忘人物、压缩字数、跳过推演和审查，甚至直接手写流程文件假装完成。Studio 把 Agent 放进任务工作区，让它只能读取当前任务允许的资料、写入预期产物，再交给文学工程内核验收。
+普通 AI 写作工具擅长“写一段”，却容易在几十章后遗忘人物、压缩篇幅、跳过推演与审查。Studio 解决的正是这个断层：**文学工程引擎决定流程和门禁，已登录的宿主 Agent、Claude Code 或 Codex CLI 提供创作智能，前端负责完整的项目管理与人机协作。**
 
-项目当前为 **工程化 MVP（v0.1.0）**：核心链路、隔离执行、前端观察和三类运行时适配已经可运行，适合本地试用与架构验证；长期无人值守运行、进程恢复和完整 Codex Windows 适配仍在继续建设。
+当前版本为 **v0.2.0 独立工程版**。引擎、任务协议、项目模板、Prompt 资产、审查、Canon、状态演化与导出能力均已嵌入本仓库，运行时不依赖另一个 Skill 或源码仓库。
 
 ## 界面预览
 
-### 项目总控
+### 项目中心与创作总控
 
-把状态机、审查门禁、正文进度和下一步任务翻译成普通创作者能理解的中文，而不是直接铺开 JSON 和日志。
+用户从作品名称、目标字数与创作方向开始，不需要理解目录和 JSON。系统会建立完整项目，并把流程门禁、正文进度和下一步翻译成可行动的中文。
 
-![项目总控界面](docs/images/studio-project-dashboard.png)
+![项目中心与创作总控](docs/images/studio-project-dashboard.jpg)
 
-### Agent 执行中心
+### Agent 工作台
 
-选择正式路线和 Agent 运行时，观察任务领取、隔离执行、产物提交与门禁验收过程。遇到 Canon 写回、发布等高风险节点时自动停下等待确认。
+当前任务、允许读取的资料、预期产物、运行时、执行过程和验收结果会被集中展示。遇到分支、文风、Canon 写回或发布节点时，系统暂停并等待用户选择。
 
-![Agent 执行中心](docs/images/studio-agent-worker.png)
+![Agent 工作台](docs/images/studio-agent-worker.jpg)
 
-## 它如何工作
+## 核心能力
 
-Studio 与 [Literary Engineering Project Skill](https://github.com/o-1717986918/literary-engineering-project-skill) 分工明确：
+- **独立项目管理**：在前端创建、打开和切换作品，项目、Agent、档案、文风与导出始终绑定同一作品。
+- **CLI 持续状态机**：正式工作遵循 `task-next -> task-open -> task-submit -> task-complete -> route-audit`，Agent 不能把手写文件伪装成完成。
+- **受控 Agent Worker**：每项任务进入独立工作区，只提供任务允许读取的资料，只接收声明过的预期产物。
+- **双类智能运行时**：支持当前宿主 Agent，以及本机已登录的 Claude Code / Codex CLI；Studio 不保存模型 API Key，也不直接调用模型供应商接口。
+- **长篇工程内核**：覆盖字数预算、场景推演、分支选择、正文生成、AgentReview、Style Lint、修订、晋升、人物状态、Canon 候选、节奏衔接和导出门禁。
+- **作品档案**：正文、人物、世界观、场景、分支、文风、审查、预算与写回候选经过前端包装后展示，保留信息而不暴露原始 JSON 噪声。
+- **人类决策面板**：把分支选择、文风挂载、Canon 审批、修订方向、扩纲方向和发布审批呈现为明确的选择卡。
+- **实时观察**：项目总控、作品档案和 Worker 状态优先通过 SSE 更新，连接不可用时自动降级为轮询。
+- **完整作品交付**：可汇编正式正文并导出 DOCX，同时过滤场景编号、工作流痕迹、Canon 注释和审查标记。
 
-- **文学工程内核**负责任务顺序、提示词包、项目契约、字数预算、审查、Canon、状态演化、导出和正式门禁。
-- **Studio** 负责领取任务、建立隔离工作区、调度 Agent、限制读写范围、提交产物并展示实时进度。
-- **Agent 运行时**提供真正的语言理解、创作和判断能力，可以来自当前宿主平台、Claude Code 或 Codex CLI。
+## 工作方式
 
 ```mermaid
 flowchart LR
-    Core["文学工程内核\n任务与门禁"] --> Package["当前任务包\n资料 + 约束 + 预期产物"]
-    Package --> Worker["Studio Agent Worker\n隔离、调度、观察"]
-    Worker --> Host["宿主 Agent"]
-    Worker --> Claude["Claude Code"]
-    Worker --> Codex["Codex CLI"]
-    Host --> Check["产物白名单与内核验收"]
+    UI["前端客户端\n项目、方向、选择、阅读"] --> API["Studio API / SSE"]
+    API --> Core["嵌入式文学工程引擎\n状态机、任务包、硬门禁"]
+    Core --> Box["单任务隔离工作区"]
+    Box --> Host["宿主 Agent"]
+    Box --> Claude["Claude Code"]
+    Box --> Codex["Codex CLI"]
+    Host --> Check["白名单写回与正式验收"]
     Claude --> Check
     Codex --> Check
     Check --> Core
+    Core --> UI
 ```
 
-## 已实现能力
-
-- 复用正式任务循环：`task-next -> task-open -> task-submit -> task-complete -> route-audit`。
-- 校验 `agent-task/v1` 任务包，拒绝越出文学项目目录的路径。
-- 为每个任务创建独立工作区，只放入必读资料、任务源文件和预期产物。
-- 在写回正式项目之前拒绝任何超出 `expected_outputs` 的修改。
-- 覆盖旧文件前保留备份，Agent 输出不能直接伪装成正式完成。
-- 提供 `host-agent`、`claude-code` 和 `codex-cli` 三种运行时适配器。
-- 复用原有项目总控、作品档案、正文阅读、活动流、人工选择和文风挂载能力。
-- 通过 SSE 展示 Worker 任务状态和项目变化。
-- 不保存模型 API Key，也不在 Studio 内维护另一套模型 Provider。
+Studio 自带规则和流程，但不内置另一条 LLM API 路线。模型能力来自用户已经登录并授权的 Agent 平台；项目只负责给它当前任务、必要上下文和可写边界。
 
 ## 快速开始
 
-### 1. 准备环境
+### 1. 安装
 
-- Python 3.10 或更高版本
-- 本地克隆的文学工程内核仓库
-- 至少一种可用 Agent：当前宿主 Agent、已登录的 Claude Code，或已登录的 Codex CLI
-
-建议把两个仓库放在同一父目录下，Studio 会自动发现内核：
+需要 Python 3.10 或更高版本。
 
 ```powershell
-git clone https://github.com/o-1717986918/literary-engineering-project-skill.git
 git clone https://github.com/o-1717986918/literary-engineering-studio.git
 cd literary-engineering-studio
-```
-
-如果内核位于其他目录，可以设置 `LEW_CORE_REPO` 指向它。
-
-### 2. 安装并自检
-
-```powershell
 python -m pip install -e ".[api,test]"
-les config-init
-les doctor
+python -m literary_engineering_studio config-init
+python -m literary_engineering_studio doctor
 ```
 
-`doctor` 会检查内核和本机 Agent CLI 是否可用。Studio 配置中不应出现模型密钥。
+`doctor` 会检查嵌入引擎和本机 Agent CLI。Studio 配置拒绝模型密钥和模型 Provider 字段。
 
-### 3. 启动前端
+### 2. 启动客户端
 
 ```powershell
-les serve --port 8791
+python -m literary_engineering_studio serve --port 8791
 ```
 
-浏览器打开 `http://127.0.0.1:8791/`，在“当前项目”中填入一个文学工程作品目录。
+打开 `http://127.0.0.1:8791/`：
 
-### 4. 执行任务
+1. 在“项目中心”创建新作品，或打开包含 `project.yaml` 的已有项目。
+2. 在“创作总控”持续补充创作方向。
+3. 在“Agent 工作台”选择正式路线与 Agent 运行时并执行下一步。
+4. 在“作品档案”阅读正文、检查人物与世界观、查看分支和审查证据。
+5. 在人工决策卡出现时做方向性选择，CLI 会把选择落实到正式流程。
 
-在前端“Agent 执行”中选择正式路线与运行时，或者使用命令行：
+### 3. 可选命令行操作
+
+前端是主要客户端，`les` 命令只用于安装诊断、自动化或故障恢复。若系统未把 Python Scripts 目录加入 `PATH`，使用下面的模块形式即可：
 
 ```powershell
-# 为当前宿主 Agent 准备隔离任务
-les task-prepare C:\path\to\work-project --route scene-development --runtime host-agent
-
-# 让本机已登录的 Claude Code 执行下一项正式任务
-les agent-worker-once C:\path\to\work-project --route scene-development --runtime claude-code
-
-# 使用 Codex CLI 执行一项正式任务
-les task-run C:\path\to\work-project --route scene-development --runtime codex-cli
+python -m literary_engineering_studio project-list
+python -m literary_engineering_studio task-prepare C:\path\to\work-project --route scene-development --runtime host-agent
+python -m literary_engineering_studio agent-worker-once C:\path\to\work-project --route scene-development --runtime claude-code
 ```
 
-## 运行时支持
+嵌入引擎的低级命令不是用户操作面。正式任务应由前端或 Studio Worker 领取和执行。
 
-| 运行时 | 当前状态 | 说明 |
+## Agent 运行时
+
+| 运行时 | 状态 | 使用方式 |
 | --- | --- | --- |
-| 当前宿主 Agent | 可用 | Studio 准备任务包，由当前 Codex、Claude 等工具层 Agent 执行 |
-| Claude Code CLI | 已接入 | 复用本机登录状态，在隔离工作区内使用受限文件工具 |
-| Codex CLI | 已接入，Windows 适配待完善 | 使用 `workspace-write`、临时会话和 JSON 事件输出 |
-| OpenHands / ACP | 规划中 | 未来作为统一外部 Agent 协议适配层 |
+| 当前宿主 Agent | 可用 | Studio 准备任务包，由正在监督项目的 Codex、Claude 等平台 Agent 执行 |
+| Claude Code CLI | 已接入 | 复用本机登录状态，在隔离工作区内执行当前任务 |
+| Codex CLI | 已接入 | 使用临时会话与 `workspace-write` 权限执行当前任务 |
+| ACP / OpenHands | 规划中 | 后续作为协议化运行时适配，不改变文学工程内核 |
 
 ## 安全边界
 
-- Studio 只监听本机 `127.0.0.1`，当前版本不适合直接暴露到公网。
-- Agent 运行在单任务隔离目录中，不能直接把任意修改写回正式作品。
-- 人工审批、Canon 应用和发布类任务会暂停，不会自动越过。
-- 运行时输出不等于任务完成；只有预期文件通过内核校验后，任务才会进入完成状态。
-- Studio 不接管模型账号，不读取或保存 Claude、Codex 的账户凭据。
+- 服务默认只监听 `127.0.0.1`，不应直接暴露到公网。
+- Studio 不读取、保存或转发 Claude、Codex 的账号凭据。
+- Studio 配置不接受模型 API Key；嵌入引擎桥拒绝本地 provider、director-chat 和旧 API 服务命令。
+- Agent 只能在单任务隔离目录内工作，越出 `expected_outputs` 的修改会被拒绝。
+- 覆盖既有产物前会保留备份；运行时回复文本不能直接成为正式作品。
+- Canon 应用、关键写回和发布节点必须等待人工审批。
+- 正文必须由当前主 Agent 完成，子 Agent 仅能承担检索、统计、格式检查等机械任务。
 
 ## 当前成熟度
 
-已经适合：
+已经适合本地创建和管理文学项目、观察正式任务、运行单项 Agent 工作、阅读项目档案，并验证完整门禁链路。当前仍不建议无人值守并发生成数十万字作品，也不建议在缺少人工抽检时直接发布成稿。
 
-- 在本机观察文学工程项目的真实状态；
-- 为宿主 Agent 创建可执行的隔离任务；
-- 验证 Claude Code / Codex CLI 的受控接入方案；
-- 开发和测试 Agent Worker、前端以及任务协议。
+下一阶段重点是持久化任务队列、任务锁、停止/重试/恢复、运行时工具事件流、写回前差异预览，以及大规模端到端创作回归测试。
 
-尚不建议：
-
-- 无人值守连续生成数十万字作品；
-- 多 Worker 并发修改同一项目；
-- 把当前本地服务直接部署为公网多用户产品；
-- 在没有人工抽检的情况下发布 Agent 生成的最终作品。
-
-下一阶段重点是持久化任务队列、任务锁、停止/重试/恢复、真实工具事件流，以及完整的端到端创作回归测试。
-
-## 开发与验证
+## 开发验证
 
 ```powershell
 python -m unittest discover -s tests -v
 python -m compileall -q src
-node --check frontend/app.js
+node --check src/literary_engineering_studio/frontend/app.js
+python -m literary_engineering_studio_engine prompt-registry-validate --json
 ```
 
 进一步阅读：
 
-- [当前内核审查](docs/architecture/current-core-review.md)
-- [Studio 架构](docs/architecture/new-studio-architecture.md)
-- [实施路线](docs/roadmap/implementation-route.md)
+- [嵌入引擎审查](docs/architecture/current-core-review.md)
+- [独立 Studio 架构](docs/architecture/new-studio-architecture.md)
+- [后续实施路线](docs/roadmap/implementation-route.md)
 
-## 仓库关系
-
-这个仓库是面向最终使用者的 Agent 执行平台；核心流程与大型 Skill 仍独立维护在 [literary-engineering-project-skill](https://github.com/o-1717986918/literary-engineering-project-skill)。两者分离，可以让 Skill 保持轻量、可安装，也让 Studio 自由发展进程管理、沙箱、前端和多 Agent 适配能力。
+原有 Skill 项目仍可独立供 Codex、Claude 等工具层平台安装，但它不是 Studio 的运行依赖。两个项目可以分别安装、分别演进。

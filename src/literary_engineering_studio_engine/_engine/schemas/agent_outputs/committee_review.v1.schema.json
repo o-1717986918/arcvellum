@@ -1,0 +1,19 @@
+{
+  "schema_id": "committee_review.v1",
+  "schema_value": "literary-engineering-workbench/committee-review-agent/v1",
+  "required": ["schema", "subject", "final_recommendation", "reviewers", "disagreements", "action_items", "source_paths"],
+  "recommended": ["minority_opinions"],
+  "types": {
+    "schema": "str",
+    "subject": "str",
+    "final_recommendation": "str",
+    "reviewers": "list",
+    "disagreements": "list",
+    "action_items": "list",
+    "source_paths": "list",
+    "minority_opinions": "list"
+  },
+  "enums": {
+    "final_recommendation": ["approve", "approve_with_notes", "revise", "reject"]
+  }
+}

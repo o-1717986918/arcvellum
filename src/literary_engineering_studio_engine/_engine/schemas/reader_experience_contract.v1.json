@@ -1,0 +1,27 @@
+{
+  "schema": "literary-engineering-workbench/reader-experience-contract/v1",
+  "description": "Scene-level reader question, promised reward, withheld information, payoff/delay, tension, and anti-summary contract.",
+  "required_fields": [
+    "schema",
+    "scene_id",
+    "status",
+    "required",
+    "chapter_obligation",
+    "reader_experience"
+  ],
+  "reader_experience_required_fields": [
+    "reader_question",
+    "promised_reward",
+    "withheld_information",
+    "payoff_or_delay",
+    "emotional_curve",
+    "tension_source",
+    "curiosity_hook",
+    "freshness_requirement",
+    "anti_summary_requirement",
+    "reader_aftertaste"
+  ],
+  "count_unit": "chinese_content_chars_including_chinese_punctuation",
+  "machine_count_unit": "machine_nonspace_chars",
+  "status_values": ["not_required", "blocked", "incomplete", "pass"]
+}

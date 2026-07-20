@@ -1,0 +1,21 @@
+{
+  "schema_id": "organization.v1",
+  "schema_value": "literary-engineering-workbench/organization-candidate/v1",
+  "required": ["schema", "candidate_id", "organization_id", "name", "type", "public_goal", "hidden_goal", "resources", "conflicts", "risks", "source_paths"],
+  "recommended": ["promotion_notes"],
+  "types": {
+    "schema": "str",
+    "candidate_id": "str",
+    "organization_id": "str",
+    "name": "str",
+    "type": "str",
+    "public_goal": "str",
+    "hidden_goal": "str",
+    "resources": "list",
+    "conflicts": "list",
+    "risks": "list",
+    "source_paths": "list",
+    "promotion_notes": "str"
+  },
+  "enums": {}
+}

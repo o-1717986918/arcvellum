@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "literary-engineering-workbench/agent-submission/v1",
+  "title": "CLI-mediated platform-agent submission",
+  "type": "object",
+  "required": [
+    "schema",
+    "task_id",
+    "route",
+    "submitted_at",
+    "submitted_by",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "literary-engineering-workbench/agent-submission/v1"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "route": {
+      "type": "string"
+    },
+    "scene_id": {
+      "type": "string"
+    },
+    "submitted_at": {
+      "type": "string"
+    },
+    "submitted_by": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "note": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

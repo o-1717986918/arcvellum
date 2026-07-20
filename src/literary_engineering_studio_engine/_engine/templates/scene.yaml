@@ -1,0 +1,93 @@
+scene_id: ""
+chapter_id: ""
+chapter_obligation_id: ""
+status: planned
+word_count_target: 0
+word_count_min: 0
+word_count_max: 0
+
+time:
+  story_time: ""
+  timeline_order: null
+
+location: ""
+participants: []
+referenced_characters: []
+context_policy:
+  include_major_characters: true
+  include_minor_characters: participants_and_referenced_only
+
+input_state:
+  canon_refs: []
+  character_states: []
+  active_foreshadowing: []
+
+scene_goal: ""
+conflict:
+  external: ""
+  internal: ""
+
+actions: []
+revealed_info: []
+emotional_curve: []
+style_constraints: []
+reader_experience:
+  reader_question: ""
+  promised_reward: ""
+  withheld_information: []
+  payoff_or_delay: ""
+  emotional_curve: []
+  tension_source: ""
+  curiosity_hook: ""
+  freshness_requirement: ""
+  anti_summary_requirement: ""
+  reader_aftertaste: ""
+
+narrative_rhythm:
+  rhythm_role: mixed
+  pace: balanced
+  density: medium
+  scene_function: []
+  scene_turn: ""
+  reader_effect: ""
+  paragraph_shape: "过场简短，关键选择细写；段落推进以行动、信息差和人物选择为主。"
+  density_mix:
+    summary: low
+    action: medium
+    dialogue: medium
+    reflection: low
+    description: low
+  dialogue_ratio: medium
+  action_ratio: medium
+  reflection_ratio: low
+  description_ratio: low
+  narrative_distance: medium
+  tension_curve: ""
+  texture_variety: "避免连续场景全是同一种材料；对话、动作、心理、环境、信息揭示应按场景功能变化。"
+  chapter_ending_policy: ""
+  slow_down_points: []
+  speed_up_points: []
+  avoid_flatness: "每段至少承担行动推进、信息改变、关系压力、选择代价或场景衔接之一。"
+
+scene_bridge:
+  incoming_pressure: ""
+  incoming_from_previous: []
+  reader_questions_carried: []
+  carryover_from_previous: []
+  outgoing_hooks: []
+  outgoing_hook: ""
+  promise_payoff_items: []
+  continuity_handshake: "结尾必须给下一场留下可接续的压力、问题、代价或未完成动作。"
+
+output_state:
+  new_facts: []
+  character_changes: []
+  relationship_changes: []
+  foreshadowing_changes: []
+  next_hooks: []
+
+review:
+  canon_test: pending
+  character_test: pending
+  plot_test: pending
+  style_test: pending

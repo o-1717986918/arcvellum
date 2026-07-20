@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from . import __version__
-from .config import load_config, repository_root
+from .config import load_config
 from .core_bridge import CoreBridge
 from .core_read_models import (
     build_activity,
@@ -24,6 +24,14 @@ from .core_read_models import (
     style_mounts,
 )
 from .jobs import JobStore
+from .project_manager import (
+    create_project,
+    current_project,
+    list_projects,
+    read_directions,
+    record_direction,
+    register_project,
+)
 from .runtimes import runtime_status
 from .worker import AgentWorker
 
@@ -52,6 +60,25 @@ class StyleMountRequest(BaseModel):
     project_root: str
     style_library_root: str = ""
     style_id: str
+
+
+class ProjectCreateRequest(BaseModel):
+    parent_directory: str
+    title: str
+    folder_name: str = ""
+    work_type: str = "novel"
+    target_length: int = 30000
+    premise: str = ""
+    genre: str = ""
+
+
+class ProjectOpenRequest(BaseModel):
+    project_root: str
+
+
+class DirectionRequest(BaseModel):
+    project_root: str
+    message: str
 
 
 def create_app():
@@ -83,17 +110,17 @@ def create_app():
     @app.get("/health")
     def health():
         try:
-            core = CoreBridge(config).doctor()
-            core_ready = core.returncode == 0
-            core_detail = core.stderr.strip() if core.returncode else "ready"
+            engine = CoreBridge(config).doctor()
+            engine_ready = engine.returncode == 0
+            engine_detail = engine.stderr.strip() if engine.returncode else "ready"
         except Exception as exc:
-            core_ready = False
-            core_detail = str(exc)
+            engine_ready = False
+            engine_detail = str(exc)
         return {
             "ok": True,
             "version": __version__,
-            "core_ready": core_ready,
-            "core_detail": core_detail,
+            "engine_ready": engine_ready,
+            "engine_detail": engine_detail,
             "runtimes": runtime_status(config),
             "model_provider": "disabled-by-architecture",
         }
@@ -101,6 +128,32 @@ def create_app():
     @app.get("/runtime/adapters")
     def runtime_adapters():
         return {"ok": True, "items": runtime_status(config), "model_provider": "not used"}
+
+    @app.get("/projects")
+    def projects_index():
+        return {"ok": True, **list_projects()}
+
+    @app.get("/projects/current")
+    def projects_current():
+        return current_project()
+
+    @app.post("/projects/open")
+    def projects_open(payload: ProjectOpenRequest):
+        return _call(lambda: {"ok": True, "project": register_project(payload.project_root)})
+
+    @app.post("/projects/create")
+    def projects_create(payload: ProjectCreateRequest):
+        values = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+        return _call(lambda: {"ok": True, "project": create_project(**values)})
+
+    @app.get("/projects/directions")
+    def projects_directions(project_root: str, limit: int = 20):
+        root = _project(project_root)
+        return {"ok": True, "items": read_directions(root, limit=limit)}
+
+    @app.post("/projects/directions")
+    def projects_record_direction(payload: DirectionRequest):
+        return _call(lambda: record_direction(_project(payload.project_root), payload.message))
 
     @app.post("/worker/prepare")
     def worker_prepare(payload: WorkerRequest):
@@ -288,7 +341,7 @@ def _project(value: str) -> Path:
 
 
 def _frontend_file(relative: str, content_type: str):
-    root = repository_root() / "frontend"
+    root = Path(__file__).resolve().with_name("frontend")
     target = (root / relative).resolve()
     if not target.is_relative_to(root.resolve()) or not target.is_file():
         raise HTTPException(status_code=404, detail=f"frontend asset not found: {relative}")
