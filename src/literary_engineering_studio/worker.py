@@ -5,13 +5,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import threading
 from typing import Any
+from collections.abc import Callable
 
 from .config import load_config
 from .contracts import TaskPackage, load_task_package
 from .core_bridge import CoreBridge
 from .runtimes import build_runtime
-from .sandbox import SandboxManifest, import_expected_outputs, stage_task, update_run_manifest
+from .sandbox import (
+    SandboxManifest,
+    apply_expected_outputs,
+    inspect_expected_outputs,
+    load_writeback_preview,
+    rollback_expected_outputs,
+    sandbox_from_run,
+    stage_task,
+    update_run_manifest,
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +37,7 @@ class WorkerRunResult:
     message: str
     imported_outputs: tuple[str, ...] = ()
     audit_fields: dict[str, str] | None = None
+    writeback_preview: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -39,13 +51,22 @@ class WorkerRunResult:
             "message": self.message,
             "imported_outputs": list(self.imported_outputs),
             "audit": self.audit_fields or {},
+            "writeback_preview": self.writeback_preview or {},
         }
 
 
 class AgentWorker:
-    def __init__(self, config: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        *,
+        event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+        cancel_event: threading.Event | None = None,
+    ):
         self.config = config or load_config()
         self.bridge = CoreBridge(self.config)
+        self.event_sink = event_sink
+        self.cancel_event = cancel_event or threading.Event()
 
     def prepare(
         self,
@@ -57,6 +78,7 @@ class AgentWorker:
         scene: str = "",
     ) -> tuple[TaskPackage | None, SandboxManifest | None, WorkerRunResult | None]:
         project = _validate_project(project_root)
+        self._emit("task.selecting", {"project_root": str(project), "route": route})
         selected_task_id = task_id.strip()
         if not selected_task_id:
             issued = self.bridge.task_next(project, route, scene=scene)
@@ -78,7 +100,17 @@ class AgentWorker:
         if not task_json_value:
             raise RuntimeError("task-open did not report task_json")
         task = load_task_package(project, Path(task_json_value))
+        self._emit(
+            "task.opened",
+            {
+                "task_id": task.task_id,
+                "route": task.route,
+                "current_state": task.current_state,
+                "execution_contract": task.execution_contract.as_dict(),
+            },
+        )
         if task.human_gate_reasons:
+            self._emit("human.required", {"reasons": list(task.human_gate_reasons), "task_id": task.task_id})
             return task, None, WorkerRunResult(
                 "waiting_human",
                 project,
@@ -90,21 +122,47 @@ class AgentWorker:
                 "human approval gate: " + ", ".join(task.human_gate_reasons),
             )
 
-        command_error = ""
-        if task.command and bool(self.config.get("worker", {}).get("auto_run_task_command", True)):
-            try:
-                self.bridge.execute_task_command(task.command, project)
-            except (RuntimeError, ValueError, FileNotFoundError) as exc:
-                command_error = str(exc)
-
         runs_root = Path(str(self.config.get("worker", {}).get("runs_root") or ""))
-        sandbox = stage_task(task, runs_root, runtime=runtime_id)
-        if command_error:
+        active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
+        sandbox = stage_task(task, runs_root, runtime=active_runtime)
+        self._emit(
+            "sandbox.prepared",
+            {
+                "run_id": sandbox.run_id,
+                "run_root": str(sandbox.run_root),
+                "workspace": str(sandbox.workspace),
+                "project_root": str(task.project_root),
+                "runner_id": active_runtime,
+                "task_id": task.task_id,
+            },
+        )
+        if task.command:
+            self._emit("core.command_started", {"task_id": task.task_id})
+            try:
+                command_result = self.bridge.execute_task_command(task.command, sandbox.workspace)
+            except (RuntimeError, ValueError, FileNotFoundError) as exc:
+                update_run_manifest(
+                    sandbox.manifest_path,
+                    status="core_command_failed",
+                    core_command_error=str(exc),
+                )
+                self._emit("core.command_failed", {"task_id": task.task_id, "error": str(exc)})
+                return task, sandbox, WorkerRunResult(
+                    "core_command_failed",
+                    project,
+                    task.route,
+                    task.task_id,
+                    active_runtime,
+                    sandbox.run_root,
+                    sandbox.workspace,
+                    str(exc),
+                )
             update_run_manifest(
                 sandbox.manifest_path,
-                status="prepared_with_core_command_error",
-                core_command_error=command_error,
+                status="core_command_completed",
+                core_command_returncode=command_result.returncode,
             )
+            self._emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
         return task, sandbox, None
 
     def run_once(
@@ -126,10 +184,50 @@ class AgentWorker:
         if terminal is not None:
             return terminal
         assert task is not None and sandbox is not None
+        active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
+
+        if task.execution_contract.execution_policy == "deterministic":
+            self._emit("runner.skipped", {"reason": "deterministic-cli", "task_id": task.task_id})
+            update_run_manifest(
+                sandbox.manifest_path,
+                status="deterministic_outputs_ready",
+                runtime_message="core deterministic command completed in the isolated workspace",
+                runtime_returncode=0,
+            )
+            return self._complete_outputs(task, sandbox, active_runtime)
+
+        if self.cancel_event.is_set():
+            self._emit("run.cancelled", {"stage": "before-runner"})
+            return WorkerRunResult(
+                "cancelled",
+                task.project_root,
+                task.route,
+                task.task_id,
+                runtime_id,
+                sandbox.run_root,
+                sandbox.workspace,
+                "run cancelled before Agent Runner execution",
+            )
 
         runtime = build_runtime(runtime_id, self.config)
         timeout = int(self.config.get("worker", {}).get("timeout_seconds") or 1800)
-        runtime_result = runtime.execute(sandbox.workspace, sandbox.prompt_path, sandbox.run_root, timeout=timeout)
+        self._emit("runner.started", {"runner_id": runtime_id, "task_id": task.task_id})
+        runtime_result = runtime.execute(
+            sandbox.workspace,
+            sandbox.prompt_path,
+            sandbox.run_root,
+            timeout=timeout,
+            event_sink=self._emit,
+            cancel_event=self.cancel_event,
+        )
+        self._emit(
+            "runner.completed",
+            {
+                "runner_id": runtime_id,
+                "status": runtime_result.status,
+                "returncode": runtime_result.returncode,
+            },
+        )
         update_run_manifest(
             sandbox.manifest_path,
             status=runtime_result.status,
@@ -160,8 +258,28 @@ class AgentWorker:
                 runtime_result.message,
             )
 
-        imported = import_expected_outputs(task, sandbox)
-        if not imported:
+        if self.cancel_event.is_set():
+            self._emit("run.cancelled", {"stage": "before-writeback"})
+            return WorkerRunResult(
+                "cancelled",
+                task.project_root,
+                task.route,
+                task.task_id,
+                runtime_id,
+                sandbox.run_root,
+                sandbox.workspace,
+                "run cancelled before formal writeback",
+            )
+
+        return self._complete_outputs(task, sandbox, runtime_id)
+
+    def _complete_outputs(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        runtime_id: str,
+    ) -> WorkerRunResult:
+        if not task.expected_outputs:
             update_run_manifest(
                 sandbox.manifest_path,
                 status="blocked_empty_submission",
@@ -178,6 +296,89 @@ class AgentWorker:
                 "task has no expected_outputs; choose formal submission evidence manually",
             )
 
+        self._emit("validation.started", {"kind": "expected-output-preview"})
+        preview = inspect_expected_outputs(task, sandbox)
+        self._emit("writeback.preview_ready", preview.as_dict())
+        if preview.policy != "automatic":
+            update_run_manifest(
+                sandbox.manifest_path,
+                status="awaiting_writeback_approval",
+                writeback_preview=preview.as_dict(),
+            )
+            return WorkerRunResult(
+                "waiting_writeback",
+                task.project_root,
+                task.route,
+                task.task_id,
+                runtime_id,
+                sandbox.run_root,
+                sandbox.workspace,
+                "Agent output is ready; review the writeback diff before importing it",
+                writeback_preview=preview.as_dict(),
+            )
+        return self._finalize(task, sandbox, preview, approved_by="policy:automatic")
+
+    def approve_writeback(self, run_root: Path, *, approved_by: str) -> WorkerRunResult:
+        run = load_run(run_root)
+        if str(run.get("status") or "") != "awaiting_writeback_approval":
+            raise ValueError("run is not awaiting writeback approval")
+        project = _validate_project(Path(str(run.get("project_root") or "")))
+        task_json = Path(str(run.get("task_json") or ""))
+        if not task_json.is_file():
+            task_json = project / "workflow" / "tasks" / f"{run.get('task_id')}.json"
+        task = load_task_package(project, task_json)
+        sandbox = sandbox_from_run(run_root)
+        preview = load_writeback_preview(run_root)
+        if preview.policy not in {"preview-required", "approval-required"}:
+            raise ValueError(f"writeback does not require approval: {preview.policy}")
+        update_run_manifest(
+            sandbox.manifest_path,
+            writeback_decision={
+                "decision": "approve",
+                "approved_by": approved_by.strip() or "studio-user",
+            },
+        )
+        self._emit("writeback.approved", {"approved_by": approved_by.strip() or "studio-user"})
+        return self._finalize(task, sandbox, preview, approved_by=approved_by)
+
+    def reject_writeback(self, run_root: Path, *, rejected_by: str, reason: str = "") -> WorkerRunResult:
+        run = load_run(run_root)
+        if str(run.get("status") or "") != "awaiting_writeback_approval":
+            raise ValueError("run is not awaiting writeback approval")
+        sandbox = sandbox_from_run(run_root)
+        update_run_manifest(
+            sandbox.manifest_path,
+            status="writeback_rejected",
+            writeback_decision={
+                "decision": "reject",
+                "rejected_by": rejected_by.strip() or "studio-user",
+                "reason": reason.strip(),
+            },
+        )
+        self._emit("writeback.rejected", {"reason": reason.strip()})
+        return WorkerRunResult(
+            "writeback_rejected",
+            Path(str(run["project_root"])),
+            str(run.get("route") or ""),
+            str(run.get("task_id") or ""),
+            str(run.get("runtime") or ""),
+            sandbox.run_root,
+            sandbox.workspace,
+            reason.strip() or "writeback rejected by user",
+            writeback_preview=load_writeback_preview(run_root).as_dict(),
+        )
+
+    def _finalize(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        preview,
+        *,
+        approved_by: str,
+    ) -> WorkerRunResult:
+        runtime_id = str(load_run(sandbox.run_root).get("runtime") or "opencode")
+        imported = apply_expected_outputs(task, sandbox, preview)
+        self._emit("file.imported", {"paths": list(imported), "approved_by": approved_by})
         self.bridge.task_submit(
             task.project_root,
             task.task_id,
@@ -191,7 +392,14 @@ class AgentWorker:
                 handled_by=f"studio:{runtime_id}",
             )
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
-            update_run_manifest(sandbox.manifest_path, status="blocked_by_core_gate", core_gate_error=str(exc))
+            self._emit("validation.blocked", {"kind": "core-task-gate", "error": str(exc)})
+            rollback_expected_outputs(task, sandbox, imported)
+            update_run_manifest(
+                sandbox.manifest_path,
+                status="blocked_by_core_gate",
+                core_gate_error=str(exc),
+                imported_outputs=[],
+            )
             return WorkerRunResult(
                 "blocked_by_core_gate",
                 task.project_root,
@@ -201,10 +409,12 @@ class AgentWorker:
                 sandbox.run_root,
                 sandbox.workspace,
                 str(exc),
-                imported,
+                (),
+                writeback_preview=preview.as_dict(),
             )
 
         audit = self.bridge.route_audit(task.project_root, task.route)
+        self._emit("validation.passed", {"kind": "route-audit", "audit": audit.fields})
         update_run_manifest(
             sandbox.manifest_path,
             status="complete",
@@ -222,7 +432,12 @@ class AgentWorker:
             "Agent output imported and accepted by the core task gate",
             imported,
             audit.fields,
+            preview.as_dict(),
         )
+
+    def _emit(self, event: str, data: dict[str, Any]) -> None:
+        if self.event_sink is not None:
+            self.event_sink(event, data)
 
 
 def load_run(run_root: Path) -> dict[str, Any]:
@@ -242,4 +457,3 @@ def _validate_project(value: Path) -> Path:
     if not (project / "project.yaml").exists():
         raise ValueError(f"not a Literary Engineering work project: {project}")
     return project
-

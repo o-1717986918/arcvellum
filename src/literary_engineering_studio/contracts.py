@@ -9,6 +9,7 @@ from typing import Any
 
 
 TASK_SCHEMA = "literary-engineering-workbench/agent-task/v1"
+EXECUTION_CONTRACT_SCHEMA = "literary-engineering-studio/task-execution/v0.3"
 HUMAN_GATE_TOKENS = (
     "human-choice",
     "human_approval",
@@ -18,6 +19,85 @@ HUMAN_GATE_TOKENS = (
     "release-approval",
     "publish-approval",
 )
+
+HIGH_IMPACT_PREFIXES = (
+    "canon/",
+    "characters/",
+    "drafts/scenes/",
+    "manuscript/",
+    "releases/",
+    "state/",
+)
+
+CREATIVE_TASK_TOKENS = (
+    "prose",
+    "compose",
+    "roleplay",
+    "branch",
+    "style",
+    "extract",
+    "review",
+    "canon",
+    "character",
+    "world",
+)
+
+
+@dataclass(frozen=True)
+class HumanGate:
+    required: bool
+    reasons: tuple[str, ...]
+    source: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"required": self.required, "reasons": list(self.reasons), "source": self.source}
+
+
+@dataclass(frozen=True)
+class OutputContract:
+    path: str
+    kind: str
+    writeback_policy: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "path": self.path,
+            "kind": self.kind,
+            "writeback_policy": self.writeback_policy,
+        }
+
+
+@dataclass(frozen=True)
+class TaskExecutionContract:
+    execution_policy: str
+    agent_role: str
+    human_gate: HumanGate
+    runtime_capabilities_required: tuple[str, ...]
+    outputs: tuple[OutputContract, ...]
+    compatibility_derived: bool
+
+    @property
+    def writeback_policy(self) -> str:
+        policies = {item.writeback_policy for item in self.outputs}
+        if "approval-required" in policies:
+            return "approval-required"
+        if "preview-required" in policies:
+            return "preview-required"
+        if "automatic" in policies:
+            return "automatic"
+        return "none"
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "schema": EXECUTION_CONTRACT_SCHEMA,
+            "execution_policy": self.execution_policy,
+            "agent_role": self.agent_role,
+            "human_gate": self.human_gate.as_dict(),
+            "runtime_capabilities_required": list(self.runtime_capabilities_required),
+            "outputs": [item.as_dict() for item in self.outputs],
+            "writeback_policy": self.writeback_policy,
+            "compatibility_derived": self.compatibility_derived,
+        }
 
 
 @dataclass(frozen=True)
@@ -40,6 +120,10 @@ class TaskPackage:
         return str(self.payload.get("current_state") or "")
 
     @property
+    def task_type(self) -> str:
+        return str(self.payload.get("task_type") or "").strip()
+
+    @property
     def command(self) -> str:
         return str(self.payload.get("command") or "").strip()
 
@@ -56,7 +140,11 @@ class TaskPackage:
         return tuple(str(item) for item in self.payload.get("expected_outputs") or [])
 
     @property
-    def human_gate_reasons(self) -> tuple[str, ...]:
+    def human_gate(self) -> HumanGate:
+        explicit = self.payload.get("human_gate")
+        if isinstance(explicit, dict) and isinstance(explicit.get("required"), bool):
+            reasons = tuple(str(item) for item in explicit.get("reasons") or [] if str(item).strip())
+            return HumanGate(bool(explicit["required"]), reasons, "task-package")
         haystack = " ".join(
             [
                 self.current_state,
@@ -64,7 +152,46 @@ class TaskPackage:
                 str(self.payload.get("prompt_asset_id") or ""),
             ]
         ).lower()
-        return tuple(token for token in HUMAN_GATE_TOKENS if token in haystack)
+        reasons = tuple(token for token in HUMAN_GATE_TOKENS if token in haystack)
+        return HumanGate(bool(reasons), reasons, "compatibility-inference")
+
+    @property
+    def human_gate_reasons(self) -> tuple[str, ...]:
+        return self.human_gate.reasons
+
+    @property
+    def execution_contract(self) -> TaskExecutionContract:
+        explicit_policy = str(self.payload.get("execution_policy") or "").strip()
+        explicit_role = str(self.payload.get("agent_role") or "").strip()
+        explicit_capabilities = self.payload.get("runtime_capabilities_required")
+        explicit_outputs = self.payload.get("output_contracts")
+        compatibility_derived = not (
+            explicit_policy
+            and explicit_role
+            and isinstance(explicit_capabilities, list)
+            and isinstance(explicit_outputs, list)
+            and isinstance(self.payload.get("human_gate"), dict)
+        )
+        policy = explicit_policy or _derive_execution_policy(self.payload, self.human_gate)
+        role = explicit_role or _derive_agent_role(self.payload, policy)
+        capabilities = (
+            tuple(str(item) for item in explicit_capabilities if str(item).strip())
+            if isinstance(explicit_capabilities, list)
+            else _derive_capabilities(policy, self.expected_outputs)
+        )
+        outputs = (
+            _parse_output_contracts(explicit_outputs)
+            if isinstance(explicit_outputs, list)
+            else tuple(_derive_output_contract(path, policy) for path in self.expected_outputs)
+        )
+        return TaskExecutionContract(
+            execution_policy=policy,
+            agent_role=role,
+            human_gate=self.human_gate,
+            runtime_capabilities_required=capabilities,
+            outputs=outputs,
+            compatibility_derived=compatibility_derived,
+        )
 
     def resolve_project_path(self, relative: str) -> Path:
         normalized = normalize_relative_path(relative)
@@ -120,4 +247,96 @@ def _validate_task_payload(payload: dict[str, Any]) -> None:
     for field in ("validation_gates", "forbidden_shortcuts"):
         if not isinstance(payload.get(field), list):
             raise ValueError(f"task package field must be a list: {field}")
+    _validate_optional_execution_contract(payload)
 
+
+def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:
+    if "human_gate" in payload:
+        gate = payload["human_gate"]
+        if not isinstance(gate, dict) or not isinstance(gate.get("required"), bool):
+            raise ValueError("task package human_gate must contain a boolean required field")
+        if not isinstance(gate.get("reasons", []), list):
+            raise ValueError("task package human_gate.reasons must be a list")
+    for field in ("runtime_capabilities_required", "output_contracts"):
+        if field in payload and not isinstance(payload[field], list):
+            raise ValueError(f"task package field must be a list: {field}")
+    if "output_contracts" in payload:
+        _parse_output_contracts(payload["output_contracts"])
+
+
+def _derive_execution_policy(payload: dict[str, Any], human_gate: HumanGate) -> str:
+    if human_gate.required:
+        return "human-required"
+    task_type = str(payload.get("task_type") or "").lower()
+    prompt_id = str(payload.get("prompt_asset_id") or "").lower()
+    if task_type == "deterministic-cli":
+        return "deterministic"
+    if "deterministic-cli-plus-platform-review" in task_type:
+        return "agent-required"
+    if "platform-agent" in task_type or prompt_id:
+        return "agent-required"
+    if str(payload.get("command") or "").strip():
+        return "deterministic"
+    return "agent-required"
+
+
+def _derive_agent_role(payload: dict[str, Any], policy: str) -> str:
+    if policy == "human-required":
+        return "human-decision"
+    if policy == "deterministic":
+        return "deterministic-engine"
+    haystack = " ".join(
+        [
+            str(payload.get("task_type") or ""),
+            str(payload.get("prompt_asset_id") or ""),
+            str(payload.get("current_state") or ""),
+        ]
+    ).lower()
+    if "review" in haystack or "audit" in haystack:
+        return "main-review-agent"
+    if any(token in haystack for token in CREATIVE_TASK_TOKENS):
+        return "main-creative-agent"
+    return "main-agent"
+
+
+def _derive_capabilities(policy: str, outputs: tuple[str, ...]) -> tuple[str, ...]:
+    if policy == "human-required":
+        return ()
+    if policy == "deterministic":
+        return ("deterministic-command",)
+    values = ["read-task-sources"]
+    if outputs:
+        values.append("write-expected-outputs")
+    return tuple(values)
+
+
+def _derive_output_contract(path: str, execution_policy: str) -> OutputContract:
+    normalized = str(normalize_relative_path(path))
+    lower = normalized.lower()
+    if lower.endswith("agent_completion.json") or ".agent_completion." in lower:
+        kind = "completion-evidence"
+        policy = "automatic"
+    elif "approval" in lower or lower.startswith("decisions/"):
+        kind = "human-approval"
+        policy = "approval-required"
+    elif execution_policy == "deterministic":
+        kind = "deterministic"
+        policy = "automatic"
+    else:
+        kind = "agent-authored"
+        policy = "approval-required" if lower.startswith(HIGH_IMPACT_PREFIXES) else "preview-required"
+    return OutputContract(normalized, kind, policy)
+
+
+def _parse_output_contracts(values: list[Any]) -> tuple[OutputContract, ...]:
+    parsed: list[OutputContract] = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise ValueError("task package output_contracts entries must be objects")
+        path = str(value.get("path") or "").strip()
+        kind = str(value.get("kind") or "").strip()
+        policy = str(value.get("writeback_policy") or "").strip()
+        if not path or not kind or policy not in {"automatic", "preview-required", "approval-required", "none"}:
+            raise ValueError("invalid task package output contract")
+        parsed.append(OutputContract(str(normalize_relative_path(path)), kind, policy))
+    return tuple(parsed)

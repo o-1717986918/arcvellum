@@ -1,0 +1,14 @@
+{
+  "name": "literary-engineering-studio-desktop",
+  "private": true,
+  "version": "0.3.0",
+  "scripts": {
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:icons": "tauri icon desktop/app-icon.svg --output desktop/src-tauri/icons"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.0"
+  }
+}

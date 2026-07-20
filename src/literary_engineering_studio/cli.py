@@ -9,8 +9,12 @@ from pathlib import Path
 from . import __version__
 from .config import default_config_path, load_config, save_config
 from .core_bridge import CoreBridge
+from .model_connections import model_connection_status
+from .opencode_binary import install_pinned_opencode
 from .project_manager import create_project, list_projects, record_direction, register_project
-from .runtimes import runtime_status
+from .prompt_evaluation import evaluate_prompt_assets, write_prompt_evaluation
+from .runner_probe import probe_agent_runner
+from .runtimes import agent_runner_status
 from .worker import AgentWorker
 
 
@@ -23,7 +27,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("config-init", help="Write a credential-free Studio configuration.")
-    sub.add_parser("doctor", help="Check the embedded engine and installed Agent runtimes.")
+    sub.add_parser("doctor", help="Check the embedded engine, Agent Runners, and Model Connections.")
+    runner_probe = sub.add_parser("runner-probe", help="Run an isolated real inference probe for an Agent Runner.")
+    runner_probe.add_argument("--runner", choices=["opencode", "claude-code", "codex-cli"], required=True)
+    runner_probe.add_argument("--model", default="")
+    runner_probe.add_argument("--timeout", type=int, default=90)
+    opencode_install = sub.add_parser("opencode-install", help="Install and verify the pinned bundled OpenCode Runner.")
+    opencode_install.add_argument("--destination", default="")
+    prompt_eval = sub.add_parser("prompt-eval", help="Run deterministic regression checks for high-risk prompt assets.")
+    prompt_eval.add_argument("--output", default="")
 
     project_list = sub.add_parser("project-list", help="List Studio projects and the current project.")
     project_list.set_defaults(project_command="list")
@@ -77,8 +89,9 @@ def main(argv: list[str] | None = None) -> int:
                 "mode": "embedded",
                 "detail": core.stderr.strip() if core.returncode else "ready",
             },
-            "runtimes": runtime_status(config),
-            "model_provider": "not part of this project",
+            "agent_runners": agent_runner_status(config),
+            "model_connections": model_connection_status(config),
+            "model_connection_policy": "runner-managed",
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0 if core.returncode == 0 else 1
@@ -86,6 +99,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "project-list":
         print(json.dumps(list_projects(), ensure_ascii=False, indent=2))
         return 0
+
+    if args.command == "runner-probe":
+        result = probe_agent_runner(config, args.runner, model=args.model, timeout=args.timeout)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["status"] == "ready" else 1
+
+    if args.command == "opencode-install":
+        destination = Path(args.destination).expanduser() if args.destination else None
+        result = install_pinned_opencode(destination)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "prompt-eval":
+        report = write_prompt_evaluation(Path(args.output)) if args.output else evaluate_prompt_assets()
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["status"] == "pass" else 1
 
     if args.command == "project-open":
         print(json.dumps(register_project(Path(args.project)), ensure_ascii=False, indent=2))
@@ -166,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
 def _task_arguments(parser: argparse.ArgumentParser, *, include_task_id: bool = True) -> None:
     parser.add_argument("project", help="Literary Engineering work-project directory.")
     parser.add_argument("--route", default="scene-development")
-    parser.add_argument("--runtime", choices=["host-agent", "claude-code", "codex-cli"], default="host-agent")
+    parser.add_argument("--runtime", choices=["opencode", "host-agent", "claude-code", "codex-cli"], default="opencode")
     parser.add_argument("--scene", default="")
     if include_task_id:
         parser.add_argument("--task-id", default="")

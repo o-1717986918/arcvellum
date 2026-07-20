@@ -1113,7 +1113,7 @@ def _latest_scene_candidate(root: Path, scene_id: str) -> Path | None:
 
 def _static_review_conclusion(path: Path) -> str:
     text = _read(path)
-    match = re.search(r"(?m)^-\s*结论：\s*`?([^`\s]+)`?\s*$", text)
+    match = re.search(r"(?m)^-\s*(?:审查)?结论：\s*(?:\*\*)?`?([a-z_]+)`?(?:\*\*)?\s*$", text, re.IGNORECASE)
     return match.group(1).strip().lower() if match else ""
 
 

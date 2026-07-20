@@ -4,7 +4,13 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.contracts import load_task_package
-from literary_engineering_studio.sandbox import import_expected_outputs, stage_task
+from literary_engineering_studio.sandbox import (
+    apply_expected_outputs,
+    import_expected_outputs,
+    inspect_expected_outputs,
+    rollback_expected_outputs,
+    stage_task,
+)
 
 
 class SandboxTests(unittest.TestCase):
@@ -61,7 +67,37 @@ class SandboxTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 import_expected_outputs(task, sandbox)
 
+    def test_preview_precedes_writeback_and_detects_stale_target(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            task = self._task(Path(temporary))
+            target = task.project_root / "drafts" / "candidates" / "scene_0001.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("旧正文。\n", encoding="utf-8")
+            sandbox = stage_task(task, Path(runs), runtime="host-agent", run_id="run-preview")
+            output = sandbox.workspace / "drafts" / "candidates" / "scene_0001.md"
+            output.write_text("新正文。\n", encoding="utf-8")
+            preview = inspect_expected_outputs(task, sandbox)
+            self.assertEqual(preview.policy, "preview-required")
+            self.assertIn("-旧正文。", str(preview.changes[0]["diff"]))
+            self.assertEqual(target.read_text(encoding="utf-8"), "旧正文。\n")
+            target.write_text("项目后来被修改。\n", encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                apply_expected_outputs(task, sandbox, preview)
+
+    def test_rollback_restores_preexisting_output(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            task = self._task(Path(temporary))
+            target = task.project_root / "drafts" / "candidates" / "scene_0001.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("旧正文。\n", encoding="utf-8")
+            sandbox = stage_task(task, Path(runs), runtime="host-agent", run_id="run-rollback")
+            output = sandbox.workspace / "drafts" / "candidates" / "scene_0001.md"
+            output.write_text("新正文。\n", encoding="utf-8")
+            preview = inspect_expected_outputs(task, sandbox)
+            imported = apply_expected_outputs(task, sandbox, preview)
+            rollback_expected_outputs(task, sandbox, imported)
+            self.assertEqual(target.read_text(encoding="utf-8"), "旧正文。\n")
+
 
 if __name__ == "__main__":
     unittest.main()
-

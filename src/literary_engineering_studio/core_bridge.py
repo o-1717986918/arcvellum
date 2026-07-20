@@ -122,7 +122,8 @@ class CoreBridge:
             raise ValueError("task command is empty")
         if any(token in command for token in FORBIDDEN_COMMAND_TOKENS):
             raise ValueError("task command contains a formal-mode bypass token")
-        if any(token in command for token in ("&&", "||", "|", ">", "< ", ";", "`")):
+        shell_check = command.replace("<project>", "")
+        if any(token in shell_check for token in ("&&", "||", "|", ">", "< ", ";", "`")):
             raise ValueError("task command contains unsupported shell syntax")
         parts = [_unquote(item) for item in shlex.split(command, posix=False)]
         try:

@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-CONFIG_SCHEMA = "literary-engineering-studio/config/v0.2"
+CONFIG_SCHEMA = "literary-engineering-studio/config/v0.3"
 
 
 def repository_root() -> Path:
@@ -30,6 +30,13 @@ def default_runs_root() -> Path:
     return Path.home() / ".literary-engineering-studio" / "runs"
 
 
+def default_data_root() -> Path:
+    override = os.environ.get("LES_DATA_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path.home() / ".literary-engineering-studio"
+
+
 def default_config() -> dict[str, Any]:
     return {
         "schema": CONFIG_SCHEMA,
@@ -37,24 +44,55 @@ def default_config() -> dict[str, Any]:
             "python": sys.executable,
             "module": "literary_engineering_studio_engine",
         },
+        "application": {
+            "data_root": str(default_data_root()),
+            "database_path": str(default_data_root() / "studio.sqlite3"),
+            "max_workers": 2,
+            "lease_seconds": 90,
+        },
         "worker": {
             "runs_root": str(default_runs_root()),
             "timeout_seconds": 1800,
             "auto_run_task_command": True,
             "pause_on_human_gate": True,
         },
-        "runtimes": {
+        "agent_runners": {
+            "opencode": {
+                "enabled": True,
+                "executable": "",
+                "model": "opencode/big-pickle",
+                "data_root": str(default_data_root()),
+            },
             "host-agent": {"enabled": True},
             "claude-code": {
                 "enabled": True,
                 "executable": "claude.cmd" if os.name == "nt" else "claude",
                 "permission_mode": "acceptEdits",
+                "model": "",
+                "max_budget_usd": 2.0,
             },
             "codex-cli": {
                 "enabled": True,
                 "executable": "codex",
                 "sandbox": "workspace-write",
             },
+        },
+        "model_connections": {
+            "managed_by": "agent-runner",
+            "connections": [
+                {
+                    "connection_id": "opencode-starter",
+                    "provider_family": "opencode",
+                    "connection_method": "bundled-free-provider",
+                    "agent_runner": "opencode",
+                    "authentication_state": "runner-managed",
+                    "selected_model": "opencode/big-pickle",
+                    "available_models": [],
+                    "endpoint_health": "probe-required",
+                    "privacy_class": "cloud",
+                    "detail": "Starter connection; availability and limits are verified by the bundled Runner."
+                }
+            ],
         },
         "server": {
             "host": "127.0.0.1",
@@ -74,6 +112,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         raise ValueError(f"invalid Studio config: {target}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"Studio config must be a JSON object: {target}")
+    payload = _migrate_config(payload)
     payload.pop("core", None)
     merged = _deep_merge(base, payload)
     merged["schema"] = CONFIG_SCHEMA
@@ -82,7 +121,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 
 def save_config(data: dict[str, Any], path: Path | None = None) -> Path:
     target = (path or default_config_path()).resolve()
-    payload = _deep_merge(default_config(), data)
+    payload = _deep_merge(default_config(), _migrate_config(dict(data)))
     payload.pop("core", None)
     payload["schema"] = CONFIG_SCHEMA
     _assert_no_model_credentials(payload)
@@ -99,6 +138,14 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             merged[key] = value
     return merged
+
+
+def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(payload)
+    legacy_runtimes = migrated.pop("runtimes", None)
+    if isinstance(legacy_runtimes, dict) and not isinstance(migrated.get("agent_runners"), dict):
+        migrated["agent_runners"] = legacy_runtimes
+    return migrated
 
 
 def _assert_no_model_credentials(payload: dict[str, Any]) -> None:

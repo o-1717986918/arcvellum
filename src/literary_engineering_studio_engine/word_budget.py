@@ -581,7 +581,7 @@ def _write_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline
             ),
             (
                 "写入预算审查报告",
-                f"""创建或覆盖 `{review}`。报告结论使用 pass / pass_with_notes / revise_required / reject，说明当前大纲是否足以支撑目标中文内容字符、哪里欠剧情库存、哪些卷需要扩展、哪些内容需要用户确认。不要写入 `[AGENT_TASK: ...]`。""",
+                f"""创建或覆盖 `{review}`。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有剧情库存足以支撑目标长度且不存在阻塞问题时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。说明哪里欠剧情库存、哪些卷需要扩展、哪些内容需要用户确认。不要写入 `[AGENT_TASK: ...]`。""",
             ),
         ],
     )
@@ -615,7 +615,7 @@ def _write_scene_inventory_agent_tasks(root: Path, markdown_path: Path, json_pat
             ),
             (
                 "写入扩场景审查报告",
-                f"""创建或覆盖 `{review}`。报告结论使用 pass / pass_with_notes / revise_required / reject，说明候选场景是否足以支撑预算，哪些候选需要用户确认，哪些不能直接晋升。不要写入 `[AGENT_TASK: ...]`。""",
+                f"""创建或覆盖 `{review}`。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有候选场景足以支撑预算且不存在阻塞问题时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。说明哪些候选需要用户确认，哪些不能直接晋升。不要写入 `[AGENT_TASK: ...]`。""",
             ),
         ],
     )
@@ -647,7 +647,7 @@ def _write_chapter_obligation_plan_tasks(root: Path, markdown_path: Path, json_p
             ),
             (
                 "写入章节义务审查报告",
-                f"""创建或覆盖 `{review}`。报告结论使用 pass / pass_with_notes / revise_required / reject。若未能为主要章节建立可执行的读者体验契约，不得进入批量 scene-development。""",
+                f"""创建或覆盖 `{review}`。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有全部主要章节都有可执行的读者体验契约时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。否则不得进入批量 scene-development。""",
             ),
         ],
     )

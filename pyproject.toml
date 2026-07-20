@@ -1,6 +1,6 @@
 [project]
 name = "literary-engineering-studio"
-version = "0.2.1"
+version = "0.3.0"
 description = "Standalone long-form literary project studio with an embedded workflow engine and controlled Agent runtimes."
 requires-python = ">=3.10"
 dependencies = []
@@ -38,6 +38,9 @@ literary_engineering_studio = [
     "frontend/assets/**/*.svg",
     "frontend/assets/**/*.txt",
     "frontend/assets/**/*.webp",
+    "vendor/*.json",
+    "vendor/*.md",
+    "vendor/*.txt",
 ]
 literary_engineering_studio_engine = [
     "_engine/*.md",

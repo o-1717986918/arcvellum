@@ -1,12 +1,27 @@
 from contextlib import redirect_stderr
 from io import StringIO
+from pathlib import Path
 import unittest
+from unittest.mock import patch
 
-from literary_engineering_studio.core_bridge import _assert_studio_engine_args, parse_cli_fields
+from literary_engineering_studio.config import default_config
+from literary_engineering_studio.core_bridge import CoreBridge, CoreCommandResult, _assert_studio_engine_args, parse_cli_fields
 from literary_engineering_studio_engine.cli import main as engine_main
 
 
 class CoreBridgeTests(unittest.TestCase):
+    def test_project_placeholder_is_not_treated_as_shell_redirection(self):
+        config = default_config()
+        bridge = CoreBridge(config)
+        with patch.object(bridge, "run") as run:
+            run.return_value = CoreCommandResult(("python",), 0, "", "", {})
+            bridge.execute_task_command(
+                "python -m literary_engineering_studio_engine word-budget <project> --target-words 30000",
+                Path("C:/work-project"),
+            )
+        args = run.call_args.args[0]
+        self.assertIn(str(Path("C:/work-project").resolve()), args)
+
     def test_parses_formal_cli_fields(self):
         fields = parse_cli_fields("status: issued\ntask_id: scene-demo\nmessage: task issued\n")
         self.assertEqual(fields["status"], "issued")

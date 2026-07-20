@@ -1,5 +1,18 @@
 # Studio Implementation Route
 
+## v0.3.0 Productization Complete
+
+- Versioned Runner, Model Connection, task execution, output, human-gate and normalized-event contracts.
+- SQLite WAL durable jobs, leases, route locks, idempotency, restart recovery and bounded event replay.
+- Bundled OpenCode 1.18.3 with checksum verification, isolated worker/advisor profiles and real inference probe.
+- Exact high-risk Prompt assets plus deterministic prompt regression evaluation.
+- Read-only advisor snapshots, cited answers and persistent sessions.
+- Writeback diff preview, approval/rejection, stale-target detection, rollback, stop, retry and runtime switching.
+- Tauri 2 Windows client with native folder dialogs, per-launch local authentication, frozen Python sidecar and crash-safe parent monitoring.
+- Reproducible NSIS build containing the embedded engine and OpenCode license notices.
+
+The remaining items below are post-v0.3 enhancements, not blockers for the current single-user desktop release.
+
 ## v0.2 Baseline
 
 - Standalone repository and Python package.

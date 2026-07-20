@@ -1,6 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
-const UI_VERSION = "0.2.1";
+const UI_VERSION = "0.3.0";
 let dashboardTimer = null;
 let dashboardStream = null;
 let activityTimer = null;
@@ -18,8 +18,12 @@ let visibleLibraryItems = [];
 let serverHealth = null;
 let workerJobStream = null;
 let workerJobTimer = null;
+let currentWorkerJobId = "";
 let currentProject = null;
 let recentProjects = [];
+let connectionCatalog = null;
+let runnerSnapshot = [];
+let advisorSession = null;
 
 const routeNames = {
   "scene-development": "场景开发",
@@ -74,8 +78,14 @@ function escapeHtml(value) {
 }
 
 async function api(path, options = {}) {
+  const desktopToken = window.__LES_API_TOKEN || "";
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(desktopToken ? { Authorization: "Bearer " + desktopToken } : {}),
+      ...(options.headers || {}),
+    },
+    credentials: "same-origin",
     ...options,
   });
   const text = await response.text();
@@ -85,6 +95,38 @@ async function api(path, options = {}) {
     throw new Error(typeof body === "object" ? body.detail || "请求失败" : body);
   }
   return body;
+}
+
+async function bootstrapDesktopSession() {
+  const token = window.__LES_API_TOKEN || "";
+  if (!token) return;
+  const response = await fetch("/desktop/session", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token },
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw new Error("桌面客户端无法建立本机安全会话。");
+  window.__LES_API_TOKEN = "";
+}
+
+function nativeDialogAvailable() {
+  return Boolean(window.__TAURI__?.dialog?.open);
+}
+
+async function chooseNativeFolder(targetDescriptor) {
+  if (!nativeDialogAvailable()) return;
+  const [formId, fieldName] = String(targetDescriptor || "").split(".");
+  const field = document.getElementById(formId)?.elements?.namedItem(fieldName);
+  if (!field) throw new Error("没有找到需要填写的目录字段。");
+  const selected = await window.__TAURI__.dialog.open({ directory: true, multiple: false });
+  if (typeof selected === "string" && selected) field.value = selected;
+}
+
+function configureDesktopControls() {
+  document.body.classList.toggle("native-desktop", nativeDialogAvailable());
+  $$(".native-folder-picker").forEach((button) => {
+    button.hidden = !nativeDialogAvailable();
+  });
 }
 
 function formData(form) {
@@ -253,18 +295,266 @@ async function loadHealth() {
 }
 
 async function loadRuntimes() {
-  const result = await api("/runtime/adapters");
+  const result = await api("/agent-runners");
   const items = result.items || [];
+  runnerSnapshot = items;
   $("#runtimeCards").classList.toggle("empty", !items.length);
   $("#runtimeCards").innerHTML = items.length
     ? items.map((item) => `
         <article class="runtime-card ${item.available ? "ready" : "unavailable"}">
-          <span>${escapeHtml(runtimeName(item.runtime))}</span>
-          <b>${item.available ? "可用" : "暂不可用"}</b>
-          <p>${escapeHtml(item.detail || item.executable || "未返回检测信息")}</p>
+          <span>${escapeHtml(runtimeName(item.runner_id || item.runtime))}</span>
+          <b>${item.available ? "可以执行" : item.installed ? "还需完成设置" : "尚未安装"}</b>
+          <p>${escapeHtml(runnerReadiness(item))}</p>
         </article>
       `).join("")
     : "没有发现可用的 Agent 运行时。";
+}
+
+async function loadConnections() {
+  $("#connectionFeedback").textContent = "正在核对内置 Agent、模型来源与实际可用状态……";
+  const runners = await api("/agent-runners");
+  runnerSnapshot = runners.items || [];
+  renderSettingsRunners(runnerSnapshot);
+  try {
+    connectionCatalog = await api("/model-connections/opencode/catalog");
+    renderConnectionCatalog(connectionCatalog);
+    $("#connectionFeedback").textContent = `已读取 ${connectionCatalog.connected_provider_count || 0} 个已连接提供方、${connectionCatalog.available_model_count || 0} 个可选模型。`;
+  } catch (error) {
+    connectionCatalog = null;
+    $("#connectionFeedback").textContent = error.message || String(error);
+    $("#providerSelect").innerHTML = '<option value="">暂时无法读取模型目录</option>';
+    $("#modelSelect").innerHTML = '<option value="">请先检查内置 OpenCode</option>';
+  }
+}
+
+function renderSettingsRunners(items) {
+  const target = $("#settingsRunners");
+  target.classList.toggle("empty", !items.length);
+  target.innerHTML = items.length ? items.map((item) => {
+    const id = item.runner_id || item.runtime;
+    const capabilities = item.capabilities || {};
+    const mode = id === "opencode" ? "Studio 内置" : id === "host-agent" ? "高级兼容" : "本机兼容";
+    return `
+      <article class="settings-runner ${item.available ? "ready" : item.installed ? "attention" : "offline"}">
+        <div class="runner-monogram">${escapeHtml(runtimeMonogram(id))}</div>
+        <div>
+          <span>${escapeHtml(mode)}</span>
+          <b>${escapeHtml(runtimeName(id))}</b>
+          <p>${escapeHtml(runnerReadiness(item))}</p>
+          <small>${capabilities.streaming_events ? "流式观察" : "完成后回报"} · ${capabilities.stop ? "可停止" : "不可远程停止"}</small>
+        </div>
+        <strong>${item.available ? "就绪" : item.installed ? "待设置" : "未安装"}</strong>
+      </article>`;
+  }).join("") : "没有检测到 Agent Runner。";
+  const openCode = items.find((item) => (item.runner_id || item.runtime) === "opencode");
+  $("#installOpenCode").hidden = Boolean(openCode?.installed);
+  $("#connectionRunnerSummary").textContent = openCode?.available ? `OpenCode ${openCode.capabilities?.version || ""} 已就绪` : openCode?.installed ? "OpenCode 已安装，等待模型" : "等待安装 OpenCode";
+}
+
+function renderConnectionCatalog(catalog) {
+  const providers = catalog.providers || [];
+  const providerSelect = $("#providerSelect");
+  const selectedProvider = (catalog.selected_model || "").split("/", 1)[0];
+  providerSelect.innerHTML = providers.map((provider) => `
+    <option value="${escapeHtml(provider.id)}" ${provider.id === selectedProvider ? "selected" : ""}>
+      ${escapeHtml(provider.name)}${provider.connected ? " · 已连接" : " · 未连接"}
+    </option>`).join("");
+  renderModelOptions(selectedProvider || providerSelect.value);
+  updateDisconnectButton(selectedProvider || providerSelect.value);
+  const connected = providers.filter((item) => item.connected);
+  $("#connectionModelSummary").textContent = catalog.selected_model ? friendlyModelName(catalog.selected_model) : "尚未选择模型";
+  $("#modelFacts").classList.toggle("empty", !connected.length);
+  $("#modelFacts").innerHTML = connected.length ? `
+    <div><b>${connected.length}</b><span>已连接提供方</span></div>
+    <div><b>${catalog.available_model_count || 0}</b><span>当前可选模型</span></div>
+    <div><b>${escapeHtml(friendlyModelName(catalog.selected_model || "待选择"))}</b><span>当前执行模型</span></div>
+  ` : "还没有可用的模型连接。可以先使用 OpenCode 提供的入门模型，或在下方连接自己的服务。";
+}
+
+function renderModelOptions(providerId) {
+  const provider = connectionCatalog?.providers?.find((item) => item.id === providerId);
+  const select = $("#modelSelect");
+  const models = provider?.models || [];
+  select.innerHTML = models.length ? models.map((model) => `
+    <option value="${escapeHtml(model.qualified_id)}" ${model.qualified_id === connectionCatalog.selected_model ? "selected" : ""}>
+      ${escapeHtml(model.name)}${model.context ? ` · ${formatContext(model.context)}` : ""}
+    </option>`).join("") : '<option value="">这个提供方尚未连接</option>';
+  updateDisconnectButton(providerId);
+}
+
+function updateDisconnectButton(providerId) {
+  const button = $("#disconnectProvider");
+  const provider = connectionCatalog?.providers?.find((item) => item.id === providerId);
+  button.dataset.providerId = provider?.id || "";
+  button.hidden = !provider?.connected || provider.id === "opencode";
+}
+
+async function installOpenCodeFromClient() {
+  $("#connectionFeedback").textContent = "正在下载并校验内置 OpenCode，请稍候……";
+  const result = await api("/agent-runners/opencode/install", { method: "POST", body: "{}" });
+  $("#connectionFeedback").textContent = `OpenCode ${result.version || ""} 已安装并通过校验。`;
+  await loadConnections();
+}
+
+async function saveSelectedModel(event) {
+  event.preventDefault();
+  const model = $("#modelSelect").value;
+  if (!model) throw new Error("请先选择一个已连接的模型。");
+  await api("/model-connections/opencode/model", { method: "PUT", body: JSON.stringify({ model }) });
+  $("#connectionFeedback").textContent = `已经把 ${friendlyModelName(model)} 设为当前执行模型。`;
+  await loadConnections();
+  await loadRuntimes();
+}
+
+async function connectProvider(event) {
+  event.preventDefault();
+  const data = formData($("#credentialForm"));
+  if (!data.provider_id || !data.credential) throw new Error("请填写提供方标识和访问凭证。");
+  $("#connectionFeedback").textContent = `正在把 ${data.provider_id} 的凭证交给本机 OpenCode……`;
+  await api("/model-connections/opencode/credential", { method: "PUT", body: JSON.stringify(data) });
+  $("#credentialForm").credential.value = "";
+  $("#connectionFeedback").textContent = `${data.provider_id} 已连接。凭证不会在页面中回显。`;
+  await loadConnections();
+}
+
+async function disconnectCurrentProvider() {
+  const button = $("#disconnectProvider");
+  const providerId = button.dataset.providerId || $("#providerSelect").value;
+  if (!providerId || providerId === "opencode") return;
+  const provider = connectionCatalog?.providers?.find((item) => item.id === providerId);
+  const label = provider?.name || providerId;
+  if (!window.confirm(`确认断开 ${label}？凭证将从本机 OpenCode 中移除。`)) return;
+  $("#connectionFeedback").textContent = `正在断开 ${label}……`;
+  await api(`/model-connections/opencode/credential/${encodeURIComponent(providerId)}`, { method: "DELETE" });
+  $("#connectionFeedback").textContent = `${label} 已断开。`;
+  await loadConnections();
+  await loadRuntimes();
+}
+
+async function probeCurrentRunner() {
+  const model = connectionCatalog?.selected_model || $("#modelSelect").value;
+  if (!model) throw new Error("请先选择当前执行模型。");
+  const target = $("#runnerProbeResult");
+  target.className = "probe-result running";
+  target.innerHTML = "<b>正在进行真实调用</b><p>只发送固定探针文本，不读取作品项目。</p>";
+  const result = await api("/agent-runners/opencode/probe", {
+    method: "POST",
+    body: JSON.stringify({ model, timeout: 120 }),
+  });
+  target.className = `probe-result ${result.status === "ready" ? "ready" : "failed"}`;
+  target.innerHTML = `
+    <b>${result.status === "ready" ? "真实调用通过" : "真实调用失败"}</b>
+    <p>${escapeHtml(result.response_verified ? "认证、推理、流式事件和退出链路均已验证。" : result.message || "没有收到预期回复。")}</p>
+    <dl><div><dt>配置模型</dt><dd>${escapeHtml(friendlyModelName(result.configured_model))}</dd></div><div><dt>实际模型</dt><dd>${escapeHtml(friendlyModelName(result.actual_model || "未回报"))}</dd></div><div><dt>事件</dt><dd>${Number(result.event_count || 0)} 条</dd></div></dl>
+    ${(result.warnings || []).map((warning) => `<small>${escapeHtml(warning)}</small>`).join("")}
+  `;
+  await loadConnections();
+}
+
+async function loadAdvisor() {
+  const root = sharedProjectRoot();
+  if (!root) throw new Error("请先在项目中心选择一个作品。");
+  $("#advisorSessionStatus").textContent = "正在建立只读项目快照……";
+  const sessions = await api("/advisor/sessions?project_root=" + encodeURIComponent(root));
+  if (sessions.items?.length) {
+    advisorSession = await api("/advisor/sessions/" + encodeURIComponent(sessions.items[0].session_id));
+  } else {
+    advisorSession = await api("/advisor/sessions", {
+      method: "POST",
+      body: JSON.stringify({ project_root: root, title: (currentProject?.title || "当前作品") + "问答" }),
+    });
+  }
+  renderAdvisorThread();
+  $("#advisorSessionStatus").textContent = "只读会话 · " + (advisorSession.messages?.length || 0) + " 条记录";
+}
+
+function renderAdvisorThread(pending = false) {
+  const thread = $("#advisorThread");
+  const messages = advisorSession?.messages || [];
+  thread.classList.toggle("empty", !messages.length && !pending);
+  const rendered = messages.map((message) => {
+    if (message.role === "user") {
+      return '<article class="advisor-message user"><span>你</span><p>' + escapeHtml(message.payload?.question || "") + "</p></article>";
+    }
+    return renderAdvisorAnswer(message.payload || {});
+  }).join("");
+  const empty = pending ? "" : "还没有提问。顾问会从项目快照中查找依据，不会修改任何作品文件。";
+  const waiting = pending
+    ? '<article class="advisor-message advisor pending"><span>项目顾问</span><p>正在只读检索人物、Canon、场景和审查证据……</p></article>'
+    : "";
+  thread.innerHTML = (rendered || empty) + waiting;
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function renderAdvisorAnswer(answer) {
+  const facts = answer.facts || [];
+  const inferences = answer.inferences || [];
+  const uncertainties = answer.uncertainties || [];
+  const integrity = answer.project_unchanged === false ? "完整性异常" : "只读核对";
+  const factHtml = facts.length
+    ? '<div class="advisor-evidence"><b>项目事实</b>' + facts.map((item) => '<div><p>' + escapeHtml(item.statement || "") + '</p><small>' + escapeHtml(item.citation || "未提供路径") + "</small></div>").join("") + "</div>"
+    : "";
+  const inferenceHtml = inferences.length
+    ? '<div class="advisor-inference"><b>推断</b>' + inferences.map((item) => '<p>' + escapeHtml(item.statement || "") + '<small>' + escapeHtml(item.basis || "") + "</small></p>").join("") + "</div>"
+    : "";
+  const uncertaintyHtml = uncertainties.length
+    ? '<div class="advisor-uncertainty"><b>仍不确定</b>' + uncertainties.map((item) => "<p>" + escapeHtml(item) + "</p>").join("") + "</div>"
+    : "";
+  const nextHtml = answer.suggested_next_action
+    ? "<footer><b>建议走正式流程</b><p>" + escapeHtml(answer.suggested_next_action) + "</p></footer>"
+    : "";
+  return '<article class="advisor-message advisor"><span>项目顾问 · ' + integrity + "</span><p>" +
+    escapeHtml(answer.answer || "暂时没有形成回答。").replace(/\n/g, "<br>") + "</p>" +
+    factHtml + inferenceHtml + uncertaintyHtml + nextHtml + "</article>";
+}
+
+async function askAdvisor(question = "") {
+  const value = String(question || $("#advisorQuestion").value || "").trim();
+  if (!value) throw new Error("请先写下想了解的项目问题。");
+  if (!advisorSession?.session_id) await loadAdvisor();
+  advisorSession.messages = [...(advisorSession.messages || []), { role: "user", payload: { question: value } }];
+  $("#advisorQuestion").value = "";
+  renderAdvisorThread(true);
+  const result = await api("/advisor/sessions/" + encodeURIComponent(advisorSession.session_id) + "/ask", {
+    method: "POST",
+    body: JSON.stringify({ question: value, timeout: 180 }),
+  });
+  advisorSession = await api("/advisor/sessions/" + encodeURIComponent(advisorSession.session_id));
+  renderAdvisorThread();
+  $("#advisorSessionStatus").textContent = result.answer?.snapshot_stale_at_start
+    ? "项目已更新，本次回答使用了最新只读快照"
+    : "回答完成 · 正式项目未改动";
+}
+
+function runnerReadiness(item) {
+  const state = item.readiness_state || item.capabilities?.readiness_state || "";
+  const copy = {
+    "ready-for-live-probe": "已安装、已选模型，可进行真实调用",
+    "handoff-ready": "等待已连接的宿主平台接管任务",
+    "model-selection-required": "已登录，但尚未明确选择模型",
+    "model-connection-required": "已安装，需要连接或选择模型",
+    "authentication-required": "需要先登录或连接模型服务",
+    unavailable: "本机没有可执行的兼容程序",
+  };
+  return copy[state] || item.detail || item.executable || "等待检测";
+}
+
+function runtimeMonogram(value) {
+  return ({ opencode: "OC", "host-agent": "HA", "claude-code": "CC", "codex-cli": "CX" })[value] || "AG";
+}
+
+function friendlyModelName(value) {
+  const text = String(value || "");
+  if (!text.includes("/")) return text || "待选择";
+  const [provider, ...rest] = text.split("/");
+  return `${rest.join("/")} · ${provider}`;
+}
+
+function formatContext(value) {
+  const count = Number(value || 0);
+  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M 上下文`;
+  if (count >= 1000) return `${Math.round(count / 1000)}K 上下文`;
+  return `${count} 上下文`;
 }
 
 async function loadDelivery() {
@@ -345,7 +635,7 @@ function workerPayload() {
   return {
     project_root: root,
     route: data.route || "scene-development",
-    runtime: data.runtime || "host-agent",
+    runtime: data.runtime || "opencode",
   };
 }
 
@@ -364,17 +654,20 @@ async function runWorkerTask() {
   }
   renderWorkerStatus({ status: "queued", message: `正在启动 ${runtimeName(payload.runtime)}。` });
   const job = await api("/worker/run", { method: "POST", body: JSON.stringify(payload) });
+  currentWorkerJobId = job.job_id;
+  renderWorkerStatus(job, job.job_id);
   watchWorkerJob(job.job_id);
 }
 
 function watchWorkerJob(jobId) {
+  currentWorkerJobId = jobId;
   if (workerJobStream) workerJobStream.close();
   if (workerJobTimer) clearInterval(workerJobTimer);
   if (window.EventSource) {
     workerJobStream = new EventSource(`/worker/jobs/${encodeURIComponent(jobId)}/stream`);
     workerJobStream.addEventListener("worker", (event) => {
       const payload = JSON.parse(event.data);
-      renderWorkerStatus(payload.result && Object.keys(payload.result).length ? payload.result : payload);
+      renderWorkerStatus(payload.result && Object.keys(payload.result).length ? payload.result : payload, jobId);
       if (!["queued", "running"].includes(payload.status)) {
         workerJobStream.close();
         workerJobStream = null;
@@ -395,7 +688,7 @@ function watchWorkerJob(jobId) {
 function startWorkerJobPolling(jobId) {
   const poll = async () => {
     const payload = await api(`/worker/jobs/${encodeURIComponent(jobId)}`);
-    renderWorkerStatus(payload.result && Object.keys(payload.result).length ? payload.result : payload);
+    renderWorkerStatus(payload.result && Object.keys(payload.result).length ? payload.result : payload, jobId);
     if (!["queued", "running"].includes(payload.status)) {
       clearInterval(workerJobTimer);
       workerJobTimer = null;
@@ -407,7 +700,7 @@ function startWorkerJobPolling(jobId) {
   workerJobTimer = setInterval(() => guarded(poll), 1500);
 }
 
-function renderWorkerStatus(payload) {
+function renderWorkerStatus(payload, jobId = currentWorkerJobId) {
   const status = payload.status || "unknown";
   const copy = {
     preparing: "正在准备隔离任务",
@@ -416,6 +709,9 @@ function renderWorkerStatus(payload) {
     prepared: "隔离任务已经准备好",
     waiting_host_agent: "等待当前宿主 Agent 接管",
     waiting_human: "等待你的决定",
+    waiting_writeback: "候选产物等待写回确认",
+    writeback_rejected: "本次写回已拒绝",
+    cancelled: "任务已停止",
     complete: "任务已通过 CLI 验收",
     blocked_by_core_gate: "任务被正式门禁拦下",
     runtime_failed: "Agent 运行失败",
@@ -429,11 +725,58 @@ function renderWorkerStatus(payload) {
     <p>${escapeHtml(payload.message || payload.error || "正在等待进一步状态。")}</p>
     ${payload.task_id ? `<small>任务：${escapeHtml(shortTaskId(payload.task_id))}</small>` : ""}
     ${payload.workspace ? `<small>隔离工作区：${escapeHtml(shortPath(payload.workspace))}</small>` : ""}
+    ${payload.writeback_preview?.changes?.length ? renderWritebackPreview(payload.writeback_preview, jobId) : ""}
+    ${["queued", "running", "stopping"].includes(status) && jobId ? `<div class="worker-inline-actions"><button class="stop-worker with-icon icon-stop" data-job-id="${escapeHtml(jobId)}">停止任务</button></div>` : ""}
+    ${["failed", "runtime_failed", "cancelled", "interrupted"].includes(status) && jobId ? `<div class="worker-inline-actions"><button class="retry-worker with-icon icon-refresh" data-job-id="${escapeHtml(jobId)}">重新执行</button></div>` : ""}
   `;
+}
+
+function renderWritebackPreview(preview, jobId) {
+  const changes = preview.changes || [];
+  return `<section class="writeback-preview">
+    <header><b>写回前差异</b><span>${changes.length} 个文件 · ${escapeHtml(preview.policy || "需要确认")}</span></header>
+    <div class="writeback-files">
+      ${changes.map((item) => `<details>
+        <summary><span>${escapeHtml(item.change_type === "created" ? "新增" : "修改")}</span><b>${escapeHtml(item.path)}</b><small>${formatFileSize(item.before_bytes)} → ${formatFileSize(item.after_bytes)}</small></summary>
+        <pre>${escapeHtml(item.diff || "没有可显示的文本差异，请核对文件摘要。")}</pre>
+      </details>`).join("")}
+    </div>
+    <div class="worker-inline-actions">
+      <button class="reject-writeback" data-job-id="${escapeHtml(jobId || "")}">退回候选</button>
+      <button class="approve-writeback primary" data-job-id="${escapeHtml(jobId || "")}">批准写入正式项目</button>
+    </div>
+  </section>`;
+}
+
+async function decideWriteback(jobId, decision) {
+  const reason = decision === "reject" ? "用户在 Studio 差异预览中退回候选产物。" : "";
+  renderWorkerStatus({ status: "running", message: decision === "approve" ? "正在写回并运行正式 CLI 验收……" : "正在保留隔离候选并关闭本次写回……" }, jobId);
+  const result = await api("/worker/jobs/" + encodeURIComponent(jobId) + "/writeback", {
+    method: "POST",
+    body: JSON.stringify({ decision, reason }),
+  });
+  renderWorkerStatus(result.result && Object.keys(result.result).length ? result.result : result, jobId);
+  await loadActivity();
+  await loadDashboard();
+}
+
+async function stopWorker(jobId) {
+  const result = await api("/worker/jobs/" + encodeURIComponent(jobId) + "/stop", { method: "POST", body: "{}" });
+  renderWorkerStatus(result, jobId);
+}
+
+async function retryWorker(jobId) {
+  const result = await api("/worker/jobs/" + encodeURIComponent(jobId) + "/retry", {
+    method: "POST",
+    body: JSON.stringify({ runtime: $("#workerForm").runtime.value }),
+  });
+  currentWorkerJobId = result.job_id;
+  watchWorkerJob(result.job_id);
 }
 
 function runtimeName(value) {
   const names = {
+    opencode: "内置 OpenCode",
     "host-agent": "当前宿主 Agent",
     "claude-code": "Claude Code",
     "codex-cli": "Codex CLI",
@@ -1919,10 +2262,15 @@ function bind() {
       if (button.dataset.view === "library" && sharedProjectRoot()) guarded(loadLibrary);
       if (button.dataset.view === "delivery" && sharedProjectRoot()) guarded(loadDelivery);
       if (button.dataset.view === "style" && sharedProjectRoot()) guarded(loadStyleStatus);
+      if (button.dataset.view === "advisor" && sharedProjectRoot()) guarded(loadAdvisor);
+      if (button.dataset.view === "connections") guarded(loadConnections);
     });
   });
   $("#switchProject").addEventListener("click", () => activateView("projects"));
   $("#refreshProjects").addEventListener("click", () => guarded(loadProjects));
+  $$(".native-folder-picker").forEach((button) => {
+    button.addEventListener("click", () => guarded(() => chooseNativeFolder(button.dataset.target)));
+  });
   $("#createProjectForm").addEventListener("submit", (event) => {
     event.preventDefault();
     guarded(createProjectFromClient);
@@ -1949,6 +2297,14 @@ function bind() {
   $("#detectRuntimes").addEventListener("click", () => guarded(loadRuntimes));
   $("#prepareWorkerTask").addEventListener("click", () => guarded(prepareWorkerTask));
   $("#runWorkerTask").addEventListener("click", () => guarded(runWorkerTask));
+  $("#workerStatus").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-job-id]");
+    if (!button) return;
+    if (button.classList.contains("approve-writeback")) guarded(() => decideWriteback(button.dataset.jobId, "approve"));
+    if (button.classList.contains("reject-writeback")) guarded(() => decideWriteback(button.dataset.jobId, "reject"));
+    if (button.classList.contains("stop-worker")) guarded(() => stopWorker(button.dataset.jobId));
+    if (button.classList.contains("retry-worker")) guarded(() => retryWorker(button.dataset.jobId));
+  });
   $("#dashboardProse").addEventListener("click", (event) => {
     if (event.target.closest(".open-library-drafts") || event.target.closest(".completed-mini")) {
       guarded(openLibraryDrafts);
@@ -2012,6 +2368,22 @@ function bind() {
     if (!button) return;
     guarded(() => mountStyle(button.dataset.styleId));
   });
+  $("#refreshConnections").addEventListener("click", () => guarded(loadConnections));
+  $("#installOpenCode").addEventListener("click", () => guarded(installOpenCodeFromClient));
+  $("#providerSelect").addEventListener("change", (event) => renderModelOptions(event.target.value));
+  $("#modelSelectionForm").addEventListener("submit", (event) => guarded(() => saveSelectedModel(event)));
+  $("#disconnectProvider").addEventListener("click", () => guarded(disconnectCurrentProvider));
+  $("#credentialForm").addEventListener("submit", (event) => guarded(() => connectProvider(event)));
+  $("#probeCurrentRunner").addEventListener("click", () => guarded(probeCurrentRunner));
+  $("#refreshAdvisor").addEventListener("click", () => guarded(loadAdvisor));
+  $("#advisorForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    guarded(() => askAdvisor());
+  });
+  $("#advisorSuggestions").addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (button) guarded(() => askAdvisor(button.textContent));
+  });
 }
 
 async function guarded(fn) {
@@ -2023,7 +2395,13 @@ async function guarded(fn) {
   }
 }
 
-bind();
-loadHealth();
-guarded(loadRuntimes);
-guarded(loadProjects);
+async function startClient() {
+  configureDesktopControls();
+  bind();
+  await bootstrapDesktopSession();
+  await loadHealth();
+  await loadRuntimes();
+  await loadProjects();
+}
+
+guarded(startClient);

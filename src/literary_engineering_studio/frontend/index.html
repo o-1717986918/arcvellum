@@ -29,7 +29,9 @@
           <button data-view="activity"><span class="ui-icon icon-agent"></span><span>Agent 工作台</span></button>
           <button data-view="library"><span class="ui-icon icon-library"></span><span>作品档案</span></button>
           <button data-view="style"><span class="ui-icon icon-style"></span><span>文风管理</span></button>
+          <button data-view="advisor"><span class="ui-icon icon-advisor"></span><span>项目顾问</span></button>
           <button data-view="delivery"><span class="ui-icon icon-delivery"></span><span>交付中心</span></button>
+          <button data-view="connections"><span class="ui-icon icon-settings"></span><span>连接与模型</span></button>
         </nav>
         <div class="side-note">
           <span id="healthDot" class="dot"></span>
@@ -63,7 +65,12 @@
               </div>
               <form id="createProjectForm" class="project-form">
                 <label>作品名称<input name="title" required placeholder="例如：潮汐档案" /></label>
-                <label>保存位置<input name="parent_directory" required placeholder="选择一个已有文件夹" /></label>
+                <label>保存位置
+                  <span class="path-picker">
+                    <input name="parent_directory" required placeholder="选择一个已有文件夹" />
+                    <button class="native-folder-picker with-icon icon-folder-open" type="button" data-target="createProjectForm.parent_directory">选择</button>
+                  </span>
+                </label>
                 <div class="form-pair">
                   <label>作品类型
                     <select name="work_type">
@@ -87,7 +94,12 @@
                 <small>不会移动或复制原项目</small>
               </div>
               <form id="openProjectForm" class="project-open-form">
-                <label>项目目录<input name="project_root" required placeholder="包含 project.yaml 的作品目录" /></label>
+                <label>项目目录
+                  <span class="path-picker">
+                    <input name="project_root" required placeholder="包含 project.yaml 的作品目录" />
+                    <button class="native-folder-picker with-icon icon-folder-open" type="button" data-target="openProjectForm.project_root">选择</button>
+                  </span>
+                </label>
                 <button class="with-icon icon-folder-open" type="submit">打开这个项目</button>
               </form>
               <div class="project-client-note">
@@ -216,7 +228,7 @@
               <span>执行架构</span>
               <small>不在 Studio 内配置模型 API</small>
             </div>
-            <p>Studio 自带的文学工程引擎负责任务顺序、正式门禁与写回验收；智能执行由宿主 Agent、Claude Code 或 Codex CLI 提供。所有运行时都只能在隔离任务工作区中读取资料和写入预期产物，不依赖另一个 Skill 仓库。</p>
+            <p>Studio 自带文学工程引擎与 OpenCode Agent Runner。引擎负责任务顺序、正式门禁与写回验收；OpenCode 只在隔离任务工作区内读取资料和写入预期产物。Claude Code 与宿主 Agent 作为兼容选项，不再是普通用户的前置依赖。</p>
           </section>
         </section>
 
@@ -269,6 +281,7 @@
               </label>
               <label>Agent 运行时
                 <select name="runtime">
+                  <option value="opencode">内置 OpenCode</option>
                   <option value="host-agent">当前宿主 Agent</option>
                   <option value="claude-code">Claude Code</option>
                   <option value="codex-cli">Codex CLI</option>
@@ -515,6 +528,121 @@
               <small>选择会先写入人类选择证据</small>
             </div>
             <div id="styleLibrary" class="style-library empty">填写文风库目录后点击“检查文风”。如果留空，会尝试读取默认文风库。</div>
+          </section>
+        </section>
+
+        <section id="view-advisor" class="view">
+          <header class="view-header hero-panel advisor-hero">
+            <div class="hero-copy">
+              <span class="eyebrow">只读项目顾问</span>
+              <h2>问作品，不让问答改动作品。</h2>
+              <p class="muted">顾问只读取当前项目的隔离快照，回答人物、世界观、剧情、伏笔、字数与审查问题。它会引用依据，也会明确区分事实、推断和未知。</p>
+            </div>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/archive-folder.png" alt="" />
+            </div>
+            <div class="hero-actions">
+              <button id="refreshAdvisor" class="primary with-icon icon-refresh" type="button">刷新顾问</button>
+            </div>
+          </header>
+
+          <section class="advisor-layout">
+            <aside class="panel advisor-context">
+              <div class="panel-title"><span>可以这样问</span><small>问题只触发读取，不触发写回</small></div>
+              <div id="advisorSuggestions" class="advisor-suggestions">
+                <button type="button">目前最重要的剧情压力是什么？</button>
+                <button type="button">哪些人物设定会影响下一场？</button>
+                <button type="button">还有哪些伏笔没有兑现？</button>
+                <button type="button">当前字数和场景库存匹配吗？</button>
+              </div>
+              <div class="advisor-safety">
+                <b>只读边界</b>
+                <p>无编辑、无命令行、无网络、无子 Agent。问答不会自动成为 Canon，也不会推进工作流。</p>
+              </div>
+            </aside>
+
+            <section class="panel advisor-conversation">
+              <div class="panel-title"><span>和项目顾问对话</span><small id="advisorSessionStatus">选择作品后建立只读会话</small></div>
+              <div id="advisorThread" class="advisor-thread empty" aria-live="polite">选择一个作品后，可以从右侧项目资料中获得带依据的回答。</div>
+              <form id="advisorForm" class="advisor-form">
+                <label class="sr-only" for="advisorQuestion">向项目顾问提问</label>
+                <textarea id="advisorQuestion" name="question" rows="3" placeholder="例如：第三章里主角为什么拒绝那封信？这个选择和背景故事一致吗？"></textarea>
+                <button class="primary with-icon icon-arrow-right" type="submit">询问顾问</button>
+              </form>
+            </section>
+          </section>
+        </section>
+
+        <section id="view-connections" class="view">
+          <header class="view-header hero-panel connection-hero">
+            <div class="hero-copy">
+              <span class="eyebrow">执行引擎</span>
+              <h2>把作品交给谁写，先在这里说清楚。</h2>
+              <p class="muted">内置 OpenCode 负责真正的 Agent 执行，模型连接负责提供智能。两者分开显示，避免“程序装好了”被误认为“模型已经可用”。</p>
+            </div>
+            <div class="hero-visual" aria-hidden="true">
+              <img src="/ui/assets/editorial-icons/branch-cards.png" alt="" />
+            </div>
+            <div class="hero-actions">
+              <button id="refreshConnections" class="primary with-icon icon-refresh" type="button">刷新连接</button>
+              <button id="probeCurrentRunner" class="with-icon icon-play" type="button">真实测试</button>
+            </div>
+          </header>
+
+          <section class="connection-line" aria-label="智能执行链路">
+            <article><span>01</span><b>模型来源</b><p id="connectionModelSummary">正在读取</p></article>
+            <i aria-hidden="true"></i>
+            <article><span>02</span><b>内置 Agent</b><p id="connectionRunnerSummary">正在读取</p></article>
+            <i aria-hidden="true"></i>
+            <article><span>03</span><b>文学任务</b><p>隔离执行，门禁写回</p></article>
+          </section>
+
+          <div id="connectionFeedback" class="connection-feedback" aria-live="polite">正在检查内置 Agent 与模型来源。</div>
+
+          <div class="connection-layout">
+            <section class="panel runner-console">
+              <div class="panel-title">
+                <span>Agent Runner</span>
+                <small>负责读取任务、调用工具和产出文件</small>
+              </div>
+              <div id="settingsRunners" class="settings-runners empty">正在检测可用执行器。</div>
+              <button id="installOpenCode" class="with-icon icon-download" type="button">安装内置 OpenCode</button>
+            </section>
+
+            <section class="panel model-console">
+              <div class="panel-title">
+                <span>模型连接</span>
+                <small>选择实际写作与审查使用的模型</small>
+              </div>
+              <form id="modelSelectionForm" class="connection-form">
+                <label>模型提供方
+                  <select name="provider_id" id="providerSelect"><option value="">正在读取提供方</option></select>
+                </label>
+                <label>具体模型
+                  <select name="model" id="modelSelect"><option value="">先选择已连接的提供方</option></select>
+                </label>
+                <button class="primary with-icon icon-save" type="submit">使用这个模型</button>
+                <button id="disconnectProvider" class="danger" type="button" hidden>断开此提供方</button>
+              </form>
+              <div id="modelFacts" class="model-facts empty">模型目录加载后，这里会显示连接状态、模型数量与上下文信息。</div>
+            </section>
+          </div>
+
+          <section class="panel credential-console">
+            <div class="credential-copy">
+              <span class="eyebrow">连接新的模型服务</span>
+              <h3>密钥只提交给本机 OpenCode</h3>
+              <p>Studio 不把密钥写进作品、普通配置或运行日志。提交后页面只显示“已连接”，不会回显原文。</p>
+            </div>
+            <form id="credentialForm" class="credential-form">
+              <label>提供方标识<input name="provider_id" required placeholder="例如 deepseek、anthropic、openai" /></label>
+              <label>访问凭证<input name="credential" type="password" autocomplete="off" required placeholder="粘贴后只做本机单向提交" /></label>
+              <button class="with-icon icon-link" type="submit">建立连接</button>
+            </form>
+          </section>
+
+          <section id="runnerProbeResult" class="probe-result empty" aria-live="polite">
+            真实测试会让当前模型只回复一个固定短语，用于确认认证、实际模型和流式事件都可用。
           </section>
         </section>
       </main>

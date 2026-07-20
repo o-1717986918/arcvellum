@@ -1,0 +1,14 @@
+{
+  "schema": "literary-engineering-studio/opencode-bundle/v0.1",
+  "version": "1.18.3",
+  "license": "MIT",
+  "source": "https://github.com/anomalyco/opencode",
+  "targets": {
+    "windows-x64-baseline": {
+      "archive": "opencode-windows-x64-baseline.zip",
+      "executable": "opencode.exe",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.3/opencode-windows-x64-baseline.zip",
+      "sha256": "cd987a173b62ce0fb5fea6807e5271a26c1ca3bc1b5f8f5d4eb6497bbe770d9e"
+    }
+  }
+}

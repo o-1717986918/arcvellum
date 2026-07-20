@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import secrets
 import time
 from typing import Any
 
 from . import __version__
+from .advisor import ProjectAdvisor
 from .config import load_config
 from .core_bridge import CoreBridge
 from .core_read_models import (
@@ -24,7 +27,11 @@ from .core_read_models import (
     style_mounts,
 )
 from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
-from .jobs import JobStore
+from .lifecycle import ApplicationLifecycleManager
+from .model_connections import model_connection_status
+from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
+from .opencode_control import disconnect_provider, provider_catalog, select_model, set_api_credential
+from .runner_probe import probe_agent_runner
 from .project_manager import (
     create_project,
     current_project,
@@ -33,12 +40,13 @@ from .project_manager import (
     record_direction,
     register_project,
 )
-from .runtimes import runtime_status
+from .runtimes import agent_runner_status
+from .supervisor import project_lock_key
 from .worker import AgentWorker
 
 try:
-    from fastapi import FastAPI, HTTPException
-    from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+    from fastapi import FastAPI, HTTPException, Request
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
     from pydantic import BaseModel
 except ImportError:  # pragma: no cover
     FastAPI = None
@@ -47,15 +55,18 @@ except ImportError:  # pragma: no cover
     FileResponse = None
     Response = None
     StreamingResponse = None
+    JSONResponse = None
+    Request = None
     BaseModel = object
 
 
 class WorkerRequest(BaseModel):
     project_root: str
     route: str = "scene-development"
-    runtime: str = "host-agent"
+    runtime: str = "opencode"
     task_id: str = ""
     scene: str = ""
+    idempotency_key: str = ""
 
 
 class StyleMountRequest(BaseModel):
@@ -83,17 +94,88 @@ class DirectionRequest(BaseModel):
     message: str
 
 
+class RunnerProbeRequest(BaseModel):
+    model: str = ""
+    timeout: int = 120
+
+
+class OpenCodeCredentialRequest(BaseModel):
+    provider_id: str
+    credential: str
+
+
+class ModelSelectionRequest(BaseModel):
+    model: str
+
+
+class AdvisorSessionRequest(BaseModel):
+    project_root: str
+    title: str = "项目问答"
+
+
+class AdvisorQuestionRequest(BaseModel):
+    question: str
+    timeout: int = 180
+
+
+class WritebackDecisionRequest(BaseModel):
+    decision: str
+    reason: str = ""
+
+
+class WorkerRetryRequest(BaseModel):
+    runtime: str = ""
+
+
 def create_app():
     if FastAPI is None:
         raise RuntimeError("Studio API requires pip install -e .[api]")
     config = load_config()
-    runs_root = Path(str(config.get("worker", {}).get("runs_root") or ""))
-    jobs = JobStore(runs_root / "jobs")
+    lifecycle = ApplicationLifecycleManager(config)
+    jobs = lifecycle.store
+    advisor = ProjectAdvisor(config, jobs)
     app = FastAPI(title="Literary Engineering Studio", version=__version__)
+    api_token = os.environ.get("LES_API_TOKEN", "").strip()
+    desktop_session_token = secrets.token_urlsafe(32) if api_token else ""
+
+    if api_token:
+        @app.middleware("http")
+        async def desktop_auth(request: Request, call_next):
+            path = request.url.path
+            if path == "/" or path.startswith("/ui/") or path == "/desktop/session":
+                return await call_next(request)
+            supplied = request.headers.get("Authorization", "")
+            session_cookie = request.cookies.get("les_desktop_session", "")
+            if supplied == f"Bearer {api_token}" or secrets.compare_digest(session_cookie, desktop_session_token):
+                return await call_next(request)
+            return JSONResponse(status_code=401, content={"detail": "Studio desktop session is not authenticated"})
+    app.state.lifecycle = lifecycle
+    if hasattr(app, "add_event_handler"):
+        app.add_event_handler("shutdown", lifecycle.shutdown)
+    else:  # FastAPI releases that expose lifecycle handlers only through the router
+        app.router.on_shutdown.append(lifecycle.shutdown)
 
     @app.get("/", response_class=HTMLResponse)
     def ui_root():
         return _frontend_file("index.html", "text/html; charset=utf-8")
+
+    @app.post("/desktop/session")
+    def desktop_session(request: Request):
+        if not api_token:
+            return {"ok": True, "desktop_auth": "not-required"}
+        supplied = request.headers.get("Authorization", "")
+        if supplied != f"Bearer {api_token}":
+            raise HTTPException(status_code=401, detail="invalid Studio desktop bootstrap token")
+        response = JSONResponse({"ok": True, "desktop_auth": "ready"})
+        response.set_cookie(
+            "les_desktop_session",
+            desktop_session_token,
+            httponly=True,
+            samesite="strict",
+            secure=False,
+            path="/",
+        )
+        return response
 
     @app.get("/ui/{path:path}")
     def ui_asset(path: str):
@@ -123,13 +205,102 @@ def create_app():
             "version": __version__,
             "engine_ready": engine_ready,
             "engine_detail": engine_detail,
-            "runtimes": runtime_status(config),
-            "model_provider": "disabled-by-architecture",
+            "agent_runners": agent_runner_status(config),
+            "model_connections": model_connection_status(config),
+            "model_connection_policy": "runner-managed",
+            "application": lifecycle.health(),
         }
+
+    @app.get("/application/health")
+    def application_health():
+        return {"ok": True, **lifecycle.health()}
+
+    @app.get("/agent-runners")
+    def agent_runners():
+        return {"ok": True, "items": agent_runner_status(config)}
+
+    @app.get("/agent-runners/opencode/bundle")
+    def opencode_bundle_status():
+        executable = locate_opencode(
+            config.get("agent_runners", {}).get("opencode", {})
+            if isinstance(config.get("agent_runners"), dict)
+            else {}
+        )
+        return {
+            "ok": True,
+            "installed": executable is not None,
+            "verification": verify_opencode(executable) if executable else {},
+        }
+
+    @app.post("/agent-runners/opencode/install")
+    def opencode_bundle_install():
+        return _call(lambda: {"ok": True, **install_pinned_opencode()})
+
+    @app.post("/agent-runners/{runner_id}/probe")
+    def agent_runner_probe(runner_id: str, payload: RunnerProbeRequest):
+        if runner_id not in {"opencode", "claude-code", "codex-cli"}:
+            raise HTTPException(status_code=404, detail="unknown Agent Runner")
+        return _call(
+            lambda: {
+                "ok": True,
+                **probe_agent_runner(config, runner_id, model=payload.model, timeout=max(10, min(600, payload.timeout))),
+            }
+        )
+
+    @app.get("/model-connections/opencode/catalog")
+    def opencode_model_catalog():
+        return _call(lambda: {"ok": True, **provider_catalog(config)})
+
+    @app.put("/model-connections/opencode/credential")
+    def opencode_model_credential(payload: OpenCodeCredentialRequest):
+        return _call(lambda: {"ok": True, **set_api_credential(config, payload.provider_id, payload.credential)})
+
+    @app.delete("/model-connections/opencode/credential/{provider_id}")
+    def opencode_model_disconnect(provider_id: str):
+        return _call(lambda: {"ok": True, **disconnect_provider(config, provider_id)})
+
+    @app.put("/model-connections/opencode/model")
+    def opencode_model_select(payload: ModelSelectionRequest):
+        return _call(lambda: {"ok": True, **select_model(config, payload.model)})
+
+    @app.get("/model-connections")
+    def model_connections():
+        return {
+            "ok": True,
+            "items": model_connection_status(config),
+            "managed_by": "agent-runner",
+        }
+
+    @app.get("/advisor/sessions")
+    def advisor_sessions(project_root: str):
+        return _call(lambda: {"ok": True, "items": advisor.list_sessions(_project(project_root))})
+
+    @app.post("/advisor/sessions")
+    def advisor_session_create(payload: AdvisorSessionRequest):
+        return _call(lambda: {"ok": True, **advisor.create_session(_project(payload.project_root), title=payload.title)})
+
+    @app.get("/advisor/sessions/{session_id}")
+    def advisor_session_read(session_id: str):
+        return _call(lambda: {"ok": True, **jobs.read_advisor_session(session_id)})
+
+    @app.post("/advisor/sessions/{session_id}/ask")
+    def advisor_session_ask(session_id: str, payload: AdvisorQuestionRequest):
+        return _call(
+            lambda: {
+                "ok": True,
+                "session_id": session_id,
+                "answer": advisor.ask(session_id, payload.question, timeout=max(10, min(600, payload.timeout))),
+            }
+        )
 
     @app.get("/runtime/adapters")
     def runtime_adapters():
-        return {"ok": True, "items": runtime_status(config), "model_provider": "not used"}
+        return {
+            "ok": True,
+            "items": agent_runner_status(config),
+            "deprecated_alias": True,
+            "replacement": "/agent-runners",
+        }
 
     @app.get("/projects")
     def projects_index():
@@ -178,6 +349,7 @@ def create_app():
             "task_id": task.task_id,
             "route": task.route,
             "runtime": payload.runtime,
+            "execution_contract": task.execution_contract.as_dict(),
             "run_root": str(sandbox.run_root),
             "workspace": str(sandbox.workspace),
             "prompt": str(sandbox.prompt_path),
@@ -186,10 +358,21 @@ def create_app():
     @app.post("/worker/run")
     def worker_run(payload: WorkerRequest):
         request_data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
-        job = jobs.create(request_data)
+        job = jobs.create(request_data, idempotency_key=payload.idempotency_key)
 
-        def execute() -> dict[str, Any]:
-            result = AgentWorker(config).run_once(
+        def execute(cancel_event) -> dict[str, Any]:
+            def emit(event: str, data: dict[str, Any]) -> None:
+                jobs.append_event(str(job["job_id"]), event, data)
+                if event == "sandbox.prepared":
+                    jobs.register_resources(
+                        str(job["job_id"]),
+                        formal_project=str(data.get("project_root") or payload.project_root),
+                        task_sandbox=str(data.get("run_root") or ""),
+                        agent_session=f"{data.get('runner_id') or payload.runtime}:{data.get('run_id') or job['job_id']}",
+                        run_workspace=str(data.get("workspace") or ""),
+                    )
+
+            result = AgentWorker(config, event_sink=emit, cancel_event=cancel_event).run_once(
                 _project(payload.project_root),
                 route=payload.route,
                 runtime_id=payload.runtime,
@@ -198,7 +381,12 @@ def create_app():
             )
             return result.as_dict()
 
-        jobs.start(str(job["job_id"]), execute)
+        if job["status"] in {"queued", "interrupted"}:
+            lifecycle.supervisor.submit(
+                str(job["job_id"]),
+                execute,
+                lock_key=project_lock_key(payload.project_root, payload.route),
+            )
         return {"ok": True, **job}
 
     @app.get("/worker/jobs/{job_id}")
@@ -208,20 +396,104 @@ def create_app():
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.get("/worker/jobs/{job_id}/events")
+    def worker_job_events(job_id: str, after: int = 0, limit: int = 200):
+        try:
+            jobs.read(job_id)
+            return {"ok": True, "items": jobs.events_since(job_id, after, limit=limit)}
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/worker/jobs/{job_id}/stop")
+    def worker_job_stop(job_id: str):
+        try:
+            return {"ok": True, **lifecycle.supervisor.stop(job_id)}
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/worker/jobs/{job_id}/writeback")
+    def worker_job_writeback(job_id: str, payload: WritebackDecisionRequest):
+        try:
+            job = jobs.read(job_id)
+            if job["status"] != "waiting_writeback":
+                raise ValueError("job is not waiting for writeback approval")
+            run_root = Path(str(job.get("result", {}).get("run_root") or ""))
+            request = job.get("request") if isinstance(job.get("request"), dict) else {}
+            lock_key = project_lock_key(str(request.get("project_root") or ""), str(request.get("route") or "auto"))
+            owner = lifecycle.supervisor.worker_id
+            if not jobs.acquire_lock(lock_key, job_id, owner, lease_seconds=180):
+                raise RuntimeError("another active task owns this project route")
+            try:
+                def emit(event: str, data: dict[str, Any]) -> None:
+                    jobs.append_event(job_id, event, data)
+
+                worker = AgentWorker(config, event_sink=emit)
+                decision = payload.decision.strip().lower()
+                if decision == "approve":
+                    result = worker.approve_writeback(run_root, approved_by="studio-user")
+                elif decision == "reject":
+                    result = worker.reject_writeback(run_root, rejected_by="studio-user", reason=payload.reason)
+                else:
+                    raise ValueError("writeback decision must be approve or reject")
+                return {
+                    "ok": True,
+                    **jobs.update(
+                        job_id,
+                        status=result.status,
+                        result=result.as_dict(),
+                        finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    ),
+                }
+            finally:
+                jobs.release_lock(lock_key, job_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/worker/jobs/{job_id}/retry")
+    def worker_job_retry(job_id: str, payload: WorkerRetryRequest):
+        try:
+            previous = jobs.read(job_id)
+            if previous["status"] in {"queued", "running", "stopping"}:
+                raise ValueError("active jobs cannot be retried")
+            request = dict(previous.get("request") or {})
+            if payload.runtime.strip():
+                if payload.runtime not in {"opencode", "host-agent", "claude-code", "codex-cli"}:
+                    raise ValueError("unknown Agent Runner")
+                request["runtime"] = payload.runtime
+            request["idempotency_key"] = ""
+            retry = WorkerRequest(**request)
+            return worker_run(retry)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (RuntimeError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/worker/jobs/{job_id}/stream")
-    def worker_job_stream(job_id: str, interval_seconds: float = 1.0):
-        interval = max(0.5, min(10.0, float(interval_seconds or 1.0)))
+    def worker_job_stream(job_id: str, request: Request, interval_seconds: float = 0.5, after: int = 0):
+        interval = max(0.1, min(10.0, float(interval_seconds or 0.5)))
+        try:
+            resume_after = max(int(after), int(request.headers.get("Last-Event-ID") or 0))
+        except ValueError:
+            resume_after = max(0, int(after))
 
         def stream():
-            previous = ""
+            cursor = max(0, resume_after)
+            previous_revision = -1
             while True:
                 payload = jobs.read(job_id)
-                serialized = json.dumps({"ok": True, **payload}, ensure_ascii=False)
-                if serialized != previous:
+                for item in jobs.events_since(job_id, cursor):
+                    cursor = int(item["sequence"])
+                    yield f"id: {cursor}\n"
+                    yield f"event: {item['event']}\n"
+                    yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
+                revision = int(payload.get("revision") or 0)
+                if revision != previous_revision:
                     yield "event: worker\n"
-                    yield "data: " + serialized + "\n\n"
-                    previous = serialized
-                if payload.get("status") not in {"queued", "running"}:
+                    yield "data: " + json.dumps({"ok": True, **payload}, ensure_ascii=False) + "\n\n"
+                    previous_revision = revision
+                if payload.get("status") not in {"queued", "running", "stopping"}:
                     break
                 time.sleep(interval)
 

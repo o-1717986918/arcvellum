@@ -3,6 +3,8 @@
 ## 1. Plan Status
 
 - Baseline: `literary-engineering-studio v0.2.1`
+- Delivered release: `literary-engineering-studio v0.3.0`
+- Status: Milestones A-J core product deliverables are implemented and verified on the development Windows host. Commercial code signing, an offline WebView2 variant, updater-channel operations, clean virtual-machine coverage, and extended unattended-load testing remain release operations or post-v0.3 extensions.
 - Scope: the next productization round after the client trust pass
 - Primary outcome: Studio becomes a self-contained literary engineering application with a bundled Agent Runner, a controlled Model Connection experience, a read-only project advisor, and a native desktop client.
 - Architecture review input: AstrBot confirms that model completion, Agent execution, event dispatch, application lifecycle, and desktop packaging should be separate product subsystems. Studio adopts those boundaries without adopting a chatbot-first pipeline or weakening the literary workflow state machine.

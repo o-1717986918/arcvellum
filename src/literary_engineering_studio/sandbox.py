@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import difflib
 import hashlib
 import json
 from pathlib import Path
@@ -29,6 +30,22 @@ class SandboxManifest:
     manifest_path: Path
     baseline_path: Path
     expected_outputs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WritebackPreview:
+    policy: str
+    preview_path: Path
+    changes: tuple[dict[str, object], ...]
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "schema": "literary-engineering-studio/writeback-preview/v0.1",
+            "policy": self.policy,
+            "preview_path": str(self.preview_path),
+            "change_count": len(self.changes),
+            "changes": list(self.changes),
+        }
 
 
 def stage_task(
@@ -76,6 +93,10 @@ def stage_task(
 
     shutil.copy2(task.task_json_path, task_dir / "task.json")
     shutil.copy2(task.task_markdown_path, task_dir / "task.agent_tasks.md")
+    (task_dir / "execution_contract.json").write_text(
+        json.dumps(task.execution_contract.as_dict(), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     prompt_path = workspace / "AGENT_TASK.md"
     prompt_path.write_text(_render_agent_prompt(task), encoding="utf-8")
     baseline = _workspace_hashes(workspace)
@@ -90,6 +111,8 @@ def stage_task(
         "runtime": runtime,
         "project_root": str(task.project_root),
         "task_id": task.task_id,
+        "task_json": str(task.task_json_path),
+        "task_markdown": str(task.task_markdown_path),
         "route": task.route,
         "current_state": task.current_state,
         "workspace": str(workspace),
@@ -98,6 +121,7 @@ def stage_task(
         "missing_sources": missing_sources,
         "expected_outputs": list(task.expected_outputs),
         "human_gate_reasons": list(task.human_gate_reasons),
+        "execution_contract": task.execution_contract.as_dict(),
     }
     manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return SandboxManifest(
@@ -111,7 +135,7 @@ def stage_task(
     )
 
 
-def import_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
+def inspect_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> WritebackPreview:
     baseline = json.loads(sandbox.baseline_path.read_text(encoding="utf-8"))
     current = _workspace_hashes(sandbox.workspace)
     unexpected = _unexpected_changes(baseline, current, sandbox.expected_outputs)
@@ -126,6 +150,51 @@ def import_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> tupl
             missing.append(relative)
     if missing:
         raise FileNotFoundError("Agent runtime did not create expected outputs: " + ", ".join(missing))
+
+    contracts = {item.path: item for item in task.execution_contract.outputs}
+    changes: list[dict[str, object]] = []
+    for relative in sandbox.expected_outputs:
+        source = sandbox.workspace / Path(relative)
+        target = task.resolve_project_path(relative)
+        contract = contracts.get(relative)
+        changes.append(
+            {
+                "path": relative,
+                "kind": contract.kind if contract else "agent-authored",
+                "writeback_policy": contract.writeback_policy if contract else "preview-required",
+                "change_type": "modified" if target.exists() else "created",
+                "before_sha256": _path_digest(target),
+                "after_sha256": _path_digest(source),
+                "before_bytes": _path_size(target),
+                "after_bytes": _path_size(source),
+                "diff": _readable_diff(target, source, relative),
+            }
+        )
+    preview_path = sandbox.run_root / "writeback.preview.json"
+    payload = {
+        "schema": "literary-engineering-studio/writeback-preview/v0.1",
+        "task_id": task.task_id,
+        "project_root": str(task.project_root),
+        "policy": task.execution_contract.writeback_policy,
+        "created_at": _now(),
+        "changes": changes,
+    }
+    preview_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    update_run_manifest(
+        sandbox.manifest_path,
+        status="writeback_preview_ready",
+        writeback_policy=task.execution_contract.writeback_policy,
+        writeback_preview=str(preview_path),
+    )
+    return WritebackPreview(task.execution_contract.writeback_policy, preview_path, tuple(changes))
+
+
+def apply_expected_outputs(task: TaskPackage, sandbox: SandboxManifest, preview: WritebackPreview) -> tuple[str, ...]:
+    for change in preview.changes:
+        relative = str(change["path"])
+        target = task.resolve_project_path(relative)
+        if _path_digest(target) != str(change.get("before_sha256") or ""):
+            raise RuntimeError(f"formal project changed after writeback preview: {relative}")
 
     backup_root = sandbox.run_root / "backups"
     imported: list[str] = []
@@ -145,6 +214,54 @@ def import_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> tupl
     return tuple(imported)
 
 
+def import_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
+    preview = inspect_expected_outputs(task, sandbox)
+    return apply_expected_outputs(task, sandbox, preview)
+
+
+def rollback_expected_outputs(task: TaskPackage, sandbox: SandboxManifest, imported: Iterable[str]) -> None:
+    backup_root = sandbox.run_root / "backups"
+    for relative in imported:
+        target = task.resolve_project_path(relative)
+        backup = backup_root / Path(relative)
+        if target.exists() and target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+        if backup.exists():
+            _copy_path(backup, target)
+    update_run_manifest(sandbox.manifest_path, status="writeback_rolled_back")
+
+
+def sandbox_from_run(run_root: Path) -> SandboxManifest:
+    root = run_root.expanduser().resolve()
+    manifest_path = root / "run.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    workspace = Path(str(payload["workspace"])).resolve()
+    return SandboxManifest(
+        run_id=str(payload["run_id"]),
+        run_root=root,
+        workspace=workspace,
+        prompt_path=Path(str(payload["prompt"])).resolve(),
+        manifest_path=manifest_path,
+        baseline_path=root / "baseline.json",
+        expected_outputs=tuple(str(item) for item in payload.get("expected_outputs") or []),
+    )
+
+
+def load_writeback_preview(run_root: Path) -> WritebackPreview:
+    path = run_root.expanduser().resolve() / "writeback.preview.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    changes = payload.get("changes")
+    if not isinstance(changes, list):
+        raise ValueError(f"invalid writeback preview: {path}")
+    return WritebackPreview(
+        str(payload.get("policy") or "preview-required"),
+        path,
+        tuple(item for item in changes if isinstance(item, dict)),
+    )
+
+
 def update_run_manifest(path: Path, **updates: object) -> None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload.update(updates)
@@ -158,9 +275,19 @@ def _render_agent_prompt(task: TaskPackage) -> str:
     direction_path = task.project_root / "workflow" / "studio" / "user_directions.md"
     direction = direction_path.read_text(encoding="utf-8", errors="ignore").strip() if direction_path.is_file() else ""
     direction_block = f"\n## Current User Direction\n\n{direction}\n" if direction else ""
+    execution = task.execution_contract
+    capability_lines = "\n".join(f"- {item}" for item in execution.runtime_capabilities_required) or "- none"
     return f"""# Studio Agent Execution Contract
 
 你是本次任务的主 Agent。当前目录是隔离任务工作区，不是正式项目根目录。
+
+执行策略：`{execution.execution_policy}`
+Agent 角色：`{execution.agent_role}`
+写回策略：`{execution.writeback_policy}`
+
+所需能力：
+
+{capability_lines}
 
 硬约束：
 
@@ -170,6 +297,7 @@ def _render_agent_prompt(task: TaskPackage) -> str:
 4. 不使用任何 debug waiver、绕过标志或 maintainer mode。
 5. 正文、修订和最终文学文本必须由当前主 Agent 亲自完成，不委派给 subagent。
 6. 完成文件后即可结束；聊天回复不是正式产物。
+7. `_task/execution_contract.json` 是本次执行与写回的结构化契约；不得修改它。
 
 ## Allowed Outputs
 
@@ -208,6 +336,45 @@ def _workspace_hashes(root: Path) -> dict[str, str]:
         relative = path.relative_to(root).as_posix()
         hashes[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
     return hashes
+
+
+def _path_digest(path: Path) -> str:
+    if not path.exists():
+        return ""
+    if path.is_file():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    hashes = _workspace_hashes(path)
+    return hashlib.sha256(json.dumps(hashes, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _path_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if path.is_file():
+        return path.stat().st_size
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+
+
+def _readable_diff(before: Path, after: Path, relative: str) -> str:
+    if not after.is_file() or (before.exists() and not before.is_file()):
+        return "目录内容发生变化；请查看文件清单。"
+    if after.suffix.lower() not in {".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".py"}:
+        return "二进制或不可读文本文件；请核对文件大小与摘要。"
+    before_lines = before.read_text(encoding="utf-8", errors="replace").splitlines() if before.is_file() else []
+    after_lines = after.read_text(encoding="utf-8", errors="replace").splitlines()
+    diff = list(
+        difflib.unified_diff(
+            before_lines,
+            after_lines,
+            fromfile="正式项目/" + relative,
+            tofile="候选写回/" + relative,
+            lineterm="",
+            n=3,
+        )
+    )
+    if len(diff) > 180:
+        diff = diff[:180] + ["... 差异过长，已在预览中截断 ..."]
+    return "\n".join(diff)
 
 
 def _copy_path(source: Path, destination: Path) -> None:

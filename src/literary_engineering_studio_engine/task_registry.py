@@ -3109,7 +3109,7 @@ def _scene_path_for_task(root: Path, task: dict[str, object]) -> Path:
 
 def _static_review_conclusion(path: Path) -> str:
     text = _read_text(path)
-    match = re.search(r"(?m)^-\s*结论：\s*`?([^`\s]+)`?\s*$", text)
+    match = re.search(r"(?m)^-\s*(?:审查)?结论：\s*(?:\*\*)?`?([a-z_]+)`?(?:\*\*)?\s*$", text, re.IGNORECASE)
     return match.group(1).strip().lower() if match else ""
 
 

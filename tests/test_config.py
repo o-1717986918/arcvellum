@@ -2,7 +2,7 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from literary_engineering_studio.config import default_config, save_config
+from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, load_config, save_config
 
 
 class ConfigTests(unittest.TestCase):
@@ -12,7 +12,21 @@ class ConfigTests(unittest.TestCase):
         self.assertNotIn("profiles", config)
         self.assertNotIn("core", config)
         self.assertEqual(config["engine"]["module"], "literary_engineering_studio_engine")
-        self.assertIn("runtimes", config)
+        self.assertIn("agent_runners", config)
+        self.assertIn("model_connections", config)
+        self.assertNotIn("runtimes", config)
+
+    def test_migrates_legacy_runtimes_to_agent_runners(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            target.write_text(
+                '{"schema":"literary-engineering-studio/config/v0.2","runtimes":{"host-agent":{"enabled":false}}}',
+                encoding="utf-8",
+            )
+            loaded = load_config(target)
+            self.assertEqual(loaded["schema"], CONFIG_SCHEMA)
+            self.assertFalse(loaded["agent_runners"]["host-agent"]["enabled"])
+            self.assertNotIn("runtimes", loaded)
 
     def test_rejects_api_key_fields(self):
         with tempfile.TemporaryDirectory() as temporary:
