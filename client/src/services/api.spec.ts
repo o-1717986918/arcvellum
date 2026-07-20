@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, query, streamApi } from "./api";
+import { ApiError, api, authorizedFetch, bootstrapDesktopSession, query, streamApi } from "./api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -71,5 +71,24 @@ describe("API client", () => {
     expect(query({ project_root: "C:\\作品\\潮汐 之后", route: "", page: 2 })).toBe(
       "project_root=C%3A%5C%E4%BD%9C%E5%93%81%5C%E6%BD%AE%E6%B1%90+%E4%B9%8B%E5%90%8E&page=2",
     );
+  });
+
+  it("uses the injected desktop API base and keeps bearer auth for later streams", async () => {
+    window.__LES_API_BASE = "http://127.0.0.1:43123";
+    window.__LES_API_TOKEN = "test-desktop-token";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    await bootstrapDesktopSession();
+    await api("/application/bootstrap");
+    await authorizedFetch("/application/diagnostics/export", { method: "POST" });
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe("http://127.0.0.1:43123/desktop/session");
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get("Authorization")).toBe("Bearer test-desktop-token");
+    expect(String(fetchMock.mock.calls[2][0])).toBe("http://127.0.0.1:43123/application/diagnostics/export");
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get("Authorization")).toBe("Bearer test-desktop-token");
+    delete window.__LES_API_BASE;
+    delete window.__LES_API_TOKEN;
   });
 });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { Bot, Check, CloudCog, Download, FileJson, Info, KeyRound, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
-import { api } from "@/services/api";
+import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Info, KeyRound, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
+import { api, authorizedFetch } from "@/services/api";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
@@ -16,6 +16,7 @@ const section = ref<"connections" | "about">("connections");
 const appInfo = ref<Record<string, any> | null>(null);
 const updateResult = ref<UpdateCheckResult | null>(null);
 const updateProgress = ref({ downloaded: 0, total: 0 });
+const projectsRoot = ref("");
 
 const providers = computed(() => store.modelCatalog?.providers || []);
 const connectedProviders = computed(() => providers.value.filter((provider) => provider.connected));
@@ -29,6 +30,7 @@ onMounted(async () => {
     feedback.value = cause instanceof Error ? cause.message : "模型目录暂时不可用。";
   }
   appInfo.value = await api<Record<string, any>>("/application/info").catch(() => null);
+  projectsRoot.value = String(appInfo.value?.paths?.projects_root || "");
 });
 
 async function refresh(): Promise<void> {
@@ -111,7 +113,7 @@ async function applyUpdate(): Promise<void> {
 async function exportDiagnostics(): Promise<void> {
   busy.value = true;
   try {
-    const response = await fetch("/application/diagnostics/export", { method: "POST", credentials: "include" });
+    const response = await authorizedFetch("/application/diagnostics/export", { method: "POST" });
     if (!response.ok) throw new Error("诊断报告没有生成。 ");
     const blob = await response.blob();
     const disposition = response.headers.get("content-disposition") || "";
@@ -125,6 +127,27 @@ async function exportDiagnostics(): Promise<void> {
     feedback.value = "脱敏诊断报告已经导出。";
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "诊断报告没有生成。";
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function chooseProjectsRoot(): Promise<void> {
+  const result = await DesktopBridge.selectDirectory(projectsRoot.value);
+  if (result.path) projectsRoot.value = result.path;
+}
+
+async function saveProjectsRoot(): Promise<void> {
+  if (!projectsRoot.value.trim()) return;
+  busy.value = true;
+  try {
+    const result = await api<{ projects_root: string }>("/projects/default-location", {
+      method: "PUT",
+      body: JSON.stringify({ projects_root: projectsRoot.value }),
+    });
+    projectsRoot.value = result.projects_root;
+    feedback.value = "默认作品库已更新，只影响以后新建的作品。";
+    appInfo.value = await api<Record<string, any>>("/application/info");
   } finally {
     busy.value = false;
   }
@@ -233,10 +256,17 @@ function pathValue(key: string): string {
       <section class="data-locations">
         <header><div><span class="eyebrow">本地数据</span><h2>ArcVellum 把内容放在哪里</h2></div></header>
         <dl>
+          <div><dt>默认作品库</dt><dd>{{ pathValue('projects_root') }}</dd></div>
           <div><dt>应用数据</dt><dd>{{ pathValue('application_data') }}</dd></div>
           <div><dt>日志</dt><dd>{{ pathValue('logs') }}</dd></div>
           <div><dt>配置</dt><dd>{{ pathValue('configuration') }}</dd></div>
         </dl>
+        <div class="projects-root-editor">
+          <label class="field"><span>以后新建作品的保存位置</span><input v-model.trim="projectsRoot" /></label>
+          <button v-if="DesktopBridge.isDesktop" class="secondary-button" @click="chooseProjectsRoot"><FolderCog :size="16" />选择文件夹</button>
+          <button class="primary-button" :disabled="busy || !projectsRoot" @click="saveProjectsRoot"><Check :size="16" />设为默认</button>
+        </div>
+        <p class="location-note">更改默认位置不会移动现有作品，也不会改变它们在最近作品中的登记。</p>
       </section>
 
       <section class="maintenance-actions">

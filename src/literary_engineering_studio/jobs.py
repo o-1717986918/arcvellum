@@ -16,7 +16,7 @@ from typing import Any
 JOB_SCHEMA = "literary-engineering-studio/worker-job/v0.3"
 EVENT_SCHEMA = "literary-engineering-studio/run-event/v0.3"
 EVENT_RETENTION_PER_JOB = 5000
-DATABASE_SCHEMA_VERSION = 4
+DATABASE_SCHEMA_VERSION = 6
 ACTIVE_STATUSES = {"queued", "running", "stopping"}
 TERMINAL_STATUSES = {
     "complete",
@@ -390,6 +390,121 @@ class JobStore:
             )
         return {"project_root": project_root, "policy": policy, "updated_at": now}
 
+    def upsert_advisor_inbox(
+        self,
+        project_root: str,
+        *,
+        dedupe_key: str,
+        kind: str,
+        severity: str,
+        title: str,
+        message: str,
+        action: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = _now()
+        item_id = f"notice-{uuid.uuid4().hex[:16]}"
+        with self._write_lock, self._connection() as connection:
+            existing = connection.execute(
+                "SELECT item_id FROM advisor_inbox WHERE project_root = ? AND dedupe_key = ?",
+                (project_root, dedupe_key),
+            ).fetchone()
+            cursor = connection.execute(
+                """
+                INSERT INTO advisor_inbox (
+                    item_id, project_root, dedupe_key, kind, severity, title, message,
+                    action_json, created_at, read_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')
+                ON CONFLICT(project_root, dedupe_key) DO UPDATE SET
+                    kind = excluded.kind,
+                    severity = excluded.severity,
+                    title = excluded.title,
+                    message = excluded.message,
+                    action_json = excluded.action_json
+                """,
+                (item_id, project_root, dedupe_key, kind, severity, title, message, _json(action or {}), now),
+            )
+            row = connection.execute(
+                "SELECT * FROM advisor_inbox WHERE project_root = ? AND dedupe_key = ?",
+                (project_root, dedupe_key),
+            ).fetchone()
+        assert row is not None
+        return {**self._advisor_inbox_row(row), "inserted": existing is None and bool(cursor.rowcount)}
+
+    def advisor_inbox(self, project_root: str, *, unread_only: bool = False, limit: int = 100) -> list[dict[str, Any]]:
+        unread_clause = "AND read_at = ''" if unread_only else ""
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM advisor_inbox WHERE project_root = ? {unread_clause} ORDER BY created_at DESC LIMIT ?",
+                (project_root, max(1, min(500, int(limit)))),
+            ).fetchall()
+        return [self._advisor_inbox_row(row) for row in rows]
+
+    def mark_advisor_inbox_read(self, item_id: str, *, read: bool = True) -> dict[str, Any]:
+        with self._write_lock, self._connection() as connection:
+            connection.execute("UPDATE advisor_inbox SET read_at = ? WHERE item_id = ?", (_now() if read else "", item_id))
+            row = connection.execute("SELECT * FROM advisor_inbox WHERE item_id = ?", (item_id,)).fetchone()
+        if row is None:
+            raise FileNotFoundError(f"Advisor inbox item not found: {item_id}")
+        return self._advisor_inbox_row(row)
+
+    def reader_state(self, project_root: str) -> dict[str, Any]:
+        with self._connection() as connection:
+            position = connection.execute("SELECT * FROM reader_positions WHERE project_root = ?", (project_root,)).fetchone()
+            bookmarks = connection.execute(
+                "SELECT unit_id, created_at FROM reader_bookmarks WHERE project_root = ? ORDER BY created_at ASC",
+                (project_root,),
+            ).fetchall()
+        return {
+            "project_root": project_root,
+            "position": {
+                "unit_id": position["unit_id"],
+                "scroll_ratio": float(position["scroll_ratio"]),
+                "updated_at": position["updated_at"],
+            } if position is not None else {"unit_id": "", "scroll_ratio": 0.0, "updated_at": ""},
+            "bookmarks": [{"unit_id": row["unit_id"], "created_at": row["created_at"]} for row in bookmarks],
+        }
+
+    def save_reader_position(self, project_root: str, unit_id: str, scroll_ratio: float) -> dict[str, Any]:
+        ratio = max(0.0, min(1.0, float(scroll_ratio)))
+        now = _now()
+        with self._write_lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO reader_positions (project_root, unit_id, scroll_ratio, updated_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(project_root) DO UPDATE SET unit_id = excluded.unit_id,
+                    scroll_ratio = excluded.scroll_ratio, updated_at = excluded.updated_at
+                """,
+                (project_root, unit_id, ratio, now),
+            )
+        return self.reader_state(project_root)
+
+    def set_reader_bookmark(self, project_root: str, unit_id: str, enabled: bool) -> dict[str, Any]:
+        with self._write_lock, self._connection() as connection:
+            if enabled:
+                connection.execute(
+                    "INSERT OR IGNORE INTO reader_bookmarks (project_root, unit_id, created_at) VALUES (?, ?, ?)",
+                    (project_root, unit_id, _now()),
+                )
+            else:
+                connection.execute("DELETE FROM reader_bookmarks WHERE project_root = ? AND unit_id = ?", (project_root, unit_id))
+        return self.reader_state(project_root)
+
+    @staticmethod
+    def _advisor_inbox_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "item_id": row["item_id"],
+            "project_root": row["project_root"],
+            "dedupe_key": row["dedupe_key"],
+            "kind": row["kind"],
+            "severity": row["severity"],
+            "title": row["title"],
+            "message": row["message"],
+            "action": json.loads(row["action_json"]),
+            "created_at": row["created_at"],
+            "read_at": row["read_at"],
+            "unread": not bool(row["read_at"]),
+        }
+
     def read_delegation_policy(self, project_root: str) -> dict[str, Any] | None:
         with self._connection() as connection:
             row = connection.execute(
@@ -635,6 +750,33 @@ class JobStore:
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY(session_id, preference),
                     FOREIGN KEY(session_id) REFERENCES advisor_sessions(session_id)
+                );
+                CREATE TABLE IF NOT EXISTS advisor_inbox (
+                    item_id TEXT PRIMARY KEY,
+                    project_root TEXT NOT NULL,
+                    dedupe_key TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    action_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    read_at TEXT NOT NULL DEFAULT '',
+                    UNIQUE(project_root, dedupe_key)
+                );
+                CREATE INDEX IF NOT EXISTS advisor_inbox_project_idx
+                    ON advisor_inbox(project_root, read_at, created_at);
+                CREATE TABLE IF NOT EXISTS reader_positions (
+                    project_root TEXT PRIMARY KEY,
+                    unit_id TEXT NOT NULL,
+                    scroll_ratio REAL NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS reader_bookmarks (
+                    project_root TEXT NOT NULL,
+                    unit_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(project_root, unit_id)
                 );
                 CREATE TABLE IF NOT EXISTS delegation_policies (
                     project_root TEXT PRIMARY KEY,

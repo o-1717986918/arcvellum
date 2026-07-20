@@ -19,6 +19,29 @@ function Assert-NativeSuccess([string]$Step) {
     }
 }
 
+function Assert-BundleTargetsAvailable {
+    $BundleDir = Join-Path $TauriRoot "target\release\bundle\nsis"
+    if (-not (Test-Path -LiteralPath $BundleDir)) { return }
+    Get-ChildItem -LiteralPath $BundleDir -Filter "ArcVellum_*-setup.exe*" -File | ForEach-Object {
+        try {
+            $Stream = [System.IO.File]::Open($_.FullName, 'Open', 'ReadWrite', 'None')
+            $Stream.Dispose()
+        } catch {
+            throw "Release bundle is in use: $($_.FullName). Close the installer or signing process, then retry."
+        }
+    }
+}
+
+function Assert-FileTargetAvailable([string]$Path, [string]$Label) {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    try {
+        $Stream = [System.IO.File]::Open($Path, 'Open', 'ReadWrite', 'None')
+        $Stream.Dispose()
+    } catch {
+        throw "$Label is in use: $Path. Close the running ArcVellum smoke-test or build process, then retry."
+    }
+}
+
 Push-Location $Root
 try {
     if (-not $SkipPythonInstall) {
@@ -39,6 +62,8 @@ try {
     cmd /c npm run client:build
     Assert-NativeSuccess "Vue client production build"
 
+    Assert-FileTargetAvailable $SidecarSource "Frozen Python sidecar"
+    Assert-FileTargetAvailable $SidecarTarget "Tauri Python sidecar"
     python -m PyInstaller --noconfirm --clean (Join-Path $Root "packaging\studio_sidecar.spec")
     Assert-NativeSuccess "Python sidecar build"
     New-Item -ItemType Directory -Force -Path $BinaryDir, $ResourceDir | Out-Null
@@ -62,6 +87,7 @@ try {
         $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [System.Net.NetworkCredential]::new("", $SecurePassword).Password
     }
     $env:PATH = "$HOME\.cargo\bin;$env:PATH"
+    Assert-BundleTargetsAvailable
     cmd /c npm run desktop:build
     Assert-NativeSuccess "Tauri desktop build"
     $StudioVersion = python -c "from literary_engineering_studio import __version__; print(__version__)"
@@ -70,8 +96,8 @@ try {
         --bundle-dir (Join-Path $TauriRoot "target\release\bundle") `
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
-        --base-url "https://github.com/o-1717986918/literary-engineering-studio/releases/latest/download" `
-        --notes "ArcVellum product experience update."
+        --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
+        --notes "ArcVellum Reader, Advisor and Narrative Observatory release."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

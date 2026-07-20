@@ -1,15 +1,15 @@
 {
   "name": "arcvellum-studio",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.7.0",
   "scripts": {
     "client:dev": "vite --config client/vite.config.ts",
-    "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
+    "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts && node scripts/sync-desktop-frontend.mjs",
     "client:test": "vitest run --config client/vitest.config.ts",
     "client:test:watch": "vitest --config client/vitest.config.ts",
     "tauri": "tauri",
-    "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build",
+    "desktop:dev": "npm run client:build && tauri dev",
+    "desktop:build": "npm run client:build && tauri build",
     "desktop:icons": "tauri icon desktop/app-icon.svg --output desktop/src-tauri/icons"
   },
   "devDependencies": {

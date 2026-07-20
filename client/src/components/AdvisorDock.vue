@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router";
 import {
   ArrowUp,
+  Bell,
   BookOpenCheck,
   ChevronDown,
   CircleDotDashed,
@@ -13,9 +14,10 @@ import {
   Pause,
   ShieldCheck,
   Sparkles,
+  UserRoundPen,
   X,
 } from "lucide-vue-next";
-import { api, query, streamApi } from "@/services/api";
+import { api, connectEventStream, query, streamApi, type EventStreamConnection } from "@/services/api";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AdvisorAction, AdvisorAnswer, AdvisorMessage, AdvisorSession } from "@/types/api";
 
@@ -30,30 +32,120 @@ const session = ref<AdvisorSession | null>(null);
 const transientMessages = ref<AdvisorMessage[]>([]);
 const thread = ref<HTMLElement | null>(null);
 const actionBusy = ref("");
+const personas = ref<Record<string, unknown>[]>([]);
+const selectedPersona = ref("chief-editor");
+const personaEditorOpen = ref(false);
+const customPersona = ref({ name: "", tagline: "", prompt: "" });
+const inbox = ref<Record<string, unknown>[]>([]);
+const unreadCount = ref(0);
+const inboxSettings = ref({ mode: "standard", quiet_start: "22:30", quiet_end: "08:00" });
 const dockSide = ref<"left" | "right">((localStorage.getItem("arcvellum.advisorSide") as "left" | "right") || "right");
 let requestController: AbortController | null = null;
+let inboxStream: EventStreamConnection | null = null;
 
 const messages = computed(() => transientMessages.value.length ? transientMessages.value : session.value?.messages || []);
 const projectTitle = computed(() => store.currentProject?.title || "当前作品");
+const inboxUnreadCount = computed(() => inbox.value.filter((item) => Boolean(item.unread)).length);
 
 watch(
   () => store.currentProjectPath,
   () => {
     session.value = null;
     transientMessages.value = [];
+    inboxStream?.close();
+    inboxStream = null;
+    inbox.value = [];
+    unreadCount.value = 0;
+    if (store.currentProjectPath) void loadAdvisorSurface();
     if (open.value && store.currentProjectPath) void ensureSession();
   },
 );
 
-onMounted(() => window.addEventListener("keydown", globalKeydown));
+onMounted(() => {
+  window.addEventListener("keydown", globalKeydown);
+  if (store.currentProjectPath) void loadAdvisorSurface();
+});
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", globalKeydown);
   requestController?.abort();
+  inboxStream?.close();
 });
 
 async function toggle(): Promise<void> {
   open.value = !open.value;
   if (open.value && store.currentProjectPath) await ensureSession();
+}
+
+async function loadAdvisorSurface(): Promise<void> {
+  if (!store.currentProjectPath) return;
+  const [catalog, notices] = await Promise.all([
+    api<{ selected_persona: string; items: Record<string, unknown>[] }>(
+      `/advisor/personas?${query({ project_root: store.currentProjectPath })}`,
+    ),
+    api<{ items: Record<string, unknown>[]; unread_count: number; notification_count?: number; settings?: { mode: string; quiet_start: string; quiet_end: string } }>(
+      `/advisor/inbox?${query({ project_root: store.currentProjectPath })}`,
+    ),
+  ]).catch(() => [
+    { selected_persona: "chief-editor", items: [] as Record<string, unknown>[] },
+    { items: [] as Record<string, unknown>[], unread_count: 0, notification_count: 0, settings: undefined },
+  ]);
+  personas.value = [...(catalog.items || [])];
+  selectedPersona.value = catalog.selected_persona || "chief-editor";
+  inbox.value = [...(notices.items || [])];
+  unreadCount.value = notices.notification_count ?? notices.unread_count ?? 0;
+  if (notices.settings) inboxSettings.value = notices.settings;
+  inboxStream?.close();
+  inboxStream = connectEventStream(
+    `/advisor/inbox/stream?${query({ project_root: store.currentProjectPath, interval_seconds: 8 })}`,
+    (event, data) => {
+      if (event !== "advisor.inbox") return;
+      inbox.value = (data.items || []) as Record<string, unknown>[];
+      unreadCount.value = Number(data.notification_count ?? data.unread_count ?? 0);
+    },
+  );
+}
+
+async function choosePersona(): Promise<void> {
+  if (!store.currentProjectPath) return;
+  const result = await api<{ selected_persona: string; items: Record<string, unknown>[] }>("/advisor/personas/selection", {
+    method: "PUT",
+    body: JSON.stringify({ project_root: store.currentProjectPath, persona_id: selectedPersona.value }),
+  });
+  personas.value = result.items || personas.value;
+  store.notice = `顾问已切换为${String(personas.value.find((item) => item.persona_id === selectedPersona.value)?.name || "新人格")}。`;
+}
+
+async function saveCustomPersona(): Promise<void> {
+  const result = await api<{ persona: Record<string, unknown> }>("/advisor/personas/custom", {
+    method: "PUT",
+    body: JSON.stringify(customPersona.value),
+  });
+  await loadAdvisorSurface();
+  selectedPersona.value = String(result.persona.persona_id || "chief-editor");
+  await choosePersona();
+  personaEditorOpen.value = false;
+}
+
+async function saveInboxSettings(): Promise<void> {
+  if (!store.currentProjectPath) return;
+  const result = await api<{ settings: { mode: string; quiet_start: string; quiet_end: string } }>("/advisor/inbox/settings", {
+    method: "PUT",
+    body: JSON.stringify({ project_root: store.currentProjectPath, ...inboxSettings.value }),
+  });
+  inboxSettings.value = result.settings;
+  store.notice = "顾问主动提醒偏好已保存。";
+}
+
+async function markNotice(item: Record<string, unknown>, run = false): Promise<void> {
+  if (item.unread) {
+    await api(`/advisor/inbox/${encodeURIComponent(String(item.item_id))}`, {
+      method: "PATCH",
+      body: JSON.stringify({ read: true }),
+    });
+    item.unread = false;
+    unreadCount.value = Math.max(0, unreadCount.value - 1);
+  }
+  if (run && item.action && typeof item.action === "object") await runAction(item.action as AdvisorAction);
 }
 
 async function ensureSession(): Promise<void> {
@@ -218,14 +310,21 @@ async function scrollToEnd(): Promise<void> {
     <MessageCircleMore v-if="!open" :size="23" />
     <Minimize2 v-else :size="21" />
     <span>顾问</span>
+    <i v-if="unreadCount" class="advisor-unread">{{ unreadCount > 9 ? '9+' : unreadCount }}</i>
   </button>
 
   <Transition name="advisor-panel">
     <aside v-if="open" class="advisor-dock" :class="dockSide" aria-label="ArcVellum 创作顾问">
       <header class="advisor-dock-header">
         <div class="advisor-avatar"><Sparkles :size="18" /></div>
-        <div><span>ArcVellum 创作顾问</span><strong>{{ projectTitle }}</strong></div>
+        <div>
+          <span>ArcVellum 创作顾问</span>
+          <select v-model="selectedPersona" class="advisor-persona-select" title="选择顾问人格" @change="choosePersona">
+            <option v-for="persona in personas" :key="String(persona.persona_id)" :value="persona.persona_id">{{ persona.name }}</option>
+          </select>
+        </div>
         <span class="advisor-readonly"><ShieldCheck :size="13" />只读</span>
+        <button class="icon-button dock-switch" title="自定义顾问人格" @click="personaEditorOpen = !personaEditorOpen"><UserRoundPen :size="16" /></button>
         <button class="icon-button dock-switch" :title="dockSide === 'right' ? '移到左侧' : '移到右侧'" @click="switchSide">
           <PanelLeftClose v-if="dockSide === 'right'" :size="16" />
           <PanelRightClose v-else :size="16" />
@@ -233,7 +332,29 @@ async function scrollToEnd(): Promise<void> {
         <button class="icon-button" title="收起顾问" @click="open = false"><X :size="17" /></button>
       </header>
 
+      <form v-if="personaEditorOpen" class="advisor-persona-editor" @submit.prevent="saveCustomPersona">
+        <header><div><strong>自定义顾问人格</strong><small>只改变语言与关注重点，不改变只读权限。</small></div><button type="button" class="icon-button" @click="personaEditorOpen = false"><X :size="15" /></button></header>
+        <input v-model.trim="customPersona.name" required maxlength="40" placeholder="人格名称" />
+        <input v-model.trim="customPersona.tagline" maxlength="120" placeholder="一句话说明它最关注什么" />
+        <textarea v-model.trim="customPersona.prompt" required minlength="80" maxlength="5000" rows="6" placeholder="描述回答节奏、判断重点、反对方式、追问倾向和不应使用的套话。"></textarea>
+        <button class="primary-button">保存并使用</button>
+        <section class="advisor-notification-settings">
+          <strong>主动提醒</strong>
+          <select v-model="inboxSettings.mode"><option value="off">全部关闭</option><option value="blocking">只提醒阻塞</option><option value="standard">标准</option><option value="active">积极</option></select>
+          <label>免打扰开始<input v-model="inboxSettings.quiet_start" type="time" /></label>
+          <label>免打扰结束<input v-model="inboxSettings.quiet_end" type="time" /></label>
+          <button type="button" class="secondary-button" @click="saveInboxSettings">保存提醒偏好</button>
+        </section>
+      </form>
+
       <div ref="thread" class="advisor-thread">
+        <section v-if="inbox.some((item) => item.unread)" class="advisor-inbox">
+          <header><span><Bell :size="14" />顾问主动提醒</span><strong>{{ inboxUnreadCount }}</strong></header>
+          <article v-for="item in inbox.filter((notice) => notice.unread).slice(0, 3)" :key="String(item.item_id)" :data-severity="item.severity">
+            <div><strong>{{ item.title }}</strong><p>{{ item.message }}</p></div>
+            <div><button v-if="item.action" @click="markNotice(item, true)">{{ (item.action as Record<string, unknown>).label || '查看' }}</button><button @click="markNotice(item)">知道了</button></div>
+          </article>
+        </section>
         <section v-if="!messages.length && !loadingSession" class="advisor-welcome">
           <span class="welcome-symbol"><BookOpenCheck :size="25" /></span>
           <h2>我们聊聊这部作品</h2>

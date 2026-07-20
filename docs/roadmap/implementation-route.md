@@ -1,5 +1,13 @@
 # Studio Implementation Route
 
+## Delivered Roadmap: ArcVellum v0.5.1-v0.7
+
+The post-v0.5 roadmap in `docs/roadmap/arcvellum-v0.5.1-v0.7-reader-advisor-observatory-plan.md` is implemented in ArcVellum v0.7.0. Its release evidence is recorded in `docs/releases/v0.7.0-verification.md`.
+
+It is grounded in the current v0.5.0 implementation and covers only observed gaps: desktop directory-dialog reliability, hidden process execution, lazy provider loading, single-document startup, a default project library, a complete Reader Manifest and long-form reader, modular advisor personas, deterministic proactive advisor messages, a real narrative projection behind the StoryTrace, controlled visual assets, repository identity migration, and release hardening.
+
+Delivery followed the intended dependency order: desktop stability and application paths, Reader Manifest and incremental reading, advisor personas and deterministic proactive messages, then Narrative Projection and controlled visual assets.
+
 ## Delivered Roadmap: ArcVellum v0.4-v0.5
 
 The post-v0.3 product plan in `docs/roadmap/arcvellum-v0.4-v0.5-product-experience-and-autonomy-plan.md` is implemented in the v0.5.0 release candidate. The detailed verification record is `docs/releases/v0.5.0-verification.md`.

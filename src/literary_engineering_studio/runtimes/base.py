@@ -16,6 +16,8 @@ from typing import Any
 from collections.abc import Callable
 from typing import Sequence
 
+from ..subprocess_utils import popen_hidden, run_hidden
+
 
 @dataclass(frozen=True)
 class RuntimeAvailability:
@@ -77,7 +79,7 @@ class AgentRuntime:
         if not resolved:
             return RuntimeAvailability(self.runtime_id, False, executable, "executable not found")
         try:
-            completed = subprocess.run(
+            completed = run_hidden(
                 [*executable_prefix(resolved), "--version"],
                 text=True,
                 encoding="utf-8",
@@ -94,8 +96,8 @@ class AgentRuntime:
     def build_command(self, workspace: Path) -> Sequence[str]:
         raise NotImplementedError
 
-    def capabilities(self) -> AgentRunnerCapabilities:
-        availability = self.availability()
+    def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
+        availability = availability or self.availability()
         version = availability.detail if availability.available else ""
         return AgentRunnerCapabilities(
             runner_id=self.runtime_id,
@@ -151,7 +153,7 @@ class AgentRuntime:
             event_sink("runner.process.started", {"runner_id": self.runtime_id})
         cancellation = cancel_event or threading.Event()
         try:
-            process = subprocess.Popen(
+            process = popen_hidden(
                 command,
                 cwd=workspace,
                 stdin=subprocess.PIPE,

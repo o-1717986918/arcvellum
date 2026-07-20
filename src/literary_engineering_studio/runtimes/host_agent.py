@@ -16,7 +16,7 @@ class HostAgentRuntime(AgentRuntime):
     def build_command(self, workspace: Path):
         return ()
 
-    def capabilities(self) -> AgentRunnerCapabilities:
+    def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
         return AgentRunnerCapabilities(
             runner_id=self.runtime_id,
             version="host-platform",

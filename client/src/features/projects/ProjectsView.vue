@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ArrowRight, BookPlus, Check, FolderOpen, LocateFixed, Sparkles } from "lucide-vue-next";
 import { api } from "@/services/api";
@@ -9,8 +9,10 @@ import { friendlyError, useAppStore } from "@/stores/app";
 const store = useAppStore();
 const router = useRouter();
 const busy = ref(false);
+const directoryBusy = ref<"create" | "open" | "">("");
 const feedback = ref("");
 const advancedPaths = ref(!DesktopBridge.isDesktop);
+const manualOpenPath = ref(!DesktopBridge.isDesktop);
 const createForm = reactive({
   title: "",
   parent_directory: localStorage.getItem("arcvellum.createDirectory") || "",
@@ -22,21 +24,51 @@ const createForm = reactive({
 });
 const openPath = ref(localStorage.getItem("arcvellum.openDirectory") || "");
 
+onMounted(async () => {
+  if (createForm.parent_directory) return;
+  try {
+    const location = await api<{ projects_root: string }>("/projects/default-location");
+    createForm.parent_directory = location.projects_root || "";
+  } catch {
+    advancedPaths.value = true;
+  }
+});
+
 const targetLabel = computed(() =>
   createForm.target_length >= 10000 ? `${Math.round(createForm.target_length / 10000)} 万字` : `${createForm.target_length} 字`,
 );
 
 async function chooseCreateDirectory(): Promise<void> {
-  const result = await DesktopBridge.selectDirectory(createForm.parent_directory);
-  if (result.path) {
-    createForm.parent_directory = result.path;
-    localStorage.setItem("arcvellum.createDirectory", result.path);
+  feedback.value = "";
+  directoryBusy.value = "create";
+  try {
+    const result = await DesktopBridge.selectDirectory(createForm.parent_directory);
+    if (!result.supported) advancedPaths.value = true;
+    if (result.path) {
+      createForm.parent_directory = result.path;
+      localStorage.setItem("arcvellum.createDirectory", result.path);
+    }
+  } catch (cause) {
+    advancedPaths.value = true;
+    feedback.value = friendlyError(cause, "目录选择器没有成功打开，请手动填写保存位置。 ");
+  } finally {
+    directoryBusy.value = "";
   }
 }
 
 async function chooseOpenDirectory(): Promise<void> {
-  const result = await DesktopBridge.selectDirectory(openPath.value);
-  if (result.path) openPath.value = result.path;
+  feedback.value = "";
+  directoryBusy.value = "open";
+  try {
+    const result = await DesktopBridge.selectDirectory(openPath.value);
+    if (!result.supported) manualOpenPath.value = true;
+    if (result.path) openPath.value = result.path;
+  } catch (cause) {
+    manualOpenPath.value = true;
+    feedback.value = friendlyError(cause, "目录选择器没有成功打开，请手动填写作品位置。 ");
+  } finally {
+    directoryBusy.value = "";
+  }
 }
 
 async function createProject(): Promise<void> {
@@ -128,11 +160,14 @@ async function continueProject(path: string): Promise<void> {
 
         <div class="directory-picker">
           <div><span>保存位置</span><strong>{{ createForm.parent_directory || "选择一个常用文件夹" }}</strong></div>
-          <button v-if="DesktopBridge.isDesktop" type="button" class="secondary-button" @click="chooseCreateDirectory">
-            <LocateFixed :size="17" />选择位置
+          <button v-if="DesktopBridge.isDesktop" type="button" class="secondary-button" :disabled="Boolean(directoryBusy)" @click="chooseCreateDirectory">
+            <LocateFixed :size="17" />{{ directoryBusy === "create" ? "正在打开……" : "选择位置" }}
           </button>
           <button v-else type="button" class="text-button" @click="advancedPaths = !advancedPaths">手动填写</button>
         </div>
+        <button v-if="DesktopBridge.isDesktop" type="button" class="text-button path-fallback" @click="advancedPaths = !advancedPaths">
+          {{ advancedPaths ? "收起手动路径" : "手动填写路径" }}
+        </button>
         <div v-if="advancedPaths" class="field-row">
           <label class="field"><span>保存位置</span><input v-model.trim="createForm.parent_directory" required placeholder="作品的上一级文件夹" /></label>
           <label class="field"><span>目录名（可选）</span><input v-model.trim="createForm.folder_name" placeholder="留空时自动生成" /></label>
@@ -148,10 +183,13 @@ async function continueProject(path: string): Promise<void> {
           <span class="section-icon"><FolderOpen :size="19" /></span>
           <div><h2>打开已有作品</h2><p>作品留在原来的位置。</p></div>
         </div>
-        <button v-if="DesktopBridge.isDesktop" class="folder-drop" type="button" @click="chooseOpenDirectory">
-          <FolderOpen :size="28" /><strong>选择作品文件夹</strong><span>{{ openPath || "从电脑中选择" }}</span>
+        <button v-if="DesktopBridge.isDesktop" class="folder-drop" type="button" :disabled="Boolean(directoryBusy)" @click="chooseOpenDirectory">
+          <FolderOpen :size="28" /><strong>{{ directoryBusy === "open" ? "正在打开……" : "选择作品文件夹" }}</strong><span>{{ openPath || "从电脑中选择" }}</span>
         </button>
-        <label v-else class="field"><span>作品文件夹</span><input v-model.trim="openPath" placeholder="输入已有作品目录" /></label>
+        <button v-if="DesktopBridge.isDesktop" type="button" class="text-button path-fallback" @click="manualOpenPath = !manualOpenPath">
+          {{ manualOpenPath ? "收起手动路径" : "手动填写路径" }}
+        </button>
+        <label v-if="manualOpenPath" class="field"><span>作品文件夹</span><input v-model.trim="openPath" placeholder="输入已有作品目录" /></label>
         <button class="secondary-button wide" :disabled="busy || !openPath" @click="openProject">打开作品<ArrowRight :size="16" /></button>
         <div class="trust-note"><Check :size="15" /><span>不会移动、复制或改名你的作品文件夹。</span></div>
       </aside>

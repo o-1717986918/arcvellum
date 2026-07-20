@@ -21,7 +21,11 @@ def build_manifest(
     artifacts = []
     for signature_path in sorted(bundle_dir.rglob("*.sig")):
         artifact = Path(str(signature_path)[: -len(".sig")])
-        if artifact.is_file() and (artifact.name.endswith(".nsis.zip") or artifact.name.endswith("-setup.exe")):
+        if (
+            artifact.is_file()
+            and version in artifact.name
+            and (artifact.name.endswith(".nsis.zip") or artifact.name.endswith("-setup.exe"))
+        ):
             artifacts.append(artifact)
     if not artifacts:
         unsigned = sorted(bundle_dir.rglob("*.nsis.zip")) + sorted(bundle_dir.rglob("*-setup.exe"))
@@ -43,6 +47,9 @@ def build_manifest(
             if version in path.name
         ]
     output_dir.mkdir(parents=True, exist_ok=True)
+    for stale in output_dir.iterdir():
+        if stale.is_file() and _is_release_output(stale):
+            stale.unlink()
     copied = []
     for source in dict.fromkeys([artifact, signature, *installers]):
         target = output_dir / source.name
@@ -99,6 +106,19 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _is_release_output(path: Path) -> bool:
+    name = path.name
+    return (
+        name in {"latest.json", "SHA256SUMS.txt"}
+        or name.endswith("-setup.exe")
+        or name.endswith("-setup.exe.sig")
+        or name.endswith(".nsis.zip")
+        or name.endswith(".nsis.zip.sig")
+        or name.endswith(".msi")
+        or name.endswith(".msi.sig")
+    )
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from typing import Any
 
 from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
 
-from .config import default_config_path
+from .config import default_config_path, default_projects_root
 
 
 REGISTRY_SCHEMA = "literary-engineering-studio/project-registry/v0.1"
@@ -93,7 +93,7 @@ def list_projects() -> dict[str, Any]:
 
 def create_project(
     *,
-    parent_directory: str,
+    parent_directory: str = "",
     title: str,
     folder_name: str = "",
     work_type: str = "novel",
@@ -104,7 +104,8 @@ def create_project(
     clean_title = title.strip()
     if not clean_title:
         raise ValueError("作品名称不能为空。")
-    parent = Path(parent_directory).expanduser().resolve()
+    parent = Path(parent_directory).expanduser().resolve() if parent_directory.strip() else default_projects_root()
+    parent.mkdir(parents=True, exist_ok=True)
     if not parent.is_dir():
         raise FileNotFoundError(f"项目保存位置不存在：{parent}")
     folder = _safe_folder_name(folder_name or clean_title)

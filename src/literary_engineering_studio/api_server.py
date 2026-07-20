@@ -14,9 +14,11 @@ from typing import Any
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, export_diagnostic_report
 from .advisor import ProjectAdvisor
+from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
+from .advisor_personas import persona_catalog, save_custom_persona, select_persona
 from .autopilot import AutopilotService
 from .bootstrap import ApplicationBootstrapService
-from .config import load_config
+from .config import default_projects_root, load_config, save_config
 from .core_bridge import CoreBridge
 from .core_read_models import (
     build_activity,
@@ -34,6 +36,7 @@ from .core_read_models import (
 from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
 from .lifecycle import ApplicationLifecycleManager
 from .model_connections import model_connection_status
+from .narrative_projection import build_narrative_projection
 from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
 from .opencode_control import disconnect_provider, provider_catalog, select_model, set_api_credential
 from .runner_probe import probe_agent_runner
@@ -46,16 +49,19 @@ from .project_manager import (
     register_project,
     validate_project_location,
 )
+from .reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
 from .runtimes import agent_runner_status
 from .supervisor import project_lock_key
 from .worker import AgentWorker
 
 try:
     from fastapi import FastAPI, HTTPException, Request
+    from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
     from pydantic import BaseModel
 except ImportError:  # pragma: no cover
     FastAPI = None
+    CORSMiddleware = None
     HTTPException = None
     HTMLResponse = None
     FileResponse = None
@@ -82,7 +88,7 @@ class StyleMountRequest(BaseModel):
 
 
 class ProjectCreateRequest(BaseModel):
-    parent_directory: str
+    parent_directory: str = ""
     title: str
     folder_name: str = ""
     work_type: str = "novel"
@@ -100,6 +106,10 @@ class ProjectLocationRequest(BaseModel):
     project_root: str = ""
     parent_directory: str = ""
     folder_name: str = ""
+
+
+class ProjectsRootRequest(BaseModel):
+    projects_root: str
 
 
 class DirectionRequest(BaseModel):
@@ -130,6 +140,41 @@ class AdvisorQuestionRequest(BaseModel):
     question: str
     timeout: int = 180
     context: dict[str, Any] | None = None
+
+
+class AdvisorPersonaSelectionRequest(BaseModel):
+    project_root: str
+    persona_id: str
+
+
+class AdvisorCustomPersonaRequest(BaseModel):
+    name: str
+    tagline: str = ""
+    prompt: str
+    persona_id: str = ""
+
+
+class AdvisorInboxReadRequest(BaseModel):
+    read: bool = True
+
+
+class AdvisorInboxSettingsRequest(BaseModel):
+    project_root: str
+    mode: str = "standard"
+    quiet_start: str = "22:30"
+    quiet_end: str = "08:00"
+
+
+class ReaderPositionRequest(BaseModel):
+    project_root: str
+    unit_id: str
+    scroll_ratio: float = 0.0
+
+
+class ReaderBookmarkRequest(BaseModel):
+    project_root: str
+    unit_id: str
+    enabled: bool = True
 
 
 class AutopilotPolicyRequest(BaseModel):
@@ -165,6 +210,13 @@ def create_app():
     advisor = ProjectAdvisor(config, jobs)
     autopilot = AutopilotService(config, jobs)
     app = FastAPI(title="ArcVellum", version=__version__)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+        allow_credentials=False,
+    )
     api_token = os.environ.get("LES_API_TOKEN", "").strip()
     desktop_session_token = secrets.token_urlsafe(32) if api_token else ""
 
@@ -172,7 +224,7 @@ def create_app():
         @app.middleware("http")
         async def desktop_auth(request: Request, call_next):
             path = request.url.path
-            if path == "/" or path.startswith("/ui/") or path == "/desktop/session":
+            if request.method == "OPTIONS" or path == "/" or path.startswith("/ui/") or path == "/desktop/session":
                 return await call_next(request)
             supplied = request.headers.get("Authorization", "")
             session_cookie = request.cookies.get("les_desktop_session", "")
@@ -232,22 +284,21 @@ def create_app():
 
     @app.get("/health")
     def health():
-        try:
-            engine = CoreBridge(config).doctor()
-            engine_ready = engine.returncode == 0
-            engine_detail = engine.stderr.strip() if engine.returncode else "ready"
-        except Exception as exc:
-            engine_ready = False
-            engine_detail = str(exc)
+        snapshot = bootstrap.snapshot()
+        engine_step = next(
+            (item for item in snapshot.get("steps", []) if item.get("id") == "engine_registry"),
+            {},
+        )
+        application_state = lifecycle.health()
         return {
             "ok": True,
             "version": __version__,
-            "engine_ready": engine_ready,
-            "engine_detail": engine_detail,
-            "agent_runners": agent_runner_status(config),
+            "engine_ready": engine_step.get("status") == "ready",
+            "engine_detail": str(engine_step.get("detail") or ""),
+            "agent_runners": application_state.get("agent_runners", []),
             "model_connections": model_connection_status(config),
             "model_connection_policy": "runner-managed",
-            "application": lifecycle.health(),
+            "application": application_state,
         }
 
     @app.get("/application/health")
@@ -269,12 +320,10 @@ def create_app():
 
     @app.get("/application/bootstrap")
     def application_bootstrap():
-        bootstrap.start_warmup()
         return bootstrap.snapshot()
 
     @app.get("/application/bootstrap/stream")
     def application_bootstrap_stream(interval_seconds: float = 1.0, max_events: int = 0):
-        bootstrap.start_warmup()
         return _stream_read_model(
             "application.bootstrap",
             bootstrap.snapshot,
@@ -289,7 +338,7 @@ def create_app():
 
     @app.get("/agent-runners")
     def agent_runners():
-        return {"ok": True, "items": agent_runner_status(config)}
+        return {"ok": True, "items": agent_runner_status(config, force_refresh=True)}
 
     @app.get("/agent-runners/opencode/bundle")
     def opencode_bundle_status():
@@ -346,6 +395,81 @@ def create_app():
     @app.get("/advisor/sessions")
     def advisor_sessions(project_root: str):
         return _call(lambda: {"ok": True, "items": advisor.list_sessions(_project(project_root))})
+
+    @app.get("/advisor/personas")
+    def advisor_personas(project_root: str):
+        return _call(lambda: persona_catalog(advisor._data_root(), _project(project_root)))
+
+    @app.put("/advisor/personas/selection")
+    def advisor_persona_selection(payload: AdvisorPersonaSelectionRequest):
+        return _call(
+            lambda: select_persona(advisor._data_root(), _project(payload.project_root), payload.persona_id)
+        )
+
+    @app.put("/advisor/personas/custom")
+    def advisor_persona_custom(payload: AdvisorCustomPersonaRequest):
+        return _call(
+            lambda: save_custom_persona(
+                advisor._data_root(),
+                name=payload.name,
+                tagline=payload.tagline,
+                prompt=payload.prompt,
+                persona_id=payload.persona_id,
+            )
+        )
+
+    @app.get("/advisor/inbox")
+    def advisor_inbox(project_root: str):
+        return _call(lambda: refresh_advisor_inbox(config, jobs, _project(project_root)))
+
+    @app.patch("/advisor/inbox/{item_id}")
+    def advisor_inbox_read(item_id: str, payload: AdvisorInboxReadRequest):
+        return _call(lambda: {"ok": True, "item": jobs.mark_advisor_inbox_read(item_id, read=payload.read)})
+
+    @app.put("/advisor/inbox/settings")
+    def advisor_inbox_settings(payload: AdvisorInboxSettingsRequest):
+        return _call(
+            lambda: {
+                "ok": True,
+                "settings": save_inbox_settings(
+                    advisor._data_root(),
+                    _project(payload.project_root),
+                    {
+                        "mode": payload.mode,
+                        "quiet_start": payload.quiet_start,
+                        "quiet_end": payload.quiet_end,
+                    },
+                ),
+            }
+        )
+
+    @app.get("/advisor/inbox/stream")
+    def advisor_inbox_stream(project_root: str, interval_seconds: float = 8.0, max_events: int = 0):
+        root = _project(project_root)
+        interval = max(2.0, min(60.0, float(interval_seconds or 8.0)))
+        limit = max(0, int(max_events or 0))
+
+        def stream():
+            previous = ""
+            sent = 0
+            while True:
+                snapshot = refresh_advisor_inbox(config, jobs, root)
+                signature = json.dumps(snapshot.get("items", []), ensure_ascii=False, sort_keys=True)
+                if signature != previous:
+                    yield _sse("advisor.inbox", snapshot)
+                    previous = signature
+                    sent += 1
+                    if limit and sent >= limit:
+                        break
+                else:
+                    yield ": advisor inbox heartbeat\n\n"
+                time.sleep(interval)
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.post("/advisor/sessions")
     def advisor_session_create(payload: AdvisorSessionRequest):
@@ -480,6 +604,30 @@ def create_app():
     @app.get("/projects/current")
     def projects_current():
         return current_project()
+
+    @app.get("/projects/default-location")
+    def projects_default_location():
+        application = config.get("application") if isinstance(config.get("application"), dict) else {}
+        root = Path(str(application.get("projects_root") or default_projects_root())).expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return {
+            "ok": True,
+            "projects_root": str(root),
+            "source": str(application.get("projects_root_source") or "platform-default"),
+            "portable_mode": bool(application.get("portable_mode", False)),
+        }
+
+    @app.put("/projects/default-location")
+    def projects_default_location_update(payload: ProjectsRootRequest):
+        root = Path(payload.projects_root).expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        if not root.is_dir() or not os.access(root, os.W_OK):
+            raise HTTPException(status_code=400, detail="默认作品库必须是可写入的文件夹。")
+        application = config.setdefault("application", {})
+        application["projects_root"] = str(root)
+        application["projects_root_source"] = "user-selected"
+        save_config(config)
+        return {"ok": True, "projects_root": str(root), "source": "user-selected", "affects_existing_projects": False}
 
     @app.post("/projects/open")
     def projects_open(payload: ProjectOpenRequest):
@@ -725,6 +873,99 @@ def create_app():
             interval_seconds,
             max_events,
         )
+
+    @app.get("/reader/manifest")
+    def reader_manifest(project_root: str):
+        return _call(lambda: public_reader_manifest(build_reader_manifest(_project(project_root))))
+
+    @app.get("/reader/units/{unit_id}")
+    def reader_unit(unit_id: str, project_root: str):
+        return _call(lambda: read_reader_unit(_project(project_root), unit_id))
+
+    @app.get("/reader/search")
+    def reader_search(project_root: str, q: str, limit: int = 40):
+        return _call(lambda: search_reader(_project(project_root), q, limit=limit))
+
+    @app.get("/reader/state")
+    def reader_state(project_root: str):
+        root = _project(project_root)
+        return {"ok": True, "schema": "arcvellum/reader-state/v1", **jobs.reader_state(str(root))}
+
+    @app.put("/reader/position")
+    def reader_position(payload: ReaderPositionRequest):
+        root = _project(payload.project_root)
+        return {"ok": True, "schema": "arcvellum/reader-state/v1", **jobs.save_reader_position(str(root), payload.unit_id, payload.scroll_ratio)}
+
+    @app.put("/reader/bookmark")
+    def reader_bookmark(payload: ReaderBookmarkRequest):
+        root = _project(payload.project_root)
+        return {"ok": True, "schema": "arcvellum/reader-state/v1", **jobs.set_reader_bookmark(str(root), payload.unit_id, payload.enabled)}
+
+    @app.get("/reader/stream")
+    def reader_stream(project_root: str, interval_seconds: float = 4.0, max_events: int = 0):
+        root = _project(project_root)
+        interval = max(1.0, min(60.0, float(interval_seconds or 4.0)))
+        limit = max(0, int(max_events or 0))
+
+        def stream():
+            sent = 0
+            previous: dict[str, Any] | None = None
+            while True:
+                manifest = public_reader_manifest(build_reader_manifest(root))
+                revision = str(manifest.get("project_revision") or "")
+                if previous is None or revision != str(previous.get("project_revision") or ""):
+                    previous_ids = {str(item.get("unit_id")) for item in (previous or {}).get("units", []) if isinstance(item, dict)}
+                    current_ids = {str(item.get("unit_id")) for item in manifest.get("units", []) if isinstance(item, dict)}
+                    payload = {
+                        **manifest,
+                        "delta": {
+                            "added": sorted(current_ids - previous_ids),
+                            "removed": sorted(previous_ids - current_ids),
+                            "initial": previous is None,
+                        },
+                    }
+                    yield _sse("reader.manifest", payload)
+                    previous = manifest
+                    sent += 1
+                    if limit and sent >= limit:
+                        break
+                else:
+                    yield ": reader heartbeat\n\n"
+                time.sleep(interval)
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.get("/narrative/projection")
+    def narrative_projection(project_root: str, level: str = "book", focus: str = ""):
+        return _call(lambda: build_narrative_projection(config, _project(project_root), level=level, focus=focus))
+
+    @app.get("/narrative/stream")
+    def narrative_stream(project_root: str, level: str = "book", focus: str = "", interval_seconds: float = 6.0, max_events: int = 0):
+        root = _project(project_root)
+        interval = max(2.0, min(60.0, float(interval_seconds or 6.0)))
+        limit = max(0, int(max_events or 0))
+
+        def stream():
+            previous = ""
+            sent = 0
+            while True:
+                projection = build_narrative_projection(config, root, level=level, focus=focus)
+                revision = str(projection.get("revision") or "")
+                if revision != previous:
+                    yield _sse("narrative.projection", projection)
+                    previous = revision
+                    sent += 1
+                    if limit and sent >= limit:
+                        break
+                else:
+                    yield ": narrative heartbeat\n\n"
+                time.sleep(interval)
+
+        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.patch("/project/display-field")
     def project_display_field(payload: dict[str, Any]):

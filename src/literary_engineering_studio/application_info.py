@@ -24,6 +24,7 @@ DIAGNOSTIC_SCHEMA = "arcvellum/diagnostic-report/v0.1"
 
 def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
     data_root = _configured_data_root(config)
+    application = config.get("application") if isinstance(config.get("application"), dict) else {}
     opencode_settings = _opencode_settings(config)
     executable = locate_opencode(opencode_settings)
     verification = verify_opencode(executable) if executable else {}
@@ -48,6 +49,7 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
         },
         "current_model": _selected_model(config),
         "paths": {
+            "projects_root": str(application.get("projects_root") or ""),
             "configuration": str(default_config_path()),
             "application_data": str(data_root),
             "logs": str(data_root / "logs"),

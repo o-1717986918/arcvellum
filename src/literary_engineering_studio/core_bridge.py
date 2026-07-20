@@ -6,10 +6,10 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import shlex
-import subprocess
 from typing import Iterable
 
 from .config import repository_root
+from .subprocess_utils import run_hidden
 
 
 FORBIDDEN_COMMAND_TOKENS = (
@@ -71,7 +71,7 @@ class CoreBridge:
         command = [self.python, "-m", self.module, *engine_args]
         env = os.environ.copy()
         env.pop("LEW_MAINTAINER_MODE", None)
-        completed = subprocess.run(
+        completed = run_hidden(
             command,
             cwd=self.working_dir,
             env=env,

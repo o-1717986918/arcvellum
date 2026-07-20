@@ -17,6 +17,7 @@ from ..opencode_binary import bundle_manifest, locate_opencode
 from ..opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
 from ..runtime_events import normalize_opencode_event
+from ..subprocess_utils import run_hidden
 from .base import AgentRunnerCapabilities, AgentRuntime, RuntimeAvailability, RuntimeResult
 
 
@@ -32,7 +33,7 @@ class OpenCodeRuntime(AgentRuntime):
         if executable is None:
             return RuntimeAvailability(self.runtime_id, False, "", "pinned OpenCode binary is not installed")
         try:
-            completed = subprocess.run(
+            completed = run_hidden(
                 [str(executable), "--version"],
                 text=True,
                 encoding="utf-8",
@@ -48,8 +49,8 @@ class OpenCodeRuntime(AgentRuntime):
         detail = version if version == expected else f"{version}; pinned version is {expected}"
         return RuntimeAvailability(self.runtime_id, completed.returncode == 0, str(executable), detail)
 
-    def capabilities(self) -> AgentRunnerCapabilities:
-        availability = self.availability()
+    def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
+        availability = availability or self.availability()
         model = str(self.settings.get("model") or "").strip()
         if not availability.available:
             readiness = "unavailable"

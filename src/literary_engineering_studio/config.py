@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-CONFIG_SCHEMA = "literary-engineering-studio/config/v0.3"
+CONFIG_SCHEMA = "literary-engineering-studio/config/v0.4"
 
 
 def repository_root() -> Path:
@@ -37,6 +37,13 @@ def default_data_root() -> Path:
     return Path.home() / ".literary-engineering-studio"
 
 
+def default_projects_root() -> Path:
+    override = os.environ.get("LES_PROJECTS_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path.home() / "Documents" / "ArcVellum" / "Works"
+
+
 def default_config() -> dict[str, Any]:
     return {
         "schema": CONFIG_SCHEMA,
@@ -47,6 +54,9 @@ def default_config() -> dict[str, Any]:
         "application": {
             "data_root": str(default_data_root()),
             "database_path": str(default_data_root() / "studio.sqlite3"),
+            "projects_root": str(default_projects_root()),
+            "projects_root_source": "platform-default",
+            "portable_mode": False,
             "max_workers": 2,
             "lease_seconds": 90,
         },

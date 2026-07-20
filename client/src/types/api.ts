@@ -88,6 +88,79 @@ export interface LibraryResponse {
   [key: string]: unknown;
 }
 
+export interface ReaderUnitSummary {
+  unit_id: string;
+  volume_id: string;
+  chapter_id: string;
+  scene_id: string;
+  order: number;
+  title: string;
+  status: "promoted" | "chapter" | "exported" | "published";
+  source_kind: "scene" | "chapter" | "release";
+  source_revision: string;
+  content_hash: string;
+  chinese_content_chars: number;
+  machine_nonspace_chars: number;
+  coverage: string[];
+  body_endpoint: string;
+}
+
+export interface ReaderManifest {
+  ok: boolean;
+  schema: "arcvellum/reader-manifest/v1";
+  project_root: string;
+  project_revision: string;
+  generated_at: string;
+  unit_count: number;
+  total_chinese_content_chars: number;
+  units: ReaderUnitSummary[];
+  warnings: Array<{ code: string; chapter_id?: string; message: string }>;
+  delta?: { added: string[]; removed: string[]; initial: boolean };
+}
+
+export interface ReaderUnitResponse {
+  ok: boolean;
+  schema: "arcvellum/reader-unit/v1";
+  unit: ReaderUnitSummary;
+  body: string;
+}
+
+export interface NarrativeNode {
+  node_id: string;
+  type: string;
+  label: string;
+  subtitle: string;
+  status: "planned" | "queued" | "current" | "formal" | "memory" | "blocked" | "alternative";
+  source_type: string;
+  source_id: string;
+  navigate: string;
+  metrics: Record<string, number>;
+  order: number;
+}
+
+export interface NarrativeEdge {
+  edge_id: string;
+  source: string;
+  target: string;
+  type: string;
+  label: string;
+}
+
+export interface NarrativeProjection {
+  ok: boolean;
+  schema: "arcvellum/narrative-projection/v1";
+  project_root: string;
+  generated_at: string;
+  revision: string;
+  level: "book" | "chapter" | "scene";
+  focus: string;
+  summary: Record<string, number | boolean>;
+  nodes: NarrativeNode[];
+  edges: NarrativeEdge[];
+  legend: Array<{ type: string; label: string; color: string }>;
+  accessibility_summary: string;
+}
+
 export interface DashboardResponse {
   ok: boolean;
   project?: Record<string, unknown>;

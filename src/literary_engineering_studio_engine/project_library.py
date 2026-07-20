@@ -152,7 +152,9 @@ def _draft_item_from_path(
     item_id: str = "",
 ) -> dict[str, object]:
     text = _read_text(path)
-    body = prose_body_for_display(text, limit=9000)
+    # Library SSE is a browsing projection. Full formal prose is loaded on
+    # demand through Reader Manifest, so keep draft previews bounded here.
+    body = prose_body_for_display(text, limit=2400)
     scene_id = _scene_id_from_draft(path)
     target = _scene_target(root, scene_id)
     title = _first_heading(text) or _display_scene_name(scene_id)

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiMock = vi.fn();
 const bootstrapDesktopSessionMock = vi.fn();
+const streamConnections: Array<{ path: string; callback: (event: string, data: Record<string, unknown>) => void; closed: boolean }> = [];
 
 vi.mock("@/services/api", () => ({
   api: apiMock,
@@ -14,32 +15,12 @@ vi.mock("@/services/api", () => ({
     });
     return params.toString();
   },
-  sseUrl: (path: string) => path,
+  connectEventStream: (path: string, callback: (event: string, data: Record<string, unknown>) => void) => {
+    const connection = { path, callback, closed: false };
+    streamConnections.push(connection);
+    return { close: () => (connection.closed = true) };
+  },
 }));
-
-class FakeEventSource {
-  static instances: FakeEventSource[] = [];
-  readonly url: string;
-  closed = false;
-  listeners = new Map<string, (event: MessageEvent) => void>();
-
-  constructor(url: string | URL) {
-    this.url = String(url);
-    FakeEventSource.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
-    this.listeners.set(type, listener as (event: MessageEvent) => void);
-  }
-
-  close(): void {
-    this.closed = true;
-  }
-
-  emit(type: string, data: unknown): void {
-    this.listeners.get(type)?.(new MessageEvent(type, { data: JSON.stringify(data) }));
-  }
-}
 
 const bootstrap = {
   ok: true,
@@ -61,8 +42,7 @@ describe("application store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     localStorage.clear();
-    FakeEventSource.instances = [];
-    vi.stubGlobal("EventSource", FakeEventSource);
+    streamConnections.length = 0;
     apiMock.mockReset();
     bootstrapDesktopSessionMock.mockReset();
     apiMock.mockImplementation(async (path: string) => {
@@ -102,7 +82,7 @@ describe("application store", () => {
     expect(store.initialized).toBe(true);
     expect(store.currentProject?.title).toBe("潮汐之后");
     expect(store.modelCatalog?.selected_model).toBe("opencode/big-pickle");
-    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(streamConnections).toHaveLength(1);
   });
 
   it("streams the active project's dashboard and archive after the initial load", async () => {
@@ -114,12 +94,12 @@ describe("application store", () => {
 
     expect(store.dashboard?.current_task).toEqual({ title: "梳理人物" });
     expect(store.library?.sections).toEqual({ characters: [] });
-    const projectStreams = FakeEventSource.instances.filter((item) => item.url.includes("/stream"));
-    expect(projectStreams.some((item) => item.url.startsWith("/workflow/dashboard/stream"))).toBe(true);
-    expect(projectStreams.some((item) => item.url.startsWith("/project/library/stream"))).toBe(true);
+    const projectStreams = streamConnections.filter((item) => item.path.includes("/stream"));
+    expect(projectStreams.some((item) => item.path.startsWith("/workflow/dashboard/stream"))).toBe(true);
+    expect(projectStreams.some((item) => item.path.startsWith("/project/library/stream"))).toBe(true);
 
-    const dashboardStream = projectStreams.find((item) => item.url.startsWith("/workflow/dashboard/stream"));
-    dashboardStream?.emit("dashboard", { ok: true, current_task: { title: "开始写第一场" } });
+    const dashboardStream = projectStreams.find((item) => item.path.startsWith("/workflow/dashboard/stream"));
+    dashboardStream?.callback("dashboard", { ok: true, current_task: { title: "开始写第一场" } });
     expect(store.dashboard?.current_task).toEqual({ title: "开始写第一场" });
   });
 });

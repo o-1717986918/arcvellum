@@ -77,6 +77,20 @@ class ApplicationBootstrapTests(unittest.TestCase):
         self.assertEqual(engine_step["status"], "blocked")
         self.assertIn("engine missing", engine_step["detail"])
 
+    def test_model_catalog_is_deferred_until_connections_are_opened(self):
+        calls = []
+        service = self._service(
+            catalog_loader=lambda _config: calls.append(1) or {},
+            project_loader=lambda: {"current_project": "", "projects": []},
+            engine_probe=lambda: SimpleNamespace(returncode=0, stderr=""),
+        )
+
+        snapshot = service.snapshot()
+
+        self.assertEqual(snapshot["model_warmup"]["status"], "deferred")
+        self.assertTrue(snapshot["can_enter_workspace"])
+        self.assertEqual(calls, [])
+
     def test_catalog_warmup_is_single_flight(self):
         entered = threading.Event()
         release = threading.Event()

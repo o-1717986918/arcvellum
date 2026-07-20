@@ -34,7 +34,7 @@ class ApiServerTests(unittest.TestCase):
         connections = self.client.get("/model-connections").json()
         self.assertEqual(connections["managed_by"], "agent-runner")
 
-    def test_bootstrap_endpoint_starts_background_model_warmup(self):
+    def test_bootstrap_endpoint_defers_model_catalog_until_settings(self):
         service = self.client.app.state.bootstrap
         service._catalog_loader = lambda _config: {
             "runner": "opencode",
@@ -48,7 +48,7 @@ class ApiServerTests(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["can_enter_workspace"])
         self.assertEqual(payload["schema"], "arcvellum/application-bootstrap/v0.1")
-        self.assertIn(payload["model_warmup"]["status"], {"loading", "ready"})
+        self.assertEqual(payload["model_warmup"]["status"], "deferred")
 
     def test_bootstrap_stream_uses_named_sse_event(self):
         service = self.client.app.state.bootstrap

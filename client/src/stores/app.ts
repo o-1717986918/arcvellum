@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
-import { api, bootstrapDesktopSession, query, sseUrl } from "@/services/api";
+import { api, bootstrapDesktopSession, connectEventStream, query, type EventStreamConnection } from "@/services/api";
 import type {
   BootstrapSnapshot,
   DashboardResponse,
@@ -9,6 +9,8 @@ import type {
   ModelCatalog,
   ProjectSummary,
   ProjectsResponse,
+  ReaderManifest,
+  ReaderUnitResponse,
 } from "@/types/api";
 
 export const useAppStore = defineStore("app", () => {
@@ -22,11 +24,14 @@ export const useAppStore = defineStore("app", () => {
   const dashboard = shallowRef<DashboardResponse | null>(null);
   const library = shallowRef<LibraryResponse | null>(null);
   const delivery = shallowRef<DeliveryResponse | null>(null);
+  const readerManifest = shallowRef<ReaderManifest | null>(null);
+  const readerBodies = ref<Record<string, { hash: string; body: string }>>({});
   const modelCatalog = shallowRef<ModelCatalog | null>(null);
   const activeJob = shallowRef<Record<string, unknown> | null>(null);
-  let bootstrapStream: EventSource | null = null;
-  let dashboardStream: EventSource | null = null;
-  let libraryStream: EventSource | null = null;
+  let bootstrapStream: EventStreamConnection | null = null;
+  let dashboardStream: EventStreamConnection | null = null;
+  let libraryStream: EventStreamConnection | null = null;
+  let readerStream: EventStreamConnection | null = null;
 
   const currentProject = computed(
     () => projects.value.find((item) => item.path === currentProjectPath.value) || bootstrap.value?.project || null,
@@ -66,6 +71,8 @@ export const useAppStore = defineStore("app", () => {
     dashboard.value = null;
     library.value = null;
     delivery.value = null;
+    readerManifest.value = null;
+    readerBodies.value = {};
     if (refresh && path) void refreshWorkspace();
   }
 
@@ -94,7 +101,7 @@ export const useAppStore = defineStore("app", () => {
   async function refreshWorkspace(): Promise<void> {
     if (!currentProjectPath.value) return;
     error.value = "";
-    await Promise.allSettled([loadDashboard(), loadLibrary(), loadDelivery()]);
+    await Promise.allSettled([loadDashboard(), loadLibrary(), loadDelivery(), loadReaderManifest()]);
     startProjectStreams();
   }
 
@@ -115,23 +122,41 @@ export const useAppStore = defineStore("app", () => {
     delivery.value = await api<DeliveryResponse>(`/project/delivery?${query({ project_root: currentProjectPath.value })}`);
   }
 
+  async function loadReaderManifest(): Promise<void> {
+    if (!currentProjectPath.value) return;
+    readerManifest.value = await api<ReaderManifest>(
+      `/reader/manifest?${query({ project_root: currentProjectPath.value })}`,
+    );
+  }
+
+  async function loadReaderUnit(unitId: string): Promise<string> {
+    const summary = readerManifest.value?.units.find((item) => item.unit_id === unitId);
+    const cached = readerBodies.value[unitId];
+    if (cached && summary && cached.hash === summary.content_hash) return cached.body;
+    const response = await api<ReaderUnitResponse>(
+      `/reader/units/${encodeURIComponent(unitId)}?${query({ project_root: currentProjectPath.value })}`,
+    );
+    readerBodies.value = {
+      ...readerBodies.value,
+      [unitId]: { hash: response.unit.content_hash, body: response.body },
+    };
+    return response.body;
+  }
+
   async function loadModelCatalog(force = false): Promise<void> {
-    const response = force
-      ? await api<{ ok: boolean; bootstrap: BootstrapSnapshot }>("/application/warmup", { method: "POST" })
-      : null;
-    if (response?.bootstrap) bootstrap.value = response.bootstrap;
+    void force;
     const catalog = await api<ModelCatalog & { ok: boolean }>("/model-connections/opencode/catalog");
     modelCatalog.value = catalog;
   }
 
   function startBootstrapStream(): void {
-    if (!window.EventSource || bootstrapStream) return;
-    bootstrapStream = new EventSource(sseUrl("/application/bootstrap/stream?interval_seconds=1"));
-    bootstrapStream.addEventListener("application.bootstrap", (event) => {
-      const payload = JSON.parse((event as MessageEvent).data) as BootstrapSnapshot;
+    if (bootstrapStream) return;
+    bootstrapStream = connectEventStream("/application/bootstrap/stream?interval_seconds=1", (event, data) => {
+      if (event !== "application.bootstrap") return;
+      const payload = data as unknown as BootstrapSnapshot;
       bootstrap.value = payload;
       if (payload.model_catalog) modelCatalog.value = payload.model_catalog;
-      if (payload.can_enter_workspace && !["loading", "waiting"].includes(payload.model_warmup.status)) {
+      if (payload.can_enter_workspace && payload.model_warmup.status !== "loading") {
         bootstrapStream?.close();
         bootstrapStream = null;
       }
@@ -141,26 +166,38 @@ export const useAppStore = defineStore("app", () => {
   function startProjectStreams(): void {
     stopProjectStreams();
     const root = currentProjectPath.value;
-    if (!root || !window.EventSource) return;
-    dashboardStream = new EventSource(
-      sseUrl(`/workflow/dashboard/stream?${query({ project_root: root, interval_seconds: 5 })}`),
+    if (!root) return;
+    dashboardStream = connectEventStream(
+      `/workflow/dashboard/stream?${query({ project_root: root, interval_seconds: 5 })}`,
+      (event, data) => {
+        if (event === "dashboard") dashboard.value = data as unknown as DashboardResponse;
+      },
     );
-    dashboardStream.addEventListener("dashboard", (event) => {
-      dashboard.value = JSON.parse((event as MessageEvent).data) as DashboardResponse;
-    });
-    libraryStream = new EventSource(
-      sseUrl(`/project/library/stream?${query({ project_root: root, interval_seconds: 7 })}`),
+    libraryStream = connectEventStream(
+      `/project/library/stream?${query({ project_root: root, interval_seconds: 7 })}`,
+      (event, data) => {
+        if (event === "library") library.value = data as unknown as LibraryResponse;
+      },
     );
-    libraryStream.addEventListener("library", (event) => {
-      library.value = JSON.parse((event as MessageEvent).data) as LibraryResponse;
-    });
+    readerStream = connectEventStream(
+      `/reader/stream?${query({ project_root: root, interval_seconds: 4 })}`,
+      (event, data) => {
+        if (event !== "reader.manifest") return;
+        const manifest = data as unknown as ReaderManifest;
+        const added = manifest.delta?.initial ? [] : manifest.delta?.added || [];
+        readerManifest.value = manifest;
+        if (added.length) notice.value = `有 ${added.length} 节新正文进入阅读长卷。`;
+      },
+    );
   }
 
   function stopProjectStreams(): void {
     dashboardStream?.close();
     libraryStream?.close();
+    readerStream?.close();
     dashboardStream = null;
     libraryStream = null;
+    readerStream = null;
   }
 
   function clearMessages(): void {
@@ -181,6 +218,8 @@ export const useAppStore = defineStore("app", () => {
     dashboard,
     library,
     delivery,
+    readerManifest,
+    readerBodies,
     modelCatalog,
     activeJob,
     initialize,
@@ -192,6 +231,8 @@ export const useAppStore = defineStore("app", () => {
     loadDashboard,
     loadLibrary,
     loadDelivery,
+    loadReaderManifest,
+    loadReaderUnit,
     loadModelCatalog,
     clearMessages,
     stopProjectStreams,

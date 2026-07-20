@@ -1,11 +1,18 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from literary_engineering_studio.project_manager import validate_project_location
+from literary_engineering_studio.project_manager import create_project, validate_project_location
 
 
 class ProjectLocationTests(unittest.TestCase):
+    def test_create_uses_default_projects_root_when_parent_is_empty(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.dict("os.environ", {"LES_PROJECTS_ROOT": temporary, "LES_CONFIG_PATH": str(Path(temporary) / "config.json")}):
+                result = create_project(parent_directory="", title="Default Location", target_length=1000)
+        self.assertEqual(result["title"], "Default Location")
+
     def test_create_location_reports_conflict_without_writing(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

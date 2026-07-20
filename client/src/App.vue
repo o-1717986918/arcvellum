@@ -22,10 +22,12 @@ const store = useAppStore();
 const route = useRoute();
 const router = useRouter();
 const showStartup = ref(true);
+const startupMinimumElapsed = ref(false);
 
 const nav = [
   { to: "/projects", label: "作品", icon: FolderKanban, needsProject: false },
   { to: "/overview", label: "创作总控", icon: Boxes, needsProject: true },
+  { to: "/reader", label: "阅读", icon: BookOpenText, needsProject: true },
   { to: "/library", label: "作品档案", icon: LibraryBig, needsProject: true },
   { to: "/delivery", label: "交付", icon: PackageCheck, needsProject: true },
   { to: "/settings", label: "设置", icon: Settings2, needsProject: false },
@@ -40,24 +42,23 @@ const statusLabel = computed(() => {
 });
 
 onMounted(async () => {
+  window.setTimeout(() => (startupMinimumElapsed.value = true), 850);
   await store.initialize();
   if (store.currentProjectPath) await store.refreshWorkspace();
-  window.setTimeout(() => {
-    if (store.bootstrap?.can_enter_workspace) showStartup.value = false;
-  }, 650);
 });
 
 watch(
-  () => store.bootstrap?.can_enter_workspace,
-  (ready) => {
-    if (ready) window.setTimeout(() => (showStartup.value = false), 420);
+  [() => store.bootstrap?.can_enter_workspace, startupMinimumElapsed],
+  ([ready, elapsed]) => {
+    if (ready && elapsed) showStartup.value = false;
   },
+  { immediate: true },
 );
 
 watch(
   () => store.currentProjectPath,
   (path) => {
-    if (!path && ["overview", "library", "delivery"].includes(String(route.name))) void router.push("/projects");
+    if (!path && ["overview", "reader", "library", "delivery"].includes(String(route.name))) void router.push("/projects");
   },
 );
 
@@ -65,15 +66,17 @@ onBeforeUnmount(() => store.stopProjectStreams());
 </script>
 
 <template>
-  <StartupScene
-    v-if="showStartup"
-    :snapshot="store.bootstrap"
-    :error="store.error"
-    @continue="showStartup = false"
-    @retry="store.initialize"
-  />
+  <Transition name="startup-fade">
+    <StartupScene
+      v-if="showStartup"
+      :snapshot="store.bootstrap"
+      :error="store.error"
+      @continue="showStartup = false"
+      @retry="store.initialize"
+    />
+  </Transition>
 
-  <div v-else class="app-shell">
+  <div class="app-shell" :class="{ 'startup-obscured': showStartup }">
     <aside class="sidebar">
       <div class="brand-lockup" aria-label="ArcVellum">
         <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>

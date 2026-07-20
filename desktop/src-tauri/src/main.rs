@@ -46,13 +46,20 @@ fn main() {
             let port_arg = port.to_string();
             let parent_pid = std::process::id().to_string();
             let token = Uuid::new_v4().simple().to_string();
+            let projects_root = app
+                .path()
+                .document_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                .join("ArcVellum")
+                .join("Works");
+            let _ = std::fs::create_dir_all(&projects_root);
             let main_window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("ArcVellum")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(980.0, 680.0)
                 .initialization_script(&format!(
-                    "window.__LES_API_TOKEN = '{}';",
-                    token
+                    "window.__LES_API_TOKEN = '{}'; window.__LES_API_BASE = 'http://127.0.0.1:{}';",
+                    token, port
                 ))
                 .build()?;
             let opencode = app
@@ -71,6 +78,7 @@ fn main() {
                     &parent_pid,
                 ])
                 .env("LES_API_TOKEN", &token)
+                .env("LES_PROJECTS_ROOT", &projects_root)
                 .env("LES_OPENCODE_EXECUTABLE", opencode)
                 .spawn()?;
             app.manage(StudioSidecar(Mutex::new(Some(child))));
@@ -79,9 +87,9 @@ fn main() {
             });
             thread::spawn(move || {
                 if wait_for_server(port, Duration::from_secs(45)) {
-                    if let Ok(url) = format!("http://127.0.0.1:{port}/").parse() {
-                        let _ = main_window.navigate(url);
-                    }
+                    let _ = main_window.eval(
+                        "window.dispatchEvent(new CustomEvent('arcvellum:backend-ready'));",
+                    );
                 } else {
                     let _ = main_window.eval(
                         "window.dispatchEvent(new CustomEvent('arcvellum:startup-error'));",

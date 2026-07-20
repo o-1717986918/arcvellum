@@ -78,6 +78,34 @@ class UpdateManifestTests(unittest.TestCase):
         self.assertIn(current.name, result["files"])
         self.assertNotIn("ArcVellum_0.3.0_x64-setup.exe", result["files"])
 
+    def test_current_version_is_selected_when_multiple_versions_are_signed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle" / "nsis"
+            bundle.mkdir(parents=True)
+            for version in ("0.5.0", "0.7.0"):
+                artifact = bundle / f"ArcVellum_{version}_x64-setup.exe"
+                artifact.write_bytes(version.encode("ascii"))
+                Path(str(artifact) + ".sig").write_text(f"signature-{version}", encoding="utf-8")
+            output = root / "release"
+            output.mkdir()
+            (output / "ArcVellum_0.5.0_x64-setup.exe").write_bytes(b"stale")
+            (output / "ArcVellum_0.5.0_x64-setup.exe.sig").write_text("stale", encoding="utf-8")
+
+            result = build_manifest(
+                bundle_dir=root / "bundle",
+                output_dir=output,
+                version="0.7.0",
+                base_url="https://example.test/releases/latest/download",
+                notes="Release notes",
+            )
+            payload = json.loads((output / "latest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["version"], "0.7.0")
+        self.assertEqual(payload["platforms"]["windows-x86_64"]["signature"], "signature-0.7.0")
+        self.assertIn("ArcVellum_0.7.0_x64-setup.exe", result["files"])
+        self.assertNotIn("ArcVellum_0.5.0_x64-setup.exe", result["files"])
+
 
 if __name__ == "__main__":
     unittest.main()

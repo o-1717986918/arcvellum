@@ -5,7 +5,8 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from .base import AgentRunnerCapabilities, AgentRuntime, executable_prefix, resolve_executable
+from ..subprocess_utils import run_hidden
+from .base import AgentRunnerCapabilities, AgentRuntime, RuntimeAvailability, executable_prefix, resolve_executable
 
 
 class ClaudeCodeRuntime(AgentRuntime):
@@ -42,15 +43,15 @@ class ClaudeCodeRuntime(AgentRuntime):
             command.extend(["--max-budget-usd", str(max_budget)])
         return tuple(command)
 
-    def capabilities(self) -> AgentRunnerCapabilities:
-        availability = self.availability()
+    def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
+        availability = availability or self.availability()
         authentication_state = "not-probed"
         provider = ""
         auth_detail = ""
         if availability.available:
             executable = resolve_executable(str(self.settings.get("executable") or "claude"))
             try:
-                completed = subprocess.run(
+                completed = run_hidden(
                     [*executable_prefix(executable), "auth", "status"],
                     text=True,
                     encoding="utf-8",

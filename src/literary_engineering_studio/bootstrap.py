@@ -268,8 +268,8 @@ class ApplicationBootstrapService:
         connections = model_connection_status(self.config)
         selected = next((str(item.get("selected_model") or "") for item in connections if item.get("selected_model")), "")
         return {
-            "status": "waiting",
-            "detail": f"正在准备模型目录{f'（当前选择 {selected}）' if selected else ''}。",
+            "status": "deferred",
+            "detail": f"模型目录将在打开连接设置时载入{f'（当前选择 {selected}）' if selected else ''}。",
             "catalog": None,
         }
 

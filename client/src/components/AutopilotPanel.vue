@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Bot, CircleCheck, CirclePause, Gauge, Pause, Play, RefreshCw, ShieldAlert, Sparkles } from "lucide-vue-next";
-import { api, query, sseUrl } from "@/services/api";
+import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy } from "@/types/api";
 
@@ -9,7 +9,7 @@ const store = useAppStore();
 const snapshot = ref<AutopilotStatus | null>(null);
 const busy = ref(false);
 const authorized = ref(false);
-let events: EventSource | null = null;
+let events: EventStreamConnection | null = null;
 
 const run = computed(() => snapshot.value?.run || null);
 const running = computed(() => run.value?.status === "running");
@@ -118,9 +118,9 @@ async function resume(): Promise<void> {
 
 function startStream(runId: string): void {
   stopStream();
-  events = new EventSource(sseUrl(`/autopilot/runs/${encodeURIComponent(runId)}/stream`));
-  events.addEventListener("autopilot.status", (event) => {
-    const payload = JSON.parse((event as MessageEvent).data) as { run: AutopilotRun };
+  events = connectEventStream(`/autopilot/runs/${encodeURIComponent(runId)}/stream`, (event, data) => {
+    if (event !== "autopilot.status") return;
+    const payload = data as unknown as { run: AutopilotRun };
     if (snapshot.value) snapshot.value.run = payload.run;
     if (["complete", "paused", "blocked", "cancelled", "failed"].includes(payload.run.status)) {
       stopStream();
