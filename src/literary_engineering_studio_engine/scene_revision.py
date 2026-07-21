@@ -12,10 +12,18 @@ from typing import Any
 from .agent_tasks import write_agent_tasks
 from .anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE, render_ai_style_lint_block
 from .context_broker import default_context_trace_path
+from .creative_quality import (
+    creative_quality_profile_exists,
+    creative_quality_profile_path,
+    load_creative_quality_profile,
+    render_creative_quality_prompt,
+)
 from .context_packet import build_context_packet
 from .draft_text import count_delivery_chars, final_body_from_draft_text
+from .narrative_rhythm import narrative_rhythm_contract
 from .new_character_register import render_new_character_register_contract
 from .punctuation_standard import render_punctuation_standard_for_prompt
+from .reader_experience import reader_experience_contract
 from .word_budget import render_word_budget_generation_standard
 
 
@@ -116,6 +124,10 @@ def _prompt_manifest(
     body = final_body_from_draft_text(draft_text)
     review_payload = _read_json(review_path) if review_path and review_path.suffix.lower() == ".json" else {}
     style_adherence = review_payload.get("style_adherence") if isinstance(review_payload.get("style_adherence"), dict) else {}
+    quality_profile = load_creative_quality_profile(root)
+    composition_path = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
+    rhythm = narrative_rhythm_contract(root, scene_path, composition_path if composition_path.exists() else None)
+    reader = reader_experience_contract(root, scene_path)
     return {
         "schema": "literary-engineering-workbench/scene-revision-prompt/v0.1",
         "generated_at": _now(),
@@ -141,8 +153,13 @@ def _prompt_manifest(
         },
         "generation_standards": {
             "word_budget": render_word_budget_generation_standard(root),
-            "punctuation": render_punctuation_standard_for_prompt(),
-            "style_lint_before": render_ai_style_lint_block(body),
+            "narrative_rhythm_contract": rhythm,
+            "reader_experience_contract": reader,
+            "punctuation": render_punctuation_standard_for_prompt(quality_profile, scope=scene_id),
+            "style_lint_before": render_ai_style_lint_block(body, profile=quality_profile, scope=scene_id),
+            "creative_quality_profile": quality_profile,
+            "creative_quality_profile_digest": quality_profile.get("digest"),
+            "creative_quality_prompt": render_creative_quality_prompt(quality_profile, scope=scene_id),
             "anti_evasion": ANTI_EVASION_REVISION_PROTOCOL,
             "output_boundary": "修订候选不得写入 AGENT_TASK、prompt manifest、canon 解释、审查过程或内部 scene 编号。",
             "notes_resolution": "逐条处理 revision_actions / warnings / style_notes / style_adherence；无法处理时写入 waiver reason。",
@@ -200,7 +217,7 @@ def _write_revision_task(
             ),
             (
                 "写入修订 manifest",
-                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema=`literary-engineering-workbench/scene-revision/v0.1`、scene_id、candidate、report、source_paths、revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、anti_evasion_protocol_applied=true、anti_evasion_rows、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers、ready_for_review=false、generated_by=`platform-agent`。
+                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema=`literary-engineering-workbench/scene-revision/v0.1`、scene_id、candidate、report、source_paths、revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、creative_quality_profile_digest=`{load_creative_quality_profile(root).get('digest')}`、reader_experience_contract（从 prompt manifest 精确复制）、narrative_rhythm_contract（从 prompt manifest 精确复制）、anti_evasion_protocol_applied=true、anti_evasion_rows、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers、ready_for_review=false、generated_by=`platform-agent`。
 
 {render_new_character_register_contract()}""",
             ),
@@ -226,6 +243,7 @@ def _source_paths(
         root / "canon" / "forbidden_changes.yaml",
         root / "plot" / "outline.md",
         root / "plot" / "word_budget" / "word_budget.json",
+        creative_quality_profile_path(root) if creative_quality_profile_exists(root) else None,
     ]
     candidates.extend(_style_source_paths(root))
     results: list[Path] = []

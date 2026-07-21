@@ -1,6 +1,8 @@
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
+import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +12,17 @@ from literary_engineering_studio_engine.cli import main as engine_main
 
 
 class CoreBridgeTests(unittest.TestCase):
+    def test_source_checkout_does_not_use_stale_installed_sidecar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "pyproject.toml").write_text("[project]\nname='test'\n", encoding="utf-8")
+            (root / "src" / "literary_engineering_studio_engine").mkdir(parents=True)
+            config = default_config()
+            config["engine"]["python"] = "D:/ArcVellum/literary-engineering-studio-sidecar.exe"
+            with patch("literary_engineering_studio.core_bridge.repository_root", return_value=root):
+                bridge = CoreBridge(config)
+            self.assertEqual(bridge.python, sys.executable)
+
     def test_project_placeholder_is_not_treated_as_shell_redirection(self):
         config = default_config()
         bridge = CoreBridge(config)

@@ -35,6 +35,7 @@ class RuntimeResult:
     command: tuple[str, ...]
     output_path: Path | None
     message: str
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

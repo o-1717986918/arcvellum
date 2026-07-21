@@ -21,8 +21,13 @@ CONTENT_TYPES = {
 }
 
 
-def build_delivery(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
-    dashboard = build_dashboard(config, project_root)
+def build_delivery(
+    config: dict[str, Any],
+    project_root: Path,
+    *,
+    dashboard_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else build_dashboard(config, project_root)
     route = next(
         (item for item in dashboard.get("route_audits", []) if item.get("route") == "export-and-release"),
         {},

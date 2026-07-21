@@ -16,13 +16,16 @@ from .runtimes import build_runtime
 from .sandbox import (
     SandboxManifest,
     apply_expected_outputs,
+    capture_core_managed_outputs,
     inspect_expected_outputs,
     load_writeback_preview,
     rollback_expected_outputs,
+    restore_core_managed_outputs,
     sandbox_from_run,
     stage_task,
     update_run_manifest,
 )
+from .task_preflight import canonicalize_task_outputs, validate_task_outputs
 
 
 @dataclass(frozen=True)
@@ -62,11 +65,13 @@ class AgentWorker:
         *,
         event_sink: Callable[[str, dict[str, Any]], None] | None = None,
         cancel_event: threading.Event | None = None,
+        runtime_pool=None,
     ):
         self.config = config or load_config()
         self.bridge = CoreBridge(self.config)
         self.event_sink = event_sink
         self.cancel_event = cancel_event or threading.Event()
+        self.runtime_pool = runtime_pool
 
     def prepare(
         self,
@@ -92,6 +97,7 @@ class AgentWorker:
                     None,
                     None,
                     issued.fields.get("message", "route has no pending task"),
+                    audit_fields={"status": "route-ready", "scope": "route-terminal-scan"},
                 )
             selected_task_id = issued.fields["task_id"]
 
@@ -162,6 +168,9 @@ class AgentWorker:
                 status="core_command_completed",
                 core_command_returncode=command_result.returncode,
             )
+            protected = capture_core_managed_outputs(task, sandbox)
+            if protected:
+                self._emit("core.outputs_protected", {"task_id": task.task_id, "paths": list(protected)})
             self._emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
         return task, sandbox, None
 
@@ -209,16 +218,35 @@ class AgentWorker:
                 "run cancelled before Agent Runner execution",
             )
 
-        runtime = build_runtime(runtime_id, self.config)
+        runtime = build_runtime(runtime_id, self.config, runtime_pool=self.runtime_pool)
         timeout = int(self.config.get("worker", {}).get("timeout_seconds") or 1800)
         self._emit("runner.started", {"runner_id": runtime_id, "task_id": task.task_id})
+        runtime_kwargs = {
+            "timeout": timeout,
+            "event_sink": self._emit,
+            "cancel_event": self.cancel_event,
+        }
+        if runtime_id == "opencode":
+            def validate_outputs():
+                restored = restore_core_managed_outputs(sandbox)
+                if restored:
+                    self._emit("core.outputs_restored", {"task_id": task.task_id, "paths": list(restored)})
+                normalized = canonicalize_task_outputs(task, sandbox)
+                if normalized:
+                    self._emit("validation.canonicalized", {"changes": normalized})
+                return validate_task_outputs(task, sandbox)
+
+            runtime_kwargs.update(
+                {
+                    "output_validator": validate_outputs,
+                    "max_repairs": int(self.config.get("worker", {}).get("max_repair_attempts") or 2),
+                }
+            )
         runtime_result = runtime.execute(
             sandbox.workspace,
             sandbox.prompt_path,
             sandbox.run_root,
-            timeout=timeout,
-            event_sink=self._emit,
-            cancel_event=self.cancel_event,
+            **runtime_kwargs,
         )
         self._emit(
             "runner.completed",
@@ -234,6 +262,7 @@ class AgentWorker:
             runtime_message=runtime_result.message,
             runtime_returncode=runtime_result.returncode,
             runtime_output=str(runtime_result.output_path) if runtime_result.output_path else "",
+            runtime_metadata=runtime_result.metadata or {},
         )
         if runtime_result.status == "waiting_host_agent":
             return WorkerRunResult(
@@ -341,6 +370,42 @@ class AgentWorker:
         self._emit("writeback.approved", {"approved_by": approved_by.strip() or "studio-user"})
         return self._finalize(task, sandbox, preview, approved_by=approved_by)
 
+    def resume_from_run(self, run_root: Path) -> WorkerRunResult:
+        """Resume only when an existing sandbox is already complete and valid."""
+        run = load_run(run_root)
+        project = _validate_project(Path(str(run.get("project_root") or "")))
+        task_json = Path(str(run.get("task_json") or ""))
+        if not task_json.is_file():
+            task_json = project / "workflow" / "tasks" / f"{run.get('task_id')}.json"
+        task = load_task_package(project, task_json)
+        sandbox = sandbox_from_run(run_root)
+        if str(run.get("task_id") or "") != task.task_id:
+            raise ValueError("recovery sandbox task identity does not match its task package")
+
+        self._emit("run.resume_started", {"run_root": str(sandbox.run_root), "task_id": task.task_id})
+        restored = restore_core_managed_outputs(sandbox)
+        if restored:
+            self._emit("core.outputs_restored", {"task_id": task.task_id, "paths": list(restored), "recovery": True})
+        normalized = canonicalize_task_outputs(task, sandbox)
+        if normalized:
+            self._emit("validation.canonicalized", {"changes": normalized, "recovery": True})
+        preflight = validate_task_outputs(task, sandbox)
+        if not preflight.passed:
+            update_run_manifest(
+                sandbox.manifest_path,
+                recovery={"status": "rejected", "preflight": preflight.as_dict()},
+            )
+            self._emit("run.resume_rejected", preflight.as_dict())
+            raise ValueError("existing sandbox is not safe to resume: " + "; ".join(item.message for item in preflight.issues[:5]))
+
+        update_run_manifest(
+            sandbox.manifest_path,
+            status="recovery_preflight_passed",
+            recovery={"status": "accepted", "preflight": preflight.as_dict()},
+        )
+        self._emit("validation.passed", {"kind": "recovery-preflight", **preflight.as_dict()})
+        return self._complete_outputs(task, sandbox, str(run.get("runtime") or "opencode"))
+
     def reject_writeback(self, run_root: Path, *, rejected_by: str, reason: str = "") -> WorkerRunResult:
         run = load_run(run_root)
         if str(run.get("status") or "") != "awaiting_writeback_approval":
@@ -413,13 +478,18 @@ class AgentWorker:
                 writeback_preview=preview.as_dict(),
             )
 
-        audit = self.bridge.route_audit(task.project_root, task.route)
-        self._emit("validation.passed", {"kind": "route-audit", "audit": audit.fields})
+        audit_fields = {
+            "status": "pass",
+            "scope": "exact-task-gate",
+            "route": task.route,
+            "task_id": task.task_id,
+        }
+        self._emit("validation.passed", {"kind": "exact-task-gate", "audit": audit_fields})
         update_run_manifest(
             sandbox.manifest_path,
             status="complete",
             imported_outputs=list(imported),
-            route_audit=audit.fields,
+            route_audit=audit_fields,
         )
         return WorkerRunResult(
             "complete",
@@ -431,7 +501,7 @@ class AgentWorker:
             sandbox.workspace,
             "Agent output imported and accepted by the core task gate",
             imported,
-            audit.fields,
+            audit_fields,
             preview.as_dict(),
         )
 

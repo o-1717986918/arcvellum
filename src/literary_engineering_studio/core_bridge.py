@@ -6,9 +6,11 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import shlex
+import sys
 from typing import Iterable
 
 from .config import repository_root
+from .core_read_models import ENGINE_ACCESS_LOCK
 from .subprocess_utils import run_hidden
 
 
@@ -59,8 +61,9 @@ class CoreBridge:
         self.config = config
         self.working_dir = repository_root()
         engine = config.get("engine", {}) if isinstance(config.get("engine"), dict) else {}
-        self.python = str(engine.get("python") or "python")
         self.module = str(engine.get("module") or "literary_engineering_studio_engine")
+        configured_python = str(engine.get("python") or "python")
+        self.python = _source_checkout_python(self.working_dir, self.module, configured_python)
 
     def doctor(self) -> CoreCommandResult:
         return self.run(["--help"], timeout=30)
@@ -71,17 +74,18 @@ class CoreBridge:
         command = [self.python, "-m", self.module, *engine_args]
         env = os.environ.copy()
         env.pop("LEW_MAINTAINER_MODE", None)
-        completed = run_hidden(
-            command,
-            cwd=self.working_dir,
-            env=env,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-        )
+        with ENGINE_ACCESS_LOCK:
+            completed = run_hidden(
+                command,
+                cwd=self.working_dir,
+                env=env,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+            )
         return CoreCommandResult(
             args=tuple(command),
             returncode=completed.returncode,
@@ -159,6 +163,15 @@ def _unquote(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1]
     return value
+
+
+def _source_checkout_python(working_dir: Path, module: str, configured_python: str) -> str:
+    """Avoid executing a stale installed sidecar while the Studio runs from source."""
+
+    module_dir = working_dir / "src" / module.replace(".", os.sep)
+    if (working_dir / "pyproject.toml").is_file() and module_dir.is_dir() and configured_python.lower().endswith(".exe"):
+        return sys.executable
+    return configured_python
 
 
 def _assert_studio_engine_args(args: list[str]) -> None:

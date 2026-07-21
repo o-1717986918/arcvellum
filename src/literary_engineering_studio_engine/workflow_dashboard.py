@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from .agent_task_status import build_agent_task_status, build_route_audit
+from .atomic_io import atomic_write_text
 from .task_registry import SUPPORTED_ROUTES
 from .workflow_state import build_workflow_state
 
@@ -102,9 +103,9 @@ def build_workflow_dashboard(
             "workflow-state is a navigation summary; route-audit is the formal pass/fail ledger.",
         ],
     }
-    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    markdown_path.write_text(_render_markdown(payload), encoding="utf-8")
-    html_path.write_text(_render_html(payload), encoding="utf-8")
+    atomic_write_text(json_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    atomic_write_text(markdown_path, _render_markdown(payload))
+    atomic_write_text(html_path, _render_html(payload))
     return WorkflowDashboardResult(
         project_root=root,
         markdown_path=markdown_path,

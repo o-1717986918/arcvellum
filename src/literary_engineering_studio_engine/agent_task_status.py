@@ -130,15 +130,19 @@ def build_route_audit(
     records = _scan_agent_tasks(root)
     normalized_route = _normalize_route(route)
     gates = _route_gates(root, normalized_route, records)
+    scene_scope = _scene_audit_scope(root) if normalized_route == "scene-development" else {}
     summary = {
         "route": normalized_route or "overall",
         "gate_count": len(gates),
         "blocking_count": sum(1 for gate in gates if gate["severity"] == "blocking"),
         "warning_count": sum(1 for gate in gates if gate["severity"] == "warning"),
+        "waiting_count": sum(1 for gate in gates if gate["status"] == "waiting"),
         "pass_count": sum(1 for gate in gates if gate["status"] == "pass"),
         "pending_task_count": sum(1 for record in records if record.status in {"pending", "partial", "unknown"}),
         "missing_expected_count": sum(len(record.missing_expected_paths) for record in records),
     }
+    if scene_scope:
+        summary["scene_scope"] = scene_scope
     markdown_path = _resolve_output(root, output, "workflow", "route_audit.md")
     json_path = _resolve_output(root, json_output, "workflow", "route_audit.json")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,6 +175,10 @@ def _scan_agent_tasks(root: Path) -> list[AgentTaskRecord]:
         if any(part in IGNORED_PARTS for part in path.parts):
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
+        if _is_human_decision_task(path, text):
+            # Human boundaries are surfaced through workflow state/current choices,
+            # not as unfinished Agent sidecars with completion markers.
+            continue
         expected = _unique(_extract_expected_paths(root, text))
         completion = _normalize_path(root, default_agent_completion_path(path))
         if completion not in expected:
@@ -201,6 +209,26 @@ def _scan_agent_tasks(root: Path) -> list[AgentTaskRecord]:
             )
         )
     return records
+
+
+def _is_human_decision_task(path: Path, text: str) -> bool:
+    """Recognize registry-backed human boundaries before sidecar accounting."""
+
+    if "execution_policy: `human-required`" in text:
+        return True
+    payload = _registered_task_payload(path)
+    return str(payload.get("execution_policy") or "") == "human-required"
+
+
+def _registered_task_payload(path: Path) -> dict[str, object]:
+    task_json = path.with_name(path.name.removesuffix(".agent_tasks.md") + ".task.json")
+    if not task_json.is_file():
+        return {}
+    try:
+        payload = json.loads(task_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _extract_expected_paths(root: Path, text: str) -> list[str]:
@@ -259,6 +287,12 @@ def _path_exists(root: Path, value: str) -> bool:
 
 
 def _infer_route(path: Path, text: str) -> str:
+    registered_route = str(_registered_task_payload(path).get("route") or "").strip()
+    if registered_route:
+        return registered_route
+    route_line = re.search(r"(?m)^- route: `([^`]+)`\s*$", text)
+    if route_line:
+        return route_line.group(1).strip()
     joined = (path.as_posix() + "\n" + text[:1000]).lower()
     if "word_budget" in joined or "longform word budget" in joined:
         return "longform-planning"
@@ -303,7 +337,17 @@ def _route_gates(root: Path, route: str, records: list[AgentTaskRecord]) -> list
         _add_longform_budget_gates(gates, root, force=False)
         scene_files = _scene_files(root)
         _add_gate(gates, "scene-files", bool(scene_files), "blocking", "scene yaml exists", "先创建 scenes/{scene_id}.yaml。")
-        for scene_path in scene_files:
+        started_ids = _started_scene_ids(root)
+        started_scenes = [scene_path for scene_path in scene_files if _scene_id(scene_path) in started_ids]
+        _add_gate(
+            gates,
+            "scene-audit-scope",
+            True,
+            "info",
+            f"auditing {len(started_scenes)} started scene(s); {len(scene_files) - len(started_scenes)} planned scene(s) remain future work",
+            "",
+        )
+        for scene_path in started_scenes:
             _add_scene_development_gates(gates, root, scene_path)
         scene_pending = [record for record in pending if record.route == "scene-development"]
         _add_gate(gates, "scene-sidecars-handled", not scene_pending, "blocking", "scene-development sidecars handled", f"仍有 {len(scene_pending)} 个 scene-development sidecar 未完成。")
@@ -722,6 +766,91 @@ def _add_gate(gates: list[dict[str, str]], key: str, passed: bool, severity: str
     )
 
 
+_SCENE_GATE_PHASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("上下文", ("context-",)),
+    ("角色推演", ("roleplay-",)),
+    ("分支决策", ("branch-",)),
+    (
+        "编剧准备",
+        (
+            "scene-word-budget-",
+            "reader-experience-",
+            "narrative-rhythm-",
+            "composition-",
+        ),
+    ),
+    (
+        "候选生成",
+        (
+            "prose-candidate",
+            "candidate-generation-",
+            "generation-agent-task-",
+            "style-lint-",
+            "candidate-word-budget",
+        ),
+    ),
+    (
+        "候选审查",
+        (
+            "agent-review-",
+            "candidate-review-",
+            "revision-evasion-",
+            "style-adherence-review",
+        ),
+    ),
+    ("晋升", ("promotion-", "promoted-draft")),
+    ("静态审查", ("static-review-",)),
+    ("状态写回", ("state-", "canon-writeback")),
+)
+
+
+def _scene_gate_phase(key: str) -> tuple[int, str]:
+    """Return the formal scene stage for one route-audit gate.
+
+    A route audit is an observability surface, not a second workflow engine.  The
+    mapping deliberately follows the formal scene pipeline so later, unreachable
+    gates can be shown as waiting without weakening their eventual enforcement.
+    """
+
+    label = key.split(":", 1)[-1]
+    for index, (name, prefixes) in enumerate(_SCENE_GATE_PHASES):
+        if label.startswith(prefixes):
+            return index, name
+    return len(_SCENE_GATE_PHASES), "后续步骤"
+
+
+def _mark_waiting_scene_gates(gates: list[dict[str, str]]) -> None:
+    """Demote only unreachable downstream failures to an informational wait.
+
+    All failing gates in the earliest incomplete formal phase remain blocking.
+    This preserves parallel checks such as exact-candidate review and new-character
+    registration, while avoiding a misleading wall of failures for promotion and
+    state evolution that cannot run yet.
+    """
+
+    failed_phases = [
+        _scene_gate_phase(str(gate["key"]))[0]
+        for gate in gates
+        if gate.get("status") == "fail" and gate.get("severity") == "blocking"
+    ]
+    if not failed_phases:
+        return
+    active_phase = min(failed_phases)
+    active_phase_name = (
+        _SCENE_GATE_PHASES[active_phase][0]
+        if active_phase < len(_SCENE_GATE_PHASES)
+        else "后续步骤"
+    )
+    for gate in gates:
+        phase, _ = _scene_gate_phase(str(gate["key"]))
+        if phase <= active_phase or gate.get("status") != "fail" or gate.get("severity") != "blocking":
+            continue
+        original_message = str(gate.get("message") or "")
+        gate["status"] = "waiting"
+        gate["severity"] = "info"
+        gate["message"] = f"等待“{active_phase_name}”阶段的阻塞门禁先解决，尚未到达本步骤。原检查：{original_message}"
+
+
 def _scene_files(root: Path) -> list[Path]:
     scenes = root / "scenes"
     if not scenes.exists():
@@ -729,7 +858,59 @@ def _scene_files(root: Path) -> list[Path]:
     return sorted(path for path in scenes.glob("*.yaml") if not path.name.startswith("_"))
 
 
+def _scene_audit_scope(root: Path) -> dict[str, int]:
+    scene_files = _scene_files(root)
+    started_ids = _started_scene_ids(root)
+    started = sum(1 for scene_path in scene_files if _scene_id(scene_path) in started_ids)
+    return {
+        "total_scene_count": len(scene_files),
+        "started_scene_count": started,
+        "planned_scene_count": len(scene_files) - started,
+    }
+
+
+def _started_scene_ids(root: Path) -> set[str]:
+    """Build one filesystem index instead of probing every planned scene repeatedly."""
+
+    started: set[str] = set()
+    context_dir = root / "memory" / "context_packets"
+    if context_dir.is_dir():
+        started.update(path.stem for path in context_dir.glob("scene_*.md"))
+    branch_dir = root / "branches"
+    if branch_dir.is_dir():
+        started.update(path.name for path in branch_dir.iterdir() if path.is_dir() and path.name.startswith("scene_"))
+    composition_dir = root / "drafts" / "compositions"
+    if composition_dir.is_dir():
+        started.update(path.stem.removesuffix("_composition") for path in composition_dir.glob("scene_*_composition.json"))
+    candidate_dir = root / "drafts" / "candidates"
+    if candidate_dir.is_dir():
+        for path in candidate_dir.glob("scene_*.md"):
+            scene_id = path.name.split("-", 1)[0]
+            if scene_id.startswith("scene_"):
+                started.add(scene_id)
+    review_dir = root / "reviews" / "agent"
+    if review_dir.is_dir():
+        started.update(path.stem.removesuffix("_scene_review") for path in review_dir.glob("scene_*_scene_review.json"))
+    promotion_dir = root / "drafts" / "promotions"
+    if promotion_dir.is_dir():
+        started.update(path.stem.removesuffix("_promotion") for path in promotion_dir.glob("scene_*_promotion.json"))
+    draft_dir = root / "drafts" / "scenes"
+    if draft_dir.is_dir():
+        started.update(path.stem for path in draft_dir.glob("scene_*.md"))
+    state_dir = root / "characters" / "state_patches"
+    if state_dir.is_dir():
+        started.update(path.stem.removesuffix("_state_patch") for path in state_dir.glob("scene_*_state_patch.json"))
+    task_dir = root / "workflow" / "tasks"
+    if task_dir.is_dir():
+        for path in task_dir.glob("scene-development-scene_*-*.task.json"):
+            match = re.match(r"scene-development-(scene_[^-]+)-", path.name)
+            if match:
+                started.add(match.group(1))
+    return {scene_id for scene_id in started if scene_id.startswith("scene_")}
+
+
 def _add_scene_development_gates(gates: list[dict[str, str]], root: Path, scene_path: Path) -> None:
+    first_scene_gate = len(gates)
     scene_id = _scene_id(scene_path)
     context = root / "memory" / "context_packets" / f"{scene_id}.md"
     context_trace = context_trace_status(root, scene_id, context)
@@ -1144,6 +1325,7 @@ def _add_scene_development_gates(gates: list[dict[str, str]], root: Path, scene_
             f"{scene_id} mounted style adherence reviewed",
             f"{scene_id} 已挂载文风，但 scene_review.v1 缺少 clean pass 的 style_adherence；当前状态：{style_status or 'missing'}。",
         )
+    _mark_waiting_scene_gates(gates[first_scene_gate:])
 
 
 def _promotion_candidate_path(root: Path, scene_id: str) -> Path | None:
@@ -1533,6 +1715,7 @@ def _render_route_audit_markdown(payload: dict) -> str:
         f"- Gate 数：{summary['gate_count']}",
         f"- Blocking：{summary['blocking_count']}",
         f"- Warning：{summary['warning_count']}",
+        f"- 等待前序门禁：{summary.get('waiting_count', 0)}",
         f"- 未完成 sidecar：{summary['pending_task_count']}",
         "",
         "## Gates",
@@ -1540,6 +1723,11 @@ def _render_route_audit_markdown(payload: dict) -> str:
         "| 状态 | 级别 | Gate | 说明 |",
         "| --- | --- | --- | --- |",
     ]
+    scene_scope = summary.get("scene_scope") if isinstance(summary.get("scene_scope"), dict) else {}
+    if scene_scope:
+        lines[7:7] = [
+            f"- 场景审计范围：已开始 {scene_scope.get('started_scene_count', 0)} / 总数 {scene_scope.get('total_scene_count', 0)}；未开始计划场景 {scene_scope.get('planned_scene_count', 0)} 不计为失败。",
+        ]
     for gate in payload["gates"]:
         lines.append(f"| {gate['status']} | {gate['severity']} | {gate['key']} | {gate['message']} |")
     lines.extend(["", "## Sidecar Summary", "", "| 状态 | Route | Task |", "| --- | --- | --- |"])

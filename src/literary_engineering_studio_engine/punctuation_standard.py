@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+from .creative_quality import apply_rule_mode, quality_rule_mode, quality_threshold, render_creative_quality_prompt
+
 
 PUNCTUATION_STANDARD_TITLE = "标准中文标点约束"
 
@@ -71,7 +73,7 @@ QUOTE_NORMALIZATION_MAP = str.maketrans(
 )
 
 
-def lint_punctuation(text: str) -> list[PunctuationIssue]:
+def lint_punctuation(text: str, profile: dict[str, object] | None = None, *, scope: str = "") -> list[PunctuationIssue]:
     """Return punctuation issues for Chinese prose-like text.
 
     This linter is intentionally conservative and skips fenced code blocks so
@@ -135,12 +137,14 @@ def lint_punctuation(text: str) -> list[PunctuationIssue]:
         match = pattern.search(clean)
         if match:
             issues.append(PunctuationIssue(rule, severity, message, _sample(clean, match.start(), match.end())))
-    issues.extend(_lint_literary_punctuation_rhythm(clean))
-    return issues
+    issues.extend(_lint_literary_punctuation_rhythm(clean, profile=profile))
+    return _apply_profile_modes(issues, profile, scope=scope)
 
 
-def render_punctuation_standard_for_prompt() -> str:
-    return PUNCTUATION_STANDARD_PROMPT
+def render_punctuation_standard_for_prompt(profile: dict[str, object] | None = None, *, scope: str = "") -> str:
+    if not profile:
+        return PUNCTUATION_STANDARD_PROMPT
+    return PUNCTUATION_STANDARD_PROMPT.rstrip() + "\n\n" + render_creative_quality_prompt(profile, scope=scope)
 
 
 def normalize_punctuation_for_delivery(text: str) -> str:
@@ -153,7 +157,11 @@ def normalize_punctuation_for_delivery(text: str) -> str:
     return text.translate(QUOTE_NORMALIZATION_MAP)
 
 
-def _lint_literary_punctuation_rhythm(text: str) -> list[PunctuationIssue]:
+def _lint_literary_punctuation_rhythm(
+    text: str,
+    *,
+    profile: dict[str, object] | None = None,
+) -> list[PunctuationIssue]:
     issues: list[PunctuationIssue] = []
     prose = _strip_markdown_scaffolding(text)
     cjk_count = len(re.findall(rf"[{CHINESE_RANGE}]", prose))
@@ -162,9 +170,12 @@ def _lint_literary_punctuation_rhythm(text: str) -> list[PunctuationIssue]:
 
     terminal_count = len(re.findall(r"[。！？]", prose))
     period_count = prose.count("。")
-    if terminal_count >= 8 and period_count / max(terminal_count, 1) >= 0.85:
+    staccato_minimum = max(1, int(quality_threshold(profile, "staccato_min_terminals", 8)))
+    staccato_ratio = quality_threshold(profile, "staccato_period_ratio", 0.85)
+    min_chars_per_terminal = quality_threshold(profile, "min_chars_per_terminal", 14)
+    if terminal_count >= staccato_minimum and period_count / max(terminal_count, 1) >= staccato_ratio:
         chars_per_terminal = cjk_count / max(terminal_count, 1)
-        if chars_per_terminal < 14:
+        if chars_per_terminal < min_chars_per_terminal:
             issues.append(
                 PunctuationIssue(
                     "staccato-period-overuse",
@@ -177,7 +188,8 @@ def _lint_literary_punctuation_rhythm(text: str) -> list[PunctuationIssue]:
     for sentence in _terminal_units(prose):
         comma_count = len(re.findall(r"[，、；]", sentence))
         sentence_cjk = len(re.findall(rf"[{CHINESE_RANGE}]", sentence))
-        if sentence_cjk >= 70 and comma_count >= 5:
+        comma_limit = int(quality_threshold(profile, "commas_per_sentence", 3))
+        if sentence_cjk >= 70 and comma_count > comma_limit:
             issues.append(
                 PunctuationIssue(
                     "comma-chain-overload",
@@ -189,12 +201,19 @@ def _lint_literary_punctuation_rhythm(text: str) -> list[PunctuationIssue]:
             break
 
     dash_count = prose.count("——")
-    if dash_count >= 4 or any(paragraph.count("——") >= 3 for paragraph in prose.splitlines() if paragraph.strip()):
+    unit_count = max(1, len(_terminal_units(prose)))
+    dash_limit = quality_threshold(profile, "dash_per_100_units", 2.0)
+    paragraph_limit = int(quality_threshold(profile, "dash_per_paragraph", 2))
+    dash_density = dash_count / unit_count * 100
+    if dash_count and (
+        dash_density > dash_limit
+        or any(paragraph.count("——") > paragraph_limit for paragraph in prose.splitlines() if paragraph.strip())
+    ):
         issues.append(
                 PunctuationIssue(
                     "dash-overuse",
                     "medium",
-                    "破折号使用过密。普通正式正文原则上不用破折号；超过约 2% 密度、同段反复出现，或替代“而是/但是/于是”时必须修订。请改用句法、逗号、分号、换句或动作承接；不得用脚本批量删除导致语义反转。",
+                    f"破折号使用过密。当前每 100 个叙事单元约 {dash_density:.1f} 次，档案上限为 {dash_limit:g} 次，单段上限为 {paragraph_limit} 次。请改用句法、换句或动作承接；不得用脚本批量删除导致语义反转。",
                     _first_dash_sample(prose),
                 )
             )
@@ -203,7 +222,11 @@ def _lint_literary_punctuation_rhythm(text: str) -> list[PunctuationIssue]:
         re.finditer(r"(?:^|[。！？\n])\s*(但是|可是|然而|不过|于是|所以|因此|然后|接着|突然|与此同时|另一方面)[，,]", prose)
     )
     inline_transition_matches = list(re.finditer(r"[，,](但是|可是|然而|不过|于是|所以|因此|然后|接着|突然)[，,]", prose))
-    if len(transition_matches) + len(inline_transition_matches) >= 4:
+    transition_count = len(transition_matches) + len(inline_transition_matches)
+    transition_limit = quality_threshold(profile, "transition_per_100_units", 4.0)
+    transition_minimum = max(1, int(quality_threshold(profile, "transition_minimum_hits", 4)))
+    transition_density = transition_count / unit_count * 100
+    if transition_count >= transition_minimum and transition_density > transition_limit:
         match = (transition_matches + inline_transition_matches)[0]
         issues.append(
             PunctuationIssue(
@@ -215,6 +238,22 @@ def _lint_literary_punctuation_rhythm(text: str) -> list[PunctuationIssue]:
         )
 
     return issues
+
+
+def _apply_profile_modes(
+    issues: list[PunctuationIssue],
+    profile: dict[str, object] | None,
+    *,
+    scope: str = "",
+) -> list[PunctuationIssue]:
+    if profile is None:
+        return issues
+    adjusted: list[PunctuationIssue] = []
+    for issue in issues:
+        severity = apply_rule_mode(issue.severity, quality_rule_mode(profile, issue.rule, "note", scope=scope))
+        if severity is not None:
+            adjusted.append(PunctuationIssue(issue.rule, severity, issue.message, issue.sample))
+    return adjusted
 
 
 def _terminal_units(text: str) -> list[str]:

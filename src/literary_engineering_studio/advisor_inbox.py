@@ -18,7 +18,13 @@ INBOX_SCHEMA = "arcvellum/advisor-inbox/v1"
 MODES = {"off", "blocking", "standard", "active"}
 
 
-def refresh_advisor_inbox(config: dict[str, Any], store: JobStore, project_root: Path) -> dict[str, Any]:
+def refresh_advisor_inbox(
+    config: dict[str, Any],
+    store: JobStore,
+    project_root: Path,
+    *,
+    dashboard_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     root = project_root.resolve()
     settings = inbox_settings(_data_root(config), root)
     mode = str(settings.get("mode") or "standard")
@@ -26,7 +32,7 @@ def refresh_advisor_inbox(config: dict[str, Any], store: JobStore, project_root:
         return inbox_snapshot(store, root, settings=settings)
 
     try:
-        choices = current_choices(config, root)
+        choices = current_choices(config, root, dashboard=dashboard_payload)
     except Exception:
         choices = {"items": []}
     choice_items = choices.get("items") or choices.get("choices") or []
@@ -45,7 +51,7 @@ def refresh_advisor_inbox(config: dict[str, Any], store: JobStore, project_root:
         )
 
     try:
-        dashboard = build_dashboard(config, root)
+        dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else build_dashboard(config, root)
     except Exception:
         dashboard = {"route_audits": []}
     audits = dashboard.get("route_audits") if isinstance(dashboard.get("route_audits"), list) else []

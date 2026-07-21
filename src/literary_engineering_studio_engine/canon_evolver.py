@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -132,7 +133,7 @@ def build_canon_patch_backlog(
     json_path = _resolve(root, json_output, out_dir / "canon_backlog.json")
     report.parent.mkdir(parents=True, exist_ok=True)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    items = [_patch_backlog_item(root, path) for path in _canon_patch_paths(root)]
+    items = canon_patch_backlog_items(root)
     pending = [item for item in items if item["status"] in {"pending_apply", "needs_approval", "invalid", "task_incomplete"}]
     applied = [item for item in items if item["status"] == "applied"]
     payload = {
@@ -149,6 +150,13 @@ def build_canon_patch_backlog(
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     report.write_text(_render_backlog(payload, root), encoding="utf-8")
     return CanonBacklogResult(root, report, json_path, len(pending), len(applied))
+
+
+def canon_patch_backlog_items(project_root: Path) -> list[dict[str, Any]]:
+    """Return content-bound canon patch states for workflow routing."""
+
+    root = project_root.resolve()
+    return [_patch_backlog_item(root, path) for path in _canon_patch_paths(root)]
 
 
 def apply_canon_patch(
@@ -174,7 +182,8 @@ def apply_canon_patch(
     required_approval = _patch_requires_approval(payload)
     approval_id = approval_run_id.strip() or patch_id
     approval = _approval_record_for_run(root, approval_id)
-    if required_approval and str(approval.get("decision") or "") != "approve" and not allow_unapproved:
+    approval_matches = _approval_matches_patch(approval, patch_path)
+    if required_approval and (str(approval.get("decision") or "") != "approve" or not approval_matches) and not allow_unapproved:
         raise RuntimeError(f"canon-apply requires approve record for run_id {approval_id}; got {approval.get('decision') or 'missing'}")
 
     applied_dir = root / "canon" / "applied"
@@ -185,6 +194,7 @@ def apply_canon_patch(
     changelog.parent.mkdir(parents=True, exist_ok=True)
     applied_at = _now()
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    candidate_sha256 = hashlib.sha256(patch_path.read_bytes()).hexdigest()
     apply_payload = {
         "schema": CANON_APPLY_SCHEMA,
         "patch": _rel(patch_path, root),
@@ -194,6 +204,7 @@ def apply_canon_patch(
         "applied_at": applied_at,
         "approval_run_id": approval_id,
         "approval": approval or {"decision": "allow_unapproved" if allow_unapproved else "not_required"},
+        "candidate_sha256": candidate_sha256,
         "allow_unapproved": allow_unapproved,
         "applied_count": len(items),
         "application_boundary": "ledger_only",
@@ -309,16 +320,20 @@ def _patch_backlog_item(root: Path, path: Path) -> dict[str, Any]:
     approval = _approval_record_for_run(root, approval_id)
     change = _canon_change_value(payload.get("canon_change"))
     applied = payload.get("applied") is True or str(payload.get("status") or "").strip().lower() == "applied"
+    candidate_sha256 = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+    approval_current = _approval_matches_patch(approval, path)
+    completion = agent_task_completion_status(path.with_suffix(".agent_tasks.md"), root=root)
     if applied:
         status = "applied"
     elif errors:
         status = "invalid"
     elif change is not True:
         status = "not_applicable"
-    elif _patch_requires_approval(payload) and str(approval.get("decision") or "") != "approve":
+    elif _patch_requires_approval(payload) and (
+        str(approval.get("decision") or "") != "approve" or not approval_current
+    ):
         status = "needs_approval"
     else:
-        completion = agent_task_completion_status(path.with_suffix(".agent_tasks.md"), root=root)
         status = "pending_apply" if completion.get("complete") is True else "task_incomplete"
     return {
         "patch": _rel(path, root),
@@ -328,6 +343,11 @@ def _patch_backlog_item(root: Path, path: Path) -> dict[str, Any]:
         "applied": applied,
         "approval_run_id": approval_id,
         "approval_decision": approval.get("decision", ""),
+        "approval_notes": approval.get("notes", ""),
+        "approval_current": approval_current,
+        "candidate_sha256": candidate_sha256,
+        "completion_status": completion.get("status", ""),
+        "completion_message": completion.get("message", ""),
         "requires_user_approval": _patch_requires_approval(payload),
         "item_count": len(payload.get("items") if isinstance(payload.get("items"), list) else []),
         "errors": errors,
@@ -404,6 +424,22 @@ def _approval_record_for_run(root: Path, run_id: str) -> dict[str, Any]:
         if isinstance(payload, dict) and payload.get("run_id") == run_id:
             latest = payload
     return latest
+
+
+def _approval_matches_patch(approval: dict[str, Any], patch: Path) -> bool:
+    if not approval or not patch.is_file():
+        return False
+    actual = hashlib.sha256(patch.read_bytes()).hexdigest()
+    recorded = str(approval.get("subject_sha256") or "").strip().lower()
+    if recorded:
+        return recorded == actual
+    try:
+        recorded_at = datetime.fromisoformat(str(approval.get("recorded_at") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if recorded_at.tzinfo is None:
+        recorded_at = recorded_at.replace(tzinfo=timezone.utc)
+    return datetime.fromtimestamp(patch.stat().st_mtime, tz=timezone.utc) <= recorded_at.astimezone(timezone.utc)
 
 
 def _render_backlog(payload: dict[str, Any], root: Path) -> str:

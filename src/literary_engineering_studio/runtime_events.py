@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 
-def normalize_opencode_event(payload: dict[str, Any], *, session_id: str = "") -> tuple[tuple[str, dict[str, Any]], ...]:
+def normalize_opencode_event(
+    payload: dict[str, Any],
+    *,
+    session_id: str = "",
+    tool_states: dict[str, str] | None = None,
+) -> tuple[tuple[str, dict[str, Any]], ...]:
     event = payload.get("payload") if isinstance(payload.get("payload"), dict) else payload
     if not isinstance(event, dict):
         return ()
@@ -29,8 +34,16 @@ def normalize_opencode_event(payload: dict[str, Any], *, session_id: str = "") -
             tool = str(part.get("tool") or part.get("name") or "")
             call_id = str(part.get("callID") or part.get("id") or "")
             if status in {"pending", "running"}:
+                if tool_states is not None and call_id and tool_states.get(call_id) in {"pending", "running", "completed", "error"}:
+                    return ()
+                if tool_states is not None and call_id:
+                    tool_states[call_id] = status
                 return (("tool.started", {"tool": tool, "tool_use_id": call_id}),)
             if status in {"completed", "error"}:
+                if tool_states is not None and call_id and tool_states.get(call_id) == status:
+                    return ()
+                if tool_states is not None and call_id:
+                    tool_states[call_id] = status
                 name = "tool.completed" if status == "completed" else "tool.denied"
                 return ((name, {"tool": tool, "tool_use_id": call_id, "status": status}),)
     if kind == "message.updated":

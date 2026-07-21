@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import threading
 import time
 from typing import Any
 
@@ -17,9 +18,14 @@ from .process_manager import ProcessManager
 DECISION_SCHEMA = "arcvellum/delegated-decision/v0.1"
 
 
+class CreativeStewardCancelled(RuntimeError):
+    """Raised when a paused autopilot run cancels a read-only decision."""
+
+
 class CreativeSteward:
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any], *, runtime_pool=None):
         self.config = config
+        self.runtime_pool = runtime_pool
 
     def decide(
         self,
@@ -28,6 +34,7 @@ class CreativeSteward:
         *,
         project_direction: str = "",
         timeout: int = 180,
+        cancel_event: threading.Event | None = None,
     ) -> dict[str, Any]:
         options = [item for item in choice.get("options") or [] if isinstance(item, dict) and item.get("id")]
         if not options:
@@ -36,7 +43,15 @@ class CreativeSteward:
         before = project_hashes(root)
         data_root = Path(str(self.config.get("application", {}).get("data_root") or ".")).expanduser().resolve()
         snapshot = create_advisor_snapshot(root, data_root / "steward" / "snapshots")
-        result = self._run(snapshot.workspace, choice, project_direction=project_direction, timeout=timeout)
+        if cancel_event is not None and cancel_event.is_set():
+            raise CreativeStewardCancelled("Creative Steward decision cancelled before it started")
+        result = self._run(
+            snapshot.workspace,
+            choice,
+            project_direction=project_direction,
+            timeout=timeout,
+            cancel_event=cancel_event,
+        )
         if before != project_hashes(root):
             raise RuntimeError("Creative Steward read-only integrity check failed")
         allowed = {str(item["id"]) for item in options}
@@ -58,33 +73,43 @@ class CreativeSteward:
         *,
         project_direction: str,
         timeout: int,
+        cancel_event: threading.Event | None,
     ) -> dict[str, Any]:
         settings = self.config.get("agent_runners", {}).get("opencode", {})
         executable = locate_opencode(settings if isinstance(settings, dict) else {})
         if executable is None:
             raise RuntimeError("bundled OpenCode Runner is not installed")
-        model = str((settings or {}).get("model") or "").strip()
+        models = (settings or {}).get("models") if isinstance((settings or {}).get("models"), dict) else {}
+        model = str(models.get("steward") or (settings or {}).get("steward_model") or (settings or {}).get("model") or "").strip()
         if "/" not in model:
             raise RuntimeError("select an OpenCode provider/model before using Creative Steward")
         data_root = Path(str(self.config.get("application", {}).get("data_root") or ".")).expanduser().resolve()
         run_root = data_root / "steward" / "runs" / f"run-{int(time.time() * 1000)}"
         run_root.mkdir(parents=True, exist_ok=False)
-        manager = ProcessManager(run_root / "logs")
-        server = OpenCodeServer(manager, executable=executable, shared_data_root=data_root)
+        manager = ProcessManager(run_root / "logs") if self.runtime_pool is None else None
+        server = OpenCodeServer(manager, executable=executable, shared_data_root=data_root) if manager is not None else None
         handle = None
+        lease = None
+        client = None
         try:
-            handle = server.start(
-                component_id=f"steward-{run_root.name}",
-                workspace=workspace,
-                run_root=run_root,
-                role="steward",
-                model=model,
-            )
-            session = handle.client.create_session("ArcVellum Creative Steward")
+            if self.runtime_pool is not None:
+                lease = self.runtime_pool.acquire("steward", workspace, model=model)
+                client = lease.client
+            else:
+                assert server is not None
+                handle = server.start(
+                    component_id=f"steward-{run_root.name}",
+                    workspace=workspace,
+                    run_root=run_root,
+                    role="steward",
+                    model=model,
+                )
+                client = handle.client
+            session = client.create_session("ArcVellum Creative Steward")
             session_id = str(session.get("id") or "")
             if not session_id:
                 raise RuntimeError("OpenCode did not create a Creative Steward session")
-            handle.client.prompt_async(
+            client.prompt_async(
                 session_id,
                 text=_decision_prompt(choice, project_direction),
                 model=model,
@@ -93,7 +118,10 @@ class CreativeSteward:
             deadline = time.monotonic() + max(10, min(600, int(timeout)))
             seen_busy = False
             while time.monotonic() < deadline:
-                state = handle.client.session_status().get(session_id, {})
+                if cancel_event is not None and cancel_event.is_set():
+                    client.abort(session_id)
+                    raise CreativeStewardCancelled("Creative Steward decision cancelled while waiting for model output")
+                state = client.session_status().get(session_id, {})
                 kind = str(state.get("type") or "") if isinstance(state, dict) else ""
                 if kind in {"busy", "retry"}:
                     seen_busy = True
@@ -101,13 +129,16 @@ class CreativeSteward:
                     break
                 time.sleep(0.2)
             else:
-                handle.client.abort(session_id)
+                client.abort(session_id)
                 raise RuntimeError("Creative Steward decision timed out")
-            return _parse_decision(_last_assistant_text(handle.client.messages(session_id)))
+            return _parse_decision(_last_assistant_text(client.messages(session_id)))
         finally:
-            if handle is not None:
+            if lease is not None:
+                self.runtime_pool.release(lease)
+            elif handle is not None and server is not None:
                 server.stop(handle)
-            manager.shutdown()
+            if manager is not None:
+                manager.shutdown()
 
 
 def _decision_prompt(choice: dict[str, Any], project_direction: str) -> str:

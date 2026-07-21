@@ -16,7 +16,7 @@ from typing import Any
 JOB_SCHEMA = "literary-engineering-studio/worker-job/v0.3"
 EVENT_SCHEMA = "literary-engineering-studio/run-event/v0.3"
 EVENT_RETENTION_PER_JOB = 5000
-DATABASE_SCHEMA_VERSION = 6
+DATABASE_SCHEMA_VERSION = 7
 ACTIVE_STATUSES = {"queued", "running", "stopping"}
 TERMINAL_STATUSES = {
     "complete",
@@ -258,6 +258,18 @@ class JobStore:
                 """,
                 (job_id, formal_project, task_sandbox, agent_session, run_workspace, state, now),
             )
+
+    def read_resources(self, job_id: str) -> dict[str, str] | None:
+        _validate_job_id(job_id)
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT formal_project, task_sandbox, agent_session, run_workspace, state, updated_at
+                FROM run_resources WHERE job_id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
 
     def create_advisor_session(self, project_root: str, snapshot_digest: str, *, title: str = "项目问答") -> dict[str, Any]:
         session_id = f"advisor-{uuid.uuid4().hex[:16]}"
@@ -573,6 +585,78 @@ class JobStore:
                 raise FileNotFoundError(f"Autopilot run not found: {run_id}")
         return self.read_autopilot_run(run_id)
 
+    def advance_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]:
+        """Atomically advance a run after one task reaches its formal terminal state."""
+
+        _validate_autopilot_id(run_id)
+        allowed = {"failures", "consecutive_revisions", "estimated_cost", "last_error", "current_route", "current_task_id"}
+        values = {key: value for key, value in changes.items() if key in allowed}
+        values["updated_at"] = _now()
+        assignments = ", ".join(["tasks_completed = tasks_completed + 1", *[f"{key} = ?" for key in values]])
+        with self._write_lock, self._connection() as connection:
+            cursor = connection.execute(
+                f"UPDATE autopilot_runs SET {assignments} WHERE run_id = ?",
+                (*values.values(), run_id),
+            )
+            if not cursor.rowcount:
+                raise FileNotFoundError(f"Autopilot run not found: {run_id}")
+        return self.read_autopilot_run(run_id)
+
+    def acquire_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool:
+        """Claim the cross-process controller lease for one autopilot run."""
+
+        _validate_autopilot_id(run_id)
+        owner = str(owner_id or "").strip()
+        if not owner:
+            raise ValueError("autopilot lease owner must not be empty")
+        now = datetime.now(timezone.utc)
+        expires = (now + timedelta(seconds=max(30, lease_seconds))).isoformat()
+        with self._write_lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("DELETE FROM autopilot_leases WHERE lease_expires_at < ?", (now.isoformat(),))
+            existing = connection.execute(
+                "SELECT owner_id FROM autopilot_leases WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if existing is not None and existing["owner_id"] != owner:
+                return False
+            connection.execute(
+                """
+                INSERT INTO autopilot_leases (run_id, owner_id, lease_expires_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    owner_id = excluded.owner_id,
+                    lease_expires_at = excluded.lease_expires_at,
+                    updated_at = excluded.updated_at
+                """,
+                (run_id, owner, expires, now.isoformat()),
+            )
+            return True
+
+    def renew_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool:
+        """Extend a lease only when this controller still owns it."""
+
+        _validate_autopilot_id(run_id)
+        now = datetime.now(timezone.utc)
+        expires = (now + timedelta(seconds=max(30, lease_seconds))).isoformat()
+        with self._write_lock, self._connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE autopilot_leases
+                SET lease_expires_at = ?, updated_at = ?
+                WHERE run_id = ? AND owner_id = ? AND lease_expires_at >= ?
+                """,
+                (expires, now.isoformat(), run_id, str(owner_id or ""), now.isoformat()),
+            )
+        return bool(cursor.rowcount)
+
+    def release_autopilot_lease(self, run_id: str, owner_id: str) -> None:
+        _validate_autopilot_id(run_id)
+        with self._write_lock, self._connection() as connection:
+            connection.execute(
+                "DELETE FROM autopilot_leases WHERE run_id = ? AND owner_id = ?",
+                (run_id, str(owner_id or "")),
+            )
+
     def append_autopilot_event(self, run_id: str, event: str, data: dict[str, Any]) -> dict[str, Any]:
         _validate_autopilot_id(run_id)
         with self._write_lock, self._connection() as connection:
@@ -813,6 +897,13 @@ class JobStore:
                     FOREIGN KEY(run_id) REFERENCES autopilot_runs(run_id)
                 );
                 CREATE INDEX IF NOT EXISTS autopilot_events_run_idx ON autopilot_events(run_id, sequence);
+                CREATE TABLE IF NOT EXISTS autopilot_leases (
+                    run_id TEXT PRIMARY KEY,
+                    owner_id TEXT NOT NULL,
+                    lease_expires_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(run_id) REFERENCES autopilot_runs(run_id)
+                );
                 CREATE TABLE IF NOT EXISTS delegated_decisions (
                     decision_id TEXT PRIMARY KEY,
                     run_id TEXT NOT NULL,

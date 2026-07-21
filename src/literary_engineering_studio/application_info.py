@@ -20,6 +20,7 @@ from .runtimes import agent_runner_status
 
 APPLICATION_INFO_SCHEMA = "arcvellum/application-info/v0.1"
 DIAGNOSTIC_SCHEMA = "arcvellum/diagnostic-report/v0.1"
+LEGAL_SCHEMA = "arcvellum/legal-documents/v1"
 
 
 def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
@@ -37,6 +38,12 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
         "version": __version__,
         "build_number": os.environ.get("ARCVELLUM_BUILD_NUMBER", "development"),
         "release_channel": str(updates.get("channel") or "stable"),
+        "developer": "ArcVellum contributors",
+        "repository_url": "https://github.com/o-1717986918/arcvellum",
+        "website_url": "",
+        "support_url": "https://github.com/o-1717986918/arcvellum/issues",
+        "terms_version": "2026-07-21",
+        "privacy_version": "2026-07-21",
         "last_update_check": str(updates.get("last_checked_at") or ""),
         "engine": {
             "name": "Literary Engineering Core",
@@ -61,6 +68,46 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
             "Tauri, Vue, FastAPI and other dependencies retain their respective licenses.",
         ],
         "privacy": "作品与流程数据保存在本机；模型请求由用户选择的 Agent Runner 和模型服务处理。",
+        "usage_boundary": "用户负责素材权利、真实人物、未成年人和公开传播责任；ArcVellum 的任务沙箱与写回门禁不因创作内容开放而关闭。",
+    }
+
+
+def build_legal_documents() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "schema": LEGAL_SCHEMA,
+        "version": "2026-07-21",
+        "documents": [
+            {
+                "id": "terms",
+                "title": "使用协议",
+                "summary": "ArcVellum 是本地文学创作工具。用户决定创作方向，并对输入素材、生成内容与公开传播承担责任。",
+                "sections": [
+                    {"title": "创作与交付", "body": "应用提供任务编排、审查与导出能力，不保证文学质量、事实准确性或特定发布结果。正式交付前仍需由用户确认。"},
+                    {"title": "权利与责任", "body": "请确保导入作品、作家语料、真实人物信息和其他素材具有合法来源与相应使用权。不得将本工具用于侵犯他人权利或违反适用法律。"},
+                    {"title": "运行边界", "body": "自动化模式仍受任务沙箱、文件写回范围、审查与交付门禁约束。不得通过调试指令伪造正式产物或绕过审查。"},
+                ],
+            },
+            {
+                "id": "privacy",
+                "title": "隐私说明",
+                "summary": "作品、配置与运行记录默认保存在本机；只有当前受控任务所需资料会交给用户选择的 Agent 或模型服务。",
+                "sections": [
+                    {"title": "本地数据", "body": "作品目录与应用数据不会因普通更新而删除。卸载、迁移或设备故障前仍应自行备份重要作品。"},
+                    {"title": "模型数据流", "body": "启用第三方 Agent 或模型后，其服务条款、内容政策和数据保留规则独立适用。ArcVellum 不会替第三方服务作出隐私承诺。"},
+                    {"title": "诊断信息", "body": "诊断报告会过滤凭证、正文和完整私人路径，仅保留运行状态、版本与不可逆路径指纹。"},
+                ],
+            },
+            {
+                "id": "third-party",
+                "title": "第三方组件",
+                "summary": "ArcVellum 使用 Tauri、Vue、FastAPI、OpenCode 等组件；各组件与模型服务保留各自许可和服务条款。",
+                "sections": [
+                    {"title": "OpenCode Runner", "body": "捆绑的 OpenCode 执行器按其开源许可分发。使用托管模型或账号连接时，还需遵守相应提供商条款。"},
+                    {"title": "模型提供商", "body": "模型可用性、拒答、限额、价格和内容政策由提供商决定，并可能在 ArcVellum 版本之外变化。"},
+                ],
+            },
+        ],
     }
 
 

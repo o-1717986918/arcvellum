@@ -13,7 +13,7 @@ from .core_read_models import build_dashboard, build_library
 from .reader import build_reader_manifest
 
 
-PROJECTION_SCHEMA = "arcvellum/narrative-projection/v1"
+PROJECTION_SCHEMA = "arcvellum/narrative-projection/v2"
 LEVELS = {"book", "chapter", "scene"}
 
 
@@ -23,11 +23,13 @@ def build_narrative_projection(
     *,
     level: str = "book",
     focus: str = "",
+    dashboard_payload: dict[str, Any] | None = None,
+    library_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = project_root.resolve()
     selected_level = level if level in LEVELS else "book"
-    library = build_library(config, root)
-    dashboard = build_dashboard(config, root)
+    library = library_payload if isinstance(library_payload, dict) else build_library(config, root)
+    dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else build_dashboard(config, root)
     reader = build_reader_manifest(root)
     sections = library.get("sections") if isinstance(library.get("sections"), dict) else {}
     scenes = [item for item in sections.get("scenes", []) if isinstance(item, dict)]
@@ -47,12 +49,13 @@ def build_narrative_projection(
     node_ids = {str(node["node_id"]) for node in nodes}
     edges = [edge for edge in _dedupe_edges(edges) if edge["source"] in node_ids and edge["target"] in node_ids]
     revision_text = json.dumps({"nodes": nodes, "edges": edges}, ensure_ascii=False, sort_keys=True)
-    return {
+    projection = {
         "ok": True,
         "schema": PROJECTION_SCHEMA,
         "project_root": str(root),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "revision": hashlib.sha256(revision_text.encode("utf-8")).hexdigest()[:20],
+        "sequence": 0,
         "level": selected_level,
         "focus": focus_id,
         "summary": {
@@ -64,6 +67,9 @@ def build_narrative_projection(
         },
         "nodes": nodes,
         "edges": edges,
+        "timeline": _timeline(nodes),
+        "delta": projection_delta(None, {"nodes": nodes, "edges": edges}),
+        "motion_events": [],
         "legend": [
             {"type": "current", "label": "正在推进", "color": "jade"},
             {"type": "formal", "label": "正式正文与记忆", "color": "brass"},
@@ -73,6 +79,86 @@ def build_narrative_projection(
         ],
         "accessibility_summary": _accessible_summary(selected_level, focus_id, nodes, edges),
     }
+    return projection
+
+
+def projection_delta(previous: dict[str, Any] | None, current: dict[str, Any]) -> dict[str, Any]:
+    previous_nodes = {
+        str(item.get("node_id")): item
+        for item in (previous or {}).get("nodes", [])
+        if isinstance(item, dict) and item.get("node_id")
+    }
+    current_nodes = {
+        str(item.get("node_id")): item
+        for item in current.get("nodes", [])
+        if isinstance(item, dict) and item.get("node_id")
+    }
+    previous_edges = {
+        str(item.get("edge_id")): item
+        for item in (previous or {}).get("edges", [])
+        if isinstance(item, dict) and item.get("edge_id")
+    }
+    current_edges = {
+        str(item.get("edge_id")): item
+        for item in current.get("edges", [])
+        if isinstance(item, dict) and item.get("edge_id")
+    }
+    updated_nodes = sorted(
+        node_id for node_id in current_nodes.keys() & previous_nodes.keys() if current_nodes[node_id] != previous_nodes[node_id]
+    )
+    updated_edges = sorted(
+        edge_id for edge_id in current_edges.keys() & previous_edges.keys() if current_edges[edge_id] != previous_edges[edge_id]
+    )
+    return {
+        "initial": previous is None,
+        "added_nodes": sorted(current_nodes.keys() - previous_nodes.keys()),
+        "removed_nodes": sorted(previous_nodes.keys() - current_nodes.keys()),
+        "updated_nodes": updated_nodes,
+        "added_edges": sorted(current_edges.keys() - previous_edges.keys()),
+        "removed_edges": sorted(previous_edges.keys() - current_edges.keys()),
+        "updated_edges": updated_edges,
+    }
+
+
+def projection_motion_events(previous: dict[str, Any] | None, current: dict[str, Any], delta: dict[str, Any]) -> list[dict[str, str]]:
+    current_nodes = {str(item.get("node_id")): item for item in current.get("nodes", []) if isinstance(item, dict)}
+    previous_nodes = {str(item.get("node_id")): item for item in (previous or {}).get("nodes", []) if isinstance(item, dict)}
+    events: list[dict[str, str]] = []
+    for node_id in delta.get("added_nodes", []):
+        node = current_nodes.get(str(node_id), {})
+        kind = "branch-grown" if node.get("type") == "branch" else "node-grown"
+        events.append({"type": kind, "node_id": str(node_id), "label": str(node.get("label") or "新叙事节点")})
+    for node_id in delta.get("updated_nodes", []):
+        before = previous_nodes.get(str(node_id), {})
+        after = current_nodes.get(str(node_id), {})
+        if after.get("status") == "formal" and before.get("status") != "formal":
+            events.append({"type": "joined-canon", "node_id": str(node_id), "label": str(after.get("label") or "并入正式长卷")})
+        before_chars = int((before.get("metrics") or {}).get("formal_chars") or 0)
+        after_chars = int((after.get("metrics") or {}).get("formal_chars") or 0)
+        if after_chars > before_chars:
+            events.append({"type": "manuscript-grown", "node_id": str(node_id), "label": f"正文增加 {after_chars - before_chars:,} 字"})
+        if after.get("type") == "canon" and after.get("status") == "formal":
+            events.append({"type": "canon-anchored", "node_id": str(node_id), "label": str(after.get("label") or "设定已写回")})
+    for node in current.get("nodes", []):
+        if isinstance(node, dict) and node.get("type") == "task" and node.get("status") == "queued":
+            events.append({"type": "task-pulse", "node_id": str(node.get("node_id") or ""), "label": str(node.get("subtitle") or "当前任务")})
+            break
+    return events[:12]
+
+
+def _timeline(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "node_id": str(node.get("node_id") or ""),
+            "label": str(node.get("label") or ""),
+            "status": str(node.get("status") or "planned"),
+            "order": int(node.get("order") or 0),
+            "formal_chars": int((node.get("metrics") or {}).get("formal_chars") or 0),
+            "word_target": int((node.get("metrics") or {}).get("word_target") or 0),
+        }
+        for node in sorted(nodes, key=lambda item: (int(item.get("order") or 0), str(item.get("node_id") or "")))
+        if node.get("type") in {"chapter", "scene"}
+    ]
 
 
 def _book_graph(

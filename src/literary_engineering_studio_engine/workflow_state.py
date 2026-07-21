@@ -4,16 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import re
 
 from .agent_tasks import agent_task_completion_status
+from .atomic_io import atomic_write_text
 from .asset_workshop import ASSET_CANDIDATE_DIRS
-from .canon_evolver import canon_writeback_status
+from .canon_evolver import canon_patch_backlog_items, canon_writeback_status
 from .candidate_promotion import candidate_generation_gate, candidate_review_gate
+from .narrative_rhythm import narrative_rhythm_contract
+from .scene_composer import composition_input_digest
 from .flow_gates import branch_selection_status
+from .longform_materializer import longform_materialization_status
 from .reader_experience import reader_experience_contract
+from .release_fingerprint import release_candidate_fingerprint
 from .style_prompt import style_prompt_quality_report
 from .word_budget import scene_word_budget_contract
 
@@ -34,6 +40,7 @@ def build_workflow_state(
     project_root: Path,
     *,
     route: str = "scene-development",
+    scene: Path | str | None = None,
     output: Path | None = None,
     json_output: Path | None = None,
 ) -> WorkflowStateResult:
@@ -43,7 +50,13 @@ def build_workflow_state(
     if not root.exists():
         raise FileNotFoundError(f"project root not found: {root}")
     normalized_route = _normalize_route(route) or "scene-development"
-    scenes = _scene_states(root) if normalized_route in {"scene-development", "overall"} else []
+    if normalized_route == "scene-development" and scene:
+        selected_scene = Path(scene)
+        if not selected_scene.is_absolute():
+            selected_scene = root / selected_scene
+        scenes = [_scene_state(root, selected_scene.resolve())] if selected_scene.is_file() else []
+    else:
+        scenes = _scene_states(root) if normalized_route in {"scene-development", "overall"} else []
     longform = _longform_state(root) if normalized_route in {"longform-planning", "overall"} else {}
     source_ingests = _source_ingest_states(root) if normalized_route in {"source-ingest", "overall"} else []
     styles = _style_engineering_states(root) if normalized_route in {"style-engineering", "overall"} else []
@@ -112,8 +125,8 @@ def build_workflow_state(
     json_path = _resolve_output(root, json_output, "workflow", "route_state.json")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    markdown_path.write_text(_render_markdown(payload), encoding="utf-8")
+    atomic_write_text(json_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    atomic_write_text(markdown_path, _render_markdown(payload))
     return WorkflowStateResult(
         project_root=root,
         markdown_path=markdown_path,
@@ -131,6 +144,49 @@ def _scene_states(root: Path) -> list[dict[str, object]]:
     if not scenes.exists():
         return []
     return [_scene_state(root, path) for path in sorted(scenes.glob("*.yaml")) if not path.name.startswith("_")]
+
+
+def next_scene_workflow_state(root: Path, scene: Path | str | None = None) -> dict[str, object] | None:
+    scene_paths = sorted(path for path in (root / "scenes").glob("*.yaml") if not path.name.startswith("_"))
+    if scene:
+        selected = Path(scene)
+        if not selected.is_absolute():
+            selected = root / selected
+        return _scene_state(root, selected.resolve()) if selected.is_file() else None
+    if not scene_paths:
+        return None
+
+    latest_scene_id = _latest_scene_task_id(root)
+    start = 0
+    if latest_scene_id:
+        start = next((index for index, path in enumerate(scene_paths) if _scene_id(path) == latest_scene_id), 0)
+    for path in scene_paths[start:]:
+        state = _scene_state(root, path)
+        if state.get("status") != "ready":
+            return state
+    for path in scene_paths[:start]:
+        state = _scene_state(root, path)
+        if state.get("status") != "ready":
+            return state
+    return None
+
+
+def _latest_scene_task_id(root: Path) -> str:
+    latest: tuple[int, str] | None = None
+    tasks = root / "workflow" / "tasks"
+    if not tasks.is_dir():
+        return ""
+    for path in tasks.glob("*.task.json"):
+        payload = _read_json(path)
+        if payload.get("route") != "scene-development":
+            continue
+        scene_id = str(payload.get("scene_id") or "").strip()
+        if not scene_id:
+            continue
+        stamp = path.stat().st_mtime_ns
+        if latest is None or stamp > latest[0]:
+            latest = (stamp, scene_id)
+    return latest[1] if latest else ""
 
 
 def _longform_state(root: Path) -> dict[str, object]:
@@ -164,7 +220,7 @@ def _longform_state(root: Path) -> dict[str, object]:
             "chapter-obligation-agent-task",
             root,
             root / "plot" / "chapter_obligations" / "chapter_obligations.agent_tasks.md",
-            [],
+            [root / "plot" / "candidates" / "chapters" / "chapter_obligation_plan.md"],
             "complete chapter_obligations.agent_tasks.md and write per-chapter reader contracts",
         ),
         _longform_review_step(
@@ -172,6 +228,7 @@ def _longform_state(root: Path) -> dict[str, object]:
             root / "reviews" / "word_budget" / "chapter_obligation_review.md",
             "write a clean chapter obligation review with conclusion: pass",
         ),
+        _longform_materialization_step(root),
     ]
     first_open = next((step for step in steps if step["status"] != "pass"), None)
     return {
@@ -231,6 +288,17 @@ def _longform_review_step(key: str, path: Path, next_action: str) -> dict[str, o
         "path": str(path),
         "message": f"conclusion={conclusion or 'missing'}",
         "next_action": "" if conclusion == "pass" else next_action,
+    }
+
+
+def _longform_materialization_step(root: Path) -> dict[str, object]:
+    passed, message = longform_materialization_status(root)
+    return {
+        "key": "planning-materialization",
+        "status": "pass" if passed else "missing",
+        "path": "workflow/longform_materialization.json",
+        "message": message,
+        "next_action": "" if passed else "materialize the reviewed longform plan into formal plot/outline.md and scenes/*.yaml",
     }
 
 
@@ -376,14 +444,14 @@ def _asset_intake_state() -> dict[str, object]:
         "candidate": "",
         "status": "blocked",
         "current_step": "asset-intake",
-        "next_action": "choose asset type from user direction and run asset-create / agent-create-* to create a platform-agent sidecar",
+        "next_action": "run seed-project-assets to create foundational world and protagonist platform-agent sidecars",
         "steps": [
             {
                 "key": "asset-intake",
                 "status": "missing",
                 "path": "",
                 "message": "no candidate asset or asset creation sidecar found",
-                "next_action": "run asset-create / agent-create-* with asset type, brief, optional target id, and optional source",
+                "next_action": "run seed-project-assets; the resulting sidecars will hand creative asset generation to the Agent",
             }
         ],
     }
@@ -407,7 +475,7 @@ def _asset_state(root: Path, record: dict[str, Path | str]) -> dict[str, object]
         _file_step("asset-review-task-file", review_task, "run review-candidate-asset to create the platform-agent asset review sidecar"),
         _asset_review_agent_step(root, review_task, review_json, review_path),
         _asset_review_pass_step(root, review_json),
-        _asset_approval_step(root, candidate_id),
+        _asset_approval_step(root, candidate_id, candidate_path),
         _asset_promotion_step(root, promotion_manifest),
     ]
     first_open = next((step for step in steps if step["status"] != "pass"), None)
@@ -468,20 +536,47 @@ def _asset_review_pass_step(root: Path, review_json: Path) -> dict[str, object]:
         "status": "pass" if passed else status or "missing",
         "path": _rel(review_json, root),
         "message": f"status={status or 'missing'}; blocking={len(blocking)}; revision_actions={len(revisions)}",
-        "next_action": "" if passed else "revise candidate asset or write a clean platform-agent review with status: pass",
+        "next_action": (
+            ""
+            if passed
+            else "revise the candidate against every recorded finding, reset review evidence to recheck_required, then run a fresh independent asset review"
+        ),
     }
 
 
-def _asset_approval_step(root: Path, candidate_id: str) -> dict[str, object]:
+def _asset_approval_step(root: Path, candidate_id: str, candidate_path: Path) -> dict[str, object]:
     approval = _approval_record(root, candidate_id)
-    passed = str(approval.get("decision") or "") == "approve"
+    decision = str(approval.get("decision") or "").strip().lower()
+    current = _approval_matches_candidate(approval, candidate_path)
+    passed = decision == "approve" and current
+    revision_requested = decision in {"revise", "reject"} and current
     return {
-        "key": "asset-approval",
-        "status": "pass" if passed else str(approval.get("decision") or "missing"),
+        "key": "asset-approval-revision" if revision_requested else "asset-approval",
+        "status": "pass" if passed else decision if current else "missing",
         "path": "workflow/approvals/index.jsonl",
-        "message": "approve record exists" if passed else "missing human approve record",
-        "next_action": "" if passed else f"ask user for approval and record an approve decision for run_id `{candidate_id}` before promotion",
+        "message": "current-candidate approve record exists" if passed else (
+            f"current candidate was {decision}; revise it using the recorded approval notes" if revision_requested else "missing approve record for current candidate content"
+        ),
+        "next_action": "" if passed else (
+            "revise the candidate against the latest approval rationale, reset review evidence, and request an independent re-review"
+            if revision_requested
+            else f"ask user for approval and record an approve decision for run_id `{candidate_id}` before promotion"
+        ),
     }
+
+
+def _approval_matches_candidate(approval: dict[str, object], candidate_path: Path) -> bool:
+    if not approval or not candidate_path.is_file():
+        return False
+    actual = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    recorded = str(approval.get("subject_sha256") or "").strip().lower()
+    if recorded:
+        return recorded == actual
+    recorded_at = _parse_datetime(str(approval.get("recorded_at") or ""))
+    if recorded_at is None:
+        return False
+    candidate_time = datetime.fromtimestamp(candidate_path.stat().st_mtime, tz=timezone.utc)
+    return candidate_time <= recorded_at
 
 
 def _asset_promotion_step(root: Path, manifest_path: Path) -> dict[str, object]:
@@ -512,7 +607,9 @@ def _review_audit_state(root: Path) -> dict[str, object]:
     committee_md = committee_json.with_suffix(".md")
     committee_task = committee_json.with_suffix(".agent_tasks.md")
     longform_json = root / "reviews" / "longform" / "longform_audit.json"
+    canon_backlog = _canon_backlog_step(root)
     steps = [
+        canon_backlog,
         _canon_lint_step(root, canon_lint_json),
         _file_step("canon-review-task-file", canon_review_task, "run agent-canon-review to create the platform-agent canon review sidecar"),
         _review_agent_step(root, "canon-review-agent-task", canon_review_task, canon_review_json, canon_review_md, "complete canon review sidecar, JSON, Markdown, and completion marker"),
@@ -526,10 +623,70 @@ def _review_audit_state(root: Path) -> dict[str, object]:
     return {
         "target_id": "project-review",
         "scene_id": "project-review",
+        "patch": str(canon_backlog.get("patch") or ""),
+        "patch_id": str(canon_backlog.get("patch_id") or ""),
+        "candidate_sha256": str(canon_backlog.get("candidate_sha256") or ""),
+        "approval_decision": str(canon_backlog.get("approval_decision") or ""),
         "status": "ready" if first_open is None else "blocked",
         "current_step": first_open["key"] if first_open else "ready",
         "next_action": first_open["next_action"] if first_open else "",
         "steps": steps,
+    }
+
+
+def _canon_backlog_step(root: Path) -> dict[str, object]:
+    pending = [
+        item
+        for item in canon_patch_backlog_items(root)
+        if str(item.get("status") or "") not in {"applied", "not_applicable"}
+    ]
+    if not pending:
+        return {
+            "key": "canon-patch-backlog",
+            "status": "pass",
+            "path": "canon/patches",
+            "message": "no unapplied canon patch candidates",
+            "next_action": "",
+        }
+
+    item = pending[0]
+    patch = str(item.get("patch") or "")
+    patch_id = str(item.get("approval_run_id") or Path(patch).stem)
+    status = str(item.get("status") or "invalid")
+    decision = str(item.get("approval_decision") or "").strip().lower()
+    approval_current = item.get("approval_current") is True
+    if status in {"invalid", "task_incomplete"} or (approval_current and decision in {"revise", "reject"}):
+        key = "canon-patch-revision"
+        message = str(item.get("message") or "canon patch requires revision")
+        if approval_current and decision in {"revise", "reject"}:
+            message = f"current canon patch was {decision}: {item.get('approval_notes') or 'revision requested'}"
+        next_action = "revise the canon patch candidate and its report, then complete its sidecar before requesting fresh approval"
+    elif approval_current and decision == "defer":
+        key = "canon-patch-deferred"
+        message = "canon patch is intentionally deferred for later user decision"
+        next_action = "resume this canon patch from the decision panel when the project is ready to approve, revise, or reject it"
+    elif status == "needs_approval":
+        key = "canon-patch-approval"
+        message = "canon patch requires a decision bound to its current content"
+        next_action = f"record approve, revise, reject, or defer for canon patch `{patch_id}`"
+    elif status == "pending_apply":
+        key = "canon-patch-apply"
+        message = "canon patch is approved and ready for durable ledger apply"
+        next_action = f"run canon-apply for `{patch}` with approval run_id `{patch_id}`"
+    else:
+        key = "canon-patch-revision"
+        message = str(item.get("message") or status)
+        next_action = "repair the canon patch candidate before project-level review"
+    return {
+        "key": key,
+        "status": status,
+        "path": patch,
+        "patch": patch,
+        "patch_id": patch_id,
+        "candidate_sha256": str(item.get("candidate_sha256") or ""),
+        "approval_decision": decision,
+        "message": message,
+        "next_action": next_action,
     }
 
 
@@ -587,7 +744,11 @@ def _canon_review_pass_step(root: Path, json_path: Path) -> dict[str, object]:
         "status": "pass" if passed else conclusion or "missing",
         "path": _rel(json_path, root),
         "message": message,
-        "next_action": "" if passed else "resolve canon review findings or write a clean platform-agent canon_review.v1 pass",
+        "next_action": (
+            ""
+            if passed
+            else "repair every finding at its declared target_path, refresh canon-lint, reset review evidence, and run a fresh independent canon review"
+        ),
     }
 
 
@@ -602,7 +763,11 @@ def _committee_pass_step(root: Path, json_path: Path) -> dict[str, object]:
         "status": "pass" if passed else recommendation or "missing",
         "path": _rel(json_path, root),
         "message": f"final_recommendation={recommendation or 'missing'}; action_items={len(action_items)}; disagreements={len(disagreements)}",
-        "next_action": "" if passed else "resolve committee action items/disagreements and write final_recommendation=approve",
+        "next_action": (
+            ""
+            if passed
+            else "repair declared project targets, refresh deterministic audits, reset canon/committee evidence, and rerun both independent reviews"
+        ),
     }
 
 
@@ -640,7 +805,7 @@ def _export_release_state(root: Path, chapter_id: str) -> dict[str, object]:
     steps = [
         _chapter_workspace_step(root, chapter_id, chapter_json, chapter_md),
         _export_package_step(root, chapter_id, export_manifest),
-        _release_approval_step(root, approval_run_id),
+        _release_approval_step(root, approval_run_id, export_manifest),
         _publish_release_step(root, latest, release_dir),
     ]
     first_open = next((step for step in steps if step["status"] != "pass"), None)
@@ -697,10 +862,22 @@ def _export_package_step(root: Path, chapter_id: str, manifest_path: Path) -> di
     payload = _read_json(manifest_path)
     skipped = payload.get("skipped_scenes") if isinstance(payload.get("skipped_scenes"), list) else []
     outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
-    required = [outputs.get("novel"), outputs.get("screenplay"), outputs.get("video_prompt_pack")]
+    docx = outputs.get("docx") if isinstance(outputs.get("docx"), dict) else {}
+    layouts = outputs.get("docx_layout_plans") if isinstance(outputs.get("docx_layout_plans"), dict) else {}
+    inspections = outputs.get("docx_inspections") if isinstance(outputs.get("docx_inspections"), dict) else {}
+    delivery_keys = ("novel", "screenplay", "video_prompt_pack")
+    required = [
+        outputs.get("novel"),
+        outputs.get("screenplay"),
+        outputs.get("video_prompt_pack"),
+        *[docx.get(key) for key in delivery_keys],
+        *[layouts.get(key) for key in delivery_keys],
+        *[inspections.get(key) for key in delivery_keys],
+    ]
     missing = [str(item) for item in required if not item or not (root / str(item)).exists()]
     include_blocked = bool(payload.get("include_blocked"))
-    passed = manifest_path.exists() and not skipped and not include_blocked and not missing
+    formats = {str(item).strip().lower() for item in payload.get("requested_formats", []) if str(item).strip()}
+    passed = manifest_path.exists() and {"md", "docx"}.issubset(formats) and not skipped and not include_blocked and not missing
     message = f"skipped={len(skipped)}; include_blocked={include_blocked}; missing_outputs={len(missing)}"
     return {
         "key": "export-package",
@@ -711,16 +888,31 @@ def _export_package_step(root: Path, chapter_id: str, manifest_path: Path) -> di
     }
 
 
-def _release_approval_step(root: Path, run_id: str) -> dict[str, object]:
+def _release_approval_step(root: Path, run_id: str, manifest_path: Path) -> dict[str, object]:
     approval = _approval_record(root, run_id)
-    passed = str(approval.get("decision") or "") == "approve"
+    decision = str(approval.get("decision") or "").strip().lower()
+    current = _approval_matches_digest(approval, release_candidate_fingerprint(root, manifest_path.parent.name))
+    passed = decision == "approve" and current
+    revision_requested = decision in {"revise", "reject"} and current
     return {
-        "key": "release-approval",
-        "status": "pass" if passed else str(approval.get("decision") or "missing"),
+        "key": "release-revision-required" if revision_requested else "release-approval",
+        "status": "pass" if passed else decision if current else "missing",
         "path": "workflow/approvals/index.jsonl",
-        "message": "approve record exists" if passed else f"missing human approve record for {run_id}",
-        "next_action": "" if passed else f"ask user to approve release candidate and record approval run_id `{run_id}`",
+        "message": "current export approve record exists" if passed else (
+            f"current export was {decision}; return the requested changes to formal scene review/revision"
+            if revision_requested
+            else f"missing approval bound to the current export manifest for {run_id}"
+        ),
+        "next_action": "" if passed else (
+            "choose the affected scene revisions, rerun review/promotion/chapter export, then request a fresh release decision"
+            if revision_requested
+            else f"ask user to approve the current release candidate and record approval run_id `{run_id}`"
+        ),
     }
+
+
+def _approval_matches_digest(approval: dict[str, object], digest: str) -> bool:
+    return bool(digest) and str(approval.get("subject_sha256") or "").strip().lower() == digest.lower()
 
 
 def _publish_release_step(root: Path, latest_path: Path, release_dir: Path) -> dict[str, object]:
@@ -729,19 +921,22 @@ def _publish_release_step(root: Path, latest_path: Path, release_dir: Path) -> d
     payload = _read_json(manifest)
     status = str(payload.get("status") or "").strip().lower()
     approval = payload.get("approval") if isinstance(payload.get("approval"), dict) else {}
+    approved_fingerprint = str(payload.get("approved_export_fingerprint") or "").strip().lower()
     passed = (
         latest_path.exists()
         and manifest.exists()
         and status == "published"
         and not payload.get("allow_unapproved")
         and approval.get("decision") == "approve"
+        and bool(approved_fingerprint)
+        and str(approval.get("subject_sha256") or "").strip().lower() == approved_fingerprint
         and latest.get("manifest") == _rel(manifest, root)
     )
     return {
         "key": "publish-release",
         "status": "pass" if passed else "missing" if not manifest.exists() else "blocked",
         "path": _rel(manifest, root),
-        "message": f"latest={bool(latest)}; status={status or 'missing'}; approval={approval.get('decision') or 'missing'}",
+        "message": f"latest={bool(latest)}; status={status or 'missing'}; approval={approval.get('decision') or 'missing'}; content_bound={bool(approved_fingerprint)}",
         "next_action": "" if passed else "run publish-chapter with approval run id; do not use --allow-unapproved",
     }
 
@@ -751,12 +946,22 @@ def _style_engineering_state(root: Path, profile_dir: Path) -> dict[str, object]
     task_path = profile_dir / "style_prompt.agent_tasks.md"
     prompt_path = profile_dir / "style_prompt.md"
     agent_json = profile_dir / "style_prompt.agent.json"
+    eval_dir = profile_dir / "evaluation_results" / "formal"
+    eval_reference = _style_eval_reference(profile_dir)
+    eval_candidate = eval_dir / "platform_agent_candidate.md"
+    eval_manifest = eval_dir / "platform_agent_candidate.prompt.json"
+    eval_task = eval_candidate.with_suffix(".agent_tasks.md")
+    eval_current = eval_dir / "style_eval_current.json"
     steps = [
         _style_profile_step(root, profile_dir),
         _file_step("style-prompt-task-file", task_path, "run style-prompt on this profile to create platform-agent prompt sidecar"),
         _style_prompt_agent_step(root, task_path, prompt_path, agent_json),
         _style_prompt_quality_step(root, prompt_path),
-        _style_eval_readiness_step(root, profile_dir),
+        _style_eval_setup_step(root, profile_dir, eval_reference),
+        _file_step("style-eval-task-file", eval_task, "prepare the formal style evaluation task with a concrete corpus reference and project direction input"),
+        _style_eval_agent_step(root, eval_task, eval_candidate, eval_manifest),
+        _style_eval_score_step(root, eval_candidate, eval_current),
+        _style_eval_readiness_step(root, profile_dir, eval_candidate, eval_current),
     ]
     first_open = next((step for step in steps if step["status"] != "pass"), None)
     return {
@@ -833,24 +1038,75 @@ def _style_prompt_quality_step(root: Path, prompt_path: Path) -> dict[str, objec
     }
 
 
-def _style_eval_readiness_step(root: Path, profile_dir: Path) -> dict[str, object]:
-    evals = _accepted_style_evals(profile_dir)
-    if evals:
+def _style_eval_setup_step(root: Path, profile_dir: Path, reference: Path | None) -> dict[str, object]:
+    if reference is not None:
         return {
-            "key": "style-eval-readiness",
+            "key": "style-eval-setup",
             "status": "pass",
-            "path": _rel(profile_dir / "evaluation_results", root),
-            "message": f"accepted_evaluations={len(evals)}",
+            "path": _rel(reference, root),
+            "message": "concrete corpus reference available for formal evaluation",
             "next_action": "",
         }
-    all_evals = sorted((profile_dir / "evaluation_results").glob("*/style_eval_*.json"))
     return {
-        "key": "style-eval-readiness",
-        "status": "missing" if not all_evals else "blocked",
-        "path": _rel(profile_dir / "evaluation_results", root),
-        "message": "no accepted style_eval JSON found",
-        "next_action": "run style-prompt-eval/style-eval and create at least one accepted style_eval JSON before building or mounting a Style Skill",
+        "key": "style-eval-setup",
+        "status": "missing",
+        "path": _rel(profile_dir / "corpus", root),
+        "message": "formal style evaluation needs at least one authorized UTF-8 corpus text",
+        "next_action": "import an authorized or public-domain corpus text into this profile before evaluation",
     }
+
+
+def _style_eval_agent_step(root: Path, task_path: Path, candidate: Path, manifest: Path) -> dict[str, object]:
+    state = agent_task_completion_status(task_path, root=root)
+    missing = [_rel(path, root) for path in (candidate, manifest) if not path.is_file()]
+    complete = state.get("complete") is True and not missing
+    message = str(state.get("message") or "")
+    if missing:
+        message = (message + "; " if message else "") + "missing " + ", ".join(missing)
+    return {
+        "key": "style-eval-agent-task",
+        "status": "pass" if complete else str(state.get("status") or "pending"),
+        "path": _rel(task_path, root),
+        "message": message,
+        "next_action": "" if complete else "complete the formal style evaluation candidate, prompt manifest, and sidecar marker",
+    }
+
+
+def _style_eval_score_step(root: Path, candidate: Path, current: Path) -> dict[str, object]:
+    payload = _read_json(current)
+    candidate_sha = hashlib.sha256(candidate.read_bytes()).hexdigest() if candidate.is_file() else ""
+    scored_sha = str(payload.get("candidate_sha256") or "")
+    current_score = current.is_file() and candidate_sha and scored_sha == candidate_sha
+    return {
+        "key": "style-eval-score-file",
+        "status": "pass" if current_score else "missing" if not current.is_file() else "stale",
+        "path": _rel(current, root),
+        "message": "deterministic style score matches current candidate" if current_score else "style score is missing or stale for the current evaluation candidate",
+        "next_action": "" if current_score else "run deterministic style-eval for the current formal candidate and corpus reference",
+    }
+
+
+def _style_eval_readiness_step(root: Path, profile_dir: Path, candidate: Path, current: Path) -> dict[str, object]:
+    payload = _read_json(current)
+    candidate_sha = hashlib.sha256(candidate.read_bytes()).hexdigest() if candidate.is_file() else ""
+    risk = str(payload.get("risk_level") or "")
+    try:
+        score = float(payload.get("overall_score") or 0)
+    except (TypeError, ValueError):
+        score = 0.0
+    accepted = bool(candidate_sha) and str(payload.get("candidate_sha256") or "") == candidate_sha and risk not in {"high_copy_risk", "low_similarity"} and score >= 45
+    return {
+        "key": "style-eval-readiness" if accepted else "style-eval-revision",
+        "status": "pass" if accepted else "blocked",
+        "path": _rel(current, root),
+        "message": f"overall_score={score}; risk_level={risk or 'missing'}; current_candidate={bool(candidate_sha)}",
+        "next_action": "" if accepted else "revise the style prompt and evaluation candidate against deterministic score evidence, then rerun style-eval",
+    }
+
+
+def _style_eval_reference(profile_dir: Path) -> Path | None:
+    candidates = sorted((profile_dir / "corpus").glob("*.txt"))
+    return next((path for path in candidates if path.is_file() and path.stat().st_size > 0), None)
 
 
 def _accepted_style_evals(profile_dir: Path) -> list[dict[str, object]]:
@@ -906,7 +1162,7 @@ def _approval_record(root: Path, candidate_id: str) -> dict[str, object]:
 
 def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
     scene_id = _scene_id(scene_path)
-    candidate = _promotion_candidate_path(root, scene_id) or _latest_scene_candidate(root, scene_id)
+    candidate = _current_scene_candidate(root, scene_id)
     steps = [
         _file_step("context-packet", root / "memory" / "context_packets" / f"{scene_id}.md", "run context --scene scenes/{scene}.yaml".format(scene=scene_id)),
         _file_step("context-trace", root / "memory" / "context_packets" / f"{scene_id}.trace.json", "rerun context --scene scenes/{scene}.yaml and inspect context trace".format(scene=scene_id)),
@@ -915,16 +1171,17 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
         _file_step("branch-manifest", root / "branches" / scene_id / "branch_manifest.json", "run branch-simulate --agent"),
         _task_step("branch-agent-task", root, root / "branches" / scene_id / "branch_manifest.agent_tasks.md", "complete branch_manifest.agent_tasks.md and marker"),
         _branch_selection_step(root / "branches" / scene_id / "branch_selection.md"),
-        _file_step("composition-json", root / "drafts" / "compositions" / f"{scene_id}_composition.json", "run compose-scene --agent-tasks"),
-        _task_step("composition-agent-task", root, root / "drafts" / "compositions" / f"{scene_id}_composition.agent_tasks.md", "complete scene composition sidecar and marker"),
         _word_budget_step(root, scene_path),
         _reader_experience_step(root, scene_path),
+        _narrative_rhythm_step(root, scene_path),
+        _composition_step(root, scene_path),
+        _task_step("composition-agent-task", root, root / "drafts" / "compositions" / f"{scene_id}_composition.agent_tasks.md", "complete scene composition sidecar and marker"),
         _candidate_step(root, scene_id, candidate),
         _task_step("generation-agent-task", root, candidate.with_suffix(".agent_tasks.md") if candidate else root / "drafts" / "candidates" / f"{scene_id}-platform-agent.agent_tasks.md", "complete generation sidecar and marker"),
         _review_step(root, scene_id, candidate),
         _task_step("agent-review-task", root, root / "reviews" / "agent" / f"{scene_id}_scene_review.agent_tasks.md", "complete AgentReview sidecar and marker"),
-        _file_step("promotion-manifest", root / "drafts" / "promotions" / f"{scene_id}_promotion.json", "run promote-candidate after exact candidate review"),
-        _file_step("promoted-draft", root / "drafts" / "scenes" / f"{scene_id}.md", "promote a reviewed candidate into drafts/scenes"),
+        _promotion_step(root, scene_id, candidate),
+        _promoted_draft_step(root, scene_id, candidate),
         _static_review_step(root, scene_id),
         _file_step("state-patch-json", root / "characters" / "state_patches" / f"{scene_id}_state_patch.json", "run state-evolve --agent-tasks"),
         _task_step("state-agent-task", root, root / "characters" / "state_patches" / f"{scene_id}_state_patch.agent_tasks.md", "complete state-evolve sidecar and marker"),
@@ -1024,6 +1281,51 @@ def _reader_experience_step(root: Path, scene_path: Path) -> dict[str, object]:
     }
 
 
+def _narrative_rhythm_step(root: Path, scene_path: Path) -> dict[str, object]:
+    contract = narrative_rhythm_contract(root, scene_path)
+    status = str(contract.get("status") or "")
+    passed = status == "pass"
+    return {
+        "key": "scene-rhythm-contract",
+        "status": "pass" if passed else status or "missing",
+        "path": _rel(scene_path, root),
+        "message": contract.get("message", ""),
+        "next_action": "complete the CLI-issued scene-rhythm-contract task before composition" if not passed else "",
+    }
+
+
+def _composition_step(root: Path, scene_path: Path) -> dict[str, object]:
+    scene_id = _scene_id(scene_path)
+    path = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
+    if not path.is_file():
+        return {
+            "key": "composition-json",
+            "status": "missing",
+            "path": _rel(path, root),
+            "message": "composition JSON is missing",
+            "next_action": "run compose-scene --agent-tasks",
+        }
+    payload = _read_json(path)
+    provenance = payload.get("formal_cli_provenance") if isinstance(payload.get("formal_cli_provenance"), dict) else {}
+    expected = composition_input_digest(root, scene_path)
+    recorded = str(provenance.get("input_contract_digest") or "")
+    if not recorded or recorded != expected:
+        return {
+            "key": "composition-json",
+            "status": "stale",
+            "path": _rel(path, root),
+            "message": "composition input contracts changed or were generated by an older CLI; rebuild after the current budget, reader, and rhythm contracts.",
+            "next_action": "rerun compose-scene --agent-tasks from the CLI task package",
+        }
+    return {
+        "key": "composition-json",
+        "status": "pass",
+        "path": _rel(path, root),
+        "message": "composition matches the current formal input contracts",
+        "next_action": "",
+    }
+
+
 def _candidate_step(root: Path, scene_id: str, candidate: Path | None) -> dict[str, object]:
     if candidate is None:
         return {
@@ -1053,25 +1355,137 @@ def _review_step(root: Path, scene_id: str, candidate: Path | None) -> dict[str,
             "next_action": "generate a formal candidate first",
         }
     gate = candidate_review_gate(root, scene_id, candidate)
+    status = str(gate.get("status") or "missing")
+    review_again = {
+        "missing",
+        "task_incomplete",
+        "schema_failed",
+        "stale_or_wrong_source",
+        "creative_quality_review_stale",
+    }
+    if status == "human_decision_required":
+        if _candidate_revision_direction(root, scene_id, gate):
+            return {
+                "key": "candidate-revision",
+                "status": "needs_revision",
+                "path": str(gate.get("review") or ""),
+                "message": "a matching formal revision direction is recorded; revise prose without modifying canon or character assets",
+                "next_action": "run revise-scene against the exact candidate and review, then independently review the new revision candidate",
+            }
+        return {
+            "key": "candidate-human-decision",
+            "status": "human_required",
+            "path": str(gate.get("review") or ""),
+            "message": gate.get("message", "candidate review requires a formal decision"),
+            "next_action": "choose whether prose should align with the existing formal asset or hold the candidate for a separate asset revision",
+        }
+    key = "candidate-review" if status in review_again else "candidate-revision"
+    if status == "pass":
+        key = "candidate-review"
     return {
-        "key": "candidate-review",
-        "status": "pass" if gate.get("status") == "pass" else str(gate.get("status") or "missing"),
+        "key": key,
+        "status": "pass" if status == "pass" else status,
         "path": str(gate.get("review") or ""),
         "message": gate.get("message", ""),
-        "next_action": "" if gate.get("status") == "pass" else "run agent-review-scene --draft <candidate>, then write review JSON/MD and completion marker",
+        "next_action": (
+            ""
+            if status == "pass"
+            else "run agent-review-scene on the exact candidate and complete its sidecar"
+            if key == "candidate-review"
+            else "run revise-scene against the exact candidate and review, then independently review the new revision candidate"
+        ),
     }
+
+
+def _candidate_revision_direction(root: Path, scene_id: str, gate: dict[str, object]) -> bool:
+    """Require a decision tied to this exact candidate, never a generic old note."""
+
+    expected_sha = str(gate.get("candidate_sha256") or "").strip().lower()
+    if not expected_sha:
+        return False
+    index = root / "workflow" / "human_choices" / "index.jsonl"
+    if not index.is_file():
+        return False
+    for line in reversed(index.read_text(encoding="utf-8", errors="ignore").splitlines()):
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(record, dict) or str(record.get("decision_type") or "") != "cross_asset_alignment":
+            continue
+        target = record.get("target") if isinstance(record.get("target"), dict) else {}
+        if str(target.get("scene_id") or target.get("target_id") or "") != scene_id:
+            continue
+        if str(target.get("candidate_sha256") or "").strip().lower() != expected_sha:
+            continue
+        return str(record.get("selected") or "") == "align_prose_to_formal_asset"
+    return False
 
 
 def _static_review_step(root: Path, scene_id: str) -> dict[str, object]:
     path = root / "reviews" / f"{scene_id}-review.md"
     conclusion = _static_review_conclusion(path)
+    draft = root / "drafts" / "scenes" / f"{scene_id}.md"
+    fresh = _static_review_matches_draft(path, draft)
+    key = "static-review" if not conclusion or not fresh else "static-revision"
+    if conclusion == "pass" and fresh:
+        key = "static-review"
     return {
-        "key": "static-review",
-        "status": "pass" if conclusion == "pass" else conclusion or "missing",
+        "key": key,
+        "status": "pass" if conclusion == "pass" and fresh else "stale" if conclusion and not fresh else conclusion or "missing",
         "path": _rel(path, root),
-        "message": f"conclusion={conclusion or 'missing'}",
-        "next_action": "" if conclusion == "pass" else "run review-scene on the promoted draft and resolve notes",
+        "message": f"conclusion={conclusion or 'missing'}; exact_draft={fresh}",
+        "next_action": "" if conclusion == "pass" and fresh else (
+            "run review-scene on the exact promoted draft" if not conclusion or not fresh else "revise the promoted draft against static review findings, then run exact-candidate AgentReview and promotion again"
+        ),
     }
+
+
+def _promotion_step(root: Path, scene_id: str, candidate: Path | None) -> dict[str, object]:
+    manifest = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
+    payload = _read_json(manifest)
+    recorded = str(payload.get("candidate") or "").replace("\\", "/")
+    expected = _rel(candidate, root) if candidate else ""
+    current = bool(candidate and manifest.is_file() and recorded == expected)
+    if current and payload.get("candidate_sha256"):
+        current = str(payload.get("candidate_sha256") or "").lower() == hashlib.sha256(candidate.read_bytes()).hexdigest()
+    return {
+        "key": "promotion-manifest",
+        "status": "pass" if current else "missing" if not manifest.exists() else "stale",
+        "path": _rel(manifest, root),
+        "message": f"candidate={recorded or 'missing'}; current_candidate={expected or 'missing'}",
+        "next_action": "" if current else "run promote-candidate for the exact independently reviewed candidate",
+    }
+
+
+def _promoted_draft_step(root: Path, scene_id: str, candidate: Path | None) -> dict[str, object]:
+    draft = root / "drafts" / "scenes" / f"{scene_id}.md"
+    manifest = _read_json(root / "drafts" / "promotions" / f"{scene_id}_promotion.json")
+    expected_hash = str(manifest.get("draft_sha256") or "").lower()
+    actual_hash = hashlib.sha256(draft.read_bytes()).hexdigest() if draft.is_file() else ""
+    current = bool(candidate and draft.is_file() and expected_hash and expected_hash == actual_hash)
+    return {
+        "key": "promoted-draft",
+        "status": "pass" if current else "missing" if not draft.exists() else "stale",
+        "path": _rel(draft, root),
+        "message": "promoted draft matches current promotion manifest" if current else "promoted draft is missing or stale",
+        "next_action": "" if current else "promote the exact reviewed candidate into drafts/scenes",
+    }
+
+
+def _current_scene_candidate(root: Path, scene_id: str) -> Path | None:
+    promoted = _promotion_candidate_path(root, scene_id)
+    latest = _latest_scene_candidate(root, scene_id)
+    manifest = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
+    if latest and (not manifest.exists() or latest.stat().st_mtime_ns > manifest.stat().st_mtime_ns):
+        return latest
+    return promoted or latest
+
+
+def current_scene_candidate(root: Path, scene_id: str) -> Path | None:
+    """Return the exact candidate that the formal scene route currently governs."""
+
+    return _current_scene_candidate(root.resolve(), scene_id)
 
 
 def _canon_writeback_step(root: Path, scene_id: str) -> dict[str, object]:
@@ -1115,6 +1529,13 @@ def _static_review_conclusion(path: Path) -> str:
     text = _read(path)
     match = re.search(r"(?m)^-\s*(?:审查)?结论：\s*(?:\*\*)?`?([a-z_]+)`?(?:\*\*)?\s*$", text, re.IGNORECASE)
     return match.group(1).strip().lower() if match else ""
+
+
+def _static_review_matches_draft(review: Path, draft: Path) -> bool:
+    if not review.is_file() or not draft.is_file():
+        return False
+    match = re.search(r"(?m)^-\s*审查对象 SHA-256：`([0-9a-fA-F]{64})`\s*$", _read(review))
+    return bool(match and match.group(1).lower() == hashlib.sha256(draft.read_bytes()).hexdigest())
 
 
 def _scene_id(path: Path) -> str:
@@ -1263,3 +1684,13 @@ def _slug_profile_id(value: str) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

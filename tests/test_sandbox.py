@@ -6,11 +6,14 @@ import unittest
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.sandbox import (
     apply_expected_outputs,
+    capture_core_managed_outputs,
     import_expected_outputs,
     inspect_expected_outputs,
     rollback_expected_outputs,
+    restore_core_managed_outputs,
     stage_task,
 )
+from literary_engineering_studio_engine.task_registry import _enrich_task_payload
 
 
 class SandboxTests(unittest.TestCase):
@@ -97,6 +100,58 @@ class SandboxTests(unittest.TestCase):
             imported = apply_expected_outputs(task, sandbox, preview)
             rollback_expected_outputs(task, sandbox, imported)
             self.assertEqual(target.read_text(encoding="utf-8"), "旧正文。\n")
+
+    def test_exact_prompt_omits_host_manuals_but_keeps_domain_references(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload["required_reading"] = [
+                "SKILL.md",
+                "references/workflows.md",
+                "docs/modules/domain-guide.md",
+            ]
+            payload.pop("prompt_asset", None)
+            payload = _enrich_task_payload(payload)
+            task.task_json_path.write_text(json.dumps(payload), encoding="utf-8")
+            (root / "SKILL.md").write_text("host manual", encoding="utf-8")
+            (root / "references").mkdir()
+            (root / "references/workflows.md").write_text("large workflow map", encoding="utf-8")
+            (root / "docs/modules").mkdir(parents=True)
+            (root / "docs/modules/domain-guide.md").write_text("domain constraints", encoding="utf-8")
+
+            compact_task = load_task_package(root, task.task_json_path)
+            sandbox = stage_task(compact_task, Path(runs), runtime="opencode", run_id="run-compact")
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            context = json.loads((sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["reference_paths"], ["docs/modules/domain-guide.md"])
+            self.assertEqual(context["reference_paths"], ["docs/modules/domain-guide.md"])
+            self.assertFalse((sandbox.workspace / "SKILL.md").exists())
+            self.assertFalse((sandbox.workspace / "references/workflows.md").exists())
+            self.assertTrue((sandbox.workspace / "docs/modules/domain-guide.md").is_file())
+
+    def test_restores_cli_managed_outputs_after_agent_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload["expected_outputs"] = [
+                "drafts/candidates/scene_0001.md",
+                "drafts/candidates/scene_0001.prompt.json",
+            ]
+            payload["core_managed_outputs"] = ["drafts/candidates/scene_0001.prompt.json"]
+            task.task_json_path.write_text(json.dumps(_enrich_task_payload(payload)), encoding="utf-8")
+            task = load_task_package(root, task.task_json_path)
+            sandbox = stage_task(task, Path(runs), runtime="opencode", run_id="run-protected")
+            protected = sandbox.workspace / "drafts" / "candidates" / "scene_0001.prompt.json"
+            protected.parent.mkdir(parents=True, exist_ok=True)
+            protected.write_text('{"source":"cli"}\n', encoding="utf-8")
+
+            self.assertEqual(capture_core_managed_outputs(task, sandbox), ("drafts/candidates/scene_0001.prompt.json",))
+            protected.write_text('{"source":"agent"}\n', encoding="utf-8")
+
+            self.assertEqual(restore_core_managed_outputs(sandbox), ("drafts/candidates/scene_0001.prompt.json",))
+            self.assertEqual(protected.read_text(encoding="utf-8"), '{"source":"cli"}\n')
 
 
 if __name__ == "__main__":

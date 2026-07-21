@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
 import threading
 from typing import Any, Callable
@@ -33,7 +33,7 @@ class ApplicationBootstrapService:
         self._catalog_loader = catalog_loader
         self._project_loader = project_loader
         self._engine_probe = engine_probe or (lambda: CoreBridge(config).doctor())
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="arcvellum-bootstrap")
+        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="arcvellum-bootstrap")
         self._lock = threading.RLock()
         self._catalog_future: Future | None = None
         self._catalog: dict[str, Any] | None = None
@@ -42,6 +42,7 @@ class ApplicationBootstrapService:
         self._catalog_loaded_at = ""
         self._engine_state: dict[str, Any] | None = None
         self._closed = False
+        self._engine_future: Future = self._executor.submit(self._load_engine_state)
 
     def start_warmup(self, *, force: bool = False) -> bool:
         """Start one provider-catalog warmup; repeated reads never create a process storm."""
@@ -89,7 +90,7 @@ class ApplicationBootstrapService:
             _step(
                 "engine_registry",
                 "文学工程内核",
-                "ready" if engine_state["ready"] else "blocked",
+                "ready" if engine_state["ready"] else "loading" if engine_state.get("loading") else "blocked",
                 blocking=True,
                 detail=engine_state["detail"],
                 recovery_action="运行应用诊断，确认内核模块和 Python 运行时完整。",
@@ -146,7 +147,10 @@ class ApplicationBootstrapService:
         blocking_ready = all(item["status"] == "ready" for item in steps if item["blocking"])
         degraded = any(item["status"] in {"degraded", "failed"} for item in steps)
         warming = any(item["status"] in {"loading", "waiting"} for item in steps)
-        phase = "blocked" if not blocking_ready else "starting" if warming else "degraded" if degraded else "ready"
+        blocking_failed = any(
+            item["status"] in {"blocked", "failed"} for item in steps if item["blocking"]
+        )
+        phase = "blocked" if blocking_failed else "starting" if not blocking_ready or warming else "degraded" if degraded else "ready"
         completed = sum(1 for item in steps if item["status"] not in {"loading", "waiting"})
 
         notices = []
@@ -210,6 +214,19 @@ class ApplicationBootstrapService:
         if cached is not None:
             return cached
         try:
+            self._engine_future.result(timeout=0.02)
+        except FutureTimeoutError:
+            return {
+                "ready": False,
+                "loading": True,
+                "detail": "正在校验文学工程内核与项目协议。",
+            }
+        with self._lock:
+            cached = self._engine_state
+        return cached or {"ready": False, "loading": False, "detail": "文学工程内核诊断未返回结果。"}
+
+    def _load_engine_state(self) -> None:
+        try:
             probe = self._engine_probe()
             returncode = int(getattr(probe, "returncode", 1))
             stderr = str(getattr(probe, "stderr", "") or "").strip()
@@ -221,7 +238,6 @@ class ApplicationBootstrapService:
             state = {"ready": False, "detail": str(exc)}
         with self._lock:
             self._engine_state = state
-        return state
 
     def _project_state(self) -> dict[str, Any]:
         try:

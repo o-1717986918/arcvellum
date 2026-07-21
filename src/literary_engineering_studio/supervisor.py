@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
-import hashlib
 from pathlib import Path
 import threading
 import uuid
 from typing import Any, Callable
 
+from .execution_coordinator import ProjectExecutionCoordinator, project_execution_key
 from .jobs import JobStore
 
 
 class WorkerSupervisor:
-    def __init__(self, store: JobStore, *, max_workers: int = 2, lease_seconds: int = 90):
+    def __init__(
+        self,
+        store: JobStore,
+        *,
+        max_workers: int = 2,
+        lease_seconds: int = 90,
+        execution_coordinator: ProjectExecutionCoordinator | None = None,
+    ):
         self.store = store
         self.worker_id = f"studio-{uuid.uuid4().hex[:12]}"
         self.lease_seconds = max(30, int(lease_seconds))
@@ -21,6 +28,7 @@ class WorkerSupervisor:
         self._futures: dict[str, Future[None]] = {}
         self._cancel: dict[str, threading.Event] = {}
         self._lock = threading.RLock()
+        self.execution_coordinator = execution_coordinator or ProjectExecutionCoordinator()
         self.recovered_jobs = tuple(self.store.recover_interrupted())
 
     def submit(
@@ -80,7 +88,19 @@ class WorkerSupervisor:
     ) -> None:
         if not self.store.claim(job_id, self.worker_id, lease_seconds=self.lease_seconds):
             return
+        project_root = str(self.store.read(job_id).get("request", {}).get("project_root") or "")
+        if not self.execution_coordinator.acquire(project_root, job_id):
+            self.store.update(
+                job_id,
+                status="waiting_human",
+                error="another active task owns this project",
+                finished_at=_now_from_store(),
+                lease_owner="",
+                lease_expires_at="",
+            )
+            return
         if not self.store.acquire_lock(lock_key, job_id, self.worker_id, lease_seconds=self.lease_seconds * 2):
+            self.execution_coordinator.release(project_root, job_id)
             self.store.update(
                 job_id,
                 status="waiting_human",
@@ -128,6 +148,7 @@ class WorkerSupervisor:
             heartbeat_stop.set()
             heartbeat.join(timeout=2)
             self.store.release_lock(lock_key, job_id)
+            self.execution_coordinator.release(project_root, job_id)
             with self._lock:
                 self._cancel.pop(job_id, None)
 
@@ -141,9 +162,7 @@ class WorkerSupervisor:
 
 
 def project_lock_key(project_root: str | Path, route: str) -> str:
-    project = str(Path(project_root).expanduser().resolve()).casefold()
-    digest = hashlib.sha256(project.encode("utf-8")).hexdigest()[:20]
-    return f"project:{digest}:route:{str(route or 'auto').strip().lower()}"
+    return f"project:{project_execution_key(project_root)}:execution"
 
 
 def _now_from_store() -> str:

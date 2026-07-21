@@ -6,13 +6,14 @@ import importlib
 import json
 from pathlib import Path
 import threading
+import time
 from typing import Any, Callable
 
 
 # Core read models materialize dashboard files at stable project paths. The
 # initial HTTP request and SSE projection can arrive together, so serialize
 # those rebuilds to prevent a reader from observing a partially replaced JSON.
-_WORKFLOW_PROJECTION_LOCK = threading.RLock()
+ENGINE_ACCESS_LOCK = threading.RLock()
 
 def install_core_import_path(config: dict[str, Any]) -> Path:
     """Compatibility shim returning the location of the embedded engine."""
@@ -23,9 +24,9 @@ def install_core_import_path(config: dict[str, Any]) -> Path:
 
 
 def build_dashboard(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
-    with _WORKFLOW_PROJECTION_LOCK:
+    with ENGINE_ACCESS_LOCK:
         result = _function(config, "workflow_dashboard", "build_workflow_dashboard")(project_root)
-        payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+        payload = _read_json_with_retry(result.json_path)
     return {
         "ok": True,
         "project_root": str(project_root),
@@ -43,8 +44,24 @@ def build_dashboard(config: dict[str, Any], project_root: Path) -> dict[str, Any
     }
 
 
+def _read_json_with_retry(path: Path, *, attempts: int = 4, delay_seconds: float = 0.025) -> dict[str, Any]:
+    last_error: json.JSONDecodeError | None = None
+    for attempt in range(attempts):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError(f"expected JSON object: {path}")
+            return payload
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(delay_seconds)
+    assert last_error is not None
+    raise last_error
+
+
 def build_activity(config: dict[str, Any], project_root: Path, limit: int = 30) -> dict[str, Any]:
-    with _WORKFLOW_PROJECTION_LOCK:
+    with ENGINE_ACCESS_LOCK:
         payload = _function(config, "workflow_activity", "build_workflow_activity")(project_root, limit=limit)
     return {"ok": True, **payload}
 
@@ -59,9 +76,19 @@ def build_library(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
     return {"ok": True, **payload}
 
 
-def current_choices(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
-    with _WORKFLOW_PROJECTION_LOCK:
-        payload = _function(config, "project_interaction", "build_current_human_choices")(project_root)
+def current_choices(
+    config: dict[str, Any],
+    project_root: Path,
+    *,
+    route: str = "",
+    dashboard: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    builder = _function(config, "project_interaction", "build_current_human_choices")
+    if route:
+        payload = builder(project_root, route=route)
+    else:
+        with ENGINE_ACCESS_LOCK:
+            payload = builder(project_root, dashboard_payload=dashboard)
     return {"ok": True, **payload}
 
 

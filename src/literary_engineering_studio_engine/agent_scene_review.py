@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,12 @@ from .anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RU
 from .agent_provider import run_agent_task
 from .agent_schema import validate_agent_run
 from .context_broker import default_context_trace_path
+from .creative_quality import (
+    creative_quality_profile_exists,
+    creative_quality_profile_path,
+    load_creative_quality_profile,
+    render_creative_quality_prompt,
+)
 from .draft_text import final_body_from_workbench_text
 from .narrative_rhythm import render_narrative_rhythm_contract
 from .new_character_register import empty_new_character_register, render_new_character_register_contract
@@ -47,6 +54,8 @@ def review_scene_with_agent(
     context_path = root / "memory" / "context_packets" / f"{scene_id}.md"
     context_trace_path = default_context_trace_path(context_path)
     style_prompt_path = _first_existing(_style_source_candidates(root))
+    quality_profile = load_creative_quality_profile(root)
+    quality_path = creative_quality_profile_path(root)
     source_paths = [_rel_str(scene_path, root)]
     if draft_path.exists():
         source_paths.append(_rel_str(draft_path, root))
@@ -56,6 +65,8 @@ def review_scene_with_agent(
         source_paths.append(_rel_str(context_trace_path, root))
     if style_prompt_path and style_prompt_path.exists():
         source_paths.append(_rel_str(style_prompt_path, root))
+    if creative_quality_profile_exists(root):
+        source_paths.append(_rel_str(quality_path, root))
     composition_json = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
     if composition_json.exists():
         source_paths.append(_rel_str(composition_json, root))
@@ -65,6 +76,7 @@ def review_scene_with_agent(
 
     scene_text = _read(scene_path)
     draft_text = _read(draft_path) if draft_path.exists() else ""
+    candidate_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
     draft_body = final_body_from_workbench_text(draft_text) or draft_text
     context_text = _read(context_path) if context_path.exists() else ""
     context_trace_text = _read(context_trace_path) if context_trace_path.exists() else ""
@@ -72,13 +84,34 @@ def review_scene_with_agent(
     word_budget_adherence = word_budget_adherence_for_body(root, scene_path, draft_body)
     reader_adherence = reader_experience_adherence_for_body(root, scene_path, draft_body)
     rhythm_contract_text = render_narrative_rhythm_contract(root, scene_path, composition_json if composition_json.exists() else None)
-    dry_payload = _dry_scene_review(scene_id, draft_text, source_paths, word_budget_adherence, reader_adherence)
+    dry_payload = _dry_scene_review(
+        scene_id,
+        draft_text,
+        source_paths,
+        word_budget_adherence,
+        reader_adherence,
+        quality_profile,
+        candidate_sha256,
+    )
     run_result = run_agent_task(
         root,
         agent_id="scene-reviewer",
         task=f"review-scene:{scene_id}",
         system_prompt=_system_prompt(),
-        user_prompt=_user_prompt(scene_text, draft_text, context_text, context_trace_text, style_text, source_paths, word_budget_adherence, reader_adherence, rhythm_contract_text),
+        user_prompt=_user_prompt(
+            scene_text,
+            draft_text,
+            context_text,
+            context_trace_text,
+            style_text,
+            source_paths,
+            word_budget_adherence,
+            reader_adherence,
+            rhythm_contract_text,
+            quality_profile,
+            scene_id,
+            candidate_sha256,
+        ),
         provider=provider,
         metadata={"schema_name": "scene_review.v1", "scene_id": scene_id, "source_paths": source_paths},
         dry_run_output=dry_payload,
@@ -86,7 +119,14 @@ def review_scene_with_agent(
     validation = validate_agent_run(root, run_dir=run_result.run_dir, schema_name="scene_review.v1")
     parsed = json.loads(run_result.parsed_output_path.read_text(encoding="utf-8"))
     parsed["agent_run_dir"] = _rel_str(run_result.run_dir, root)
+    parsed["candidate_sha256"] = candidate_sha256
     parsed["schema_validation"] = _rel_str(validation.validation_path, root)
+    parsed["creative_quality_profile"] = {
+        "path": _rel_str(quality_path, root) if creative_quality_profile_exists(root) else "implicit-default",
+        "revision": quality_profile.get("revision"),
+        "digest": quality_profile.get("digest"),
+        "name": quality_profile.get("name"),
+    }
 
     report_path = _resolve_output(root, output, "reviews", "agent", f"{scene_id}_scene_review.md")
     json_path = _resolve_output(root, json_output, "reviews", "agent", f"{scene_id}_scene_review.json")
@@ -121,11 +161,18 @@ def _user_prompt(
     word_budget_adherence: dict[str, object],
     reader_adherence: dict[str, object],
     rhythm_contract_text: str,
+    quality_profile: dict[str, object],
+    scene_id: str,
+    candidate_sha256: str,
 ) -> str:
     draft_body = final_body_from_workbench_text(draft_text) or draft_text
     return f"""Source paths: {source_paths}
+Exact candidate SHA-256: {candidate_sha256}
+The JSON field `candidate_sha256` must equal this value exactly.
 
-{render_ai_style_lint_block(draft_body)}
+{render_ai_style_lint_block(draft_body, profile=quality_profile, scope=scene_id)}
+
+{render_creative_quality_prompt(quality_profile, scope=scene_id)}
 
 {ANTI_EVASION_REVISION_PROTOCOL}
 
@@ -153,7 +200,7 @@ def _user_prompt(
 
 {rhythm_contract_text}
 
-若正文没有接住入场压力、没有完成本场 scene_turn、没有详略节奏差异，或结尾没有给下一场留下可接续钩子，`conclusion` 不得为 pass。必须在 JSON 中填写 `narrative_rhythm_adherence`。
+若正文没有接住入场压力、没有完成本场 scene_turn、没有按 tension_curve 的 entry / peak / exit 形成可辨识的升降、没有详略节奏差异，或结尾没有给下一场留下可接续钩子，`conclusion` 不得为 pass。不得只因元数据填写完整就判断通过；必须结合正文中的动作、信息、选择与代价验证曲线，并在 JSON 中填写 `narrative_rhythm_adherence`。
 
 同时检查 Scene Function Gate、Reader Question / Promise-Payoff、Narrative Distance 和 Texture Variety：本场不能只是补设定或聊天；必须有推进主线、改变关系、制造误判、兑现/设置问题、改变人物选择、扩大代价或转移读者认知之一。若读者问题没有管理、承诺没有兑现/延迟说明、叙述距离持续贴脸解释心理，或章节内连续场景材料过于单一，不能 clean pass。
 
@@ -199,10 +246,12 @@ def _dry_scene_review(
     source_paths: list[str],
     word_budget_adherence: dict[str, object],
     reader_adherence: dict[str, object],
+    quality_profile: dict[str, object],
+    candidate_sha256: str,
 ) -> dict[str, object]:
     draft_body = final_body_from_workbench_text(draft_text) or draft_text
     has_body = bool(draft_body.strip()) and "<!-- 在这里写入场景正文。 -->" not in draft_body
-    lint_issues = lint_ai_style(draft_body) if has_body else []
+    lint_issues = lint_ai_style(draft_body, profile=quality_profile, scope=scene_id) if has_body else []
     blocking_lint = [issue for issue in lint_issues if issue.severity not in {"low"}]
     budget_status = str(word_budget_adherence.get("status") or "").strip().lower()
     budget_blocked = budget_status not in {"pass", "not_required"}
@@ -228,6 +277,7 @@ def _dry_scene_review(
     return {
         "schema": "literary-engineering-workbench/scene-review-agent/v1",
         "scene_id": scene_id,
+        "candidate_sha256": candidate_sha256,
         "conclusion": conclusion,
         "summary": "dry-run scene reviewer preserved the review contract and source trace.",
         "blocking_issues": [],

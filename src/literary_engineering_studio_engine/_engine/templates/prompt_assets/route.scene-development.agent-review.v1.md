@@ -24,7 +24,7 @@ context_groups:
   - reader experience
   - narrative rhythm
 hard_constraints:
-  - Review the exact candidate path; stale or wrong-source reviews fail.
+  - Review the exact candidate path and candidate_sha256 supplied by the task; stale or wrong-content reviews fail.
   - Medium+ Style Lint, unresolved word-budget failure, reader-experience failure, new-character unresolved status, missing scene function, reader question/promise-payoff failure, narrative-distance monotony, texture repetition, or rhythm/bridge failure blocks pass.
   - pass_with_notes must go through revise-scene or explicit user accepted notes; it does not promote cleanly.
   - Canon writeback must be classified as no_change, declared, needs_patch, or unknown.
@@ -34,6 +34,7 @@ output_contract:
   - Write scene_review.v1 JSON and Markdown report at the task package paths, then complete the sidecar.
 review_requirements:
   - Review JSON must cite the exact candidate path.
+  - Review JSON candidate_sha256 must equal the digest supplied in the task package.
   - conclusion=pass requires no unresolved warnings, revision actions, style deviations, word-budget failure, reader-experience failure, rhythm/bridge failure, or new-character issues.
 forbidden_shortcuts:
   - Do not call a local dry-run or external hidden reviewer.

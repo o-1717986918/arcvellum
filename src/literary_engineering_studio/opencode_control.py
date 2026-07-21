@@ -13,8 +13,8 @@ from .opencode_server import OpenCodeServer, OpenCodeServerHandle
 from .process_manager import ProcessManager
 
 
-def provider_catalog(config: dict[str, Any]) -> dict[str, Any]:
-    with _control_session(config) as handle:
+def provider_catalog(config: dict[str, Any], *, runtime_pool=None) -> dict[str, Any]:
+    with _control_session(config, runtime_pool=runtime_pool) as handle:
         payload = handle.client.providers()
         auth_methods = handle.client.provider_auth_methods()
         connected = {str(item) for item in payload.get("connected") or []}
@@ -55,28 +55,29 @@ def provider_catalog(config: dict[str, Any]) -> dict[str, Any]:
             "runner": "opencode",
             "version": str(handle.client.health().get("version") or ""),
             "selected_model": _selected_model(config),
+            "selected_models": _selected_models(config),
             "providers": providers,
             "connected_provider_count": sum(1 for item in providers if item["connected"]),
             "available_model_count": sum(len(item["models"]) for item in providers),
         }
 
 
-def set_api_credential(config: dict[str, Any], provider_id: str, credential: str) -> dict[str, Any]:
+def set_api_credential(config: dict[str, Any], provider_id: str, credential: str, *, runtime_pool=None) -> dict[str, Any]:
     normalized_id = _validated_provider_id(provider_id)
     secret = str(credential or "").strip()
     if not secret or len(secret) > 8192:
         raise ValueError("credential must contain between 1 and 8192 characters")
-    with _control_session(config) as handle:
+    with _control_session(config, runtime_pool=runtime_pool) as handle:
         if not handle.client.set_auth(normalized_id, {"type": "api", "key": secret}):
             raise RuntimeError("OpenCode rejected the provider credential")
-    return provider_catalog(config)
+    return provider_catalog(config, runtime_pool=runtime_pool)
 
 
-def disconnect_provider(config: dict[str, Any], provider_id: str) -> dict[str, Any]:
+def disconnect_provider(config: dict[str, Any], provider_id: str, *, runtime_pool=None) -> dict[str, Any]:
     normalized_id = _validated_provider_id(provider_id)
     if normalized_id == "opencode":
         raise ValueError("the built-in OpenCode starter provider cannot be disconnected")
-    with _control_session(config) as handle:
+    with _control_session(config, runtime_pool=runtime_pool) as handle:
         if not handle.client.delete_auth(normalized_id):
             raise RuntimeError("OpenCode rejected the provider disconnect request")
 
@@ -86,6 +87,10 @@ def disconnect_provider(config: dict[str, Any], provider_id: str) -> dict[str, A
     selected_model = str(opencode.get("model") or "")
     if selected_model.startswith(normalized_id + "/"):
         opencode["model"] = fallback
+        models = opencode.setdefault("models", {})
+        for role, value in list(models.items()):
+            if str(value).startswith(normalized_id + "/"):
+                models[role] = fallback
         section = config.setdefault("model_connections", {})
         connections = section.setdefault("connections", [])
         record = next(
@@ -111,16 +116,26 @@ def disconnect_provider(config: dict[str, Any], provider_id: str) -> dict[str, A
             }
         )
     save_config(config)
-    return provider_catalog(config)
+    return provider_catalog(config, runtime_pool=runtime_pool)
 
 
-def select_model(config: dict[str, Any], qualified_model: str) -> dict[str, Any]:
+def select_model(config: dict[str, Any], qualified_model: str, *, role: str = "all") -> dict[str, Any]:
     model = str(qualified_model or "").strip()
     if "/" not in model or any(char.isspace() for char in model):
         raise ValueError("model must use provider/model-id format")
     runners = config.setdefault("agent_runners", {})
     opencode = runners.setdefault("opencode", {})
-    opencode["model"] = model
+    normalized_role = str(role or "all").strip().lower()
+    if normalized_role not in {"all", "worker", "advisor", "steward"}:
+        raise ValueError("model role must be all, worker, advisor, or steward")
+    models = opencode.setdefault("models", {})
+    if normalized_role == "all":
+        opencode["model"] = model
+        models.update({"worker": model, "advisor": model, "steward": model})
+    else:
+        models[normalized_role] = model
+        if normalized_role == "worker":
+            opencode["model"] = model
     section = config.setdefault("model_connections", {})
     connections = section.setdefault("connections", [])
     record = next(
@@ -140,11 +155,11 @@ def select_model(config: dict[str, Any], qualified_model: str) -> dict[str, Any]
     record["authentication_state"] = "runner-managed"
     record["endpoint_health"] = "probe-required"
     save_config(config)
-    return {"selected_model": model, "saved": True}
+    return {"selected_model": model, "selected_models": _selected_models(config), "role": normalized_role, "saved": True}
 
 
 @contextmanager
-def _control_session(config: dict[str, Any]) -> Iterator[OpenCodeServerHandle]:
+def _control_session(config: dict[str, Any], *, runtime_pool=None) -> Iterator[OpenCodeServerHandle]:
     settings = _opencode_settings(config)
     executable = locate_opencode(settings)
     if executable is None:
@@ -155,6 +170,13 @@ def _control_session(config: dict[str, Any]) -> Iterator[OpenCodeServerHandle]:
         root = Path(temporary)
         workspace = root / "workspace"
         workspace.mkdir()
+        if runtime_pool is not None:
+            lease = runtime_pool.acquire("advisor", workspace)
+            try:
+                yield type("ControlHandle", (), {"client": lease.client})()
+            finally:
+                runtime_pool.release(lease)
+            return
         manager = ProcessManager(root / "logs")
         server = OpenCodeServer(manager, executable=executable, shared_data_root=data_root)
         handle = server.start(
@@ -179,6 +201,13 @@ def _opencode_settings(config: dict[str, Any]) -> dict[str, object]:
 
 def _selected_model(config: dict[str, Any]) -> str:
     return str(_opencode_settings(config).get("model") or "")
+
+
+def _selected_models(config: dict[str, Any]) -> dict[str, str]:
+    settings = _opencode_settings(config)
+    fallback = str(settings.get("model") or "")
+    values = settings.get("models") if isinstance(settings.get("models"), dict) else {}
+    return {role: str(values.get(role) or fallback) for role in ("worker", "advisor", "steward")}
 
 
 def _validated_provider_id(value: str) -> str:

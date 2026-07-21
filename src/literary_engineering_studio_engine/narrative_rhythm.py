@@ -9,6 +9,7 @@ from typing import Any
 
 
 RHYTHM_SCHEMA = "literary-engineering-workbench/narrative-rhythm-contract/v0.1"
+RHYTHM_CURVE_SCHEMA = "literary-engineering-workbench/narrative-rhythm-curve/v0.1"
 
 
 DEFAULT_RHYTHM = {
@@ -83,16 +84,24 @@ def narrative_rhythm_contract(
     composition_bridge = _dict_value(composition_payload.get("scene_bridge"))
     scene_rhythm = _block_mapping(scene_text, "narrative_rhythm")
     scene_bridge = _block_mapping(scene_text, "scene_bridge")
-    rhythm = _merge_dict(DEFAULT_RHYTHM, scene_rhythm, composition_rhythm)
-    bridge = _merge_dict(DEFAULT_BRIDGE, scene_bridge, composition_bridge)
-    explicit = bool(composition_rhythm or composition_bridge or scene_rhythm or scene_bridge)
+    plan_payload = _read_json(root / "plot" / "rhythm_plan.json")
+    plan_scenes = plan_payload.get("scenes") if isinstance(plan_payload.get("scenes"), dict) else {}
+    plan_rhythm = plan_scenes.get(scene_id) if isinstance(plan_scenes.get(scene_id), dict) else {}
+    # Composition is a derived planning artifact. A later formal scene-contract
+    # task must be able to repair it before composition is rebuilt, and a user
+    # rhythm plan remains the highest authority.
+    rhythm = _merge_dict(DEFAULT_RHYTHM, composition_rhythm, scene_rhythm, plan_rhythm)
+    bridge = _merge_dict(DEFAULT_BRIDGE, composition_bridge, scene_bridge)
+    explicit = bool(composition_rhythm or composition_bridge or scene_rhythm or scene_bridge or plan_rhythm)
     missing_required = _missing_contract_fields(rhythm, bridge) if explicit else []
     status = "pass" if explicit and not missing_required else ("incomplete" if explicit else "defaulted")
     return {
         "schema": RHYTHM_SCHEMA,
         "scene_id": scene_id,
         "status": status,
-        "source": _source_label(composition_rhythm, composition_bridge, scene_rhythm, scene_bridge),
+        "source": "rhythm-plan" if plan_rhythm else _source_label(composition_rhythm, composition_bridge, scene_rhythm, scene_bridge),
+        "plan_revision": int(plan_payload.get("revision") or 0),
+        "plan_digest": str(plan_payload.get("digest") or ""),
         "message": _contract_message(explicit, missing_required),
         "missing_required": missing_required,
         "narrative_rhythm": rhythm,
@@ -127,7 +136,7 @@ def render_narrative_rhythm_contract(
         f"- 密度配比：摘要={density.get('summary', rhythm.get('summary_ratio', 'low'))}，行动={density.get('action', rhythm.get('action_ratio', 'medium'))}，对白={density.get('dialogue', rhythm.get('dialogue_ratio', 'medium'))}，思考={density.get('reflection', rhythm.get('reflection_ratio', 'low'))}，环境={density.get('description', rhythm.get('description_ratio', 'low'))}",
         f"- 需要放慢：{_join_list(rhythm.get('slow_down_points')) or '关键选择、后果落点'}",
         f"- 需要加速：{_join_list(rhythm.get('speed_up_points')) or '过场、重复说明、已知信息'}",
-        f"- 张力曲线：{rhythm.get('tension_curve') or '未填写，生成时按本场功能安排起落'}",
+        f"- 张力曲线：{_render_tension_curve(rhythm.get('tension_curve')) or '未填写（必填：entry / peak / exit，均为 1-5）'}",
         f"- 质地变化：{rhythm.get('texture_variety') or DEFAULT_RHYTHM['texture_variety']}",
         f"- 章节结尾策略：{rhythm.get('chapter_ending_policy') or '若本场是章末，避免总用警句/反转句，按情绪余波、信息落点、行动启动、关系变化、静默或 cliffhanger 选择。'}",
         f"- 防扁平化：{rhythm.get('avoid_flatness') or DEFAULT_RHYTHM['avoid_flatness']}",
@@ -149,6 +158,71 @@ def rhythm_review_status(payload: dict[str, Any]) -> str:
     if not isinstance(value, dict):
         return ""
     return str(value.get("status") or "").strip().lower()
+
+
+def normalize_tension_curve(value: object) -> dict[str, int] | None:
+    """Normalize one scene's entry/peak/exit tension to the 1-5 scale."""
+
+    if isinstance(value, dict):
+        values = [_tension_number(value.get(key)) for key in ("entry", "peak", "exit")]
+    elif isinstance(value, (list, tuple)) and len(value) >= 3:
+        values = [_tension_number(item) for item in value[:3]]
+    else:
+        text = str(value or "").strip().lower()
+        tokens = re.findall(r"[1-5]|very_low|very_high|low|medium|high|低|中|高", text)
+        values = [_tension_number(item) for item in tokens[:3]] if len(tokens) >= 3 else []
+    if len(values) != 3 or any(item is None for item in values):
+        return None
+    entry, peak, exit_value = (int(item) for item in values if item is not None)
+    return {"entry": entry, "peak": peak, "exit": exit_value}
+
+
+def analyze_narrative_rhythm_sequence(scenes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Audit a chapter sequence without pretending numbers replace editorial judgment."""
+
+    points: list[dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
+    for index, scene in enumerate(scenes):
+        scene_id = str(scene.get("scene_id") or f"scene_{index + 1:04d}")
+        curve = normalize_tension_curve(scene.get("tension_curve"))
+        points.append({
+            "scene_id": scene_id,
+            "pace": str(scene.get("pace") or "").strip().lower(),
+            "rhythm_role": str(scene.get("rhythm_role") or "").strip().lower(),
+            "scene_function": _sequence_function(scene.get("scene_function")),
+            "tension": curve,
+        })
+        if curve is None:
+            issues.append(_curve_issue("missing_tension_curve", "blocking", [scene_id], "缺少可检查的 entry / peak / exit 张力曲线。"))
+
+    _append_repetition_issues(points, "pace", "flat_pace_run", "连续场景采用同一种推进速度", issues)
+    _append_repetition_issues(points, "rhythm_role", "flat_role_run", "连续场景承担同一种节奏角色", issues)
+
+    valid = [point for point in points if point["tension"]]
+    if len(valid) >= 3:
+        peaks = [int(point["tension"]["peak"]) for point in valid]
+        if max(peaks) - min(peaks) <= 1:
+            issues.append(_curve_issue("flat_tension_band", "warning", [point["scene_id"] for point in valid], "章节峰值长期停留在同一窄区间，缺少蓄势、抬升与回落。"))
+        for start in range(len(valid) - 2):
+            run = valid[start:start + 3]
+            if all(int(point["tension"]["peak"]) >= 4 and int(point["tension"]["exit"]) >= 3 for point in run):
+                issues.append(_curve_issue("sustained_high_pressure", "warning", [point["scene_id"] for point in run], "连续三场保持高压且没有明显回落，读者容易疲劳。"))
+        for previous, current in zip(valid, valid[1:]):
+            gap = abs(int(previous["tension"]["exit"]) - int(current["tension"]["entry"]))
+            if gap >= 3:
+                issues.append(_curve_issue("tension_handoff_gap", "warning", [previous["scene_id"], current["scene_id"]], "相邻场景的出场与入场张力跳变过大，需要用转场或因果压力解释。"))
+
+    blocking = sum(1 for issue in issues if issue["severity"] == "blocking")
+    status = "incomplete" if blocking else ("needs_attention" if issues else "pass")
+    return {
+        "schema": RHYTHM_CURVE_SCHEMA,
+        "status": status,
+        "scene_count": len(points),
+        "blocking_count": blocking,
+        "warning_count": len(issues) - blocking,
+        "points": points,
+        "issues": issues,
+    }
 
 
 def _read(path: Path) -> str:
@@ -193,6 +267,8 @@ def _missing_contract_fields(rhythm: dict[str, Any], bridge: dict[str, Any]) -> 
         missing.append("narrative_rhythm.scene_turn")
     if not _meaningful_value(rhythm.get("reader_effect")):
         missing.append("narrative_rhythm.reader_effect")
+    if normalize_tension_curve(rhythm.get("tension_curve")) is None:
+        missing.append("narrative_rhythm.tension_curve(entry/peak/exit:1-5)")
     if not _meaningful_value(bridge.get("incoming_pressure")):
         missing.append("scene_bridge.incoming_pressure")
     if not (_meaningful_value(bridge.get("outgoing_hook")) or _meaningful_value(bridge.get("outgoing_hooks"))):
@@ -405,3 +481,51 @@ def _join_hooks(value: object) -> str:
             if text:
                 parts.append(text)
     return "；".join(parts)
+
+
+def _tension_number(value: object) -> int | None:
+    labels = {"very_low": 1, "low": 2, "medium": 3, "high": 4, "very_high": 5, "低": 2, "中": 3, "高": 4}
+    text = str(value or "").strip().lower()
+    if text in labels:
+        return labels[text]
+    try:
+        number = int(float(text))
+    except (TypeError, ValueError):
+        return None
+    return number if 1 <= number <= 5 else None
+
+
+def _render_tension_curve(value: object) -> str:
+    curve = normalize_tension_curve(value)
+    if curve is None:
+        return str(value or "")
+    return f"入场 {curve['entry']} → 峰值 {curve['peak']} → 出场 {curve['exit']}"
+
+
+def _sequence_function(value: object) -> str:
+    if isinstance(value, list):
+        return " / ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value or "").strip()
+
+
+def _curve_issue(code: str, severity: str, scene_ids: list[str], message: str) -> dict[str, Any]:
+    return {"code": code, "severity": severity, "scene_ids": scene_ids, "message": message}
+
+
+def _append_repetition_issues(
+    points: list[dict[str, Any]],
+    key: str,
+    code: str,
+    message: str,
+    issues: list[dict[str, Any]],
+) -> None:
+    start = 0
+    while start < len(points):
+        value = str(points[start].get(key) or "")
+        end = start + 1
+        while value and end < len(points) and str(points[end].get(key) or "") == value:
+            end += 1
+        if value and end - start >= 3:
+            run = points[start:end]
+            issues.append(_curve_issue(code, "warning", [point["scene_id"] for point in run], f"{message}（{value}），需要证明这是有意设计而非平均化惯性。"))
+        start = end

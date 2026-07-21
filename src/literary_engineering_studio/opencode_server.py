@@ -36,8 +36,9 @@ class OpenCodeServer:
         run_root: Path,
         role: str,
         model: str,
+        profile_root: Path | None = None,
     ) -> OpenCodeServerHandle:
-        profile_root = run_root / "opencode-profile"
+        profile_root = (profile_root or (run_root / "opencode-profile")).expanduser().resolve()
         profile_path = write_profile(profile_root, role=role, model=model)
         state_root = self.shared_data_root / "opencode"
         for path in (state_root / "config", state_root / "data", state_root / "cache", state_root / "state"):

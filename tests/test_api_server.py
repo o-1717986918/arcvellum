@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import re
@@ -11,14 +12,28 @@ except ImportError:  # pragma: no cover
     TestClient = None
 
 from literary_engineering_studio.api_server import create_app
+from literary_engineering_studio.config import default_config
 
 
 @unittest.skipIf(TestClient is None, "FastAPI test dependencies are not installed")
 class ApiServerTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(create_app())
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.config = default_config()
+        self.config["application"]["data_root"] = str(root)
+        self.config["application"]["database_path"] = str(root / "studio.sqlite3")
+        self.config["application"]["projects_root"] = str(root / "projects")
+        self.config["worker"]["runs_root"] = str(root / "runs")
+        self.config["agent_runners"]["opencode"]["data_root"] = str(root)
+        self.client = TestClient(create_app(self.config))
+
+    def tearDown(self):
+        self.client.close()
+        self.temporary.cleanup()
 
     def test_health_separates_agent_runners_and_model_connections(self):
+        self.client.app.state.bootstrap._engine_future.result(timeout=15)
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -43,6 +58,7 @@ class ApiServerTests(unittest.TestCase):
             "connected_provider_count": 1,
             "available_model_count": 1,
         }
+        service._engine_future.result(timeout=15)
         response = self.client.get("/application/bootstrap")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -63,6 +79,43 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("event: application.bootstrap", response.text)
         self.assertIn("can_enter_workspace", response.text)
+
+    def test_help_details_and_legal_are_real_product_endpoints(self):
+        details = self.client.get("/application/details")
+        self.assertEqual(details.status_code, 200)
+        self.assertEqual(details.json()["product_name"], "ArcVellum")
+        self.assertTrue(details.json()["repository_url"].endswith("/arcvellum"))
+
+        help_center = self.client.get("/help")
+        self.assertEqual(help_center.status_code, 200)
+        self.assertGreaterEqual(len(help_center.json()["topics"]), 5)
+
+        legal = self.client.get("/application/legal")
+        self.assertEqual(legal.status_code, 200)
+        self.assertEqual({item["id"] for item in legal.json()["documents"]}, {"terms", "privacy", "third-party"})
+
+    def test_narrative_stream_emits_sequence_and_delta(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root.joinpath("project.yaml").write_text("project:\n  title: test\n", encoding="utf-8")
+            projection = {
+                "ok": True,
+                "schema": "arcvellum/narrative-projection/v2",
+                "revision": "revision-one",
+                "nodes": [],
+                "edges": [],
+                "timeline": [],
+                "summary": {},
+            }
+            with patch("literary_engineering_studio.api_server.build_narrative_projection", return_value=projection):
+                response = self.client.get(
+                    "/narrative/stream",
+                    params={"project_root": str(root), "max_events": 1, "interval_seconds": 2},
+                )
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("event: narrative.projection", response.text)
+            self.assertIn("id: 1", response.text)
+            self.assertIn('"initial": true', response.text)
 
     def test_model_provider_disconnect_is_exposed_through_control_api(self):
         catalog = {
@@ -100,7 +153,7 @@ class ApiServerTests(unittest.TestCase):
                 "LES_DATA_ROOT": str(root / "data"),
             }
             with patch.dict(os.environ, env):
-                with TestClient(create_app()) as desktop:
+                with TestClient(create_app(self.config)) as desktop:
                     self.assertEqual(desktop.get("/health").status_code, 401)
                     rejected = desktop.post(
                         "/desktop/session",
@@ -126,7 +179,7 @@ class ApiServerTests(unittest.TestCase):
                 "LES_DATA_ROOT": str(root / "data"),
             }
             with patch.dict(os.environ, env):
-                with TestClient(create_app()) as desktop:
+                with TestClient(create_app(self.config)) as desktop:
                     response = desktop.options(
                         "/application/bootstrap",
                         headers={
@@ -138,6 +191,16 @@ class ApiServerTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.headers.get("access-control-allow-origin"), "http://tauri.localhost")
                     self.assertEqual(response.headers.get("access-control-allow-credentials"), "true")
+                    patch_response = desktop.options(
+                        "/project/display-field",
+                        headers={
+                            "Origin": "http://tauri.localhost",
+                            "Access-Control-Request-Method": "PATCH",
+                            "Access-Control-Request-Headers": "authorization,content-type",
+                        },
+                    )
+                    self.assertEqual(patch_response.status_code, 200)
+                    self.assertIn("PATCH", patch_response.headers.get("access-control-allow-methods", ""))
 
     def test_worker_stream_resumes_after_last_event_id(self):
         store = self.client.app.state.lifecycle.store
@@ -171,7 +234,7 @@ class ApiServerTests(unittest.TestCase):
                     }
                 ]
             }
-            with patch("literary_engineering_studio.delivery.build_dashboard", return_value=dashboard):
+            with patch("literary_engineering_studio.api_server.build_dashboard", return_value=dashboard):
                 response = self.client.get("/project/delivery", params={"project_root": str(project)})
             self.assertEqual(response.status_code, 200)
             payload = response.json()
@@ -236,6 +299,16 @@ class ApiServerTests(unittest.TestCase):
             self.assertEqual(loaded["policy"]["mode"], "supervised_auto")
             self.assertEqual(loaded["policy"]["delegated_decisions"], ["branch_selection"])
 
+            policy["mode"] = "full_auto"
+            policy["release_policy"] = "delegated"
+            self.client.put("/autopilot/policy", json={"project_root": str(project), "policy": policy})
+            blocked = self.client.post(
+                "/autopilot/start",
+                json={"project_root": str(project), "runtime": "opencode", "authorized": False},
+            )
+            self.assertEqual(blocked.status_code, 400)
+            self.assertIn("明确确认授权", blocked.json()["detail"])
+
     def test_advisor_stream_separates_visible_text_from_final_answer(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
@@ -255,6 +328,33 @@ class ApiServerTests(unittest.TestCase):
             self.assertIn("event: advisor.delta", response.text)
             self.assertIn("自然回答", response.text)
             self.assertIn("event: advisor.result", response.text)
+            self.assertLess(response.text.index("event: advisor.delta"), response.text.index("event: advisor.result"))
+
+    def test_advisor_stream_paces_a_coarse_provider_delta_without_changing_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            session = self.client.post("/advisor/sessions", json={"project_root": str(project)}).json()
+            answer = "先处理人物选择与代价，让下一场有明确承接。随后检查章节张力是否经历蓄势、峰值和回落，而不是连续维持同一种速度。"
+
+            def fake_ask(_advisor, _session_id, _question, **kwargs):
+                kwargs["event_sink"]("advisor.delta", {"text": answer})
+                return {"schema": "arcvellum/advisor-answer/v0.2", "message": answer, "evidence": [], "uncertainties": [], "suggested_actions": []}
+
+            with patch("literary_engineering_studio.advisor.ProjectAdvisor.ask", new=fake_ask):
+                response = self.client.post(
+                    f"/advisor/sessions/{session['session_id']}/ask/stream",
+                    json={"question": "现在应该关注什么？"},
+                )
+            delta_payloads = []
+            current_event = ""
+            for line in response.text.splitlines():
+                if line.startswith("event: "):
+                    current_event = line.removeprefix("event: ")
+                elif current_event == "advisor.delta" and line.startswith("data: "):
+                    delta_payloads.append(json.loads(line.removeprefix("data: ")))
+            self.assertGreater(len(delta_payloads), 1)
+            self.assertEqual("".join(str(item["text"]) for item in delta_payloads), answer)
 
 
 if __name__ == "__main__":

@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
 import re
 
 from .anti_ai_style import lint_ai_style
+from .creative_quality import load_creative_quality_profile
 from .punctuation_standard import lint_punctuation
 from .scene_draft import extract_draft_body
 
@@ -74,6 +76,9 @@ def review_scene_draft(project_root: Path, draft: Path, output: Path | None = No
 
     text = _read(draft_path)
     body = extract_draft_body(text)
+    quality_profile = load_creative_quality_profile(root)
+    scene_match = re.search(r"scene_\d+", draft_path.stem)
+    quality_scope = scene_match.group(0) if scene_match else draft_path.stem
     issues: list[ReviewIssue] = []
 
     for section in REQUIRED_SECTIONS:
@@ -102,13 +107,13 @@ def review_scene_draft(project_root: Path, draft: Path, output: Path | None = No
     if "style-profile" not in text and "风格" not in text:
         issues.append(ReviewIssue("Style Test", "low", "未发现风格约束引用。"))
 
-    for punctuation_issue in lint_punctuation(body):
+    for punctuation_issue in lint_punctuation(body, profile=quality_profile, scope=quality_scope):
         message = f"{punctuation_issue.message}（rule: {punctuation_issue.rule}）"
         if punctuation_issue.sample:
             message += f" 示例：{punctuation_issue.sample}"
         issues.append(ReviewIssue("Punctuation Standard Test", punctuation_issue.severity, message))
 
-    for ai_issue in lint_ai_style(body):
+    for ai_issue in lint_ai_style(body, profile=quality_profile, scope=quality_scope):
         message = ai_issue.message
         if ai_issue.sample:
             message += f" 示例：{ai_issue.sample}"
@@ -154,6 +159,7 @@ def _issue_lines(issues: list[ReviewIssue], gate: str) -> str:
 
 def _review_report(draft_path: Path, conclusion: str, issues: list[ReviewIssue], root: Path) -> str:
     rel = draft_path.relative_to(root).as_posix() if draft_path.is_relative_to(root) else str(draft_path)
+    source_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
     gates = [
         "Canon Test",
         "Timeline Test",
@@ -178,6 +184,7 @@ def _review_report(draft_path: Path, conclusion: str, issues: list[ReviewIssue],
 ## 基本信息
 
 - 审查对象：`{rel}`
+- 审查对象 SHA-256：`{source_sha256}`
 - 审查时间：{datetime.now(timezone.utc).isoformat()}
 - 审查阶段：single_scene_draft
 - 结论：{conclusion}

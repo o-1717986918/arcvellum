@@ -48,6 +48,23 @@ class DurableJobTests(unittest.TestCase):
             store.release_lock("project:a:route:b", first["job_id"])
             self.assertTrue(store.acquire_lock("project:a:route:b", second["job_id"], "two"))
 
+    def test_autopilot_lease_and_progress_are_cross_store_safe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "studio.sqlite3"
+            first = JobStore(database)
+            policy = {"mode": "supervised_auto"}
+            run = first.create_autopilot_run("C:/work", mode="supervised_auto", runtime="opencode", policy=policy)
+            second = JobStore(database)
+
+            self.assertTrue(first.acquire_autopilot_lease(run["run_id"], "controller-a"))
+            self.assertFalse(second.acquire_autopilot_lease(run["run_id"], "controller-b"))
+            self.assertTrue(first.renew_autopilot_lease(run["run_id"], "controller-a"))
+            first.advance_autopilot_run(run["run_id"], failures=0, last_error="")
+            second.advance_autopilot_run(run["run_id"], failures=0, last_error="")
+            self.assertEqual(second.read_autopilot_run(run["run_id"])["tasks_completed"], 2)
+            first.release_autopilot_lease(run["run_id"], "controller-a")
+            self.assertTrue(second.acquire_autopilot_lease(run["run_id"], "controller-b"))
+
     def test_supervisor_persists_completion(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")

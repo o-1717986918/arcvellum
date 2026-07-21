@@ -26,7 +26,7 @@ _STATUS_LOCK = threading.RLock()
 _STATUS_TTL_SECONDS = 30.0
 
 
-def build_runtime(runtime_id: str, config: dict[str, object]) -> AgentRuntime:
+def build_runtime(runtime_id: str, config: dict[str, object], *, runtime_pool=None) -> AgentRuntime:
     normalized = str(runtime_id or "").strip().lower()
     runtime_type = RUNTIME_TYPES.get(normalized)
     if runtime_type is None:
@@ -37,7 +37,10 @@ def build_runtime(runtime_id: str, config: dict[str, object]) -> AgentRuntime:
     settings = runners.get(normalized, {}) if isinstance(runners.get(normalized), dict) else {}
     if settings.get("enabled") is False:
         raise RuntimeError(f"Agent runtime is disabled: {normalized}")
-    return runtime_type(settings)
+    runtime = runtime_type(settings)
+    if isinstance(runtime, OpenCodeRuntime):
+        runtime.runtime_pool = runtime_pool
+    return runtime
 
 
 def agent_runner_status(

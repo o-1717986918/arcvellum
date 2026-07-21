@@ -63,6 +63,7 @@ def default_config() -> dict[str, Any]:
         "worker": {
             "runs_root": str(default_runs_root()),
             "timeout_seconds": 1800,
+            "max_repair_attempts": 2,
             "auto_run_task_command": True,
             "pause_on_human_gate": True,
         },
@@ -71,7 +72,13 @@ def default_config() -> dict[str, Any]:
                 "enabled": True,
                 "executable": "",
                 "model": "opencode/big-pickle",
+                "models": {
+                    "worker": "opencode/big-pickle",
+                    "advisor": "opencode/big-pickle",
+                    "steward": "opencode/big-pickle",
+                },
                 "data_root": str(default_data_root()),
+                "idle_timeout_seconds": 900,
             },
             "host-agent": {"enabled": True},
             "claude-code": {
@@ -159,6 +166,19 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
     legacy_runtimes = migrated.pop("runtimes", None)
     if isinstance(legacy_runtimes, dict) and not isinstance(migrated.get("agent_runners"), dict):
         migrated["agent_runners"] = legacy_runtimes
+    runners = migrated.get("agent_runners")
+    if isinstance(runners, dict) and isinstance(runners.get("opencode"), dict):
+        opencode = dict(runners["opencode"])
+        unified_model = str(opencode.get("model") or "").strip()
+        if unified_model and not isinstance(opencode.get("models"), dict):
+            opencode["models"] = {
+                "worker": unified_model,
+                "advisor": unified_model,
+                "steward": unified_model,
+            }
+            runners = dict(runners)
+            runners["opencode"] = opencode
+            migrated["agent_runners"] = runners
     return migrated
 
 

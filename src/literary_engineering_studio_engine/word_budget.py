@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from .agent_tasks import agent_task_completion_status, write_agent_tasks
+from .longform_materializer import longform_materialization_status
 from .draft_text import (
     count_delivery_chars,
     count_delivery_chinese_content_chars,
@@ -244,9 +245,17 @@ def load_word_budget_summary(root: Path) -> dict[str, object]:
     }
 
 
-def scene_word_budget_contract(root: Path, scene_path: Path) -> dict[str, object]:
+def scene_word_budget_contract(
+    root: Path,
+    scene_path: Path,
+    *,
+    materialization_scope: str = "full",
+) -> dict[str, object]:
     """Return the hard per-scene word-budget contract for formal generation/review."""
 
+    scope = materialization_scope.strip().lower()
+    if scope not in {"full", "scene"}:
+        raise ValueError("materialization_scope must be 'full' or 'scene'")
     root = root.resolve()
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
     scene_text = _read(scene_path)
@@ -308,13 +317,21 @@ def scene_word_budget_contract(root: Path, scene_path: Path) -> dict[str, object
     base["required"] = required
     base["budget_status"] = budget_status
     if budget_status == "needs_expansion":
-        base.update(
-            {
-                "status": "needs_expansion",
-                "message": "word budget reports needs_expansion; process budget and scene-inventory sidecars before formal generation",
-            }
+        materialized, materialization_message = longform_materialization_status(
+            root,
+            scene_path=scene_path if scope == "scene" else None,
         )
-        return base
+        if not materialized:
+            base.update(
+                {
+                    "status": "needs_expansion",
+                    "message": "word budget reports needs_expansion; process budget and scene-inventory sidecars before formal generation",
+                    "materialization_status": materialization_message,
+                }
+            )
+            return base
+        base["budget_status"] = "materialized"
+        base["materialization_status"] = materialization_message
     chapter_row = _chapter_budget_row(payload, chapter_id)
     if not chapter_row:
         if required:
@@ -414,10 +431,15 @@ def scene_word_budget_contract(root: Path, scene_path: Path) -> dict[str, object
     return base
 
 
-def ensure_scene_word_budget_ready(root: Path, scene_path: Path) -> dict[str, object]:
+def ensure_scene_word_budget_ready(
+    root: Path,
+    scene_path: Path,
+    *,
+    materialization_scope: str = "full",
+) -> dict[str, object]:
     """Raise when a formal scene has no usable word-budget contract."""
 
-    contract = scene_word_budget_contract(root, scene_path)
+    contract = scene_word_budget_contract(root, scene_path, materialization_scope=materialization_scope)
     if contract.get("status") == "not_required":
         return contract
     if contract.get("status") == "pass":
@@ -442,10 +464,16 @@ def ensure_scene_word_budget_ready(root: Path, scene_path: Path) -> dict[str, ob
     )
 
 
-def word_budget_adherence_for_body(root: Path, scene_path: Path, body: str) -> dict[str, object]:
+def word_budget_adherence_for_body(
+    root: Path,
+    scene_path: Path,
+    body: str,
+    *,
+    materialization_scope: str = "full",
+) -> dict[str, object]:
     """Return deterministic cleaned-body word-budget adherence for a scene draft/candidate."""
 
-    contract = scene_word_budget_contract(root, scene_path)
+    contract = scene_word_budget_contract(root, scene_path, materialization_scope=materialization_scope)
     clean_machine_chars = count_delivery_chars(body)
     clean_chinese_chars = count_delivery_chinese_content_chars(body)
     status = str(contract.get("status") or "")
@@ -522,8 +550,13 @@ def render_word_budget_generation_standard(root: Path) -> str:
 场景生成前必须确认当前场景承担明确叙事负载：主线行动、关系压力、世界/信息释放、行动后果或节奏调节。若 `scene_inventory_binding` 显示当前章节欠场景或正文缺口，先处理 `scene_inventory_expansion.agent_tasks.md`，补候选场景和因果链，不要用长段总结、空泛抒情或重复心理解释灌字数。"""
 
 
-def render_scene_word_budget_contract(root: Path, scene_path: Path) -> str:
-    contract = scene_word_budget_contract(root, scene_path)
+def render_scene_word_budget_contract(
+    root: Path,
+    scene_path: Path,
+    *,
+    materialization_scope: str = "full",
+) -> str:
+    contract = scene_word_budget_contract(root, scene_path, materialization_scope=materialization_scope)
     status = contract.get("status", "")
     if status == "not_required":
         return "本项目当前未达到强制长篇预算规模；仍应避免把剧情量压缩成摘要或用空泛描写灌字数。"
@@ -562,7 +595,7 @@ def _write_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline
         source_paths=source_paths,
         notes=[
             "这是长篇字数预算与剧情库存门禁任务。",
-            "CLI 只负责计算预算、统计现有大纲库存和生成诊断；卷章场景创意分配必须由平台 agent 完成。",
+            "CLI 只负责计算预算、统计现有大纲库存和生成诊断；本任务只完成卷章级创意分配，逐场景库存由后续 scene-inventory 正式任务完成。",
             "预算不等于灌字数。补足字数必须通过因果链、场景功能、人物状态、信息释放和行动后果增加剧情库存。",
             "候选大纲未经审查和用户批准，不得覆盖 plot/outline.md 或正式 scene 文件。",
         ],
@@ -573,11 +606,11 @@ def _write_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline
             ),
             (
                 "补足剧情库存候选",
-                f"""创建或覆盖 `{candidate}`。按卷 -> 章 -> 场景列出可支撑目标中文内容字符的候选结构。每章必须包含目标中文内容字符、2-5个场景、每个场景的功能、目标中文内容字符、主线/副线/人物线/世界信息/后果负载、详略等级和承接的前后因果。不得只写概括性梗概。""",
+                f"""创建或覆盖 `{candidate}`。按卷 -> 章列出可支撑目标中文内容字符的候选骨架。每章必须包含目标中文内容字符、计划场景数、章节功能、关键转向、主线/副线/人物线/世界信息/后果负载、详略等级、读者义务以及承接的前后因果。不要在本任务展开逐场景清单；逐场景功能、目标字符和承接关系由后续 scene-inventory 任务生成，避免重复生成数百条场景后因末端格式问题整单重跑。""",
             ),
             (
                 "建立字数-剧情量映射",
-                """为每卷写出剧情库存说明：核心事件数、调查/行动链数、人物关系变化数、信息释放点、失败/代价点、伏笔设置和回收点。若某卷目标约10万字，场景库存通常应达到60-90个；不足时必须标注 underbuilt。""",
+                """为每卷写出剧情库存说明：核心事件数、调查/行动链数、人物关系变化数、信息释放点、失败/代价点、伏笔设置和回收点，并给出计划章节数与计划场景总数。若某卷目标约10万字，场景库存通常应达到60-90个；不足时必须标注 underbuilt，但不要在这里逐条创作全部场景。""",
             ),
             (
                 "写入预算审查报告",

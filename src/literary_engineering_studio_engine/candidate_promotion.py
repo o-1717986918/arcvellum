@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,8 +12,10 @@ from pathlib import Path
 from .agent_schema import validate_payload
 from .agent_tasks import agent_task_completion_status
 from .anti_ai_style import style_lint_gate, style_lint_gate_message
+from .creative_quality import creative_quality_profile_exists, load_creative_quality_profile
 from .flow_gates import FlowGateError
 from .new_character_register import new_character_register_issues
+from .narrative_rhythm import narrative_rhythm_contract
 from .reader_experience import reader_experience_adherence_for_body
 from .word_budget import word_budget_adherence_for_body
 
@@ -86,6 +89,8 @@ def promote_scene_candidate(
         sections=sections,
     )
     draft_path.write_text(draft, encoding="utf-8")
+    candidate_sha256 = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    draft_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
 
     manifest_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
     report_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.md"
@@ -96,7 +101,9 @@ def promote_scene_candidate(
         "scene_id": scene_id,
         "scene": _rel(scene_path, root),
         "candidate": _rel(candidate_path, root),
+        "candidate_sha256": candidate_sha256,
         "draft": _rel(draft_path, root),
+        "draft_sha256": draft_sha256,
         "approval_run_id": approval_run_id,
         "selection_note": selection_note,
         "candidate_review": review_gate,
@@ -215,10 +222,27 @@ def candidate_generation_gate(root: Path, scene_id: str, candidate_path: Path) -
         invalid.extend(new_character_register_issues(payload, root, mode="generation"))
         prompt_payload = _read_json(prompt_manifest_path)
         standards = prompt_payload.get("generation_standards") if isinstance(prompt_payload.get("generation_standards"), dict) else {}
+        if creative_quality_profile_exists(root):
+            current_digest = str(load_creative_quality_profile(root).get("digest") or "")
+            prompt_digest = str(standards.get("creative_quality_profile_digest") or "") if isinstance(standards, dict) else ""
+            candidate_digest = str(payload.get("creative_quality_profile_digest") or "")
+            if not prompt_digest:
+                invalid.append("prompt manifest missing creative_quality_profile_digest")
+            elif prompt_digest != current_digest:
+                invalid.append("prompt manifest creative quality profile is stale")
+            if not candidate_digest:
+                invalid.append("candidate manifest missing creative_quality_profile_digest")
+            elif candidate_digest != prompt_digest:
+                invalid.append("candidate manifest creative quality profile digest mismatch")
         rhythm_standard = standards.get("narrative_rhythm_contract") if isinstance(standards, dict) else {}
         if not isinstance(rhythm_standard, dict) or rhythm_standard.get("status") not in {"pass", "defaulted"}:
             invalid.append("prompt manifest missing ready generation_standards.narrative_rhythm_contract")
         scene_path = root / "scenes" / f"{scene_id}.yaml"
+        current_rhythm = narrative_rhythm_contract(root, scene_path)
+        current_plan_digest = str(current_rhythm.get("plan_digest") or "")
+        prompt_plan_digest = str(rhythm_standard.get("plan_digest") or "") if isinstance(rhythm_standard, dict) else ""
+        if current_plan_digest and prompt_plan_digest != current_plan_digest:
+            invalid.append("prompt manifest narrative rhythm plan is stale")
         candidate_body = _candidate_body(_read(candidate_path)) if candidate_path.exists() else ""
         reader = reader_experience_adherence_for_body(root, scene_path, candidate_body)
         if reader.get("status") != "not_required":
@@ -261,7 +285,8 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
     rel_candidate = _rel(candidate_path, root)
     candidate_text = _read(candidate_path)
     candidate_body = _candidate_body(candidate_text) or candidate_text
-    lint_gate = style_lint_gate(candidate_body)
+    quality_profile = load_creative_quality_profile(root)
+    lint_gate = style_lint_gate(candidate_body, profile=quality_profile, scope=scene_id)
     word_budget = word_budget_adherence_for_body(root, scene_path, candidate_body)
     reader_experience = reader_experience_adherence_for_body(root, scene_path, candidate_body)
     review_completion = agent_task_completion_status(review_task, root=root)
@@ -274,6 +299,12 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
         "style_lint": lint_gate,
         "word_budget_adherence": word_budget,
         "reader_experience_adherence": reader_experience,
+        "creative_quality_profile": {
+            "required": creative_quality_profile_exists(root),
+            "revision": quality_profile.get("revision"),
+            "digest": quality_profile.get("digest"),
+            "name": quality_profile.get("name"),
+        },
         "mounted_style_required": _mounted_style_exists(root),
         "status": "missing",
         "conclusion": "",
@@ -282,6 +313,7 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
         "reader_experience_status": str(reader_experience.get("status") or ""),
         "schema_errors": [],
         "unresolved_notes": [],
+        "human_decision_notes": [],
         "source_match": False,
         "message": "candidate review is missing",
     }
@@ -293,7 +325,9 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
     style = payload.get("style_adherence") if isinstance(payload.get("style_adherence"), dict) else {}
     style_status = str(style.get("status") or "").strip().lower() if isinstance(style, dict) else ""
     source_match = _review_mentions_candidate(payload, rel_candidate, candidate_path)
+    content_match = _candidate_review_content_match(payload, candidate_path)
     unresolved = _unresolved_review_notes(payload)
+    human_decision_notes = _human_decision_notes(payload)
     new_character_issues = new_character_register_issues(payload, root, mode="review") if payload else ["new_character_register is missing"]
     style_required = _mounted_style_exists(root)
     style_passed = not style_required or style_status in {"pass", "pass_with_notes"}
@@ -304,6 +338,10 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
     review_reader_status = str(review_reader.get("status") or "").strip().lower()
     review_rhythm = payload.get("narrative_rhythm_adherence") if isinstance(payload.get("narrative_rhythm_adherence"), dict) else {}
     review_rhythm_status = str(review_rhythm.get("status") or "").strip().lower()
+    review_quality = payload.get("creative_quality_profile") if isinstance(payload.get("creative_quality_profile"), dict) else {}
+    quality_required = creative_quality_profile_exists(root)
+    quality_digest = str(quality_profile.get("digest") or "")
+    review_quality_passed = (not quality_required) or str(review_quality.get("digest") or "") == quality_digest
     review_canon = payload.get("canon_writeback") if isinstance(payload.get("canon_writeback"), dict) else {}
     canon_review_ok, canon_review_status, canon_review_message = _canon_writeback_review_gate(review_canon)
     revision_integrity_ok, revision_integrity_status, revision_integrity_message = _revision_integrity_review_gate(
@@ -324,6 +362,7 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
         not errors
         and task_completed
         and source_match
+        and content_match
         and conclusion == "pass"
         and style_passed
         and not unresolved
@@ -333,6 +372,7 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
         and reader_passed
         and review_reader_passed
         and review_rhythm_passed
+        and review_quality_passed
         and canon_review_ok
         and revision_integrity_ok
         and not new_character_issues
@@ -349,6 +389,9 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
     elif not source_match:
         status = "stale_or_wrong_source"
         message = "scene review does not cite this candidate in source_paths/candidate"
+    elif not content_match:
+        status = "stale_or_wrong_source"
+        message = "scene review candidate_sha256 does not match the current candidate content"
     elif conclusion not in {"pass", "pass_with_notes"}:
         status = "failed"
         message = f"candidate review conclusion is {conclusion or 'missing'}"
@@ -373,12 +416,18 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
     elif not review_rhythm_passed:
         status = "narrative_rhythm_review_failed"
         message = f"AgentReview did not pass narrative_rhythm_adherence: {review_rhythm_status or 'missing'}"
+    elif not review_quality_passed:
+        status = "creative_quality_review_stale"
+        message = "AgentReview was produced with a different creative quality profile; run formal review again"
     elif not canon_review_ok:
         status = "canon_writeback_review_failed"
         message = f"AgentReview did not resolve canon_writeback declaration: {canon_review_message}"
     elif not revision_integrity_ok:
         status = "revision_integrity_review_failed"
         message = f"AgentReview did not pass revision_integrity: {revision_integrity_message}"
+    elif human_decision_notes:
+        status = "human_decision_required"
+        message = "candidate review requires a recorded human or delegated decision before prose can be revised: " + "; ".join(human_decision_notes)
     elif new_character_issues:
         status = "new_character_unresolved"
         message = "AgentReview did not resolve new_character_register: " + "; ".join(new_character_issues)
@@ -400,12 +449,22 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
             "revision_integrity_status": revision_integrity_status,
             "schema_errors": errors,
             "unresolved_notes": unresolved,
+            "human_decision_notes": human_decision_notes,
+            "candidate_sha256": str(payload.get("candidate_sha256") or "").strip().lower(),
             "new_character_register_issues": new_character_issues,
             "source_match": source_match,
             "message": message,
         }
     )
     return gate
+
+
+def _candidate_review_content_match(payload: dict[str, object], candidate_path: Path) -> bool:
+    if not candidate_path.is_file():
+        return False
+    actual = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    recorded = str(payload.get("candidate_sha256") or "").strip().lower()
+    return bool(recorded) and recorded == actual
 
 
 def _ensure_candidate_generation_provenance(gate: dict[str, object]) -> None:
@@ -518,6 +577,33 @@ def _unresolved_review_notes(payload: dict[str, object]) -> list[str]:
     )
     if not revision_ok:
         notes.append(f"revision_integrity.{revision_status}:{revision_message}")
+    return notes
+
+
+def _human_decision_notes(payload: dict[str, object]) -> list[str]:
+    """Return review findings that must not be silently converted into prose edits.
+
+    These are usually cross-asset facts such as a canonical age, relationship, or
+    world rule.  A revision agent may execute a *recorded* direction, but it must
+    never choose which formal fact wins simply because it is editing prose.
+    """
+
+    notes: list[str] = []
+    for key in ("blocking_issues", "warnings", "revision_actions", "style_notes"):
+        value = payload.get(key)
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            resolution = str(item.get("resolution") or item.get("status") or "").strip().lower()
+            blocks_pass = item.get("blocks_pass") is True
+            if resolution in {"needs_human_review", "human_decision_required", "pending_user_decision"} or (
+                blocks_pass and "human" in resolution
+            ):
+                item_id = str(item.get("id") or key)
+                description = str(item.get("description") or item.get("note") or "requires a formal decision")
+                notes.append(f"{item_id}: {description}")
     return notes
 
 

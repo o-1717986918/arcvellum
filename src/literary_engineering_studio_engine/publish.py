@@ -9,9 +9,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .creative_quality import load_creative_quality_profile
+
 from .canon_lint import build_canon_lint
-from .chapter_pipeline import build_chapter_workspace
-from .export_package import build_export_package
+from .chapter_pipeline import ChapterWorkspaceResult, build_chapter_workspace
+from .export_package import build_export_package, load_export_package
+from .release_fingerprint import release_candidate_fingerprint
 
 
 @dataclass(frozen=True)
@@ -54,29 +57,54 @@ def publish_chapter(
     if canon.blocking_count:
         raise RuntimeError(f"canon-lint has blocking issues: {canon.blocking_count}")
 
-    chapter = build_chapter_workspace(root, chapter_id=chapter_id, build_missing=False, review_drafts=False)
-    if rebuild_chapter:
+    chapter_json = root / "plot" / "chapters" / f"{chapter_id}.json"
+    chapter_markdown = root / "drafts" / "chapters" / f"{chapter_id}.md"
+    if rebuild_chapter or not chapter_json.is_file() or not chapter_markdown.is_file():
         chapter = build_chapter_workspace(root, chapter_id=chapter_id, build_missing=False, review_drafts=True)
+    else:
+        chapter_payload = _read_json(chapter_json)
+        summary = chapter_payload.get("summary") if isinstance(chapter_payload.get("summary"), dict) else {}
+        chapter = ChapterWorkspaceResult(
+            project_root=root,
+            markdown_path=chapter_markdown,
+            json_path=chapter_json,
+            chapter_id=chapter_id,
+            scene_count=int(summary.get("scene_count", 0) or 0),
+            ready_count=int(summary.get("ready_count", 0) or 0),
+            blocked_count=int(summary.get("blocked_count", 0) or 0),
+        )
     if chapter.scene_count <= 0:
         raise RuntimeError(f"chapter has no scenes: {chapter_id}")
     if chapter.blocked_count:
         raise RuntimeError(f"chapter has non-ready scenes: {chapter.blocked_count}")
 
+    approved_fingerprint = release_candidate_fingerprint(root, chapter_id)
     approval = _find_approval(root, approval_run_id)
-    if approval is None and not allow_unapproved:
-        raise RuntimeError("publish requires an approve record; pass approval_run_id or use allow_unapproved for internal release")
+    if (
+        approval is None
+        or not approved_fingerprint
+        or str(approval.get("subject_sha256") or "").strip().lower() != approved_fingerprint
+    ) and not allow_unapproved:
+        raise RuntimeError("publish requires a current-content approve record for the exported release candidate")
 
-    export = build_export_package(
-        root,
-        chapter_id=chapter_id,
-        include_blocked=False,
-        rebuild_chapter=rebuild_export,
-        formats=export_formats,
+    export = (
+        build_export_package(
+            root,
+            chapter_id=chapter_id,
+            include_blocked=False,
+            rebuild_chapter=False,
+            formats=export_formats,
+        )
+        if rebuild_export or not (root / "exports" / chapter_id / "export_manifest.json").is_file()
+        else load_export_package(root, chapter_id)
     )
     if export.exported_scene_count <= 0:
         raise RuntimeError(f"chapter has no exported scenes: {chapter_id}")
     if export.skipped_scene_count:
         raise RuntimeError(f"export skipped scenes: {export.skipped_scene_count}")
+    rebuilt_fingerprint = release_candidate_fingerprint(root, chapter_id)
+    if approval is not None and rebuilt_fingerprint != approved_fingerprint:
+        raise RuntimeError("release candidate changed while rebuilding export; request a fresh content-bound approval")
 
     release_dir.mkdir(parents=True, exist_ok=True)
     copied_outputs = _copy_exports(root, release_dir, export)
@@ -99,7 +127,9 @@ def publish_chapter(
         "chapter_id": chapter_id,
         "release_id": release_id,
         "project_root": str(root),
+        "creative_quality_profile": load_creative_quality_profile(root),
         "approval": approval or {"decision": "allow_unapproved", "run_id": "", "notes": ""},
+        "approved_export_fingerprint": approved_fingerprint,
         "gates": {
             "canon_lint": {
                 "status": canon.status,
@@ -200,14 +230,13 @@ def _find_approval(root: Path, approval_run_id: str = "") -> dict[str, object] |
         if not line.strip():
             continue
         record = json.loads(line)
-        if record.get("decision") != "approve":
-            continue
         if approval_run_id and record.get("run_id") != approval_run_id:
             continue
         records.append(record)
     if not records:
         return None
-    return records[-1]
+    latest = records[-1]
+    return latest if latest.get("decision") == "approve" else None
 
 
 def _render_release_notes(manifest: dict[str, object]) -> str:

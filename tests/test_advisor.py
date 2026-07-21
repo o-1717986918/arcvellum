@@ -84,6 +84,19 @@ class AdvisorTests(unittest.TestCase):
         self.assertEqual(len(answer["suggested_actions"]), 1)
         self.assertEqual(answer["suggested_actions"][0]["type"], "open_view")
 
+    def test_natural_language_console_keeps_only_confirmable_actions(self):
+        raw = (
+            "可以继续推进，我会把执行交给正式状态机。"
+            + METADATA_MARKER
+            + '{"suggested_actions":['
+              '{"type":"start_autopilot","label":"开始连续创作","route":"auto"},'
+              '{"type":"write_file","label":"直接改正文"}]}'
+            + METADATA_END
+        )
+        answer = _parse_answer(raw)
+        self.assertEqual([item["type"] for item in answer["suggested_actions"]], ["start_autopilot"])
+        self.assertIn("自然语言项目控制台", _advisor_prompt("继续创作", []))
+
     def test_answer_memory_is_normalized_for_new_and_legacy_payloads(self):
         v2 = _parse_answer(
             "继续保留这个方向。"

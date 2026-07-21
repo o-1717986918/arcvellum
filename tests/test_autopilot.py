@@ -5,7 +5,15 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.autopilot import AutopilotService, DelegationPolicy, ROUTE_ORDER, default_policy, normalize_policy
+from literary_engineering_studio.autopilot import (
+    AutopilotService,
+    DelegationPolicy,
+    ROUTE_ORDER,
+    default_policy,
+    is_revision_task,
+    next_revision_count,
+    normalize_policy,
+)
 from literary_engineering_studio.creative_steward import _decision_prompt, _parse_decision
 from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.project_manager import record_direction
@@ -19,6 +27,15 @@ class _Audit:
 
 
 class AutopilotTests(unittest.TestCase):
+    def test_revision_counter_covers_semantic_revision_task_names(self):
+        run = {"consecutive_revisions": 2}
+        self.assertTrue(is_revision_task("character-and-world-assets-protagonist-asset-review-pass"))
+        self.assertTrue(is_revision_task("review-and-audit-canon-review-pass"))
+        self.assertTrue(is_revision_task("scene-development-scene-0001-candidate-revision"))
+        self.assertFalse(is_revision_task("scene-development-scene-0001-agent-review-task"))
+        self.assertEqual(next_revision_count(run, "character-and-world-assets-protagonist-asset-review-pass"), 3)
+        self.assertEqual(next_revision_count(run, "scene-development-scene-0001-agent-review-task"), 0)
+
     def test_policy_modes_bound_decisions_and_limits(self):
         collaborative = DelegationPolicy(default_policy("collaborative"))
         self.assertFalse(collaborative.permits("scene-development", "branch_selection"))
@@ -28,9 +45,56 @@ class AutopilotTests(unittest.TestCase):
         full = DelegationPolicy(default_policy("full_auto"))
         self.assertTrue(full.permits_writeback("scene-development"))
         self.assertTrue(full.permits("export-and-release", "release_approval"))
+        self.assertFalse(full.permits("scene-development", "cross_asset_alignment"))
         normalized = normalize_policy({"mode": "full_auto", "limits": {"max_tasks": 999999, "max_cost": -1}})
         self.assertEqual(normalized["limits"]["max_tasks"], 10000)
         self.assertEqual(normalized["limits"]["max_cost"], 0)
+
+    def test_cancelled_steward_decision_never_records_a_choice(self):
+        class CancellingSteward:
+            def decide(self, project, choice, *, project_direction="", timeout=180, cancel_event=None):
+                assert cancel_event is not None
+                cancel_event.set()
+                return {
+                    "selected_option": "approve",
+                    "rationale": "would have approved",
+                    "evidence": [],
+                    "alternatives": [],
+                    "confidence": 1.0,
+                    "requires_human": False,
+                    "human_reason": "",
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: Tide\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(str(project.resolve()), mode="full_auto", runtime="opencode", policy=policy)
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+            stop = threading.Event()
+            handled = service._delegate_choice(
+                run["run_id"],
+                project,
+                "character-and-world-assets",
+                DelegationPolicy(policy),
+                CancellingSteward(),
+                {
+                    "choice_id": "choice.asset.cancel",
+                    "route": "character-and-world-assets",
+                    "decision_type": "asset_approval",
+                    "target": {"target_id": "asset"},
+                    "options": [{"id": "approve"}, {"id": "revise"}],
+                },
+                stop=stop,
+            )
+
+            self.assertFalse(handled)
+            self.assertEqual(store.delegated_decisions(run["run_id"]), [])
+            events = store.autopilot_events_since(run["run_id"])
+            self.assertTrue(any(item["event"] == "decision.cancelled" for item in events))
 
     def test_run_policy_events_and_decisions_survive_restart(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -55,6 +119,81 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(loaded["status"], "paused")
             self.assertEqual(restarted.delegated_decisions(run["run_id"])[0]["decision_id"], decision["decision_id"])
             self.assertTrue(restarted.autopilot_events_since(run["run_id"]))
+
+    def test_resume_clears_stale_finished_timestamp(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("supervised_auto")
+            run = store.create_autopilot_run(str(root), mode=policy["mode"], runtime="opencode", policy=policy)
+            store.update_autopilot_run(
+                run["run_id"],
+                status="paused",
+                stop_reason="application-restart",
+                finished_at="2026-01-01T00:00:00+00:00",
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with patch.object(service, "_launch") as launch:
+                resumed = service.resume(run["run_id"])
+
+            self.assertEqual(resumed["status"], "running")
+            self.assertEqual(resumed["finished_at"], "")
+            launch.assert_called_once_with(run["run_id"])
+
+    def test_runtime_failure_recovers_complete_sandbox_before_retrying(self):
+        class RecoveringWorker:
+            run_calls = 0
+            resume_calls = 0
+
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                self.__class__.run_calls += 1
+                if self.__class__.run_calls == 1:
+                    return WorkerRunResult(
+                        "runtime_failed", project, route, "budget-task", runtime_id,
+                        project / "run-budget", project / "run-budget" / "workspace", "timeout",
+                    )
+                return WorkerRunResult("route_ready", project, route, "", runtime_id, None, None, "路线已完成。")
+
+            def resume_from_run(self, run_root):
+                self.__class__.resume_calls += 1
+                return WorkerRunResult(
+                    "complete", project, "longform-planning", "budget-task", "opencode",
+                    run_root, run_root / "workspace", "recovered",
+                )
+
+        class FakeRelease:
+            def __init__(self, config):
+                self.config = config
+
+            def release(self, project, *, approved_by, autopilot_run_id=""):
+                return {"ok": True, "manifest_path": "release.json"}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(str(project.resolve()), mode="full_auto", runtime="opencode", policy=policy)
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", RecoveringWorker),
+                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            events = store.autopilot_events_since(run["run_id"])
+            self.assertEqual(store.read_autopilot_run(run["run_id"])["status"], "complete")
+            self.assertEqual(RecoveringWorker.resume_calls, 1)
+            self.assertTrue(any(event["event"] == "task.recovery_succeeded" for event in events))
 
     def test_structured_approval_choice_materializes_core_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -355,6 +494,49 @@ class AutopilotTests(unittest.TestCase):
             self.assertTrue(docx.is_file())
             self.assertIn(direction, (project / "workflow" / "studio" / "user_directions.md").read_text(encoding="utf-8"))
             self.assertEqual(manuscript.read_text(encoding="utf-8").count("退潮"), 2)
+
+    def test_scene_route_yields_to_pending_character_asset_then_resumes(self):
+        class DependencyWorker:
+            calls = []
+
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                self.__class__.calls.append(route)
+                status = "complete" if route == "scene-development" and len(self.__class__.calls) == 1 else "route_ready"
+                return WorkerRunResult(status, project, route, f"{route}-task", runtime_id, None, None, "ok")
+
+        class FakeRelease:
+            def __init__(self, config):
+                self.config = config
+
+            def release(self, project, *, approved_by, autopilot_run_id=""):
+                return {"ok": True}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(str(project.resolve()), mode="full_auto", runtime="opencode", policy=policy)
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", DependencyWorker),
+                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("scene-development",)),
+                patch("literary_engineering_studio.autopilot._pending_asset_dependency", side_effect=[False, True, False]),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            self.assertEqual(DependencyWorker.calls, ["scene-development", "character-and-world-assets", "scene-development"])
+            events = store.autopilot_events_since(run["run_id"])
+            self.assertTrue(any(event["event"] == "route.dependency_entered" for event in events))
+            self.assertTrue(any(event["event"] == "route.dependency_ready" for event in events))
 
 
 if __name__ == "__main__":

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import re
 from pathlib import Path
 
 from .display_cleaner import read_json_file, read_jsonl_tail, truncate_text
 from .approval import record_workflow_approval
+from .release_fingerprint import release_candidate_fingerprint
 from .workflow_dashboard import build_workflow_dashboard
+from .workflow_state import build_workflow_state, next_scene_workflow_state
 
 
 UI_OVERRIDES_SCHEMA = "literary-engineering-workbench/ui-overrides/v0.1"
@@ -37,6 +40,7 @@ DECISION_TYPES = {
     "canon_patch_approval",
     "word_budget_direction",
     "revision_direction",
+    "cross_asset_alignment",
     "state_patch_confirmation",
     "general_project_choice",
 }
@@ -188,11 +192,23 @@ def record_ui_note(
     return {"ok": True, "note": record, "note_path": _rel(note_path, root), "index_path": "workflow/user_notes/index.jsonl"}
 
 
-def build_current_human_choices(project_root: Path) -> dict[str, object]:
+def build_current_human_choices(
+    project_root: Path,
+    route: str = "",
+    dashboard_payload: dict[str, object] | None = None,
+) -> dict[str, object]:
     root = project_root.resolve()
-    result = build_workflow_dashboard(root)
-    dashboard = read_json_file(result.json_path)
-    actions = dashboard.get("next_actions") if isinstance(dashboard.get("next_actions"), list) else []
+    normalized_route = str(route or "").strip().lower()
+    if normalized_route:
+        actions, dashboard_path = _route_choice_actions(root, normalized_route)
+    elif isinstance(dashboard_payload, dict):
+        actions = dashboard_payload.get("next_actions") if isinstance(dashboard_payload.get("next_actions"), list) else []
+        dashboard_path = "workflow/dashboard/workflow_dashboard.json"
+    else:
+        result = build_workflow_dashboard(root)
+        dashboard = read_json_file(result.json_path)
+        actions = dashboard.get("next_actions") if isinstance(dashboard.get("next_actions"), list) else []
+        dashboard_path = _rel(result.json_path, root)
     choices: list[dict[str, object]] = []
     seen = set()
 
@@ -217,32 +233,88 @@ def build_current_human_choices(project_root: Path) -> dict[str, object]:
         target = str(action.get("target") or "")
         if route == "scene-development" and step == "branch-selection":
             add_choice(_branch_choice(root, target), step, str(action.get("next_action") or ""))
-        elif step == "asset-approval" or route == "character-and-world-assets" and "approval" in step:
-            add_choice(_approval_choice(route, target, "asset_approval", "候选设定需要你确认是否晋升。"), step, str(action.get("next_action") or ""))
+        elif step == "asset-approval":
+            add_choice(_approval_choice(root, route, target, "asset_approval", "候选设定需要你确认是否晋升。"), step, str(action.get("next_action") or ""))
         elif step == "release-approval" or route == "export-and-release" and "approval" in step:
-            add_choice(_approval_choice(route, target, "release_approval", "发布前需要你确认是否放行。"), step, str(action.get("next_action") or ""))
+            add_choice(_approval_choice(root, route, target, "release_approval", "发布前需要你确认是否放行。"), step, str(action.get("next_action") or ""))
         elif route == "longform-planning" and step in {"budget-review", "scene-inventory-review", "chapter-obligation-review"}:
             add_choice(_direction_choice(route, target or "longform", "word_budget_direction"), step, str(action.get("next_action") or ""))
+        elif route == "scene-development" and step == "candidate-human-decision":
+            add_choice(_candidate_asset_alignment_choice(root, target), step, str(action.get("next_action") or ""))
         elif route == "scene-development" and step in {"candidate-review", "agent-review-task", "static-review", "revision-direction"}:
             add_choice(_direction_choice(route, target or "scene", "revision_direction"), step, str(action.get("next_action") or ""))
         elif route == "style-engineering":
             add_choice(_style_mount_choice(root), step, str(action.get("next_action") or ""))
-    for manifest in sorted((root / "branches").glob("*/branch_manifest.json")):
-        scene_id = manifest.parent.name
-        if (manifest.parent / "branch_selection.md").exists():
-            continue
-        add_choice(_branch_choice(root, scene_id))
-    for choice in _canon_patch_choices(root):
-        add_choice(choice)
-    add_choice(_style_mount_choice(root))
+    if not normalized_route or normalized_route == "scene-development":
+        for manifest in sorted((root / "branches").glob("*/branch_manifest.json")):
+            scene_id = manifest.parent.name
+            if (manifest.parent / "branch_selection.md").exists():
+                continue
+            add_choice(_branch_choice(root, scene_id))
+    if not normalized_route or normalized_route == "review-and-audit":
+        for choice in _canon_patch_choices(root):
+            add_choice(choice)
+    if not normalized_route or normalized_route == "style-engineering":
+        add_choice(_style_mount_choice(root))
     return {
         "schema": "literary-engineering-workbench/current-human-choices/v0.1",
         "generated_at": _now(),
         "project_root": str(root),
         "choices": choices[:20],
         "recent_choices": read_jsonl_tail(root / "workflow" / "human_choices" / "index.jsonl", 12),
-        "dashboard": _rel(result.json_path, root),
+        "dashboard": dashboard_path,
     }
+
+
+def _route_choice_actions(root: Path, route: str) -> tuple[list[dict[str, object]], str]:
+    if route == "scene-development":
+        state = next_scene_workflow_state(root)
+        if not state or state.get("status") == "ready":
+            return [], ""
+        return [
+            {
+                "route": route,
+                "target": state.get("scene_id", ""),
+                "current_step": state.get("current_step", ""),
+                "next_action": state.get("next_action", ""),
+            }
+        ], ""
+
+    state_dir = root / "workflow" / "runtime_choices"
+    result = build_workflow_state(
+        root,
+        route=route,
+        output=state_dir / f"{route}.md",
+        json_output=state_dir / f"{route}.json",
+    )
+    payload = read_json_file(result.json_path)
+    keys = {
+        "longform-planning": ("longform",),
+        "source-ingest": ("source_ingests",),
+        "style-engineering": ("styles",),
+        "character-and-world-assets": ("assets",),
+        "review-and-audit": ("audits",),
+        "export-and-release": ("exports",),
+    }.get(route, ())
+    items: list[dict[str, object]] = []
+    for key in keys:
+        value = payload.get(key)
+        candidates = [value] if isinstance(value, dict) else value if isinstance(value, list) else []
+        for item in candidates:
+            if not isinstance(item, dict) or item.get("status") == "ready":
+                continue
+            candidate_id = str(item.get("candidate_id") or "")
+            items.append(
+                {
+                    "route": route,
+                    # Asset approvals are bound to the candidate file digest, not the
+                    # source scene that happened to introduce the asset.
+                    "target": candidate_id or item.get("scene_id") or item.get("target_id") or "",
+                    "current_step": item.get("current_step", ""),
+                    "next_action": item.get("next_action", ""),
+                }
+            )
+    return items, _rel(result.json_path, root)
 
 
 def record_human_choice(project_root: Path, payload: dict[str, object]) -> dict[str, object]:
@@ -338,15 +410,19 @@ def _branch_choice(root: Path, scene_id: str) -> dict[str, object] | None:
     }
 
 
-def _approval_choice(route: str, target: str, decision_type: str, summary: str) -> dict[str, object]:
-    safe_target = _safe_target_id(target or "target")
+def _approval_choice(root: Path, route: str, target: str, decision_type: str, summary: str) -> dict[str, object]:
+    approval_target = _safe_approval_target(target or "target")
+    choice_target = _safe_target_id(approval_target)
+    subject_sha256 = _asset_candidate_sha256(root, approval_target) if decision_type == "asset_approval" else (
+        release_candidate_fingerprint(root, approval_target) if decision_type == "release_approval" else ""
+    )
     return {
-        "choice_id": _make_id("choice", decision_type, safe_target),
+        "choice_id": _make_id("choice", decision_type, choice_target),
         "route": route,
         "decision_type": decision_type,
-        "title": f"{safe_target} 等待用户审批",
+        "title": f"{approval_target} 等待用户审批",
         "summary": summary,
-        "target": {"target_id": safe_target},
+        "target": {"target_id": approval_target, **({"candidate_sha256": subject_sha256} if subject_sha256 else {})},
         "source_paths": ["workflow/approvals/index.jsonl"],
         "options": [
             {"id": "approve", "label": "批准", "summary": "允许进入下一步正式流程。"},
@@ -393,6 +469,59 @@ def _direction_choice(route: str, target: str, decision_type: str) -> dict[str, 
     }
 
 
+def _candidate_asset_alignment_choice(root: Path, scene_id: str) -> dict[str, object] | None:
+    safe_scene_id = _safe_target_id(scene_id or "")
+    if not safe_scene_id:
+        return None
+    review_path = root / "reviews" / "agent" / f"{safe_scene_id}_scene_review.json"
+    review = read_json_file(review_path)
+    candidate_sha256 = str(review.get("candidate_sha256") or "").strip().lower()
+    if not candidate_sha256:
+        return None
+    human_notes = []
+    for key in ("blocking_issues", "warnings", "revision_actions"):
+        values = review.get(key) if isinstance(review.get(key), list) else []
+        human_notes.extend(
+            str(item.get("description") or item.get("note") or "")
+            for item in values
+            if isinstance(item, dict)
+            and str(item.get("resolution") or "").strip().lower() in {
+                "needs_human_review",
+                "human_decision_required",
+                "pending_user_decision",
+            }
+        )
+    summary = "；".join(note for note in human_notes if note) or "审查指出正文与正式设定存在冲突，必须先决定哪个事实成立。"
+    return {
+        "choice_id": _make_id("choice", "candidate_asset_alignment", safe_scene_id),
+        "route": "scene-development",
+        "decision_type": "cross_asset_alignment",
+        "title": f"{safe_scene_id} 需要确认正式设定",
+        "summary": summary,
+        "target": {
+            "scene_id": safe_scene_id,
+            "target_id": safe_scene_id,
+            "candidate_sha256": candidate_sha256,
+            "review": _rel(review_path, root),
+        },
+        "source_paths": [_rel(review_path, root)],
+        "recommended": "align_prose_to_formal_asset",
+        "options": [
+            {
+                "id": "align_prose_to_formal_asset",
+                "label": "以现有正式设定为准修改正文",
+                "summary": "不改 canon 或角色文件，只让正文与已批准的正式资产一致，然后重新审查。",
+            },
+            {
+                "id": "hold_for_asset_revision",
+                "label": "保留正文，转入设定修订",
+                "summary": "正文不自动改写；先通过角色或 canon 的正式候选、审查与审批流程修改设定。",
+            },
+        ],
+        "actions": ["确认设定优先级"],
+    }
+
+
 def _canon_patch_choices(root: Path) -> list[dict[str, object]]:
     folder = root / "canon" / "patches"
     if not folder.exists():
@@ -406,6 +535,10 @@ def _canon_patch_choices(root: Path) -> list[dict[str, object]]:
         if change is False or str(change).lower() == "false":
             continue
         scene_id = _safe_target_id(str(payload.get("scene_id") or path.stem.replace("_canon_patch", "")) or "canon")
+        digest = _file_sha256(path)
+        approval = _latest_approval_record(root, path.stem)
+        if approval and str(approval.get("subject_sha256") or "").lower() == digest:
+            continue
         patch_items = payload.get("items") if isinstance(payload.get("items"), list) else []
         choices.append(
             {
@@ -414,13 +547,17 @@ def _canon_patch_choices(root: Path) -> list[dict[str, object]]:
                 "decision_type": "canon_patch_approval",
                 "title": f"{scene_id} 有世界观写回候选",
                 "summary": "这会影响后续场景的世界规则和事实边界。选择只记录审批意图，正式写入仍要走 canon-apply。",
-                "target": {"scene_id": scene_id, "patch": _rel(path, root)},
+                "target": {
+                    "scene_id": scene_id,
+                    "patch": _rel(path, root),
+                    "approval_run_id": path.stem,
+                    "candidate_sha256": digest,
+                },
                 "source_paths": [_rel(path, root), _rel(path.with_suffix(".md"), root)],
                 "recommended": "review_then_apply" if patch_items else "revise",
                 "options": [
                     {"id": "approve", "label": "同意写回", "summary": "认可这批候选事实，后续仍需正式 apply。"},
                     {"id": "revise", "label": "要求修改", "summary": "方向可以保留，但候选事实需要平台 Agent 重写。"},
-                    {"id": "defer", "label": "暂缓", "summary": "现在不写入 canon，先等待后续剧情确认。"},
                     {"id": "reject", "label": "拒绝", "summary": "这批候选事实不应进入世界观。"},
                 ],
                 "actions": ["记录 canon 审批"],
@@ -509,9 +646,7 @@ def _materialize_branch_selection(root: Path, record: dict[str, object], choice_
 
 def _materialize_approval(root: Path, record: dict[str, object]) -> str:
     selected = str(record.get("selected") or "").strip()
-    if selected == "defer":
-        return ""
-    if selected not in {"approve", "revise", "reject"}:
+    if selected not in {"approve", "revise", "reject", "defer"}:
         raise ValueError("approval choice must select approve, revise, reject, or defer")
     decision_type = str(record.get("decision_type") or "")
     target = record.get("target") if isinstance(record.get("target"), dict) else {}
@@ -522,7 +657,7 @@ def _materialize_approval(root: Path, record: dict[str, object]) -> str:
         patch_rel = str(target.get("patch") or "").strip()
         patch = root / patch_rel if patch_rel else None
         if patch is not None and patch.is_file():
-            run_id = str(read_json_file(patch).get("patch_id") or run_id)
+            run_id = str(target.get("approval_run_id") or patch.stem)
     if not run_id:
         raise ValueError(f"{decision_type} choice does not identify its approval target")
     result = record_workflow_approval(
@@ -531,8 +666,44 @@ def _materialize_approval(root: Path, record: dict[str, object]) -> str:
         selected,
         actor=str(record.get("actor") or "user-ui"),
         notes=str(record.get("rationale") or ""),
+        subject_sha256=str(target.get("candidate_sha256") or ""),
     )
     return _rel(result.approval_path, root)
+
+
+def _asset_candidate_sha256(root: Path, candidate_id: str) -> str:
+    for relative in (
+        f"characters/candidates/{candidate_id}.json",
+        f"canon/candidates/world_rules/{candidate_id}.json",
+        f"canon/candidates/locations/{candidate_id}.json",
+        f"canon/candidates/organizations/{candidate_id}.json",
+        f"plot/candidates/outlines/{candidate_id}.json",
+        f"plot/candidates/chapters/{candidate_id}.json",
+        f"plot/candidates/scenes/{candidate_id}.json",
+    ):
+        path = root / relative
+        if path.is_file():
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+    return ""
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+
+
+def _latest_approval_record(root: Path, run_id: str) -> dict[str, object]:
+    index = root / "workflow" / "approvals" / "index.jsonl"
+    latest: dict[str, object] = {}
+    if not index.is_file():
+        return latest
+    for line in index.read_text(encoding="utf-8", errors="ignore").splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict) and item.get("run_id") == run_id:
+            latest = item
+    return latest
 
 
 def _safe_mapping(value: dict[str, object]) -> dict[str, object]:
@@ -585,6 +756,15 @@ def _safe_target_id(value: str) -> str:
     target = re.sub(r"[^A-Za-z0-9_.-]", "_", target)
     target = re.sub(r"_+", "_", target).strip("._-")
     return target[:120]
+
+
+def _safe_approval_target(value: str) -> str:
+    target = value.strip()
+    if not target or len(target) > 128 or ".." in target or any(char in target for char in "/\\"):
+        raise ValueError("invalid approval target")
+    if any(ord(char) < 32 for char in target):
+        raise ValueError("invalid approval target")
+    return target
 
 
 def _safe_choice_id(value: str) -> str:

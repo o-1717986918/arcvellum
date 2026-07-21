@@ -16,6 +16,6 @@
     "next_gate": "str"
   },
   "enums": {
-    "conclusion": ["pass", "pass_with_notes", "revise_required", "reject"]
+    "conclusion": ["pass", "pass_with_notes", "revise_required", "reject", "recheck_required"]
   }
 }

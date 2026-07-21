@@ -157,6 +157,17 @@ class TaskPackage:
         return tuple(str(item) for item in self.payload.get("expected_outputs") or [])
 
     @property
+    def core_managed_outputs(self) -> tuple[str, ...]:
+        """Outputs created by the deterministic command, never by the Agent."""
+
+        declared = {str(item) for item in self.expected_outputs}
+        return tuple(
+            str(item)
+            for item in self.payload.get("core_managed_outputs") or []
+            if str(item) in declared
+        )
+
+    @property
     def human_gate(self) -> HumanGate:
         explicit = self.payload.get("human_gate")
         if isinstance(explicit, dict) and isinstance(explicit.get("required"), bool):

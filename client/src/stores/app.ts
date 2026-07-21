@@ -11,6 +11,8 @@ import type {
   ProjectsResponse,
   ReaderManifest,
   ReaderUnitResponse,
+  AutopilotRun,
+  AutopilotStatus,
 } from "@/types/api";
 
 export const useAppStore = defineStore("app", () => {
@@ -28,10 +30,12 @@ export const useAppStore = defineStore("app", () => {
   const readerBodies = ref<Record<string, { hash: string; body: string }>>({});
   const modelCatalog = shallowRef<ModelCatalog | null>(null);
   const activeJob = shallowRef<Record<string, unknown> | null>(null);
+  const autopilotStatus = shallowRef<AutopilotStatus | null>(null);
   let bootstrapStream: EventStreamConnection | null = null;
   let dashboardStream: EventStreamConnection | null = null;
   let libraryStream: EventStreamConnection | null = null;
   let readerStream: EventStreamConnection | null = null;
+  let autopilotStream: EventStreamConnection | null = null;
 
   const currentProject = computed(
     () => projects.value.find((item) => item.path === currentProjectPath.value) || bootstrap.value?.project || null,
@@ -72,6 +76,7 @@ export const useAppStore = defineStore("app", () => {
     library.value = null;
     delivery.value = null;
     readerManifest.value = null;
+    autopilotStatus.value = null;
     readerBodies.value = {};
     if (refresh && path) void refreshWorkspace();
   }
@@ -101,8 +106,24 @@ export const useAppStore = defineStore("app", () => {
   async function refreshWorkspace(): Promise<void> {
     if (!currentProjectPath.value) return;
     error.value = "";
-    await Promise.allSettled([loadDashboard(), loadLibrary(), loadDelivery(), loadReaderManifest()]);
+    await Promise.allSettled([loadDashboard(), loadLibrary(), loadDelivery(), loadReaderManifest(), loadAutopilotStatus()]);
     startProjectStreams();
+  }
+
+  async function loadAutopilotStatus(): Promise<void> {
+    if (!currentProjectPath.value) return;
+    autopilotStatus.value = await api<AutopilotStatus>(
+      `/autopilot/status?${query({ project_root: currentProjectPath.value })}`,
+    );
+  }
+
+  function setAutopilotStatus(value: AutopilotStatus | null): void {
+    autopilotStatus.value = value;
+  }
+
+  function setAutopilotRun(run: AutopilotRun): void {
+    if (!autopilotStatus.value) return;
+    autopilotStatus.value = { ...autopilotStatus.value, run };
   }
 
   async function loadDashboard(): Promise<void> {
@@ -189,15 +210,32 @@ export const useAppStore = defineStore("app", () => {
         if (added.length) notice.value = `有 ${added.length} 节新正文进入阅读长卷。`;
       },
     );
+    const activeRun = autopilotStatus.value?.run;
+    if (activeRun?.status === "running") {
+      autopilotStream = connectEventStream(
+        `/autopilot/runs/${encodeURIComponent(activeRun.run_id)}/stream`,
+        (event, data) => {
+          if (event !== "autopilot.status") return;
+          const payload = data as unknown as { run: AutopilotRun };
+          setAutopilotRun(payload.run);
+          if (["complete", "paused", "blocked", "cancelled", "failed"].includes(payload.run.status)) {
+            autopilotStream?.close();
+            autopilotStream = null;
+          }
+        },
+      );
+    }
   }
 
   function stopProjectStreams(): void {
     dashboardStream?.close();
     libraryStream?.close();
     readerStream?.close();
+    autopilotStream?.close();
     dashboardStream = null;
     libraryStream = null;
     readerStream = null;
+    autopilotStream = null;
   }
 
   function clearMessages(): void {
@@ -222,6 +260,7 @@ export const useAppStore = defineStore("app", () => {
     readerBodies,
     modelCatalog,
     activeJob,
+    autopilotStatus,
     initialize,
     loadProjects,
     setCurrentProject,
@@ -233,6 +272,9 @@ export const useAppStore = defineStore("app", () => {
     loadDelivery,
     loadReaderManifest,
     loadReaderUnit,
+    loadAutopilotStatus,
+    setAutopilotStatus,
+    setAutopilotRun,
     loadModelCatalog,
     clearMessages,
     stopProjectStreams,

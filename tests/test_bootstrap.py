@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 
@@ -68,6 +69,7 @@ class ApplicationBootstrapTests(unittest.TestCase):
             project_loader=lambda: {"current_project": "", "projects": []},
             engine_probe=lambda: SimpleNamespace(returncode=1, stderr="engine missing"),
         )
+        service._engine_future.result(timeout=2)
         snapshot = service.snapshot()
 
         self.assertFalse(snapshot["ready"])
@@ -85,6 +87,7 @@ class ApplicationBootstrapTests(unittest.TestCase):
             engine_probe=lambda: SimpleNamespace(returncode=0, stderr=""),
         )
 
+        service._engine_future.result(timeout=2)
         snapshot = service.snapshot()
 
         self.assertEqual(snapshot["model_warmup"]["status"], "deferred")
@@ -134,11 +137,36 @@ class ApplicationBootstrapTests(unittest.TestCase):
                 },
                 engine_probe=lambda: SimpleNamespace(returncode=0, stderr=""),
             )
+            service._engine_future.result(timeout=2)
             snapshot = service.snapshot()
 
         self.assertEqual(snapshot["project"]["title"], "长夜来信")
         self.assertEqual(snapshot["project_count"], 1)
         self.assertNotIn("project.yaml", str(snapshot))
+
+    def test_slow_engine_probe_is_reported_without_blocking_snapshot(self):
+        entered = threading.Event()
+        release = threading.Event()
+
+        def slow_probe():
+            entered.set()
+            release.wait(timeout=2)
+            return SimpleNamespace(returncode=0, stderr="")
+
+        service = self._service(
+            project_loader=lambda: {"current_project": "", "projects": []},
+            engine_probe=slow_probe,
+        )
+        self.assertTrue(entered.wait(timeout=1))
+        before = time.monotonic()
+        snapshot = service.snapshot()
+        self.assertLess(time.monotonic() - before, 0.2)
+        self.assertEqual(snapshot["phase"], "starting")
+        engine_step = next(item for item in snapshot["steps"] if item["id"] == "engine_registry")
+        self.assertEqual(engine_step["status"], "loading")
+        release.set()
+        service._engine_future.result(timeout=2)
+        self.assertTrue(service.snapshot()["can_enter_workspace"])
 
 
 if __name__ == "__main__":

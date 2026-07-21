@@ -9,6 +9,7 @@ from typing import Any
 
 from .agent_schema import validate_payload
 from .anti_ai_style import style_lint_gate, style_lint_gate_message
+from .creative_quality import load_creative_quality_profile
 from .context_broker import context_trace_status
 from .flow_gates import branch_selection_status
 from .new_character_register import new_character_register_issues
@@ -160,8 +161,8 @@ def scene_readiness_status(
     unresolved = [str(item) for item in agent_review_state.get("unresolved_notes", [])]
     new_character_issues = [str(item) for item in agent_review_state.get("new_character_register_issues", [])]
     source_match = bool(agent_review_state.get("source_match"))
-    lint_gate = style_lint_gate(body)
     scene_id = _scene_id_from_draft(draft_path)
+    lint_gate = style_lint_gate(body, profile=load_creative_quality_profile(root), scope=scene_id)
     scene_path = root / "scenes" / f"{scene_id}.yaml"
     word_budget = word_budget_adherence_for_body(root, scene_path, body)
     reader_experience = reader_experience_adherence_for_body(root, scene_path, body)

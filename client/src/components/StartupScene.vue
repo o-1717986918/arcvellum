@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { AlertTriangle, Check, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import type { BootstrapSnapshot } from "@/types/api";
 
-const props = defineProps<{ snapshot: BootstrapSnapshot | null; error: string }>();
+const props = defineProps<{ snapshot: BootstrapSnapshot | null; error: string; visualSkippable?: boolean }>();
 defineEmits<{ continue: []; retry: [] }>();
 
 const currentStep = computed(() =>
@@ -11,6 +11,11 @@ const currentStep = computed(() =>
   props.snapshot?.steps.find((step) => step.status === "blocked") ||
   props.snapshot?.steps.at(-1),
 );
+const progress = computed(() => {
+  const steps = props.snapshot?.steps || [];
+  if (!steps.length) return .12;
+  return Math.max(.12, steps.filter((step) => step.status === "ready").length / steps.length);
+});
 </script>
 
 <template>
@@ -19,8 +24,9 @@ const currentStep = computed(() =>
       <span class="paper-sheet paper-one"></span>
       <span class="paper-sheet paper-two"></span>
       <span class="paper-sheet paper-three"></span>
-      <svg class="story-line" viewBox="0 0 720 420" role="presentation">
-        <path d="M38 324 C158 310 144 212 266 214 S394 292 472 194 S570 88 686 110" />
+      <svg class="story-line" viewBox="0 0 720 420" role="presentation" :style="{ '--bootstrap-progress': progress }">
+        <path class="line-bed" d="M38 324 C158 310 144 212 266 214 S394 292 472 194 S570 88 686 110" />
+        <path class="line-progress" pathLength="1" d="M38 324 C158 310 144 212 266 214 S394 292 472 194 S570 88 686 110" />
         <path class="branch" d="M266 214 C338 166 385 130 444 88" />
         <circle cx="38" cy="324" r="7" />
         <circle cx="266" cy="214" r="7" />
@@ -53,7 +59,8 @@ const currentStep = computed(() =>
         <button class="primary-button" @click="$emit('retry')"><RefreshCw :size="16" />重试</button>
       </div>
       <div class="startup-actions" v-else-if="snapshot?.can_enter_workspace">
-        <button class="primary-button" @click="$emit('continue')">进入创作台</button>
+        <button v-if="visualSkippable" class="primary-button" @click="$emit('continue')">进入创作台</button>
+        <small v-else>正在完成视觉校准，可随时等待工作台自动进入</small>
         <small v-if="snapshot.degraded">部分模型连接可稍后在设置中恢复</small>
       </div>
     </section>

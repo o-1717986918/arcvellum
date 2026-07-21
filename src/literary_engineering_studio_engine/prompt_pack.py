@@ -12,6 +12,12 @@ from typing import Any
 
 from .anti_ai_style import ANTI_AI_STYLE_PROMPT, ANTI_EVASION_REVISION_PROTOCOL
 from .context_broker import default_context_trace_path
+from .creative_quality import (
+    creative_quality_profile_exists,
+    creative_quality_profile_path,
+    load_creative_quality_profile,
+    render_creative_quality_prompt,
+)
 from .flow_gates import ensure_composition_ready_for_generation
 from .narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from .new_character_register import render_new_character_register_contract
@@ -105,6 +111,9 @@ class PromptPack:
     style_profile_path: Path | None
     word_budget_path: Path | None
     review_notes_path: Path | None
+    creative_quality_profile: dict[str, Any]
+    creative_quality_profile_path: Path | None
+    creative_quality_profile_text: str
     style_generation_standard: str
     word_budget_generation_standard: str
     scene_word_budget_contract: dict[str, Any]
@@ -127,6 +136,7 @@ def build_scene_prompt_pack(
     composition: Path | None = None,
     allow_unselected_composition: bool = False,
     allow_missing_composition: bool = False,
+    materialization_scope: str = "full",
 ) -> PromptPack:
     """Render system/user prompts for a scene generation provider."""
 
@@ -150,12 +160,19 @@ def build_scene_prompt_pack(
         allow_unselected_composition=allow_unselected_composition,
         allow_missing_composition=allow_missing_composition,
     )
-    word_budget_contract = ensure_scene_word_budget_ready(root, scene_path)
+    word_budget_contract = ensure_scene_word_budget_ready(
+        root,
+        scene_path,
+        materialization_scope=materialization_scope,
+    )
     reader_contract = ensure_reader_experience_ready(root, scene_path)
     rhythm_contract = narrative_rhythm_contract(root, scene_path, composition_path)
     style_profile_path = _find_style_asset(root)
     word_budget_path = _find_word_budget(root)
     review_notes_path = _find_scene_review_notes(root, scene_id)
+    quality_profile = load_creative_quality_profile(root)
+    quality_profile_path = creative_quality_profile_path(root) if creative_quality_profile_exists(root) else None
+    quality_profile_text = render_creative_quality_prompt(quality_profile, scope=scene_id)
 
     values = {
         "scene_id": scene_id,
@@ -166,13 +183,18 @@ def build_scene_prompt_pack(
         "style_profile": _render_style_constraint(root, style_profile_path),
         "style_generation_standard": _render_style_generation_standard(root, style_profile_path),
         "word_budget_generation_standard": render_word_budget_generation_standard(root),
-        "scene_word_budget_contract": render_scene_word_budget_contract(root, scene_path),
+        "scene_word_budget_contract": render_scene_word_budget_contract(
+            root,
+            scene_path,
+            materialization_scope=materialization_scope,
+        ),
         "reader_experience_contract": render_reader_experience_contract(root, scene_path),
         "narrative_rhythm_contract": render_narrative_rhythm_contract(root, scene_path, composition_path),
         "review_notes_standard": _render_review_notes_standard(root, scene_id, review_notes_path),
         "generation_constraint_brief": _render_generation_constraint_brief(root, style_profile_path, word_budget_path, review_notes_path, rhythm_contract),
-        "punctuation_standard": render_punctuation_standard_for_prompt(),
+        "punctuation_standard": render_punctuation_standard_for_prompt(quality_profile, scope=scene_id),
         "anti_ai_style": ANTI_AI_STYLE_PROMPT,
+        "creative_quality_profile": quality_profile_text,
         "new_character_register_contract": render_new_character_register_contract(),
         "output_contract": OUTPUT_CONTRACT.strip(),
         "generated_at": _now(),
@@ -187,9 +209,20 @@ def build_scene_prompt_pack(
     user_prompt = _ensure_narrative_rhythm_contract(user_prompt, values["narrative_rhythm_contract"])
     user_prompt = _ensure_review_notes_standard(user_prompt, values["review_notes_standard"])
     user_prompt = _ensure_generation_constraint_brief(user_prompt, values["generation_constraint_brief"])
+    user_prompt = _ensure_creative_quality_profile(user_prompt, quality_profile_text)
     user_prompt = _ensure_new_character_register_contract(user_prompt, values["new_character_register_contract"])
     user_prompt = _ensure_context_trace(user_prompt, values["context_trace_text"])
-    sources = _sources(root, scene_path, context_path, context_trace_path, composition_path, style_profile_path, word_budget_path, review_notes_path)
+    sources = _sources(
+        root,
+        scene_path,
+        context_path,
+        context_trace_path,
+        composition_path,
+        style_profile_path,
+        word_budget_path,
+        review_notes_path,
+        quality_profile_path,
+    )
     return PromptPack(
         project_root=root,
         scene_path=scene_path,
@@ -199,6 +232,9 @@ def build_scene_prompt_pack(
         style_profile_path=style_profile_path,
         word_budget_path=word_budget_path,
         review_notes_path=review_notes_path,
+        creative_quality_profile=quality_profile,
+        creative_quality_profile_path=quality_profile_path,
+        creative_quality_profile_text=quality_profile_text,
         style_generation_standard=values["style_generation_standard"],
         word_budget_generation_standard=values["word_budget_generation_standard"],
         scene_word_budget_contract=word_budget_contract,
@@ -233,6 +269,9 @@ def write_prompt_manifest(pack: PromptPack, output: Path, provider: str, model: 
             "style": pack.style_generation_standard,
             "style_profile_loaded": pack.style_profile_path is not None,
             "style_profile": _rel(pack.style_profile_path, pack.project_root) if pack.style_profile_path else "",
+            "creative_quality_profile": pack.creative_quality_profile,
+            "creative_quality_profile_path": _rel(pack.creative_quality_profile_path, pack.project_root) if pack.creative_quality_profile_path else "implicit-default",
+            "creative_quality_profile_digest": str(pack.creative_quality_profile.get("digest") or ""),
             "word_budget": pack.word_budget_generation_standard,
             "word_budget_loaded": pack.word_budget_path is not None,
             "word_budget_path": _rel(pack.word_budget_path, pack.project_root) if pack.word_budget_path else "",
@@ -281,6 +320,12 @@ def _ensure_style_generation_standard(user_prompt: str, standard: str) -> str:
     if "## 文风生成标准" in user_prompt or "# 文风生成标准" in user_prompt:
         return user_prompt
     return user_prompt.rstrip() + "\n\n## 文风生成标准\n\n" + standard.strip() + "\n"
+
+
+def _ensure_creative_quality_profile(user_prompt: str, profile_text: str) -> str:
+    if "# 本项目创作品质档案" in user_prompt:
+        return user_prompt
+    return user_prompt.rstrip() + "\n\n" + profile_text.strip() + "\n"
 
 
 def _ensure_word_budget_generation_standard(user_prompt: str, standard: str) -> str:
@@ -348,6 +393,7 @@ def _sources(
     style_profile_path: Path | None,
     word_budget_path: Path | None,
     review_notes_path: Path | None,
+    quality_profile_path: Path | None,
 ) -> list[dict[str, Any]]:
     paths = [scene_path, context_path, context_trace_path]
     if composition_path:
@@ -361,6 +407,8 @@ def _sources(
         paths.append(obligation)
     if review_notes_path:
         paths.append(review_notes_path)
+    if quality_profile_path:
+        paths.append(quality_profile_path)
     punctuation_ref = _bundle_root() / "references" / "punctuation-standard.md"
     if punctuation_ref.exists():
         paths.append(punctuation_ref)

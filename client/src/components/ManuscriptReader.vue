@@ -272,7 +272,7 @@ function chapterLabel(value: unknown): string {
       <button v-if="newUnitCount" class="reader-new-units" @click="goTo(units.length - 1)">{{ newUnitCount }} 节新正文</button>
     </div>
 
-    <div class="reader-layout">
+    <div class="reader-layout" :class="{ 'toc-open': tocOpen && current }">
       <aside v-if="tocOpen && current" class="reader-toc">
         <header><strong>阅读目录</strong><button class="icon-button" title="关闭目录" @click="tocOpen = false"><X :size="15" /></button></header>
         <nav>

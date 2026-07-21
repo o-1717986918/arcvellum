@@ -58,6 +58,7 @@ export interface ModelCatalog {
   runner?: string;
   version?: string;
   selected_model?: string;
+  selected_models?: Record<"worker" | "advisor" | "steward", string>;
   providers: ProviderItem[];
   connected_provider_count?: number;
   available_model_count?: number;
@@ -148,15 +149,27 @@ export interface NarrativeEdge {
 
 export interface NarrativeProjection {
   ok: boolean;
-  schema: "arcvellum/narrative-projection/v1";
+  schema: "arcvellum/narrative-projection/v2";
   project_root: string;
   generated_at: string;
   revision: string;
+  sequence: number;
   level: "book" | "chapter" | "scene";
   focus: string;
   summary: Record<string, number | boolean>;
   nodes: NarrativeNode[];
   edges: NarrativeEdge[];
+  timeline: Array<{ node_id: string; label: string; status: string; order: number; formal_chars: number; word_target: number }>;
+  delta: {
+    initial: boolean;
+    added_nodes: string[];
+    removed_nodes: string[];
+    updated_nodes: string[];
+    added_edges: string[];
+    removed_edges: string[];
+    updated_edges: string[];
+  };
+  motion_events: Array<{ type: string; node_id: string; label: string }>;
   legend: Array<{ type: string; label: string; color: string }>;
   accessibility_summary: string;
 }
@@ -188,9 +201,9 @@ export interface DeliveryResponse {
 }
 
 export interface AdvisorAction {
-  type: "open_view" | "record_direction" | "prepare_next_task" | "pause_autopilot" | "request_revision";
+  type: "open_view" | "record_direction" | "run_next_task" | "prepare_next_task" | "start_autopilot" | "pause_autopilot" | "resume_autopilot" | "request_revision";
   label: string;
-  target?: "overview" | "library" | "delivery" | "settings";
+  target?: "overview" | "reader" | "library" | "quality" | "delivery" | "settings";
   message?: string;
   route?: string;
 }
@@ -254,6 +267,7 @@ export interface AutopilotRun {
   last_error: string;
   stop_reason: string;
   created_at: string;
+  started_at: string;
   updated_at: string;
 }
 

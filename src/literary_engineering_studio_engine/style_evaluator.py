@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import re
 from collections import Counter
@@ -71,12 +72,16 @@ def evaluate_style(options: StyleEvalOptions) -> StyleEvalResult:
         "profile_dir": str(profile_dir),
         "reference": str(reference),
         "candidate": str(candidate),
+        "reference_sha256": hashlib.sha256(reference.read_bytes()).hexdigest(),
+        "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
         "overall_score": scores["overall"],
         "risk_level": risk_level,
         "scores": scores,
     }
     metrics_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     report_path.write_text(_render_report(payload, profile_metrics, reference_metrics, candidate_metrics), encoding="utf-8")
+    (out_dir / "style_eval_current.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out_dir / "style_eval_current.md").write_text(_render_report(payload, profile_metrics, reference_metrics, candidate_metrics), encoding="utf-8")
     return StyleEvalResult(
         report_path=report_path,
         metrics_path=metrics_path,

@@ -20,12 +20,14 @@ hard_constraints:
   - Evaluate independent lenses before synthesizing a verdict.
   - Cite exact artifacts and distinguish deterministic failures from semantic judgment.
   - pass_with_notes creates required revision work and never behaves as pass.
+  - A non-approve recommendation is a valid completed review; every repair action item or disagreement must include exact target_path action and verification.
 style_constraints:
   - Be adversarial toward flattering generic feedback and unsupported praise.
 output_contract:
   - Write committee JSON report Markdown and completion marker at declared paths.
 review_requirements:
   - Verdict accounts for all blocking lenses and exact-source provenance.
+  - target_path must name one allowed project text file rather than a directory review artifact or workflow artifact.
 forbidden_shortcuts:
   - Do not average away a blocking Canon review style lint or route gate failure.
 ---

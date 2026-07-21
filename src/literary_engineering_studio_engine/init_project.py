@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from shutil import copyfile
 
+from .creative_quality import default_creative_quality_profile
 from .resources import engine_root
 
 
@@ -197,6 +198,11 @@ def init_work_project(options: InitOptions) -> InitResult:
     files: list[Path] = []
 
     _write(root / "project.yaml", _project_yaml(options), files)
+    _write(
+        root / "style" / "creative_quality_profile.json",
+        json.dumps(default_creative_quality_profile(), ensure_ascii=False, indent=2) + "\n",
+        files,
+    )
     _write(root / "AGENTS.md", _agents_md(options.title), files)
     _write(root / "agentread.yaml", _agentread_yaml(), files)
 

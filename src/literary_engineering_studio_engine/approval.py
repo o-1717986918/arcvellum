@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 
-APPROVAL_DECISIONS = {"approve", "revise", "reject"}
+APPROVAL_DECISIONS = {"approve", "revise", "reject", "defer"}
 
 
 @dataclass(frozen=True)
@@ -33,12 +32,13 @@ def record_workflow_approval(
     decision: str,
     actor: str = "human",
     notes: str = "",
+    subject_sha256: str = "",
 ) -> ApprovalResult:
     root = project_root.resolve()
     safe_run_id = _validate_run_id(run_id)
     decision = decision.strip()
     if decision not in APPROVAL_DECISIONS:
-        raise ValueError("decision must be one of: approve, revise, reject")
+        raise ValueError("decision must be one of: approve, revise, reject, defer")
 
     approvals_dir = root / "workflow" / "approvals"
     approvals_dir.mkdir(parents=True, exist_ok=True)
@@ -54,6 +54,7 @@ def record_workflow_approval(
         "notes": notes,
         "recorded_at": recorded_at,
         "task_path": _rel_str(task_path, root) if task_path else "",
+        "subject_sha256": subject_sha256.strip().lower(),
     }
     line = json.dumps(record, ensure_ascii=False) + "\n"
     with approval_path.open("a", encoding="utf-8") as handle:
@@ -90,7 +91,7 @@ def _load_approval_index(root: Path) -> list[dict[str, object]]:
 
 
 def _write_followup_task(root: Path, run_id: str, decision: str, actor: str, notes: str, recorded_at: str) -> Path | None:
-    if decision == "approve":
+    if decision in {"approve", "defer"}:
         return None
     tasks_dir = root / "workflow" / "tasks"
     tasks_dir.mkdir(parents=True, exist_ok=True)
@@ -159,8 +160,10 @@ def _validate_run_id(value: str) -> str:
     run_id = value.strip()
     if not run_id:
         raise ValueError("run_id must not be empty")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", run_id) or ".." in run_id:
-        raise ValueError("run_id may contain only letters, numbers, dot, underscore, and hyphen")
+    if len(run_id) > 128 or ".." in run_id or any(char in run_id for char in "/\\"):
+        raise ValueError("run_id must be a single safe filename segment")
+    if any(ord(char) < 32 for char in run_id):
+        raise ValueError("run_id may not contain control characters")
     return run_id
 
 

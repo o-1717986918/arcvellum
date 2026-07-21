@@ -15,6 +15,7 @@ from typing import Iterable
 from literary_engineering_studio_engine.resources import engine_root
 
 from .contracts import TaskPackage
+from .task_program import compact_task_references, render_worker_program, write_task_context
 
 
 MANIFEST_SCHEMA = "literary-engineering-studio/task-sandbox/v0.1"
@@ -66,7 +67,8 @@ def stage_task(
 
     copied_sources: list[str] = []
     missing_sources: list[str] = []
-    for relative in _unique([*task.required_reading, *task.source_paths]):
+    reference_paths = compact_task_references(task)
+    for relative in _unique([*reference_paths, *task.source_paths]):
         source = task.resolve_project_path(relative)
         if not source.exists():
             embedded = engine_root() / Path(relative)
@@ -85,6 +87,17 @@ def stage_task(
         if source.exists():
             _copy_path(source, destination)
 
+    # Engine commands validate their positional project argument before they
+    # inspect task-specific inputs.  Every sandbox is therefore a minimal,
+    # runnable work-project rather than a bag of detached source files.  This
+    # descriptor remains outside expected outputs, so an Agent cannot alter it
+    # or write changes back through the task boundary.
+    project_descriptor = task.project_root / "project.yaml"
+    if project_descriptor.is_file():
+        _copy_path(project_descriptor, workspace / "project.yaml")
+        if "project.yaml" not in copied_sources:
+            copied_sources.append("project.yaml")
+
     direction_digest = task.project_root / "workflow" / "studio" / "user_directions.md"
     if direction_digest.is_file():
         relative = "workflow/studio/user_directions.md"
@@ -98,7 +111,8 @@ def stage_task(
         encoding="utf-8",
     )
     prompt_path = workspace / "AGENT_TASK.md"
-    prompt_path.write_text(_render_agent_prompt(task), encoding="utf-8")
+    prompt_path.write_text(_render_agent_prompt(task, reference_paths=reference_paths), encoding="utf-8")
+    write_task_context(task, workspace / "TASK_CONTEXT.json", reference_paths=reference_paths)
     baseline = _workspace_hashes(workspace)
     baseline_path = run_root / "baseline.json"
     baseline_path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -118,6 +132,8 @@ def stage_task(
         "workspace": str(workspace),
         "prompt": str(prompt_path),
         "copied_sources": copied_sources,
+        "reference_paths": list(reference_paths),
+        "omitted_reference_paths": [path for path in task.required_reading if path not in reference_paths],
         "missing_sources": missing_sources,
         "expected_outputs": list(task.expected_outputs),
         "human_gate_reasons": list(task.human_gate_reasons),
@@ -262,6 +278,52 @@ def load_writeback_preview(run_root: Path) -> WritebackPreview:
     )
 
 
+def capture_core_managed_outputs(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
+    """Snapshot deterministic command outputs before handing control to an Agent."""
+
+    protected_root = sandbox.run_root / "core-managed"
+    captured: list[str] = []
+    digests: dict[str, str] = {}
+    for relative in task.core_managed_outputs:
+        source = sandbox.workspace / Path(relative)
+        if not source.exists():
+            continue
+        _copy_path(source, protected_root / Path(relative))
+        captured.append(relative)
+        digests[relative] = _path_digest(source)
+    if captured:
+        update_run_manifest(
+            sandbox.manifest_path,
+            core_managed_outputs=captured,
+            core_managed_digests=digests,
+        )
+    return tuple(captured)
+
+
+def restore_core_managed_outputs(sandbox: SandboxManifest) -> tuple[str, ...]:
+    """Restore command-owned files if a runtime tried to rewrite them."""
+
+    payload = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+    protected = [str(item) for item in payload.get("core_managed_outputs") or []]
+    protected_root = sandbox.run_root / "core-managed"
+    restored: list[str] = []
+    for relative in protected:
+        source = protected_root / Path(relative)
+        target = sandbox.workspace / Path(relative)
+        if not source.exists():
+            continue
+        if _path_digest(source) == _path_digest(target):
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() and target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+        _copy_path(source, target)
+        restored.append(relative)
+    return tuple(restored)
+
+
 def update_run_manifest(path: Path, **updates: object) -> None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload.update(updates)
@@ -269,45 +331,17 @@ def update_run_manifest(path: Path, **updates: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _render_agent_prompt(task: TaskPackage) -> str:
-    task_text = task.task_markdown_path.read_text(encoding="utf-8")
-    outputs = "\n".join(f"- {item}" for item in task.expected_outputs) or "- 无固定文件输出"
+def _render_agent_prompt(task: TaskPackage, *, reference_paths: tuple[str, ...]) -> str:
     direction_path = task.project_root / "workflow" / "studio" / "user_directions.md"
     direction = direction_path.read_text(encoding="utf-8", errors="ignore").strip() if direction_path.is_file() else ""
-    direction_block = f"\n## Current User Direction\n\n{direction}\n" if direction else ""
-    execution = task.execution_contract
-    capability_lines = "\n".join(f"- {item}" for item in execution.runtime_capabilities_required) or "- none"
-    return f"""# Studio Agent Execution Contract
+    return render_worker_program(task, user_direction=direction, reference_paths=reference_paths)
 
-你是本次任务的主 Agent。当前目录是隔离任务工作区，不是正式项目根目录。
 
-执行策略：`{execution.execution_policy}`
-Agent 角色：`{execution.agent_role}`
-写回策略：`{execution.writeback_policy}`
-
-所需能力：
-
-{capability_lines}
-
-硬约束：
-
-1. 只读取当前工作区中已提供的资料。
-2. 只创建或修改下列 expected outputs；不要修改 source artifacts。
-3. 不运行 task-submit、task-complete、route-audit，也不伪造完成标记；Studio Worker 会在写回后执行正式 CLI 验收。
-4. 不使用任何 debug waiver、绕过标志或 maintainer mode。
-5. 正文、修订和最终文学文本必须由当前主 Agent 亲自完成，不委派给 subagent。
-6. 完成文件后即可结束；聊天回复不是正式产物。
-7. `_task/execution_contract.json` 是本次执行与写回的结构化契约；不得修改它。
-
-## Allowed Outputs
-
-{outputs}
-{direction_block}
-
-## Core Task Package
-
-{task_text}
-"""
+def sandbox_change_issues(sandbox: SandboxManifest) -> list[str]:
+    baseline = json.loads(sandbox.baseline_path.read_text(encoding="utf-8"))
+    current = _workspace_hashes(sandbox.workspace)
+    unexpected = _unexpected_changes(baseline, current, sandbox.expected_outputs)
+    return ["Agent runtime changed files outside expected_outputs: " + ", ".join(unexpected[:20])] if unexpected else []
 
 
 def _unexpected_changes(

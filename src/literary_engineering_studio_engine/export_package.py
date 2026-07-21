@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from .creative_quality import load_creative_quality_profile
 from typing import Sequence
 
 from .chapter_pipeline import build_chapter_workspace
@@ -50,7 +52,9 @@ def build_export_package(
     requested_formats = normalize_export_formats(formats)
 
     chapter_json = root / "plot" / "chapters" / f"{chapter_id}.json"
-    build_chapter_workspace(root, chapter_id=chapter_id, build_missing=False, review_drafts=False)
+    chapter_markdown = root / "drafts" / "chapters" / f"{chapter_id}.md"
+    if rebuild_chapter or not chapter_json.is_file() or not chapter_markdown.is_file():
+        build_chapter_workspace(root, chapter_id=chapter_id, build_missing=False, review_drafts=False)
     if not chapter_json.exists():
         raise FileNotFoundError(f"chapter JSON not found: {chapter_json}")
 
@@ -117,6 +121,7 @@ def build_export_package(
         "include_blocked": include_blocked,
         "requested_formats": list(requested_formats),
         "source_chapter_json": _rel_str(chapter_json, root),
+        "creative_quality_profile": load_creative_quality_profile(root),
         "outputs": {
             "novel": _rel_str(novel_path, root),
             "screenplay": _rel_str(screenplay_path, root),
@@ -145,6 +150,48 @@ def build_export_package(
         chapter_id=chapter_id,
         exported_scene_count=len(exportable),
         skipped_scene_count=len(skipped),
+    )
+
+
+def load_export_package(project_root: Path, chapter_id: str) -> ExportPackageResult:
+    """Load an existing formal export without mutating approved artifacts."""
+
+    root = project_root.resolve()
+    out_dir = root / "exports" / chapter_id
+    manifest_path = out_dir / "export_manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"export manifest not found: {manifest_path}")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if payload.get("schema") != "literary-engineering-workbench/export-package/v0.1":
+        raise ValueError("export manifest has wrong or missing schema")
+    outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
+
+    def path_for(value: object) -> Path:
+        relative = str(value or "").replace("\\", "/")
+        if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ValueError(f"unsafe or missing export output path: {relative or 'missing'}")
+        path = root / relative
+        if not path.is_file():
+            raise FileNotFoundError(f"export output not found: {path}")
+        return path
+
+    docx = outputs.get("docx") if isinstance(outputs.get("docx"), dict) else {}
+    layouts = outputs.get("docx_layout_plans") if isinstance(outputs.get("docx_layout_plans"), dict) else {}
+    inspections = outputs.get("docx_inspections") if isinstance(outputs.get("docx_inspections"), dict) else {}
+    return ExportPackageResult(
+        project_root=root,
+        output_dir=out_dir,
+        manifest_path=manifest_path,
+        novel_path=path_for(outputs.get("novel")),
+        screenplay_path=path_for(outputs.get("screenplay")),
+        video_prompt_path=path_for(outputs.get("video_prompt_pack")),
+        docx_outputs={str(key): path_for(value) for key, value in docx.items()},
+        docx_layout_plans={str(key): path_for(value) for key, value in layouts.items()},
+        docx_inspections={str(key): path_for(value) for key, value in inspections.items()},
+        requested_formats=tuple(str(item) for item in payload.get("requested_formats", []) if str(item)),
+        chapter_id=str(payload.get("chapter_id") or chapter_id),
+        exported_scene_count=len(payload.get("exported_scenes", []) if isinstance(payload.get("exported_scenes"), list) else []),
+        skipped_scene_count=len(payload.get("skipped_scenes", []) if isinstance(payload.get("skipped_scenes"), list) else []),
     )
 
 

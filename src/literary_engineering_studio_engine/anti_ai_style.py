@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+from .creative_quality import apply_rule_mode, quality_rule_mode, quality_threshold
+
 
 ANTI_EVASION_REVISION_PROTOCOL = """## 修订反规避协议
 
@@ -176,16 +178,16 @@ class AIStyleIssue:
     sample: str = ""
 
 
-def style_lint_gate(text: str) -> dict[str, object]:
+def style_lint_gate(text: str, profile: dict[str, object] | None = None, *, scope: str = "") -> dict[str, object]:
     """Return a machine gate result for AI-style lint findings.
 
     Mechanical contrast frames are always blocking. Other medium-or-higher
     findings are blocking; low findings remain review notes.
     """
 
-    issues = lint_ai_style(text)
-    blocking = [issue for issue in issues if is_style_lint_blocking(issue)]
-    notes = [issue for issue in issues if not is_style_lint_blocking(issue)]
+    issues = lint_ai_style(text, profile=profile, scope=scope)
+    blocking = [issue for issue in issues if is_style_lint_blocking(issue, profile=profile, scope=scope)]
+    notes = [issue for issue in issues if not is_style_lint_blocking(issue, profile=profile, scope=scope)]
     status = "blocking" if blocking else ("notes" if notes else "pass")
     return {
         "status": status,
@@ -196,7 +198,13 @@ def style_lint_gate(text: str) -> dict[str, object]:
     }
 
 
-def is_style_lint_blocking(issue: AIStyleIssue) -> bool:
+def is_style_lint_blocking(issue: AIStyleIssue, profile: dict[str, object] | None = None, *, scope: str = "") -> bool:
+    if profile is not None:
+        mode = quality_rule_mode(profile, issue.rule, "blocking" if issue.rule in AI_STYLE_GATE_BLOCKING_RULES else "note", scope=scope)
+        if mode == "off" or mode == "note":
+            return False
+        if mode == "blocking":
+            return True
     severity = issue.severity.strip().lower()
     return issue.rule in AI_STYLE_GATE_BLOCKING_RULES or severity not in {"", "low"}
 
@@ -229,10 +237,17 @@ def style_lint_gate_message(gate: dict[str, object], *, max_items: int = 3) -> s
     return "；".join(rendered) if rendered else "Style Lint findings present"
 
 
-def render_ai_style_lint_block(text: str, *, max_issues: int = 12, max_sample_chars: int = 120) -> str:
+def render_ai_style_lint_block(
+    text: str,
+    *,
+    profile: dict[str, object] | None = None,
+    scope: str = "",
+    max_issues: int = 12,
+    max_sample_chars: int = 120,
+) -> str:
     """Render deterministic AI-style lint evidence for platform-agent review prompts."""
 
-    issues = lint_ai_style(text)
+    issues = lint_ai_style(text, profile=profile, scope=scope)
     lines = [
         "## Style Lint (auto-detected)",
         "",
@@ -259,33 +274,37 @@ def render_ai_style_lint_block(text: str, *, max_issues: int = 12, max_sample_ch
     return "\n".join(lines).rstrip() + "\n"
 
 
-def lint_ai_style(text: str) -> list[AIStyleIssue]:
+def lint_ai_style(text: str, profile: dict[str, object] | None = None, *, scope: str = "") -> list[AIStyleIssue]:
     clean = _strip_markdown(text)
     issues: list[AIStyleIssue] = []
-    issues.extend(_banned_phrase_issues(clean))
+    issues.extend(_banned_phrase_issues(clean, profile))
     contrast_issues = _contrast_frame_issues(clean)
     issues.extend(contrast_issues)
     evasion_issues = _contrast_evasion_issues(clean)
     issues.extend(evasion_issues)
-    issues.extend(_sentence_shape_issues(clean, skip_dash=bool(contrast_issues or evasion_issues)))
+    issues.extend(_sentence_shape_issues(clean, profile=profile, skip_dash=bool(contrast_issues or evasion_issues)))
     issues.extend(_abstract_summary_issues(clean))
     issues.extend(_explanatory_mind_issues(clean))
     issues.extend(_slogan_ending_issues(clean))
-    return issues
+    return _apply_profile_modes(issues, profile, scope=scope)
 
 
-def _banned_phrase_issues(text: str) -> list[AIStyleIssue]:
+def _banned_phrase_issues(text: str, profile: dict[str, object] | None = None) -> list[AIStyleIssue]:
     hits = [phrase for phrase in BANNED_AI_PHRASES for _ in range(text.count(phrase))]
+    custom_phrases = profile.get("custom_banned_phrases") if isinstance(profile, dict) else []
+    if isinstance(custom_phrases, list):
+        hits.extend(str(phrase) for phrase in custom_phrases for _ in range(text.count(str(phrase))) if str(phrase))
     intent_hits = [term for term in BANNED_INTENT_TERMS for _ in range(text.count(term))]
     if intent_hits and len(intent_hits) >= 3:
         hits.append("X意泛滥：" + "、".join(sorted(set(intent_hits))[:5]))
     if not hits:
         return []
     sample = _first_present_sample(text, [hit for hit in hits if not hit.startswith("X意泛滥")] or [hits[0]])
-    severity, density_note = _soft_density_verdict(len(hits), text)
+    severity, density_note = _soft_density_verdict(len(hits), text, profile)
+    rule = "custom-banned-phrase" if any(str(item) in sample for item in custom_phrases or []) else "plain-narration-banned-expression"
     return [
         AIStyleIssue(
-            "plain-narration-banned-expression",
+            rule,
             severity,
             "出现朴素叙述风险词/风险句式，容易显得像 AI 在演小说。"
             f"此类词组按约 2% 密度门禁处理，{density_note}；请改为普通人会说、日记里会写的准确动作或事实细节。",
@@ -343,11 +362,21 @@ def _contrast_evasion_issues(text: str) -> list[AIStyleIssue]:
     ]
 
 
-def _sentence_shape_issues(text: str, *, skip_dash: bool = False) -> list[AIStyleIssue]:
+def _sentence_shape_issues(
+    text: str,
+    *,
+    profile: dict[str, object] | None = None,
+    skip_dash: bool = False,
+) -> list[AIStyleIssue]:
     issues: list[AIStyleIssue] = []
     dash_count = text.count("——")
     if dash_count and not skip_dash:
-        severity, density_note = _soft_density_verdict(dash_count, text)
+        severity, density_note = _soft_density_verdict(
+            dash_count,
+            text,
+            profile,
+            threshold_key="dash_per_100_units",
+        )
         issues.append(
             AIStyleIssue(
                 "dash-prohibited-in-plain-narration",
@@ -358,12 +387,13 @@ def _sentence_shape_issues(text: str, *, skip_dash: bool = False) -> list[AIStyl
             )
         )
     for sentence in re.split(r"[。！？!?\n]", text):
-        if sentence.count("，") + sentence.count(",") > 3:
+        comma_limit = int(quality_threshold(profile, "commas_per_sentence", 3))
+        if sentence.count("，") + sentence.count(",") > comma_limit:
             issues.append(
                 AIStyleIssue(
                     "comma-overload-in-sentence",
                     "medium",
-                    "一句话超过三个逗号，容易形成拖长的作文腔。请拆句、换行或删掉重复渲染。",
+                    f"一句话超过 {comma_limit} 个逗号，容易形成拖长的作文腔。请拆句、换行或删掉重复渲染。",
                     sentence.strip()[:100],
                 )
             )
@@ -381,7 +411,7 @@ def _sentence_shape_issues(text: str, *, skip_dash: bool = False) -> list[AIStyl
     for pattern in transition_patterns:
         match = re.search(pattern, text)
         if match:
-            severity, density_note = _soft_density_verdict(1, text)
+            severity, density_note = _soft_density_verdict(1, text, profile)
             issues.append(
                 AIStyleIssue(
                     "plain-narration-template-sentence",
@@ -393,8 +423,14 @@ def _sentence_shape_issues(text: str, *, skip_dash: bool = False) -> list[AIStyl
             )
             break
     simile_count = len(re.findall(r"(?:好像|仿佛|如同|像[^。！？\n]{1,18}(?:一样|似的))", text))
-    if simile_count >= 2:
-        severity, density_note = _soft_density_verdict(simile_count, text)
+    simile_minimum = max(1, int(quality_threshold(profile, "simile_minimum_hits", 2)))
+    if simile_count >= simile_minimum:
+        severity, density_note = _soft_density_verdict(
+            simile_count,
+            text,
+            profile,
+            threshold_key="simile_per_100_units",
+        )
         issues.append(
             AIStyleIssue(
                 "simile-dependency",
@@ -493,12 +529,32 @@ def _strip_markdown(text: str) -> str:
     return "\n".join(lines)
 
 
-def _soft_density_verdict(hit_count: int, text: str) -> tuple[str, str]:
+def _soft_density_verdict(
+    hit_count: int,
+    text: str,
+    profile: dict[str, object] | None = None,
+    *,
+    threshold_key: str = "soft_density_per_100_units",
+) -> tuple[str, str]:
     unit_count = _narrative_unit_count(text)
-    allowed = max(1, int(unit_count * AI_STYLE_SOFT_DENSITY_LIMIT))
+    per_100 = quality_threshold(profile, threshold_key, AI_STYLE_SOFT_DENSITY_LIMIT * 100)
+    density_limit = per_100 / 100
+    allowed = max(1, int(unit_count * density_limit))
     density = hit_count / max(unit_count, 1)
     severity = "medium" if hit_count > allowed else "low"
-    return severity, f"当前 {hit_count}/{unit_count} 个叙事单元，约 {density:.1%}，阈值约 {AI_STYLE_SOFT_DENSITY_LIMIT:.0%}"
+    return severity, f"当前 {hit_count}/{unit_count} 个叙事单元，约 {density:.1%}，阈值为每 100 个叙事单元 {per_100:g} 次"
+
+
+def _apply_profile_modes(issues: list[AIStyleIssue], profile: dict[str, object] | None, *, scope: str = "") -> list[AIStyleIssue]:
+    if profile is None:
+        return issues
+    adjusted: list[AIStyleIssue] = []
+    for issue in issues:
+        default = "blocking" if issue.rule in AI_STYLE_GATE_BLOCKING_RULES else "note"
+        severity = apply_rule_mode(issue.severity, quality_rule_mode(profile, issue.rule, default, scope=scope))
+        if severity is not None:
+            adjusted.append(AIStyleIssue(issue.rule, severity, issue.message, issue.sample))
+    return adjusted
 
 
 def _narrative_unit_count(text: str) -> int:

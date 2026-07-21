@@ -4,18 +4,21 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import inspect
 import json
 from pathlib import Path
 import threading
 import time
 from typing import Any
+import uuid
 
 from .core_read_models import current_choices, mount_style, record_choice
-from .creative_steward import CreativeSteward
+from .creative_steward import CreativeSteward, CreativeStewardCancelled
 from .jobs import JobStore
 from .project_manager import read_directions, record_direction
 from .whole_book_release import WholeBookReleaseCoordinator
 from .worker import AgentWorker, WorkerRunResult
+from literary_engineering_studio_engine.workflow_state import build_workflow_state
 
 
 POLICY_SCHEMA = "arcvellum/delegation-policy/v0.1"
@@ -38,6 +41,23 @@ PROACTIVE_DECISIONS = {
     "canon_patch_approval",
 }
 TERMINAL_STATUSES = {"complete", "paused", "blocked", "cancelled", "failed"}
+REVISION_TASK_MARKERS = (
+    "revision",
+    "revise",
+    "asset-review-pass",
+    "asset-approval-revision",
+    "canon-review-pass",
+    "committee-pass",
+)
+
+
+def is_revision_task(task_id: str) -> bool:
+    normalized = str(task_id or "").strip().lower()
+    return bool(normalized) and any(marker in normalized for marker in REVISION_TASK_MARKERS)
+
+
+def next_revision_count(run: dict[str, Any], task_id: str) -> int:
+    return int(run.get("consecutive_revisions") or 0) + 1 if is_revision_task(task_id) else 0
 
 
 def default_policy(mode: str = "collaborative") -> dict[str, Any]:
@@ -132,13 +152,23 @@ class DelegationPolicy:
 
 
 class AutopilotService:
-    def __init__(self, config: dict[str, Any], store: JobStore):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        store: JobStore,
+        *,
+        runtime_pool=None,
+        execution_coordinator=None,
+    ):
         self.config = config
         self.store = store
+        self.runtime_pool = runtime_pool
+        self.execution_coordinator = execution_coordinator
         self.store.recover_autopilot_runs()
         self._lock = threading.RLock()
         self._threads: dict[str, threading.Thread] = {}
         self._stops: dict[str, threading.Event] = {}
+        self._controller_id = f"studio-controller-{uuid.uuid4().hex[:12]}"
 
     def policy(self, project_root: Path) -> dict[str, Any]:
         root = str(project_root.expanduser().resolve())
@@ -168,7 +198,13 @@ class AutopilotService:
             return run
         if run["status"] == "complete":
             raise ValueError("这次自动创作已经完成。")
-        self.store.update_autopilot_run(run_id, status="running", stop_reason="", last_error="")
+        self.store.update_autopilot_run(
+            run_id,
+            status="running",
+            stop_reason="",
+            last_error="",
+            finished_at="",
+        )
         self.store.append_autopilot_event(run_id, "autopilot.resumed", {})
         self._launch(run_id)
         return self.store.read_autopilot_run(run_id)
@@ -219,10 +255,49 @@ class AutopilotService:
             thread.start()
 
     def _run(self, run_id: str, stop: threading.Event) -> None:
+        """Run one controller only while this process owns the durable lease."""
+
+        lease_owner = f"{self._controller_id}:{run_id}"
+        if not self.store.acquire_autopilot_lease(run_id, lease_owner):
+            self.store.append_autopilot_event(
+                run_id,
+                "autopilot.controller_busy",
+                {"controller_id": self._controller_id},
+            )
+            return
+        renew_stop = threading.Event()
+
+        def renew() -> None:
+            while not renew_stop.wait(20):
+                if self.store.renew_autopilot_lease(run_id, lease_owner):
+                    continue
+                setattr(stop, "_arcvellum_lease_lost", True)
+                stop.set()
+                self.store.append_autopilot_event(
+                    run_id,
+                    "autopilot.controller_lease_lost",
+                    {"controller_id": self._controller_id},
+                )
+                return
+
+        heartbeat = threading.Thread(target=renew, name=f"arcvellum-lease-{run_id}", daemon=True)
+        heartbeat.start()
+        try:
+            self._run_claimed(run_id, stop)
+        finally:
+            renew_stop.set()
+            heartbeat.join(timeout=1)
+            self.store.release_autopilot_lease(run_id, lease_owner)
+
+    def _run_claimed(self, run_id: str, stop: threading.Event) -> None:
         run = self.store.read_autopilot_run(run_id)
         project = Path(run["project_root"])
         policy = DelegationPolicy(run["policy"])
-        steward = CreativeSteward(self.config)
+        steward = (
+            CreativeSteward(self.config, runtime_pool=self.runtime_pool)
+            if self.runtime_pool is not None
+            else CreativeSteward(self.config)
+        )
         route_index = 0
         failure_by_task: dict[str, int] = {}
         try:
@@ -246,29 +321,82 @@ class AutopilotService:
                     self.store.append_autopilot_event(run_id, "autopilot.completed", {"tasks_completed": run["tasks_completed"]})
                     return
 
-                route = ROUTE_ORDER[route_index]
+                planned_route = ROUTE_ORDER[route_index]
+                dependency_route = planned_route == "scene-development" and _pending_asset_dependency(project)
+                route = "character-and-world-assets" if dependency_route else planned_route
                 self.store.update_autopilot_run(run_id, current_route=route, current_task_id="")
-                self.store.append_autopilot_event(run_id, "route.entered", {"route": route})
-                if self._resolve_proactive_choice(run_id, project, route, policy, steward):
-                    if self.store.read_autopilot_run(run_id)["status"] != "running":
-                        return
-                result = AgentWorker(
-                    self.config,
-                    event_sink=lambda event, data: self._worker_event(run_id, event, data),
-                    cancel_event=stop,
-                ).run_once(project, route=route, runtime_id=run["runtime"])
+                self.store.append_autopilot_event(
+                    run_id,
+                    "route.dependency_entered" if dependency_route else "route.entered",
+                    {"route": route, "resume_route": planned_route} if dependency_route else {"route": route},
+                )
+                decision_handled = self._resolve_proactive_choice(run_id, project, route, policy, steward, stop=stop)
+                current_status = self.store.read_autopilot_run(run_id)
+                if stop.is_set() or (
+                    decision_handled
+                    and current_status["status"] in TERMINAL_STATUSES
+                    and current_status.get("stop_reason") != "application-restart"
+                ):
+                    return
+                owner = f"autopilot:{run_id}"
+                if self.execution_coordinator is not None and not self.execution_coordinator.acquire(project, owner):
+                    self._pause_for(run_id, "project-busy", "同一作品已有另一项正式任务正在执行，请稍后继续。")
+                    return
+                try:
+                    result = AgentWorker(
+                        self.config,
+                        event_sink=lambda event, data: self._worker_event(run_id, event, data),
+                        cancel_event=stop,
+                        runtime_pool=self.runtime_pool,
+                    ).run_once(project, route=route, runtime_id=run["runtime"])
+                finally:
+                    if self.execution_coordinator is not None:
+                        self.execution_coordinator.release(project, owner)
                 self.store.update_autopilot_run(run_id, current_task_id=result.task_id)
 
+                if result.status == "runtime_failed" and result.run_root is not None and not stop.is_set():
+                    self.store.append_autopilot_event(
+                        run_id,
+                        "task.recovery_started",
+                        {"task_id": result.task_id, "run_root": str(result.run_root)},
+                    )
+                    if self.execution_coordinator is None or self.execution_coordinator.acquire(project, owner):
+                        try:
+                            result = AgentWorker(
+                                self.config,
+                                event_sink=lambda event, data: self._worker_event(run_id, event, data),
+                                runtime_pool=self.runtime_pool,
+                            ).resume_from_run(result.run_root)
+                            self.store.append_autopilot_event(
+                                run_id,
+                                "task.recovery_succeeded",
+                                {"task_id": result.task_id, "status": result.status},
+                            )
+                        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+                            self.store.append_autopilot_event(
+                                run_id,
+                                "task.recovery_rejected",
+                                {"task_id": result.task_id, "message": str(exc)},
+                            )
+                        finally:
+                            if self.execution_coordinator is not None:
+                                self.execution_coordinator.release(project, owner)
+
                 if result.status == "route_ready":
+                    if dependency_route:
+                        self.store.append_autopilot_event(
+                            run_id,
+                            "route.dependency_ready",
+                            {"route": route, "resume_route": planned_route},
+                        )
+                        continue
                     self.store.append_autopilot_event(run_id, "route.ready", {"route": route})
                     route_index += 1
                     continue
                 if result.status == "complete":
-                    revisions = int(run["consecutive_revisions"]) + 1 if "revis" in result.task_id.lower() else 0
-                    self.store.update_autopilot_run(
+                    self.store.advance_autopilot_run(
                         run_id,
-                        tasks_completed=int(run["tasks_completed"]) + 1,
-                        consecutive_revisions=revisions,
+                        consecutive_revisions=next_revision_count(run, result.task_id),
                         failures=0,
                         last_error="",
                     )
@@ -277,29 +405,46 @@ class AutopilotService:
                     if not policy.permits_writeback(route):
                         self._pause_for(run_id, "writeback-approval-required", result.message)
                         return
-                    final = AgentWorker(self.config, event_sink=lambda event, data: self._worker_event(run_id, event, data)).approve_writeback(
-                        result.run_root,
-                        approved_by="delegated-agent:autopilot-controller",
-                    )
+                    if self.execution_coordinator is not None and not self.execution_coordinator.acquire(project, owner):
+                        self._pause_for(run_id, "project-busy", "正式写回前发现另一项任务正在使用作品，请稍后继续。")
+                        return
+                    try:
+                        final = AgentWorker(
+                            self.config,
+                            event_sink=lambda event, data: self._worker_event(run_id, event, data),
+                            runtime_pool=self.runtime_pool,
+                        ).approve_writeback(
+                            result.run_root,
+                            approved_by="delegated-agent:autopilot-controller",
+                        )
+                    finally:
+                        if self.execution_coordinator is not None:
+                            self.execution_coordinator.release(project, owner)
                     self.store.record_delegated_decision(
                         run_id,
                         _operational_decision(run, route, result.task_id, "writeback_approval", "approve", "授权策略允许导入已校验的预期产物。"),
                     )
                     if final.status == "complete":
-                        self.store.update_autopilot_run(run_id, tasks_completed=int(run["tasks_completed"]) + 1, failures=0)
+                        self.store.advance_autopilot_run(
+                            run_id,
+                            consecutive_revisions=next_revision_count(run, result.task_id),
+                            failures=0,
+                        )
                         continue
                     result = final
                 if result.status == "waiting_human":
-                    choices = current_choices(self.config, project).get("choices") or []
+                    choices = current_choices(self.config, project, route=route).get("choices") or []
                     choice = next((item for item in choices if isinstance(item, dict) and (not result.task_id or not item.get("task_id") or item.get("task_id") == result.task_id)), None)
                     if not choice or not policy.permits(route, str(choice.get("decision_type") or "")):
                         self._pause_for(run_id, "human-decision-required", result.message)
                         return
-                    if not self._delegate_choice(run_id, project, route, policy, steward, choice, task_id=result.task_id):
+                    if not self._delegate_choice(run_id, project, route, policy, steward, choice, task_id=result.task_id, stop=stop):
                         return
                     continue
 
                 if result.status == "cancelled" or stop.is_set():
+                    if getattr(stop, "_arcvellum_lease_lost", False):
+                        return
                     self._pause_for(run_id, "user-request", "自动创作已暂停。")
                     return
                 task_key = result.task_id or f"{route}:unknown"
@@ -321,7 +466,6 @@ class AutopilotService:
             with self._lock:
                 self._stops.pop(run_id, None)
                 self._threads.pop(run_id, None)
-
     def _resolve_proactive_choice(
         self,
         run_id: str,
@@ -329,8 +473,10 @@ class AutopilotService:
         route: str,
         policy: DelegationPolicy,
         steward: CreativeSteward,
+        *,
+        stop: threading.Event | None = None,
     ) -> bool:
-        payload = current_choices(self.config, project)
+        payload = current_choices(self.config, project, route=route)
         choices = payload.get("choices") if isinstance(payload.get("choices"), list) else []
         prior = {
             str(item.get("choice_fingerprint") or "")
@@ -351,7 +497,7 @@ class AutopilotService:
         )
         if choice is None:
             return False
-        return self._delegate_choice(run_id, project, route, policy, steward, choice)
+        return self._delegate_choice(run_id, project, route, policy, steward, choice, stop=stop)
 
     def _delegate_choice(
         self,
@@ -363,15 +509,35 @@ class AutopilotService:
         choice: dict[str, Any],
         *,
         task_id: str = "",
+        stop: threading.Event | None = None,
     ) -> bool:
         decision_type = str(choice.get("decision_type") or "")
         if not policy.permits(route, decision_type):
             self._pause_for(run_id, "human-decision-required", "当前决定不在自动授权范围内。")
             return False
-        decision = steward.decide(project, choice, project_direction=_project_direction(project))
+        if stop is not None and stop.is_set():
+            return False
+        self.store.append_autopilot_event(
+            run_id,
+            "decision.started",
+            {
+                "route": route,
+                "task_id": task_id or str(choice.get("task_id") or ""),
+                "decision_type": decision_type,
+                "choice_id": str(choice.get("choice_id") or ""),
+            },
+        )
+        try:
+            decision = _run_steward_decision(steward, project, choice, _project_direction(project), stop)
+        except CreativeStewardCancelled:
+            self.store.append_autopilot_event(run_id, "decision.cancelled", {"decision_type": decision_type})
+            return False
+        if stop is not None and stop.is_set():
+            self.store.append_autopilot_event(run_id, "decision.cancelled", {"decision_type": decision_type})
+            return False
         if decision["requires_human"]:
             self._pause_for(run_id, "steward-escalation", decision["human_reason"] or "创作代理认为需要你来决定。")
-            return False
+            return True
 
         materialize = decision_type in {
             "branch_selection",
@@ -430,6 +596,14 @@ class AutopilotService:
         return True
 
     def _worker_event(self, run_id: str, event: str, data: dict[str, Any]) -> None:
+        if event == "task.opened":
+            self.store.update_autopilot_run(
+                run_id,
+                current_task_id=str(data.get("task_id") or ""),
+                current_route=str(data.get("route") or self.store.read_autopilot_run(run_id).get("current_route") or ""),
+            )
+        if event in {"agent.message.delta", "runner.session.status"}:
+            return
         self.store.append_autopilot_event(run_id, f"worker.{event}", data)
         if event == "usage.updated":
             cost = float(data.get("cost_usd") or 0)
@@ -440,6 +614,39 @@ class AutopilotService:
     def _pause_for(self, run_id: str, reason: str, message: str) -> None:
         self.store.update_autopilot_run(run_id, status="paused", stop_reason=reason, last_error=message)
         self.store.append_autopilot_event(run_id, "autopilot.paused", {"reason": reason, "message": message})
+
+
+def _run_steward_decision(
+    steward: CreativeSteward,
+    project: Path,
+    choice: dict[str, Any],
+    project_direction: str,
+    stop: threading.Event | None,
+) -> dict[str, Any]:
+    """Preserve compatibility with test or third-party steward adapters."""
+
+    parameters = inspect.signature(steward.decide).parameters
+    kwargs: dict[str, Any] = {"project_direction": project_direction}
+    if "cancel_event" in parameters:
+        kwargs["cancel_event"] = stop
+    return steward.decide(project, choice, **kwargs)
+
+
+def _pending_asset_dependency(project: Path) -> bool:
+    """Return whether scene work must yield to a formal candidate-asset gate."""
+
+    try:
+        state = build_workflow_state(project, route="character-and-world-assets")
+        payload = json.loads(state.json_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    assets = payload.get("assets") if isinstance(payload, dict) else []
+    return any(
+        isinstance(item, dict)
+        and bool(str(item.get("candidate") or "").strip())
+        and str(item.get("status") or "") != "ready"
+        for item in assets
+    )
 
 
 def _operational_decision(run: dict[str, Any], route: str, task_id: str, decision_type: str, selected: str, rationale: str) -> dict[str, Any]:

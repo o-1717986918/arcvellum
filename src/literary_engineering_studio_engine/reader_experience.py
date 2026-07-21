@@ -17,13 +17,16 @@ CHAPTER_OBLIGATION_SCHEMA = "literary-engineering-workbench/chapter-obligation-c
 READER_EXPERIENCE_SCHEMA = "literary-engineering-workbench/reader-experience-contract/v1"
 REQUIRED_CHAPTER_FIELDS = (
     "chapter_function",
-    "must_payoff",
     "must_setup",
     "must_change",
     "must_not_resolve",
-    "inherited_hooks",
     "ending_hook",
     "inventory_sufficiency",
+)
+OPTIONAL_EMPTY_CHAPTER_LIST_FIELDS = (
+    "must_payoff",
+    "inherited_hooks",
+    "expansion_needed",
 )
 REQUIRED_READER_FIELDS = (
     "reader_question",
@@ -414,6 +417,12 @@ def _chapter_contract_issues(payload: dict[str, Any]) -> list[str]:
         value = payload.get(field)
         if value in ("", None, [], {}):
             issues.append(f"chapter obligation field missing: {field}")
+    # An opening chapter can legitimately have no earlier hook to inherit and no
+    # due payoff. Require these fields to be explicit lists, not non-empty lists.
+    for field in OPTIONAL_EMPTY_CHAPTER_LIST_FIELDS:
+        value = payload.get(field)
+        if not isinstance(value, list):
+            issues.append(f"chapter obligation field must be a list: {field}")
     scenes = payload.get("reader_experience_by_scene")
     if not isinstance(scenes, list) or not scenes:
         issues.append("reader_experience_by_scene must contain at least one scene contract")

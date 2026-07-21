@@ -7,6 +7,7 @@ import {
   BookOpenCheck,
   ChevronDown,
   CircleDotDashed,
+  GripVertical,
   MessageCircleMore,
   Minimize2,
   PanelLeftClose,
@@ -18,6 +19,7 @@ import {
   X,
 } from "lucide-vue-next";
 import { api, connectEventStream, query, streamApi, type EventStreamConnection } from "@/services/api";
+import { renderSafeMarkdown } from "@/services/markdown";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AdvisorAction, AdvisorAnswer, AdvisorMessage, AdvisorSession } from "@/types/api";
 
@@ -40,8 +42,17 @@ const inbox = ref<Record<string, unknown>[]>([]);
 const unreadCount = ref(0);
 const inboxSettings = ref({ mode: "standard", quiet_start: "22:30", quiet_end: "08:00" });
 const dockSide = ref<"left" | "right">((localStorage.getItem("arcvellum.advisorSide") as "left" | "right") || "right");
+const orbPosition = ref(readPosition("arcvellum.advisorOrbPosition"));
+const dockPosition = ref(readPosition("arcvellum.advisorDockPosition"));
+const orbStyle = computed(() => orbPosition.value ? { left: `${orbPosition.value.left}px`, top: `${orbPosition.value.top}px`, right: "auto", bottom: "auto" } : undefined);
+const dockStyle = computed(() => dockPosition.value ? { left: `${dockPosition.value.left}px`, top: `${dockPosition.value.top}px`, right: "auto", bottom: "auto" } : undefined);
 let requestController: AbortController | null = null;
 let inboxStream: EventStreamConnection | null = null;
+let deltaBuffer = "";
+let deltaTimer = 0;
+let dragKind: "orb" | "dock" | null = null;
+let dragStart = { x: 0, y: 0, left: 0, top: 0 };
+let dragged = false;
 
 const messages = computed(() => transientMessages.value.length ? transientMessages.value : session.value?.messages || []);
 const projectTitle = computed(() => store.currentProject?.title || "当前作品");
@@ -64,16 +75,103 @@ watch(
 onMounted(() => {
   window.addEventListener("keydown", globalKeydown);
   if (store.currentProjectPath) void loadAdvisorSurface();
+  window.addEventListener("resize", keepAdvisorInView);
 });
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", globalKeydown);
   requestController?.abort();
   inboxStream?.close();
+  window.clearTimeout(deltaTimer);
+  stopAdvisorDrag();
+  window.removeEventListener("resize", keepAdvisorInView);
 });
 
 async function toggle(): Promise<void> {
   open.value = !open.value;
   if (open.value && store.currentProjectPath) await ensureSession();
+}
+
+async function onOrbClick(): Promise<void> {
+  if (dragged) {
+    dragged = false;
+    return;
+  }
+  await toggle();
+}
+
+function startOrbDrag(event: PointerEvent): void {
+  if (event.button !== 0 || window.matchMedia("(max-width: 760px)").matches) return;
+  const element = event.currentTarget as HTMLElement;
+  const rect = element.getBoundingClientRect();
+  beginAdvisorDrag("orb", event, rect.left, rect.top);
+}
+
+function startDockDrag(event: PointerEvent): void {
+  if (event.button !== 0 || window.matchMedia("(max-width: 760px)").matches) return;
+  if ((event.target as HTMLElement).closest("button, select, input, textarea, label")) return;
+  const element = (event.currentTarget as HTMLElement).closest(".advisor-dock") as HTMLElement | null;
+  if (!element) return;
+  const rect = element.getBoundingClientRect();
+  beginAdvisorDrag("dock", event, rect.left, rect.top);
+}
+
+function beginAdvisorDrag(kind: "orb" | "dock", event: PointerEvent, left: number, top: number): void {
+  dragKind = kind;
+  dragged = false;
+  dragStart = { x: event.clientX, y: event.clientY, left, top };
+  document.body.classList.add("dragging-advisor");
+  window.addEventListener("pointermove", moveAdvisor);
+  window.addEventListener("pointerup", stopAdvisorDrag, { once: true });
+  event.preventDefault();
+}
+
+function moveAdvisor(event: PointerEvent): void {
+  if (!dragKind) return;
+  const dx = event.clientX - dragStart.x;
+  const dy = event.clientY - dragStart.y;
+  if (Math.abs(dx) + Math.abs(dy) > 5) dragged = true;
+  const width = dragKind === "orb" ? 58 : Math.min(438, window.innerWidth - 36);
+  const height = dragKind === "orb" ? 58 : Math.min(window.innerHeight - 36, 760);
+  const next = boundedAdvisorPosition(dragStart.left + dx, dragStart.top + dy, width, height);
+  if (dragKind === "orb") orbPosition.value = next;
+  else dockPosition.value = next;
+}
+
+function stopAdvisorDrag(): void {
+  if (dragKind === "orb" && orbPosition.value) localStorage.setItem("arcvellum.advisorOrbPosition", JSON.stringify(orbPosition.value));
+  if (dragKind === "dock" && dockPosition.value) localStorage.setItem("arcvellum.advisorDockPosition", JSON.stringify(dockPosition.value));
+  dragKind = null;
+  document.body.classList.remove("dragging-advisor");
+  window.removeEventListener("pointermove", moveAdvisor);
+  window.removeEventListener("pointerup", stopAdvisorDrag);
+}
+
+function boundedAdvisorPosition(left: number, top: number, width: number, height: number): { left: number; top: number } {
+  const margin = 10;
+  return {
+    left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin)),
+    top: Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin)),
+  };
+}
+
+function keepAdvisorInView(): void {
+  if (window.matchMedia("(max-width: 760px)").matches) return;
+  if (orbPosition.value) orbPosition.value = boundedAdvisorPosition(orbPosition.value.left, orbPosition.value.top, 58, 58);
+  if (dockPosition.value) dockPosition.value = boundedAdvisorPosition(dockPosition.value.left, dockPosition.value.top, Math.min(438, window.innerWidth - 36), Math.min(window.innerHeight - 36, 760));
+}
+
+function resetDockPosition(): void {
+  dockPosition.value = null;
+  localStorage.removeItem("arcvellum.advisorDockPosition");
+}
+
+function readPosition(key: string): { left: number; top: number } | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "null");
+    return value && Number.isFinite(value.left) && Number.isFinite(value.top) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 async function loadAdvisorSurface(): Promise<void> {
@@ -178,6 +276,9 @@ async function ask(): Promise<void> {
   if (!session.value) return;
   question.value = "";
   thinking.value = true;
+  deltaBuffer = "";
+  window.clearTimeout(deltaTimer);
+  deltaTimer = 0;
   const optimistic: AdvisorMessage[] = [
     ...(session.value.messages || []),
     { role: "user", payload: { question: value } },
@@ -201,8 +302,12 @@ async function ask(): Promise<void> {
       (event, data) => {
         const current = transientMessages.value.at(-1);
         if (!current || current.role !== "advisor") return;
-        if (event === "advisor.delta") current.payload.message = String(current.payload.message || "") + String(data.text || "");
+        if (event === "advisor.delta") {
+          deltaBuffer += String(data.text || "");
+          scheduleDeltaFlush();
+        }
         if (event === "advisor.result") {
+          flushDelta();
           const answer = (data.answer || {}) as AdvisorAnswer;
           current.payload = answer;
         }
@@ -218,10 +323,27 @@ async function ask(): Promise<void> {
       current.payload.message = friendlyError(cause, "顾问暂时没有完成回答，请重试。");
     }
   } finally {
+    flushDelta();
     requestController = null;
     thinking.value = false;
     await scrollToEnd();
   }
+}
+
+function scheduleDeltaFlush(): void {
+  if (deltaTimer) return;
+  deltaTimer = window.setTimeout(() => {
+    deltaTimer = 0;
+    flushDelta();
+  }, 72);
+}
+
+function flushDelta(): void {
+  if (!deltaBuffer) return;
+  const current = transientMessages.value.at(-1);
+  if (current?.role === "advisor") current.payload.message = String(current.payload.message || "") + deltaBuffer;
+  deltaBuffer = "";
+  void scrollToEnd();
 }
 
 async function runAction(action: AdvisorAction): Promise<void> {
@@ -237,12 +359,20 @@ async function runAction(action: AdvisorAction): Promise<void> {
         body: JSON.stringify({ project_root: store.currentProjectPath, message: action.message || action.label }),
       });
       store.notice = "这条想法已经交给创作流程。";
-    } else if (action.type === "prepare_next_task") {
-      await api("/worker/prepare", {
+    } else if (action.type === "run_next_task" || action.type === "prepare_next_task") {
+      const allowedRoutes = new Set(["auto", "scene-development", "longform-planning", "style-engineering", "character-and-world-assets", "review-and-audit", "export-and-release"]);
+      await api("/worker/run", {
         method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, route: "scene-development", runtime: "opencode" }),
+        body: JSON.stringify({ project_root: store.currentProjectPath, route: allowedRoutes.has(action.route || "") ? action.route : "auto", runtime: "opencode" }),
       });
-      store.notice = "下一项创作任务已经准备好。";
+      store.notice = "下一项创作任务已经启动。";
+      await store.loadDashboard();
+    } else if (action.type === "start_autopilot") {
+      await api("/autopilot/start", {
+        method: "POST",
+        body: JSON.stringify({ project_root: store.currentProjectPath, runtime: "opencode" }),
+      });
+      store.notice = "连续创作已经开始。";
       await store.loadDashboard();
     } else if (action.type === "pause_autopilot") {
       const state = await api<{ run?: { run_id: string; status: string } }>(
@@ -254,6 +384,16 @@ async function runAction(action: AdvisorAction): Promise<void> {
           body: JSON.stringify({ reason: "advisor-user-request" }),
         });
         store.notice = "连续创作已经暂停。";
+      }
+    } else if (action.type === "resume_autopilot") {
+      const state = await api<{ run?: { run_id: string; status: string } }>(
+        `/autopilot/status?${query({ project_root: store.currentProjectPath })}`,
+      );
+      if (state.run?.run_id && ["paused", "blocked", "failed"].includes(state.run.status)) {
+        await api(`/autopilot/runs/${state.run.run_id}/resume`, { method: "POST" });
+        store.notice = "连续创作已经继续。";
+      } else {
+        store.notice = "当前没有可以恢复的连续创作任务。";
       }
     } else if (action.type === "request_revision") {
       await api("/projects/directions", {
@@ -276,6 +416,7 @@ function stopAnswer(): void {
 function switchSide(): void {
   dockSide.value = dockSide.value === "right" ? "left" : "right";
   localStorage.setItem("arcvellum.advisorSide", dockSide.value);
+  resetDockPosition();
 }
 
 function globalKeydown(event: KeyboardEvent): void {
@@ -301,10 +442,13 @@ async function scrollToEnd(): Promise<void> {
 <template>
   <button
     class="advisor-orb"
+    data-tour="advisor"
     :class="{ open }"
     :disabled="!store.hasProject"
+    :style="orbStyle"
     :title="store.hasProject ? '打开创作顾问' : '先选择一部作品'"
-    @click="toggle"
+    @pointerdown="startOrbDrag"
+    @click="onOrbClick"
   >
     <span class="advisor-orb-rings" aria-hidden="true"></span>
     <MessageCircleMore v-if="!open" :size="23" />
@@ -314,16 +458,17 @@ async function scrollToEnd(): Promise<void> {
   </button>
 
   <Transition name="advisor-panel">
-    <aside v-if="open" class="advisor-dock" :class="dockSide" aria-label="ArcVellum 创作顾问">
-      <header class="advisor-dock-header">
+    <aside v-if="open" class="advisor-dock" :class="dockSide" :style="dockStyle" aria-label="ArcVellum 创作顾问">
+      <header class="advisor-dock-header" title="拖动顾问窗；双击复位" @pointerdown="startDockDrag" @dblclick="resetDockPosition">
+        <span class="advisor-drag-cue"><GripVertical :size="15" /></span>
         <div class="advisor-avatar"><Sparkles :size="18" /></div>
-        <div>
+        <div class="advisor-title">
           <span>ArcVellum 创作顾问</span>
           <select v-model="selectedPersona" class="advisor-persona-select" title="选择顾问人格" @change="choosePersona">
             <option v-for="persona in personas" :key="String(persona.persona_id)" :value="persona.persona_id">{{ persona.name }}</option>
           </select>
         </div>
-        <span class="advisor-readonly"><ShieldCheck :size="13" />只读</span>
+        <span class="advisor-readonly"><ShieldCheck :size="13" />受控操作</span>
         <button class="icon-button dock-switch" title="自定义顾问人格" @click="personaEditorOpen = !personaEditorOpen"><UserRoundPen :size="16" /></button>
         <button class="icon-button dock-switch" :title="dockSide === 'right' ? '移到左侧' : '移到右侧'" @click="switchSide">
           <PanelLeftClose v-if="dockSide === 'right'" :size="16" />
@@ -358,7 +503,7 @@ async function scrollToEnd(): Promise<void> {
         <section v-if="!messages.length && !loadingSession" class="advisor-welcome">
           <span class="welcome-symbol"><BookOpenCheck :size="25" /></span>
           <h2>我们聊聊这部作品</h2>
-          <p>你可以讨论人物动机、情节取舍、世界规则和下一步方向。顾问会看作品，但不会擅自改动它。</p>
+          <p>你可以讨论作品，也可以直接说“继续创作”“暂停”“把这条要求记下来”或“打开正文”。顾问会把明确意图变成可确认的安全操作。</p>
           <button @click="question = '请结合当前进度，告诉我现在最值得决定的创作问题。'; ask()">从当前进度聊起</button>
         </section>
 
@@ -371,7 +516,11 @@ async function scrollToEnd(): Promise<void> {
           <article v-else class="advisor-answer">
             <div class="advisor-avatar small"><Sparkles :size="14" /></div>
             <div class="advisor-answer-body">
-              <p v-if="message.payload.message || message.payload.answer">{{ message.payload.message || message.payload.answer }}</p>
+              <div
+                v-if="message.payload.message || message.payload.answer"
+                class="advisor-markdown"
+                v-html="renderSafeMarkdown(message.payload.message || message.payload.answer)"
+              ></div>
               <div v-else class="advisor-thinking"><i></i><i></i><i></i><span>正在阅读作品并思考</span></div>
               <details v-if="message.payload.evidence?.length || message.payload.uncertainties?.length" class="advisor-evidence">
                 <summary><ChevronDown :size="14" />查看判断依据</summary>

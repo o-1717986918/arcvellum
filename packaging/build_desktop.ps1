@@ -97,7 +97,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum Reader, Advisor and Narrative Observatory release."
+        --notes "ArcVellum v0.8 adds Creative Quality Profiles, scoped prose rules, Narrative Orrery, help, details and legal guidance."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

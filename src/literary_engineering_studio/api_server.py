@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ import time
 from typing import Any
 
 from . import __version__
-from .application_info import build_application_info, build_diagnostic_report, export_diagnostic_report
+from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .advisor import ProjectAdvisor
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
 from .advisor_personas import persona_catalog, save_custom_persona, select_persona
@@ -35,8 +36,9 @@ from .core_read_models import (
 )
 from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
 from .lifecycle import ApplicationLifecycleManager
+from .live_events import EPHEMERAL_WORKER_EVENTS, coalesce_live_events
 from .model_connections import model_connection_status
-from .narrative_projection import build_narrative_projection
+from .narrative_projection import build_narrative_projection, projection_delta, projection_motion_events
 from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
 from .opencode_control import disconnect_provider, provider_catalog, select_model, set_api_credential
 from .runner_probe import probe_agent_runner
@@ -50,9 +52,15 @@ from .project_manager import (
     validate_project_location,
 )
 from .reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
-from .runtimes import agent_runner_status
 from .supervisor import project_lock_key
 from .worker import AgentWorker
+from literary_engineering_studio_engine.anti_ai_style import style_lint_gate
+from literary_engineering_studio_engine.creative_quality import (
+    load_creative_quality_profile,
+    save_creative_quality_profile,
+)
+from literary_engineering_studio_engine.punctuation_standard import lint_punctuation
+from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 
 try:
     from fastapi import FastAPI, HTTPException, Request
@@ -119,6 +127,7 @@ class DirectionRequest(BaseModel):
 
 class RunnerProbeRequest(BaseModel):
     model: str = ""
+    role: str = "worker"
     timeout: int = 120
 
 
@@ -129,6 +138,7 @@ class OpenCodeCredentialRequest(BaseModel):
 
 class ModelSelectionRequest(BaseModel):
     model: str
+    role: str = "all"
 
 
 class AdvisorSessionRequest(BaseModel):
@@ -185,6 +195,7 @@ class AutopilotPolicyRequest(BaseModel):
 class AutopilotStartRequest(BaseModel):
     project_root: str
     runtime: str = "opencode"
+    authorized: bool = False
 
 
 class AutopilotControlRequest(BaseModel):
@@ -198,22 +209,47 @@ class WritebackDecisionRequest(BaseModel):
 
 class WorkerRetryRequest(BaseModel):
     runtime: str = ""
+    resume: bool = True
 
 
-def create_app():
+class CreativeQualityRequest(BaseModel):
+    project_root: str
+    profile: dict[str, Any]
+
+
+class CreativeQualityPreviewRequest(BaseModel):
+    project_root: str
+    text: str
+    profile: dict[str, Any] | None = None
+    scope: str = ""
+
+
+class RhythmPlanRequest(BaseModel):
+    project_root: str
+    entries: list[dict[str, Any]]
+
+
+def create_app(config_override: dict[str, Any] | None = None):
     if FastAPI is None:
         raise RuntimeError("Studio API requires pip install -e .[api]")
-    config = load_config()
+    config = config_override or load_config()
     lifecycle = ApplicationLifecycleManager(config)
     bootstrap = ApplicationBootstrapService(config, lifecycle)
     jobs = lifecycle.store
-    advisor = ProjectAdvisor(config, jobs)
-    autopilot = AutopilotService(config, jobs)
+    advisor = ProjectAdvisor(config, jobs, runtime_pool=lifecycle.opencode_pool)
+    autopilot = AutopilotService(
+        config,
+        jobs,
+        runtime_pool=lifecycle.opencode_pool,
+        execution_coordinator=lifecycle.execution_coordinator,
+    )
+    narrative_stream_state: dict[str, dict[str, Any]] = {}
+    narrative_stream_lock = threading.Lock()
     app = FastAPI(title="ArcVellum", version=__version__)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"],
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
         # The packaged WebView talks to the loopback sidecar from a Tauri
         # origin. Its authenticated requests use credentials="include" so the
@@ -239,6 +275,15 @@ def create_app():
     app.state.lifecycle = lifecycle
     app.state.bootstrap = bootstrap
     app.state.autopilot = autopilot
+
+    def cached_read_model(key: str, root: Path, builder):
+        return lifecycle.read_models.get(key, root, builder)
+
+    def dashboard_snapshot(root: Path):
+        return cached_read_model(f"dashboard:{root}", root, lambda: build_dashboard(config, root))
+
+    def library_snapshot(root: Path):
+        return cached_read_model(f"library:{root}", root, lambda: build_library(config, root))
 
     def shutdown_application():
         autopilot.shutdown()
@@ -314,6 +359,28 @@ def create_app():
     def application_info():
         return build_application_info(config)
 
+    @app.get("/application/details")
+    def application_details():
+        return build_application_info(config)
+
+    @app.get("/application/legal")
+    def application_legal():
+        return build_legal_documents()
+
+    @app.get("/help")
+    def help_center():
+        return {
+            "ok": True,
+            "schema": "arcvellum/help-center/v1",
+            "topics": [
+                {"id": "first-use", "title": "第一次使用", "summary": "建立作品、写下方向、连接 Agent，然后从创作总控准备下一项任务。"},
+                {"id": "gates", "title": "审批与门禁", "summary": "分支、设定写回、修订和交付会在关键节点等待明确决定。"},
+                {"id": "models", "title": "Agent 与模型", "summary": "Agent 执行受控任务，模型提供创作判断，正式产物由状态机验收。"},
+                {"id": "reader", "title": "阅读与交付", "summary": "阅读器只拼接晋升正文，交付只使用通过正式门禁的内容。"},
+                {"id": "troubleshooting", "title": "启动与连接", "summary": "可重新检查本地服务或生成不含正文和凭证的诊断报告。"},
+            ],
+        }
+
     @app.get("/application/diagnostics")
     def application_diagnostics():
         return {"ok": True, **build_diagnostic_report(config, lifecycle, bootstrap)}
@@ -343,7 +410,7 @@ def create_app():
 
     @app.get("/agent-runners")
     def agent_runners():
-        return {"ok": True, "items": agent_runner_status(config, force_refresh=True)}
+        return {"ok": True, "items": lifecycle.refresh_agent_runners(wait=True, force=True)}
 
     @app.get("/agent-runners/opencode/bundle")
     def opencode_bundle_status():
@@ -369,25 +436,39 @@ def create_app():
         return _call(
             lambda: {
                 "ok": True,
-                **probe_agent_runner(config, runner_id, model=payload.model, timeout=max(10, min(600, payload.timeout))),
+                **probe_agent_runner(
+                    config,
+                    runner_id,
+                    model=payload.model,
+                    role=payload.role,
+                    timeout=max(10, min(600, payload.timeout)),
+                    runtime_pool=lifecycle.opencode_pool if runner_id == "opencode" else None,
+                ),
             }
         )
 
     @app.get("/model-connections/opencode/catalog")
     def opencode_model_catalog():
-        return _call(lambda: {"ok": True, **provider_catalog(config)})
+        return _call(lambda: {"ok": True, **provider_catalog(config, runtime_pool=lifecycle.opencode_pool)})
 
     @app.put("/model-connections/opencode/credential")
     def opencode_model_credential(payload: OpenCodeCredentialRequest):
-        return _call(lambda: {"ok": True, **set_api_credential(config, payload.provider_id, payload.credential)})
+        return _call(
+            lambda: {
+                "ok": True,
+                **set_api_credential(config, payload.provider_id, payload.credential, runtime_pool=lifecycle.opencode_pool),
+            }
+        )
 
     @app.delete("/model-connections/opencode/credential/{provider_id}")
     def opencode_model_disconnect(provider_id: str):
-        return _call(lambda: {"ok": True, **disconnect_provider(config, provider_id)})
+        return _call(
+            lambda: {"ok": True, **disconnect_provider(config, provider_id, runtime_pool=lifecycle.opencode_pool)}
+        )
 
     @app.put("/model-connections/opencode/model")
     def opencode_model_select(payload: ModelSelectionRequest):
-        return _call(lambda: {"ok": True, **select_model(config, payload.model)})
+        return _call(lambda: {"ok": True, **select_model(config, payload.model, role=payload.role)})
 
     @app.get("/model-connections")
     def model_connections():
@@ -425,7 +506,15 @@ def create_app():
 
     @app.get("/advisor/inbox")
     def advisor_inbox(project_root: str):
-        return _call(lambda: refresh_advisor_inbox(config, jobs, _project(project_root)))
+        root = _project(project_root)
+        return _call(
+            lambda: refresh_advisor_inbox(
+                config,
+                jobs,
+                root,
+                dashboard_payload=dashboard_snapshot(root),
+            )
+        )
 
     @app.patch("/advisor/inbox/{item_id}")
     def advisor_inbox_read(item_id: str, payload: AdvisorInboxReadRequest):
@@ -458,7 +547,12 @@ def create_app():
             previous = ""
             sent = 0
             while True:
-                snapshot = refresh_advisor_inbox(config, jobs, root)
+                snapshot = refresh_advisor_inbox(
+                    config,
+                    jobs,
+                    root,
+                    dashboard_payload=dashboard_snapshot(root),
+                )
                 signature = json.dumps(snapshot.get("items", []), ensure_ascii=False, sort_keys=True)
                 if signature != previous:
                     yield _sse("advisor.inbox", snapshot)
@@ -531,7 +625,14 @@ def create_app():
                 except queue.Empty:
                     yield ": keep-alive\n\n"
                     continue
-                yield _sse(event, data)
+                if event == "advisor.delta":
+                    chunks = _visible_delta_chunks(str(data.get("text") or ""))
+                    for chunk in chunks:
+                        yield _sse(event, {**data, "text": chunk})
+                        if len(chunks) > 1:
+                            time.sleep(0.014)
+                else:
+                    yield _sse(event, data)
                 if event == "advisor.closed":
                     break
 
@@ -556,7 +657,13 @@ def create_app():
 
     @app.post("/autopilot/start")
     def autopilot_start(payload: AutopilotStartRequest):
-        return _call(lambda: {"ok": True, "run": autopilot.start(_project(payload.project_root), runtime=payload.runtime)})
+        def start():
+            root = _project(payload.project_root)
+            policy = autopilot.policy(root).get("policy", {})
+            if policy.get("mode") == "full_auto" and not payload.authorized:
+                raise ValueError("全自动交付需要用户在创作总控中明确确认授权。")
+            return {"ok": True, "run": autopilot.start(root, runtime=payload.runtime)}
+        return _call(start)
 
     @app.post("/autopilot/runs/{run_id}/pause")
     def autopilot_pause(run_id: str, payload: AutopilotControlRequest):
@@ -597,7 +704,7 @@ def create_app():
     def runtime_adapters():
         return {
             "ok": True,
-            "items": agent_runner_status(config),
+            "items": lifecycle.health().get("agent_runners", []),
             "deprecated_alias": True,
             "replacement": "/agent-runners",
         }
@@ -657,10 +764,84 @@ def create_app():
     def projects_record_direction(payload: DirectionRequest):
         return _call(lambda: record_direction(_project(payload.project_root), payload.message))
 
+    @app.get("/project/creative-quality")
+    def project_creative_quality(project_root: str):
+        root = _project(project_root)
+        return {"ok": True, "profile": load_creative_quality_profile(root)}
+
+    @app.get("/project/details")
+    def project_details(project_root: str):
+        root = _project(project_root)
+        dashboard = build_dashboard(config, root)
+        reader = public_reader_manifest(build_reader_manifest(root))
+        return {
+            "ok": True,
+            "schema": "arcvellum/project-details/v1",
+            "project_root": str(root),
+            "dashboard": dashboard,
+            "reader": {
+                "unit_count": len(reader.get("units", [])),
+                "formal_chinese_chars": reader.get("total_chinese_content_chars", 0),
+            },
+            "creative_quality_profile": load_creative_quality_profile(root),
+        }
+
+    @app.put("/project/creative-quality")
+    def project_creative_quality_update(payload: CreativeQualityRequest):
+        root = _project(payload.project_root)
+        return _call(
+            lambda: {
+                "ok": True,
+                "profile": save_creative_quality_profile(root, payload.profile, updated_by="studio-user"),
+                "effect": "future-candidates",
+                "review_required_for_existing_candidates": True,
+            }
+        )
+
+    @app.post("/project/creative-quality/preview")
+    def project_creative_quality_preview(payload: CreativeQualityPreviewRequest):
+        root = _project(payload.project_root)
+        profile = payload.profile or load_creative_quality_profile(root)
+        style_gate = style_lint_gate(payload.text, profile=profile, scope=payload.scope)
+        punctuation = lint_punctuation(payload.text, profile=profile, scope=payload.scope)
+        punctuation_items = [
+            {
+                "rule": issue.rule,
+                "severity": issue.severity,
+                "message": issue.message,
+                "sample": issue.sample,
+            }
+            for issue in punctuation
+        ]
+        blocking = list(style_gate.get("blocking") or []) + [item for item in punctuation_items if item["severity"] != "low"]
+        notes = list(style_gate.get("notes") or []) + [item for item in punctuation_items if item["severity"] == "low"]
+        return {
+            "ok": True,
+            "status": "blocking" if blocking else ("notes" if notes else "pass"),
+            "blocking": blocking,
+            "notes": notes,
+            "profile_digest": profile.get("digest", ""),
+            "summary": "存在必须修改的问题" if blocking else ("有可复核的表达提醒" if notes else "样文通过当前静态规则"),
+        }
+
+    @app.get("/project/rhythm-plan")
+    def project_rhythm_plan(project_root: str):
+        return _call(lambda: {"ok": True, "plan": load_rhythm_plan(_project(project_root))})
+
+    @app.put("/project/rhythm-plan")
+    def project_rhythm_plan_update(payload: RhythmPlanRequest):
+        root = _project(payload.project_root)
+        return _call(lambda: {
+            "ok": True,
+            "plan": save_rhythm_plan(root, payload.entries, updated_by="studio-user"),
+            "effect": "future-candidates",
+            "review_required_for_existing_candidates": True,
+        })
+
     @app.post("/worker/prepare")
     def worker_prepare(payload: WorkerRequest):
         try:
-            task, sandbox, terminal = AgentWorker(config).prepare(
+            task, sandbox, terminal = AgentWorker(config, runtime_pool=lifecycle.opencode_pool).prepare(
                 _project(payload.project_root),
                 route=payload.route,
                 runtime_id=payload.runtime,
@@ -684,14 +865,29 @@ def create_app():
             "prompt": str(sandbox.prompt_path),
         }
 
-    @app.post("/worker/run")
-    def worker_run(payload: WorkerRequest):
+    def launch_worker(payload: WorkerRequest, *, resume_run_root: Path | None = None):
         request_data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
         job = jobs.create(request_data, idempotency_key=payload.idempotency_key)
 
+        if resume_run_root is not None:
+            run = json.loads((resume_run_root / "run.json").read_text(encoding="utf-8"))
+            jobs.register_resources(
+                str(job["job_id"]),
+                formal_project=str(run.get("project_root") or payload.project_root),
+                task_sandbox=str(resume_run_root),
+                agent_session=f"recovery:{run.get('run_id') or job['job_id']}",
+                run_workspace=str(run.get("workspace") or ""),
+                state="recovering",
+            )
+
         def execute(cancel_event) -> dict[str, Any]:
             def emit(event: str, data: dict[str, Any]) -> None:
-                jobs.append_event(str(job["job_id"]), event, data)
+                channel = f"worker:{job['job_id']}"
+                if event in EPHEMERAL_WORKER_EVENTS:
+                    lifecycle.live_events.publish(channel, event, data)
+                else:
+                    jobs.append_event(str(job["job_id"]), event, data)
+                    lifecycle.live_events.notify()
                 if event == "sandbox.prepared":
                     jobs.register_resources(
                         str(job["job_id"]),
@@ -701,7 +897,20 @@ def create_app():
                         run_workspace=str(data.get("workspace") or ""),
                     )
 
-            result = AgentWorker(config, event_sink=emit, cancel_event=cancel_event).run_once(
+            worker = AgentWorker(
+                config,
+                event_sink=emit,
+                cancel_event=cancel_event,
+                runtime_pool=lifecycle.opencode_pool,
+            )
+            if resume_run_root is not None:
+                try:
+                    result = worker.resume_from_run(resume_run_root)
+                    emit("run.resumed", {"run_root": str(resume_run_root), "status": result.status})
+                    return result.as_dict()
+                except (FileNotFoundError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+                    emit("run.resume_fallback", {"run_root": str(resume_run_root), "error": str(exc)})
+            result = worker.run_once(
                 _project(payload.project_root),
                 route=payload.route,
                 runtime_id=payload.runtime,
@@ -717,6 +926,10 @@ def create_app():
                 lock_key=project_lock_key(payload.project_root, payload.route),
             )
         return {"ok": True, **job}
+
+    @app.post("/worker/run")
+    def worker_run(payload: WorkerRequest):
+        return launch_worker(payload)
 
     @app.get("/worker/jobs/{job_id}")
     def worker_job(job_id: str):
@@ -748,15 +961,20 @@ def create_app():
                 raise ValueError("job is not waiting for writeback approval")
             run_root = Path(str(job.get("result", {}).get("run_root") or ""))
             request = job.get("request") if isinstance(job.get("request"), dict) else {}
-            lock_key = project_lock_key(str(request.get("project_root") or ""), str(request.get("route") or "auto"))
+            project_root = str(request.get("project_root") or "")
+            lock_key = project_lock_key(project_root, str(request.get("route") or "auto"))
             owner = lifecycle.supervisor.worker_id
+            coordinator_owner = f"writeback:{job_id}"
+            if not lifecycle.execution_coordinator.acquire(project_root, coordinator_owner):
+                raise RuntimeError("another active task owns this project")
             if not jobs.acquire_lock(lock_key, job_id, owner, lease_seconds=180):
+                lifecycle.execution_coordinator.release(project_root, coordinator_owner)
                 raise RuntimeError("another active task owns this project route")
             try:
                 def emit(event: str, data: dict[str, Any]) -> None:
                     jobs.append_event(job_id, event, data)
 
-                worker = AgentWorker(config, event_sink=emit)
+                worker = AgentWorker(config, event_sink=emit, runtime_pool=lifecycle.opencode_pool)
                 decision = payload.decision.strip().lower()
                 if decision == "approve":
                     result = worker.approve_writeback(run_root, approved_by="studio-user")
@@ -775,6 +993,7 @@ def create_app():
                 }
             finally:
                 jobs.release_lock(lock_key, job_id)
+                lifecycle.execution_coordinator.release(project_root, coordinator_owner)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (RuntimeError, ValueError) as exc:
@@ -793,7 +1012,13 @@ def create_app():
                 request["runtime"] = payload.runtime
             request["idempotency_key"] = ""
             retry = WorkerRequest(**request)
-            return worker_run(retry)
+            resume_root = None
+            if payload.resume and previous["status"] in {"interrupted", "runtime_failed", "failed"}:
+                resources = jobs.read_resources(job_id)
+                candidate = Path(str((resources or {}).get("task_sandbox") or ""))
+                if candidate.is_dir() and (candidate / "run.json").is_file():
+                    resume_root = candidate
+            return launch_worker(retry, resume_run_root=resume_root)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (RuntimeError, ValueError, TypeError) as exc:
@@ -809,7 +1034,9 @@ def create_app():
 
         def stream():
             cursor = max(0, resume_after)
+            live_cursor = 0
             previous_revision = -1
+            last_heartbeat = time.monotonic()
             while True:
                 payload = jobs.read(job_id)
                 for item in jobs.events_since(job_id, cursor):
@@ -822,34 +1049,47 @@ def create_app():
                     yield "event: worker\n"
                     yield "data: " + json.dumps({"ok": True, **payload}, ensure_ascii=False) + "\n\n"
                     previous_revision = revision
+                live = lifecycle.live_events.wait_since(f"worker:{job_id}", live_cursor, timeout=0.1)
+                for item in coalesce_live_events(live):
+                    live_cursor = max(live_cursor, int(item.get("sequence") or 0))
+                    yield f"event: {item['event']}\n"
+                    yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
                 if payload.get("status") not in {"queued", "running", "stopping"}:
                     break
-                time.sleep(interval)
+                if time.monotonic() - last_heartbeat >= 10:
+                    yield ": worker heartbeat\n\n"
+                    last_heartbeat = time.monotonic()
+                lifecycle.live_events.wait_since(f"worker:{job_id}", live_cursor, timeout=interval)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 
     @app.get("/workflow/dashboard")
     def workflow_dashboard(project_root: str):
-        return _call(lambda: build_dashboard(config, _project(project_root)))
+        root = _project(project_root)
+        return _call(lambda: dashboard_snapshot(root))
 
     @app.get("/workflow/dashboard/stream")
     def workflow_dashboard_stream(project_root: str, interval_seconds: float = 8.0, max_events: int = 0):
+        root = _project(project_root)
         return _stream_read_model(
             "dashboard",
-            lambda: build_dashboard(config, _project(project_root)),
+            lambda: dashboard_snapshot(root),
             interval_seconds,
             max_events,
         )
 
     @app.get("/workflow/activity")
     def workflow_activity(project_root: str, limit: int = 30):
-        return _call(lambda: build_activity(config, _project(project_root), max(1, min(200, limit))))
+        root = _project(project_root)
+        bounded = max(1, min(200, limit))
+        return _call(lambda: cached_read_model(f"activity:{root}:{bounded}", root, lambda: build_activity(config, root, bounded)))
 
     @app.get("/workflow/activity/stream")
     def workflow_activity_stream(project_root: str, interval_seconds: float = 4.0, max_events: int = 0):
+        root = _project(project_root)
         return _stream_read_model(
             "activity",
-            lambda: build_activity(config, _project(project_root)),
+            lambda: cached_read_model(f"activity:{root}:30", root, lambda: build_activity(config, root)),
             interval_seconds,
             max_events,
         )
@@ -868,20 +1108,23 @@ def create_app():
 
     @app.get("/project/library")
     def project_library(project_root: str):
-        return _call(lambda: build_library(config, _project(project_root)))
+        root = _project(project_root)
+        return _call(lambda: library_snapshot(root))
 
     @app.get("/project/library/stream")
     def project_library_stream(project_root: str, interval_seconds: float = 6.0, max_events: int = 0):
+        root = _project(project_root)
         return _stream_read_model(
             "library",
-            lambda: build_library(config, _project(project_root)),
+            lambda: library_snapshot(root),
             interval_seconds,
             max_events,
         )
 
     @app.get("/reader/manifest")
     def reader_manifest(project_root: str):
-        return _call(lambda: public_reader_manifest(build_reader_manifest(_project(project_root))))
+        root = _project(project_root)
+        return _call(lambda: cached_read_model(f"reader:{root}", root, lambda: public_reader_manifest(build_reader_manifest(root))))
 
     @app.get("/reader/units/{unit_id}")
     def reader_unit(unit_id: str, project_root: str):
@@ -916,7 +1159,7 @@ def create_app():
             sent = 0
             previous: dict[str, Any] | None = None
             while True:
-                manifest = public_reader_manifest(build_reader_manifest(root))
+                manifest = cached_read_model(f"reader:{root}", root, lambda: public_reader_manifest(build_reader_manifest(root)))
                 revision = str(manifest.get("project_revision") or "")
                 if previous is None or revision != str(previous.get("project_revision") or ""):
                     previous_ids = {str(item.get("unit_id")) for item in (previous or {}).get("units", []) if isinstance(item, dict)}
@@ -946,7 +1189,22 @@ def create_app():
 
     @app.get("/narrative/projection")
     def narrative_projection(project_root: str, level: str = "book", focus: str = ""):
-        return _call(lambda: build_narrative_projection(config, _project(project_root), level=level, focus=focus))
+        root = _project(project_root)
+        key = f"narrative:{root}:{level}:{focus}"
+        return _call(
+            lambda: cached_read_model(
+                key,
+                root,
+                lambda: build_narrative_projection(
+                    config,
+                    root,
+                    level=level,
+                    focus=focus,
+                    dashboard_payload=dashboard_snapshot(root),
+                    library_payload=library_snapshot(root),
+                ),
+            )
+        )
 
     @app.get("/narrative/stream")
     def narrative_stream(project_root: str, level: str = "book", focus: str = "", interval_seconds: float = 6.0, max_events: int = 0):
@@ -955,14 +1213,38 @@ def create_app():
         limit = max(0, int(max_events or 0))
 
         def stream():
-            previous = ""
             sent = 0
+            stream_key = f"{root}|{level}|{focus}"
             while True:
-                projection = build_narrative_projection(config, root, level=level, focus=focus)
+                projection = cached_read_model(
+                    f"narrative:{root}:{level}:{focus}",
+                    root,
+                    lambda: build_narrative_projection(
+                        config,
+                        root,
+                        level=level,
+                        focus=focus,
+                        dashboard_payload=dashboard_snapshot(root),
+                        library_payload=library_snapshot(root),
+                    ),
+                )
                 revision = str(projection.get("revision") or "")
-                if revision != previous:
-                    yield _sse("narrative.projection", projection)
-                    previous = revision
+                with narrative_stream_lock:
+                    state = narrative_stream_state.get(stream_key, {})
+                    previous_projection = state.get("projection") if isinstance(state.get("projection"), dict) else None
+                    previous_revision = str((previous_projection or {}).get("revision") or "")
+                    if revision != previous_revision:
+                        sequence = int(state.get("sequence") or 0) + 1
+                        delta = projection_delta(previous_projection, projection)
+                        projection["sequence"] = sequence
+                        projection["delta"] = delta
+                        projection["motion_events"] = projection_motion_events(previous_projection, projection, delta)
+                        narrative_stream_state[stream_key] = {"sequence": sequence, "projection": projection}
+                    else:
+                        sequence = int(state.get("sequence") or 0)
+                        delta = None
+                if delta is not None:
+                    yield _sse("narrative.projection", projection, event_id=sequence)
                     sent += 1
                     if limit and sent >= limit:
                         break
@@ -982,7 +1264,8 @@ def create_app():
 
     @app.get("/project/delivery")
     def project_delivery(project_root: str):
-        return _call(lambda: build_delivery(config, _project(project_root)))
+        root = _project(project_root)
+        return _call(lambda: build_delivery(config, root, dashboard_payload=dashboard_snapshot(root)))
 
     @app.get("/project/delivery/download")
     def project_delivery_download(project_root: str, path: str):
@@ -1030,8 +1313,30 @@ def _call(function):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _sse(event: str, data: dict[str, Any]) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+def _sse(event: str, data: dict[str, Any], event_id: int | str | None = None) -> str:
+    prefix = f"id: {event_id}\n" if event_id is not None else ""
+    return f"{prefix}event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _visible_delta_chunks(value: str, target: int = 16, maximum: int = 28) -> list[str]:
+    """Pace coarse provider deltas without inventing or rewriting answer text."""
+
+    if len(value) <= maximum:
+        return [value] if value else []
+    chunks: list[str] = []
+    cursor = 0
+    punctuation = "，。！？；：、,.!?;:\n"
+    while cursor < len(value):
+        hard_end = min(len(value), cursor + maximum)
+        preferred_end = min(len(value), cursor + target)
+        end = hard_end
+        for index in range(preferred_end, hard_end):
+            if value[index] in punctuation:
+                end = index + 1
+                break
+        chunks.append(value[cursor:end])
+        cursor = end
+    return chunks
 
 
 def _friendly_error(exc: Exception) -> str:
@@ -1051,16 +1356,29 @@ def _stream_read_model(event: str, function, interval_seconds: float, max_events
 
     def stream():
         sent = 0
+        previous_digest = ""
+        last_heartbeat = time.monotonic()
         while True:
             payload = function()
-            yield f"event: {event}\n"
-            yield "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
-            sent += 1
+            serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+            digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+            if digest != previous_digest:
+                yield f"event: {event}\n"
+                yield "data: " + serialized + "\n\n"
+                previous_digest = digest
+                sent += 1
+            elif time.monotonic() - last_heartbeat >= 15:
+                yield f": {event} heartbeat\n\n"
+                last_heartbeat = time.monotonic()
             if limit and sent >= limit:
                 break
             time.sleep(interval)
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _project(value: str) -> Path:

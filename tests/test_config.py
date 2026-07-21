@@ -28,6 +28,25 @@ class ConfigTests(unittest.TestCase):
             self.assertFalse(loaded["agent_runners"]["host-agent"]["enabled"])
             self.assertNotIn("runtimes", loaded)
 
+    def test_migrates_unified_opencode_model_to_all_agent_roles(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            target.write_text(
+                '{"agent_runners":{"opencode":{"model":"deepseek/deepseek-chat"}}}',
+                encoding="utf-8",
+            )
+
+            loaded = load_config(target)
+
+            self.assertEqual(
+                loaded["agent_runners"]["opencode"]["models"],
+                {
+                    "worker": "deepseek/deepseek-chat",
+                    "advisor": "deepseek/deepseek-chat",
+                    "steward": "deepseek/deepseek-chat",
+                },
+            )
+
     def test_rejects_api_key_fields(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "config.json"

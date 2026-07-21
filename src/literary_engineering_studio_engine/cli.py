@@ -32,6 +32,7 @@ from .init_project import InitOptions, init_work_project
 from .knowledge_store import KNOWLEDGE_BACKENDS, build_knowledge_store, search_knowledge_store
 from .langgraph_adapter import run_literary_graph
 from .longform_audit import build_longform_audit
+from .longform_materializer import materialize_longform_plan
 from .memory_index import build_memory_index, search_memory
 from .flow_gates import ensure_scene_pre_generation_tasks_completed
 from .formal_mode import bypass_hits, formal_bypass_message
@@ -44,6 +45,7 @@ from .model_config import (
 )
 from .orchestration_blueprint import build_orchestration_blueprint
 from .platform_agent_tasks import (
+    write_project_seed_asset_tasks,
     write_platform_asset_creation_task,
     write_platform_asset_review_task,
     write_platform_canon_review_task,
@@ -56,6 +58,7 @@ from .platform_agent_tasks import (
     write_platform_style_prompt_task,
 )
 from .prompt_pack import build_scene_prompt_pack, write_prompt_manifest
+from .scene_character_assets import ensure_scene_character_asset_tasks
 from .publish import publish_chapter
 from .reader_experience import build_chapter_obligation_tasks
 from .review_ci import review_scene_draft
@@ -98,7 +101,7 @@ from .task_registry import (
 from .workflow_runner import WORKFLOW_MODES, run_workflow
 from .workflow_contract import validate_workflow_contract
 from .workflow_dashboard import build_workflow_dashboard
-from .workflow_state import build_workflow_state
+from .workflow_state import build_workflow_state, next_scene_workflow_state
 from .word_budget import build_word_budget
 
 
@@ -326,6 +329,12 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     agent_review_scene.add_argument("--draft", default="", help="Draft path. Defaults to drafts/scenes/{scene_id}.md.")
     agent_review_scene.add_argument("--out", default="", help="Expected markdown report path.")
     agent_review_scene.add_argument("--json-out", default="", help="Expected JSON result path.")
+    agent_review_scene.add_argument(
+        "--materialization-scope",
+        choices=("full", "scene"),
+        default="full",
+        help="Validate the full inventory or only the staged active scene.",
+    )
 
     agent_canon_review = sub.add_parser("agent-canon-review", help="Write a formal platform-agent canon and continuity review task.")
     agent_canon_review.add_argument("project", help="Work project directory.")
@@ -369,6 +378,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     route_audit.add_argument("--route", default="", help="Route key such as scene-development, longform-planning, or export-and-release.")
     route_audit.add_argument("--out", default="", help="Output markdown path. Defaults to workflow/route_audit.md.")
     route_audit.add_argument("--json-out", default="", help="Output JSON path. Defaults to workflow/route_audit.json.")
+    route_audit.add_argument("--full-state", action="store_true", help="Also rebuild the full route state; scene-development defaults to a current-scene snapshot.")
 
     workflow_state = sub.add_parser("workflow-state", help="Write a persistent formal-route state ledger.")
     workflow_state.add_argument("project", help="Work project directory.")
@@ -473,6 +483,9 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     create_asset.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
     create_asset.add_argument("--out-dir", default="", help="Legacy compatibility only; formal command writes task sidecars next to expected outputs.")
 
+    seed_assets = sub.add_parser("seed-project-assets", help="Create stable platform-agent sidecars for a project's foundational world and protagonist assets.")
+    seed_assets.add_argument("project", help="Work project directory.")
+
     list_assets = sub.add_parser("list-candidate-assets", help="List candidate assets created by agent asset commands.")
     list_assets.add_argument("project", help="Work project directory.")
     list_assets.add_argument("--type", default="", choices=("", *ASSET_TYPES))
@@ -524,6 +537,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     generate.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
     generate.add_argument("--out", default="", help="Output candidate markdown path.")
     generate.add_argument("--agent-tasks", action="store_true", help="Legacy compatibility only; formal command always writes a platform-agent task.")
+    generate.add_argument("--materialization-scope", choices=("full", "scene"), default="full", help="Validate the full inventory or only the staged active scene.")
     generate.add_argument("--allow-unselected-composition", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass branch-selection gates.")
     generate.add_argument("--allow-missing-composition", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass scene-composition gates.")
 
@@ -664,6 +678,12 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     obligation.add_argument("--out", default="", help="Output markdown path. Defaults to plot/chapter_obligations/{chapter_id}.md.")
     obligation.add_argument("--json-out", default="", help="Output JSON path. Defaults to plot/chapter_obligations/{chapter_id}.json.")
     obligation.add_argument("--agent-tasks-out", default="", help="Output agent task sidecar. Defaults to plot/chapter_obligations/{chapter_id}.agent_tasks.md.")
+
+    materialize_longform = sub.add_parser(
+        "materialize-longform-plan",
+        help="Materialize reviewed longform candidates into formal outline and scene contracts.",
+    )
+    materialize_longform.add_argument("project", help="Work project directory.")
 
     longform = sub.add_parser("longform-audit", help="Audit long-form continuity, readiness, and graph structure.")
     longform.add_argument("project", help="Work project directory.")
@@ -1245,6 +1265,7 @@ def main(argv=None) -> int:
                 draft_path=draft_path,
                 report_path=Path(args.out) if args.out else None,
                 json_path=Path(args.json_out) if args.json_out else None,
+                materialization_scope=args.materialization_scope,
             )
         except (FileExistsError, FileNotFoundError, RuntimeError, ValueError) as exc:
             parser.error(str(exc))
@@ -1357,8 +1378,20 @@ def main(argv=None) -> int:
         out = Path(args.out) if args.out else None
         json_out = Path(args.json_out) if args.json_out else None
         try:
-            result = build_route_audit(Path(args.project), route=args.route, output=out, json_output=json_out)
-            state = build_workflow_state(Path(args.project), route=args.route or "scene-development")
+            project = Path(args.project).resolve()
+            route = args.route or "scene-development"
+            result = build_route_audit(project, route=route, output=out, json_output=json_out)
+            current_scene = next_scene_workflow_state(project) if route == "scene-development" and not args.full_state else None
+            if current_scene and current_scene.get("scene"):
+                state = build_workflow_state(
+                    project,
+                    route=route,
+                    scene=str(current_scene["scene"]),
+                    output=Path("workflow/runtime_choices/route-audit-scene-development.md"),
+                    json_output=Path("workflow/runtime_choices/route-audit-scene-development.json"),
+                )
+            else:
+                state = build_workflow_state(project, route=route)
         except FileNotFoundError as exc:
             parser.error(str(exc))
         print(f"route_audit: {result.markdown_path}")
@@ -1410,7 +1443,11 @@ def main(argv=None) -> int:
             print(f"task_json: {result.task_json_path}")
         if result.task_markdown_path:
             print(f"task: {result.task_markdown_path}")
-            _print_agent_task_notice(result.task_markdown_path, project=Path(args.project).resolve())
+            task_payload = json.loads(result.task_json_path.read_text(encoding="utf-8")) if result.task_json_path else {}
+            if str(task_payload.get("execution_policy") or "") == "human-required":
+                _print_human_decision_notice(result.task_markdown_path, project=Path(args.project).resolve())
+            else:
+                _print_agent_task_notice(result.task_markdown_path, project=Path(args.project).resolve())
         print(f"expected_outputs: {result.expected_output_count}")
         print(f"message: {result.message}")
         return 0
@@ -1667,6 +1704,18 @@ def main(argv=None) -> int:
         _print_agent_task_notice(result.task_path, project=Path(args.project).resolve())
         return 0
 
+    if args.command == "seed-project-assets":
+        try:
+            results = write_project_seed_asset_tasks(Path(args.project).resolve())
+        except (FileExistsError, FileNotFoundError, RuntimeError, ValueError) as exc:
+            parser.error(str(exc))
+        for result in results:
+            print(f"asset_creation_task: {result.task_path}")
+            print(f"expected_candidate: {result.expected_json_path}")
+            print(f"expected_report: {result.expected_report_path}")
+        print("receiver: platform-agent")
+        return 0
+
     if args.command == "list-candidate-assets":
         for item in list_asset_candidates(Path(args.project), asset_type=args.type):
             print(f"{item['candidate_id']}\t{item['asset_type']}\t{item['status']}\t{item['path']}\t{item['title']}")
@@ -1766,6 +1815,7 @@ def main(argv=None) -> int:
                 composition=composition,
                 allow_unselected_composition=args.allow_unselected_composition,
                 allow_missing_composition=args.allow_missing_composition,
+                materialization_scope=args.materialization_scope,
             )
             prompt_manifest = candidate.with_suffix(".prompt.json")
             write_prompt_manifest(prompt_pack, prompt_manifest, provider="platform-agent", model="tool-layer-agent")
@@ -1777,12 +1827,15 @@ def main(argv=None) -> int:
                 prompt_manifest_path=prompt_manifest,
                 candidate_path=candidate,
             )
+            character_assets = ensure_scene_character_asset_tasks(root, scene_path)
         except (FileExistsError, FileNotFoundError, RuntimeError, ValueError, KeyError) as exc:
             parser.error(str(exc))
         print(f"scene_generation_task: {result.task_path}")
         print(f"expected_candidate: {result.expected_report_path}")
         print(f"expected_manifest: {result.expected_json_path}")
         print(f"prompt_manifest: {prompt_manifest}")
+        for requirement in character_assets:
+            print(f"scene_character_asset_task: {requirement.task_path}")
         print("receiver: platform-agent")
         print(f"scene: {scene_id}")
         _print_agent_task_notice(result.task_path, project=root)
@@ -2128,6 +2181,17 @@ def main(argv=None) -> int:
         print("receiver: platform-agent")
         return 0
 
+    if args.command == "materialize-longform-plan":
+        try:
+            result = materialize_longform_plan(Path(args.project))
+        except (FileNotFoundError, ValueError) as exc:
+            parser.error(str(exc))
+        print(f"manifest: {result.manifest_path}")
+        print(f"outline: {result.outline_path}")
+        print(f"chapters: {result.chapter_count}")
+        print(f"scenes: {len(result.scene_paths)}")
+        return 0
+
     if args.command == "longform-audit":
         out = Path(args.out) if args.out else None
         json_out = Path(args.json_out) if args.json_out else None
@@ -2381,3 +2445,10 @@ def _print_agent_task_notice(task_path: Path, *, project: Path | None = None) ->
     if project is not None:
         print(f"next_check: python -m literary_engineering_studio_engine agent-task-status \"{project}\"")
     print("next_action: read the .agent_tasks.md sidecar, write all expected artifacts, then create the .agent_completion.json marker before running the next formal step.")
+
+
+def _print_human_decision_notice(task_path: Path, *, project: Path | None = None) -> None:
+    print(f"human_decision_required: {task_path}")
+    if project is not None:
+        print(f"decision_project: {project}")
+    print("next_action: review the offered options in Studio and record one deliberate decision. Do not create Agent artifacts or completion markers for this task.")

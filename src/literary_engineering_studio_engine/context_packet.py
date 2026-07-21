@@ -197,6 +197,45 @@ def _retrieval_section(hits) -> str:
     return "\n\n".join(sections)
 
 
+def _plot_context(root: Path, scene_text: str) -> str:
+    outline_path = root / "plot" / "outline.md"
+    outline = _read(outline_path)
+    supplemental = _first_existing(root, ["plot/foreshadowing.csv", "plot/conflict_matrix.md"])
+    if not outline:
+        return supplemental
+
+    chapter_value = _field_value(scene_text, "chapter_id") or _field_value(scene_text, "chapter_obligation_id")
+    chapter_match = re.search(r"(\d+)", chapter_value)
+    chapter_number = int(chapter_match.group(1)) if chapter_match else 1
+    headings = list(re.finditer(r"(?m)^###\s+Ch\s*0*(\d+)\b.*$", outline, re.IGNORECASE))
+    current_index = next(
+        (index for index, match in enumerate(headings) if int(match.group(1)) == chapter_number),
+        None,
+    )
+    if current_index is None:
+        return outline[:12000] + ("\n..." if len(outline) > 12000 else "") + "\n\n" + supplemental
+
+    first_chapter = headings[0].start()
+    preamble = outline[:first_chapter].strip()
+    current_start = headings[current_index].start()
+    volume_start = outline.rfind("\n## 卷", 0, current_start)
+    volume_intro = ""
+    if volume_start >= 0:
+        volume_heading_end = outline.find("\n### ", volume_start)
+        if volume_heading_end > volume_start:
+            volume_intro = outline[volume_start:volume_heading_end].strip()
+
+    chapter_sections: list[str] = []
+    for index in range(max(0, current_index - 1), min(len(headings), current_index + 2)):
+        start = headings[index].start()
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(outline)
+        chapter_sections.append(outline[start:end].strip())
+    selected = "\n\n".join(part for part in [preamble, volume_intro, *chapter_sections] if part)
+    if len(selected) > 16000:
+        selected = selected[:16000] + "\n..."
+    return selected + "\n\n" + supplemental
+
+
 def build_context_packet(
     project_root: Path,
     scene: Path | None = None,
@@ -274,11 +313,7 @@ def build_context_packet(
 
 ## 剧情状态
 
-{_first_existing(root, [
-    "plot/outline.md",
-    "plot/foreshadowing.csv",
-    "plot/conflict_matrix.md",
-])}
+{_plot_context(root, scene_text)}
 
 ## 风格约束
 

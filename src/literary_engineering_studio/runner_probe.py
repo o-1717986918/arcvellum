@@ -6,6 +6,7 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import tempfile
+import time
 from typing import Any
 
 from .runtimes import build_runtime
@@ -16,14 +17,18 @@ def probe_agent_runner(
     runner_id: str,
     *,
     model: str = "",
+    role: str = "worker",
     timeout: int = 90,
+    runtime_pool=None,
 ) -> dict[str, Any]:
     probe_config = deepcopy(config)
     runners = probe_config.setdefault("agent_runners", {})
     settings = runners.setdefault(runner_id, {})
     if model:
         settings["model"] = model
-    runtime = build_runtime(runner_id, probe_config)
+        models = settings.setdefault("models", {})
+        models[role if role in {"worker", "advisor", "steward"} else "worker"] = model
+    runtime = build_runtime(runner_id, probe_config, runtime_pool=runtime_pool)
     before = runtime.capabilities().as_dict()
     with tempfile.TemporaryDirectory(prefix="les-runner-probe-") as temporary:
         root = Path(temporary)
@@ -34,7 +39,9 @@ def probe_agent_runner(
             "Reply with exactly STUDIO_RUNNER_READY. Do not call tools and do not create or modify files.",
             encoding="utf-8",
         )
+        started = time.monotonic()
         result = runtime.execute(workspace, prompt, root, timeout=max(10, int(timeout)))
+        total_ms = round((time.monotonic() - started) * 1000)
         events = _read_events(root / "runtime.events.jsonl")
         actual_model = ""
         provider = str(before.get("provider") or "")
@@ -52,6 +59,10 @@ def probe_agent_runner(
         configured_model = str(settings.get("model") or "")
         model_matches = not (configured_model and actual_model) or _models_compatible(configured_model, actual_model)
         warnings = []
+        first_event_ms = next(
+            (int(event.get("elapsed_ms") or 0) for event in events if event.get("event") == "runner.first_event"),
+            0,
+        )
         if not model_matches:
             warnings.append(
                 f"Runner returned model {actual_model!r} although {configured_model!r} was requested; "
@@ -68,6 +79,9 @@ def probe_agent_runner(
             "provider": provider,
             "capabilities": before,
             "event_count": len(events),
+            "total_ms": total_ms,
+            "time_to_first_event_ms": first_event_ms,
+            "service_reused": bool((result.metadata or {}).get("service_reused")),
             "response_verified": "STUDIO_RUNNER_READY" in output,
             "diagnostic_output_tail": output_tail if result.status != "completed" else "",
             "warnings": warnings,

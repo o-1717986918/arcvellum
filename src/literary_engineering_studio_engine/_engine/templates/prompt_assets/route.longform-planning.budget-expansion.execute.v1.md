@@ -14,11 +14,13 @@ required_inputs:
 context_groups:
   - target Han-character count
   - genre and time span
-  - volume chapter and scene inventory
+  - volume and chapter inventory
+  - planned scene counts by chapter
   - reader questions promises and payoffs
 hard_constraints:
   - Expand narrative inventory rather than padding prose.
-  - Reconcile project volume chapter and scene Han-character targets.
+  - Reconcile project volume and chapter Han-character targets and planned scene counts.
+  - Do not enumerate every scene in this task; the formal scene-inventory task owns scene-level expansion.
   - Keep the expanded outline as candidate material pending human approval.
   - Use pass only when inventory supports the target and no blocking issue remains.
   - Do not use pass_with_notes; nonblocking observations belong in a notes section under pass.
@@ -36,6 +38,6 @@ forbidden_shortcuts:
 
 # Longform Budget Expansion
 
-Build a candidate longform structure whose event inventory can actually carry the requested scale. Give every chapter and scene a causal function, target Han-character budget, reader obligation, consequence, and handoff. Review the candidate critically after writing it.
+Build a candidate longform structure whose event inventory can actually carry the requested scale. Give every volume and chapter a causal function, target Han-character budget, planned scene count, reader obligation, consequence, and handoff. Preserve enough specificity to prove that the requested length is supported, but leave scene-by-scene expansion to the next formal scene-inventory task.
 
 The review status is a formal gate. Write one standalone status line in the exact form required by the output contract. Use `pass` when remaining observations are genuinely nonblocking and place those observations in a separate notes section. Use `revise_required` whenever the outline still lacks events, causality, obligations, or sufficient reader payoff inventory. Only after all outputs exist and have been checked may you write the completion JSON.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Bot, CircleCheck, CirclePause, Gauge, Pause, Play, RefreshCw, ShieldAlert, Sparkles } from "lucide-vue-next";
+import { Bot, CircleCheck, CirclePause, Gauge, Pause, Play, RefreshCw, ShieldAlert, Sparkles, Timer, Wrench } from "lucide-vue-next";
 import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy } from "@/types/api";
@@ -9,11 +9,27 @@ const store = useAppStore();
 const snapshot = ref<AutopilotStatus | null>(null);
 const busy = ref(false);
 const authorized = ref(false);
+const liveStage = ref("等待开始");
+const liveDetail = ref("ArcVellum 会在这里显示真实推进阶段。 ");
+const lastActivityAt = ref("");
+const repairCount = ref(0);
+const tick = ref(Date.now());
+const streamStartedAt = ref(0);
 let events: EventStreamConnection | null = null;
+let clock = 0;
 
 const run = computed(() => snapshot.value?.run || null);
 const running = computed(() => run.value?.status === "running");
 const mode = computed(() => snapshot.value?.policy.mode || "collaborative");
+const elapsedText = computed(() => {
+  tick.value;
+  const started = streamStartedAt.value;
+  if (!started || !running.value) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - started) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes} 分 ${seconds % 60} 秒`;
+});
 const statusText = computed(() => {
   if (!run.value) return "还没有开始连续创作";
   if (run.value.status === "running") return "作品正在持续向前推进";
@@ -28,9 +44,15 @@ const modes: Array<{ id: AutopilotMode; title: string; text: string }> = [
   { id: "full_auto", title: "全自动交付", text: "授权后持续推进到完整作品，触发质量红线会自动停下。" },
 ];
 
-onMounted(load);
+onMounted(() => {
+  clock = window.setInterval(() => (tick.value = Date.now()), 1000);
+  void load();
+});
 watch(() => store.currentProjectPath, load);
-onBeforeUnmount(stopStream);
+onBeforeUnmount(() => {
+  stopStream();
+  window.clearInterval(clock);
+});
 
 async function load(): Promise<void> {
   stopStream();
@@ -38,6 +60,7 @@ async function load(): Promise<void> {
   if (!store.currentProjectPath) return;
   try {
     snapshot.value = await api<AutopilotStatus>(`/autopilot/status?${query({ project_root: store.currentProjectPath })}`);
+    store.setAutopilotStatus(snapshot.value);
     if (snapshot.value.run?.status === "running") startStream(snapshot.value.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "暂时无法读取连续创作状态。");
@@ -76,9 +99,10 @@ async function start(): Promise<void> {
   try {
     const result = await api<{ run: AutopilotRun }>("/autopilot/start", {
       method: "POST",
-      body: JSON.stringify({ project_root: store.currentProjectPath, runtime: "opencode" }),
+      body: JSON.stringify({ project_root: store.currentProjectPath, runtime: "opencode", authorized: mode.value !== "full_auto" || authorized.value }),
     });
     if (snapshot.value) snapshot.value.run = result.run;
+    store.setAutopilotRun(result.run);
     startStream(result.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "连续创作暂时无法启动。");
@@ -96,6 +120,7 @@ async function pause(): Promise<void> {
       body: JSON.stringify({ reason: "user-request" }),
     });
     if (snapshot.value) snapshot.value.run = result.run;
+    store.setAutopilotRun(result.run);
     stopStream();
   } finally {
     busy.value = false;
@@ -108,6 +133,7 @@ async function resume(): Promise<void> {
   try {
     const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, { method: "POST" });
     if (snapshot.value) snapshot.value.run = result.run;
+    store.setAutopilotRun(result.run);
     startStream(result.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "暂时无法继续创作。");
@@ -118,15 +144,63 @@ async function resume(): Promise<void> {
 
 function startStream(runId: string): void {
   stopStream();
+  streamStartedAt.value = Date.now();
+  lastActivityAt.value = "";
   events = connectEventStream(`/autopilot/runs/${encodeURIComponent(runId)}/stream`, (event, data) => {
-    if (event !== "autopilot.status") return;
-    const payload = data as unknown as { run: AutopilotRun };
-    if (snapshot.value) snapshot.value.run = payload.run;
-    if (["complete", "paused", "blocked", "cancelled", "failed"].includes(payload.run.status)) {
-      stopStream();
-      void store.refreshWorkspace();
+    if (event === "autopilot.status") {
+      const payload = data as unknown as { run: AutopilotRun };
+      if (snapshot.value) snapshot.value.run = payload.run;
+      store.setAutopilotRun(payload.run);
+      lastActivityAt.value = new Date().toISOString();
+      if (["complete", "paused", "blocked", "cancelled", "failed"].includes(payload.run.status)) {
+        stopStream();
+        void store.refreshWorkspace();
+      }
+      return;
     }
+    const envelope = data as unknown as { at?: string; data?: Record<string, unknown> };
+    applyWorkerActivity(event, envelope.data || (data as Record<string, unknown>));
+    lastActivityAt.value = envelope.at || new Date().toISOString();
   });
+}
+
+function applyWorkerActivity(event: string, data: Record<string, unknown>): void {
+  const stages: Record<string, [string, string]> = {
+    "worker.task.opened": ["正在理解任务", "已领取当前路线的正式任务和约束。"],
+    "worker.sandbox.prepared": ["正在准备资料", "已建立隔离工作区，只允许写入本次产物。"],
+    "worker.core.command_started": ["正在整理确定性资料", "先由文学内核准备结构和检查依据。"],
+    "worker.runner.process.started": ["创作能力已就绪", data.reused ? "复用已连接的 Agent，开始本次工作。" : "Agent 已连接，开始本次工作。"],
+    "worker.runner.session.started": ["正在思考与创作", "模型已经收到完整任务合同。"],
+    "worker.runner.first_event": ["已经开始产出", "Agent 正在读取资料并形成结果。"],
+    "worker.tool.started": toolStage(data),
+    "worker.validation.started": ["正在检查成果", "先做格式、范围与门禁预检。"],
+    "worker.validation.canonicalized": ["正在整理交付格式", "只校准机器门禁标记，不改变 Agent 的判断结论。"],
+    "worker.validation.failed": ["正在纠正问题", "预检发现了可修复问题，Agent 会在当前上下文中修改。"],
+    "worker.repair.started": ["正在同会话修订", `第 ${Number(data.attempt || 1)} 次修订，不会重新开始整项任务。`],
+    "worker.repair.completed": ["修订已完成", "正在重新执行确定性预检。"],
+    "worker.writeback.preview_ready": ["成果等待写回", "候选差异已经准备好，尚未改变正式作品。"],
+    "worker.file.imported": ["正在写入正式项目", "已通过策略确认，正在交给文学内核验收。"],
+    "worker.validation.passed": ["检查已经通过", "当前阶段的确定性门禁已确认。"],
+    "task.recovery_started": ["正在接管已有成果", "上一轮虽已超时，ArcVellum 会先检查现有产物，不从头重写。"],
+    "task.recovery_succeeded": ["已有成果已恢复", "有效产物已经通过预检，正在继续正式写回。"],
+    "task.recovery_rejected": ["已有成果还不完整", "只在无法安全接管时才会重新执行当前任务。"],
+  };
+  const value = stages[event];
+  if (!value) return;
+  liveStage.value = value[0];
+  liveDetail.value = value[1];
+  if (event === "worker.repair.started") repairCount.value = Math.max(repairCount.value, Number(data.attempt || 1));
+}
+
+function toolStage(data: Record<string, unknown>): [string, string] {
+  const tool = String(data.tool || data.name || "").toLowerCase();
+  if (tool.includes("read") || tool.includes("glob") || tool.includes("list") || tool.includes("search")) {
+    return ["正在阅读任务资料", "Agent 正在隔离工作区内核对本次允许读取的作品信息。"];
+  }
+  if (tool.includes("write") || tool.includes("edit") || tool.includes("patch")) {
+    return ["正在写入候选成果", "所有改动仍停留在隔离工作区。"];
+  }
+  return ["正在执行当前步骤", "Agent 正在使用任务允许的工具推进产物。"];
 }
 
 function stopStream(): void {
@@ -174,7 +248,8 @@ function routeText(route: string): string {
       </div>
       <div class="autopilot-copy">
         <span>{{ running ? routeText(run?.current_route || '') : '当前状态' }}</span>
-        <strong>{{ statusText }}</strong>
+        <strong>{{ running ? liveStage : statusText }}</strong>
+        <p v-if="running">{{ liveDetail }}</p>
         <small v-if="run">已经完成 {{ run.tasks_completed }} 项创作任务 · 预计费用 ${{ run.estimated_cost.toFixed(2) }}</small>
         <small v-else>你可以随时暂停、改变方向，再从原处继续。</small>
       </div>
@@ -183,6 +258,12 @@ function routeText(route: string): string {
         <button v-else-if="run && run.status !== 'complete'" class="primary-button" :disabled="busy" @click="resume"><RefreshCw :size="16" />继续</button>
         <button v-else-if="run?.status !== 'complete'" class="primary-button" :disabled="busy || (mode === 'full_auto' && !authorized)" @click="start"><Play :size="16" />开始</button>
       </div>
+    </div>
+
+    <div v-if="running" class="autopilot-live-evidence" aria-live="polite">
+      <span><Timer :size="14" />本次连续运行 {{ elapsedText }}</span>
+      <span v-if="repairCount"><Wrench :size="14" />自动修订 {{ repairCount }} 次</span>
+      <span><i></i>{{ lastActivityAt ? '连接活跃' : '正在建立连接' }}</span>
     </div>
 
     <label v-if="mode === 'full_auto' && !running && run?.status !== 'complete'" class="autopilot-authorization">

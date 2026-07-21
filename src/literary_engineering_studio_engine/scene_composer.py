@@ -6,6 +6,7 @@ artifacts into a deterministic writing plan for one scene.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -16,6 +17,12 @@ from typing import Any
 from .agent_tasks import default_agent_tasks_path, write_agent_tasks
 from .context_broker import default_context_trace_path
 from .context_packet import build_context_packet
+from .creative_quality import (
+    creative_quality_profile_exists,
+    creative_quality_profile_path,
+    load_creative_quality_profile,
+    render_creative_quality_prompt,
+)
 from .flow_gates import FlowGateError, branch_selection_status, ensure_agent_task_completed, selected_branch_from
 from .narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from .reader_experience import reader_experience_contract
@@ -108,6 +115,8 @@ def build_scene_composition(
     word_budget_contract = scene_word_budget_contract(root, scene_path)
     reader_contract = reader_experience_contract(root, scene_path)
     rhythm_contract = narrative_rhythm_contract(root, scene_path)
+    quality_profile = load_creative_quality_profile(root)
+    input_contract_digest = composition_input_digest(root, scene_path)
 
     default_dir = root / "drafts" / "compositions"
     output_path = _resolve(root, output, default_dir / f"{facts.scene_id}_composition.md")
@@ -124,6 +133,7 @@ def build_scene_composition(
             "created_by": "compose-scene",
             "agent_tasks_requested": bool(agent_tasks),
             "manual_file_creation_allowed": False,
+            "input_contract_digest": input_contract_digest,
             "required_predecessors": [
                 "context",
                 "simulate-scene --agent",
@@ -153,6 +163,8 @@ def build_scene_composition(
         "narrative_rhythm_contract": rhythm_contract,
         "narrative_rhythm": rhythm_contract.get("narrative_rhythm", {}),
         "scene_bridge": rhythm_contract.get("scene_bridge", {}),
+        "creative_quality_profile": quality_profile,
+        "creative_quality_profile_digest": quality_profile.get("digest"),
         "revision_targets": revision_targets,
         "writeback_candidates": branch.get("writeback_candidates", _fallback_writeback(facts)),
         "guardrails": guardrails,
@@ -177,6 +189,39 @@ def build_scene_composition(
     )
 
 
+def composition_input_digest(project_root: Path, scene_path: Path) -> str:
+    """Digest the formal inputs that make a composition safe to reuse."""
+
+    root = project_root.resolve()
+    scene = scene_path if scene_path.is_absolute() else root / scene_path
+    scene_text = _read(scene)
+    facts = _scene_facts(scene, scene_text)
+    input_paths = [
+        scene,
+        root / "project.yaml",
+        root / "memory" / "context_packets" / f"{facts.scene_id}.md",
+        root / "memory" / "context_packets" / f"{facts.scene_id}.trace.json",
+        root / "branches" / facts.scene_id / "branch_manifest.json",
+        root / "branches" / facts.scene_id / "branch_selection.md",
+        root / "plot" / "word_budget" / "word_budget.json",
+        root / "plot" / "chapter_obligations" / f"{facts.chapter_id}.json",
+        root / "plot" / "rhythm_plan.json",
+        creative_quality_profile_path(root),
+    ]
+    digest = hashlib.sha256()
+    for path in input_paths:
+        try:
+            relative = path.resolve().relative_to(root).as_posix()
+        except ValueError:
+            relative = str(path)
+        digest.update(relative.encode("utf-8"))
+        if path.is_file():
+            digest.update(path.read_bytes())
+        else:
+            digest.update(b"<missing>")
+    return digest.hexdigest()
+
+
 def _write_composition_agent_tasks(
     root: Path,
     scene_path: Path,
@@ -198,6 +243,10 @@ def _write_composition_agent_tasks(
     obligation_path = str(chapter_contract.get("path") or "")
     if obligation_path:
         source_paths.append(root / obligation_path)
+    if creative_quality_profile_exists(root):
+        source_paths.append(creative_quality_profile_path(root))
+    quality_profile = load_creative_quality_profile(root)
+    quality_prompt = render_creative_quality_prompt(quality_profile, scope=str(payload["scene_id"]))
     return write_agent_tasks(
         default_agent_tasks_path(output_path),
         title=f"compose-scene {payload['scene_id']}",
@@ -218,7 +267,11 @@ def _write_composition_agent_tasks(
             ),
             (
                 "检查进入生成条件",
-                """判断当前 composition 是否适合作为 generate-scene 的输入。若适合，列出必须传给正文生成的硬约束；若不适合，提出最小修订步骤。硬约束必须包括场景字数预算口径、章节义务、读者问题、承诺回报、暂扣信息、兑现/延迟和反摘要要求。""",
+                f"""判断当前 composition 是否适合作为 generate-scene 的输入。若适合，列出必须传给正文生成的硬约束；若不适合，提出最小修订步骤。硬约束必须包括场景字数预算口径、章节义务、读者问题、承诺回报、暂扣信息、兑现/延迟、反摘要要求，以及 Creative Quality Profile digest `{quality_profile.get('digest')}`。不得凭记忆改写或缩短品质档案。""",
+            ),
+            (
+                "执行创作品质档案",
+                f"""以下规则不是事后审查备注，而是本场正文生成前的正式约束。逐项确认 composition 的 beats、prose_seed、dialogue_intents 与它们没有冲突；若文风挂载要求例外，必须先登记显式例外，不能自行放宽。\n\n{quality_prompt}""",
             ),
             (
                 "检查读者体验与章节义务",
@@ -226,7 +279,7 @@ def _write_composition_agent_tasks(
             ),
             (
                 "检查叙事节奏与场景桥接",
-                """读取 narrative_rhythm_contract、narrative_rhythm 和 scene_bridge。确认本场开头接住 incoming_pressure，中段有 scene_turn，过场和高潮的详略不同，结尾留下 outgoing_hook 或 continuity_handshake。若缺失，应先补 scene.yaml 或 composition，不要把所有场景写成同一种平均节奏。""",
+                """读取 narrative_rhythm_contract、narrative_rhythm 和 scene_bridge。必须为 tension_curve 填写 entry / peak / exit 三个 1-5 整数，并说明张力如何由入场经过本场选择升降到出场；不能只写“先慢后快”。确认本场开头接住 incoming_pressure，中段有 scene_turn，过场和高潮的详略不同，结尾留下 outgoing_hook 或 continuity_handshake。若缺失，应先补 scene.yaml 或 composition，不要把所有场景写成同一种平均节奏。""",
             ),
             (
                 "检查写回候选",

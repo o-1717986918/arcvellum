@@ -9,7 +9,7 @@ import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
-const selectedModel = ref("");
+const selectedModels = reactive({ worker: "", advisor: "", steward: "" });
 const busy = ref(false);
 const feedback = ref("");
 const section = ref<"connections" | "about">("connections");
@@ -25,7 +25,7 @@ const models = computed(() => connectedProviders.value.flatMap((provider) => pro
 onMounted(async () => {
   try {
     await store.loadModelCatalog();
-    selectedModel.value = store.modelCatalog?.selected_model || "";
+    syncSelectedModels();
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "模型目录暂时不可用。";
   }
@@ -38,7 +38,7 @@ async function refresh(): Promise<void> {
   feedback.value = "";
   try {
     await store.loadModelCatalog(true);
-    selectedModel.value = store.modelCatalog?.selected_model || "";
+    syncSelectedModels();
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "刷新失败。";
   } finally {
@@ -64,11 +64,24 @@ async function connectProvider(): Promise<void> {
   }
 }
 
-async function saveModel(): Promise<void> {
-  if (!selectedModel.value) return;
-  await api("/model-connections/opencode/model", { method: "PUT", body: JSON.stringify({ model: selectedModel.value }) });
-  feedback.value = "默认创作模型已经更新。";
+async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> {
+  if (!selectedModels[role]) return;
+  await api("/model-connections/opencode/model", {
+    method: "PUT",
+    body: JSON.stringify({ model: selectedModels[role], role }),
+  });
+  const labels = { worker: "正文与审查", advisor: "创作顾问", steward: "自动审批" };
+  feedback.value = `${labels[role]}模型已经更新。`;
   await store.loadModelCatalog();
+  syncSelectedModels();
+}
+
+function syncSelectedModels(): void {
+  const fallback = store.modelCatalog?.selected_model || "";
+  const values: Partial<Record<"worker" | "advisor" | "steward", string>> = store.modelCatalog?.selected_models || {};
+  selectedModels.worker = values.worker || fallback;
+  selectedModels.advisor = values.advisor || fallback;
+  selectedModels.steward = values.steward || fallback;
 }
 
 async function disconnect(providerId: string): Promise<void> {
@@ -183,14 +196,23 @@ function pathValue(key: string): string {
     <section class="connection-summary">
       <div><span class="summary-symbol"><Bot :size="21" /></span><p>可用模型<strong>{{ formatCount(store.modelCatalog?.available_model_count) }}</strong></p></div>
       <div><span class="summary-symbol"><CloudCog :size="21" /></span><p>已连接服务<strong>{{ connectedProviders.length }}</strong></p></div>
-      <div><span class="summary-symbol"><WandSparkles :size="21" /></span><p>当前模型<strong>{{ store.modelCatalog?.selected_model || "尚未选择" }}</strong></p></div>
+      <div><span class="summary-symbol"><WandSparkles :size="21" /></span><p>正文模型<strong>{{ store.modelCatalog?.selected_models?.worker || store.modelCatalog?.selected_model || "尚未选择" }}</strong></p></div>
     </section>
 
     <div class="settings-grid">
       <section class="settings-section">
-        <header><span class="section-icon"><WandSparkles :size="18" /></span><div><h2>默认创作模型</h2><p>用于正文、审查、推演和设定生成。</p></div></header>
-        <label class="field"><span>选择模型</span><select v-model="selectedModel"><option value="">先连接一个模型服务</option><option v-for="model in models" :key="model.qualified_id" :value="model.qualified_id">{{ model.name }} · {{ model.qualified_id }}</option></select></label>
-        <button class="primary-button" :disabled="!selectedModel" @click="saveModel"><Check :size="16" />使用这个模型</button>
+        <header><span class="section-icon"><WandSparkles :size="18" /></span><div><h2>按工作选择模型</h2><p>高质量正文、快速对话和日常审批可以各用合适的模型。</p></div></header>
+        <div class="role-model-list">
+          <article v-for="role in ([
+            { id: 'worker', title: '正文与审查', text: '负责写作、推演、修订和正式审查。' },
+            { id: 'advisor', title: '创作顾问', text: '优先选择响应快、对话自然的模型。' },
+            { id: 'steward', title: '自动审批', text: '在授权范围内比较候选方向。' },
+          ] as const)" :key="role.id">
+            <div><strong>{{ role.title }}</strong><p>{{ role.text }}</p></div>
+            <select v-model="selectedModels[role.id]"><option value="">先连接一个模型服务</option><option v-for="model in models" :key="model.qualified_id" :value="model.qualified_id">{{ model.name }} · {{ model.qualified_id }}</option></select>
+            <button class="icon-button" :disabled="!selectedModels[role.id]" title="保存这个角色的模型" @click="saveModel(role.id)"><Check :size="15" /></button>
+          </article>
+        </div>
 
         <div class="provider-list">
           <article v-for="provider in providers" :key="provider.id" :class="{ connected: provider.connected }">

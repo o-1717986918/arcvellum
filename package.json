@@ -1,7 +1,7 @@
 {
   "name": "arcvellum-studio",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.8.0",
   "scripts": {
     "client:dev": "vite --config client/vite.config.ts",
     "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts && node scripts/sync-desktop-frontend.mjs",
@@ -28,7 +28,10 @@
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "@types/markdown-it": "^14.1.2",
+    "dompurify": "^3.4.12",
     "lucide-vue-next": "^0.468.0",
+    "markdown-it": "^14.3.0",
     "pinia": "^3.0.4",
     "vue": "3.5",
     "vue-router": "4.5"

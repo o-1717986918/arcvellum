@@ -8,6 +8,7 @@ skill, then downstream gates validate the artifacts that platform agent writes.
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,7 +17,14 @@ import re
 from .agent_tasks import write_agent_tasks
 from .anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE, render_ai_style_lint_block
 from .asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES, ASSET_TYPES
+from .asset_context import compact_asset_context_paths
 from .context_broker import default_context_trace_path
+from .creative_quality import (
+    creative_quality_profile_exists,
+    creative_quality_profile_path,
+    load_creative_quality_profile,
+    render_creative_quality_prompt,
+)
 from .draft_text import count_delivery_chars, final_body_from_workbench_text
 from .narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from .new_character_register import render_new_character_register_contract
@@ -41,6 +49,7 @@ def write_platform_scene_review_task(
     draft_path: Path,
     report_path: Path | None = None,
     json_path: Path | None = None,
+    materialization_scope: str = "full",
 ) -> PlatformAgentTaskResult:
     scene_id = scene_path.stem
     report = report_path or root / "reviews" / "agent" / f"{scene_id}_scene_review.md"
@@ -59,10 +68,19 @@ def write_platform_scene_review_task(
     if obligation_path.exists():
         source_paths.append(obligation_path)
     _extend_unique(source_paths, _style_source_paths(root))
+    quality_profile = load_creative_quality_profile(root)
+    if creative_quality_profile_exists(root):
+        source_paths.append(creative_quality_profile_path(root))
     draft_text = _read_optional(draft_path)
+    candidate_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
     body = final_body_from_workbench_text(draft_text)
-    style_lint_block = render_ai_style_lint_block(body or draft_text)
-    word_budget_adherence = word_budget_adherence_for_body(root, scene_path, body)
+    style_lint_block = render_ai_style_lint_block(body or draft_text, profile=quality_profile, scope=scene_id)
+    word_budget_adherence = word_budget_adherence_for_body(
+        root,
+        scene_path,
+        body,
+        materialization_scope=materialization_scope,
+    )
     reader_adherence = reader_experience_adherence_for_body(root, scene_path, body)
     rhythm_contract_text = render_narrative_rhythm_contract(root, scene_path, composition_json if composition_json.exists() else None)
     new_character_contract = render_new_character_register_contract()
@@ -77,6 +95,7 @@ def write_platform_scene_review_task(
             "不要调用本地 dry-run、http-chat、外部 agent 服务或隐藏 provider。",
             f"完成后写入 JSON：{_rel(json_output, root)}",
             f"完成后写入 Markdown 报告：{_rel(report, root)}",
+            f"本次审查正文 SHA-256：{candidate_sha256}；JSON 必须原样写入 candidate_sha256。",
         ],
         tasks=[
             (
@@ -95,7 +114,9 @@ def write_platform_scene_review_task(
             ),
             (
                 "处理确定性 Style Lint 证据",
-                f"""{style_lint_block}
+                f"""{render_creative_quality_prompt(quality_profile, scope=scene_id)}
+
+{style_lint_block}
 
 以上 Style Lint 是审查前由代码自动检出的证据。若存在 medium 或更高风险，必须在 JSON 的 blocking_issues、warnings、revision_actions 或 style_notes 中处理，不得仅用“整体可读”“属于合理修辞”带过。若认为某个 low 风险可保留，必须在 Markdown 报告说明语义理由。禁止用批量脚本直接删除否定、破折号或心理表达。{ANTI_EVASION_SHORT_RULE}""",
             ),
@@ -135,6 +156,7 @@ def write_platform_scene_review_task(
 {{
   "schema": "literary-engineering-workbench/scene-review-agent/v1",
   "scene_id": "{scene_id}",
+  "candidate_sha256": "{candidate_sha256}",
   "conclusion": "pass | pass_with_notes | revise_required | reject",
   "summary": "...",
   "blocking_issues": [],
@@ -149,6 +171,12 @@ def write_platform_scene_review_task(
     "evidence": [],
     "deviations": [],
     "revision_actions": []
+  }},
+  "creative_quality_profile": {{
+    "path": "{_rel(creative_quality_profile_path(root), root) if creative_quality_profile_exists(root) else 'implicit-default'}",
+    "revision": {quality_profile.get('revision', 1)},
+    "digest": "{quality_profile.get('digest', '')}",
+    "name": "{quality_profile.get('name', '')}"
   }},
   "revision_integrity": {{
     "status": "pass | revise_required | not_applicable",
@@ -242,6 +270,9 @@ def write_platform_scene_generation_task(
     if obligation_path.exists():
         source_paths.append(obligation_path)
     _extend_unique(source_paths, _style_source_paths(root))
+    quality_profile = load_creative_quality_profile(root)
+    if creative_quality_profile_exists(root):
+        source_paths.append(creative_quality_profile_path(root))
     word_budget_contract = scene_word_budget_contract(root, scene_path)
     reader_contract = reader_experience_contract(root, scene_path)
     rhythm_contract = narrative_rhythm_contract(root, scene_path, composition_path)
@@ -270,7 +301,9 @@ def write_platform_scene_generation_task(
             ),
             (
                 "执行生成前最终硬约束摘要",
-                """先读取 prompt manifest 的 generation_standards.hard_constraints，把 canon、场景编排、人物逻辑、文风、字数预算、AgentReview notes、标点和输出边界压缩成内部执行顺序。该摘要必须指导正文生成，但不得作为分析、自检表或工作流痕迹输出。""",
+                f"""先读取 prompt manifest 的 generation_standards.hard_constraints 和 creative_quality_profile，把 canon、场景编排、人物逻辑、文风、字数预算、AgentReview notes、标点和输出边界压缩成内部执行顺序。该摘要必须指导正文生成，但不得作为分析、自检表或工作流痕迹输出。
+
+{render_creative_quality_prompt(quality_profile, scope=scene_id)}""",
             ),
             (
                 "执行反规避与朴素叙述禁区",
@@ -297,7 +330,7 @@ def write_platform_scene_generation_task(
                 "执行生成前叙事节奏与场景桥接",
                 f"""{rhythm_contract_text}
 
-写正文时必须让开头接住 incoming_pressure，中段完成 scene_turn，结尾交出 outgoing_hook。过场不要恋战，高潮不要靠堆形容词撑长；用动作、信息差、人物选择和代价调整节奏。候选 manifest 必须记录 narrative_rhythm_contract 和 narrative_rhythm_standard_applied=true。
+写正文时必须按 tension_curve 的 entry / peak / exit（1-5）执行张力变化，让开头接住 incoming_pressure，中段完成 scene_turn，结尾交出 outgoing_hook。过场不要恋战，高潮不要靠堆形容词撑长；用动作、信息差、人物选择和代价调整节奏。候选 manifest 必须记录 narrative_rhythm_contract 和 narrative_rhythm_standard_applied=true。
 
 同时执行 Scene Function Gate、Reader Question Ledger、Promise / Payoff Ledger、Narrative Distance Control 和 Texture Variety Pass：确认本场功能不是“补设定/聊天”，读者问题和承诺有管理，叙述距离不会持续贴脸解释心理，本场材料与上下场形成变化。""",
             ),
@@ -311,7 +344,7 @@ def write_platform_scene_generation_task(
             ),
             (
                 "生成候选 manifest",
-                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema、scene_id、candidate、prompt_manifest、source_paths、generated_by=`platform-agent`、created_at、style_profile/context/composition 引用、style_generation_standard_applied=true、reader_experience_contract、reader_experience_standard_applied=true/false、word_budget_standard_applied=true/false、narrative_rhythm_contract、narrative_rhythm_standard_applied=true/false、hard_constraints_applied=true、anti_evasion_protocol_applied=true、pass_with_notes_actions_applied=true/false、word_budget_contract、clean_body_chinese_chars、clean_body_machine_chars、word_budget_adherence.status、new_character_register、canon_change、no_canon_change_reason 和待审查事项。
+                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema、scene_id、candidate、prompt_manifest、source_paths、generated_by=`platform-agent`、created_at、style_profile/context/composition 引用、creative_quality_profile_digest=`{quality_profile.get('digest', '')}`、style_generation_standard_applied=true、reader_experience_contract、reader_experience_standard_applied=true/false、word_budget_standard_applied=true/false、narrative_rhythm_contract、narrative_rhythm_standard_applied=true/false、hard_constraints_applied=true、anti_evasion_protocol_applied=true、pass_with_notes_actions_applied=true/false、word_budget_contract、clean_body_chinese_chars、clean_body_machine_chars、word_budget_adherence.status、new_character_register、canon_change、no_canon_change_reason 和待审查事项。
 
 本场叙事节奏契约：
 {json.dumps(rhythm_contract, ensure_ascii=False, indent=2)}
@@ -343,17 +376,21 @@ def write_platform_asset_creation_task(
 ) -> PlatformAgentTaskResult:
     normalized = _normalize_asset_type(asset_type)
     schema_name = ASSET_SCHEMA_NAMES[normalized]
+    schema_path = engine_path("schemas", "agent_outputs", f"{schema_name}.schema.json")
+    schema_contract = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema_summary = json.dumps(
+        {
+            "schema_value": schema_contract.get("schema_value"),
+            "required": schema_contract.get("required", []),
+            "types": schema_contract.get("types", {}),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
     candidate_id = _asset_candidate_id(normalized, target_id or brief)
     candidate = candidate_path or root / ASSET_CANDIDATE_DIRS[normalized] / f"{candidate_id}.json"
     report = report_path or candidate.with_suffix(".md")
-    source_paths = [
-        root / "project.yaml",
-        root / "canon",
-        root / "characters",
-        root / "plot",
-        root / "style",
-        engine_path("schemas", "agent_outputs", f"{schema_name}.schema.json"),
-    ]
+    source_paths = [*compact_asset_context_paths(root), schema_path]
     resolved_source = _resolve_optional(root, source)
     if resolved_source:
         source_paths.append(resolved_source)
@@ -367,6 +404,7 @@ def write_platform_asset_creation_task(
             "由平台 agent 创建候选资产；不要调用本地 dry-run、http-chat 或外部 agent。",
             f"资产类型：{normalized}",
             f"目标 schema：{schema_name}",
+            "候选 JSON 必须是该 schema 的单个根对象；不要自创 `characters`、`items` 等外层数组包装。",
             f"完成后写入候选 JSON：{_rel(candidate, root)}",
             f"完成后写入候选 Markdown 报告：{_rel(report, root)}",
         ],
@@ -377,7 +415,13 @@ def write_platform_asset_creation_task(
             ),
             (
                 "生成候选资产",
-                f"""按 `{schema_name}` 创建或覆盖 `{_rel(candidate, root)}`。必须包含 `schema`、`candidate_id`、`risks`、`source_paths` 和 `promotion_notes`；如为角色相关资产，必须让 background_story 只作为隐性行为因果。创作简述：{brief or "使用项目 premise 与现有材料。"} 目标 ID：{target_id or "n/a"}。""",
+                f"""按 `{schema_name}` 创建或覆盖 `{_rel(candidate, root)}`。候选必须是一个根对象，字段和值严格满足下面的机器合同；不要把角色放进 `characters` 数组，不要把 `promotion_notes` 写成对象：
+
+```json
+{schema_summary}
+```
+
+必须包含 `schema`、`candidate_id`、`risks`、`source_paths` 和 `promotion_notes`；如为角色相关资产，必须让 background_story 只作为隐性行为因果。创作简述：{brief or "使用项目 premise 与现有材料。"} 目标 ID：{target_id or "n/a"}。""",
             ),
             (
                 "写入候选说明",
@@ -392,6 +436,42 @@ def write_platform_asset_creation_task(
     return PlatformAgentTaskResult(task_path, report, candidate)
 
 
+def write_project_seed_asset_tasks(root: Path) -> list[PlatformAgentTaskResult]:
+    """Create stable world and protagonist task sidecars for a new project."""
+
+    project_root = root.resolve()
+    if not (project_root / "project.yaml").is_file():
+        raise FileNotFoundError(f"project.yaml not found: {project_root}")
+    shared_brief = (
+        "基于 project.yaml、用户方向记忆、已经确认的长篇预算与候选大纲，建立足以约束后续创作的基础资产。"
+        "不要重复大纲；只提取会持续影响人物选择、冲突、代价和场景因果的设定。"
+    )
+    specs = (
+        (
+            "world",
+            "world-foundation",
+            project_root / ASSET_CANDIDATE_DIRS["world"] / "world-foundation.json",
+            shared_brief + "世界资产必须给出可执行规则、限制、代价与不可破坏的边界。",
+        ),
+        (
+            "character",
+            "protagonist-foundation",
+            project_root / ASSET_CANDIDATE_DIRS["character"] / "protagonist-foundation.json",
+            shared_brief + "角色资产聚焦主角，必须包含动机、恐惧、道德边界与隐性的 background_story 行为因果。",
+        ),
+    )
+    return [
+        write_platform_asset_creation_task(
+            project_root,
+            asset_type=asset_type,
+            brief=brief,
+            target_id=target_id,
+            candidate_path=candidate_path,
+        )
+        for asset_type, target_id, candidate_path, brief in specs
+    ]
+
+
 def write_platform_asset_review_task(
     root: Path,
     *,
@@ -404,13 +484,7 @@ def write_platform_asset_review_task(
     report = report_path or root / "reviews" / "assets" / f"{candidate_id}_review.md"
     json_output = json_path or report.with_suffix(".json")
     task_path = json_output.with_suffix(".agent_tasks.md")
-    source_paths = [
-        candidate,
-        root / "canon",
-        root / "characters",
-        root / "plot",
-        root / "style",
-    ]
+    source_paths = [candidate, *compact_asset_context_paths(root)]
     write_agent_tasks(
         task_path,
         title=f"platform asset review {candidate_id}",
@@ -418,6 +492,9 @@ def write_platform_asset_review_task(
         source_paths=source_paths,
         notes=[
             "由平台 agent 审查候选资产；不要调用本地 dry-run、http-chat 或外部 agent。",
+            "本任务只负责审查，不修改候选；pass、failed、revise_required 都是可正式提交的审查结论。",
+            "如需修订，必须如实写 revise_required；后续独立 revision task 会修改候选并触发新一轮复审。",
+            "revision_actions 只能要求修改当前 candidate 文件及其说明。新增其他角色、世界规则或场景等跨任务依赖只能写入 warnings / promotion_risks，不能阻塞当前候选。",
             f"完成后写入 JSON：{_rel(json_output, root)}",
             f"完成后写入 Markdown 报告：{_rel(report, root)}",
         ],
@@ -428,7 +505,7 @@ def write_platform_asset_review_task(
             ),
             (
                 "写入审查 JSON",
-                f"""创建或覆盖 `{_rel(json_output, root)}`，至少包含 schema、candidate、candidate_id、asset_type、status(pass|failed|revise_required)、blocking_issues、warnings、revision_actions、promotion_risks、reviewed_at。""",
+                f"""创建或覆盖 `{_rel(json_output, root)}`。schema 必须精确为 `literary-engineering-workbench/candidate-asset-review/v0.1`，并至少包含 candidate、candidate_id、asset_type、status(pass|failed|revise_required)、blocking_issues、warnings、revision_actions、promotion_risks、reviewed_at。非通过结论必须给出可执行的 blocking_issues 或 revision_actions；revision_actions 的 target 必须精确指向当前候选 `{_rel(candidate, root)}` 或其字段锚点，不能要求本任务创建其他资产。不要为了推进流程伪造 pass。""",
             ),
             (
                 "写入审查报告",
@@ -459,6 +536,7 @@ def write_platform_canon_review_task(root: Path) -> PlatformAgentTaskResult:
         notes=[
             "由平台 agent 审查 canon、角色、场景、章节和伏笔连续性。",
             "本任务不调用本地 dry-run、http-chat 或外部 agent。",
+            "非通过结论可以正式提交；每条需要修复的 recommendation 必须包含精确 target_path、action 和 verification，供隔离修复任务限定写入范围。",
             f"完成后写入 JSON：{_rel(json_output, root)}",
             f"完成后写入 Markdown 报告：{_rel(report, root)}",
         ],
@@ -469,7 +547,7 @@ def write_platform_canon_review_task(root: Path) -> PlatformAgentTaskResult:
             ),
             (
                 "写入正式 canon review",
-                """按 `canon_review.v1` 写入 JSON，并在 Markdown 报告中给出需要修复、保留候选或请求用户确认的事项。""",
+                """按 `canon_review.v1` 写入 JSON，并在 Markdown 报告中给出需要修复、保留候选或请求用户确认的事项。pass_with_notes / revise_required / reject 都是合法结论，不得伪造 pass；非通过结论的 recommendations 必须为对象数组，每项包含位于 canon/、characters/、plot/、scenes/ 或 drafts/candidates/ 下的单个文本文件 target_path，以及 action、verification。""",
             ),
         ],
     )
@@ -495,6 +573,7 @@ def write_platform_committee_task(
         notes=[
             "由平台 agent 扮演多个审稿视角完成综合判断。",
             "不要调用本地 dry-run、http-chat 或外部 agent。",
+            "非通过建议可以正式提交；每个 action_item 或需要修复的 disagreement 必须携带精确 target_path、action 和 verification。",
             f"完成后写入 JSON：{_rel(json_output, root)}",
             f"完成后写入 Markdown 报告：{_rel(report, root)}",
         ],
@@ -505,7 +584,7 @@ def write_platform_committee_task(
             ),
             (
                 "形成综合建议",
-                """按 `committee_review.v1` 写出最终建议、分歧、行动项和少数意见。不要把建议直接晋升为 canon 或发布决定。""",
+                """按 `committee_review.v1` 写出最终建议、分歧、行动项和少数意见。approve_with_notes / revise / reject 均可如实提交；需要修复的 action_items / disagreements 必须写成对象并包含单个允许项目文本文件的 target_path、action、verification。不要把建议直接晋升为 canon 或发布决定。""",
             ),
         ],
     )

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .context_broker import context_trace_status
 from .draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
-from .narrative_rhythm import narrative_rhythm_contract
+from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract
 from .scene_readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
 from .word_budget import load_word_budget_summary
 
@@ -52,6 +52,9 @@ class LongformSceneRecord:
     reader_experience_adherence_status: str
     reader_promise_satisfied: bool
     narrative_rhythm_status: str
+    rhythm_role: str
+    pace: str
+    tension_curve: object
     scene_function: tuple[str, ...]
     scene_turn: str
     reader_effect: str
@@ -101,7 +104,9 @@ def build_longform_audit(
     foreshadowing = _scan_foreshadowing(root)
     chapter_files = sorted((root / "plot" / "chapters").glob("*.json")) if (root / "plot" / "chapters").exists() else []
     word_budget = load_word_budget_summary(root)
+    rhythm_curves = _rhythm_curves(scenes)
     issues = _audit_issues(root, scenes, characters, foreshadowing, chapter_files, target_length, word_budget)
+    issues.extend(_rhythm_curve_issues(rhythm_curves))
     graph = _build_graph(scenes, characters, foreshadowing)
 
     markdown_path = _resolve_output(root, output, "reviews", "longform", "longform_audit.md")
@@ -118,6 +123,7 @@ def build_longform_audit(
         "project_root": str(root),
         "summary": summary,
         "word_budget": word_budget,
+        "rhythm_curves": rhythm_curves,
         "scenes": [asdict(scene) for scene in scenes],
         "characters": characters,
         "foreshadowing": foreshadowing,
@@ -197,6 +203,9 @@ def _scan_scenes(root: Path) -> list[LongformSceneRecord]:
                 reader_experience_adherence_status=str(agent_state.get("reader_experience_adherence_status") or ""),
                 reader_promise_satisfied=bool(agent_state.get("reader_promise_satisfied")),
                 narrative_rhythm_status=str(rhythm_contract.get("status") or ""),
+                rhythm_role=str(rhythm_payload.get("rhythm_role") or ""),
+                pace=str(rhythm_payload.get("pace") or ""),
+                tension_curve=rhythm_payload.get("tension_curve"),
                 scene_function=tuple(_string_list(rhythm_payload.get("scene_function"))),
                 scene_turn=str(rhythm_payload.get("scene_turn") or ""),
                 reader_effect=str(rhythm_payload.get("reader_effect") or ""),
@@ -636,6 +645,7 @@ def _summary(
     locations = {scene.location for scene in scenes if scene.location}
     totals = word_budget.get("totals", {}) if word_budget else {}
     totals = totals if isinstance(totals, dict) else {}
+    rhythm_curves = _rhythm_curves(scenes)
     return {
         "chapter_count": max(len(chapter_ids), len(chapter_files)),
         "scene_count": len(scenes),
@@ -650,11 +660,49 @@ def _summary(
         "blocked_scene_count": sum(1 for scene in scenes if scene.status != "ready"),
         "rhythm_pass_count": sum(1 for scene in scenes if scene.narrative_rhythm_status == "pass"),
         "rhythm_gap_count": sum(1 for scene in scenes if scene.narrative_rhythm_status in {"", "defaulted", "incomplete"}),
+        "rhythm_curve_pass_count": sum(1 for curve in rhythm_curves.values() if curve.get("status") == "pass"),
+        "rhythm_curve_attention_count": sum(1 for curve in rhythm_curves.values() if curve.get("status") != "pass"),
         "issue_count": len(issues),
         "word_budget_status": str(word_budget.get("status") or "missing") if word_budget else "missing",
         "word_budget_scene_count": _to_int(totals.get("scene_count")),
         "word_budget_chapter_count": _to_int(totals.get("chapter_count")),
     }
+
+
+def _rhythm_curves(scenes: list[LongformSceneRecord]) -> dict[str, dict[str, object]]:
+    chapters: dict[str, list[LongformSceneRecord]] = {}
+    for scene in scenes:
+        chapters.setdefault(scene.chapter_id, []).append(scene)
+    return {
+        chapter_id: analyze_narrative_rhythm_sequence([
+            {
+                "scene_id": scene.scene_id,
+                "pace": scene.pace,
+                "rhythm_role": scene.rhythm_role,
+                "scene_function": list(scene.scene_function),
+                "tension_curve": scene.tension_curve,
+            }
+            for scene in chapter_scenes
+        ])
+        for chapter_id, chapter_scenes in chapters.items()
+    }
+
+
+def _rhythm_curve_issues(curves: dict[str, dict[str, object]]) -> list[LongformIssue]:
+    issues: list[LongformIssue] = []
+    for chapter_id, curve in curves.items():
+        for issue in curve.get("issues", []):
+            if not isinstance(issue, dict):
+                continue
+            severity = "high" if issue.get("severity") == "blocking" else "medium"
+            issues.append(LongformIssue(
+                severity,
+                "narrative_rhythm_curve",
+                chapter_id,
+                str(issue.get("message") or "章节叙事节奏曲线需要复核。"),
+                "回到场景编排，调整场景功能、推进速度或 entry/peak/exit 张力交接；不要只靠正文修辞制造假高潮。",
+            ))
+    return issues
 
 
 def _review_conclusion(text: str) -> str:

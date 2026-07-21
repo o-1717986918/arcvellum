@@ -3,10 +3,47 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.narrative_projection import build_narrative_projection
+from literary_engineering_studio.narrative_projection import (
+    build_narrative_projection,
+    projection_delta,
+    projection_motion_events,
+)
 
 
 class NarrativeProjectionTests(unittest.TestCase):
+    def test_book_projection_aggregates_one_thousand_scenes_by_chapter(self):
+        scenes = []
+        for index in range(1000):
+            chapter = f"chapter_{index // 10 + 1:04d}"
+            scenes.append({"id": f"scene_{index + 1:04d}", "title": f"场景 {index + 1}", "subtitle": chapter, "facts": [{"label": "章节", "value": chapter}, {"label": "目标字数", "value": "1400"}]})
+        library = {"sections": {"scenes": scenes, "characters": [], "branches": [], "reviews": [], "canon_patches": []}}
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
+            projection = build_narrative_projection({}, Path(temporary), level="book")
+        self.assertTrue(projection["summary"]["aggregated"])
+        self.assertEqual(projection["summary"]["scene_count"], 1000)
+        self.assertEqual(len([node for node in projection["nodes"] if node["type"] == "chapter"]), 100)
+        self.assertLessEqual(len(projection["nodes"]), 112)
+
+    def test_projection_delta_is_explicit_and_drives_real_motion_events(self):
+        previous = {
+            "nodes": [{"node_id": "chapter:1", "type": "chapter", "label": "第一章", "status": "current", "metrics": {"formal_chars": 100}}],
+            "edges": [],
+        }
+        current = {
+            "nodes": [
+                {"node_id": "chapter:1", "type": "chapter", "label": "第一章", "status": "formal", "metrics": {"formal_chars": 500}},
+                {"node_id": "branch:1:A", "type": "branch", "label": "承担代价", "status": "alternative", "metrics": {}},
+            ],
+            "edges": [{"edge_id": "branch:chapter:1>branch:1:A", "source": "chapter:1", "target": "branch:1:A", "type": "branch", "label": "备选"}],
+        }
+        delta = projection_delta(previous, current)
+        self.assertEqual(delta["added_nodes"], ["branch:1:A"])
+        self.assertEqual(delta["updated_nodes"], ["chapter:1"])
+        events = projection_motion_events(previous, current, delta)
+        self.assertIn("branch-grown", {item["type"] for item in events})
+        self.assertIn("joined-canon", {item["type"] for item in events})
+        self.assertIn("manuscript-grown", {item["type"] for item in events})
+
     def test_book_projection_aggregates_scenes_and_keeps_source_evidence(self):
         library = {
             "sections": {
@@ -22,6 +59,8 @@ class NarrativeProjectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=reader):
             projection = build_narrative_projection({}, Path(temporary), level="book")
         chapter = next(node for node in projection["nodes"] if node["type"] == "chapter")
+        self.assertEqual(projection["schema"], "arcvellum/narrative-projection/v2")
+        self.assertEqual(projection["timeline"][0]["node_id"], chapter["node_id"])
         self.assertEqual(chapter["metrics"]["word_target"], 2700)
         self.assertEqual(chapter["metrics"]["formal_chars"], 1180)
         self.assertEqual(chapter["source_type"], "scene-catalog")

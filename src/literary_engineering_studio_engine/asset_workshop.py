@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -250,7 +251,7 @@ def promote_candidate_asset(
     if errors:
         raise ValueError(f"candidate schema validation failed: {len(errors)} errors")
     candidate_id = str(payload.get("candidate_id") or candidate_path.stem)
-    if not allow_unapproved and not _has_approval(root, approval_run_id or candidate_id):
+    if not allow_unapproved and not _has_approval(root, approval_run_id or candidate_id, candidate_path):
         raise RuntimeError("candidate promotion requires an approve record or --allow-unapproved")
     output_paths = tuple(_write_promoted_asset(root, asset_type, payload))
     promotion_dir = root / "workflow" / "asset_promotions"
@@ -848,12 +849,13 @@ def _validate_group(group: str, asset_type: str) -> None:
         raise ValueError(f"{asset_type} cannot be promoted through {group} group")
 
 
-def _has_approval(root: Path, run_id: str) -> bool:
+def _has_approval(root: Path, run_id: str, candidate_path: Path) -> bool:
     if not run_id:
         return False
     index = root / "workflow" / "approvals" / "index.jsonl"
     if not index.exists():
         return False
+    latest: dict[str, Any] = {}
     for line in index.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -861,9 +863,22 @@ def _has_approval(root: Path, run_id: str) -> bool:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if record.get("run_id") == run_id and record.get("decision") == "approve":
-            return True
-    return False
+        if record.get("run_id") == run_id:
+            latest = record if isinstance(record, dict) else {}
+    if latest.get("decision") != "approve" or not candidate_path.is_file():
+        return False
+    actual = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    recorded = str(latest.get("subject_sha256") or "").strip().lower()
+    if recorded:
+        return recorded == actual
+    try:
+        recorded_at = datetime.fromisoformat(str(latest.get("recorded_at") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if recorded_at.tzinfo is None:
+        recorded_at = recorded_at.replace(tzinfo=timezone.utc)
+    candidate_time = datetime.fromtimestamp(candidate_path.stat().st_mtime, tz=timezone.utc)
+    return candidate_time <= recorded_at.astimezone(timezone.utc)
 
 
 def _candidate_title(payload: dict[str, Any]) -> str:

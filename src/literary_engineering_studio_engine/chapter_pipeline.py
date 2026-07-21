@@ -13,7 +13,7 @@ from .context_broker import default_context_trace_path
 from .draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
 from .platform_agent_tasks import write_platform_scene_review_task
 from .review_ci import review_scene_draft
-from .narrative_rhythm import narrative_rhythm_contract
+from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract
 from .scene_draft import build_scene_draft
 from .scene_readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
 
@@ -44,6 +44,9 @@ class SceneChapterRecord:
     reader_experience_adherence_status: str
     reader_promise_satisfied: bool
     narrative_rhythm_status: str
+    rhythm_role: str
+    pace: str
+    tension_curve: object
     scene_function: tuple[str, ...]
     scene_turn: str
     reader_effect: str
@@ -104,6 +107,7 @@ def build_chapter_workspace(
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.parent.mkdir(parents=True, exist_ok=True)
 
+    rhythm_curve = _chapter_rhythm_curve(records)
     payload = {
         "schema": "literary-engineering-workbench/chapter-workspace/v0.1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -111,6 +115,7 @@ def build_chapter_workspace(
         "project_root": str(root),
         "scenes": [asdict(record) for record in records],
         "summary": _chapter_summary(records),
+        "rhythm_curve": rhythm_curve,
     }
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     markdown_path.write_text(_render_chapter_markdown(root, chapter_id, records, json_path), encoding="utf-8")
@@ -228,6 +233,9 @@ def _build_scene_record(
         reader_experience_adherence_status=str(agent_state.get("reader_experience_adherence_status") or ""),
         reader_promise_satisfied=bool(agent_state.get("reader_promise_satisfied")),
         narrative_rhythm_status=str(rhythm_contract.get("status") or ""),
+        rhythm_role=str(rhythm_payload.get("rhythm_role") or ""),
+        pace=str(rhythm_payload.get("pace") or ""),
+        tension_curve=rhythm_payload.get("tension_curve"),
         scene_function=tuple(_string_list(rhythm_payload.get("scene_function"))),
         scene_turn=str(rhythm_payload.get("scene_turn") or ""),
         reader_effect=str(rhythm_payload.get("reader_effect") or ""),
@@ -245,6 +253,7 @@ def _build_scene_record(
 def _render_chapter_markdown(root: Path, chapter_id: str, records: list[SceneChapterRecord], json_path: Path) -> str:
     generated_at = datetime.now(timezone.utc).isoformat()
     summary = _chapter_summary(records)
+    rhythm_curve = _chapter_rhythm_curve(records)
     lines = [
         f"# 章节工作台：{chapter_id}",
         "",
@@ -266,6 +275,7 @@ def _render_chapter_markdown(root: Path, chapter_id: str, records: list[SceneCha
         f"- 阻塞/待处理：{summary['blocked_count']}",
         f"- 总正文中文内容字符：{summary['draft_chars']}",
         f"- 机器非空白字符诊断：{summary.get('draft_machine_chars', 0)}",
+        f"- 章节节奏曲线：{rhythm_curve['status']}（{rhythm_curve['blocking_count']} 个缺口，{rhythm_curve['warning_count']} 个风险）",
         "",
         "## 场景清单",
         "",
@@ -285,6 +295,14 @@ def _render_chapter_markdown(root: Path, chapter_id: str, records: list[SceneCha
                 status=record.status,
             )
         )
+
+    lines.extend(["", "## 章节叙事节奏曲线", ""])
+    if rhythm_curve["issues"]:
+        for issue in rhythm_curve["issues"]:
+            scenes = "、".join(issue["scene_ids"])
+            lines.append(f"- **{issue['severity']}** `{scenes}`：{issue['message']}")
+    else:
+        lines.append("- 节奏曲线存在可辨识的蓄势、变化与回落，未发现机械平均化信号。")
 
     lines.extend([
         "",
@@ -417,7 +435,8 @@ def _continuity_lines(records: list[SceneChapterRecord]) -> list[str]:
     return lines
 
 
-def _chapter_summary(records: list[SceneChapterRecord]) -> dict[str, int]:
+def _chapter_summary(records: list[SceneChapterRecord]) -> dict[str, object]:
+    rhythm_curve = _chapter_rhythm_curve(records)
     return {
         "scene_count": len(records),
         "ready_count": sum(1 for record in records if record.status == "ready"),
@@ -427,7 +446,22 @@ def _chapter_summary(records: list[SceneChapterRecord]) -> dict[str, int]:
         "draft_machine_chars": sum(record.draft_machine_chars for record in records),
         "rhythm_pass_count": sum(1 for record in records if record.narrative_rhythm_status == "pass"),
         "rhythm_incomplete_count": sum(1 for record in records if record.narrative_rhythm_status == "incomplete"),
+        "rhythm_curve_status": rhythm_curve["status"],
+        "rhythm_curve_issue_count": len(rhythm_curve["issues"]),
     }
+
+
+def _chapter_rhythm_curve(records: list[SceneChapterRecord]) -> dict[str, object]:
+    return analyze_narrative_rhythm_sequence([
+        {
+            "scene_id": record.scene_id,
+            "pace": record.pace,
+            "rhythm_role": record.rhythm_role,
+            "scene_function": list(record.scene_function),
+            "tension_curve": record.tension_curve,
+        }
+        for record in records
+    ])
 
 
 def _string_list(value: object) -> list[str]:
