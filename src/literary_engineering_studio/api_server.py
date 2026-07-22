@@ -235,6 +235,7 @@ class CreativeQualityPreviewRequest(BaseModel):
 class RhythmPlanRequest(BaseModel):
     project_root: str
     entries: list[dict[str, Any]]
+    book_profile: dict[str, Any] | None = None
 
 
 def create_app(config_override: dict[str, Any] | None = None):
@@ -922,7 +923,7 @@ def create_app(config_override: dict[str, Any] | None = None):
         root = _project(payload.project_root)
         return _call(lambda: {
             "ok": True,
-            "plan": save_rhythm_plan(root, payload.entries, updated_by="studio-user"),
+            "plan": save_rhythm_plan(root, payload.entries, updated_by="studio-user", book_profile=payload.book_profile),
             "effect": "future-candidates",
             "review_required_for_existing_candidates": True,
         })

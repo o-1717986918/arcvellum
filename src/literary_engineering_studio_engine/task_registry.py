@@ -48,7 +48,7 @@ SUPPORTED_ROUTES = {
 # Bump this whenever the executable task-package contract changes.  Active
 # packages are deliberately refreshed by `task-next` instead of leaving a
 # desktop client to execute an obsolete command captured by an older build.
-TASK_CONTRACT_REVISION = "2026-07-22.1"
+TASK_CONTRACT_REVISION = "2026-07-23.1"
 TASK_TYPE_EXECUTION = {
     "deterministic-cli": ("deterministic", "deterministic-engine"),
     "deterministic-review": ("deterministic", "deterministic-engine"),
@@ -1755,6 +1755,7 @@ def _longform_blueprint_for_state(root: Path, current_state: str, next_action: s
             ],
             "hard_constraints": [
                 "Read scene_inventory_expansion.agent_tasks.md and create budgeted scene inventory candidates.",
+                "The inventory is a machine-readable materialization contract: use the required chapter heading and 11-column scene table, not free-form scene cards or prose summaries.",
                 "Each added scene candidate needs target Chinese-content characters, function, participants, conflict, information release, consequence, and setup/payoff role.",
                 "Scene inventory remains candidate material until review and user approval.",
             ],

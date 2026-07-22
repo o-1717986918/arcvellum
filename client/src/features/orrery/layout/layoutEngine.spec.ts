@@ -57,8 +57,8 @@ describe("buildSpatialLayout", () => {
     const early = result.points.get("scene:1")!;
     const next = result.points.get("scene:2")!;
     const late = result.points.get("scene:300")!;
-    expect(next.x - early.x).toBeGreaterThan(0.7);
-    expect(late.x - early.x).toBeGreaterThan(200);
+    expect(next.x - early.x).toBeGreaterThan(1.1);
+    expect(late.x - early.x).toBeGreaterThan(350);
     expect(late.z).toBeLessThan(early.z);
     const primary = longBook.map((item) => result.points.get(item.node_id)!);
     expect(primary.every((point, index) => index === 0 || point.x > primary[index - 1].x)).toBe(true);
@@ -101,6 +101,49 @@ describe("buildSpatialLayout", () => {
     const points = temporal.map((item) => result.points.get(item.node_id)!);
     expect(points[2].x - points[1].x).toBeGreaterThan(points[1].x - points[0].x);
     expect(points.every((point, index) => index === 0 || point.x > points[index - 1].x)).toBe(true);
+  });
+
+  it("keeps scenes from one chapter in a local cluster and separates chapter clusters", () => {
+    const clustered = [
+      node("scene:one", "scene", 1),
+      node("scene:two", "scene", 2),
+      node("scene:three", "scene", 3),
+      node("scene:four", "scene", 4),
+    ];
+    clustered[0].metrics.chapter_id = "chapter_0001";
+    clustered[1].metrics.chapter_id = "chapter_0001";
+    clustered[2].metrics.chapter_id = "chapter_0002";
+    clustered[3].metrics.chapter_id = "chapter_0002";
+    for (const grammar of ["spine", "braid", "strata", "constellation", "loop", "stage"] as const) {
+      const result = buildSpatialLayout(grammar, "clustered-book", clustered, "project-seed");
+      const one = result.points.get("scene:one")!;
+      const two = result.points.get("scene:two")!;
+      const three = result.points.get("scene:three")!;
+      const four = result.points.get("scene:four")!;
+      const withinOne = Math.hypot(two.x - one.x, two.y - one.y, two.z - one.z);
+      const between = Math.hypot(three.x - two.x, three.y - two.y, three.z - two.z);
+      const withinTwo = Math.hypot(four.x - three.x, four.y - three.y, four.z - three.z);
+      expect(between).toBeGreaterThan(withinOne * 1.75);
+      expect(between).toBeGreaterThan(withinTwo * 1.75);
+    }
+  });
+
+  it("moves constellation chapter clusters along a continuous stellar route instead of alternating spokes", () => {
+    const chapters = Array.from({ length: 8 }, (_value, index) => {
+      const item = node(`scene:${index + 1}`, "scene", index + 1);
+      item.metrics.chapter_id = `chapter_${String(index + 1).padStart(4, "0")}`;
+      return item;
+    });
+    const result = buildSpatialLayout("constellation", "constellation-route", chapters, "project-seed");
+    const points = chapters.map((item) => result.points.get(item.node_id)!);
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const incoming = { x: points[index].x - points[index - 1].x, z: points[index].z - points[index - 1].z };
+      const outgoing = { x: points[index + 1].x - points[index].x, z: points[index + 1].z - points[index].z };
+      const cosine = (incoming.x * outgoing.x + incoming.z * outgoing.z) / (Math.hypot(incoming.x, incoming.z) * Math.hypot(outgoing.x, outgoing.z));
+      // A route may turn, but it must not reverse into the previous chapter's
+      // space; that is the geometric source of unreadable full-book webs.
+      expect(cosine).toBeGreaterThan(-0.25);
+    }
   });
 
   it("gives every grammar a stable local separation for dense narrative sequences", () => {

@@ -8,7 +8,7 @@ const DEFAULT_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
   progress: { width: 300, height: 332 },
   reader: { width: 332, height: 540 },
   decisions: { width: 328, height: 340 },
-  rules: { width: 350, height: 440 },
+  rules: { width: 440, height: 590 },
   health: { width: 258, height: 290 },
   delivery: { width: 294, height: 282 },
 };
@@ -18,7 +18,7 @@ const MIN_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
   progress: { width: 282, height: 280 },
   reader: { width: 300, height: 370 },
   decisions: { width: 300, height: 248 },
-  rules: { width: 320, height: 350 },
+  rules: { width: 360, height: 430 },
   health: { width: 258, height: 240 },
   delivery: { width: 260, height: 210 },
 };

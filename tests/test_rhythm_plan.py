@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 
 
@@ -67,6 +67,40 @@ class RhythmPlanTests(unittest.TestCase):
             self.assertEqual(plan["entries"][0]["volume_id"], "volume_01")
             self.assertIn("volume_01", plan["volumes"])
             self.assertEqual(plan["book"]["scene_count"], 2)
+
+    def test_book_profile_is_versioned_and_visible_to_scene_generation_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir()
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\ntitle: 开端\n"
+                "narrative_rhythm:\n  scene_function: [铺垫]\n  scene_turn: 发现异常\n  reader_effect: 读者意识到平静不可靠\n  tension_curve: {entry: 1, peak: 3, exit: 2}\n"
+                "scene_bridge:\n  incoming_pressure: 日常秩序已经出现裂缝\n  outgoing_hook: 一封未署名的信\n",
+                encoding="utf-8",
+            )
+            saved = save_rhythm_plan(root, [{
+                "scene_id": "scene_0001",
+                "pace": "balanced",
+                "rhythm_role": "setup",
+                "tension_curve": {"entry": 1, "peak": 3, "exit": 2},
+                "detail_level": "standard",
+            }], book_profile={
+                "profile_id": "contemplative",
+                "arc": {"opening": 1, "ascent": 2, "midpoint": 4, "crisis": 3, "finale": 4},
+                "breathing_interval": 4,
+                "set_piece_ratio": 14,
+                "narrative_distance": "observant",
+                "ending_policy": "afterglow",
+                "directive": "让关键变化落在选择之后，而不是解释之前。",
+            })
+            contract = narrative_rhythm_contract(root, scene)
+            self.assertEqual(saved["book_profile"]["profile_id"], "contemplative")
+            self.assertEqual(saved["book_profile"]["arc"]["midpoint"], 4)
+            self.assertEqual(contract["book_rhythm_profile"]["ending_policy"], "afterglow")
+            self.assertIn("关键变化", contract["book_rhythm_profile"]["directive"])
+            self.assertIn("沉静回响", render_narrative_rhythm_contract(root, scene))
+            self.assertIn("关键变化", render_narrative_rhythm_contract(root, scene))
 
 
 if __name__ == "__main__":

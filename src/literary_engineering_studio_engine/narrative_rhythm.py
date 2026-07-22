@@ -88,6 +88,7 @@ def narrative_rhythm_contract(
     plan_payload = _read_json(root / "plot" / "rhythm_plan.json")
     plan_scenes = plan_payload.get("scenes") if isinstance(plan_payload.get("scenes"), dict) else {}
     plan_rhythm = plan_scenes.get(scene_id) if isinstance(plan_scenes.get(scene_id), dict) else {}
+    book_profile = _book_profile(plan_payload.get("book_profile"))
     # Composition is a derived planning artifact. A later formal scene-contract
     # task must be able to repair it before composition is rebuilt, and a user
     # rhythm plan remains the highest authority.
@@ -103,6 +104,7 @@ def narrative_rhythm_contract(
         "source": "rhythm-plan" if plan_rhythm else _source_label(composition_rhythm, composition_bridge, scene_rhythm, scene_bridge),
         "plan_revision": int(plan_payload.get("revision") or 0),
         "plan_digest": str(plan_payload.get("digest") or ""),
+        "book_rhythm_profile": book_profile,
         "message": _contract_message(explicit, missing_required),
         "missing_required": missing_required,
         "narrative_rhythm": rhythm,
@@ -120,6 +122,7 @@ def render_narrative_rhythm_contract(
     contract = narrative_rhythm_contract(root, scene_path, composition_path)
     rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
     bridge = contract.get("scene_bridge") if isinstance(contract.get("scene_bridge"), dict) else {}
+    book_profile = contract.get("book_rhythm_profile") if isinstance(contract.get("book_rhythm_profile"), dict) else {}
     density = rhythm.get("density_mix") if isinstance(rhythm.get("density_mix"), dict) else {}
     lines = [
         "# 本场景叙事节奏与场景桥接硬属性",
@@ -139,6 +142,7 @@ def render_narrative_rhythm_contract(
         f"- 需要放慢：{_join_list(rhythm.get('slow_down_points')) or '关键选择、后果落点'}",
         f"- 需要加速：{_join_list(rhythm.get('speed_up_points')) or '过场、重复说明、已知信息'}",
         f"- 张力曲线：{_render_tension_curve(rhythm.get('tension_curve')) or '未填写（必填：entry / peak / exit，均为 1-5）'}",
+        f"- 全书节奏意图：{_render_book_profile(book_profile)}",
         f"- 质地变化：{rhythm.get('texture_variety') or DEFAULT_RHYTHM['texture_variety']}",
         f"- 章节结尾策略：{rhythm.get('chapter_ending_policy') or '若本场是章末，避免总用警句/反转句，按情绪余波、信息落点、行动启动、关系变化、静默或 cliffhanger 选择。'}",
         f"- 防扁平化：{rhythm.get('avoid_flatness') or DEFAULT_RHYTHM['avoid_flatness']}",
@@ -284,6 +288,68 @@ def _contract_message(explicit: bool, missing_required: list[str]) -> str:
     if missing_required:
         return "叙事节奏/场景桥接已出现，但缺少关键硬属性：" + "，".join(missing_required)
     return "叙事节奏/场景桥接已显式配置。"
+
+
+def _book_profile(value: object) -> dict[str, Any]:
+    profile = value if isinstance(value, dict) else {}
+    raw_arc = profile.get("arc") if isinstance(profile.get("arc"), dict) else {}
+    return {
+        "profile_id": str(profile.get("profile_id") or "layered"),
+        "arc": {
+            "opening": _tension_number(raw_arc.get("opening")) or 2,
+            "ascent": _tension_number(raw_arc.get("ascent")) or 3,
+            "midpoint": _tension_number(raw_arc.get("midpoint")) or 4,
+            "crisis": _tension_number(raw_arc.get("crisis")) or 3,
+            "finale": _tension_number(raw_arc.get("finale")) or 5,
+        },
+        "breathing_interval": max(1, min(8, _safe_int(profile.get("breathing_interval"), 3))),
+        "set_piece_ratio": max(5, min(45, _safe_int(profile.get("set_piece_ratio"), 18))),
+        "narrative_distance": str(profile.get("narrative_distance") or "varied"),
+        "ending_policy": str(profile.get("ending_policy") or "varied"),
+        "directive": str(profile.get("directive") or "").strip()[:500],
+    }
+
+
+def _render_book_profile(profile: dict[str, Any]) -> str:
+    names = {
+        "layered": "层层蓄压",
+        "balanced": "均衡推进",
+        "pulse": "强起伏脉冲",
+        "contemplative": "沉静回响",
+    }
+    distances = {
+        "balanced": "远近均衡",
+        "varied": "随场景切换远近",
+        "close_varied": "以贴近人物为主，关键处拉远",
+        "observant": "观察性叙述距离",
+    }
+    endings = {
+        "varied": "章末避免同一种悬念模板",
+        "momentum": "以行动启动和未竟压力为主",
+        "afterglow": "以情绪余波和信息落点为主",
+        "quiet": "保留静默与留白式收束",
+    }
+    arc = profile.get("arc") if isinstance(profile.get("arc"), dict) else {}
+    curve = " → ".join(str(arc.get(key) or "?") for key in ("opening", "ascent", "midpoint", "crisis", "finale"))
+    parts = [
+        names.get(str(profile.get("profile_id") or ""), "用户定义曲线"),
+        f"全书锚点 {curve}",
+        f"连续高压约每 {profile.get('breathing_interval') or 3} 场留出后果/呼吸",
+        f"重点场约 {profile.get('set_piece_ratio') or 18}%",
+        distances.get(str(profile.get("narrative_distance") or ""), "叙述距离随场景调整"),
+        endings.get(str(profile.get("ending_policy") or ""), "章末多样化"),
+    ]
+    directive = str(profile.get("directive") or "").strip()
+    if directive:
+        parts.append(f"用户补充：{directive}")
+    return "；".join(parts)
+
+
+def _safe_int(value: object, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _meaningful_value(value: object) -> bool:

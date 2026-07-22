@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { Activity, ArrowUpRight, BookOpenText, CircleAlert, CircleCheck, Download, FileCheck2, Focus, GitBranch, PackageOpen, PauseCircle, PlayCircle, RefreshCw, Route, ScanSearch } from "lucide-vue-next";
+import { Activity, ArrowUpRight, BookOpenText, CircleAlert, CircleCheck, Download, FileCheck2, Focus, GitBranch, PackageOpen, RefreshCw, Route, ScanSearch } from "lucide-vue-next";
 import SpatialWindowFrame from "@/features/orrery/SpatialWindowFrame.vue";
 import QualityView from "@/features/quality/QualityView.vue";
+import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
@@ -190,7 +191,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
             </dl>
             <section v-if="observedTask || observedEvents.length" class="agent-pulse"><header><span><Activity :size="14" />{{ observedTask?.role || '执行观察' }}</span><small>{{ observedTask?.stage || '等待新的任务事件' }}</small></header><ol v-if="observedEvents.length"><li v-for="event in observedEvents" :key="event.sequence"><i></i><div><strong>{{ event.stage }}</strong><p>{{ event.message }}</p></div></li></ol></section>
             <p v-if="activeRun.last_error" class="progress-warning">{{ activeRun.last_error }}</p>
-            <button class="primary-button wide" @click="emit('advance')"><PauseCircle v-if="['paused', 'blocked', 'failed'].includes(activeRunStatus)" :size="15" /><PlayCircle v-else :size="15" />{{ activeRunStatus === 'running' ? '正在观察这项推进' : (activeRunStatus ? '继续这一轮任务' : '启动下一项任务') }}</button>
+            <AutopilotPanel compact />
           </div>
         </div>
       </template>

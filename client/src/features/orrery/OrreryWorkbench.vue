@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { BookOpenText, BookPlus, ChevronDown, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, Settings2, SlidersHorizontal } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
@@ -16,7 +16,7 @@ import { manuscriptItems } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import { useSpatialProjectionStore } from "@/stores/spatialProjection";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
-import type { SpatialGrammar, SpatialNarrativeNode, SpatialNodeDetail } from "@/types/spatial";
+import type { SpatialGrammar, SpatialNarrativeNode, SpatialNarrativeProjection, SpatialNodeDetail } from "@/types/spatial";
 
 const props = defineProps<{ dashboard: Record<string, unknown> | null; immersive?: boolean }>();
 
@@ -33,6 +33,8 @@ const healthExpanded = ref(false);
 const projectBandOpen = ref(false);
 const activeCharacterId = ref("");
 const staticStage = ref(false);
+const bookChapterNodes = ref<SpatialNarrativeNode[]>([]);
+let chapterRailRequest = 0;
 
 const projection = computed(() => spatial.projection);
 const layout = computed(() => projection.value ? buildSpatialLayout(projection.value.spatial_grammar, projection.value.revision, projection.value.nodes, projection.value.layout_seed) : null);
@@ -40,9 +42,19 @@ const deliveryReady = computed(() => String(app.delivery?.status || "") === "rea
 const prose = computed(() => manuscriptItems((app.library || null) as Record<string, unknown> | null));
 const progress = computed(() => app.projectProgress);
 const overallProgress = computed(() => Number(progress.value?.overall_percent));
-const chapterNodes = computed(() => (projection.value?.nodes || [])
-  .filter((node) => node.type === "chapter")
-  .sort((left, right) => left.order - right.order));
+const chapterNodes = computed(() => [...bookChapterNodes.value].sort((left, right) => left.order - right.order));
+const activeChapterRailNodeId = computed(() => {
+  if (!projection.value) return windows.selectedNodeId;
+  if (projection.value.level === "chapter") {
+    return chapterNodes.value.find((node) => node.source_id === projection.value?.focus)?.node_id || windows.selectedNodeId;
+  }
+  if (projection.value.level === "scene") {
+    const selected = projection.value.nodes.find((node) => node.node_id === `scene:${projection.value?.focus}`);
+    const chapterId = String(selected?.metrics.chapter_id || "");
+    return chapterNodes.value.find((node) => node.source_id === chapterId)?.node_id || windows.selectedNodeId;
+  }
+  return windows.selectedNodeId;
+});
 
 watch(() => app.currentProjectPath, (root) => {
   windows.clear();
@@ -50,9 +62,16 @@ watch(() => app.currentProjectPath, (root) => {
   if (root) {
     void spatial.open(root, { level: "book", focus: "" });
     void loadChoices();
+    void loadChapterRail(root);
   }
-  else spatial.close();
+  else {
+    bookChapterNodes.value = [];
+    spatial.close();
+  }
 }, { immediate: true });
+watch(() => projection.value?.source_revisions?.narrative_v2, () => {
+  if (app.currentProjectPath) void loadChapterRail(app.currentProjectPath);
+});
 watch(
   [() => app.currentProjectPath, () => projection.value?.spatial_grammar, () => projection.value?.revision],
   ([root, grammar]) => {
@@ -95,9 +114,15 @@ function setLevel(level: "book" | "chapter" | "scene"): void {
   void spatial.setView({ level, focus: "" });
 }
 
-function setGrammar(event: Event): void {
+async function setGrammar(event: Event): Promise<void> {
   const value = (event.target as HTMLSelectElement).value as SpatialGrammar;
-  void spatial.setView({ grammar: value });
+  await spatial.setView({ grammar: value });
+  // The grammar refresh changes the coordinate system. Reframe after the new
+  // projection and its layout have reached the mounted stage, rather than
+  // trusting a reactive watcher to win a race with the previous camera.
+  await nextTick();
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  stage.value?.openingSegment();
 }
 
 function switchProject(path: string): void {
@@ -117,9 +142,38 @@ function focusNodeObject(node: SpatialNarrativeNode): void {
   void selectNode(node);
 }
 
+async function openChapterFromRail(nodeId: string): Promise<void> {
+  const chapter = chapterNodes.value.find((item) => item.node_id === nodeId);
+  if (!chapter) return;
+  // The rail is a global table of contents. It never replaces the full-book
+  // canvas: it changes the detailed focus and then flies the camera to that
+  // chapter's first scene on the same narrative river.
+  const firstScene = projection.value?.nodes
+    .filter((node) => node.type === "scene" && String(node.metrics.chapter_id || "") === chapter.source_id)
+    .sort((left, right) => left.order - right.order)[0];
+  if (spatial.level === "scene") {
+    await spatial.setView({ level: "scene", focus: firstScene?.node_id.replace(/^scene:/, "") || "" });
+  } else {
+    await spatial.setView({ level: "chapter", focus: chapter.source_id });
+  }
+  await focusChapterCluster(chapter.source_id);
+}
+
+async function focusChapterCluster(chapterId: string): Promise<void> {
+  await nextTick();
+  // The renderer mounts its new anchors during Vue's paint. A frame boundary
+  // keeps directory navigation fluid without selecting or opening a window.
+  window.requestAnimationFrame(() => {
+    const target = projection.value?.nodes
+      .filter((node) => node.type === "scene" && String(node.metrics.chapter_id || "") === chapterId)
+      .sort((left, right) => left.order - right.order)[0];
+    const point = target ? layout.value?.points.get(target.node_id) : undefined;
+    if (target && point) stage.value?.focus(point, target.node_id);
+  });
+}
+
 function selectCharacter(nodeId: string): void {
   activeCharacterId.value = nodeId;
-  if (nodeId) focusNode(nodeId);
 }
 
 function grammarLabel(grammar: SpatialGrammar): string {
@@ -143,6 +197,18 @@ async function loadChoices(): Promise<void> {
     `/workflow/current-choice?${query({ project_root: app.currentProjectPath })}`,
   ).catch(() => ({ items: [] }));
   choices.value = result.items || result.choices || [];
+}
+
+async function loadChapterRail(root: string): Promise<void> {
+  const sequence = ++chapterRailRequest;
+  const payload = await api<SpatialNarrativeProjection>(`/narrative/projection/v3?${query({
+    project_root: root,
+    level: "book",
+    focus: "",
+    grammar: spatial.grammar,
+  })}`).catch(() => null);
+  if (sequence !== chapterRailRequest || root !== app.currentProjectPath || !payload) return;
+  bookChapterNodes.value = payload.nodes.filter((node) => node.type === "chapter");
 }
 </script>
 
@@ -193,7 +259,7 @@ async function loadChoices(): Promise<void> {
     </nav>
     <button class="orrery-v3-reader-entry" title="打开正文长卷" @click="windows.openInstrument('reader')"><BookOpenText :size="16" /><span><small>MANUSCRIPT</small><strong>正文长卷</strong></span></button>
     <button class="orrery-v3-delivery-beacon" :class="{ ready: deliveryReady }" :disabled="!deliveryReady" :title="deliveryReady ? '作品已具备交付条件' : '交付条件尚未满足'" @click="windows.openInstrument('delivery')"><PackageCheck :size="17" /><span>{{ deliveryReady ? '可以交付' : '交付待命' }}</span></button>
-    <ChapterRail :chapters="chapterNodes" :selected-node-id="windows.selectedNodeId" @select="focusNode" />
+    <ChapterRail :chapters="chapterNodes" :selected-node-id="activeChapterRailNodeId" @select="openChapterFromRail" />
     <SpatialWindowLayer :projection="projection" :dashboard="props.dashboard" :choices="choices" :delivery="app.delivery" :progress="progress" :prose="prose" @advance="emit('advance')" @inspect-task="emit('inspectTask')" @open-reader="emit('openReader')" @choose="emit('choose', $event)" @focus-node="focusNode" />
   </section>
 </template>

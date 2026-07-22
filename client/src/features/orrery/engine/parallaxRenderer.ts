@@ -5,7 +5,7 @@ import type { OrreryDepth, OrreryMotion, OrreryRenderQuality } from "@/services/
 
 // Book-scale work surface. The world is intentionally generous so a 300+ scene
 // projection can still fit without the camera clamping the last chapters.
-const WORLD_WIDTH = 96000;
+const WORLD_WIDTH = 192000;
 const WORLD_HEIGHT = 22000;
 const ORIGIN = { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 };
 
@@ -184,14 +184,32 @@ export class NarrativeParallaxRenderer {
 
   showOpeningSegment(): void {
     if (!this.layout || !this.projection) return;
+    // A chapter-rail focus may still be easing when the reader changes
+    // grammar. The old interpolation uses a different coordinate system and
+    // can otherwise pull a fresh loop/constellation shot back to an off-screen
+    // or all-book camera after this method has chosen its local opening shot.
+    this.animation = null;
     this.focusedNodeId = "";
     const primary = this.projection.nodes
       .filter((node) => node.type === "chapter" || node.type === "scene")
       .sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
     if (!primary.length) return;
-    const currentIndex = Math.max(0, primary.findIndex((node) => node.status === "current" || node.status === "blocked"));
-    const start = Math.max(0, Math.min(primary.length - 1, currentIndex < 0 ? 0 : currentIndex - 2));
-    const windowed = primary.slice(start, Math.min(primary.length, start + 14));
+    const detectedCurrentIndex = primary.findIndex((node) => node.status === "current" || node.status === "blocked");
+    const currentIndex = detectedCurrentIndex >= 0 ? detectedCurrentIndex : 0;
+    const start = Math.max(0, Math.min(primary.length - 1, currentIndex - 2));
+    const availableWidth = Math.max(480, this.host.clientWidth - 148);
+    // The opening shot is a reading surface, not a miniature of the whole
+    // book.  Keep only the next readable run in view; the full river remains
+    // one click away through fit(), pan and the chapter rail.
+    // A detailed scene view should open as a readable stretch of narrative,
+    // not as a compressed inventory. The rest of the book remains available
+    // through pan, zoom and the permanent chapter rail.
+    const stageGrammar = this.layout.grammar === "stage";
+    const radialGrammar = this.layout.grammar === "loop" || this.layout.grammar === "constellation";
+    const visibleCount = stageGrammar
+      ? 3
+      : Math.max(5, Math.min(7, Math.floor(availableWidth / 172)));
+    const windowed = primary.slice(start, Math.min(primary.length, start + visibleCount));
     const points = windowed
       .map((node) => this.layout?.points.get(node.node_id))
       .filter((point): point is WorldPoint => Boolean(point))
@@ -203,9 +221,12 @@ export class NarrativeParallaxRenderer {
     const maxY = Math.max(...points.map((point) => point.y));
     const width = Math.max(680, maxX - minX + 360);
     const height = Math.max(520, maxY - minY + 420);
-    const availableWidth = Math.max(480, this.host.clientWidth - 148);
     const availableHeight = Math.max(380, this.host.clientHeight - 170);
-    const scale = Math.min(0.98, Math.max(0.16, Math.min(availableWidth / width, availableHeight / height)));
+    // Circular and stellar grammars deliberately place chapters across wide
+    // spatial fields. Their opening shot must favour a readable local orbit;
+    // the full constellation remains an explicit `fit()` action.
+    const minimumScale = stageGrammar ? 0.52 : radialGrammar ? 0.56 : 0.16;
+    const scale = Math.min(0.98, Math.max(minimumScale, Math.min(availableWidth / width, availableHeight / height)));
     this.viewport.moveCenter((minX + maxX) / 2, (minY + maxY) / 2);
     this.viewport.setZoom(scale, true);
     this.emitAnchors(true);
@@ -383,6 +404,7 @@ export class NarrativeParallaxRenderer {
     const primary = new Graphics();
     const secondary = new Graphics();
     const detailProjection = this.projection.level !== "book";
+    const globalBackboneGrammar = this.layout.grammar !== "loop" && this.layout.grammar !== "constellation";
     for (const edge of this.projection.edges) {
       const source = this.layout.points.get(edge.source);
       const target = this.layout.points.get(edge.target);
@@ -397,8 +419,18 @@ export class NarrativeParallaxRenderer {
             ? this.palette.core
             : mix(this.palette.core, this.palette.label, 0.46);
       const backbone = edge.type === "sequence" || edge.type === "bridge";
-      const localEvidence = detailProjection && (edge.source.startsWith("scene:") || edge.target.startsWith("scene:"));
-      const connection = backbone || localEvidence ? primary : secondary;
+      // A detail view can contain every scene in the book. Only evidence
+      // attached to an explicitly focused node deserves foreground treatment;
+      // the rest remains quiet background context until the reader navigates
+      // toward it.
+      const focusedEvidence = Boolean(this.focusedNodeId) && (
+        edge.source === this.focusedNodeId || edge.target === this.focusedNodeId
+      );
+      const localEvidence = detailProjection && focusedEvidence && !backbone;
+      // In a linear grammar the full sequence is the scenery. In a radial
+      // grammar that same all-book sequence becomes a bright tangled mesh, so
+      // only the foreground SVG's currently visible spine speaks clearly.
+      const connection = (backbone && globalBackboneGrammar) || localEvidence ? primary : secondary;
       // A narrative relationship is a route through the field, not a diagram
       // wire. Its stable bend keeps the graph legible across live refreshes.
       const dx = end.x - start.x;
@@ -409,8 +441,11 @@ export class NarrativeParallaxRenderer {
       const bend = Math.min(220, Math.max(26, distance * (backbone ? 0.11 : 0.18))) * curvePolarity(edge.edge_id);
       const controlA = { x: start.x + dx * 0.34 + normalX * bend, y: start.y + dy * 0.34 + normalY * bend };
       const controlB = { x: end.x - dx * 0.34 + normalX * bend, y: end.y - dy * 0.34 + normalY * bend };
-      const width = edge.type === "branch" ? 3.1 : backbone ? 2.8 : localEvidence ? 2.2 : 1.45;
-      const alpha = backbone ? (detailProjection ? 0.78 : 0.52) : localEvidence ? 0.62 : edge.strength > 0.7 ? 0.42 : 0.2;
+      // The SVG foreground layer redraws nearby detail relations when both
+      // endpoints are in view. Keep this GPU layer quiet so distant evidence
+      // reads as atmosphere rather than a thicket of wires across the book.
+      const width = edge.type === "branch" ? 2.3 : backbone ? 2.8 : localEvidence ? 1.15 : 1.1;
+      const alpha = backbone ? (detailProjection ? 0.64 : 0.48) : localEvidence ? 0.38 : edge.strength > 0.7 ? 0.16 : 0.065;
       connection.moveTo(start.x, start.y).bezierCurveTo(controlA.x, controlA.y, controlB.x, controlB.y, end.x, end.y).stroke({ color, width, alpha });
     }
     this.primaryRelations = primary;
@@ -458,7 +493,7 @@ export class NarrativeParallaxRenderer {
     const scale = this.viewport.scale.x;
     const focused = Boolean(this.focusedNodeId);
     this.primaryRelations.alpha = scale >= 0.42 ? 1 : scale >= 0.22 ? 0.62 : 0.38;
-    this.secondaryRelations.alpha = focused ? 0.24 : scale >= 0.66 ? 1 : scale >= 0.38 ? 0.55 : scale >= 0.22 ? 0.2 : 0.055;
+    this.secondaryRelations.alpha = focused ? 0.26 : scale >= 0.82 ? 0.15 : scale >= 0.58 ? 0.06 : scale >= 0.3 ? 0.025 : 0.01;
   }
 
   private tideOffset(node: SpatialNarrativeProjection["nodes"][number], base: { x: number; y: number }): { x: number; y: number } {

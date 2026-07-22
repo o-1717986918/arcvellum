@@ -141,6 +141,25 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(resumed["finished_at"], "")
             launch.assert_called_once_with(run["run_id"])
 
+    def test_explicit_authorization_renewal_updates_the_paused_run_snapshot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = JobStore(root / "studio.sqlite3")
+            original = default_policy("supervised_auto")
+            original["limits"]["max_runtime_hours"] = 1
+            run = store.create_autopilot_run(str(root), mode="supervised_auto", runtime="opencode", policy=original)
+            store.update_autopilot_run(run["run_id"], status="paused", stop_reason="runtime-limit")
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+            renewed = {**original, "limits": {**original["limits"], "max_runtime_hours": 12}}
+
+            result = service.save_policy(root, renewed)
+
+            resumed_policy = store.read_autopilot_run(run["run_id"])["policy"]
+            self.assertEqual(resumed_policy["limits"]["max_runtime_hours"], 12)
+            self.assertEqual(result["run"]["run_id"], run["run_id"])
+            events = store.autopilot_events_since(run["run_id"])
+            self.assertTrue(any(event["event"] == "autopilot.authorization_updated" for event in events))
+
     def test_runtime_failure_recovers_complete_sandbox_before_retrying(self):
         class RecoveringWorker:
             run_calls = 0

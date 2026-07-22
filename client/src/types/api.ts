@@ -135,7 +135,7 @@ export interface NarrativeNode {
   source_type: string;
   source_id: string;
   navigate: string;
-  metrics: Record<string, number>;
+  metrics: Record<string, number | string>;
   order: number;
 }
 

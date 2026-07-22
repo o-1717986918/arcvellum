@@ -5,6 +5,7 @@ import { api, connectEventStream, query, type EventStreamConnection } from "@/se
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy } from "@/types/api";
 
+const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
 const store = useAppStore();
 const snapshot = ref<AutopilotStatus | null>(null);
 const busy = ref(false);
@@ -15,12 +16,24 @@ const lastActivityAt = ref("");
 const repairCount = ref(0);
 const tick = ref(Date.now());
 const streamStartedAt = ref(0);
+const renewalLimits = ref({ max_tasks: 500, max_runtime_hours: 24, max_consecutive_revisions: 3, max_failures_per_task: 2, max_cost: 100 });
 let events: EventStreamConnection | null = null;
 let clock = 0;
 
 const run = computed(() => snapshot.value?.run || null);
 const running = computed(() => run.value?.status === "running");
 const mode = computed(() => snapshot.value?.policy.mode || "collaborative");
+const authorizationLimit = computed(() => {
+  const reason = String(run.value?.stop_reason || "");
+  return ["task-limit", "runtime-limit", "cost-limit", "revision-limit", "authorization-expired"].includes(reason) ? reason : "";
+});
+const authorizationLimitText = computed(() => ({
+  "task-limit": "本轮完成任务数已达到你的授权上限。",
+  "runtime-limit": "本轮连续运行时长已达到你的授权上限。",
+  "cost-limit": "本轮预估费用已达到你的授权上限。",
+  "revision-limit": "连续修订次数已达到你的授权上限。",
+  "authorization-expired": "本轮授权已到期。",
+} as Record<string, string>)[authorizationLimit.value] || "");
 const elapsedText = computed(() => {
   tick.value;
   const started = streamStartedAt.value;
@@ -60,11 +73,24 @@ async function load(): Promise<void> {
   if (!store.currentProjectPath) return;
   try {
     snapshot.value = await api<AutopilotStatus>(`/autopilot/status?${query({ project_root: store.currentProjectPath })}`);
+    syncRenewalLimits();
     store.setAutopilotStatus(snapshot.value);
     if (snapshot.value.run?.status === "running") startStream(snapshot.value.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "暂时无法读取连续创作状态。");
   }
+}
+
+function syncRenewalLimits(): void {
+  const limits = snapshot.value?.policy.limits;
+  if (!limits) return;
+  renewalLimits.value = {
+    max_tasks: Number(limits.max_tasks || 500),
+    max_runtime_hours: Number(limits.max_runtime_hours || 24),
+    max_consecutive_revisions: Number(limits.max_consecutive_revisions || 3),
+    max_failures_per_task: Number(limits.max_failures_per_task || 2),
+    max_cost: Number(limits.max_cost || 0),
+  };
 }
 
 async function selectMode(next: AutopilotMode): Promise<void> {
@@ -137,6 +163,36 @@ async function resume(): Promise<void> {
     startStream(result.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "暂时无法继续创作。");
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function renewAuthorization(): Promise<void> {
+  if (!snapshot.value || !run.value || busy.value) return;
+  busy.value = true;
+  try {
+    const policy: DelegationPolicy = {
+      ...snapshot.value.policy,
+      limits: {
+        max_tasks: Math.max(1, Math.trunc(renewalLimits.value.max_tasks || 1)),
+        max_runtime_hours: Math.max(0.1, Number(renewalLimits.value.max_runtime_hours || 0.1)),
+        max_consecutive_revisions: Math.max(1, Math.trunc(renewalLimits.value.max_consecutive_revisions || 1)),
+        max_failures_per_task: Math.max(0, Math.trunc(renewalLimits.value.max_failures_per_task || 0)),
+        max_cost: Math.max(0, Number(renewalLimits.value.max_cost || 0)),
+      },
+    };
+    const saved = await api<{ policy: DelegationPolicy; run?: AutopilotRun }>("/autopilot/policy", {
+      method: "PUT",
+      body: JSON.stringify({ project_root: store.currentProjectPath, policy }),
+    });
+    snapshot.value.policy = saved.policy;
+    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, { method: "POST" });
+    snapshot.value.run = result.run;
+    store.setAutopilotRun(result.run);
+    startStream(result.run.run_id);
+  } catch (cause) {
+    store.error = friendlyError(cause, "新的授权范围暂时无法生效。");
   } finally {
     busy.value = false;
   }
@@ -223,7 +279,7 @@ function routeText(route: string): string {
 </script>
 
 <template>
-  <section class="autopilot-panel">
+  <section class="autopilot-panel" :class="{ compact: props.compact }">
     <header>
       <div><span class="eyebrow">创作模式</span><h2>你想怎样和 ArcVellum 一起写</h2></div>
       <span class="autopilot-state" :data-state="run?.status || 'idle'">
@@ -271,5 +327,17 @@ function routeText(route: string): string {
       <ShieldAlert :size="16" />
       <span>我授权创作代理处理日常选择并生成最终交付；遇到设定冲突、质量反复失败或预算上限时必须停下。</span>
     </label>
+    <section v-if="authorizationLimit && !running" class="autopilot-renewal" aria-live="polite">
+      <header><ShieldAlert :size="17" /><div><span>授权需要续期</span><strong>{{ authorizationLimitText }}</strong></div></header>
+      <p>这不是系统故障。调整以下范围后，ArcVellum 会把你的新授权写入当前这轮任务，再从暂停点继续。</p>
+      <div class="autopilot-renewal-fields">
+        <label>最多任务<input v-model.number="renewalLimits.max_tasks" min="1" step="1" type="number" /></label>
+        <label>最长运行时数<input v-model.number="renewalLimits.max_runtime_hours" min="0.1" step="0.5" type="number" /></label>
+        <label>连续修订上限<input v-model.number="renewalLimits.max_consecutive_revisions" min="1" step="1" type="number" /></label>
+        <label>单任务失败上限<input v-model.number="renewalLimits.max_failures_per_task" min="0" step="1" type="number" /></label>
+        <label>预算上限（USD，0 为不限制）<input v-model.number="renewalLimits.max_cost" min="0" step="1" type="number" /></label>
+      </div>
+      <button class="primary-button" :disabled="busy" @click="renewAuthorization"><RefreshCw :size="15" />更新授权并继续</button>
+    </section>
   </section>
 </template>

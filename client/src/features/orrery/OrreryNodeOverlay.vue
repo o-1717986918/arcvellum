@@ -17,7 +17,10 @@ const visible = computed(() => {
   const candidates = props.nodes
     .filter((node) => {
       const anchor = props.anchors[node.node_id];
-      return Boolean(anchor?.visible) && (node.detail_level !== "far" || isPinned(node));
+      // Primary narrative beats never disappear from a full-book projection.
+      // At distant camera scales they become compact glyphs; their text returns
+      // only once the reader enters a sufficiently roomy local segment.
+      return Boolean(anchor?.visible) && (isPrimary(node) || node.detail_level !== "far" || isPinned(node));
     })
     .sort((left, right) => nodePriority(right) - nodePriority(left));
   const accepted: SpatialNarrativeNode[] = [];
@@ -27,6 +30,10 @@ const visible = computed(() => {
     const anchor = props.anchors[node.node_id];
     if (!anchor) continue;
     const rectangle = labelRectangle(node, anchor);
+    if (isPrimary(node) && isOverview(node)) {
+      accepted.push(node);
+      continue;
+    }
     // Current work and the selected node are never suppressed. Other labels
     // must earn a place in the viewport instead of overlapping into noise.
     if (!isPinned(node) && occupied.some((item) => rectanglesOverlap(item, rectangle))) continue;
@@ -49,8 +56,16 @@ function isPinned(node: SpatialNarrativeNode): boolean {
     || node.node_id === props.focusNodeId
     || node.status === "current"
     || node.status === "blocked"
-    || node.type === "chapter"
-    || (props.level !== "book" && node.type === "scene");
+    || node.type === "chapter";
+}
+
+function isPrimary(node: SpatialNarrativeNode): boolean {
+  return node.type === "chapter" || node.type === "scene";
+}
+
+function isOverview(node: SpatialNarrativeNode): boolean {
+  const anchor = props.anchors[node.node_id];
+  return Boolean(anchor && anchor.scale < 0.59);
 }
 
 function labelRectangle(node: SpatialNarrativeNode, anchor: { x: number; y: number; scale: number }): { left: number; right: number; top: number; bottom: number } {
@@ -98,11 +113,10 @@ function motionClass(node: SpatialNarrativeNode): Record<string, boolean> {
 }
 
 function overviewClass(node: SpatialNarrativeNode): Record<string, boolean> {
-  const anchor = props.anchors[node.node_id];
   // Nodes remain rendered and keyboard-accessible in the global overview.
   // Only text below the legibility threshold is suppressed; it returns as the
   // camera enters a readable local segment.
-  return { overview: Boolean(anchor && anchor.scale < 0.56) };
+  return { overview: isOverview(node) };
 }
 
 function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {

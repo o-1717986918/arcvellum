@@ -81,6 +81,33 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.assertNotIn("y", scene)
         self.assertGreaterEqual(projection["summary"]["cluster_count"], 1)
 
+    def test_detail_levels_keep_the_whole_book_on_one_scene_river(self):
+        library = {"sections": {key: list(value) if isinstance(value, list) else value for key, value in self.library["sections"].items()}}
+        library["sections"]["scenes"].append(
+            {
+                "id": "scene_0003",
+                "title": "越过旧桥",
+                "path": "scenes/scene_0003.yaml",
+                "facts": [
+                    {"label": "章节", "value": "chapter_0002"},
+                    {"label": "目标字数", "value": "1600"},
+                ],
+            }
+        )
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
+            root = Path(temporary)
+            chapter = build_narrative_projection_v3(
+                {}, root, level="chapter", focus="chapter_0001", library_payload=library, dashboard_payload=self.dashboard,
+            )
+            scene = build_narrative_projection_v3(
+                {}, root, level="scene", focus="scene_0002", library_payload=library, dashboard_payload=self.dashboard,
+            )
+        for projection in (chapter, scene):
+            scene_ids = {node["node_id"] for node in projection["nodes"] if node["type"] == "scene"}
+            self.assertEqual(scene_ids, {"scene:scene_0001", "scene:scene_0002", "scene:scene_0003"})
+        focused_scene = next(node for node in scene["nodes"] if node["node_id"] == "scene:scene_0002")
+        self.assertEqual(focused_scene["metrics"]["chapter_id"], "chapter_0001")
+
     def test_auto_grammar_and_detail_are_safe_and_evidence_bound(self):
         projection = self._projection(level="scene", focus="scene_0001")
         self.assertEqual(projection["spatial_grammar"], "stage")

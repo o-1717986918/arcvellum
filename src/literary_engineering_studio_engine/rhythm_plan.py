@@ -12,10 +12,45 @@ from typing import Any
 from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract, normalize_tension_curve
 
 
-RHYTHM_PLAN_SCHEMA = "literary-engineering-workbench/rhythm-plan/v0.1"
+RHYTHM_PLAN_SCHEMA = "literary-engineering-workbench/rhythm-plan/v0.2"
 PACE_VALUES = {"slow", "slow_to_fast", "balanced", "fast_to_slow", "fast"}
 ROLE_VALUES = {"setup", "transition", "information", "emotion", "conflict", "action", "turn", "aftermath", "mixed"}
 DETAIL_LEVEL_VALUES = {"summary", "lean", "standard", "expanded", "set_piece"}
+
+# The book profile is intentionally a small editorial instrument.  It tells the
+# worker what kind of long-form reading experience the user wants without
+# flattening the existing, scene-level rhythm contract into a template.
+BOOK_PROFILE_PRESETS: dict[str, dict[str, Any]] = {
+    "layered": {
+        "arc": {"opening": 2, "ascent": 3, "midpoint": 4, "crisis": 3, "finale": 5},
+        "breathing_interval": 3,
+        "set_piece_ratio": 18,
+        "narrative_distance": "varied",
+        "ending_policy": "varied",
+    },
+    "balanced": {
+        "arc": {"opening": 2, "ascent": 3, "midpoint": 4, "crisis": 4, "finale": 5},
+        "breathing_interval": 2,
+        "set_piece_ratio": 20,
+        "narrative_distance": "balanced",
+        "ending_policy": "varied",
+    },
+    "pulse": {
+        "arc": {"opening": 3, "ascent": 4, "midpoint": 3, "crisis": 5, "finale": 5},
+        "breathing_interval": 2,
+        "set_piece_ratio": 26,
+        "narrative_distance": "close_varied",
+        "ending_policy": "momentum",
+    },
+    "contemplative": {
+        "arc": {"opening": 2, "ascent": 2, "midpoint": 4, "crisis": 3, "finale": 4},
+        "breathing_interval": 4,
+        "set_piece_ratio": 14,
+        "narrative_distance": "observant",
+        "ending_policy": "afterglow",
+    },
+}
+DEFAULT_BOOK_PROFILE_ID = "layered"
 
 
 def rhythm_plan_path(root: Path) -> Path:
@@ -26,6 +61,7 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
     root = root.resolve()
     stored = _read_json(rhythm_plan_path(root))
     stored_scenes = stored.get("scenes") if isinstance(stored.get("scenes"), dict) else {}
+    book_profile = normalize_book_profile(stored.get("book_profile"))
     entries: list[dict[str, Any]] = []
     for path in sorted((root / "scenes").glob("*.yaml")) if (root / "scenes").is_dir() else []:
         if path.name.startswith("_"):
@@ -64,6 +100,13 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
     for volume_id in sorted({str(entry["volume_id"]) for entry in entries}):
         volume_entries = [entry for entry in entries if entry["volume_id"] == volume_id]
         volumes[volume_id] = analyze_narrative_rhythm_sequence(volume_entries)
+    book_audit = analyze_narrative_rhythm_sequence(entries)
+    macro = _book_macro(entries, book_profile)
+    book_audit["macro"] = macro
+    book_audit["issues"] = [*book_audit.get("issues", []), *macro["issues"]]
+    if book_audit.get("status") == "pass" and macro["issues"]:
+        book_audit["status"] = "needs_attention"
+        book_audit["warning_count"] = int(book_audit.get("warning_count") or 0) + len(macro["issues"])
     return {
         "schema": RHYTHM_PLAN_SCHEMA,
         "revision": int(stored.get("revision") or 0),
@@ -72,12 +115,18 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
         "entries": entries,
         "chapters": chapters,
         "volumes": volumes,
-        "book": analyze_narrative_rhythm_sequence(entries),
+        "book": book_audit,
+        "book_profile": book_profile,
         "stored": bool(stored),
     }
 
 
-def save_rhythm_plan(root: Path, entries: list[dict[str, Any]], updated_by: str = "studio-user") -> dict[str, Any]:
+def save_rhythm_plan(
+    root: Path,
+    entries: list[dict[str, Any]],
+    updated_by: str = "studio-user",
+    book_profile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     root = root.resolve()
     known = {_scalar(path.read_text(encoding="utf-8", errors="ignore"), "scene_id") or path.stem for path in (root / "scenes").glob("*.yaml")}
     normalized: dict[str, dict[str, Any]] = {}
@@ -110,7 +159,8 @@ def save_rhythm_plan(root: Path, entries: list[dict[str, Any]], updated_by: str 
             "spatial_time_gap_before": time_gap,
         }
     previous = _read_json(rhythm_plan_path(root))
-    digest = hashlib.sha256(json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    normalized_profile = normalize_book_profile(book_profile if book_profile is not None else previous.get("book_profile"))
+    digest = hashlib.sha256(json.dumps({"scenes": normalized, "book_profile": normalized_profile}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     previous_digest = str(previous.get("digest") or "")
     revision = int(previous.get("revision") or 0) + (1 if digest != previous_digest else 0)
     payload = {
@@ -119,10 +169,137 @@ def save_rhythm_plan(root: Path, entries: list[dict[str, Any]], updated_by: str 
         "digest": digest,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "updated_by": updated_by,
+        "book_profile": normalized_profile,
         "scenes": normalized,
     }
     _write_json_atomic(rhythm_plan_path(root), payload)
     return load_rhythm_plan(root)
+
+
+def normalize_book_profile(value: object) -> dict[str, Any]:
+    """Return a bounded, backward-compatible full-book rhythm intent."""
+
+    supplied = value if isinstance(value, dict) else {}
+    profile_id = str(supplied.get("profile_id") or DEFAULT_BOOK_PROFILE_ID).strip().lower()
+    if profile_id not in BOOK_PROFILE_PRESETS:
+        profile_id = DEFAULT_BOOK_PROFILE_ID
+    defaults = BOOK_PROFILE_PRESETS[profile_id]
+    raw_arc = supplied.get("arc") if isinstance(supplied.get("arc"), dict) else {}
+    arc = {
+        key: _tension(raw_arc.get(key), int(defaults["arc"][key]))
+        for key in ("opening", "ascent", "midpoint", "crisis", "finale")
+    }
+    breathing_interval = _whole_number(supplied.get("breathing_interval"), int(defaults["breathing_interval"]), 1, 8)
+    set_piece_ratio = _whole_number(supplied.get("set_piece_ratio"), int(defaults["set_piece_ratio"]), 5, 45)
+    distance = str(supplied.get("narrative_distance") or defaults["narrative_distance"]).strip().lower()
+    if distance not in {"balanced", "varied", "close_varied", "observant"}:
+        distance = str(defaults["narrative_distance"])
+    ending = str(supplied.get("ending_policy") or defaults["ending_policy"]).strip().lower()
+    if ending not in {"varied", "momentum", "afterglow", "quiet"}:
+        ending = str(defaults["ending_policy"])
+    directive = str(supplied.get("directive") or "").strip()[:500]
+    return {
+        "profile_id": profile_id,
+        "arc": arc,
+        "breathing_interval": breathing_interval,
+        "set_piece_ratio": set_piece_ratio,
+        "narrative_distance": distance,
+        "ending_policy": ending,
+        "directive": directive,
+    }
+
+
+def _book_macro(entries: list[dict[str, Any]], profile: dict[str, Any]) -> dict[str, Any]:
+    chapter_ids = _ordered_unique(entry.get("chapter_id") for entry in entries)
+    expected = _interpolate_arc(profile["arc"], len(chapter_ids))
+    actual: list[int] = []
+    issues: list[dict[str, Any]] = []
+    for chapter_id in chapter_ids:
+        chapter_entries = [entry for entry in entries if entry.get("chapter_id") == chapter_id]
+        peaks = [int((entry.get("tension_curve") or {}).get("peak") or 3) for entry in chapter_entries]
+        actual.append(max(peaks, default=3))
+    if len(actual) >= 4:
+        mismatch = [chapter_ids[index] for index, value in enumerate(actual) if abs(value - expected[index]) >= 2]
+        if len(mismatch) >= max(2, len(actual) // 3):
+            issues.append(_macro_issue("macro_curve_drift", mismatch, "实际章节峰值长期偏离全书意图曲线；请确认是有意反转，还是需要调整重点场和张力分布。"))
+        run = max(_high_pressure_run(actual), default=0)
+        if run >= profile["breathing_interval"] + 2:
+            issues.append(_macro_issue("macro_breathing_gap", chapter_ids, "高压章节连续过长，未按设定保留叙事呼吸与后果落点。"))
+    scene_count = len(entries)
+    set_pieces = sum(1 for entry in entries if entry.get("detail_level") == "set_piece")
+    actual_ratio = round((set_pieces / scene_count) * 100) if scene_count else 0
+    if scene_count >= 5 and abs(actual_ratio - int(profile["set_piece_ratio"])) >= 14:
+        issues.append(_macro_issue("macro_detail_distribution", [], "重点场比例与全书详略设定差异较大；请检查是否把过场写得过重，或把关键代价压缩掉。"))
+    return {
+        "expected_curve": expected,
+        "actual_curve": actual,
+        "chapter_ids": chapter_ids,
+        "scene_count": scene_count,
+        "set_piece_count": set_pieces,
+        "set_piece_ratio": actual_ratio,
+        "issues": issues,
+    }
+
+
+def _interpolate_arc(arc: dict[str, Any], count: int) -> list[int]:
+    if count <= 0:
+        return []
+    keys = ("opening", "ascent", "midpoint", "crisis", "finale")
+    anchors = [_tension(arc.get(key), 3) for key in keys]
+    if count == 1:
+        return [anchors[0]]
+    values: list[int] = []
+    for index in range(count):
+        position = index / (count - 1)
+        scaled = position * (len(anchors) - 1)
+        left = min(len(anchors) - 1, int(scaled))
+        right = min(len(anchors) - 1, left + 1)
+        ratio = scaled - left
+        values.append(max(1, min(5, round(anchors[left] + (anchors[right] - anchors[left]) * ratio))))
+    return values
+
+
+def _ordered_unique(values: Any) -> list[str]:
+    unique = {str(value or "unassigned") for value in values}
+    return sorted(unique, key=_natural_key)
+
+
+def _natural_key(value: str) -> tuple[Any, ...]:
+    import re
+    return tuple(int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", value))
+
+
+def _high_pressure_run(values: list[int]) -> list[int]:
+    runs: list[int] = []
+    length = 0
+    for value in values:
+        if value >= 4:
+            length += 1
+        else:
+            if length:
+                runs.append(length)
+            length = 0
+    if length:
+        runs.append(length)
+    return runs
+
+
+def _macro_issue(code: str, scene_ids: list[str], message: str) -> dict[str, Any]:
+    return {"code": code, "severity": "warning", "scene_ids": scene_ids, "message": message}
+
+
+def _tension(value: object, default: int) -> int:
+    try:
+        return min(5, max(1, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _whole_number(value: object, default: int, low: int, high: int) -> int:
+    try:
+        return min(high, max(low, int(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _strings(value: object) -> list[str]:

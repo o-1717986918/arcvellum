@@ -203,12 +203,121 @@ def _parse_scene_inventory(text: str) -> list[dict[str, object]]:
                 "obligation": cells[10],
             }
         )
+    # The current task contract asks for a compact table because it is the
+    # safest exchange format for a deterministic materializer.  Earlier
+    # Studio runs, however, already produced a useful card-based inventory:
+    # a chapter heading, a scene heading, then a two-column field table.  It
+    # contains the same structured facts and must not be discarded merely
+    # because its visual presentation is different.  Accept that bounded
+    # legacy shape while still rejecting arbitrary prose lists.
     if not scenes:
-        raise ValueError("scene inventory contains no machine-readable scene rows")
+        scenes = _parse_card_scene_inventory(text)
+    if not scenes:
+        raise ValueError(
+            "scene inventory contains no machine-readable scene rows; use the required scene table or a heading-plus-field-card inventory"
+        )
     ids = [str(scene["scene_id"]) for scene in scenes]
     if len(ids) != len(set(ids)):
         raise ValueError("scene inventory contains duplicate scene ids")
     return scenes
+
+
+def _parse_card_scene_inventory(text: str) -> list[dict[str, object]]:
+    """Parse the previous Studio scene-card format into the formal contract.
+
+    A recognised card has a ``#### s_01_01 | Title`` heading inside a chapter
+    heading and a following two-column field table.  Requiring the identifying
+    heading plus the core planning fields keeps this intentionally narrow: a
+    narrative outline cannot accidentally masquerade as a materializable scene
+    inventory.
+    """
+
+    chapter_id = "chapter_0001"
+    volume_id = "volume_01"
+    chapter_title = ""
+    cards: list[dict[str, object]] = []
+    active: dict[str, str] | None = None
+    ordinal = 0
+
+    def flush() -> None:
+        nonlocal ordinal, active
+        if active is None:
+            return
+        fields = active["fields"]
+        assert isinstance(fields, dict)
+        target = _number(str(fields.get("目标汉字字符") or fields.get("目标中文内容字符") or "0"))
+        function = _field_text(fields, "功能")
+        participants = _field_text(fields, "参与角色")
+        conflict = _field_text(fields, "冲突")
+        information = _field_text(fields, "信息释放")
+        consequence = _field_text(fields, "行动后果")
+        rhythm = _field_text(fields, "节奏角色")
+        if target > 0 and function and participants and conflict and information and consequence and rhythm:
+            ordinal += 1
+            cards.append(
+                {
+                    "scene_id": f"scene_{ordinal:04d}",
+                    "source_scene_id": active["source_scene_id"],
+                    "name": active["name"],
+                    "chapter_id": active["chapter_id"],
+                    "chapter_title": active["chapter_title"],
+                    "volume_id": active["volume_id"],
+                    "target_chars": target,
+                    "function": function,
+                    "participants": _split_people(participants),
+                    "conflict": conflict,
+                    "information_release": information,
+                    "consequence": consequence,
+                    "setup_payoff_role": _field_text(fields, "设置伏笔") or _field_text(fields, "回收伏笔"),
+                    "rhythm_role": rhythm,
+                    "obligation": _field_text(fields, "读者义务"),
+                }
+            )
+        active = None
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        volume_match = re.match(r"^##\s+(?:卷|第\s*([一二三四五六七八九十0-9]+)\s*卷)", line)
+        if volume_match:
+            number = _number(volume_match.group(1) or line)
+            volume_id = f"volume_{number:02d}"
+            continue
+        chapter_match = re.match(r"^###\s+(?:chapter[_-]?|Ch\s*)0*(\d+)\s*(?:[|—-]\s*(.*?))?$", line, re.IGNORECASE)
+        if chapter_match:
+            flush()
+            chapter_id = f"chapter_{int(chapter_match.group(1)):04d}"
+            chapter_title = str(chapter_match.group(2) or "").strip()
+            continue
+        scene_match = re.match(r"^####\s+((?:s|sc|scene)[_-]?\d+(?:[_-]\d+)*)\s*[|—-]\s*(.+?)\s*$", line, re.IGNORECASE)
+        if scene_match:
+            flush()
+            active = {
+                "source_scene_id": scene_match.group(1),
+                "name": scene_match.group(2).strip(),
+                "chapter_id": chapter_id,
+                "chapter_title": chapter_title,
+                "volume_id": volume_id,
+                "fields": {},
+            }
+            continue
+        if active is None or not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 2 or cells[0] in {"字段", "---", "---:"}:
+            continue
+        label = re.sub(r"[*`_\s]", "", cells[0])
+        value = cells[1].strip()
+        if label and value and not set(label) <= {"-", ":"}:
+            fields = active["fields"]
+            assert isinstance(fields, dict)
+            fields[label] = value
+    flush()
+    return cards
+
+
+def _field_text(fields: dict[str, str], label: str) -> str:
+    value = str(fields.get(label) or "").strip()
+    return value if value not in {"无", "-", "暂无"} else ""
 
 
 def _parse_chapter_obligations(text: str) -> dict[str, dict[str, str]]:

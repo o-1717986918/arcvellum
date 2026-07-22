@@ -2,6 +2,13 @@ import type { SpatialGrammar, SpatialLayout, SpatialNarrativeNode, WorldPoint } 
 
 const PRIMARY = new Set(["chapter", "scene"]);
 const NARRATIVE_TYPES = new Set(["chapter", "scene"]);
+// A primary node needs enough room for both its physical glyph and a short
+// label at the opening camera scale.  This is deliberately larger than the
+// global-map cadence: the overview can zoom out, while a working segment must
+// remain inspectable without immediately reaching for the zoom wheel.
+const CHAPTER_STEP = 4.25;
+const SCENE_STEP = 1.2;
+const CHAPTER_CLUSTER_GAP = 5.45;
 
 interface LayoutContext {
   primary: SpatialNarrativeNode[];
@@ -10,8 +17,17 @@ interface LayoutContext {
   primaryRank: Map<string, number>;
   sceneRank: Map<string, number>;
   chapterRank: Map<string, number>;
+  sceneClusters: Map<string, SceneCluster>;
+  sceneClusterCount: number;
   rhythm: Map<string, NarrativeBeat>;
   temporalAxis: Map<string, number>;
+}
+
+interface SceneCluster {
+  id: string;
+  rank: number;
+  localRank: number;
+  size: number;
 }
 
 interface NarrativeBeat {
@@ -61,6 +77,7 @@ export function buildSpatialLayout(grammar: SpatialGrammar, revision: string, no
 function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
   const scenes = primary.filter((node) => node.type === "scene");
   const chapters = primary.filter((node) => node.type === "chapter");
+  const sceneClusters = buildSceneClusters(scenes);
   const rhythm = smoothNarrativeBeats(primary);
   return {
     primary,
@@ -69,14 +86,19 @@ function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
     primaryRank: new Map(primary.map((node, index) => [node.node_id, index])),
     sceneRank: new Map(scenes.map((node, index) => [node.node_id, index])),
     chapterRank: new Map(chapters.map((node, index) => [node.node_id, index])),
+    sceneClusters,
+    sceneClusterCount: new Set([...sceneClusters.values()].map((cluster) => cluster.id)).size,
     rhythm,
-    temporalAxis: buildTemporalAxis(primary, rhythm),
+    temporalAxis: buildTemporalAxis(primary, rhythm, sceneClusters),
   };
 }
 
 function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallbackIndex: number, context: LayoutContext): WorldPoint {
   const isChapter = node.type === "chapter";
   const rank = isChapter ? context.chapterRank.get(node.node_id) ?? fallbackIndex : context.sceneRank.get(node.node_id) ?? fallbackIndex;
+  const cluster = isChapter ? undefined : context.sceneClusters.get(node.node_id);
+  const visualRank = cluster?.rank ?? rank;
+  const visualCount = isChapter ? context.chapters.length : cluster ? context.sceneClusterCount : context.primary.length;
   // Every primary projection owns a stable ordinal. The old implementation
   // multiplied chapter ordinals into a high-frequency sine/cosine wave. Long
   // books therefore curled back across themselves and then had to be squeezed
@@ -87,10 +109,16 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
   const phase = timeline * 0.34;
   const axis = context.temporalAxis.get(node.node_id) ?? narrativeAxis(timeline);
   const beat = context.rhythm.get(node.node_id) || narrativeBeat(node, rank, context.primary.length);
-  const contour = bookContour(rank, context.primary.length);
+  const contour = bookContour(visualRank, visualCount);
   const lift = rhythmLift(beat);
   const depth = narrativeDepth(timeline) + (isChapter ? 0.38 : 0) + lift * 0.22;
-  const rise = narrativeRise(timeline) + contour * 0.58 + lift;
+  // This is a forward-moving cadence, not a repeating map ornament. It gives
+  // a long scene sequence room to inhale and release without ever folding the
+  // reading order back over itself.
+  const cadence = cluster
+    ? Math.sin(cluster.localRank * 1.16 + cluster.rank * 0.43) * 0.15 + Math.sin(cluster.rank * 0.57 + 0.7) * 0.2
+    : Math.sin(phase * 0.88) * 0.31 + Math.sin(phase * 0.31 + 0.7) * 0.19;
+  const rise = narrativeRise(timeline) + contour * 0.58 + lift + cadence;
   const arc = Math.sin(phase * 0.82);
   const swell = Math.cos(phase * 0.96);
 
@@ -103,23 +131,44 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
     return { x: axis, y: 1.08 + rise - stratum * 0.66, z: depth + (rank % 12 - 5.5) * 0.11 };
   }
   if (grammar === "constellation") {
-    const groupAngle = phase * 0.9 - Math.PI * 0.65;
-    const groupRadius = 4.6 + Math.sqrt(Math.max(1, timeline)) * 0.92;
+    // A constellation should read as a stellar route, not three alternating
+    // spokes. Earlier arms reassigned every next chapter to another side of
+    // the stage, which forced the chronological curve into sharp zigzags.
+    // This is a bounded Archimedean drift: a chapter cluster advances through
+    // one broad stellar arc while a low-frequency wave supplies visual breath.
+    const progress = visualCount <= 1 ? 0 : visualRank / Math.max(1, visualCount - 1);
+    const groupAngle = -2.42 + progress * Math.PI * 1.18 + Math.sin(progress * Math.PI * 2) * 0.14;
+    const orbitalBreath = Math.sin(progress * Math.PI * 3.1 + 0.42) * 0.78;
+    const groupRadius = 7.1 + visualRank * 1.24 + Math.sin(progress * Math.PI) * 1.75 + orbitalBreath;
+    const localAngle = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.12 : 0;
+    const localRadius = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.5 : 0;
     return {
-      x: Math.cos(groupAngle) * groupRadius,
-      y: 1.2 + arc * 0.66,
-      z: Math.sin(groupAngle) * groupRadius + depth * 0.28,
+      x: Math.cos(groupAngle + localAngle) * (groupRadius + localRadius),
+      y: 1.2 + arc * 0.44 + cadence + orbitalBreath * 0.12,
+      z: Math.sin(groupAngle + localAngle) * (groupRadius + localRadius) + depth * 0.28,
     };
   }
   if (grammar === "loop") {
-    const angle = timeline * 0.33 - Math.PI * 0.72;
-    const radius = 8.6 + Math.floor(rank / 18) * 0.78;
-    return { x: Math.cos(angle) * radius, y: 1.1 + arc * 0.46, z: Math.sin(angle) * radius + depth * 0.22 };
+    // A single expanding orbit carries recurring motifs forward. Radius grows
+    // with chapter clusters, not every fifteenth scene, so a 70-chapter book
+    // never folds its far future back across the opening shot.
+    const angle = (visualRank + 1) * 0.61 - Math.PI * 0.72;
+    const radius = 7.6 + visualRank * 0.76;
+    const localAngle = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.115 : 0;
+    const localRadius = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.54 : 0;
+    return { x: Math.cos(angle + localAngle) * (radius + localRadius), y: 1.1 + arc * 0.34 + cadence, z: Math.sin(angle + localAngle) * (radius + localRadius) + depth * 0.22 };
   }
   if (grammar === "stage") {
-    const act = Math.floor((timeline - 1) / 6);
-    const withinAct = ((timeline - 1) % 6) / 5;
-    return { x: (withinAct - 0.5) * 10.4, y: 1.2 + arc * 0.62, z: 7.7 - act * 3.32 + swell * 0.34 };
+    // A stage is made of chapter-sized playing areas. Its scenes rehearse
+    // inside the same area; the next chapter moves to a clearly separate bay
+    // instead of taking the next arbitrary grid slot.
+    const columns = 6;
+    const chapterColumn = visualRank % columns;
+    const chapterRow = Math.floor(visualRank / columns);
+    const withinAct = cluster && cluster.size > 1 ? cluster.localRank / (cluster.size - 1) : 0.5;
+    const stageX = (chapterColumn - (columns - 1) / 2) * 15;
+    const stageZ = 8 - chapterRow * 10.8 + Math.sin(chapterColumn * 0.8) * 0.45;
+    return { x: stageX + (withinAct - 0.5) * 4.4, y: 1.2 + arc * 0.42 + cadence, z: stageZ + swell * 0.34 };
   }
   // Spine: a single advancing narrative river. Its x-axis is strictly
   // monotonic, while the y/z contour reads the formal rhythm plan: tension
@@ -137,7 +186,7 @@ function narrativeAxis(timeline: number): number {
   // Linear spacing preserves a legible local cadence as a project grows.
   // It depends only on the entity ordinal, so adding a later chapter leaves
   // every established position untouched.
-  return (Math.max(1, timeline) - 1) * 0.72 - 4.8;
+  return (Math.max(1, timeline) - 1) * SCENE_STEP - 4.8;
 }
 
 function narrativeDepth(timeline: number): number {
@@ -193,18 +242,45 @@ function smoothNarrativeBeats(nodes: SpatialNarrativeNode[]): Map<string, Narrat
   }));
 }
 
-function buildTemporalAxis(nodes: SpatialNarrativeNode[], rhythm: Map<string, NarrativeBeat>): Map<string, number> {
+function buildTemporalAxis(nodes: SpatialNarrativeNode[], rhythm: Map<string, NarrativeBeat>, sceneClusters: Map<string, SceneCluster>): Map<string, number> {
   const axis = new Map<string, number>();
   let position = -4.8;
   nodes.forEach((node, index) => {
     if (index) {
       const previous = rhythm.get(nodes[index - 1].node_id);
       const current = rhythm.get(node.node_id);
-      position += 0.72 * temporalSpacing(previous, current);
+      const cluster = sceneClusters.get(node.node_id);
+      const previousCluster = sceneClusters.get(nodes[index - 1].node_id);
+      const baseStep = node.type === "chapter"
+        ? CHAPTER_STEP
+        : cluster && previousCluster && cluster.id !== previousCluster.id
+          ? CHAPTER_CLUSTER_GAP
+          : SCENE_STEP;
+      position += baseStep * temporalSpacing(previous, current);
     }
     axis.set(node.node_id, position);
   });
   return axis;
+}
+
+function buildSceneClusters(scenes: SpatialNarrativeNode[]): Map<string, SceneCluster> {
+  const groups = new Map<string, SpatialNarrativeNode[]>();
+  for (const scene of scenes) {
+    // Older projects without a chapter field remain one continuous route.
+    // Canonical scene contracts carry chapter_id, which creates the real
+    // book-scale visual clusters used by detailed views.
+    const chapterId = String(scene.metrics.chapter_id || "__unassigned__");
+    const group = groups.get(chapterId) || [];
+    group.push(scene);
+    groups.set(chapterId, group);
+  }
+  const result = new Map<string, SceneCluster>();
+  [...groups.entries()].forEach(([id, group], rank) => {
+    group.forEach((scene, localRank) => {
+      result.set(scene.node_id, { id, rank, localRank, size: group.length });
+    });
+  });
+  return result;
 }
 
 function temporalSpacing(previous?: NarrativeBeat, current?: NarrativeBeat): number {
@@ -221,7 +297,7 @@ function temporalSpacing(previous?: NarrativeBeat, current?: NarrativeBeat): num
 }
 
 function clampSpacing(value: number): number {
-  return Math.max(0.62, Math.min(3.2, value));
+  return Math.max(0.76, Math.min(3.2, value));
 }
 
 function clampBeat(value: number | undefined, fallback: number): number {
@@ -281,12 +357,12 @@ function satellitePoint(grammar: SpatialGrammar, anchor: WorldPoint, node: Spati
 }
 
 function satelliteProfile(type: string): { radius: number; spread: number; elevation: number; depthBias: number } {
-  if (type === "character") return { radius: 3.1, spread: 0.58, elevation: 1.15, depthBias: 0.85 };
-  if (type === "canon") return { radius: 2.2, spread: 0.42, elevation: -1.25, depthBias: -2.1 };
-  if (type === "task" || type === "review") return { radius: 2.4, spread: 0.48, elevation: 2.85, depthBias: 1.25 };
-  if (type === "branch") return { radius: 3.4, spread: 0.66, elevation: 1.55, depthBias: 0.72 };
-  if (type === "promise" || type === "reader-question") return { radius: 2.8, spread: 0.54, elevation: 1.72, depthBias: 0.44 };
-  return { radius: 1.8, spread: 0.4, elevation: 1.1, depthBias: 0.3 };
+  if (type === "character") return { radius: 3.8, spread: 0.72, elevation: 1.35, depthBias: 0.95 };
+  if (type === "canon") return { radius: 2.8, spread: 0.56, elevation: -1.48, depthBias: -2.35 };
+  if (type === "task" || type === "review") return { radius: 3.1, spread: 0.62, elevation: 3.15, depthBias: 1.38 };
+  if (type === "branch") return { radius: 4.25, spread: 0.88, elevation: 1.8, depthBias: 0.82 };
+  if (type === "promise" || type === "reader-question") return { radius: 3.45, spread: 0.72, elevation: 2.02, depthBias: 0.52 };
+  return { radius: 2.2, spread: 0.5, elevation: 1.25, depthBias: 0.35 };
 }
 
 function relaxLocalCollisions(points: Map<string, WorldPoint>, nodes: SpatialNarrativeNode[], seed: number): void {
@@ -297,7 +373,7 @@ function relaxLocalCollisions(points: Map<string, WorldPoint>, nodes: SpatialNar
     .filter((node) => points.has(node.node_id))
     .sort((left, right) => visualWeight(right) - visualWeight(left) || left.node_id.localeCompare(right.node_id));
   const cap = Math.min(620, ordered.length);
-  for (let pass = 0; pass < 2; pass += 1) {
+  for (let pass = 0; pass < 4; pass += 1) {
     for (let first = 0; first < cap; first += 1) {
       const fixed = ordered[first];
       const fixedPoint = points.get(fixed.node_id)!;
@@ -311,7 +387,7 @@ function relaxLocalCollisions(points: Map<string, WorldPoint>, nodes: SpatialNar
         // The backbone stays on its designed spline. Only satellites may yield
         // when space becomes tight; label LOD handles primary density.
         if (NARRATIVE_TYPES.has(moving.type)) continue;
-        const minimum = 0.78;
+        const minimum = 1.18;
         if (projectedDistance >= minimum) continue;
         const angle = projectedDistance > 0.02 ? Math.atan2(dy + dz * 0.38, dx + dz * 0.17) : pseudo(seed + hashNode(moving.node_id, pass + 61)) * Math.PI * 2;
         const push = (minimum - projectedDistance) * 0.6;

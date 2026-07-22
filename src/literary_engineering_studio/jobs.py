@@ -585,6 +585,24 @@ class JobStore:
                 raise FileNotFoundError(f"Autopilot run not found: {run_id}")
         return self.read_autopilot_run(run_id)
 
+    def update_autopilot_run_policy(self, run_id: str, policy: dict[str, Any]) -> dict[str, Any]:
+        """Renew the immutable run policy after an explicit user authorization.
+
+        A paused run evaluates its own stored policy, not the project's default
+        policy.  Without this write, changing a limit in the interface looks
+        successful but a resumed controller immediately stops on the old cap.
+        """
+
+        _validate_autopilot_id(run_id)
+        with self._write_lock, self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE autopilot_runs SET policy_json = ?, mode = ?, updated_at = ? WHERE run_id = ?",
+                (_json(policy), str(policy.get("mode") or "collaborative"), _now(), run_id),
+            )
+            if not cursor.rowcount:
+                raise FileNotFoundError(f"Autopilot run not found: {run_id}")
+        return self.read_autopilot_run(run_id)
+
     def advance_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]:
         """Atomically advance a run after one task reaches its formal terminal state."""
 

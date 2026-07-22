@@ -180,7 +180,21 @@ class AutopilotService:
         active = self.store.latest_autopilot_run(root)
         if active and active["status"] == "running":
             raise ValueError("请先暂停自动创作，再修改授权范围。")
-        return self.store.save_delegation_policy(root, normalize_policy(payload))
+        policy = normalize_policy(payload)
+        saved = self.store.save_delegation_policy(root, policy)
+        # A paused run keeps a policy snapshot for auditability. Updating the
+        # project default alone cannot renew a cap that already stopped this
+        # particular run, so reflect an explicit user change into the paused
+        # run and leave a durable event explaining why it may resume.
+        if active and active["status"] in {"paused", "blocked", "failed"}:
+            renewed = self.store.update_autopilot_run_policy(active["run_id"], policy)
+            self.store.append_autopilot_event(
+                active["run_id"],
+                "autopilot.authorization_updated",
+                {"mode": policy["mode"], "limits": policy["limits"]},
+            )
+            saved["run"] = renewed
+        return saved
 
     def start(self, project_root: Path, *, runtime: str = "opencode") -> dict[str, Any]:
         root = project_root.expanduser().resolve()

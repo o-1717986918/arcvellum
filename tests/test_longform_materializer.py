@@ -56,6 +56,57 @@ class LongformMaterializerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
                 materialize_longform_plan(root)
 
+    def test_card_inventory_from_earlier_studio_runs_is_materialized(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_inputs(root)
+            inventory = root / "plot/candidates/scenes/word_budget_scene_inventory.md"
+            inventory.write_text(
+                """# 场景库存候选
+
+### chapter_0001 | 初入迷城
+
+#### s_01_01 | 告别
+
+| 字段 | 内容 |
+| --- | --- |
+| **目标汉字字符** | 1200 |
+| **功能** | mainline_action |
+| **节奏角色** | setup |
+| **参与角色** | 林昭、林正 |
+| **冲突** | 父子必须分离 |
+| **信息释放** | 父亲知道学院秘密 |
+| **行动后果** | 林昭带着疑问入学 |
+| **设置伏笔** | 父亲的秘密 |
+| **读者义务** | 建立分离与秘密 |
+
+#### s_01_02 | 测试
+
+| 字段 | 内容 |
+| --- | --- |
+| **目标汉字字符** | 1200 |
+| **功能** | information_release |
+| **节奏角色** | escalation |
+| **参与角色** | 林昭、周瑾 |
+| **冲突** | 测试结果被隐藏 |
+| **信息释放** | 周瑾知道异常 |
+| **行动后果** | 林昭被暗中标记 |
+| **设置伏笔** | 能力异常 |
+| **读者义务** | 建立能力谜题 |
+""",
+                encoding="utf-8",
+            )
+            scaffold = root / "scenes/scene_0001.yaml"
+            scaffold.parent.mkdir(parents=True)
+            scaffold.write_text('scene_id: ""\nchapter_id: ""\n', encoding="utf-8")
+
+            result = materialize_longform_plan(root)
+
+            self.assertEqual(len(result.scene_paths), 2)
+            first = (root / "scenes/scene_0001.yaml").read_text(encoding="utf-8")
+            self.assertIn('title: "告别"', first)
+            self.assertIn('chapter_id: "chapter_0001"', first)
+
     def test_scoped_status_allows_a_staged_active_scene_without_copying_full_inventory(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

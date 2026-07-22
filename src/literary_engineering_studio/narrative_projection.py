@@ -220,29 +220,51 @@ def _chapter_graph(
     dashboard: dict[str, Any],
     chapter_id: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    selected = [scene for scene in scenes if (_fact(scene, "章节") or str(scene.get("subtitle") or "")) == chapter_id]
-    selected.sort(key=lambda item: _order(str(item.get("id") or "")))
+    # Chapter view is a full-book scene map, not a small isolated chapter
+    # diagram.  `chapter_id` is a camera/detail focus: all scenes remain on
+    # the same narrative river while the chosen chapter grows its local facts.
+    ordered_scenes = sorted(scenes, key=lambda item: _order(str(item.get("id") or "")))
+    selected = [scene for scene in ordered_scenes if _scene_chapter(scene) == chapter_id]
     formal = {scene_id for unit in reader.get("units", []) if isinstance(unit, dict) for scene_id in unit.get("coverage", [])}
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     participant_names: set[str] = set()
-    for index, scene in enumerate(selected[:80]):
+    for index, scene in enumerate(ordered_scenes):
         scene_id = str(scene.get("id") or "")
-        status = "formal" if scene_id in formal else "blocked" if str(scene.get("status")) == "blocked" else "current" if index == 0 else "planned"
-        nodes.append(_node(f"scene:{scene_id}", "scene", str(scene.get("title") or scene_id), status, "scene", str(scene.get("path") or scene_id), "library", subtitle=str(scene.get("excerpt") or "")[:90], metrics={"word_target": _integer(_fact(scene, "目标字数"))}, order=index))
-        participant_names.update(part.strip() for part in re.split(r"[、,，]", _fact(scene, "参与者")) if part.strip())
+        in_focus = _scene_chapter(scene) == chapter_id
+        status = "formal" if scene_id in formal else "blocked" if str(scene.get("status")) == "blocked" else "current" if in_focus and not any(node.get("status") == "current" for node in nodes) else "planned"
+        nodes.append(
+            _node(
+                f"scene:{scene_id}",
+                "scene",
+                str(scene.get("title") or scene_id),
+                status,
+                "scene",
+                str(scene.get("path") or scene_id),
+                "library",
+                subtitle=str(scene.get("excerpt") or "")[:90],
+                metrics={"word_target": _integer(_fact(scene, "目标字数")), "chapter_id": _scene_chapter(scene)},
+                order=index,
+            )
+        )
+        if in_focus:
+            participant_names.update(part.strip() for part in re.split(r"[、,，]", _fact(scene, "参与者")) if part.strip())
         if index:
-            edges.append(_edge(f"scene:{selected[index - 1].get('id')}", f"scene:{scene_id}", "bridge", "场景承接"))
-        question = _fact(scene, "读者问题")
-        if question and question != "未填写":
-            promise_id = f"question:{scene_id}"
-            nodes.append(_node(promise_id, "reader-question", question[:38], "alternative", "scene", str(scene.get("path") or scene_id), "library", subtitle="读者带入下一场的问题"))
-            edges.append(_edge(f"scene:{scene_id}", promise_id, "raises", "提出问题"))
-        promised_reward = _fact(scene, "承诺回报")
-        if promised_reward and promised_reward != "未填写":
-            promise_id = f"promise:{scene_id}"
-            nodes.append(_node(promise_id, "promise", promised_reward[:38], "memory", "scene", str(scene.get("path") or scene_id), "library", subtitle="作品向读者作出的后续承诺"))
-            edges.append(_edge(f"scene:{scene_id}", promise_id, "promise", "建立承诺"))
+            edges.append(_edge(f"scene:{ordered_scenes[index - 1].get('id')}", f"scene:{scene_id}", "bridge", "场景承接"))
+        # Only the focused chapter unfolds its reader-facing commitments. This
+        # preserves the whole-book map without turning every distant chapter
+        # into an unreadable cloud of satellites.
+        if in_focus:
+            question = _fact(scene, "读者问题")
+            if question and question != "未填写":
+                promise_id = f"question:{scene_id}"
+                nodes.append(_node(promise_id, "reader-question", question[:38], "alternative", "scene", str(scene.get("path") or scene_id), "library", subtitle="读者带入下一场的问题"))
+                edges.append(_edge(f"scene:{scene_id}", promise_id, "raises", "提出问题"))
+            promised_reward = _fact(scene, "承诺回报")
+            if promised_reward and promised_reward != "未填写":
+                promise_id = f"promise:{scene_id}"
+                nodes.append(_node(promise_id, "promise", promised_reward[:38], "memory", "scene", str(scene.get("path") or scene_id), "library", subtitle="作品向读者作出的后续承诺"))
+                edges.append(_edge(f"scene:{scene_id}", promise_id, "promise", "建立承诺"))
     for character in characters:
         if str(character.get("title") or "") not in participant_names:
             continue
@@ -261,7 +283,7 @@ def _chapter_graph(
             option_id = str(option.get("id") or _digest(option))
             nodes.append(_node(f"branch:{scene_id}:{option_id}", "branch", str(option.get("label") or option_id), "formal" if option.get("selected") else "alternative", "branch", str(branch.get("path") or scene_id), "library", subtitle=str(option.get("summary") or "")[:90]))
             edges.append(_edge(f"scene:{scene_id}", f"branch:{scene_id}:{option_id}", "branch", "已选择" if option.get("selected") else "备选"))
-    _append_task_projection(nodes, edges, dashboard, selected, level="chapter")
+    _append_task_projection(nodes, edges, dashboard, ordered_scenes, level="chapter")
     return nodes, edges
 
 
@@ -275,12 +297,34 @@ def _scene_graph(
     dashboard: dict[str, Any],
     scene_id: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    scene = next((item for item in scenes if str(item.get("id")) == scene_id), None)
+    # Scene view remains a full-book scene constellation. `scene_id` selects
+    # the only scene whose surrounding evidence should unfold in full.
+    ordered_scenes = sorted(scenes, key=lambda item: _order(str(item.get("id") or "")))
+    scene = next((item for item in ordered_scenes if str(item.get("id")) == scene_id), None)
     if scene is None:
         return [], []
-    formal = any(scene_id in unit.get("coverage", []) for unit in reader.get("units", []) if isinstance(unit, dict))
-    nodes = [_node(f"scene:{scene_id}", "scene", str(scene.get("title") or scene_id), "formal" if formal else "current", "scene", str(scene.get("path") or scene_id), "library", subtitle=str(scene.get("excerpt") or ""), metrics={"word_target": _integer(_fact(scene, "目标字数"))}, order=0)]
+    formal_coverage = {covered for unit in reader.get("units", []) if isinstance(unit, dict) for covered in unit.get("coverage", [])}
+    nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
+    for index, candidate in enumerate(ordered_scenes):
+        candidate_id = str(candidate.get("id") or "")
+        status = "formal" if candidate_id in formal_coverage else "blocked" if str(candidate.get("status")) == "blocked" else "current" if candidate_id == scene_id else "planned"
+        nodes.append(
+            _node(
+                f"scene:{candidate_id}",
+                "scene",
+                str(candidate.get("title") or candidate_id),
+                status,
+                "scene",
+                str(candidate.get("path") or candidate_id),
+                "library",
+                subtitle=str(candidate.get("excerpt") or "")[:90],
+                metrics={"word_target": _integer(_fact(candidate, "目标字数")), "chapter_id": _scene_chapter(candidate)},
+                order=index,
+            )
+        )
+        if index:
+            edges.append(_edge(f"scene:{ordered_scenes[index - 1].get('id')}", f"scene:{candidate_id}", "bridge", "场景承接"))
     participants = {part.strip() for part in re.split(r"[、,，]", _fact(scene, "参与者")) if part.strip()}
     for character in characters:
         if str(character.get("title") or "") not in participants:
@@ -385,8 +429,13 @@ def _resolve_focus(level: str, focus: str, scenes: list[dict[str, Any]], dashboa
         return target or (str(scenes[0].get("id")) if scenes else "")
     if level == "chapter":
         scene = next((item for item in scenes if str(item.get("id")) == target), scenes[0] if scenes else {})
-        return _fact(scene, "章节") or str(scene.get("subtitle") or "")
+        return _scene_chapter(scene)
     return "book"
+
+
+def _scene_chapter(scene: dict[str, Any]) -> str:
+    """Return the canonical chapter id used by every projection level."""
+    return _fact(scene, "章节") or str(scene.get("subtitle") or "未分章")
 
 
 def _fact(item: dict[str, Any], label: str) -> str:
@@ -452,5 +501,7 @@ def _friendly_action(value: str) -> str:
 def _accessible_summary(level: str, focus: str, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> str:
     blocked = sum(1 for node in nodes if node.get("status") == "blocked")
     formal = sum(1 for node in nodes if node.get("status") == "formal")
-    level_label = {"book": "全书", "chapter": "章节", "scene": "当前场景"}.get(level, "叙事")
+    # Every level retains the same book-scale field. The latter two only change
+    # the granularity and the focus of the evidence that is unfolded.
+    level_label = {"book": "全书", "chapter": "全书章节", "scene": "全书场景"}.get(level, "叙事")
     return f"{level_label}视图，共 {len(nodes)} 个节点、{len(edges)} 条关系；{formal} 个正式节点，{blocked} 个阻塞或待决定节点。"

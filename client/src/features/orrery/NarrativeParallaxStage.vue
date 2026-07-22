@@ -123,6 +123,17 @@ watch(() => [props.projection.revision, props.layout.revision] as const, () => {
   }
 });
 
+watch(() => [props.projection.spatial_grammar, props.layout.grammar] as const, async () => {
+  // A grammar owns a different coordinate vocabulary. Reframe only when the
+  // user changes that vocabulary; ordinary live projection refreshes must
+  // preserve the camera the reader has already navigated to.
+  // Wait for the computed layout to settle first. Without that turn, a fast
+  // grammar switch can reframe using the previous coordinate system and leave
+  // the new constellation or loop entirely outside the viewport.
+  await nextTick();
+  openingSegment();
+}, { flush: "post" });
+
 function emitStaticAnchors(): void {
   const target = host.value;
   if (!target) return;
@@ -225,6 +236,18 @@ function fit(): void {
   fitStaticCamera();
 }
 
+function openingSegment(): void {
+  if (renderer) {
+    renderer.update(props.projection, props.layout);
+    renderer.showOpeningSegment();
+    return;
+  }
+  if (staticProjection.value) {
+    resetStaticCamera();
+    emitStaticAnchors();
+  }
+}
+
 function focus(point: WorldPoint, nodeId = ""): void {
   if (renderer) {
     renderer.focus(point, 0.8, nodeId);
@@ -299,7 +322,7 @@ function zoomStatic(event: WheelEvent): void {
   emitStaticAnchors();
 }
 
-defineExpose({ fit, focus });
+defineExpose({ fit, focus, openingSegment });
 </script>
 
 <template>
