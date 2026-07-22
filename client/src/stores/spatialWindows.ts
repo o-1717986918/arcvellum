@@ -5,17 +5,19 @@ import type { SpatialWindow, SpatialWindowAnchor, SpatialWindowKind, SpatialWind
 
 const DEFAULT_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
   node: { width: 294, height: 348 },
-  progress: { width: 300, height: 332 },
+  progress: { width: 342, height: 438 },
+  agent: { width: 368, height: 510 },
   reader: { width: 332, height: 540 },
   decisions: { width: 328, height: 340 },
-  rules: { width: 440, height: 590 },
+  rules: { width: 456, height: 600 },
   health: { width: 258, height: 290 },
   delivery: { width: 294, height: 282 },
 };
 
 const MIN_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
   node: { width: 276, height: 270 },
-  progress: { width: 282, height: 280 },
+  progress: { width: 286, height: 316 },
+  agent: { width: 304, height: 336 },
   reader: { width: 300, height: 370 },
   decisions: { width: 300, height: 248 },
   rules: { width: 360, height: 430 },
@@ -25,6 +27,7 @@ const MIN_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
 
 const INSTRUMENT_TITLES: Record<Exclude<SpatialWindowKind, "node">, string> = {
   progress: "推进仪表",
+  agent: "执行中心",
   reader: "正文长卷",
   decisions: "待定决定",
   rules: "创作规则",
@@ -71,6 +74,7 @@ function instrumentPosition(kind: Exclude<SpatialWindowKind, "node">, size: Spat
   const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
   const positions: Record<Exclude<SpatialWindowKind, "node">, SpatialWindowPosition> = {
     progress: { left: viewportWidth - size.width - 30, top: 148 },
+    agent: { left: viewportWidth - size.width - 42, top: 184 },
     reader: { left: 82, top: 148 },
     decisions: { left: viewportWidth - size.width - 42, top: 196 },
     rules: { left: viewportWidth - size.width - 52, top: 150 },
@@ -404,7 +408,7 @@ function anchoredPosition(item: SpatialWindow, point: { x: number; y: number }):
 }
 
 function isWindowKind(value: unknown): value is SpatialWindowKind {
-  return ["node", "progress", "reader", "decisions", "rules", "health", "delivery"].includes(String(value));
+  return ["node", "progress", "agent", "reader", "decisions", "rules", "health", "delivery"].includes(String(value));
 }
 
 function validSize(value: SpatialWindowSize): boolean {

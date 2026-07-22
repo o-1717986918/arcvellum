@@ -115,6 +115,10 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
 
 class DelegationPolicy:
     def __init__(self, payload: dict[str, Any]):
+        # This run-only anchor is intentionally kept outside the reusable
+        # project policy.  A user who renews a paused run starts a new allowed
+        # runtime window instead of being charged for the days it was paused.
+        self.runtime_window_started_at = str(payload.get("runtime_window_started_at") or "")
         self.payload = normalize_policy(payload)
 
     @property
@@ -138,7 +142,7 @@ class DelegationPolicy:
         limits = self.payload["limits"]
         if int(run["tasks_completed"]) >= int(limits["max_tasks"]):
             return "task-limit"
-        started = _parse_time(str(run["started_at"]))
+        started = _parse_time(self.runtime_window_started_at or str(run["started_at"]))
         if started and (datetime.now(timezone.utc) - started).total_seconds() > float(limits["max_runtime_hours"]) * 3600:
             return "runtime-limit"
         if float(run["estimated_cost"]) >= float(limits["max_cost"]) > 0:
@@ -187,11 +191,13 @@ class AutopilotService:
         # particular run, so reflect an explicit user change into the paused
         # run and leave a durable event explaining why it may resume.
         if active and active["status"] in {"paused", "blocked", "failed"}:
-            renewed = self.store.update_autopilot_run_policy(active["run_id"], policy)
+            runtime_window_started_at = _now()
+            run_policy = {**policy, "runtime_window_started_at": runtime_window_started_at}
+            renewed = self.store.update_autopilot_run_policy(active["run_id"], run_policy)
             self.store.append_autopilot_event(
                 active["run_id"],
                 "autopilot.authorization_updated",
-                {"mode": policy["mode"], "limits": policy["limits"]},
+                {"mode": policy["mode"], "limits": policy["limits"], "runtime_window_started_at": runtime_window_started_at},
             )
             saved["run"] = renewed
         return saved

@@ -93,6 +93,7 @@ function windowKicker(): string {
   const labels: Record<SpatialWindow["kind"], string> = {
     node: "NARRATIVE SIGNAL",
     progress: "LIVE EXECUTION",
+    agent: "AGENT RUNTIME",
     reader: "READING ROOM",
     decisions: "CHOICE GATE",
     rules: "WRITING CONSTITUTION",

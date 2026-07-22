@@ -149,26 +149,39 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
     };
   }
   if (grammar === "loop") {
-    // A single expanding orbit carries recurring motifs forward. Radius grows
-    // with chapter clusters, not every fifteenth scene, so a 70-chapter book
-    // never folds its far future back across the opening shot.
-    const angle = (visualRank + 1) * 0.61 - Math.PI * 0.72;
-    const radius = 7.6 + visualRank * 0.76;
-    const localAngle = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.115 : 0;
-    const localRadius = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.54 : 0;
-    return { x: Math.cos(angle + localAngle) * (radius + localRadius), y: 1.1 + arc * 0.34 + cadence, z: Math.sin(angle + localAngle) * (radius + localRadius) + depth * 0.22 };
+    // The old loop turned by 0.61 radians per chapter while growing its radius
+    // by less than one unit. That made adjacent revolutions almost touch and
+    // compressed long books into a decorative coil. This is an open Fermat-
+    // inspired orbital ribbon: slow angular advance, stronger radial advance,
+    // and a small irrational modulation to avoid a mechanical perfect spiral.
+    // A full revolution now leaves roughly forty units of clearance, so the
+    // reader can pan through recurring motifs without chronological overlap.
+    const angle = -2.32 + visualRank * 0.305 + Math.sin(visualRank * 0.37 + 0.4) * 0.032;
+    const radius = 16.8 + visualRank * 2.62 + Math.sin(visualRank * 0.21) * 0.46 + lift * 0.34;
+    const offset = clusterRibbonOffset(cluster, angle + Math.PI / 2, 1.05, 0.48);
+    return {
+      x: Math.cos(angle) * radius + offset.x,
+      y: 1.14 + arc * 0.36 + cadence + offset.y,
+      z: Math.sin(angle) * radius + depth * 0.12 + offset.z,
+    };
   }
   if (grammar === "stage") {
-    // A stage is made of chapter-sized playing areas. Its scenes rehearse
-    // inside the same area; the next chapter moves to a clearly separate bay
-    // instead of taking the next arbitrary grid slot.
-    const columns = 6;
-    const chapterColumn = visualRank % columns;
-    const chapterRow = Math.floor(visualRank / columns);
-    const withinAct = cluster && cluster.size > 1 ? cluster.localRank / (cluster.size - 1) : 0.5;
-    const stageX = (chapterColumn - (columns - 1) / 2) * 15;
-    const stageZ = 8 - chapterRow * 10.8 + Math.sin(chapterColumn * 0.8) * 0.45;
-    return { x: stageX + (withinAct - 0.5) * 4.4, y: 1.2 + arc * 0.42 + cadence, z: stageZ + swell * 0.34 };
+    // A stage should read as a procession of playing areas, not a 6-column
+    // grid that folds chapter seven back underneath chapter one. Its apron
+    // advances strictly in reading order while the back wall follows a broad
+    // two-frequency curtain wave. The derivative supplies the tangent used by
+    // scenes in the same chapter, producing a clear local bay without a hard
+    // geometric reset at an arbitrary chapter count.
+    const stagePhase = visualRank * 0.46;
+    const stageX = visualRank * 14.4 - 8.2;
+    const stageZ = Math.sin(stagePhase) * 6.4 + Math.sin(stagePhase * 0.41 + 0.74) * 2.15 + lift * 1.3;
+    const stageSlope = Math.cos(stagePhase) * 6.4 * 0.46 + Math.cos(stagePhase * 0.41 + 0.74) * 2.15 * 0.41;
+    const offset = clusterRibbonOffset(cluster, Math.atan2(stageSlope, 14.4), 1.72, 0.84);
+    return {
+      x: stageX + offset.x,
+      y: 1.2 + arc * 0.42 + cadence + offset.y,
+      z: stageZ + swell * 0.38 + offset.z,
+    };
   }
   // Spine: a single advancing narrative river. Its x-axis is strictly
   // monotonic, while the y/z contour reads the formal rhythm plan: tension
@@ -179,6 +192,23 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
     x: axis,
     y: 1.1 + rise,
     z: depth,
+  };
+}
+
+function clusterRibbonOffset(cluster: SceneCluster | undefined, tangentAngle: number, stride: number, lateralBreath: number): WorldPoint {
+  if (!cluster || cluster.size <= 1) return { x: 0, y: 0, z: 0 };
+  const centered = cluster.localRank - (cluster.size - 1) / 2;
+  // The scenes remain a chapter-sized phrase along the main route. A bounded
+  // normal displacement gives the phrase a slight fan without turning the
+  // cluster itself into another spiral.
+  const along = centered * stride;
+  const across = Math.sin(centered * 1.17) * lateralBreath;
+  const tangent = { x: Math.cos(tangentAngle), z: Math.sin(tangentAngle) };
+  const normal = { x: -tangent.z, z: tangent.x };
+  return {
+    x: tangent.x * along + normal.x * across,
+    y: Math.sin(centered * 0.88) * 0.16,
+    z: tangent.z * along + normal.z * across,
   };
 }
 

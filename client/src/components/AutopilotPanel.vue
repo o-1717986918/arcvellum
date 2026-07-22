@@ -296,6 +296,11 @@ function routeText(route: string): string {
       </button>
     </div>
 
+    <section v-if="authorizationLimit && !running" class="autopilot-renewal-urgent" aria-live="polite">
+      <div><ShieldAlert :size="16" /><span><small>授权窗口已暂停</small><strong>{{ authorizationLimitText }}</strong></span></div>
+      <button class="secondary-button" :disabled="busy" @click="renewAuthorization"><RefreshCw :size="15" />按当前范围续期并继续</button>
+    </section>
+
     <div class="autopilot-console">
       <div class="autopilot-progress-mark" :class="run?.status || 'idle'">
         <Gauge v-if="running" :size="25" />
@@ -337,7 +342,7 @@ function routeText(route: string): string {
         <label>单任务失败上限<input v-model.number="renewalLimits.max_failures_per_task" min="0" step="1" type="number" /></label>
         <label>预算上限（USD，0 为不限制）<input v-model.number="renewalLimits.max_cost" min="0" step="1" type="number" /></label>
       </div>
-      <button class="primary-button" :disabled="busy" @click="renewAuthorization"><RefreshCw :size="15" />更新授权并继续</button>
+      <button class="primary-button" :disabled="busy" @click="renewAuthorization"><RefreshCw :size="15" />保存新授权范围并继续</button>
     </section>
   </section>
 </template>

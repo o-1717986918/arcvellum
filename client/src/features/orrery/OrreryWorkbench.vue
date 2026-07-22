@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { BookOpenText, BookPlus, ChevronDown, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, Settings2, SlidersHorizontal } from "lucide-vue-next";
+import { Activity, BookOpenText, BookPlus, ChevronDown, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, Settings2, SlidersHorizontal } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
@@ -54,6 +54,18 @@ const activeChapterRailNodeId = computed(() => {
     return chapterNodes.value.find((node) => node.source_id === chapterId)?.node_id || windows.selectedNodeId;
   }
   return windows.selectedNodeId;
+});
+const activeChapterId = computed(() => {
+  if (!projection.value) return "";
+  if (projection.value.level === "chapter" && projection.value.focus) return projection.value.focus;
+  if (projection.value.level === "scene") {
+    const focusedScene = projection.value.nodes.find((node) => node.node_id === `scene:${projection.value?.focus}`);
+    const chapterId = String(focusedScene?.metrics.chapter_id || "");
+    if (chapterId) return chapterId;
+  }
+  const selected = projection.value.nodes.find((node) => node.node_id === windows.selectedNodeId);
+  if (selected?.type === "chapter") return selected.source_id || selected.node_id;
+  return selected?.type === "scene" ? String(selected.metrics.chapter_id || "") : "";
 });
 
 watch(() => app.currentProjectPath, (root) => {
@@ -239,7 +251,7 @@ async function loadChapterRail(root: string): Promise<void> {
     <OrreryAccessibleView v-else-if="projection && listMode" :nodes="projection.nodes" :selected-node-id="windows.selectedNodeId" @select="selectNode" />
     <div v-else-if="projection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
       <NarrativeParallaxStage ref="stage" :projection="projection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
-      <NarrativeSpineLayer :projection="projection" :anchors="anchors" :active-character-id="activeCharacterId" />
+      <NarrativeSpineLayer :projection="projection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
       <OrreryNodeOverlay :nodes="projection.nodes" :anchors="anchors" :level="projection.level" :motion-events="projection.motion_events" :selected-node-id="windows.selectedNodeId" :focus-node-id="windows.selectedNodeId" @select="selectNode" @focus="focusNodeObject" />
       <NarrativeHealthRail :dashboard="props.dashboard" :expanded="healthExpanded" @toggle="healthExpanded = !healthExpanded" />
       <CharacterThreadRail :nodes="projection.nodes" :edges="projection.edges" :active-character-id="activeCharacterId" @select="selectCharacter" />
@@ -254,6 +266,7 @@ async function loadChapterRail(root: string): Promise<void> {
     <div v-else class="orrery-v3-empty"><i></i><strong>等待作品长出第一段脉络</strong><p>场景、人物或正文出现后，这里会形成可以进入的叙事场域。</p></div>
     <nav class="orrery-v3-instrument-dock" aria-label="创作控制仪表">
       <button title="打开推进仪表" @click="windows.openInstrument('progress')"><Gauge :size="16" /><span>推进</span></button>
+      <button title="打开 Agent 执行中心" @click="windows.openInstrument('agent')"><Activity :size="16" /><span>执行</span></button>
       <button title="查看待定决定" :data-count="choices.length || undefined" @click="windows.openInstrument('decisions')"><GitBranch :size="16" /><span>决策</span></button>
       <button title="查看创作规则" @click="windows.openInstrument('rules')"><SlidersHorizontal :size="16" /><span>规则</span></button>
     </nav>

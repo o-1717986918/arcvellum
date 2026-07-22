@@ -146,6 +146,36 @@ describe("buildSpatialLayout", () => {
     }
   });
 
+  it("keeps the loop grammar open between full revolutions instead of coiling chapters together", () => {
+    const chapters = Array.from({ length: 50 }, (_value, index) => {
+      const item = node(`scene:${index + 1}`, "scene", index + 1);
+      item.metrics.chapter_id = `chapter_${String(index + 1).padStart(4, "0")}`;
+      return item;
+    });
+    const result = buildSpatialLayout("loop", "open-orbit", chapters, "project-seed");
+    const points = chapters.map((item) => result.points.get(item.node_id)!);
+    const radii = points.map((point) => Math.hypot(point.x, point.z));
+    expect(radii.every((radius, index) => index === 0 || radius > radii[index - 1] + 0.78)).toBe(true);
+    // Around 24 chapters form one orbital return. The two chapter groups must
+    // still occupy clearly separate rings, rather than collapsing into a coil.
+    expect(Math.hypot(points[24].x - points[0].x, points[24].z - points[0].z)).toBeGreaterThan(28);
+  });
+
+  it("keeps the stage grammar advancing through broad bays without grid foldback", () => {
+    const chapters = Array.from({ length: 20 }, (_value, index) => {
+      const item = node(`scene:${index + 1}`, "scene", index + 1);
+      item.metrics.chapter_id = `chapter_${String(index + 1).padStart(4, "0")}`;
+      return item;
+    });
+    const result = buildSpatialLayout("stage", "stage-promenade", chapters, "project-seed");
+    const points = chapters.map((item) => result.points.get(item.node_id)!);
+    expect(points.every((point, index) => index === 0 || point.x > points[index - 1].x + 12)).toBe(true);
+    // The curtain wave is visible, but never so compressed that an act reads
+    // as a flat rail or a stacked grid.
+    const zSpan = Math.max(...points.map((point) => point.z)) - Math.min(...points.map((point) => point.z));
+    expect(zSpan).toBeGreaterThan(8);
+  });
+
   it("gives every grammar a stable local separation for dense narrative sequences", () => {
     const longBook = Array.from({ length: 96 }, (_value, index) => node("scene:" + (index + 1), "scene", index + 1));
     for (const grammar of ["spine", "braid", "strata", "constellation", "loop", "stage"] as const) {

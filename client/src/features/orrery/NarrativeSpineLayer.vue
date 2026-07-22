@@ -10,6 +10,7 @@ const props = defineProps<{
   projection: SpatialNarrativeProjection;
   anchors: Record<string, Anchor>;
   activeCharacterId?: string;
+  activeChapterId?: string;
 }>();
 
 const host = ref<SVGSVGElement | null>(null);
@@ -22,8 +23,15 @@ const spinePoints = computed<SpinePoint[]>(() => spineClusters.value.map((cluste
 const spinePath = computed(() => buildPath(spinePoints.value.map((item) => item.anchor)));
 const chapterSpokes = computed(() => spineClusters.value.flatMap((cluster) => cluster.members
   .filter((member) => Math.hypot(member.anchor.x - cluster.anchor.x, member.anchor.y - cluster.anchor.y) > 3)
-  .map((member) => ({ id: `${cluster.id}:${member.node.node_id}`, start: cluster.anchor, end: member.anchor }))));
+  .map((member) => ({
+    id: `${cluster.id}:${member.node.node_id}`,
+    start: cluster.anchor,
+    end: member.anchor,
+    ...chapterState(cluster.id),
+  }))));
 const nodesById = computed(() => new Map(props.projection.nodes.map((node) => [node.node_id, node])));
+const activeChapterKey = computed(() => chapterKey(props.activeChapterId));
+const hasChapterFocus = computed(() => Boolean(activeChapterKey.value));
 
 const characterRelations = computed(() => {
   const chapterIds = new Set(props.projection.nodes.filter((node) => node.type === "chapter").map((node) => node.node_id));
@@ -45,9 +53,10 @@ const localFlowPaths = computed(() => {
         id: edge.edge_id,
         path: relationshipPath(source, target, edge.edge_id),
         type: edge.type,
+        ...edgeChapterState(edge),
       } : null;
     })
-    .filter((item): item is { id: string; path: string; type: string } => Boolean(item))
+    .filter((item): item is { id: string; path: string; type: string; active: boolean; muted: boolean } => Boolean(item))
     // Keep the chronological hand-off sparse. All non-sequence evidence is
     // drawn by `sceneEvidencePaths` below with its own visual grammar.
     .slice(0, 6);
@@ -72,9 +81,10 @@ const sceneEvidencePaths = computed(() => {
         path: relationshipPath(source, target, edge.edge_id),
         type: edge.type,
         nodeType: evidenceNode.type,
+        ...edgeChapterState(edge),
       };
     })
-    .filter((item): item is { id: string; path: string; type: string; nodeType: string } => Boolean(item))
+    .filter((item): item is { id: string; path: string; type: string; nodeType: string; active: boolean; muted: boolean } => Boolean(item))
     // Evidence is not a disposable decoration. Only in-view relationships are
     // rendered, but every such branch, promise, review, canon patch, task or
     // participant keeps its formal connection to the owning scene.
@@ -86,17 +96,21 @@ const characterPaths = computed(() => characterRelations.value
     const source = props.anchors[edge.source];
     const target = props.anchors[edge.target];
     if (!source || !target) return null;
+    const chapter = edgeChapterState(edge);
+    const characterActive = characterId === props.activeCharacterId;
     return {
       id: edge.edge_id,
-      active: characterId === props.activeCharacterId,
+      active: characterActive || (!props.activeCharacterId && chapter.active),
+      muted: !characterActive && ((Boolean(props.activeCharacterId)) || chapter.muted),
       path: relationshipPath(source, target, edge.edge_id),
       color: threadColor(characterId),
     };
   })
-  .filter((item): item is { id: string; active: boolean; path: string; color: string } => Boolean(item))
+  .filter((item): item is { id: string; active: boolean; muted: boolean; path: string; color: string } => Boolean(item))
   .filter((item) => !props.activeCharacterId || item.active)
+  .filter((item) => !activeChapterKey.value || item.active || !item.muted)
   .sort((left, right) => Number(right.active) - Number(left.active))
-  .slice(0, props.activeCharacterId ? undefined : 5));
+  .slice(0, props.activeCharacterId || activeChapterKey.value ? undefined : 5));
 
 onMounted(() => {
   if (!host.value) return;
@@ -141,6 +155,39 @@ function chapterCentroids(nodes: SpatialNarrativeNode[], anchors: Record<string,
     .map((node) => ({ node, anchor: anchors[node.node_id] }))
     .filter((item): item is SpinePoint => Boolean(item.anchor))
     .map((item) => ({ id: item.node.node_id, node: item.node, anchor: item.anchor, members: [item] }));
+}
+
+function chapterKey(value: unknown): string {
+  return String(value || "").replace(/^chapter:/, "").trim();
+}
+
+function nodeChapterKey(node: SpatialNarrativeNode | undefined, visited = new Set<string>()): string {
+  if (!node || visited.has(node.node_id)) return "";
+  visited.add(node.node_id);
+  if (node.type === "chapter") return chapterKey(node.source_id || node.node_id);
+  const declared = chapterKey(node.metrics.chapter_id);
+  if (declared) return declared;
+  return node.parent_id ? nodeChapterKey(nodesById.value.get(node.parent_id), visited) : "";
+}
+
+function edgeChapterState(edge: SpatialNarrativeEdge): { active: boolean; muted: boolean } {
+  if (!activeChapterKey.value) return { active: false, muted: false };
+  const sourceChapter = nodeChapterKey(nodesById.value.get(edge.source));
+  const targetChapter = nodeChapterKey(nodesById.value.get(edge.target));
+  // A line is internal only when both resolved narrative endpoints share the
+  // focused chapter, or when its non-narrative endpoint is an unscoped asset
+  // attached directly to that chapter. Cross-chapter hand-offs stay visible
+  // but never impersonate internal evidence.
+  const chapters = [sourceChapter, targetChapter].filter(Boolean);
+  const active = chapters.length
+    ? chapters.every((chapter) => chapter === activeChapterKey.value)
+    : false;
+  return { active, muted: !active };
+}
+
+function chapterState(id: string): { active: boolean; muted: boolean } {
+  const active = Boolean(activeChapterKey.value) && chapterKey(id) === activeChapterKey.value;
+  return { active, muted: Boolean(activeChapterKey.value) && !active };
 }
 
 function buildPath(points: Anchor[]): string {
@@ -248,12 +295,13 @@ function threadColor(value: string): string {
       v-for="spoke in chapterSpokes"
       :key="spoke.id"
       class="narrative-chapter-spoke"
+      :class="{ active: spoke.active, muted: spoke.muted }"
       :d="`M ${spoke.start.x} ${spoke.start.y} L ${spoke.end.x} ${spoke.end.y}`"
     />
-    <path v-if="spinePath" class="narrative-spine-glow" :class="{ detail: isDetailView }" :d="spinePath" />
-    <path v-if="spinePath" class="narrative-spine-track" :class="{ detail: isDetailView }" :d="spinePath" />
-    <path v-if="spinePath" class="narrative-spine-signal" :class="{ detail: isDetailView }" :d="spinePath" />
-    <g v-for="(cluster, index) in spineClusters" :key="cluster.id" class="narrative-chapter-anchor">
+    <path v-if="spinePath" class="narrative-spine-glow" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
+    <path v-if="spinePath" class="narrative-spine-track" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
+    <path v-if="spinePath" class="narrative-spine-signal" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
+    <g v-for="(cluster, index) in spineClusters" :key="cluster.id" class="narrative-chapter-anchor" :class="chapterState(cluster.id)">
       <circle class="narrative-chapter-anchor-halo" :cx="cluster.anchor.x" :cy="cluster.anchor.y" r="12" />
       <circle class="narrative-chapter-anchor-core" :cx="cluster.anchor.x" :cy="cluster.anchor.y" r="4" />
       <text v-if="cluster.anchor.visible && cluster.anchor.scale >= 0.56" class="narrative-chapter-anchor-label" :x="cluster.anchor.x + 10" :y="cluster.anchor.y - 10">{{ String(index + 1).padStart(2, "0") }}</text>
@@ -262,6 +310,7 @@ function threadColor(value: string): string {
       v-for="connection in localFlowPaths"
       :key="connection.id"
       class="narrative-local-flow"
+      :class="{ active: connection.active, muted: connection.muted }"
       :data-level="projection.level"
       :data-type="connection.type"
       :d="connection.path"
@@ -270,6 +319,7 @@ function threadColor(value: string): string {
       v-for="connection in sceneEvidencePaths"
       :key="connection.id"
       class="narrative-evidence-flow"
+      :class="{ active: connection.active, muted: connection.muted }"
       :data-type="connection.type"
       :data-node-type="connection.nodeType"
       :d="connection.path"
@@ -278,7 +328,7 @@ function threadColor(value: string): string {
       v-for="relation in characterPaths"
       :key="relation.id"
       class="narrative-character-thread"
-      :class="{ active: relation.active, muted: activeCharacterId && !relation.active }"
+      :class="{ active: relation.active, muted: relation.muted }"
       :stroke="relation.color"
       :d="relation.path"
     />

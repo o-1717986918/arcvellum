@@ -100,6 +100,8 @@ def _event_stage(event: str, data: dict[str, Any]) -> tuple[str, str]:
         "decision.started": ("评估受托决定", "受控决策代理正在比较已有选项，不会替代你的未授权选择。"),
         "decision.delegated": ("已记录受托决定", "已将可审计的决定写入项目的正式记录。"),
         "autopilot.paused": ("自动推进暂停", "自动推进在当前安全节点暂停。"),
+        "autopilot.authorization_updated": ("授权已续期", "新的授权范围已经写入当前运行，并从新的时间窗口继续计算。"),
+        "autopilot.resumed": ("自动推进恢复", "已从暂停点重新领取允许执行的正式任务。"),
         "autopilot.completed": ("本轮推进完成", "这一轮已完成，新的路线状态会重新计算。"),
     }
     if event in mapping:

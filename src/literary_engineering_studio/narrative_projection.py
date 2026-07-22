@@ -42,7 +42,7 @@ def build_narrative_projection(
     if selected_level == "book":
         nodes, edges = _book_graph(scenes, characters, reader, dashboard)
     elif selected_level == "chapter":
-        nodes, edges = _chapter_graph(scenes, characters, branches, reader, dashboard, focus_id)
+        nodes, edges = _chapter_graph(scenes, characters, branches, reviews, canon_patches, reader, dashboard, focus_id)
     else:
         nodes, edges = _scene_graph(scenes, characters, branches, reviews, canon_patches, reader, dashboard, focus_id)
     nodes = _dedupe(nodes)
@@ -216,6 +216,8 @@ def _chapter_graph(
     scenes: list[dict[str, Any]],
     characters: list[dict[str, Any]],
     branches: list[dict[str, Any]],
+    reviews: list[dict[str, Any]],
+    canon_patches: list[dict[str, Any]],
     reader: dict[str, Any],
     dashboard: dict[str, Any],
     chapter_id: str,
@@ -251,20 +253,6 @@ def _chapter_graph(
             participant_names.update(part.strip() for part in re.split(r"[、,，]", _fact(scene, "参与者")) if part.strip())
         if index:
             edges.append(_edge(f"scene:{ordered_scenes[index - 1].get('id')}", f"scene:{scene_id}", "bridge", "场景承接"))
-        # Only the focused chapter unfolds its reader-facing commitments. This
-        # preserves the whole-book map without turning every distant chapter
-        # into an unreadable cloud of satellites.
-        if in_focus:
-            question = _fact(scene, "读者问题")
-            if question and question != "未填写":
-                promise_id = f"question:{scene_id}"
-                nodes.append(_node(promise_id, "reader-question", question[:38], "alternative", "scene", str(scene.get("path") or scene_id), "library", subtitle="读者带入下一场的问题"))
-                edges.append(_edge(f"scene:{scene_id}", promise_id, "raises", "提出问题"))
-            promised_reward = _fact(scene, "承诺回报")
-            if promised_reward and promised_reward != "未填写":
-                promise_id = f"promise:{scene_id}"
-                nodes.append(_node(promise_id, "promise", promised_reward[:38], "memory", "scene", str(scene.get("path") or scene_id), "library", subtitle="作品向读者作出的后续承诺"))
-                edges.append(_edge(f"scene:{scene_id}", promise_id, "promise", "建立承诺"))
     for character in characters:
         if str(character.get("title") or "") not in participant_names:
             continue
@@ -273,16 +261,20 @@ def _chapter_graph(
         for scene in selected:
             if str(character.get("title") or "") in _fact(scene, "参与者"):
                 edges.append(_edge(f"character:{character_id}", f"scene:{scene.get('id')}", "participates", "参与"))
-    for branch in branches:
-        scene_id = str(branch.get("id") or "")
-        if not any(str(scene.get("id")) == scene_id for scene in selected):
-            continue
-        for option in branch.get("options", []) if isinstance(branch.get("options"), list) else []:
-            if not isinstance(option, dict):
-                continue
-            option_id = str(option.get("id") or _digest(option))
-            nodes.append(_node(f"branch:{scene_id}:{option_id}", "branch", str(option.get("label") or option_id), "formal" if option.get("selected") else "alternative", "branch", str(branch.get("path") or scene_id), "library", subtitle=str(option.get("summary") or "")[:90]))
-            edges.append(_edge(f"scene:{scene_id}", f"branch:{scene_id}:{option_id}", "branch", "已选择" if option.get("selected") else "备选"))
+    # The whole book remains visible, but a focused chapter is a real working
+    # cluster: every one of its scenes exposes the same evidence classes. A
+    # missing artifact becomes an explicit blocked node instead of silently
+    # making the scene look finished.
+    for focused_scene in selected:
+        _append_scene_evidence(
+            nodes,
+            edges,
+            focused_scene,
+            branches,
+            reviews,
+            canon_patches,
+            include_pending=True,
+        )
     _append_task_projection(nodes, edges, dashboard, ordered_scenes, level="chapter")
     return nodes, edges
 
@@ -325,44 +317,98 @@ def _scene_graph(
         )
         if index:
             edges.append(_edge(f"scene:{ordered_scenes[index - 1].get('id')}", f"scene:{candidate_id}", "bridge", "场景承接"))
-    participants = {part.strip() for part in re.split(r"[、,，]", _fact(scene, "参与者")) if part.strip()}
+    focused_chapter_id = _scene_chapter(scene)
+    focused_chapter_scenes = [candidate for candidate in ordered_scenes if _scene_chapter(candidate) == focused_chapter_id]
+    participants = {
+        part.strip()
+        for candidate in focused_chapter_scenes
+        for part in re.split(r"[、,，]", _fact(candidate, "参与者"))
+        if part.strip()
+    }
     for character in characters:
         if str(character.get("title") or "") not in participants:
             continue
         item_id = str(character.get("id") or "")
         nodes.append(_node(f"character:{item_id}", "character", str(character.get("title") or item_id), "memory", "character", str(character.get("path") or item_id), "library", subtitle=str(character.get("excerpt") or "")[:90]))
-        edges.append(_edge(f"character:{item_id}", f"scene:{scene_id}", "participates", "参与本场"))
-    branch = next((item for item in branches if str(item.get("id")) == scene_id), None)
-    if branch:
-        for option in branch.get("options", []) if isinstance(branch.get("options"), list) else []:
+        for candidate in focused_chapter_scenes:
+            candidate_id = str(candidate.get("id") or "")
+            if str(character.get("title") or "") in _fact(candidate, "参与者"):
+                edges.append(_edge(f"character:{item_id}", f"scene:{candidate_id}", "participates", "参与本场"))
+    for focused_scene in focused_chapter_scenes:
+        _append_scene_evidence(
+            nodes,
+            edges,
+            focused_scene,
+            branches,
+            reviews,
+            canon_patches,
+            include_pending=True,
+        )
+    _append_task_projection(nodes, edges, dashboard, [scene], level="scene")
+    return nodes, edges
+
+
+def _append_scene_evidence(
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    scene: dict[str, Any],
+    branches: list[dict[str, Any]],
+    reviews: list[dict[str, Any]],
+    canon_patches: list[dict[str, Any]],
+    *,
+    include_pending: bool,
+) -> None:
+    """Unfold one scene's evidence without inventing missing creative output."""
+    scene_id = str(scene.get("id") or "")
+    if not scene_id:
+        return
+    scene_ref = str(scene.get("path") or scene_id)
+    branch = next((item for item in branches if str(item.get("id") or "") == scene_id), None)
+    branch_options = branch.get("options") if isinstance(branch, dict) and isinstance(branch.get("options"), list) else []
+    if branch_options:
+        for option in branch_options:
             if not isinstance(option, dict):
                 continue
             option_id = str(option.get("id") or _digest(option))
             node_id = f"branch:{scene_id}:{option_id}"
-            nodes.append(_node(node_id, "branch", str(option.get("label") or option_id), "formal" if option.get("selected") else "alternative", "branch", str(branch.get("path") or scene_id), "library", subtitle=str(option.get("summary") or "")[:90]))
-            edges.append(_edge(f"scene:{scene_id}", node_id, "branch", "采用" if option.get("selected") else "舍弃/保留"))
-    related_reviews = [item for item in reviews if scene_id.lower() in str(item.get("path") or item.get("id") or "").lower()]
+            nodes.append(_node(node_id, "branch", str(option.get("label") or option_id), "formal" if option.get("selected") else "alternative", "branch", str(branch.get("path") or scene_ref), "library", subtitle=str(option.get("summary") or "")[:90]))
+            edges.append(_edge(f"scene:{scene_id}", node_id, "branch", "已选择" if option.get("selected") else "备选"))
+    elif include_pending:
+        node_id = f"branch-pending:{scene_id}"
+        nodes.append(_node(node_id, "branch", "待推演分支", "blocked", "scene", scene_ref, "overview", subtitle="这一场尚未生成正式分支；完成剧情推演后会在此展开。"))
+        edges.append(_edge(f"scene:{scene_id}", node_id, "workflow", "等待分支推演"))
+
+    related_reviews = [
+        item
+        for item in reviews
+        if scene_id.lower() in str(item.get("path") or item.get("id") or "").lower()
+        and "agent_completion" not in str(item.get("path") or item.get("id") or "").lower()
+    ]
     for review in related_reviews[:2]:
         node_id = f"review:{review.get('id')}"
         status = "formal" if str(review.get("status")) in {"pass", "ready"} else "blocked"
         nodes.append(_node(node_id, "review", str(review.get("title") or "场景审查"), status, "review", str(review.get("path") or review.get("id")), "library", subtitle=str(review.get("excerpt") or "")[:90]))
         edges.append(_edge(f"scene:{scene_id}", node_id, "review", "审查证据"))
+    if include_pending and not related_reviews:
+        node_id = f"review-pending:{scene_id}"
+        nodes.append(_node(node_id, "review", "待场景审查", "blocked", "scene", scene_ref, "overview", subtitle="这一场尚未写入候选审查结论；完成 AgentReview 后会在此显示。"))
+        edges.append(_edge(f"scene:{scene_id}", node_id, "workflow", "等待场景审查"))
+
     for patch in [item for item in canon_patches if scene_id.lower() in str(item.get("path") or item.get("id") or "").lower()][:3]:
         node_id = f"canon:{patch.get('id')}"
         nodes.append(_node(node_id, "canon", str(patch.get("title") or "设定变化"), "formal" if str(patch.get("status")) in {"applied", "approved"} else "blocked", "canon-patch", str(patch.get("path") or patch.get("id")), "library", subtitle=str(patch.get("excerpt") or "")[:90]))
         edges.append(_edge(f"scene:{scene_id}", node_id, "canon", "设定写回"))
+
     question = _fact(scene, "读者问题")
     if question and question != "未填写":
         node_id = f"question:{scene_id}"
-        nodes.append(_node(node_id, "reader-question", question[:38], "alternative", "scene", str(scene.get("path") or scene_id), "library", subtitle="本场留下的读者问题"))
+        nodes.append(_node(node_id, "reader-question", question[:38], "alternative", "scene", scene_ref, "library", subtitle="本场留下的读者问题"))
         edges.append(_edge(f"scene:{scene_id}", node_id, "raises", "提出问题"))
     promised_reward = _fact(scene, "承诺回报")
     if promised_reward and promised_reward != "未填写":
         node_id = f"promise:{scene_id}"
-        nodes.append(_node(node_id, "promise", promised_reward[:38], "memory", "scene", str(scene.get("path") or scene_id), "library", subtitle="后续必须兑现、反转或解释"))
+        nodes.append(_node(node_id, "promise", promised_reward[:38], "memory", "scene", scene_ref, "library", subtitle="后续必须兑现、反转或解释"))
         edges.append(_edge(f"scene:{scene_id}", node_id, "promise", "建立承诺"))
-    _append_task_projection(nodes, edges, dashboard, [scene], level="scene")
-    return nodes, edges
 
 
 def _formal_chars_by_chapter(reader: dict[str, Any]) -> dict[str, int]:

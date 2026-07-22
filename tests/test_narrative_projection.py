@@ -84,6 +84,42 @@ class NarrativeProjectionTests(unittest.TestCase):
         self.assertIn("character", kinds)
         self.assertIn("promise", kinds)
 
+    def test_chapter_and_scene_focus_unfold_every_scene_in_the_focused_chapter(self):
+        scenes = [
+            {"id": "scene_0001", "title": "场景一", "path": "scenes/scene_0001.yaml", "facts": [{"label": "章节", "value": "chapter_0001"}, {"label": "读者问题", "value": "信是谁留下的？"}]},
+            {"id": "scene_0002", "title": "场景二", "path": "scenes/scene_0002.yaml", "facts": [{"label": "章节", "value": "chapter_0001"}]},
+            {"id": "scene_0003", "title": "场景三", "path": "scenes/scene_0003.yaml", "facts": [{"label": "章节", "value": "chapter_0001"}]},
+            {"id": "scene_0004", "title": "远处场景", "path": "scenes/scene_0004.yaml", "facts": [{"label": "章节", "value": "chapter_0002"}]},
+        ]
+        library = {
+            "sections": {
+                "scenes": scenes,
+                "characters": [],
+                "branches": [
+                    {"id": "scene_0001", "path": "branches/scene_0001/branch_manifest.json", "options": [{"id": "A", "label": "保留秘密", "selected": True}]},
+                    {"id": "scene_0002", "path": "branches/scene_0002/branch_manifest.json", "options": [{"id": "B", "label": "直接质问", "selected": True}]},
+                ],
+                "reviews": [
+                    {"id": "scene_0001-review", "title": "场景一审查", "path": "reviews/scene_0001_scene_review.json", "status": "pass"},
+                    {"id": "scene_0002-review", "title": "场景二审查", "path": "reviews/scene_0002_scene_review.json", "status": "pass"},
+                ],
+                "canon_patches": [],
+            }
+        }
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
+            chapter = build_narrative_projection({}, Path(temporary), level="chapter", focus="chapter_0001")
+            scene = build_narrative_projection({}, Path(temporary), level="scene", focus="scene_0002")
+        for projection in (chapter, scene):
+            node_ids = {str(node["node_id"]) for node in projection["nodes"]}
+            self.assertIn("branch:scene_0001:A", node_ids)
+            self.assertIn("branch:scene_0002:B", node_ids)
+            self.assertIn("branch-pending:scene_0003", node_ids)
+            self.assertNotIn("branch-pending:scene_0004", node_ids)
+            self.assertIn("review:scene_0001-review", node_ids)
+            self.assertIn("review:scene_0002-review", node_ids)
+            self.assertIn("review-pending:scene_0003", node_ids)
+            self.assertIn("question:scene_0001", node_ids)
+
     def test_projection_shows_current_state_machine_action(self):
         library = {"sections": {"scenes": [{"id": "scene_0001", "title": "场景一", "subtitle": "chapter_0001", "facts": [{"label": "章节", "value": "chapter_0001"}]}], "characters": [], "branches": [], "reviews": [], "canon_patches": []}}
         dashboard = {"next_actions": [{"route": "scene-development", "target": "scene_0001", "next_action": "先完成角色推演。"}]}

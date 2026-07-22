@@ -1,6 +1,6 @@
 import type { SpatialNarrativeNode, SpatialNodeDetail } from "@/types/spatial";
 
-export type SpatialWindowKind = "node" | "progress" | "reader" | "decisions" | "rules" | "health" | "delivery";
+export type SpatialWindowKind = "node" | "progress" | "agent" | "reader" | "decisions" | "rules" | "health" | "delivery";
 
 export interface SpatialWindowPosition {
   left: number;

@@ -26,6 +26,8 @@ const activeRun = computed(() => asRecord(app.autopilotStatus?.run));
 const activeRunStatus = computed(() => String(activeRun.value.status || ""));
 const observedTask = computed(() => app.agentObservability?.active_task || null);
 const observedEvents = computed(() => (app.agentObservability?.recent_events || []).slice(-4).reverse());
+const observedSessions = computed(() => app.agentObservability?.sessions || []);
+const observedTimeline = computed(() => (app.agentObservability?.recent_events || []).slice(-12).reverse());
 const deliveryReady = computed(() => String(props.delivery?.status || "") === "ready");
 const progressParts = computed(() => asList<Record<string, unknown>>(props.progress?.parts));
 const progressPercent = computed(() => Number(props.progress?.overall_percent));
@@ -193,6 +195,32 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
             <p v-if="activeRun.last_error" class="progress-warning">{{ activeRun.last_error }}</p>
             <AutopilotPanel compact />
           </div>
+        </div>
+      </template>
+      <template v-else-if="item.kind === 'agent'">
+        <div class="spatial-agent-window" :data-status="activeRunStatus || 'idle'">
+          <header class="agent-runtime-heading">
+            <span class="agent-runtime-orb"><Activity :size="17" /></span>
+            <div><small>AGENT RUNTIME</small><strong>{{ observedTask?.role || '执行中心待命' }}</strong></div>
+            <i :class="{ live: app.agentObservability?.status === 'active', paused: activeRunStatus === 'paused' }">{{ activeRunStatus === 'paused' ? 'PAUSED' : app.agentObservability?.status === 'active' ? 'LIVE' : 'IDLE' }}</i>
+          </header>
+          <section class="agent-current-task">
+            <span>当前阶段</span>
+            <strong>{{ observedTask?.stage || '等待状态机分派下一项任务' }}</strong>
+            <p>{{ observedTask?.message || '这里会显示已被正式领取的任务，不展示隐藏提示词、凭证或原始工具输出。' }}</p>
+          </section>
+          <dl class="agent-runtime-facts">
+            <div><dt>执行器</dt><dd>{{ observedTask?.runtime || '未启动' }}</dd></div>
+            <div><dt>路线</dt><dd>{{ observedTask?.route || '等待任务' }}</dd></div>
+            <div><dt>已完成</dt><dd>{{ Number(observedTask?.tasks_completed || 0) }} 项</dd></div>
+            <div><dt>异常</dt><dd>{{ Number(observedTask?.failures || 0) }} 项</dd></div>
+          </dl>
+          <section v-if="observedSessions.length" class="agent-session-strip"><span>会话</span><strong>{{ observedSessions[0]?.session_id || '当前会话' }}</strong><small>{{ observedSessions[0]?.event_count || 0 }} 条可见事件</small></section>
+          <section class="agent-event-timeline">
+            <header><span>执行轨迹</span><small>{{ observedTimeline.length ? '实时更新' : '等待第一条任务事件' }}</small></header>
+            <ol v-if="observedTimeline.length"><li v-for="event in observedTimeline" :key="event.sequence"><i></i><div><strong>{{ event.stage }}</strong><p>{{ event.message }}</p></div><small>{{ event.route || '系统' }}</small></li></ol>
+            <p v-else>开始推进后，领取任务、读取任务包、运行 CLI、验证产物和等待授权都会在这里依次出现。</p>
+          </section>
         </div>
       </template>
       <template v-else-if="item.kind === 'reader'">

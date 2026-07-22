@@ -156,6 +156,11 @@ class AutopilotTests(unittest.TestCase):
 
             resumed_policy = store.read_autopilot_run(run["run_id"])["policy"]
             self.assertEqual(resumed_policy["limits"]["max_runtime_hours"], 12)
+            self.assertTrue(resumed_policy.get("runtime_window_started_at"))
+            self.assertNotEqual(
+                DelegationPolicy(resumed_policy).limit_reason({**run, "started_at": "2020-01-01T00:00:00+00:00"}),
+                "runtime-limit",
+            )
             self.assertEqual(result["run"]["run_id"], run["run_id"])
             events = store.autopilot_events_since(run["run_id"])
             self.assertTrue(any(event["event"] == "autopilot.authorization_updated" for event in events))
