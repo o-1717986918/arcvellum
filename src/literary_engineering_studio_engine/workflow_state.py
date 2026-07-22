@@ -389,7 +389,7 @@ def _longform_materialization_step(root: Path) -> dict[str, object]:
         "status": "pass" if passed else "missing",
         "path": "workflow/longform_materialization.json",
         "message": message,
-        "next_action": "" if passed else "materialize the reviewed longform plan into formal plot/outline.md and scenes/*.yaml",
+        "next_action": "" if passed else "materialize the reviewed longform plan, safely adopting matching existing formal contracts without overwriting them",
     }
 
 

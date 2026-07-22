@@ -56,6 +56,43 @@ class LongformMaterializerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
                 materialize_longform_plan(root)
 
+    def test_materializer_adopts_matching_formal_scenes_after_planning_digest_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_inputs(root)
+            materialize_longform_plan(root)
+            scene_path = root / "scenes/scene_0001.yaml"
+            outline_path = root / "plot/outline.md"
+            original_scene = scene_path.read_text(encoding="utf-8")
+            original_outline = outline_path.read_text(encoding="utf-8")
+            expansion = root / "plot/candidates/outlines/word_budget_expansion.md"
+            expansion.write_text(expansion.read_text(encoding="utf-8") + "\n<!-- revised planning note -->\n", encoding="utf-8")
+
+            result = materialize_longform_plan(root)
+
+            self.assertEqual(scene_path.read_text(encoding="utf-8"), original_scene)
+            self.assertEqual(outline_path.read_text(encoding="utf-8"), original_outline)
+            payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["materialization_mode"], "adopted-existing")
+            passed, message = longform_materialization_status(root)
+            self.assertTrue(passed, message)
+
+    def test_materializer_refuses_to_adopt_conflicting_formal_scene_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_inputs(root)
+            materialize_longform_plan(root)
+            scene_path = root / "scenes/scene_0001.yaml"
+            scene_path.write_text(
+                scene_path.read_text(encoding="utf-8").replace("word_count_target: 1200", "word_count_target: 9999"),
+                encoding="utf-8",
+            )
+            expansion = root / "plot/candidates/outlines/word_budget_expansion.md"
+            expansion.write_text(expansion.read_text(encoding="utf-8") + "\n<!-- revised planning note -->\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "manual reconciliation required"):
+                materialize_longform_plan(root)
+
     def test_card_inventory_from_earlier_studio_runs_is_materialized(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

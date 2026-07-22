@@ -54,6 +54,36 @@ def materialize_longform_plan(project_root: Path) -> LongformMaterializationResu
 
     scene_dir = root / "scenes"
     scene_dir.mkdir(parents=True, exist_ok=True)
+    planned_scene_paths = [scene_dir / f"{scene['scene_id']}.yaml" for scene in scenes]
+    formal_scene_paths = [path for path in planned_scene_paths if path.is_file() and not _is_blank_scene_scaffold(path)]
+    if formal_scene_paths:
+        conflicts = _existing_formal_scene_conflicts(root, scenes, planned_scene_paths)
+        outline_path = root / "plot" / "outline.md"
+        if not outline_path.is_file():
+            conflicts.append("missing existing formal outline: plot/outline.md")
+        if conflicts:
+            detail = "; ".join(conflicts[:8])
+            raise ValueError(
+                "refusing to overwrite non-scaffold formal scenes; manual reconciliation required: " + detail
+            )
+        manifest = _materialization_manifest(
+            root,
+            required,
+            source_digest,
+            outline_path,
+            planned_scene_paths,
+            scenes,
+            mode="adopted-existing",
+        )
+        atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+        return LongformMaterializationResult(
+            root,
+            manifest_path,
+            outline_path,
+            tuple(planned_scene_paths),
+            int(manifest["chapter_count"]),
+        )
+
     scene_paths: list[Path] = []
     previous_scene: dict[str, object] | None = None
     for scene in scenes:
@@ -69,17 +99,7 @@ def materialize_longform_plan(project_root: Path) -> LongformMaterializationResu
     outline_text = _formal_outline(expansion_path.read_text(encoding="utf-8", errors="ignore"), inventory_text)
     atomic_write_text(outline_path, outline_text)
 
-    manifest = {
-        "schema": MATERIALIZATION_SCHEMA,
-        "created_at": _now(),
-        "source_digest": source_digest,
-        "sources": [path.relative_to(root).as_posix() for path in required],
-        "outline_path": outline_path.relative_to(root).as_posix(),
-        "scene_paths": [path.relative_to(root).as_posix() for path in scene_paths],
-        "scene_count": len(scene_paths),
-        "chapter_count": len({str(scene["chapter_id"]) for scene in scenes}),
-        "status": "materialized",
-    }
+    manifest = _materialization_manifest(root, required, source_digest, outline_path, scene_paths, scenes)
     atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     return LongformMaterializationResult(
         root,
@@ -491,6 +511,98 @@ def _is_blank_scene_scaffold(path: Path) -> bool:
             f"reviews/agent/{path.stem}_scene_review.json",
         )
     )
+
+
+def _existing_formal_scene_conflicts(
+    root: Path,
+    scenes: list[dict[str, object]],
+    planned_scene_paths: list[Path],
+) -> list[str]:
+    """Return contract conflicts without ever mutating an existing scene.
+
+    A planning digest can change for harmless reasons after a project has
+    already entered formal scene development.  Re-materializing in that case
+    must never replace those formal files.  We can safely adopt the new
+    planning digest only when the reviewed inventory still describes the exact
+    same formal scene contracts.
+    """
+
+    conflicts: list[str] = []
+    planned_by_path = {path: scene for path, scene in zip(planned_scene_paths, scenes)}
+    for path, scene in planned_by_path.items():
+        relative = path.relative_to(root).as_posix()
+        if not path.is_file():
+            conflicts.append(f"missing formal scene: {relative}")
+            continue
+        if _is_blank_scene_scaffold(path):
+            conflicts.append(f"scene remains a blank scaffold: {relative}")
+            continue
+        actual = _scene_contract_core(path)
+        expected = {
+            "scene_id": str(scene["scene_id"]),
+            "chapter_id": str(scene["chapter_id"]),
+            "volume_id": str(scene["volume_id"]),
+            "title": str(scene["name"]),
+            "word_count_target": str(int(scene["target_chars"])),
+        }
+        for key, expected_value in expected.items():
+            if actual.get(key) != expected_value:
+                actual_value = actual.get(key) or "<missing>"
+                conflicts.append(f"{relative} {key} differs ({actual_value!r} != {expected_value!r})")
+
+    planned = set(planned_by_path)
+    unexpected = sorted(
+        path.relative_to(root).as_posix()
+        for path in (root / "scenes").glob("scene_*.yaml")
+        if path not in planned and not _is_blank_scene_scaffold(path)
+    )
+    if unexpected:
+        conflicts.append("formal scenes are absent from the reviewed inventory: " + ", ".join(unexpected[:5]))
+    return conflicts
+
+
+def _scene_contract_core(path: Path) -> dict[str, str]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    fields = ("scene_id", "chapter_id", "volume_id", "title", "word_count_target")
+    return {field: _yaml_scalar(text, field) for field in fields}
+
+
+def _yaml_scalar(text: str, key: str) -> str:
+    match = re.search(rf"(?m)^{re.escape(key)}:\s*(.*?)\s*$", text)
+    if not match:
+        return ""
+    value = match.group(1).strip()
+    if value.startswith('"'):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            decoded = value.strip('"')
+        return str(decoded).strip()
+    return value.strip("' ")
+
+
+def _materialization_manifest(
+    root: Path,
+    required: tuple[Path, ...],
+    source_digest: str,
+    outline_path: Path,
+    scene_paths: list[Path],
+    scenes: list[dict[str, object]],
+    *,
+    mode: str = "created",
+) -> dict[str, object]:
+    return {
+        "schema": MATERIALIZATION_SCHEMA,
+        "created_at": _now(),
+        "source_digest": source_digest,
+        "sources": [path.relative_to(root).as_posix() for path in required],
+        "outline_path": outline_path.relative_to(root).as_posix(),
+        "scene_paths": [path.relative_to(root).as_posix() for path in scene_paths],
+        "scene_count": len(scene_paths),
+        "chapter_count": len({str(scene["chapter_id"]) for scene in scenes}),
+        "status": "materialized",
+        "materialization_mode": mode,
+    }
 
 
 def _source_digest(paths: tuple[Path, ...]) -> str:

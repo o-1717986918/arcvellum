@@ -1850,7 +1850,7 @@ def _longform_blueprint_for_state(root: Path, current_state: str, next_action: s
             "hard_constraints": [
                 "Materialize only after the budget, scene inventory, and chapter obligation reviews all pass.",
                 "Convert the reviewed candidate inventory into formal scene contracts; do not invent or omit scenes in this deterministic step.",
-                "Never overwrite a scene that already contains formal development evidence.",
+                "Never overwrite a scene that already contains formal development evidence. When every existing formal contract exactly matches the reviewed inventory, record a safe adoption manifest instead; if any contract differs, stop for manual reconciliation.",
             ],
             "style_constraints": [],
             "word_count_target": target_words,
