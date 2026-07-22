@@ -5,11 +5,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tauri::{path::BaseDirectory, Manager, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_shell::{process::CommandChild, ShellExt};
+use tauri::{path::BaseDirectory, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri_plugin_shell::{process::{CommandChild, CommandEvent}, ShellExt};
 use uuid::Uuid;
 
 struct StudioSidecar(Mutex<Option<CommandChild>>);
+
+fn emit_startup_error(window: &WebviewWindow, message: &str) {
+    let payload = serde_json::json!({ "message": message });
+    let script = format!(
+        "window.__ARCVELLUM_STARTUP_ERROR = {payload}; window.dispatchEvent(new CustomEvent('arcvellum:startup-error', {{ detail: {payload} }}));"
+    );
+    let _ = window.eval(&script);
+}
 
 fn free_port() -> Result<u16, Box<dyn std::error::Error>> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -82,8 +90,39 @@ fn main() {
                 .env("LES_OPENCODE_EXECUTABLE", opencode)
                 .spawn()?;
             app.manage(StudioSidecar(Mutex::new(Some(child))));
+            let event_window = main_window.clone();
             tauri::async_runtime::spawn(async move {
-                while events.recv().await.is_some() {}
+                let mut stderr_lines: Vec<String> = Vec::new();
+                while let Some(event) = events.recv().await {
+                    match event {
+                        CommandEvent::Stderr(line) => {
+                            let line = String::from_utf8_lossy(&line).trim().to_string();
+                            if !line.is_empty() {
+                                stderr_lines.push(line);
+                                if stderr_lines.len() > 6 {
+                                    stderr_lines.remove(0);
+                                }
+                            }
+                        }
+                        CommandEvent::Error(error) => {
+                            emit_startup_error(&event_window, &format!(
+                                "本地创作服务无法启动：{error}。请重新启动 ArcVellum；若仍失败，请在设置中导出诊断信息。"
+                            ));
+                        }
+                        CommandEvent::Terminated(payload) => {
+                            let detail = if stderr_lines.is_empty() {
+                                format!("服务进程提前结束（退出码 {:?}）。", payload.code)
+                            } else {
+                                stderr_lines.join(" ")
+                            };
+                            emit_startup_error(&event_window, &format!(
+                                "本地创作服务没有成功启动。{detail} 请重新启动 ArcVellum；若仍失败，请在设置中导出诊断信息。"
+                            ));
+                        }
+                        CommandEvent::Stdout(_) => {}
+                        _ => {}
+                    }
+                }
             });
             thread::spawn(move || {
                 if wait_for_server(port, Duration::from_secs(45)) {
@@ -91,8 +130,9 @@ fn main() {
                         "window.dispatchEvent(new CustomEvent('arcvellum:backend-ready'));",
                     );
                 } else {
-                    let _ = main_window.eval(
-                        "window.dispatchEvent(new CustomEvent('arcvellum:startup-error'));",
+                    emit_startup_error(
+                        &main_window,
+                        "本地创作服务在 45 秒内没有响应。请重新启动 ArcVellum；若仍失败，请在设置中导出诊断信息。",
                     );
                 }
             });

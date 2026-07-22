@@ -63,6 +63,9 @@ async function enterImmersiveOrrery(): Promise<void> {
 
 onMounted(async () => {
   window.addEventListener("arcvellum:onboarding", openOnboarding);
+  window.addEventListener("arcvellum:startup-error", handleStartupError);
+  const startupError = window.__ARCVELLUM_STARTUP_ERROR?.message;
+  if (startupError) store.reportStartupError(startupError);
   const returning = window.localStorage.getItem("arcvellum.startup-seen") === "1";
   window.setTimeout(() => (startupVisualSkippable.value = true), 600);
   window.setTimeout(() => (startupMinimumElapsed.value = true), returning ? 560 : 1950);
@@ -102,7 +105,13 @@ function closeOnboarding(): void {
 onBeforeUnmount(() => {
   store.stopProjectStreams();
   window.removeEventListener("arcvellum:onboarding", openOnboarding);
+  window.removeEventListener("arcvellum:startup-error", handleStartupError);
 });
+
+function handleStartupError(event: Event): void {
+  const detail = (event as CustomEvent<{ message?: string }>).detail;
+  store.reportStartupError(detail?.message || "本地创作服务没有成功启动，请重试。");
+}
 </script>
 
 <template>

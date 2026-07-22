@@ -196,7 +196,13 @@ def main(argv: list[str] | None = None) -> int:
         server = config.get("server", {}) if isinstance(config.get("server"), dict) else {}
         host = args.host or str(server.get("host") or "127.0.0.1")
         port = args.port or int(server.get("port") or 8791)
-        uvicorn.run("literary_engineering_studio.api_server:create_app", host=host, port=port, factory=True)
+        # Do not give Uvicorn an import string here.  The desktop sidecar is a
+        # PyInstaller-frozen executable, where Uvicorn's secondary dynamic
+        # import cannot reliably resolve our packaged module.  Importing the
+        # factory in-process makes the frozen and source execution paths match.
+        from .api_server import create_app
+
+        uvicorn.run(create_app(), host=host, port=port)
         return 0
 
     parser.error(f"unknown command: {args.command}")

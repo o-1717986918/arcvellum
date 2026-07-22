@@ -268,6 +268,12 @@ export const useAppStore = defineStore("app", () => {
     notice.value = "";
   }
 
+  function reportStartupError(message: string): void {
+    error.value = message.trim() || "本地创作服务没有成功启动，请重试。";
+    loading.value = false;
+    initialized.value = false;
+  }
+
   return {
     initialized,
     loading,
@@ -306,6 +312,7 @@ export const useAppStore = defineStore("app", () => {
     setAutopilotRun,
     loadModelCatalog,
     clearMessages,
+    reportStartupError,
     stopProjectStreams,
   };
 });
