@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NarrativeParallaxRenderer, type StageAnchor } from "@/features/orrery/engine/parallaxRenderer";
+import { DEFAULT_PARALLAX_VIEW, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
 
 const props = defineProps<{
@@ -20,6 +21,8 @@ const staticProjection = ref(false);
 const staticCamera = { x: 0, y: 0, scale: 0.78 };
 let staticCameraReady = false;
 let staticDrag: { pointerId: number; clientX: number; clientY: number; x: number; y: number } | null = null;
+const staticView: ParallaxView = { ...DEFAULT_PARALLAX_VIEW };
+let staticOrbit: { pointerId: number; clientX: number; clientY: number; view: ParallaxView; pivot: WorldPoint | null } | null = null;
 
 const selectedPoint = computed<WorldPoint | null>(() => props.selectedNodeId ? props.layout.points.get(props.selectedNodeId) || null : null);
 
@@ -187,10 +190,15 @@ function staticWorldPoints(primary: SpatialNarrativeProjection["nodes"]): Map<st
     // a 2.5D view of the real narrative river, not a second linear timeline.
     // Multipliers translate semantic layout units into a roomy DOM world.
     worlds.set(node.node_id, point
-      ? { x: (point.x - first.x) * 164, y: -(point.y - first.y) * 188 }
+      ? staticWorldPoint(point, first)
       : { x: index * 118, y: -index * 5.8 });
   });
   return worlds;
+}
+
+function staticWorldPoint(point: WorldPoint, origin: WorldPoint): { x: number; y: number } {
+  const oriented = orientWorldPoint({ x: point.x - origin.x, y: point.y - origin.y, z: point.z - origin.z }, staticView);
+  return { x: oriented.x * 164, y: -oriented.y * 188 };
 }
 
 function initializeStaticCamera(primary: SpatialNarrativeProjection["nodes"], worlds: Map<string, { x: number; y: number }>, rect: DOMRect): void {
@@ -217,6 +225,9 @@ function staticScreenAnchor(point: { x: number; y: number }, rect: DOMRect, dept
 function resetStaticCamera(): void {
   staticCameraReady = false;
   staticDrag = null;
+  staticOrbit = null;
+  staticView.yaw = DEFAULT_PARALLAX_VIEW.yaw;
+  staticView.pitch = DEFAULT_PARALLAX_VIEW.pitch;
 }
 
 function hashNode(value: string): number {
@@ -253,7 +264,7 @@ function focus(point: WorldPoint, nodeId = ""): void {
     renderer.focus(point, 0.8, nodeId);
     return;
   }
-  focusStaticNode(nodeId);
+  focusStaticPoint(point);
 }
 
 function fitStaticCamera(): void {
@@ -275,15 +286,14 @@ function fitStaticCamera(): void {
   emitStaticAnchors();
 }
 
-function focusStaticNode(nodeId: string): void {
+function focusStaticPoint(point: WorldPoint): void {
   const target = host.value;
-  if (!target || !nodeId) return;
+  if (!target) return;
   const primary = props.projection.nodes.filter((node) => node.type === "chapter" || node.type === "scene").sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
-  const worlds = staticWorldPoints(primary);
-  const point = worlds.get(nodeId);
-  if (!point) return;
-  staticCamera.x = point.x;
-  staticCamera.y = point.y;
+  const first = props.layout.points.get(primary[0]?.node_id || "") || { x: 0, y: 0, z: 0 };
+  const world = staticWorldPoint(point, first);
+  staticCamera.x = world.x;
+  staticCamera.y = world.y;
   staticCamera.scale = Math.max(0.72, staticCamera.scale);
   staticCameraReady = true;
   emitStaticAnchors();
@@ -291,11 +301,33 @@ function focusStaticNode(nodeId: string): void {
 
 function startStaticDrag(event: PointerEvent): void {
   if (!staticProjection.value || !host.value) return;
+  if (event.button === 1) {
+    event.preventDefault();
+    staticOrbit = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      view: { ...staticView },
+      pivot: staticViewPivot(),
+    };
+    host.value.setPointerCapture(event.pointerId);
+    return;
+  }
+  if (event.button !== 0) return;
   host.value.setPointerCapture(event.pointerId);
   staticDrag = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: staticCamera.x, y: staticCamera.y };
 }
 
 function moveStaticDrag(event: PointerEvent): void {
+  if (staticOrbit?.pointerId === event.pointerId) {
+    event.preventDefault();
+    const nextView = parallaxViewFromDrag(staticOrbit.view, event.clientX - staticOrbit.clientX, event.clientY - staticOrbit.clientY);
+    staticView.yaw = nextView.yaw;
+    staticView.pitch = nextView.pitch;
+    recenterStaticView(staticOrbit.pivot);
+    emitStaticAnchors();
+    return;
+  }
   if (!staticDrag || staticDrag.pointerId !== event.pointerId) return;
   staticCamera.x = staticDrag.x - (event.clientX - staticDrag.clientX) / staticCamera.scale;
   staticCamera.y = staticDrag.y - (event.clientY - staticDrag.clientY) / staticCamera.scale;
@@ -303,6 +335,11 @@ function moveStaticDrag(event: PointerEvent): void {
 }
 
 function stopStaticDrag(event: PointerEvent): void {
+  if (staticOrbit?.pointerId === event.pointerId) {
+    staticOrbit = null;
+    host.value?.releasePointerCapture(event.pointerId);
+    return;
+  }
   if (!staticDrag || staticDrag.pointerId !== event.pointerId) return;
   staticDrag = null;
   host.value?.releasePointerCapture(event.pointerId);
@@ -322,9 +359,54 @@ function zoomStatic(event: WheelEvent): void {
   emitStaticAnchors();
 }
 
-defineExpose({ fit, focus, openingSegment });
+function resetView(): void {
+  if (renderer) {
+    renderer.resetView();
+    return;
+  }
+  if (!staticProjection.value || (staticView.yaw === 0 && staticView.pitch === 0)) return;
+  const pivot = staticViewPivot();
+  staticView.yaw = DEFAULT_PARALLAX_VIEW.yaw;
+  staticView.pitch = DEFAULT_PARALLAX_VIEW.pitch;
+  recenterStaticView(pivot);
+  emitStaticAnchors();
+}
+
+function staticViewPivot(): WorldPoint | null {
+  if (selectedPoint.value) return selectedPoint.value;
+  const primary = props.projection.nodes
+    .filter((node) => node.type === "chapter" || node.type === "scene")
+    .sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
+  const first = props.layout.points.get(primary[0]?.node_id || "") || { x: 0, y: 0, z: 0 };
+  let closest: WorldPoint | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (const node of primary) {
+    const point = props.layout.points.get(node.node_id);
+    if (!point) continue;
+    const world = staticWorldPoint(point, first);
+    const distance = Math.hypot(world.x - staticCamera.x, world.y - staticCamera.y);
+    if (distance < closestDistance) {
+      closest = point;
+      closestDistance = distance;
+    }
+  }
+  return closest;
+}
+
+function recenterStaticView(pivot: WorldPoint | null): void {
+  if (!pivot) return;
+  const primary = props.projection.nodes
+    .filter((node) => node.type === "chapter" || node.type === "scene")
+    .sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
+  const first = props.layout.points.get(primary[0]?.node_id || "") || { x: 0, y: 0, z: 0 };
+  const world = staticWorldPoint(pivot, first);
+  staticCamera.x = world.x;
+  staticCamera.y = world.y;
+}
+
+defineExpose({ fit, focus, openingSegment, resetView });
 </script>
 
 <template>
-  <div ref="host" class="narrative-parallax-stage" aria-hidden="true" @pointerdown="startStaticDrag" @pointermove="moveStaticDrag" @pointerup="stopStaticDrag" @pointercancel="stopStaticDrag" @wheel.prevent="zoomStatic"></div>
+  <div ref="host" class="narrative-parallax-stage" aria-hidden="true" title="左键拖动浏览，滚轮缩放，中键拖动调整视角" @pointerdown="startStaticDrag" @pointermove="moveStaticDrag" @pointerup="stopStaticDrag" @pointercancel="stopStaticDrag" @wheel.prevent="zoomStatic"></div>
 </template>

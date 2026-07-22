@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Activity, BookOpenText, BookPlus, ChevronDown, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, Settings2, SlidersHorizontal } from "lucide-vue-next";
+import { Activity, BookOpenText, BookPlus, ChevronDown, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
@@ -10,6 +10,7 @@ import NarrativeParallaxStage from "@/features/orrery/NarrativeParallaxStage.vue
 import NarrativeHealthRail from "@/features/orrery/NarrativeHealthRail.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
 import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
+import { chapterClusterFocusPoint } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import { api, query } from "@/services/api";
 import { manuscriptItems } from "@/services/presentation";
@@ -154,34 +155,40 @@ function focusNodeObject(node: SpatialNarrativeNode): void {
   void selectNode(node);
 }
 
+function resetView(): void {
+  stage.value?.resetView();
+}
+
 async function openChapterFromRail(nodeId: string): Promise<void> {
   const chapter = chapterNodes.value.find((item) => item.node_id === nodeId);
   if (!chapter) return;
   // The rail is a global table of contents. It never replaces the full-book
-  // canvas: it changes the detailed focus and then flies the camera to that
-  // chapter's first scene on the same narrative river.
-  const firstScene = projection.value?.nodes
+  // canvas: scene mode still needs one entry scene for its detail contract,
+  // but the camera lands at the centre of the whole chapter cluster.
+  const entryScene = projection.value?.nodes
     .filter((node) => node.type === "scene" && String(node.metrics.chapter_id || "") === chapter.source_id)
     .sort((left, right) => left.order - right.order)[0];
   if (spatial.level === "scene") {
-    await spatial.setView({ level: "scene", focus: firstScene?.node_id.replace(/^scene:/, "") || "" });
+    await spatial.setView({ level: "scene", focus: entryScene?.node_id.replace(/^scene:/, "") || "" });
   } else {
     await spatial.setView({ level: "chapter", focus: chapter.source_id });
   }
-  await focusChapterCluster(chapter.source_id);
+  await focusChapterCluster(chapter.source_id, chapter.node_id);
 }
 
-async function focusChapterCluster(chapterId: string): Promise<void> {
+async function focusChapterCluster(chapterId: string, chapterNodeId: string): Promise<void> {
   await nextTick();
-  // The renderer mounts its new anchors during Vue's paint. A frame boundary
-  // keeps directory navigation fluid without selecting or opening a window.
-  window.requestAnimationFrame(() => {
-    const target = projection.value?.nodes
-      .filter((node) => node.type === "scene" && String(node.metrics.chapter_id || "") === chapterId)
-      .sort((left, right) => left.order - right.order)[0];
-    const point = target ? layout.value?.points.get(target.node_id) : undefined;
-    if (target && point) stage.value?.focus(point, target.node_id);
-  });
+  // The renderer mounts its new anchors during Vue's paint. Waiting for that
+  // frame keeps the focus target in the newly selected coordinate system.
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  const currentLayout = layout.value;
+  const currentProjection = projection.value;
+  if (!currentLayout || !currentProjection) return;
+  const chapterProjectionNode = currentProjection.nodes.find((node) => node.type === "chapter" && node.source_id === chapterId);
+  const point = chapterClusterFocusPoint(currentProjection.nodes, currentLayout.points, chapterId)
+    || currentLayout.points.get(chapterNodeId)
+    || currentLayout.points.get(chapterProjectionNode?.node_id || "");
+  if (point) stage.value?.focus(point, chapterNodeId);
 }
 
 function selectCharacter(nodeId: string): void {
@@ -243,6 +250,7 @@ async function loadChapterRail(root: string): Promise<void> {
       <label><Layers3 :size="14" /><select :value="spatial.grammar" aria-label="叙事空间构型" @change="setGrammar"><option v-for="grammar in projection?.available_grammars || []" :key="grammar" :value="grammar">{{ grammarLabel(grammar) }}</option></select></label>
       <span></span>
       <button class="orrery-v3-icon" title="完整显示当前构型" @click="stage?.fit()"><Focus :size="16" /></button>
+      <button class="orrery-v3-icon" title="复位伪 3D 视角；中键拖动可调整视角" aria-label="复位伪 3D 视角" @click="resetView"><RotateCcw :size="15" /></button>
       <button class="orrery-v3-icon" :title="listMode ? '显示空间场景' : '显示无障碍列表'" @click="listMode = !listMode"><Network v-if="listMode" :size="16" /><List v-else :size="16" /></button>
     </nav>
 

@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
 import type { OrreryDepth, OrreryMotion, OrreryRenderQuality } from "@/services/orreryPreferences";
+import { DEFAULT_PARALLAX_VIEW, depthScale, parallaxViewFromDrag, scenePoint, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 
 // Book-scale work surface. The world is intentionally generous so a 300+ scene
 // projection can still fit without the camera clamping the last chapters.
@@ -89,6 +90,9 @@ export class NarrativeParallaxRenderer {
   private secondaryRelations: Graphics | null = null;
   private focusedNodeId = "";
   private experience: StageExperience;
+  private view: ParallaxView = { ...DEFAULT_PARALLAX_VIEW };
+  private orbitPointer: { pointerId: number; clientX: number; clientY: number; view: ParallaxView; pivot: WorldPoint | null } | null = null;
+  private viewRefreshQueued = false;
   private contextLostListener: (() => void) | null = null;
   private readonly handleContextLost = (event: Event) => {
     event.preventDefault();
@@ -97,6 +101,41 @@ export class NarrativeParallaxRenderer {
   };
   private readonly handleContextRestored = () => {
     if (this.projection && this.layout) this.update(this.projection, this.layout);
+  };
+  private readonly handlePointerDown = (event: PointerEvent) => {
+    if (event.button !== 1) return;
+    // Middle drag owns the oblique camera; left drag remains world panning.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.animation = null;
+    this.orbitPointer = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      view: { ...this.view },
+      pivot: this.viewPivot(),
+    };
+    this.app.canvas.dataset.orbiting = "true";
+    this.app.canvas.setPointerCapture?.(event.pointerId);
+  };
+  private readonly handlePointerMove = (event: PointerEvent) => {
+    const orbit = this.orbitPointer;
+    if (!orbit || orbit.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.view = parallaxViewFromDrag(orbit.view, event.clientX - orbit.clientX, event.clientY - orbit.clientY);
+    this.queueViewRefresh(orbit.pivot);
+  };
+  private readonly handlePointerStop = (event: PointerEvent) => {
+    if (!this.orbitPointer || this.orbitPointer.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.orbitPointer = null;
+    delete this.app.canvas.dataset.orbiting;
+    if (this.app.canvas.hasPointerCapture?.(event.pointerId)) this.app.canvas.releasePointerCapture(event.pointerId);
+  };
+  private readonly handleAuxClick = (event: MouseEvent) => {
+    if (event.button === 1) event.preventDefault();
   };
 
   private constructor(host: HTMLElement, viewport: Viewport, app: Application, experience: StageExperience) {
@@ -130,6 +169,11 @@ export class NarrativeParallaxRenderer {
     app.canvas.className = "narrative-parallax-canvas";
     app.canvas.addEventListener("webglcontextlost", instance.handleContextLost, false);
     app.canvas.addEventListener("webglcontextrestored", instance.handleContextRestored, false);
+    app.canvas.addEventListener("pointerdown", instance.handlePointerDown, true);
+    app.canvas.addEventListener("pointermove", instance.handlePointerMove, true);
+    app.canvas.addEventListener("pointerup", instance.handlePointerStop, true);
+    app.canvas.addEventListener("pointercancel", instance.handlePointerStop, true);
+    app.canvas.addEventListener("auxclick", instance.handleAuxClick, true);
     host.append(app.canvas);
     app.stage.addChild(viewport);
     viewport.eventMode = "static";
@@ -239,9 +283,22 @@ export class NarrativeParallaxRenderer {
     this.animateTo(target.x, target.y, Math.min(1.8, 0.86 + importance * 0.58), 680);
   }
 
+  resetView(): void {
+    if (this.view.yaw === 0 && this.view.pitch === 0) return;
+    const pivot = this.viewPivot();
+    this.view = { ...DEFAULT_PARALLAX_VIEW };
+    this.animation = null;
+    this.updateViewAround(pivot);
+  }
+
   dispose(): void {
     this.app.canvas.removeEventListener("webglcontextlost", this.handleContextLost);
     this.app.canvas.removeEventListener("webglcontextrestored", this.handleContextRestored);
+    this.app.canvas.removeEventListener("pointerdown", this.handlePointerDown, true);
+    this.app.canvas.removeEventListener("pointermove", this.handlePointerMove, true);
+    this.app.canvas.removeEventListener("pointerup", this.handlePointerStop, true);
+    this.app.canvas.removeEventListener("pointercancel", this.handlePointerStop, true);
+    this.app.canvas.removeEventListener("auxclick", this.handleAuxClick, true);
     this.viewport.destroy({ children: true });
     this.app.destroy(true, { children: true });
     this.anchorListener = null;
@@ -541,36 +598,56 @@ export class NarrativeParallaxRenderer {
   }
 
   private projectPoint(point: WorldPoint): { x: number; y: number } {
-    return scenePoint(point, this.experience.depth);
+    return scenePoint(point, this.experience.depth, this.view);
   }
 
   private projectDepthScale(point: WorldPoint): number {
-    return depthScale(point, this.experience.depth);
+    return depthScale(point, this.experience.depth, this.view);
+  }
+
+  private queueViewRefresh(pivot: WorldPoint | null): void {
+    if (this.viewRefreshQueued) return;
+    this.viewRefreshQueued = true;
+    window.requestAnimationFrame(() => {
+      this.viewRefreshQueued = false;
+      this.updateViewAround(pivot);
+    });
+  }
+
+  private updateViewAround(pivot: WorldPoint | null): void {
+    if (!this.projection || !this.layout) return;
+    this.update(this.projection, this.layout);
+    // Changing yaw/pitch should orbit a narrative landmark, not push the
+    // entire book out of frame. This preserves the reader's spatial anchor.
+    if (pivot) {
+      const projected = this.projectPoint(pivot);
+      this.viewport.moveCenter(projected.x, projected.y);
+      this.emitAnchors(true);
+    }
+  }
+
+  private viewPivot(): WorldPoint | null {
+    if (!this.layout) return null;
+    const focused = this.focusedNodeId ? this.layout.points.get(this.focusedNodeId) : undefined;
+    if (focused) return focused;
+    let closest: WorldPoint | null = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    const center = this.viewport.center;
+    for (const point of this.layout.points.values()) {
+      const projected = this.projectPoint(point);
+      const distance = Math.hypot(projected.x - center.x, projected.y - center.y);
+      if (distance < closestDistance) {
+        closest = point;
+        closestDistance = distance;
+      }
+    }
+    return closest;
   }
 
   private effectiveMotion(): OrreryMotion {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "reduced";
     return this.experience.motion;
   }
-}
-
-export function scenePoint(point: WorldPoint, depth: OrreryDepth = "deep"): { x: number; y: number } {
-  const zFactor = depth === "deep" ? 1 : depth === "balanced" ? 0.56 : 0.08;
-  const xFactor = depth === "deep" ? 1 : depth === "balanced" ? 0.78 : 0.65;
-  return {
-    // Oblique projection: depth drifts right and down while elevation climbs
-    // more steeply. This remains a deterministic 2D transform, but makes the
-    // foreground/midground/background relationship legible without a 3D mesh.
-    x: ORIGIN.x + point.x * 126 * xFactor + point.z * 29 * zFactor,
-    y: ORIGIN.y + point.z * 58 * zFactor - point.y * 88,
-  };
-}
-
-function depthScale(point: WorldPoint, depth: OrreryDepth): number {
-  // Positive z sits slightly nearer the viewer in the oblique projection.
-  if (depth === "flat") return 1;
-  const zFactor = depth === "deep" ? 1 : 0.48;
-  return Math.max(0.72, Math.min(1.28, 0.99 + point.z * 0.025 * zFactor + point.y * 0.012));
 }
 
 function nodeDrift(node: SpatialNarrativeProjection["nodes"][number], time: number): { x: number; y: number } {
