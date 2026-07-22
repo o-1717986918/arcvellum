@@ -200,6 +200,60 @@ export interface DeliveryResponse {
   [key: string]: unknown;
 }
 
+export interface ProjectProgressPart {
+  id: "preparation" | "manuscript" | "integrity";
+  label: string;
+  weight: number;
+  percent: number | null;
+  actual?: number;
+  target?: number | null;
+  checks?: Array<{ id: string; label: string; complete: boolean }>;
+  message?: string;
+}
+
+export interface ProjectProgress {
+  ok: boolean;
+  schema: "arcvellum/project-progress/v1";
+  status: "calibrated" | "waiting_calibration";
+  overall_percent: number | null;
+  target_chinese_content_chars: number;
+  formal_chinese_content_chars: number;
+  parts: ProjectProgressPart[];
+  source_revisions: Record<string, string>;
+  revision: string;
+}
+
+export interface AgentObservableEvent {
+  sequence: number;
+  at: string;
+  event: string;
+  stage: string;
+  message: string;
+  task_id: string;
+  route: string;
+}
+
+export interface AgentObservability {
+  ok: boolean;
+  schema: "arcvellum/agent-observability/v1";
+  project_root: string;
+  status: "active" | "idle";
+  active_task: {
+    role: string;
+    runtime: string;
+    route: string;
+    task_id: string;
+    status: string;
+    stage: string;
+    message: string;
+    tasks_completed: number;
+    failures: number;
+  } | null;
+  sessions: Array<{ session_id: string; role: string; runtime: string; status: string; route: string; event_count: number; started_at: string }>;
+  recent_events: AgentObservableEvent[];
+  revision: string;
+}
+
 export interface AdvisorAction {
   type: "open_view" | "record_direction" | "run_next_task" | "prepare_next_task" | "start_autopilot" | "pause_autopilot" | "resume_autopilot" | "request_revision";
   label: string;

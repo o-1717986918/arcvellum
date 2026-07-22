@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import re
 import shlex
 import sys
 from typing import Iterable
@@ -124,8 +125,14 @@ class CoreBridge:
 
         if not command.strip():
             raise ValueError("task command is empty")
+        parameters = task_command_parameters(command)
+        if parameters:
+            raise ValueError("task command is a template and requires: " + ", ".join(parameters))
         if any(token in command for token in FORBIDDEN_COMMAND_TOKENS):
             raise ValueError("task command contains a formal-mode bypass token")
+        # Commands run as an argument vector, never through a shell.  Keep the
+        # reject list for real shell-control syntax, but only after unresolved
+        # template fields have been surfaced as a human gate above.
         shell_check = command.replace("<project>", "")
         if any(token in shell_check for token in ("&&", "||", "|", ">", "< ", ";", "`")):
             raise ValueError("task command contains unsupported shell syntax")
@@ -140,6 +147,23 @@ class CoreBridge:
         if not args:
             raise ValueError("task command does not contain a core subcommand")
         return self.run(args, timeout=timeout).require_success()
+
+
+def task_command_parameters(command: str) -> tuple[str, ...]:
+    """Return unresolved placeholders from a core command template.
+
+    ``<project>`` is the only placeholder Studio is allowed to materialize on
+    its own. Asset intake templates intentionally contain choices such as
+    ``<type>`` or ``<user brief>``; attempting to execute those strings makes
+    the task look like a shell failure instead of an honest decision gate.
+    """
+
+    normalized = str(command or "").replace("<project>", "")
+    optional_values = [item.strip() for item in re.findall(r"\[([^\]]+)\]", normalized)]
+    required_source = re.sub(r"\[[^\]]+\]", "", normalized)
+    values = [item.strip() for item in re.findall(r"<([^>]+)>", required_source)]
+    values.extend(optional_values)
+    return tuple(dict.fromkeys(item for item in values if item))
 
 
 def parse_cli_fields(stdout: str) -> dict[str, str]:

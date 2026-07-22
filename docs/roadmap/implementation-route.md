@@ -1,5 +1,11 @@
 # Studio Implementation Route
 
+## Planned Roadmap: ArcVellum v0.9
+
+ArcVellum v0.9 will replace the fixed SVG orrery with an adaptive 2.5D narrative stage while preserving the embedded literary state machine as the only workflow authority. The product and visual specification is recorded in `docs/roadmap/arcvellum-v0.9-spatial-orrery-and-creative-observability-plan.md`; the dependency-ordered engineering route, migration strategy, performance budgets, test matrix, and release gates are recorded in `docs/roadmap/arcvellum-v0.9-implementation-execution-plan.md`.
+
+The implementation follows a contract-first vertical-slice strategy: Projection v3, one complete real-scene spatial workflow, deterministic layout grammars and LOD, purpose-built instruments, formal rhythm integration, then visual/performance/desktop release hardening. The v0.8 view remains available as a compatibility fallback until v0.9 reaches functional parity.
+
 ## Delivered Roadmap: ArcVellum v0.5.1-v0.7
 
 The post-v0.5 roadmap in `docs/roadmap/arcvellum-v0.5.1-v0.7-reader-advisor-observatory-plan.md` is implemented in ArcVellum v0.7.0. Its release evidence is recorded in `docs/releases/v0.7.0-verification.md`.

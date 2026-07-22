@@ -52,6 +52,7 @@ def build_workflow_dashboard(
     state = build_workflow_state(
         root,
         route="overall",
+        scene_scope="dashboard",
         output=dashboard_dir / "route_state.md",
         json_output=dashboard_dir / "route_state.json",
     )

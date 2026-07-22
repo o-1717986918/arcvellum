@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Info, KeyRound, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
+import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
 import { api, authorizedFetch } from "@/services/api";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
+import { applyOrreryExperience, readOrreryExperience, type OrreryDepth, type OrreryMotion, type OrreryRenderQuality, type OrreryTheme } from "@/services/orreryPreferences";
 import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
@@ -12,17 +13,24 @@ const credential = reactive({ provider_id: "deepseek", credential: "" });
 const selectedModels = reactive({ worker: "", advisor: "", steward: "" });
 const busy = ref(false);
 const feedback = ref("");
-const section = ref<"connections" | "about">("connections");
+const section = ref<"connections" | "appearance" | "about">("connections");
 const appInfo = ref<Record<string, any> | null>(null);
 const updateResult = ref<UpdateCheckResult | null>(null);
 const updateProgress = ref({ downloaded: 0, total: 0 });
 const projectsRoot = ref("");
+const experience = reactive({
+  theme: "moss" as OrreryTheme,
+  motion: "full" as OrreryMotion,
+  depth: "balanced" as OrreryDepth,
+  quality: "auto" as OrreryRenderQuality,
+});
 
 const providers = computed(() => store.modelCatalog?.providers || []);
 const connectedProviders = computed(() => providers.value.filter((provider) => provider.connected));
 const models = computed(() => connectedProviders.value.flatMap((provider) => provider.models || []));
 
 onMounted(async () => {
+  Object.assign(experience, readOrreryExperience());
   try {
     await store.loadModelCatalog();
     syncSelectedModels();
@@ -32,6 +40,11 @@ onMounted(async () => {
   appInfo.value = await api<Record<string, any>>("/application/info").catch(() => null);
   projectsRoot.value = String(appInfo.value?.paths?.projects_root || "");
 });
+
+function saveExperience(): void {
+  Object.assign(experience, applyOrreryExperience(experience));
+  feedback.value = "叙事场域偏好已应用。";
+}
 
 async function refresh(): Promise<void> {
   busy.value = true;
@@ -189,6 +202,7 @@ function pathValue(key: string): string {
 
     <div class="settings-tabs" role="tablist">
       <button :class="{ active: section === 'connections' }" @click="section = 'connections'"><CloudCog :size="16" />连接与模型</button>
+      <button :class="{ active: section === 'appearance' }" @click="section = 'appearance'"><Palette :size="16" />场域与动效</button>
       <button :class="{ active: section === 'about' }" @click="section = 'about'"><Info :size="16" />关于 ArcVellum</button>
     </div>
 
@@ -243,6 +257,55 @@ function pathValue(key: string): string {
         </div>
       </div>
     </section>
+    </template>
+
+    <template v-else-if="section === 'appearance'">
+      <section class="settings-section appearance-workbench">
+        <header>
+          <span class="section-icon iris"><Layers3 :size="18" /></span>
+          <div><h2>叙事场域</h2><p>这里控制星仪的材质、呼吸感与纵深。它不改变作品内容，只决定你如何观察和推进它。</p></div>
+        </header>
+        <div class="appearance-control-grid">
+          <label class="appearance-control">
+            <span><Palette :size="16" />整体主题</span>
+            <select v-model="experience.theme" @change="saveExperience">
+              <option value="moss">苔夜星仪</option>
+              <option value="iris">靛紫航图</option>
+              <option value="obsidian">黑曜黄铜</option>
+              <option value="bookcase">书柜暖调</option>
+              <option value="modern">冷峻现代</option>
+            </select>
+            <small>更换星仪、仪表与窗口的综合色彩。</small>
+          </label>
+          <label class="appearance-control">
+            <span><Gauge :size="16" />场景动效</span>
+            <select v-model="experience.motion" @change="saveExperience">
+              <option value="full">完整呼吸</option>
+              <option value="reduced">克制动效</option>
+              <option value="still">静止阅读</option>
+            </select>
+            <small>静止阅读会关闭节点漂移与镜头过渡。</small>
+          </label>
+          <label class="appearance-control">
+            <span><Layers3 :size="16" />空间纵深</span>
+            <select v-model="experience.depth" @change="saveExperience">
+              <option value="deep">深度场域</option>
+              <option value="balanced">平衡观察</option>
+              <option value="flat">平面阅读</option>
+            </select>
+            <small>平面阅读保留逻辑关系，但减弱伪 3D 投影。</small>
+          </label>
+          <label class="appearance-control">
+            <span><Gauge :size="16" />渲染质量</span>
+            <select v-model="experience.quality" @change="saveExperience">
+              <option value="auto">自动平衡</option>
+              <option value="high">高质量细节</option>
+              <option value="efficient">性能优先</option>
+            </select>
+            <small>性能优先会降低画布像素密度，适合长篇大项目。</small>
+          </label>
+        </div>
+      </section>
     </template>
 
     <template v-else>

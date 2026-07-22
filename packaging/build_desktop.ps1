@@ -5,12 +5,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$SourceRoot = Join-Path $Root "src"
+# The release command must work from a clean checkout as well as from a
+# developer environment that skips dependency installation. Keep the source
+# package importable for the version and provenance utilities below.
+if ($env:PYTHONPATH) {
+    $env:PYTHONPATH = "$SourceRoot;$env:PYTHONPATH"
+} else {
+    $env:PYTHONPATH = $SourceRoot
+}
 $TargetTriple = "x86_64-pc-windows-msvc"
 $TauriRoot = Join-Path $Root "desktop\src-tauri"
 $BinaryDir = Join-Path $TauriRoot "binaries"
 $ResourceDir = Join-Path $TauriRoot "resources"
 $SidecarSource = Join-Path $Root "dist\literary-engineering-studio-sidecar.exe"
 $SidecarTarget = Join-Path $BinaryDir "literary-engineering-studio-sidecar-$TargetTriple.exe"
+$SidecarProvenance = Join-Path $Root "build\sidecar-provenance.json"
 $OpenCodeSource = Join-Path $Root "build\vendor\opencode-v1.18.3\expanded\opencode.exe"
 
 function Assert-NativeSuccess([string]$Step) {
@@ -68,6 +78,11 @@ try {
     Assert-NativeSuccess "Python sidecar build"
     New-Item -ItemType Directory -Force -Path $BinaryDir, $ResourceDir | Out-Null
     Copy-Item -Force -LiteralPath $SidecarSource -Destination $SidecarTarget
+    python (Join-Path $Root "packaging\sidecar_provenance.py") write `
+        --root $Root `
+        --binary $SidecarTarget `
+        --manifest $SidecarProvenance
+    Assert-NativeSuccess "Frozen sidecar provenance write"
     Copy-Item -Force -LiteralPath $OpenCodeSource -Destination (Join-Path $ResourceDir "opencode.exe")
     Copy-Item -Force -LiteralPath (Join-Path $Root "src\literary_engineering_studio\vendor\OPENCODE-NOTICE.md") -Destination (Join-Path $ResourceDir "OPENCODE-NOTICE.md")
     Copy-Item -Force -LiteralPath (Join-Path $Root "src\literary_engineering_studio\vendor\OPENCODE-LICENSE.txt") -Destination (Join-Path $ResourceDir "OPENCODE-LICENSE.txt")
@@ -88,6 +103,11 @@ try {
     }
     $env:PATH = "$HOME\.cargo\bin;$env:PATH"
     Assert-BundleTargetsAvailable
+    python (Join-Path $Root "packaging\sidecar_provenance.py") verify `
+        --root $Root `
+        --binary $SidecarTarget `
+        --manifest $SidecarProvenance
+    Assert-NativeSuccess "Frozen sidecar provenance verification"
     cmd /c npm run desktop:build
     Assert-NativeSuccess "Tauri desktop build"
     $StudioVersion = python -c "from literary_engineering_studio import __version__; print(__version__)"
@@ -97,7 +117,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v0.8 adds Creative Quality Profiles, scoped prose rules, Narrative Orrery, help, details and legal guidance."
+        --notes "ArcVellum v0.9 adds the 2.5D Narrative Orrery, compact spatial instruments, formal rhythm observability, and real delivery progress streaming."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

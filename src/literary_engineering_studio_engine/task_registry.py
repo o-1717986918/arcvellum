@@ -44,6 +44,11 @@ SUPPORTED_ROUTES = {
     "review-and-audit",
     "export-and-release",
 }
+
+# Bump this whenever the executable task-package contract changes.  Active
+# packages are deliberately refreshed by `task-next` instead of leaving a
+# desktop client to execute an obsolete command captured by an older build.
+TASK_CONTRACT_REVISION = "2026-07-22.1"
 TASK_TYPE_EXECUTION = {
     "deterministic-cli": ("deterministic", "deterministic-engine"),
     "deterministic-review": ("deterministic", "deterministic-engine"),
@@ -233,6 +238,7 @@ def _task_contract_fingerprint(task: dict[str, object]) -> str:
         key: task.get(key)
         for key in (
             "schema",
+            "task_contract_revision",
             "task_id",
             "route",
             "scene_id",
@@ -267,7 +273,22 @@ def open_task(project_root: Path, task_id: str) -> TaskRegistryResult:
 
     root = project_root.resolve()
     task_json = _task_json_path(root, task_id)
-    task = _enrich_task_payload(_load_task(task_json))
+    stored = _load_task(task_json)
+    if (
+        str(stored.get("status") or "") in {"issued", "opened", "submitted", "blocked"}
+        and str(stored.get("task_contract_revision") or "") != TASK_CONTRACT_REVISION
+    ):
+        # A task id can be retained by a paused UI run.  Refresh it against the
+        # current route definition before opening, otherwise an old frozen task
+        # may still contain a template command such as `--target-words <target>`.
+        refreshed = issue_next_task(root, route=str(stored.get("route") or ""), force=True)
+        if refreshed.task_id != task_id or refreshed.task_json_path is None:
+            raise ValueError(
+                f"task package is stale; request the current task for route {stored.get('route') or 'unknown'}"
+            )
+        task_json = refreshed.task_json_path
+        stored = _load_task(task_json)
+    task = _enrich_task_payload(stored)
     task["status"] = "opened"
     task["opened_at"] = _now()
     task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -2828,6 +2849,7 @@ def _prompt_asset_lines(prompt_asset_id: str) -> list[str]:
 
 def _enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
     enriched = dict(task)
+    enriched["task_contract_revision"] = TASK_CONTRACT_REVISION
     prompt_id = str(enriched.get("prompt_asset_id") or "").strip()
     if not prompt_id:
         raise ValueError("formal task is missing prompt_asset_id")

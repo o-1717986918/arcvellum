@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ArrowRight, CircleAlert, CircleCheck, Clock3, Eye, EyeOff, Image, Maximize2, Minimize2, Palette, Play, Route, X } from "lucide-vue-next";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
@@ -7,9 +7,12 @@ import ImmersiveConsole from "@/components/ImmersiveConsole.vue";
 import StoryTrace from "@/components/StoryTrace.vue";
 import { api, query } from "@/services/api";
 import { asList, asRecord, describeGate, describeWorkflowAction, formatCount, labelFor, manuscriptItems, targetLabel, workflowStepLabel } from "@/services/presentation";
-import { backgroundForTheme, normalizeInstrumentVisibility, normalizeOrreryBackground, normalizeOrreryMode, normalizeOrreryTheme, type OrreryBackground, type OrreryMode, type OrreryTheme } from "@/services/orreryPreferences";
+import { applyOrreryExperience, backgroundForTheme, normalizeInstrumentVisibility, normalizeOrreryBackground, normalizeOrreryMode, normalizeOrreryTheme, type OrreryBackground, type OrreryMode, type OrreryTheme } from "@/services/orreryPreferences";
+import { loadOrreryBackground } from "@/services/orreryAssets";
 import { useAppStore } from "@/stores/app";
 import type { ImmersivePanel } from "@/types/immersive";
+
+const OrreryWorkbench = defineAsyncComponent(() => import("@/features/orrery/OrreryWorkbench.vue"));
 
 const store = useAppStore();
 const choices = ref<Record<string, unknown>[]>([]);
@@ -19,12 +22,20 @@ const narrow = window.matchMedia("(max-width: 760px)").matches;
 const mode = ref<OrreryMode>(normalizeOrreryMode(localStorage.getItem("arcvellum.orreryMode"), narrow));
 const background = ref<OrreryBackground>(normalizeOrreryBackground(localStorage.getItem("arcvellum.orreryBackground")));
 const theme = ref<OrreryTheme>(normalizeOrreryTheme(localStorage.getItem("arcvellum.visualTheme")));
+// The standard trace remains compiled only as a compatibility branch. Public
+// navigation and persisted preferences are intentionally locked to spatial.
+const engine = ref<"spatial">("spatial");
+const backgroundImage = ref("");
 const instrumentsVisible = ref(normalizeInstrumentVisibility(localStorage.getItem("arcvellum.orreryInstruments")));
 const immersivePanels = ref<ImmersivePanel[]>([]);
 const selectedChoice = ref<Record<string, unknown> | null>(null);
 const choiceRationale = ref("");
 const choiceBusy = ref(false);
+const choiceMessage = ref("");
+const choiceError = ref("");
+const choiceCompleted = ref(false);
 const immersive = computed(() => mode.value === "immersive");
+const heroStyle = computed(() => ({ "--orrery-background-image": backgroundImage.value ? `url("${backgroundImage.value}")` : "none" }));
 
 const dashboard = computed(() => (store.dashboard || null) as Record<string, unknown> | null);
 const summary = computed(() => asRecord(dashboard.value?.summary));
@@ -53,6 +64,7 @@ const activeRunTitle = computed(() => {
 onMounted(async () => {
   window.addEventListener("arcvellum:orrery-mode", handleGlobalModeRequest as EventListener);
   if (window.matchMedia("(max-width: 760px)").matches) mode.value = "workbench";
+  else mode.value = "immersive";
   await store.refreshWorkspace();
   await loadChoices();
 });
@@ -65,9 +77,19 @@ watch(mode, (value) => {
   document.documentElement.classList.toggle("orrery-immersive", value === "immersive");
 }, { immediate: true });
 watch(background, (value) => localStorage.setItem("arcvellum.orreryBackground", value));
+watch(background, async (value, _previous, onCleanup) => {
+  let active = true;
+  onCleanup(() => { active = false; });
+  backgroundImage.value = "";
+  try {
+    const source = await loadOrreryBackground(value);
+    if (active) backgroundImage.value = source;
+  } catch {
+    if (active) backgroundImage.value = "";
+  }
+}, { immediate: true });
 watch(theme, (value, previous) => {
-  localStorage.setItem("arcvellum.visualTheme", value);
-  document.documentElement.dataset.arcvellumTheme = value;
+  applyOrreryExperience({ theme: value });
   if (previous && previous !== value) background.value = backgroundForTheme(value);
 }, { immediate: true });
 watch(instrumentsVisible, (value) => localStorage.setItem("arcvellum.orreryInstruments", value ? "visible" : "hidden"));
@@ -75,7 +97,6 @@ watch(instrumentsVisible, (value) => localStorage.setItem("arcvellum.orreryInstr
 function toggleMode(): void {
   if (!immersive.value && window.matchMedia("(max-width: 760px)").matches) return;
   mode.value = immersive.value ? "workbench" : "immersive";
-  if (!immersive.value) immersivePanels.value = [];
 }
 
 function handleGlobalModeRequest(event: CustomEvent<OrreryMode>): void {
@@ -86,13 +107,30 @@ function handleGlobalModeRequest(event: CustomEvent<OrreryMode>): void {
 function openChoice(choice: Record<string, unknown>): void {
   selectedChoice.value = choice;
   choiceRationale.value = "";
+  choiceMessage.value = "";
+  choiceError.value = "";
+  choiceCompleted.value = false;
+}
+
+function closeChoice(): void {
+  selectedChoice.value = null;
+  choiceRationale.value = "";
+  choiceMessage.value = "";
+  choiceError.value = "";
+  choiceCompleted.value = false;
 }
 
 async function submitChoice(option: Record<string, unknown>): Promise<void> {
   if (!store.currentProjectPath || !selectedChoice.value || choiceBusy.value) return;
+  const selected = String(option.id || option.label || "").trim();
+  if (!selected) {
+    choiceError.value = "这个选项缺少可提交的标识，请刷新项目后重试。";
+    return;
+  }
   choiceBusy.value = true;
+  choiceError.value = "";
   try {
-    await api("/workflow/human-choice", {
+    const result = await api<Record<string, unknown>>("/workflow/human-choice", {
       method: "POST",
       body: JSON.stringify({
         project_root: store.currentProjectPath,
@@ -102,16 +140,19 @@ async function submitChoice(option: Record<string, unknown>): Promise<void> {
         decision_type: selectedChoice.value.decision_type,
         target: selectedChoice.value.target || {},
         options: selectedChoice.value.options || [],
-        selected: option.id,
+        selected,
         rationale: choiceRationale.value || `用户在 ArcVellum 中确认“${String(option.label || option.id)}”。`,
         actor: "arcvellum-user",
       }),
     });
-    selectedChoice.value = null;
+    const effect = asRecord(result.effect);
+    choiceMessage.value = String(effect.summary || result.materialized || "选择已写入正式流程。");
+    choiceCompleted.value = true;
     await Promise.all([loadChoices(), store.refreshWorkspace()]);
-    store.notice = "你的选择已经进入正式创作流程。";
+    store.notice = choiceMessage.value;
   } catch (cause) {
-    store.error = cause instanceof Error ? cause.message : "暂时无法记录这项选择。";
+    choiceError.value = cause instanceof Error ? cause.message : "暂时无法记录这项选择。";
+    store.error = choiceError.value;
   } finally {
     choiceBusy.value = false;
   }
@@ -169,12 +210,31 @@ async function handleActiveRun(): Promise<void> {
     working.value = false;
   }
 }
+
+function inspectSpatialTask(): void {
+  if (immersive.value && !immersivePanels.value.includes("progress")) immersivePanels.value = ["progress", ...immersivePanels.value];
+  if (!immersive.value) document.querySelector(".autopilot-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function openSpatialReader(): void {
+  if (immersive.value && !immersivePanels.value.includes("reader")) immersivePanels.value = ["reader", ...immersivePanels.value];
+  if (!immersive.value) document.querySelector(".manuscript-reader")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function advanceSpatialRun(): void {
+  if (activeRun.value) {
+    void handleActiveRun();
+    return;
+  }
+  void prepareNextTask();
+}
 </script>
 
 <template>
-  <div class="overview-view" :class="{ 'is-immersive': immersive, 'instruments-hidden': immersive && !instrumentsVisible, 'console-open': immersive && immersivePanels.length }" :data-orrery-background="background">
-    <section class="orrery-hero">
-      <StoryTrace :dashboard="dashboard" :immersive="immersive" />
+  <div class="overview-view" :class="{ 'is-immersive': immersive, 'instruments-hidden': immersive && !instrumentsVisible, 'console-open': immersive && immersivePanels.length, 'spatial-active': engine === 'spatial' }" :data-orrery-background="background" :data-orrery-engine="engine">
+    <section class="orrery-hero" :style="heroStyle">
+      <OrreryWorkbench v-if="engine === 'spatial'" :dashboard="dashboard" :immersive="immersive" @advance="advanceSpatialRun" @inspect-task="inspectSpatialTask" @open-reader="openSpatialReader" @choose="openChoice" />
+      <StoryTrace v-else :dashboard="dashboard" :immersive="immersive" />
 
       <div class="orrery-view-tools" aria-label="叙事星仪视图">
         <label title="选择整体观测主题"><Palette :size="15" /><select v-model="theme" aria-label="选择整体观测主题"><option value="moss">苔夜星仪</option><option value="iris">靛紫航图</option><option value="obsidian">黑曜黄铜</option><option value="bookcase">米白书柜</option><option value="modern">冷峻现代</option></select></label>
@@ -187,14 +247,14 @@ async function handleActiveRun(): Promise<void> {
         </button>
       </div>
 
-      <div class="orrery-vitals" aria-label="作品状态摘要">
+      <div v-if="engine !== 'spatial'" class="orrery-vitals" aria-label="作品状态摘要">
         <div><Route :size="15" /><span>路线</span><strong>{{ readyRoutes }}/{{ routeAudits.length || 0 }}</strong></div>
         <div><Clock3 :size="15" /><span>待办</span><strong>{{ formatCount(summary.pending_task_count) }}</strong></div>
         <div :class="{ alert: Number(summary.blocking_count || 0) }"><CircleAlert :size="15" /><span>补齐</span><strong>{{ formatCount(summary.blocking_count) }}</strong></div>
         <div><CircleCheck :size="15" /><span>正文</span><strong>{{ prose.length }}</strong></div>
       </div>
 
-      <aside class="orrery-now-panel">
+      <aside v-if="engine !== 'spatial'" class="orrery-now-panel">
         <span class="eyebrow">现在最值得做</span>
         <template v-if="activeRun">
           <span class="route-chip">{{ labelFor(activeRun.current_route) }}</span>
@@ -224,7 +284,7 @@ async function handleActiveRun(): Promise<void> {
       </aside>
 
       <ImmersiveConsole
-        v-if="immersive"
+        v-if="immersive && engine !== 'spatial'"
         v-model:open="immersivePanels"
         :choices="choices"
         :prose="prose"
@@ -266,14 +326,16 @@ async function handleActiveRun(): Promise<void> {
     </section>
     </div>
 
-    <div v-if="selectedChoice" class="choice-dialog-backdrop" @click.self="selectedChoice = null">
+    <div v-if="selectedChoice" class="choice-dialog-backdrop" @click.self="closeChoice">
       <section class="choice-dialog" role="dialog" aria-modal="true" :aria-label="String(selectedChoice.title || '创作方向选择')">
-        <header><div><span class="eyebrow">这一步由你决定</span><h2>{{ selectedChoice.title || "创作方向选择" }}</h2><p>{{ selectedChoice.summary }}</p></div><button class="icon-button" title="关闭" @click="selectedChoice = null"><X :size="16" /></button></header>
+        <header><div><span class="eyebrow">这一步由你决定</span><h2>{{ selectedChoice.title || "创作方向选择" }}</h2><p>{{ selectedChoice.summary }}</p></div><button class="icon-button" title="关闭" @click="closeChoice"><X :size="16" /></button></header>
+        <p v-if="choiceMessage" class="choice-feedback success" role="status">{{ choiceMessage }}</p>
+        <p v-if="choiceError" class="choice-feedback error" role="alert">{{ choiceError }}</p>
         <div class="choice-options">
           <button
             v-for="option in asList<Record<string, unknown>>(selectedChoice.options)"
             :key="String(option.id)"
-            :disabled="choiceBusy"
+            :disabled="choiceBusy || choiceCompleted"
             @click="submitChoice(option)"
           >
             <span v-if="String(selectedChoice.recommended || '') === String(option.id)">建议</span>

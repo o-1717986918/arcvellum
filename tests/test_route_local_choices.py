@@ -186,6 +186,40 @@ class RouteLocalChoiceTests(unittest.TestCase):
 
             self.assertEqual(result.scene_count, 1)
 
+    def test_dashboard_scope_observes_frontier_without_expanding_every_planned_scene(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            scenes = root / "scenes"
+            scenes.mkdir()
+            for index in range(1, 31):
+                (scenes / f"scene_{index:04d}.yaml").write_text(
+                    f"scene_id: scene_{index:04d}\nchapter_id: chapter_0001\n",
+                    encoding="utf-8",
+                )
+
+            observed: list[str] = []
+            original = workflow_state._scene_state
+
+            def record_scene(project_root, scene_path):
+                observed.append(scene_path.stem)
+                return original(project_root, scene_path)
+
+            with patch.object(workflow_state, "_scene_state", side_effect=record_scene):
+                result = workflow_state.build_workflow_state(
+                    root,
+                    route="overall",
+                    scene_scope="dashboard",
+                    output=root / "workflow/dashboard/route_state.md",
+                    json_output=root / "workflow/dashboard/route_state.json",
+                )
+
+            payload = json.loads((root / "workflow/dashboard/route_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(result.scene_count, 30)
+            self.assertEqual(observed, ["scene_0001"])
+            self.assertEqual(payload["summary"]["scene_scope"]["mode"], "active-frontier")
+            self.assertTrue(payload["summary"]["scene_scope"]["truncated"])
+
 
 if __name__ == "__main__":
     unittest.main()

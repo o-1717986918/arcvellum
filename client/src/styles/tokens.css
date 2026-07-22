@@ -53,11 +53,13 @@
   --instrument-light-raised: #dcece4;
   --instrument-light-line: #a9c9bb;
   --orrery-overlay: rgba(7, 20, 17, 0.38);
+  --orrery-deep: #071713;
   --orrery-line: #6d9989;
   --orrery-core: #68b99c;
   --orrery-label: #edf4f1;
   --orrery-branch: #9184ad;
   --orrery-canon: #c2a45e;
+  --orrery-warning: #e0755f;
 }
 
 html[data-arcvellum-theme="iris"] {
@@ -94,11 +96,13 @@ html[data-arcvellum-theme="iris"] {
   --instrument-light-raised: #f7f5fa;
   --instrument-light-line: #d4cede;
   --orrery-overlay: rgba(12, 11, 29, 0.48);
+  --orrery-deep: #100f1e;
   --orrery-line: #81779e;
   --orrery-core: #a496c7;
   --orrery-label: #f0edf6;
   --orrery-branch: #d381a4;
   --orrery-canon: #ccb271;
+  --orrery-warning: #e07b69;
   --focus: 0 0 0 3px rgba(113, 102, 143, 0.26);
 }
 
@@ -136,11 +140,13 @@ html[data-arcvellum-theme="obsidian"] {
   --instrument-light-raised: #faf9f3;
   --instrument-light-line: #d7d2bd;
   --orrery-overlay: rgba(7, 8, 7, 0.52);
+  --orrery-deep: #0c0d0c;
   --orrery-line: #9c8d68;
   --orrery-core: #c8aa62;
   --orrery-label: #f2efe4;
   --orrery-branch: #8f8a7c;
   --orrery-canon: #e0bd68;
+  --orrery-warning: #de7660;
   --focus: 0 0 0 3px rgba(184, 149, 75, 0.24);
 }
 
@@ -178,11 +184,13 @@ html[data-arcvellum-theme="bookcase"] {
   --instrument-light-raised: #f1e3ca;
   --instrument-light-line: #c8ae80;
   --orrery-overlay: rgba(31, 22, 13, 0.35);
+  --orrery-deep: #21170f;
   --orrery-line: #a17b3e;
   --orrery-core: #cfa34f;
   --orrery-label: #f4ead8;
   --orrery-branch: #9a83aa;
   --orrery-canon: #d4b467;
+  --orrery-warning: #d87255;
   --focus: 0 0 0 3px rgba(208, 163, 78, 0.24);
 }
 
@@ -220,10 +228,12 @@ html[data-arcvellum-theme="modern"] {
   --instrument-light-raised: #edf3f5;
   --instrument-light-line: #b8cbd1;
   --orrery-overlay: rgba(8, 15, 23, 0.34);
+  --orrery-deep: #0e171f;
   --orrery-line: #6fa4b2;
   --orrery-core: #75c2c9;
   --orrery-label: #edf5f7;
   --orrery-branch: #8e83aa;
   --orrery-canon: #c8aa62;
+  --orrery-warning: #df7565;
   --focus: 0 0 0 3px rgba(80, 162, 172, 0.24);
 }

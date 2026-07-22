@@ -117,6 +117,32 @@ class ApiServerTests(unittest.TestCase):
             self.assertIn("id: 1", response.text)
             self.assertIn('"initial": true', response.text)
 
+    def test_narrative_v3_exposes_spatial_contract_and_stream(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root.joinpath("project.yaml").write_text("project:\n  title: test\n", encoding="utf-8")
+            projection = {
+                "ok": True,
+                "schema": "arcvellum/narrative-projection/v3",
+                "revision": "spatial-revision-one",
+                "nodes": [],
+                "edges": [],
+                "timeline": [],
+                "summary": {},
+                "source_revisions": {},
+            }
+            with patch("literary_engineering_studio.api_server.build_narrative_projection_v3", return_value=projection):
+                snapshot = self.client.get("/narrative/projection/v3", params={"project_root": str(root), "grammar": "braid"})
+                self.assertEqual(snapshot.status_code, 200)
+                self.assertEqual(snapshot.json()["schema"], "arcvellum/narrative-projection/v3")
+                stream = self.client.get(
+                    "/narrative/stream/v3",
+                    params={"project_root": str(root), "grammar": "braid", "max_events": 1, "interval_seconds": 2},
+                )
+            self.assertEqual(stream.status_code, 200)
+            self.assertIn("event: narrative.v3.projection", stream.text)
+            self.assertIn("id: 1", stream.text)
+
     def test_model_provider_disconnect_is_exposed_through_control_api(self):
         catalog = {
             "runner": "opencode",
@@ -254,6 +280,76 @@ class ApiServerTests(unittest.TestCase):
             )
             self.assertEqual(rejected.status_code, 400)
 
+    def test_delivery_stream_publishes_real_delivery_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            (project / "exports").mkdir()
+            (project / "exports" / "final-manuscript.docx").write_bytes(b"test-docx")
+            dashboard = {
+                "route_audits": [{
+                    "route": "export-and-release",
+                    "blocking_count": 0,
+                    "pending_task_count": 0,
+                    "top_blocking_gates": [],
+                }]
+            }
+            with patch("literary_engineering_studio.api_server.build_dashboard", return_value=dashboard):
+                response = self.client.get(
+                    "/project/delivery/stream",
+                    params={"project_root": str(project), "max_events": 1},
+                )
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("event: delivery", response.text)
+            self.assertIn("final-manuscript.docx", response.text)
+
+    def test_workspace_stream_coalesces_project_read_models(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            (project / "exports").mkdir()
+            (project / "exports" / "final-manuscript.docx").write_bytes(b"test-docx")
+            dashboard = {
+                "route_audits": [{
+                    "route": "export-and-release",
+                    "blocking_count": 0,
+                    "pending_task_count": 0,
+                    "top_blocking_gates": [],
+                }]
+            }
+            with patch("literary_engineering_studio.api_server.build_dashboard", return_value=dashboard):
+                response = self.client.get(
+                    "/project/workspace/stream",
+                    params={"project_root": str(project), "max_events": 1},
+                )
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("event: workspace.snapshot", response.text)
+            self.assertIn('"dashboard"', response.text)
+            self.assertIn('"reader_manifest"', response.text)
+            self.assertIn('"agent_observability"', response.text)
+
+    def test_workspace_snapshot_hydrates_read_models_in_one_request(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            dashboard = {
+                "route_audits": [{
+                    "route": "export-and-release",
+                    "blocking_count": 0,
+                    "pending_task_count": 0,
+                    "top_blocking_gates": [],
+                }]
+            }
+            with patch("literary_engineering_studio.api_server.build_dashboard", return_value=dashboard):
+                response = self.client.get("/project/workspace", params={"project_root": str(project)})
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertTrue(payload["ok"])
+            self.assertIn("dashboard", payload)
+            self.assertIn("library", payload)
+            self.assertIn("reader_manifest", payload)
+
     def test_project_client_can_create_select_and_record_direction(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -283,6 +379,25 @@ class ApiServerTests(unittest.TestCase):
                 self.assertEqual(direction.status_code, 200)
                 history = self.client.get("/projects/directions", params={"project_root": project["path"]})
                 self.assertEqual(history.json()["items"][0]["message"], "先写日常秩序，再让异常逐步侵入。")
+
+                choice = self.client.post(
+                    "/workflow/human-choice",
+                    json={
+                        "project_root": project["path"],
+                        "choice_id": "choice-api-budget",
+                        "route": "longform-planning",
+                        "decision_type": "word_budget_direction",
+                        "target": {"target_id": "volume_01"},
+                        "options": [{"id": "expand_inventory", "label": "扩充剧情库存"}],
+                        "selected": "expand_inventory",
+                        "rationale": "先增加剧情事件，再安排章节预算。",
+                        "actor": "arcvellum-user",
+                    },
+                )
+                self.assertEqual(choice.status_code, 200)
+                self.assertEqual(choice.json()["effect"]["kind"], "creative-direction")
+                history = self.client.get("/projects/directions", params={"project_root": project["path"]})
+                self.assertIn("expand_inventory", history.json()["items"][-1]["message"])
 
     def test_autopilot_policy_is_user_configurable_and_persistent(self):
         with tempfile.TemporaryDirectory() as temporary:

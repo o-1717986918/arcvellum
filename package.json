@@ -1,20 +1,23 @@
 {
   "name": "arcvellum-studio",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.1",
   "scripts": {
     "client:dev": "vite --config client/vite.config.ts",
-    "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts && node scripts/sync-desktop-frontend.mjs",
+    "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --configLoader runner --config client/vite.config.ts && node scripts/sync-desktop-frontend.mjs && node scripts/verify-v09-build.mjs",
+    "client:verify-build": "node scripts/verify-v09-build.mjs",
     "client:test": "vitest run --config client/vitest.config.ts",
     "client:test:watch": "vitest --config client/vitest.config.ts",
     "tauri": "tauri",
     "desktop:dev": "npm run client:build && tauri dev",
-    "desktop:build": "npm run client:build && tauri build",
+    "desktop:verify-sidecar": "python packaging/sidecar_provenance.py verify --root . --binary desktop/src-tauri/binaries/literary-engineering-studio-sidecar-x86_64-pc-windows-msvc.exe --manifest build/sidecar-provenance.json",
+    "desktop:build": "npm run client:build && npm run desktop:verify-sidecar && tauri build",
     "desktop:icons": "tauri icon desktop/app-icon.svg --output desktop/src-tauri/icons"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.0",
     "@types/node": "^24.13.3",
+    "@types/penner": "^0.1.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/test-utils": "2.4",
     "jsdom": "^26.1.0",
@@ -32,7 +35,10 @@
     "dompurify": "^3.4.12",
     "lucide-vue-next": "^0.468.0",
     "markdown-it": "^14.3.0",
+    "penner": "^0.1.3",
     "pinia": "^3.0.4",
+    "pixi-viewport": "^6.0.3",
+    "pixi.js": "^8.19.0",
     "vue": "3.5",
     "vue-router": "4.5"
   }

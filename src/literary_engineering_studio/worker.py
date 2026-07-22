@@ -11,7 +11,7 @@ from collections.abc import Callable
 
 from .config import load_config
 from .contracts import TaskPackage, load_task_package
-from .core_bridge import CoreBridge
+from .core_bridge import CoreBridge, task_command_parameters
 from .runtimes import build_runtime
 from .sandbox import (
     SandboxManifest,
@@ -143,6 +143,23 @@ class AgentWorker:
             },
         )
         if task.command:
+            unresolved = task_command_parameters(task.command)
+            if unresolved:
+                message = "当前任务需要先确定：" + "、".join(unresolved)
+                self._emit(
+                    "task.parameters_required",
+                    {"task_id": task.task_id, "parameters": list(unresolved), "message": message},
+                )
+                return task, None, WorkerRunResult(
+                    "waiting_human",
+                    project,
+                    task.route,
+                    task.task_id,
+                    runtime_id,
+                    None,
+                    None,
+                    message,
+                )
             self._emit("core.command_started", {"task_id": task.task_id})
             try:
                 command_result = self.bridge.execute_task_command(task.command, sandbox.workspace)

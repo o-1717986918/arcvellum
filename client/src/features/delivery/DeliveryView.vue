@@ -28,11 +28,12 @@ async function prepareDelivery(): Promise<void> {
   preparing.value = true;
   message.value = "";
   try {
-    const result = await api<Record<string, unknown>>("/worker/prepare", {
+    const result = await api<Record<string, unknown>>("/worker/run", {
       method: "POST",
       body: JSON.stringify({ project_root: store.currentProjectPath, route: "export-and-release", runtime: "opencode" }),
     });
-    message.value = String(result.message || "交付任务已经准备好。 ");
+    message.value = String(result.message || "交付任务已经启动；完成后正式文件会出现在下方。");
+    await Promise.allSettled([store.loadDelivery(), store.loadDashboard(), store.loadAgentObservability(), store.loadAutopilotStatus()]);
   } catch (cause) {
     message.value = cause instanceof Error ? cause.message : "暂时无法准备交付。";
   } finally {

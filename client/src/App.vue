@@ -19,7 +19,7 @@ import {
 import StartupScene from "@/components/StartupScene.vue";
 import AdvisorDock from "@/components/AdvisorDock.vue";
 import OnboardingTour from "@/components/OnboardingTour.vue";
-import { normalizeOrreryTheme } from "@/services/orreryPreferences";
+import { applyOrreryExperience } from "@/services/orreryPreferences";
 import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
@@ -29,7 +29,7 @@ const showStartup = ref(true);
 const startupMinimumElapsed = ref(false);
 const startupVisualSkippable = ref(false);
 const showOnboarding = ref(false);
-document.documentElement.dataset.arcvellumTheme = normalizeOrreryTheme(window.localStorage.getItem("arcvellum.visualTheme"));
+applyOrreryExperience({});
 
 const nav = [
   { to: "/projects", label: "作品", icon: FolderKanban, needsProject: false },
@@ -48,6 +48,8 @@ const statusLabel = computed(() => {
   if (phase === "starting") return "正在准备";
   return "运行正常";
 });
+
+const spatialStageMode = computed(() => route.name === "overview");
 
 async function enterImmersiveOrrery(): Promise<void> {
   if (!store.hasProject) {
@@ -115,8 +117,8 @@ onBeforeUnmount(() => {
     />
   </Transition>
 
-  <div class="app-shell" :class="{ 'startup-obscured': showStartup, 'orrery-mode': route.name === 'overview' }">
-    <aside class="sidebar">
+  <div class="app-shell" :class="{ 'startup-obscured': showStartup, 'orrery-mode': route.name === 'overview', 'spatial-stage-mode': spatialStageMode }">
+    <aside v-if="!spatialStageMode" class="sidebar">
       <div class="brand-lockup" aria-label="ArcVellum">
         <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
         <div>

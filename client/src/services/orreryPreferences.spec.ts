@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { backgroundForTheme, normalizeInstrumentVisibility, normalizeOrreryBackground, normalizeOrreryMode, normalizeOrreryTheme } from "./orreryPreferences";
+import {
+  backgroundForTheme,
+  normalizeInstrumentVisibility,
+  normalizeOrreryBackground,
+  normalizeOrreryDepth,
+  normalizeOrreryMode,
+  normalizeOrreryMotion,
+  normalizeOrreryRenderQuality,
+  normalizeOrreryTheme,
+} from "./orreryPreferences";
 
 describe("orrery preferences", () => {
   it("accepts known modes and backgrounds", () => {
@@ -20,5 +29,14 @@ describe("orrery preferences", () => {
   it("keeps instruments visible unless explicitly hidden", () => {
     expect(normalizeInstrumentVisibility(null)).toBe(true);
     expect(normalizeInstrumentVisibility("hidden")).toBe(false);
+  });
+
+  it("normalizes visual comfort and quality preferences", () => {
+    expect(normalizeOrreryMotion("still")).toBe("still");
+    expect(normalizeOrreryMotion("unknown")).toBe("full");
+    expect(normalizeOrreryDepth("flat")).toBe("flat");
+    expect(normalizeOrreryDepth("unknown")).toBe("balanced");
+    expect(normalizeOrreryRenderQuality("efficient")).toBe("efficient");
+    expect(normalizeOrreryRenderQuality("unknown")).toBe("auto");
   });
 });

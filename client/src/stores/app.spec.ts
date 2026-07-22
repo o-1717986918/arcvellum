@@ -65,9 +65,22 @@ describe("application store", () => {
           ],
         };
       }
+      if (path.startsWith("/project/workspace?")) return {
+        dashboard: { ok: true, current_task: { title: "梳理人物" } },
+        library: { ok: true, sections: { characters: [] } },
+        delivery: { ok: true, project_root: "C:\\ArcVellum\\潮汐之后", status: "draft", files: [] },
+        reader_manifest: { ok: true, units: [], delta: { added: [], removed: [], initial: true } },
+        project_progress: { ok: true, status: "waiting_calibration", overall_percent: null, parts: [] },
+        autopilot_status: { ok: true, run: null },
+        agent_observability: { ok: true, status: "idle", active_task: null, sessions: [], recent_events: [] },
+      };
       if (path.startsWith("/workflow/dashboard")) return { ok: true, current_task: { title: "梳理人物" } };
       if (path.startsWith("/project/library")) return { ok: true, sections: { characters: [] } };
       if (path.startsWith("/project/delivery")) return { ok: true, project_root: "C:\\ArcVellum\\潮汐之后", status: "draft", files: [] };
+      if (path.startsWith("/reader/manifest")) return { ok: true, units: [], delta: { added: [], removed: [], initial: true } };
+      if (path.startsWith("/project/progress")) return { ok: true, status: "waiting_calibration", overall_percent: null, parts: [] };
+      if (path.startsWith("/autopilot/status")) return { ok: true, run: null };
+      if (path.startsWith("/agent-observability")) return { ok: true, status: "idle", active_task: null, sessions: [], recent_events: [] };
       throw new Error(`Unexpected API path: ${path}`);
     });
   });
@@ -85,7 +98,7 @@ describe("application store", () => {
     expect(streamConnections).toHaveLength(1);
   });
 
-  it("streams the active project's dashboard and archive after the initial load", async () => {
+  it("uses one workspace stream for the active project's live read models", async () => {
     const { useAppStore } = await import("./app");
     const store = useAppStore();
     await store.initialize();
@@ -94,12 +107,23 @@ describe("application store", () => {
 
     expect(store.dashboard?.current_task).toEqual({ title: "梳理人物" });
     expect(store.library?.sections).toEqual({ characters: [] });
+    const initialReadPaths = apiMock.mock.calls.map(([path]) => String(path));
+    expect(initialReadPaths.filter((path) => path.startsWith("/project/workspace?"))).toHaveLength(1);
+    expect(initialReadPaths.some((path) => path.startsWith("/workflow/dashboard?"))).toBe(false);
+    expect(initialReadPaths.some((path) => path.startsWith("/project/library?"))).toBe(false);
     const projectStreams = streamConnections.filter((item) => item.path.includes("/stream"));
-    expect(projectStreams.some((item) => item.path.startsWith("/workflow/dashboard/stream"))).toBe(true);
-    expect(projectStreams.some((item) => item.path.startsWith("/project/library/stream"))).toBe(true);
+    expect(projectStreams.filter((item) => item.path.startsWith("/project/workspace/stream"))).toHaveLength(1);
 
-    const dashboardStream = projectStreams.find((item) => item.path.startsWith("/workflow/dashboard/stream"));
-    dashboardStream?.callback("dashboard", { ok: true, current_task: { title: "开始写第一场" } });
+    const workspaceStream = projectStreams.find((item) => item.path.startsWith("/project/workspace/stream"));
+    workspaceStream?.callback("workspace.snapshot", {
+      dashboard: { ok: true, current_task: { title: "开始写第一场" } },
+      library: { ok: true, sections: { characters: [] } },
+      delivery: { ok: true, project_root: "C:\\ArcVellum\\潮汐之后", status: "draft", files: [] },
+      reader_manifest: { ok: true, units: [], delta: { added: [], removed: [], initial: true } },
+      project_progress: { ok: true, status: "waiting_calibration", overall_percent: null, parts: [] },
+      autopilot_status: { ok: true, run: null },
+      agent_observability: { ok: true, status: "idle", active_task: null, sessions: [], recent_events: [] },
+    });
     expect(store.dashboard?.current_task).toEqual({ title: "开始写第一场" });
   });
 

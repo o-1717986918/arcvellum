@@ -15,6 +15,7 @@ from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhyth
 RHYTHM_PLAN_SCHEMA = "literary-engineering-workbench/rhythm-plan/v0.1"
 PACE_VALUES = {"slow", "slow_to_fast", "balanced", "fast_to_slow", "fast"}
 ROLE_VALUES = {"setup", "transition", "information", "emotion", "conflict", "action", "turn", "aftermath", "mixed"}
+DETAIL_LEVEL_VALUES = {"summary", "lean", "standard", "expanded", "set_piece"}
 
 
 def rhythm_plan_path(root: Path) -> Path:
@@ -30,24 +31,39 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
         if path.name.startswith("_"):
             continue
         scene_id = _scalar(path.read_text(encoding="utf-8", errors="ignore"), "scene_id") or path.stem
-        chapter_id = _scalar(path.read_text(encoding="utf-8", errors="ignore"), "chapter_id") or "unassigned"
+        scene_text = path.read_text(encoding="utf-8", errors="ignore")
+        chapter_id = _scalar(scene_text, "chapter_id") or "unassigned"
+        volume_id = _scalar(scene_text, "volume_id") or _scalar(scene_text, "volume") or "unassigned"
         contract = narrative_rhythm_contract(root, path)
         rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
         curve = normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
+        stored_entry = stored_scenes.get(scene_id) if isinstance(stored_scenes.get(scene_id), dict) else {}
+        stored_gap = stored_entry.get("spatial_time_gap_before") if stored_entry else None
+        scene_gap = _scalar(scene_text, "spatial_time_gap_before")
         entries.append({
             "scene_id": scene_id,
+            "volume_id": volume_id,
             "chapter_id": chapter_id,
             "title": _scalar(path.read_text(encoding="utf-8", errors="ignore"), "title") or scene_id,
             "pace": str(rhythm.get("pace") or "balanced"),
             "rhythm_role": str(rhythm.get("rhythm_role") or "mixed"),
             "scene_function": _strings(rhythm.get("scene_function")),
             "tension_curve": curve,
+            "detail_level": str(rhythm.get("detail_level") or "standard"),
+            "word_count_target": _integer(_scalar(scene_text, "word_count_target")),
+            "timeline_order": _integer(_scalar(scene_text, "timeline_order")),
+            "story_time": _scalar(scene_text, "story_time"),
+            "spatial_time_gap_before": _positive_number(stored_gap if stored_gap not in (None, "") else scene_gap),
             "source": "rhythm-plan" if scene_id in stored_scenes else str(contract.get("source") or "default"),
         })
     chapters: dict[str, dict[str, Any]] = {}
     for chapter_id in sorted({str(entry["chapter_id"]) for entry in entries}):
         chapter_entries = [entry for entry in entries if entry["chapter_id"] == chapter_id]
         chapters[chapter_id] = analyze_narrative_rhythm_sequence(chapter_entries)
+    volumes: dict[str, dict[str, Any]] = {}
+    for volume_id in sorted({str(entry["volume_id"]) for entry in entries}):
+        volume_entries = [entry for entry in entries if entry["volume_id"] == volume_id]
+        volumes[volume_id] = analyze_narrative_rhythm_sequence(volume_entries)
     return {
         "schema": RHYTHM_PLAN_SCHEMA,
         "revision": int(stored.get("revision") or 0),
@@ -55,6 +71,8 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
         "updated_at": str(stored.get("updated_at") or ""),
         "entries": entries,
         "chapters": chapters,
+        "volumes": volumes,
+        "book": analyze_narrative_rhythm_sequence(entries),
         "stored": bool(stored),
     }
 
@@ -74,13 +92,22 @@ def save_rhythm_plan(root: Path, entries: list[dict[str, Any]], updated_by: str 
             raise ValueError(f"unsupported scene pace: {pace}")
         if role not in ROLE_VALUES:
             raise ValueError(f"unsupported rhythm role: {role}")
+        detail_level = str(entry.get("detail_level") or "standard").strip().lower()
+        if detail_level not in DETAIL_LEVEL_VALUES:
+            raise ValueError(f"unsupported scene detail level: {detail_level}")
         if curve is None:
             raise ValueError(f"scene {scene_id} requires entry/peak/exit tension values from 1 to 5")
+        time_gap = _positive_number(entry.get("spatial_time_gap_before"))
         normalized[scene_id] = {
             "pace": pace,
             "rhythm_role": role,
             "scene_function": _strings(entry.get("scene_function")),
             "tension_curve": curve,
+            "detail_level": detail_level,
+            # This is a projection-only editorial adjustment. It controls the
+            # visual breathing room before the scene without rewriting the
+            # project's authored story time or its reading order.
+            "spatial_time_gap_before": time_gap,
         }
     previous = _read_json(rhythm_plan_path(root))
     digest = hashlib.sha256(json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -109,6 +136,20 @@ def _scalar(text: str, key: str) -> str:
     import re
     match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
     return match.group(1).strip().strip("\"'") if match else ""
+
+
+def _integer(value: object) -> int:
+    try:
+        return max(0, int(str(value or "").replace(",", "")))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _positive_number(value: object) -> float:
+    try:
+        return max(0.0, float(str(value or "").replace(",", "")))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _read_json(path: Path) -> dict[str, Any]:

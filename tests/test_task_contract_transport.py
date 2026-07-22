@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio_engine.agent_task_status import build_agent_task_status, build_route_audit
+import literary_engineering_studio_engine.agent_task_status as agent_task_status
 import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.platform_agent_tasks import write_project_seed_asset_tasks
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload, _render_task_markdown, complete_task, submit_task
@@ -453,6 +454,16 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertEqual(payload["tasks"][0]["path"], "workflow/tasks/scene-agent.agent_tasks.md")
             self.assertEqual(payload["tasks"][0]["route"], "scene-development")
 
+    def test_agent_task_status_treats_an_unreadable_historical_source_as_missing(self):
+        historical_path = unittest.mock.Mock()
+        historical_path.is_absolute.return_value = True
+        historical_path.exists.side_effect = PermissionError("denied")
+
+        with patch.object(agent_task_status, "Path", return_value=historical_path):
+            exists = agent_task_status._path_exists(Path("C:/project"), "C:\\unreadable\\runtime\\punctuation-standard.md")
+
+        self.assertFalse(exists)
+
     def test_submit_and_complete_require_exact_declared_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -563,6 +574,23 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertEqual(refreshed.status, "issued")
             self.assertEqual(current["refreshed_from_status"], "opened")
             self.assertNotIn("obsolete/output.json", current["expected_outputs"])
+
+    def test_open_task_refreshes_a_legacy_active_package_before_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            first = task_registry.issue_next_task(root, route="character-and-world-assets")
+            payload = json.loads(first.task_json_path.read_text(encoding="utf-8"))
+            payload["status"] = "opened"
+            payload.pop("task_contract_revision", None)
+            payload["command"] = "python -m literary_engineering_studio_engine asset-create <project> --type <type>"
+            first.task_json_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            opened = task_registry.open_task(root, first.task_id)
+            refreshed = json.loads(opened.task_json_path.read_text(encoding="utf-8"))
+            self.assertEqual(opened.status, "opened")
+            self.assertEqual(refreshed["task_contract_revision"], task_registry.TASK_CONTRACT_REVISION)
+            self.assertEqual(refreshed["command"], "python -m literary_engineering_studio_engine seed-project-assets <project>")
 
 
 if __name__ == "__main__":

@@ -41,6 +41,7 @@ def build_workflow_state(
     *,
     route: str = "scene-development",
     scene: Path | str | None = None,
+    scene_scope: str = "full",
     output: Path | None = None,
     json_output: Path | None = None,
 ) -> WorkflowStateResult:
@@ -50,13 +51,21 @@ def build_workflow_state(
     if not root.exists():
         raise FileNotFoundError(f"project root not found: {root}")
     normalized_route = _normalize_route(route) or "scene-development"
+    selected_scene_paths: list[Path] = []
+    scene_scope_summary: dict[str, object] = {}
     if normalized_route == "scene-development" and scene:
         selected_scene = Path(scene)
         if not selected_scene.is_absolute():
             selected_scene = root / selected_scene
-        scenes = [_scene_state(root, selected_scene.resolve())] if selected_scene.is_file() else []
+        selected_scene_paths = [selected_scene.resolve()] if selected_scene.is_file() else []
+        scenes = [_scene_state(root, path) for path in selected_scene_paths]
+        scene_scope_summary = _scene_scope_summary(root, selected_scene_paths, mode="single")
     else:
-        scenes = _scene_states(root) if normalized_route in {"scene-development", "overall"} else []
+        if normalized_route in {"scene-development", "overall"}:
+            selected_scene_paths, scene_scope_summary = _scene_paths_for_scope(root, scene_scope)
+            scenes = [_scene_state(root, path) for path in selected_scene_paths]
+        else:
+            scenes = []
     longform = _longform_state(root) if normalized_route in {"longform-planning", "overall"} else {}
     source_ingests = _source_ingest_states(root) if normalized_route in {"source-ingest", "overall"} else []
     styles = _style_engineering_states(root) if normalized_route in {"style-engineering", "overall"} else []
@@ -65,9 +74,16 @@ def build_workflow_state(
     exports = _export_release_states(root) if normalized_route in {"export-and-release", "overall"} else []
     longform_blocked = 1 if longform and longform.get("status") != "ready" else 0
     longform_ready = 1 if longform and longform.get("status") == "ready" else 0
+    reported_scene_count = (
+        int(scene_scope_summary.get("total_scene_count") or len(scenes))
+        if scene_scope == "dashboard"
+        else len(scenes)
+    )
     summary = {
         "route": normalized_route,
-        "scene_count": len(scenes),
+        "scene_count": reported_scene_count,
+        "scene_detail_count": len(scenes),
+        "scene_scope": scene_scope_summary,
         "source_ingest_count": len(source_ingests),
         "style_profile_count": len(styles),
         "asset_count": len(assets),
@@ -132,7 +148,7 @@ def build_workflow_state(
         markdown_path=markdown_path,
         json_path=json_path,
         route=normalized_route,
-        scene_count=summary["scene_count"],
+        scene_count=int(summary["scene_count"]),
         blocked_count=summary["blocked_count"],
         ready_count=summary["ready_count"],
         next_action_count=summary["next_action_count"],
@@ -144,6 +160,81 @@ def _scene_states(root: Path) -> list[dict[str, object]]:
     if not scenes.exists():
         return []
     return [_scene_state(root, path) for path in sorted(scenes.glob("*.yaml")) if not path.name.startswith("_")]
+
+
+def _scene_paths_for_scope(root: Path, scope: str) -> tuple[list[Path], dict[str, object]]:
+    """Select the scene evidence appropriate for a caller's read surface.
+
+    Formal CLI state and audits retain the full scene ledger. A live dashboard,
+    however, must not spend tens of seconds recomputing contracts for hundreds
+    of untouched planned scenes just to identify the next task. It observes all
+    started scenes near the active frontier and one upcoming planned scene.
+    """
+
+    paths = [path for path in sorted((root / "scenes").glob("*.yaml")) if not path.name.startswith("_")]
+    if scope != "dashboard":
+        return paths, _scene_scope_summary(root, paths, mode="full")
+
+    started = _started_scene_ids(root)
+    started_paths = [path for path in paths if _scene_id(path) in started]
+    planned_paths = [path for path in paths if _scene_id(path) not in started]
+    active_scene_id = _latest_scene_task_id(root)
+    selected: list[Path] = list(started_paths[-12:])
+    active_path = next((path for path in paths if _scene_id(path) == active_scene_id), None)
+    if active_path is not None and active_path not in selected:
+        selected.append(active_path)
+    if planned_paths:
+        selected.append(planned_paths[0])
+    if not selected and paths:
+        selected.append(paths[0])
+    selected = sorted(set(selected))
+    return selected, _scene_scope_summary(root, selected, mode="active-frontier", started_count=len(started_paths))
+
+
+def _scene_scope_summary(
+    root: Path,
+    selected: list[Path],
+    *,
+    mode: str,
+    started_count: int | None = None,
+) -> dict[str, object]:
+    all_paths = [path for path in (root / "scenes").glob("*.yaml") if not path.name.startswith("_")]
+    known_started = len(_started_scene_ids(root)) if started_count is None else started_count
+    total = len(all_paths)
+    return {
+        "mode": mode,
+        "total_scene_count": total,
+        "started_scene_count": known_started,
+        "planned_scene_count": max(0, total - known_started),
+        "observed_scene_count": len(selected),
+        "truncated": len(selected) < total,
+    }
+
+
+def _started_scene_ids(root: Path) -> set[str]:
+    """Derive started scene ids without reading every planned scene contract."""
+
+    started: set[str] = set()
+    for folder, pattern, transform in (
+        (root / "memory" / "context_packets", "scene_*.md", lambda path: path.stem),
+        (root / "drafts" / "compositions", "scene_*_composition.json", lambda path: path.stem.removesuffix("_composition")),
+        (root / "reviews" / "agent", "scene_*_scene_review.json", lambda path: path.stem.removesuffix("_scene_review")),
+        (root / "drafts" / "promotions", "scene_*_promotion.json", lambda path: path.stem.removesuffix("_promotion")),
+        (root / "drafts" / "scenes", "scene_*.md", lambda path: path.stem),
+        (root / "characters" / "state_patches", "scene_*_state_patch.json", lambda path: path.stem.removesuffix("_state_patch")),
+    ):
+        if folder.is_dir():
+            started.update(transform(path) for path in folder.glob(pattern))
+    branch_root = root / "branches"
+    if branch_root.is_dir():
+        started.update(path.name for path in branch_root.iterdir() if path.is_dir() and path.name.startswith("scene_"))
+    task_root = root / "workflow" / "tasks"
+    if task_root.is_dir():
+        for path in task_root.glob("scene-development-scene_*-*.task.json"):
+            match = re.match(r"scene-development-(scene_[^-]+)-", path.name)
+            if match:
+                started.add(match.group(1))
+    return {scene_id for scene_id in started if scene_id.startswith("scene_")}
 
 
 def next_scene_workflow_state(root: Path, scene: Path | str | None = None) -> dict[str, object] | None:

@@ -93,7 +93,61 @@ def current_choices(
 
 
 def record_choice(config: dict[str, Any], project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    return _function(config, "project_interaction", "record_human_choice")(project_root, payload)
+    result = _function(config, "project_interaction", "record_human_choice")(project_root, payload)
+    if not bool(payload.get("materialize", True)):
+        return result
+
+    choice = result.get("choice") if isinstance(result.get("choice"), dict) else {}
+    decision_type = str(choice.get("decision_type") or payload.get("decision_type") or "")
+    selected = str(choice.get("selected") or payload.get("selected") or "")
+    actor = str(choice.get("actor") or payload.get("actor") or "user-ui")
+    if decision_type in {
+        "revision_direction",
+        "word_budget_direction",
+        "cross_asset_alignment",
+        "general_project_choice",
+    }:
+        from .project_manager import record_direction
+
+        direction = record_direction(project_root, _choice_direction_message(choice), actor=actor)
+        result["materialized"] = str(direction.get("digest") or result.get("materialized") or "")
+        result["effect"] = {
+            "kind": "creative-direction",
+            "summary": "已写入项目创作方向，下一份任务包会自动携带这项选择。",
+            "path": result["materialized"],
+        }
+    elif decision_type == "style_mount":
+        mounted = mount_style(config, project_root, str((project_root / "style").resolve()), selected)
+        result["materialized"] = str(mounted.get("mount_manifest") or result.get("materialized") or "")
+        result["effect"] = {
+            "kind": "style-mounted",
+            "summary": "已挂载正式文风；后续正文与审查任务会读取它。",
+            "path": result["materialized"],
+        }
+    else:
+        result["effect"] = {
+            "kind": "formal-choice",
+            "summary": "已记录正式选择，状态机将按对应门禁继续验证。",
+            "path": str(result.get("materialized") or result.get("choice_path") or ""),
+        }
+    return result
+
+
+def _choice_direction_message(choice: dict[str, Any]) -> str:
+    """Render a compact, task-readable human decision for future task packages."""
+
+    decision_type = str(choice.get("decision_type") or "general_project_choice")
+    selected = str(choice.get("selected") or "")
+    rationale = str(choice.get("rationale") or "用户通过 Studio 确认这一方向。")
+    target = choice.get("target") if isinstance(choice.get("target"), dict) else {}
+    target_text = ", ".join(f"{key}={value}" for key, value in target.items() if str(value).strip()) or "project"
+    return (
+        f"【用户正式选择 / {decision_type}】\n"
+        f"目标：{target_text}\n"
+        f"选择：{selected}\n"
+        f"理由：{rationale}\n"
+        "执行要求：后续任务必须把该选择作为创作与审查依据；它不取代 canon、review、promotion 或 release 门禁。"
+    )
 
 
 def save_display_field(config: dict[str, Any], project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:

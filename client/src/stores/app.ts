@@ -13,7 +13,19 @@ import type {
   ReaderUnitResponse,
   AutopilotRun,
   AutopilotStatus,
+  AgentObservability,
+  ProjectProgress,
 } from "@/types/api";
+
+interface ProjectWorkspaceSnapshot {
+  dashboard: DashboardResponse;
+  library: LibraryResponse;
+  delivery: DeliveryResponse;
+  reader_manifest: ReaderManifest;
+  project_progress: ProjectProgress;
+  autopilot_status: AutopilotStatus;
+  agent_observability: AgentObservability;
+}
 
 export const useAppStore = defineStore("app", () => {
   const initialized = ref(false);
@@ -31,10 +43,10 @@ export const useAppStore = defineStore("app", () => {
   const modelCatalog = shallowRef<ModelCatalog | null>(null);
   const activeJob = shallowRef<Record<string, unknown> | null>(null);
   const autopilotStatus = shallowRef<AutopilotStatus | null>(null);
+  const projectProgress = shallowRef<ProjectProgress | null>(null);
+  const agentObservability = shallowRef<AgentObservability | null>(null);
   let bootstrapStream: EventStreamConnection | null = null;
-  let dashboardStream: EventStreamConnection | null = null;
-  let libraryStream: EventStreamConnection | null = null;
-  let readerStream: EventStreamConnection | null = null;
+  let workspaceStream: EventStreamConnection | null = null;
   let autopilotStream: EventStreamConnection | null = null;
 
   const currentProject = computed(
@@ -77,6 +89,8 @@ export const useAppStore = defineStore("app", () => {
     delivery.value = null;
     readerManifest.value = null;
     autopilotStatus.value = null;
+    projectProgress.value = null;
+    agentObservability.value = null;
     readerBodies.value = {};
     if (refresh && path) void refreshWorkspace();
   }
@@ -106,8 +120,24 @@ export const useAppStore = defineStore("app", () => {
   async function refreshWorkspace(): Promise<void> {
     if (!currentProjectPath.value) return;
     error.value = "";
-    await Promise.allSettled([loadDashboard(), loadLibrary(), loadDelivery(), loadReaderManifest(), loadAutopilotStatus()]);
+    const snapshot = await api<ProjectWorkspaceSnapshot>(
+      `/project/workspace?${query({ project_root: currentProjectPath.value })}`,
+    );
+    applyWorkspaceSnapshot(snapshot);
     startProjectStreams();
+  }
+
+  function applyWorkspaceSnapshot(snapshot: ProjectWorkspaceSnapshot): void {
+    const manifest = snapshot.reader_manifest;
+    const added = manifest?.delta?.initial ? [] : manifest?.delta?.added || [];
+    dashboard.value = snapshot.dashboard;
+    library.value = snapshot.library;
+    delivery.value = snapshot.delivery;
+    readerManifest.value = manifest;
+    projectProgress.value = snapshot.project_progress;
+    autopilotStatus.value = snapshot.autopilot_status;
+    agentObservability.value = snapshot.agent_observability;
+    if (added.length) notice.value = `有 ${added.length} 节新正文进入阅读长卷。`;
   }
 
   async function loadAutopilotStatus(): Promise<void> {
@@ -150,6 +180,20 @@ export const useAppStore = defineStore("app", () => {
     );
   }
 
+  async function loadProjectProgress(): Promise<void> {
+    if (!currentProjectPath.value) return;
+    projectProgress.value = await api<ProjectProgress>(
+      `/project/progress?${query({ project_root: currentProjectPath.value })}`,
+    );
+  }
+
+  async function loadAgentObservability(): Promise<void> {
+    if (!currentProjectPath.value) return;
+    agentObservability.value = await api<AgentObservability>(
+      `/agent-observability?${query({ project_root: currentProjectPath.value })}`,
+    );
+  }
+
   async function loadReaderUnit(unitId: string): Promise<string> {
     const summary = readerManifest.value?.units.find((item) => item.unit_id === unitId);
     const cached = readerBodies.value[unitId];
@@ -188,26 +232,11 @@ export const useAppStore = defineStore("app", () => {
     stopProjectStreams();
     const root = currentProjectPath.value;
     if (!root) return;
-    dashboardStream = connectEventStream(
-      `/workflow/dashboard/stream?${query({ project_root: root, interval_seconds: 5 })}`,
+    workspaceStream = connectEventStream(
+      `/project/workspace/stream?${query({ project_root: root, interval_seconds: 2 })}`,
       (event, data) => {
-        if (event === "dashboard") dashboard.value = data as unknown as DashboardResponse;
-      },
-    );
-    libraryStream = connectEventStream(
-      `/project/library/stream?${query({ project_root: root, interval_seconds: 7 })}`,
-      (event, data) => {
-        if (event === "library") library.value = data as unknown as LibraryResponse;
-      },
-    );
-    readerStream = connectEventStream(
-      `/reader/stream?${query({ project_root: root, interval_seconds: 4 })}`,
-      (event, data) => {
-        if (event !== "reader.manifest") return;
-        const manifest = data as unknown as ReaderManifest;
-        const added = manifest.delta?.initial ? [] : manifest.delta?.added || [];
-        readerManifest.value = manifest;
-        if (added.length) notice.value = `有 ${added.length} 节新正文进入阅读长卷。`;
+        if (event !== "workspace.snapshot") return;
+        applyWorkspaceSnapshot(data as unknown as ProjectWorkspaceSnapshot);
       },
     );
     const activeRun = autopilotStatus.value?.run;
@@ -228,13 +257,9 @@ export const useAppStore = defineStore("app", () => {
   }
 
   function stopProjectStreams(): void {
-    dashboardStream?.close();
-    libraryStream?.close();
-    readerStream?.close();
+    workspaceStream?.close();
     autopilotStream?.close();
-    dashboardStream = null;
-    libraryStream = null;
-    readerStream = null;
+    workspaceStream = null;
     autopilotStream = null;
   }
 
@@ -261,6 +286,8 @@ export const useAppStore = defineStore("app", () => {
     modelCatalog,
     activeJob,
     autopilotStatus,
+    projectProgress,
+    agentObservability,
     initialize,
     loadProjects,
     setCurrentProject,
@@ -271,6 +298,8 @@ export const useAppStore = defineStore("app", () => {
     loadLibrary,
     loadDelivery,
     loadReaderManifest,
+    loadProjectProgress,
+    loadAgentObservability,
     loadReaderUnit,
     loadAutopilotStatus,
     setAutopilotStatus,

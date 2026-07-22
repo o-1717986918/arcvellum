@@ -41,17 +41,28 @@ const customPersona = ref({ name: "", tagline: "", prompt: "" });
 const inbox = ref<Record<string, unknown>[]>([]);
 const unreadCount = ref(0);
 const inboxSettings = ref({ mode: "standard", quiet_start: "22:30", quiet_end: "08:00" });
+const DEFAULT_DOCK_SIZE = { width: 390, height: 680 };
+const MIN_DOCK_SIZE = { width: 336, height: 460 };
 const dockSide = ref<"left" | "right">((localStorage.getItem("arcvellum.advisorSide") as "left" | "right") || "right");
 const orbPosition = ref(readPosition("arcvellum.advisorOrbPosition"));
 const dockPosition = ref(readPosition("arcvellum.advisorDockPosition"));
+const dockSize = ref(readSize("arcvellum.advisorDockSize"));
 const orbStyle = computed(() => orbPosition.value ? { left: `${orbPosition.value.left}px`, top: `${orbPosition.value.top}px`, right: "auto", bottom: "auto" } : undefined);
-const dockStyle = computed(() => dockPosition.value ? { left: `${dockPosition.value.left}px`, top: `${dockPosition.value.top}px`, right: "auto", bottom: "auto" } : undefined);
+const dockStyle = computed(() => {
+  const size = currentDockSize();
+  return {
+    width: String(size.width) + "px",
+    height: String(size.height) + "px",
+    ...(dockPosition.value ? { left: String(dockPosition.value.left) + "px", top: String(dockPosition.value.top) + "px", right: "auto", bottom: "auto" } : {}),
+  };
+});
 let requestController: AbortController | null = null;
 let inboxStream: EventStreamConnection | null = null;
 let deltaBuffer = "";
 let deltaTimer = 0;
 let dragKind: "orb" | "dock" | null = null;
 let dragStart = { x: 0, y: 0, left: 0, top: 0 };
+let resizeStart = { x: 0, y: 0, width: 0, height: 0 };
 let dragged = false;
 
 const messages = computed(() => transientMessages.value.length ? transientMessages.value : session.value?.messages || []);
@@ -83,6 +94,7 @@ onBeforeUnmount(() => {
   inboxStream?.close();
   window.clearTimeout(deltaTimer);
   stopAdvisorDrag();
+  stopDockResize();
   window.removeEventListener("resize", keepAdvisorInView);
 });
 
@@ -130,8 +142,9 @@ function moveAdvisor(event: PointerEvent): void {
   const dx = event.clientX - dragStart.x;
   const dy = event.clientY - dragStart.y;
   if (Math.abs(dx) + Math.abs(dy) > 5) dragged = true;
-  const width = dragKind === "orb" ? 58 : Math.min(438, window.innerWidth - 36);
-  const height = dragKind === "orb" ? 58 : Math.min(window.innerHeight - 36, 760);
+  const size = currentDockSize();
+  const width = dragKind === "orb" ? 58 : size.width;
+  const height = dragKind === "orb" ? 58 : size.height;
   const next = boundedAdvisorPosition(dragStart.left + dx, dragStart.top + dy, width, height);
   if (dragKind === "orb") orbPosition.value = next;
   else dockPosition.value = next;
@@ -146,6 +159,34 @@ function stopAdvisorDrag(): void {
   window.removeEventListener("pointerup", stopAdvisorDrag);
 }
 
+function startDockResize(event: PointerEvent): void {
+  if (event.button !== 0 || window.matchMedia("(max-width: 760px)").matches) return;
+  const size = currentDockSize();
+  resizeStart = { x: event.clientX, y: event.clientY, width: size.width, height: size.height };
+  document.body.classList.add("resizing-advisor");
+  window.addEventListener("pointermove", resizeDock);
+  window.addEventListener("pointerup", stopDockResize, { once: true });
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function resizeDock(event: PointerEvent): void {
+  dockSize.value = clampDockSize({
+    width: resizeStart.width + event.clientX - resizeStart.x,
+    height: resizeStart.height + event.clientY - resizeStart.y,
+  });
+  if (dockPosition.value) {
+    dockPosition.value = boundedAdvisorPosition(dockPosition.value.left, dockPosition.value.top, dockSize.value.width, dockSize.value.height);
+  }
+}
+
+function stopDockResize(): void {
+  if (dockSize.value) localStorage.setItem("arcvellum.advisorDockSize", JSON.stringify(dockSize.value));
+  document.body.classList.remove("resizing-advisor");
+  window.removeEventListener("pointermove", resizeDock);
+  window.removeEventListener("pointerup", stopDockResize);
+}
+
 function boundedAdvisorPosition(left: number, top: number, width: number, height: number): { left: number; top: number } {
   const margin = 10;
   return {
@@ -157,12 +198,15 @@ function boundedAdvisorPosition(left: number, top: number, width: number, height
 function keepAdvisorInView(): void {
   if (window.matchMedia("(max-width: 760px)").matches) return;
   if (orbPosition.value) orbPosition.value = boundedAdvisorPosition(orbPosition.value.left, orbPosition.value.top, 58, 58);
-  if (dockPosition.value) dockPosition.value = boundedAdvisorPosition(dockPosition.value.left, dockPosition.value.top, Math.min(438, window.innerWidth - 36), Math.min(window.innerHeight - 36, 760));
+  dockSize.value = currentDockSize();
+  if (dockPosition.value) dockPosition.value = boundedAdvisorPosition(dockPosition.value.left, dockPosition.value.top, dockSize.value.width, dockSize.value.height);
 }
 
 function resetDockPosition(): void {
   dockPosition.value = null;
+  dockSize.value = { ...DEFAULT_DOCK_SIZE };
   localStorage.removeItem("arcvellum.advisorDockPosition");
+  localStorage.removeItem("arcvellum.advisorDockSize");
 }
 
 function readPosition(key: string): { left: number; top: number } | null {
@@ -172,6 +216,28 @@ function readPosition(key: string): { left: number; top: number } | null {
   } catch {
     return null;
   }
+}
+
+function readSize(key: string): { width: number; height: number } | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "null");
+    return value && Number.isFinite(value.width) && Number.isFinite(value.height) ? clampDockSize(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clampDockSize(size: { width: number; height: number }): { width: number; height: number } {
+  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
+  return {
+    width: Math.round(Math.min(Math.max(MIN_DOCK_SIZE.width, size.width), Math.max(MIN_DOCK_SIZE.width, viewportWidth - 24))),
+    height: Math.round(Math.min(Math.max(MIN_DOCK_SIZE.height, size.height), Math.max(MIN_DOCK_SIZE.height, viewportHeight - 24))),
+  };
+}
+
+function currentDockSize(): { width: number; height: number } {
+  return clampDockSize(dockSize.value || DEFAULT_DOCK_SIZE);
 }
 
 async function loadAdvisorSurface(): Promise<void> {
@@ -560,6 +626,7 @@ async function scrollToEnd(): Promise<void> {
         </button>
         <small>Enter 发送 · Shift + Enter 换行</small>
       </form>
+      <button class="advisor-dock-resize" title="调整顾问窗口尺寸" aria-label="调整顾问窗口尺寸" @pointerdown="startDockResize"><i></i></button>
     </aside>
   </Transition>
 </template>

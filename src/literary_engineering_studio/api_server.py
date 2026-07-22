@@ -15,6 +15,7 @@ from typing import Any
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .advisor import ProjectAdvisor
+from .agent_observability import build_agent_observability
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
 from .advisor_personas import persona_catalog, save_custom_persona, select_persona
 from .autopilot import AutopilotService
@@ -39,6 +40,13 @@ from .lifecycle import ApplicationLifecycleManager
 from .live_events import EPHEMERAL_WORKER_EVENTS, coalesce_live_events
 from .model_connections import model_connection_status
 from .narrative_projection import build_narrative_projection, projection_delta, projection_motion_events
+from .narrative_projection_v3 import (
+    build_narrative_node_detail_v3,
+    build_narrative_projection_v3,
+    spatial_projection_delta,
+    spatial_projection_motion_events,
+)
+from .project_progress import build_project_progress
 from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
 from .opencode_control import disconnect_provider, provider_catalog, select_model, set_api_credential
 from .runner_probe import probe_agent_runner
@@ -244,6 +252,7 @@ def create_app(config_override: dict[str, Any] | None = None):
         execution_coordinator=lifecycle.execution_coordinator,
     )
     narrative_stream_state: dict[str, dict[str, Any]] = {}
+    narrative_v3_stream_state: dict[str, dict[str, Any]] = {}
     narrative_stream_lock = threading.Lock()
     app = FastAPI(title="ArcVellum", version=__version__)
     app.add_middleware(
@@ -284,6 +293,47 @@ def create_app(config_override: dict[str, Any] | None = None):
 
     def library_snapshot(root: Path):
         return cached_read_model(f"library:{root}", root, lambda: build_library(config, root))
+
+    def reader_snapshot(root: Path):
+        return cached_read_model(f"reader:{root}", root, lambda: public_reader_manifest(build_reader_manifest(root)))
+
+    def progress_snapshot(root: Path):
+        return cached_read_model(
+            f"progress:{root}",
+            root,
+            lambda: build_project_progress(dashboard_snapshot(root), library_snapshot(root), reader_snapshot(root)),
+        )
+
+    def delivery_snapshot(root: Path):
+        return cached_read_model(
+            f"delivery:{root}",
+            root,
+            lambda: build_delivery(config, root, dashboard_payload=dashboard_snapshot(root)),
+        )
+
+    def workspace_snapshot(root: Path):
+        """One coherent event payload for the persistent project workbench.
+
+        Browser HTTP/1.1 connection limits are surprisingly easy to exhaust
+        with a separate SSE channel for every read model. This bundle keeps
+        live observation while leaving connection capacity for direct actions,
+        node focus changes, task execution, and advisor streaming.
+        """
+        autopilot_status = autopilot.status(root)
+        run = autopilot_status.get("run") if isinstance(autopilot_status.get("run"), dict) else {}
+        events = jobs.autopilot_events_since(str(run.get("run_id") or ""), limit=80) if run.get("run_id") else []
+        return {
+            "ok": True,
+            "schema": "arcvellum/project-workspace-stream/v1",
+            "project_root": str(root),
+            "dashboard": dashboard_snapshot(root),
+            "library": library_snapshot(root),
+            "delivery": delivery_snapshot(root),
+            "reader_manifest": reader_snapshot(root),
+            "project_progress": progress_snapshot(root),
+            "autopilot_status": autopilot_status,
+            "agent_observability": build_agent_observability(str(root), autopilot_status, events, dashboard_snapshot(root)),
+        }
 
     def shutdown_application():
         autopilot.shutdown()
@@ -650,6 +700,45 @@ def create_app(config_override: dict[str, Any] | None = None):
             payload["decisions"] = jobs.delegated_decisions(run["run_id"])[-20:] if run else []
             return payload
         return _call(read)
+
+    @app.get("/agent-observability")
+    def agent_observability(project_root: str):
+        def read():
+            root = _project(project_root)
+            status = autopilot.status(root)
+            run = status.get("run") if isinstance(status.get("run"), dict) else {}
+            events = jobs.autopilot_events_since(str(run.get("run_id") or ""), limit=80) if run.get("run_id") else []
+            return build_agent_observability(str(root), status, events, dashboard_snapshot(root))
+        return _call(read)
+
+    @app.get("/agent-observability/stream")
+    def agent_observability_stream(project_root: str, interval_seconds: float = 1.0, max_events: int = 0):
+        root = _project(project_root)
+        interval = max(0.5, min(15.0, float(interval_seconds or 1.0)))
+        limit = max(0, int(max_events or 0))
+
+        def stream():
+            previous_revision = ""
+            sent = 0
+            while True:
+                status = autopilot.status(root)
+                run = status.get("run") if isinstance(status.get("run"), dict) else {}
+                events = jobs.autopilot_events_since(str(run.get("run_id") or ""), limit=80) if run.get("run_id") else []
+                payload = build_agent_observability(str(root), status, events, dashboard_snapshot(root))
+                revision = str(payload.get("revision") or "")
+                if revision != previous_revision:
+                    yield _sse("agent.observability", payload)
+                    previous_revision = revision
+                    sent += 1
+                    if limit and sent >= limit:
+                        break
+                else:
+                    yield ": agent heartbeat\n\n"
+                if str(run.get("status") or "") in {"complete", "paused", "blocked", "cancelled", "failed"} and sent:
+                    break
+                time.sleep(interval)
+
+        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.put("/autopilot/policy")
     def autopilot_policy_save(payload: AutopilotPolicyRequest):
@@ -1100,11 +1189,33 @@ def create_app(config_override: dict[str, Any] | None = None):
 
     @app.get("/workflow/current-choice")
     def workflow_current_choice(project_root: str):
-        return _call(lambda: current_choices(config, _project(project_root)))
+        root = _project(project_root)
+
+        def build_choices():
+            snapshot = dashboard_snapshot(root)
+            dashboard = snapshot.get("dashboard") if isinstance(snapshot, dict) else None
+            return current_choices(config, root, dashboard=dashboard if isinstance(dashboard, dict) else None)
+
+        # Decision cards are a workbench read model, not a reason to rebuild a
+        # complete formal dashboard beside the workbench's existing snapshot.
+        return _call(build_choices)
 
     @app.post("/workflow/human-choice")
     def workflow_human_choice(payload: dict[str, Any]):
-        return _call(lambda: record_choice(config, _project(str(payload.get("project_root") or "")), payload))
+        root = _project(str(payload.get("project_root") or ""))
+        result = _call(lambda: record_choice(config, root, payload))
+        choice = result.get("choice") if isinstance(result.get("choice"), dict) else {}
+        lifecycle.live_events.publish(
+            f"project:{root}",
+            "human.choice_recorded",
+            {
+                "choice_id": str(choice.get("choice_id") or ""),
+                "decision_type": str(choice.get("decision_type") or ""),
+                "effect": result.get("effect") or {},
+            },
+        )
+        lifecycle.live_events.notify()
+        return result
 
     @app.get("/project/library")
     def project_library(project_root: str):
@@ -1121,10 +1232,42 @@ def create_app(config_override: dict[str, Any] | None = None):
             max_events,
         )
 
+    @app.get("/project/progress")
+    def project_progress(project_root: str):
+        root = _project(project_root)
+        return _call(lambda: progress_snapshot(root))
+
+    @app.get("/project/progress/stream")
+    def project_progress_stream(project_root: str, interval_seconds: float = 5.0, max_events: int = 0):
+        root = _project(project_root)
+        return _stream_read_model(
+            "project.progress",
+            lambda: progress_snapshot(root),
+            interval_seconds,
+            max_events,
+        )
+
+    @app.get("/project/workspace/stream")
+    def project_workspace_stream(project_root: str, interval_seconds: float = 2.0, max_events: int = 0):
+        root = _project(project_root)
+        return _stream_read_model(
+            "workspace.snapshot",
+            lambda: workspace_snapshot(root),
+            interval_seconds,
+            max_events,
+        )
+
+    @app.get("/project/workspace")
+    def project_workspace(project_root: str):
+        """Hydrate the workbench with one coherent read model before SSE begins."""
+
+        root = _project(project_root)
+        return _call(lambda: workspace_snapshot(root))
+
     @app.get("/reader/manifest")
     def reader_manifest(project_root: str):
         root = _project(project_root)
-        return _call(lambda: cached_read_model(f"reader:{root}", root, lambda: public_reader_manifest(build_reader_manifest(root))))
+        return _call(lambda: reader_snapshot(root))
 
     @app.get("/reader/units/{unit_id}")
     def reader_unit(unit_id: str, project_root: str):
@@ -1254,6 +1397,94 @@ def create_app(config_override: dict[str, Any] | None = None):
 
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    @app.get("/narrative/projection/v3")
+    def narrative_projection_v3(project_root: str, level: str = "book", focus: str = "", grammar: str = "auto"):
+        root = _project(project_root)
+        key = f"narrative-v3:{root}:{level}:{focus}:{grammar}"
+        return _call(
+            lambda: cached_read_model(
+                key,
+                root,
+                lambda: build_narrative_projection_v3(
+                    config,
+                    root,
+                    level=level,
+                    focus=focus,
+                    grammar=grammar,
+                    dashboard_payload=dashboard_snapshot(root),
+                    library_payload=library_snapshot(root),
+                ),
+            )
+        )
+
+    @app.get("/narrative/projection/v3/nodes/{node_id}")
+    def narrative_projection_v3_node(node_id: str, project_root: str, level: str = "book", focus: str = "", grammar: str = "auto"):
+        root = _project(project_root)
+        try:
+            return _call(
+                lambda: build_narrative_node_detail_v3(
+                    config,
+                    root,
+                    node_id,
+                    level=level,
+                    focus=focus,
+                    grammar=grammar,
+                    dashboard_payload=dashboard_snapshot(root),
+                    library_payload=library_snapshot(root),
+                )
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="未找到这个叙事节点。") from exc
+
+    @app.get("/narrative/stream/v3")
+    def narrative_stream_v3(project_root: str, level: str = "book", focus: str = "", grammar: str = "auto", interval_seconds: float = 6.0, max_events: int = 0):
+        root = _project(project_root)
+        interval = max(2.0, min(60.0, float(interval_seconds or 6.0)))
+        limit = max(0, int(max_events or 0))
+
+        def stream():
+            sent = 0
+            stream_key = f"{root}|{level}|{focus}|{grammar}"
+            while True:
+                projection = cached_read_model(
+                    f"narrative-v3:{root}:{level}:{focus}:{grammar}",
+                    root,
+                    lambda: build_narrative_projection_v3(
+                        config,
+                        root,
+                        level=level,
+                        focus=focus,
+                        grammar=grammar,
+                        dashboard_payload=dashboard_snapshot(root),
+                        library_payload=library_snapshot(root),
+                    ),
+                )
+                revision = str(projection.get("revision") or "")
+                with narrative_stream_lock:
+                    state = narrative_v3_stream_state.get(stream_key, {})
+                    previous_projection = state.get("projection") if isinstance(state.get("projection"), dict) else None
+                    previous_revision = str((previous_projection or {}).get("revision") or "")
+                    if revision != previous_revision:
+                        sequence = int(state.get("sequence") or 0) + 1
+                        delta = spatial_projection_delta(previous_projection, projection)
+                        projection["sequence"] = sequence
+                        projection["delta"] = delta
+                        projection["motion_events"] = spatial_projection_motion_events(previous_projection, projection, delta)
+                        narrative_v3_stream_state[stream_key] = {"sequence": sequence, "projection": projection}
+                    else:
+                        sequence = int(state.get("sequence") or 0)
+                        delta = None
+                if delta is not None:
+                    yield _sse("narrative.v3.projection", projection, event_id=sequence)
+                    sent += 1
+                    if limit and sent >= limit:
+                        break
+                else:
+                    yield ": narrative v3 heartbeat\n\n"
+                time.sleep(interval)
+
+        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
     @app.patch("/project/display-field")
     def project_display_field(payload: dict[str, Any]):
         return _call(lambda: save_display_field(config, _project(str(payload.get("project_root") or "")), payload))
@@ -1265,7 +1496,17 @@ def create_app(config_override: dict[str, Any] | None = None):
     @app.get("/project/delivery")
     def project_delivery(project_root: str):
         root = _project(project_root)
-        return _call(lambda: build_delivery(config, root, dashboard_payload=dashboard_snapshot(root)))
+        return _call(lambda: delivery_snapshot(root))
+
+    @app.get("/project/delivery/stream")
+    def project_delivery_stream(project_root: str, interval_seconds: float = 5.0, max_events: int = 0):
+        root = _project(project_root)
+        return _stream_read_model(
+            "delivery",
+            lambda: delivery_snapshot(root),
+            interval_seconds,
+            max_events,
+        )
 
     @app.get("/project/delivery/download")
     def project_delivery_download(project_root: str, path: str):

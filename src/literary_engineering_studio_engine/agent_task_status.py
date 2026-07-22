@@ -283,7 +283,13 @@ def _path_exists(root: Path, value: str) -> bool:
     path = Path(value)
     if not path.is_absolute():
         path = root / path
-    return path.exists()
+    # Historical task packages may contain paths from a packaged runtime whose
+    # temporary extraction directory has already disappeared or is unreadable.
+    # They are missing inputs, not a reason to make the whole dashboard fail.
+    try:
+        return path.exists()
+    except OSError:
+        return False
 
 
 def _infer_route(path: Path, text: str) -> str:

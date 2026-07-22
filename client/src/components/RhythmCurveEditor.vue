@@ -9,12 +9,18 @@ const props = defineProps<{ compact?: boolean }>();
 interface TensionCurve { entry: number; peak: number; exit: number }
 interface RhythmEntry {
   scene_id: string;
+  volume_id: string;
   chapter_id: string;
   title: string;
   pace: string;
   rhythm_role: string;
   scene_function: string[];
   tension_curve: TensionCurve;
+  detail_level: "summary" | "lean" | "standard" | "expanded" | "set_piece";
+  word_count_target: number;
+  timeline_order: number;
+  story_time: string;
+  spatial_time_gap_before: number;
   source: string;
 }
 interface RhythmPlan {
@@ -22,6 +28,8 @@ interface RhythmPlan {
   digest: string;
   entries: RhythmEntry[];
   chapters: Record<string, { status: string; issues: Array<{ code: string; severity: string; message: string; scene_ids: string[] }> }>;
+  volumes: Record<string, { status: string; issues: Array<{ code: string; severity: string; message: string; scene_ids: string[] }> }>;
+  book: { status: string; issues: Array<{ code: string; severity: string; message: string; scene_ids: string[] }> };
 }
 
 const store = useAppStore();
@@ -34,6 +42,28 @@ const message = ref("");
 const chapters = computed(() => [...new Set((plan.value?.entries || []).map((entry) => entry.chapter_id))]);
 const entries = computed(() => (plan.value?.entries || []).filter((entry) => entry.chapter_id === chapter.value));
 const selected = computed(() => entries.value.find((entry) => entry.scene_id === selectedId.value) || entries.value[0] || null);
+const bookStats = computed(() => chapters.value.map((chapterId) => {
+  const chapterEntries = (plan.value?.entries || []).filter((entry) => entry.chapter_id === chapterId);
+  const target = chapterEntries.reduce((sum, entry) => sum + Number(entry.word_count_target || 0), 0);
+  const peak = chapterEntries.length ? Math.max(...chapterEntries.map((entry) => Number(entry.tension_curve.peak || 0))) : 0;
+  const setPieces = chapterEntries.filter((entry) => entry.detail_level === "set_piece").length;
+  return { chapterId, volumeId: chapterEntries[0]?.volume_id || "unassigned", sceneCount: chapterEntries.length, target, peak, setPieces };
+}));
+const bookTarget = computed(() => bookStats.value.reduce((sum, item) => sum + item.target, 0));
+const volumeStats = computed(() => {
+  const grouped = new Map<string, { volumeId: string; chapterCount: number; sceneCount: number; target: number; peak: number; setPieces: number }>();
+  bookStats.value.forEach((item) => {
+    const existing = grouped.get(item.volumeId) || { volumeId: item.volumeId, chapterCount: 0, sceneCount: 0, target: 0, peak: 0, setPieces: 0 };
+    existing.chapterCount += 1;
+    existing.sceneCount += item.sceneCount;
+    existing.target += item.target;
+    existing.peak = Math.max(existing.peak, item.peak);
+    existing.setPieces += item.setPieces;
+    grouped.set(item.volumeId, existing);
+  });
+  return [...grouped.values()];
+});
+const bookRiskCount = computed(() => plan.value?.book?.issues?.length || 0);
 const chartPoints = computed(() => {
   const values: string[] = [];
   const count = Math.max(1, entries.value.length * 3 - 1);
@@ -97,6 +127,12 @@ async function save(): Promise<void> {
       <div class="rhythm-editor-tools"><label>查看章节<select v-model="chapter"><option v-for="item in chapters" :key="item" :value="item">{{ item }}</option></select></label><button class="icon-button" title="重新读取节奏计划" @click="load"><RefreshCw :size="16" /></button></div>
     </header>
 
+    <nav v-if="bookStats.length" class="rhythm-book-overview" aria-label="全书节奏概览">
+      <button class="rhythm-book-total" type="button" @click="chapter = chapters[0] || ''"><span>全书编排</span><strong>{{ bookStats.reduce((sum, item) => sum + item.sceneCount, 0) }} 场</strong><small>{{ bookTarget ? `${bookTarget.toLocaleString('zh-CN')} 字目标` : '待补齐字数目标' }}{{ bookRiskCount ? ` · ${bookRiskCount} 项全书风险` : '' }}</small></button>
+      <span v-for="volume in volumeStats" :key="volume.volumeId" class="rhythm-volume-marker"><b>{{ volume.volumeId === 'unassigned' ? '未分卷' : volume.volumeId }}</b><small>{{ volume.chapterCount }} 章 · {{ volume.sceneCount }} 场 · {{ volume.setPieces }} 重点场</small></span>
+      <button v-for="item in bookStats" :key="item.chapterId" type="button" :class="{ active: item.chapterId === chapter }" @click="chapter = item.chapterId"><span>{{ item.chapterId }}</span><i :style="{ height: `${Math.max(12, item.peak * 18)}%` }"></i><small>{{ item.sceneCount }} 场 · {{ item.setPieces }} 重点</small></button>
+    </nav>
+
     <div v-if="entries.length" class="rhythm-editor-body">
       <div class="rhythm-chart">
         <div class="rhythm-chart-scale"><span v-for="level in [5,4,3,2,1]" :key="level">{{ level }}</span></div>
@@ -115,8 +151,13 @@ async function save(): Promise<void> {
         <div class="rhythm-selectors">
           <label>节奏角色<select v-model="selected.rhythm_role"><option value="setup">铺垫</option><option value="transition">过场</option><option value="information">信息</option><option value="emotion">情绪</option><option value="conflict">冲突</option><option value="action">行动</option><option value="turn">转折</option><option value="aftermath">余波</option><option value="mixed">混合</option></select></label>
           <label>推进速度<select v-model="selected.pace"><option value="slow">慢</option><option value="slow_to_fast">由慢到快</option><option value="balanced">均衡</option><option value="fast_to_slow">由快到慢</option><option value="fast">快</option></select></label>
+          <label>详略等级<select v-model="selected.detail_level"><option value="summary">概述</option><option value="lean">简写</option><option value="standard">标准</option><option value="expanded">展开</option><option value="set_piece">重点场</option></select></label>
         </div>
-        <label class="rhythm-function">场景功能<input :value="selected.scene_function.join('；')" placeholder="推进主线；改变关系" @input="selected.scene_function = ($event.target as HTMLInputElement).value.split(/[；;]/).map(v => v.trim()).filter(Boolean)" /></label>
+        <div class="rhythm-temporal-control">
+          <div><span>故事时间</span><strong>{{ selected.story_time || (selected.timeline_order ? `时间序 ${selected.timeline_order}` : "尚未标注") }}</strong><small>读取场景的故事时间；时间跳跃会自动拉开章节间距，闪回仍保持阅读顺序。</small></div>
+          <label>本场前间距<input v-model.number="selected.spatial_time_gap_before" type="number" min="0" max="3.2" step="0.1" /><small>0 为自动；0.6–3.2 仅调整星图距离，不改写正文时间。</small></label>
+        </div>
+        <label class="rhythm-function">场景功能<input :value="selected.scene_function.join('；')" placeholder="推进主线；改变关系" @input="selected.scene_function = ($event.target as HTMLInputElement).value.split(/[；;]/).map(v => v.trim()).filter(Boolean)" /><small>目标 {{ Number(selected.word_count_target || 0).toLocaleString('zh-CN') || '待设定' }} 字；详略会作为生成和审查约束，而不是单纯拉长句子。</small></label>
         <div class="rhythm-levels">
           <label><span>入场张力<small>接住上一场</small></span><input v-model.number="selected.tension_curve.entry" type="range" min="1" max="5" /><output>{{ selected.tension_curve.entry }}</output></label>
           <label><span>场内峰值<small>选择与代价</small></span><input v-model.number="selected.tension_curve.peak" type="range" min="1" max="5" /><output>{{ selected.tension_curve.peak }}</output></label>

@@ -7,11 +7,18 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_bridge import CoreBridge, CoreCommandResult, _assert_studio_engine_args, parse_cli_fields
+from literary_engineering_studio.core_bridge import CoreBridge, CoreCommandResult, _assert_studio_engine_args, parse_cli_fields, task_command_parameters
 from literary_engineering_studio_engine.cli import main as engine_main
 
 
 class CoreBridgeTests(unittest.TestCase):
+    def test_task_command_parameters_distinguishes_project_placeholder_from_required_choices(self):
+        self.assertEqual(task_command_parameters("python -m literary_engineering_studio_engine word-budget <project>"), ())
+        self.assertEqual(
+            task_command_parameters("python -m literary_engineering_studio_engine asset-create <project> --type <type> [--source <path>]"),
+            ("type", "--source <path>"),
+        )
+
     def test_source_checkout_does_not_use_stale_installed_sidecar(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -34,6 +41,23 @@ class CoreBridgeTests(unittest.TestCase):
             )
         args = run.call_args.args[0]
         self.assertIn(str(Path("C:/work-project").resolve()), args)
+
+    def test_unresolved_template_is_reported_as_required_input_not_shell_syntax(self):
+        bridge = CoreBridge(default_config())
+        command = "python -m literary_engineering_studio_engine word-budget <project> --target-words <target>"
+        with self.assertRaisesRegex(ValueError, "requires: target") as raised:
+            bridge.execute_task_command(command, Path("C:/work-project"))
+        self.assertNotIn("unsupported shell syntax", str(raised.exception))
+
+    def test_asset_template_is_reported_as_required_input_not_shell_syntax(self):
+        bridge = CoreBridge(default_config())
+        command = (
+            "python -m literary_engineering_studio_engine asset-create <project> "
+            "--type <type> --brief <user brief> [--source <path>]"
+        )
+        with self.assertRaisesRegex(ValueError, "requires: type, user brief, --source <path>") as raised:
+            bridge.execute_task_command(command, Path("C:/work-project"))
+        self.assertNotIn("unsupported shell syntax", str(raised.exception))
 
     def test_parses_formal_cli_fields(self):
         fields = parse_cli_fields("status: issued\ntask_id: scene-demo\nmessage: task issued\n")
