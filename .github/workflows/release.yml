@@ -64,7 +64,10 @@ jobs:
           python -m unittest discover -s tests -v
           python -m compileall -q src
           python -m literary_engineering_studio_engine prompt-registry-validate --json
-          python -m literary_engineering_studio prompt-eval --live --runner opencode --model opencode/big-pickle --timeout 240 --output dist/prompt-evaluation.json
+          # Live model evaluation is intentionally opt-in. A release runner has no
+          # user-managed provider connection, so only deterministic prompt-contract
+          # regressions may block a signed installer release.
+          python -m literary_engineering_studio prompt-eval --output dist/prompt-evaluation.json
 
       - name: Test Vue client and Rust shell
         shell: pwsh
