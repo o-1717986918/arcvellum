@@ -69,14 +69,15 @@ jobs:
           # regressions may block a signed installer release.
           python -m literary_engineering_studio prompt-eval --output dist/prompt-evaluation.json
 
-      - name: Test Vue client and Rust shell
+      - name: Test Vue client
         shell: pwsh
         run: |
           npm run client:test
           npm run client:build
-          Push-Location desktop/src-tauri
-          cargo check --locked
-          Pop-Location
+
+      # The Tauri build requires the frozen Python sidecar, which is generated
+      # by build_desktop.ps1 and intentionally not tracked in Git. That script
+      # performs the authoritative Rust/Tauri compile after producing it.
 
       - name: Build signed updater and installer
         shell: pwsh
