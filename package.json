@@ -1,7 +1,7 @@
 {
   "name": "arcvellum-studio",
   "private": true,
-  "version": "0.9.3",
+  "version": "0.9.4",
   "scripts": {
     "client:dev": "vite --config client/vite.config.ts",
     "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --configLoader runner --config client/vite.config.ts && node scripts/sync-desktop-frontend.mjs && node scripts/verify-v09-build.mjs",

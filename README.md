@@ -4,7 +4,7 @@
 
 ArcVellum 是面向小说、剧本与伪记录作品的本地 Agent 创作平台。它把人物、世界观、情节、场景、文风、字数预算、审查证据和正式正文放进一条可恢复、可追溯的生产线；Agent 负责创作判断，文学工程内核负责签发任务、验证产物和阻止跳步。
 
-当前版本：**v0.9.3 Authorization Renewal and Runtime Observability Update**。
+当前版本：**v0.9.4 Bounded Pseudo-3D View Update**。
 
 ![ArcVellum v0.9.3 叙事星仪](docs/images/arcvellum-orrery-v093.png)
 
@@ -132,7 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 
 ## 项目状态
 
-当前源码与 Windows 候选安装包为 **v0.9.3**。本轮重新冻结了本地 Python sidecar，并完成 NSIS 安装程序、updater 签名与更新清单构建。它延续 v0.9.2 对桌面启动链路的修复，并补上了一个真实的自动推进缺口：当运行因授权时长上限暂停后，用户更新授权会建立新的本轮计时窗口，而不是把已经暂停的历史时间重新计入上限。
+当前源码与 Windows 候选安装包为 **v0.9.4**。本轮重新冻结了本地 Python sidecar，并完成 NSIS 安装程序、updater 签名与更新清单构建；同时补上了伪 3D 叙事星仪的中键视角旋转、章节聚焦枢轴保持和一键复位能力。
 
 这仍是 Beta：核心文学工程状态机、空间星仪、阅读器、Agent 执行观测和安装版链路已可用；进入 v1.0 前仍需积累更多题材的长期项目样本、无人值守恢复证据、Windows 10/11 干净虚拟机的首次安装/覆盖升级矩阵，以及商业代码签名验证。
 
@@ -146,6 +146,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 - [v0.8 Agent Runtime 与沉浸星仪执行计划](docs/roadmap/arcvellum-v0.8-agent-runtime-and-immersive-orrery-execution-plan.md)
 - [v0.9.0 发行说明](docs/releases/v0.9.0.md)
 - [v0.9.1 发行说明](docs/releases/v0.9.1.md)
+- [v0.9.4 发行说明](docs/releases/v0.9.4.md)
 - [v0.9.3 发行说明](docs/releases/v0.9.3.md)
 - [v0.9.2 发行说明](docs/releases/v0.9.2.md)
 - [v0.9 空间星仪实施计划](docs/roadmap/arcvellum-v0.9-implementation-execution-plan.md)
