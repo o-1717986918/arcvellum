@@ -17,6 +17,7 @@ function scene(id: string, chapterId: string): SpatialNarrativeNode {
     parent_id: null,
     cluster_id: `cluster:${chapterId}`,
     time_band: 1,
+    completion_state: "planned",
     importance: 0.5,
     detail_level: "near",
     world_hint: { surface: "narrative", grammar: "spine", elevation_band: "midground", occlusion_priority: 1 },

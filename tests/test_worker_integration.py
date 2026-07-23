@@ -7,10 +7,29 @@ from unittest.mock import patch
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_read_models import install_core_import_path
 from literary_engineering_studio.project_manager import record_direction
-from literary_engineering_studio.worker import AgentWorker
+from literary_engineering_studio.worker import AgentWorker, _resolve_task_json_path
 
 
 class WorkerIntegrationTests(unittest.TestCase):
+    def test_resolves_canonical_task_when_reported_chinese_path_is_mojibake(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / "你好，新世界"
+            task = project / "workflow" / "tasks" / "planning-demo.task.json"
+            task.parent.mkdir(parents=True)
+            task.write_text("{}\n", encoding="utf-8")
+            resolved = _resolve_task_json_path(
+                project,
+                "planning-demo",
+                r"C:\Users\Fold\Documents\ArcVellum\Works\���K��������\workflow\tasks\planning-demo.task.json",
+            )
+            self.assertEqual(resolved, task.resolve())
+
+    def test_rejects_invalid_task_identity_before_path_resolution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            with self.assertRaisesRegex(ValueError, "invalid task id"):
+                _resolve_task_json_path(project, "../outside", "")
+
     def test_asset_intake_runs_concrete_seed_command_and_writes_sidecars(self):
         config = default_config()
         install_core_import_path(config)

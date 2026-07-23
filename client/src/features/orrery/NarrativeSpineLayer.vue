@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import type { SpatialNarrativeEdge, SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
+import type { SpatialCompletionState, SpatialNarrativeEdge, SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
 
 type Anchor = { x: number; y: number; visible: boolean; scale: number };
 type SpinePoint = { node: SpatialNarrativeNode; anchor: Anchor };
@@ -21,6 +21,15 @@ const isDetailView = computed(() => props.projection.level !== "book");
 const spineClusters = computed<SpineCluster[]>(() => chapterCentroids(props.projection.nodes, props.anchors));
 const spinePoints = computed<SpinePoint[]>(() => spineClusters.value.map((cluster) => ({ node: cluster.node, anchor: cluster.anchor })));
 const spinePath = computed(() => buildPath(spinePoints.value.map((item) => item.anchor)));
+const spineSegments = computed(() => spineClusters.value.slice(1).map((cluster, index) => {
+  const previous = spineClusters.value[index];
+  return {
+    id: `${previous.id}>${cluster.id}`,
+    path: buildPath([previous.anchor, cluster.anchor]),
+    completion: chapterCompletion(cluster),
+    ...chapterState(cluster.id),
+  };
+}));
 const chapterSpokes = computed(() => spineClusters.value.flatMap((cluster) => cluster.members
   .filter((member) => Math.hypot(member.anchor.x - cluster.anchor.x, member.anchor.y - cluster.anchor.y) > 3)
   .map((member) => ({
@@ -28,6 +37,7 @@ const chapterSpokes = computed(() => spineClusters.value.flatMap((cluster) => cl
     start: cluster.anchor,
     end: member.anchor,
     ...chapterState(cluster.id),
+    completion: chapterCompletion(cluster),
   }))));
 const nodesById = computed(() => new Map(props.projection.nodes.map((node) => [node.node_id, node])));
 const activeChapterKey = computed(() => chapterKey(props.activeChapterId));
@@ -190,6 +200,14 @@ function chapterState(id: string): { active: boolean; muted: boolean } {
   return { active, muted: Boolean(activeChapterKey.value) && !active };
 }
 
+function chapterCompletion(cluster: SpineCluster): SpatialCompletionState {
+  const states = cluster.members.map((member) => member.node.completion_state);
+  if (states.includes("active")) return "active";
+  if (states.includes("blocked")) return "blocked";
+  if (states.length && states.every((state) => state === "completed")) return "completed";
+  return cluster.node.completion_state || "planned";
+}
+
 function buildPath(points: Anchor[]): string {
   if (!points.length) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -296,12 +314,16 @@ function threadColor(value: string): string {
       :key="spoke.id"
       class="narrative-chapter-spoke"
       :class="{ active: spoke.active, muted: spoke.muted }"
+      :data-completion="spoke.completion"
       :d="`M ${spoke.start.x} ${spoke.start.y} L ${spoke.end.x} ${spoke.end.y}`"
     />
-    <path v-if="spinePath" class="narrative-spine-glow" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
-    <path v-if="spinePath" class="narrative-spine-track" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
-    <path v-if="spinePath" class="narrative-spine-signal" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
-    <g v-for="(cluster, index) in spineClusters" :key="cluster.id" class="narrative-chapter-anchor" :class="chapterState(cluster.id)">
+    <path v-if="spinePath" class="narrative-spine-foundation" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
+    <g v-for="segment in spineSegments" :key="segment.id" class="narrative-spine-segment" :class="{ active: segment.active, muted: segment.muted }" :data-completion="segment.completion">
+      <path class="narrative-spine-glow" :class="{ detail: isDetailView }" :d="segment.path" />
+      <path class="narrative-spine-track" :class="{ detail: isDetailView }" :d="segment.path" />
+      <path class="narrative-spine-signal" :class="{ detail: isDetailView }" :d="segment.path" />
+    </g>
+    <g v-for="(cluster, index) in spineClusters" :key="cluster.id" class="narrative-chapter-anchor" :class="chapterState(cluster.id)" :data-completion="chapterCompletion(cluster)">
       <circle class="narrative-chapter-anchor-halo" :cx="cluster.anchor.x" :cy="cluster.anchor.y" r="12" />
       <circle class="narrative-chapter-anchor-core" :cx="cluster.anchor.x" :cy="cluster.anchor.y" r="4" />
       <text v-if="cluster.anchor.visible && cluster.anchor.scale >= 0.56" class="narrative-chapter-anchor-label" :x="cluster.anchor.x + 10" :y="cluster.anchor.y - 10">{{ String(index + 1).padStart(2, "0") }}</text>

@@ -23,9 +23,10 @@ class CreativeStewardCancelled(RuntimeError):
 
 
 class CreativeSteward:
-    def __init__(self, config: dict[str, Any], *, runtime_pool=None):
+    def __init__(self, config: dict[str, Any], *, runtime_pool=None, event_sink=None):
         self.config = config
         self.runtime_pool = runtime_pool
+        self.event_sink = event_sink
 
     def decide(
         self,
@@ -91,6 +92,8 @@ class CreativeSteward:
         handle = None
         lease = None
         client = None
+        session_id = ""
+        session_finished = False
         try:
             if self.runtime_pool is not None:
                 lease = self.runtime_pool.acquire("steward", workspace, model=model)
@@ -109,6 +112,8 @@ class CreativeSteward:
             session_id = str(session.get("id") or "")
             if not session_id:
                 raise RuntimeError("OpenCode did not create a Creative Steward session")
+            self._emit("steward.session.created", {"session_id": session_id, "model": model})
+            self._emit("steward.session.started", {"session_id": session_id, "model": model})
             client.prompt_async(
                 session_id,
                 text=_decision_prompt(choice, project_direction),
@@ -120,6 +125,11 @@ class CreativeSteward:
             while time.monotonic() < deadline:
                 if cancel_event is not None and cancel_event.is_set():
                     client.abort(session_id)
+                    self._emit(
+                        "steward.session.finished",
+                        {"session_id": session_id, "model": model, "status": "cancelled", "reason": "cancelled"},
+                    )
+                    session_finished = True
                     raise CreativeStewardCancelled("Creative Steward decision cancelled while waiting for model output")
                 state = client.session_status().get(session_id, {})
                 kind = str(state.get("type") or "") if isinstance(state, dict) else ""
@@ -130,8 +140,23 @@ class CreativeSteward:
                 time.sleep(0.2)
             else:
                 client.abort(session_id)
+                self._emit(
+                    "steward.session.finished",
+                    {"session_id": session_id, "model": model, "status": "failed", "reason": "timeout"},
+                )
+                session_finished = True
                 raise RuntimeError("Creative Steward decision timed out")
-            return _parse_decision(_last_assistant_text(client.messages(session_id)))
+            result = _parse_decision(_last_assistant_text(client.messages(session_id)))
+            self._emit("steward.session.finished", {"session_id": session_id, "model": model, "status": "complete"})
+            session_finished = True
+            return result
+        except Exception:
+            if session_id and not session_finished:
+                self._emit(
+                    "steward.session.finished",
+                    {"session_id": session_id, "model": model, "status": "failed", "reason": "decision_error"},
+                )
+            raise
         finally:
             if lease is not None:
                 self.runtime_pool.release(lease)
@@ -139,6 +164,10 @@ class CreativeSteward:
                 server.stop(handle)
             if manager is not None:
                 manager.shutdown()
+
+    def _emit(self, event: str, data: dict[str, Any]) -> None:
+        if self.event_sink is not None:
+            self.event_sink(event, data)
 
 
 def _decision_prompt(choice: dict[str, Any], project_direction: str) -> str:

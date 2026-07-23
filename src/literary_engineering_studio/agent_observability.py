@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from datetime import datetime, timezone
 from typing import Any
 
 
-SCHEMA = "arcvellum/agent-observability/v1"
+SCHEMA = "arcvellum/agent-observability/v2"
 
 
 def build_agent_observability(
@@ -20,19 +22,35 @@ def build_agent_observability(
     autopilot_status: dict[str, Any],
     events: list[dict[str, Any]],
     dashboard: dict[str, Any],
+    sessions: list[dict[str, Any]] | None = None,
+    services: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     run = autopilot_status.get("run") if isinstance(autopilot_status.get("run"), dict) else {}
     current_task = dashboard.get("current_task") if isinstance(dashboard.get("current_task"), dict) else {}
     visible_events = [_visible_event(item) for item in events[-18:] if isinstance(item, dict)]
     active = _active_task(run, current_task, visible_events)
-    source = {"run": run, "events": visible_events, "task": current_task}
+    visible_sessions = [_visible_session(item) for item in (sessions or []) if isinstance(item, dict)]
+    visible_services = [_visible_service(item) for item in (services or []) if isinstance(item, dict)]
+    source = {
+        "run": run,
+        "events": visible_events,
+        "task": current_task,
+        "sessions": visible_sessions,
+        "services": visible_services,
+    }
+    status = "active" if (
+        run and str(run.get("status")) == "running"
+        or any(item["status"] in {"queued", "running", "waiting", "waiting_human"} for item in visible_sessions)
+    ) else "idle"
     return {
         "ok": True,
         "schema": SCHEMA,
         "project_root": project_root,
-        "status": "active" if run and str(run.get("status")) == "running" else "idle",
+        "status": status,
         "active_task": active,
-        "sessions": [_session(run, visible_events)] if run else [],
+        "controller": _controller(run),
+        "services": visible_services,
+        "sessions": visible_sessions,
         "recent_events": visible_events,
         "revision": _digest(source),
     }
@@ -56,15 +74,55 @@ def _active_task(run: dict[str, Any], task: dict[str, Any], events: list[dict[st
     }
 
 
-def _session(run: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
+def _controller(run: dict[str, Any]) -> dict[str, Any] | None:
+    if not run:
+        return None
     return {
-        "session_id": str(run.get("run_id") or ""),
-        "role": "主创执行者",
-        "runtime": str(run.get("runtime") or ""),
+        "run_id": _short_id(run.get("run_id")),
         "status": str(run.get("status") or ""),
         "route": str(run.get("current_route") or ""),
-        "event_count": len(events),
-        "started_at": str(run.get("started_at") or run.get("created_at") or ""),
+        "task_id": str(run.get("current_task_id") or ""),
+        "tasks_completed": _integer(run.get("tasks_completed")),
+        "stalled_cycles": _integer(run.get("stalled_cycles")),
+        "last_progress_at": str(run.get("last_progress_at") or ""),
+    }
+
+
+def _visible_session(item: dict[str, Any]) -> dict[str, Any]:
+    status = str(item.get("status") or "idle")
+    started_at = str(item.get("started_at") or "")
+    finished_at = str(item.get("finished_at") or "")
+    return {
+        "session_id": _short_id(item.get("session_id")),
+        "role": _role_label(item.get("role")),
+        "role_id": str(item.get("role") or ""),
+        "runtime": str(item.get("runtime") or ""),
+        "model": str(item.get("model") or ""),
+        "status": status,
+        "route": str(item.get("route") or ""),
+        "task_id": str(item.get("task_id") or ""),
+        "event_count": _integer(item.get("event_count")),
+        "retry_count": _integer(item.get("retry_count")),
+        "last_event": str(item.get("last_event") or ""),
+        "last_message": _safe_message(item.get("last_message"), _session_message(status)),
+        "started_at": started_at,
+        "updated_at": str(item.get("updated_at") or ""),
+        "finished_at": finished_at,
+        "elapsed_seconds": _elapsed_seconds(started_at, finished_at),
+    }
+
+
+def _visible_service(item: dict[str, Any]) -> dict[str, Any]:
+    healthy = bool(item.get("healthy"))
+    return {
+        "role": _role_label(item.get("role")),
+        "role_id": str(item.get("role") or ""),
+        "model": str(item.get("model") or ""),
+        "status": "failed" if not healthy else "busy" if _integer(item.get("active_leases")) else "warm",
+        "healthy": healthy,
+        "active_leases": _integer(item.get("active_leases")),
+        "restart_count": _integer(item.get("restart_count")),
+        "started_at": str(item.get("started_at") or ""),
     }
 
 
@@ -121,12 +179,54 @@ def _status_message(status: str) -> str:
     return {"running": "任务仍在受控执行，新的可见状态会持续出现。", "paused": "可以在确认后从这个安全节点继续。", "blocked": "先处理当前阻塞证据，系统不会跳过门禁。"}.get(status, "当前没有正在执行的任务。")
 
 
+def _session_message(status: str) -> str:
+    return {
+        "queued": "会话正在等待运行。",
+        "running": "会话正在执行当前任务。",
+        "waiting": "会话正在等待上游结果。",
+        "waiting_human": "会话正在等待你的决定。",
+        "idle": "会话保持可复用，当前没有在生成内容。",
+        "failed": "会话未能完成当前动作。",
+        "cancelled": "会话已取消。",
+        "complete": "会话已完成并归档。",
+    }.get(status, "会话状态已更新。")
+
+
+def _role_label(value: object) -> str:
+    return {
+        "worker": "主创执行者",
+        "advisor": "项目顾问",
+        "steward": "受托决策者",
+    }.get(str(value or ""), str(value or "Agent"))
+
+
+def _short_id(value: object) -> str:
+    text = str(value or "")
+    if len(text) <= 12:
+        return text
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:6]
+    return f"{text[:4]}…{digest}"
+
+
+def _elapsed_seconds(started_at: str, finished_at: str) -> int:
+    try:
+        started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        ended = datetime.fromisoformat(finished_at.replace("Z", "+00:00")) if finished_at else datetime.now(timezone.utc)
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if ended.tzinfo is None:
+            ended = ended.replace(tzinfo=timezone.utc)
+        return max(0, int((ended - started).total_seconds()))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _safe_message(value: object, fallback: str) -> str:
     text = str(value or "").strip().replace("\n", " ")
     if not text:
         return fallback
     # Internal tracebacks and absolute paths are not presentation data.
-    if "Traceback" in text or ":\\" in text or text.startswith("/"):
+    if "Traceback" in text or re.search(r"\b[A-Za-z]:[/\\]", text) or text.startswith(("/", "\\\\")):
         return fallback
     return text[:300]
 

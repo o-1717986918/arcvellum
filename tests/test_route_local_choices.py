@@ -78,8 +78,13 @@ class RouteLocalChoiceTests(unittest.TestCase):
                     root,
                     route="character-and-world-assets",
                 )
+                repeated = project_interaction.build_current_human_choices(
+                    root,
+                    route="character-and-world-assets",
+                )
 
             choice = payload["choices"][0]
+            self.assertEqual(choice["choice_id"], repeated["choices"][0]["choice_id"])
             self.assertEqual(choice["target"]["target_id"], "scene-0001-林正")
             self.assertTrue(choice["target"]["candidate_sha256"])
             recorded = project_interaction.record_human_choice(
@@ -91,6 +96,16 @@ class RouteLocalChoiceTests(unittest.TestCase):
                 json.loads(approval.read_text(encoding="utf-8").splitlines()[-1])["run_id"],
                 "scene-0001-林正",
             )
+            with patch.object(
+                project_interaction,
+                "build_workflow_state",
+                return_value=SimpleNamespace(json_path=state_path),
+            ):
+                after = project_interaction.build_current_human_choices(
+                    root,
+                    route="character-and-world-assets",
+                )
+            self.assertEqual(after["choices"], [])
 
     def test_cross_asset_scene_review_exposes_a_hash_bound_decision(self):
         with tempfile.TemporaryDirectory() as temporary:

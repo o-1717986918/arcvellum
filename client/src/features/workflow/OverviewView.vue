@@ -1,21 +1,32 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { ArrowRight, CircleAlert, CircleCheck, Clock3, Eye, EyeOff, Image, Maximize2, Minimize2, Palette, Play, Route, X } from "lucide-vue-next";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ImmersiveConsole from "@/components/ImmersiveConsole.vue";
 import StoryTrace from "@/components/StoryTrace.vue";
-import { api, query } from "@/services/api";
+import { api } from "@/services/api";
 import { asList, asRecord, describeGate, describeWorkflowAction, formatCount, labelFor, manuscriptItems, targetLabel, workflowStepLabel } from "@/services/presentation";
 import { applyOrreryExperience, backgroundForTheme, normalizeInstrumentVisibility, normalizeOrreryBackground, normalizeOrreryMode, normalizeOrreryTheme, type OrreryBackground, type OrreryMode, type OrreryTheme } from "@/services/orreryPreferences";
 import { loadOrreryBackground } from "@/services/orreryAssets";
 import { useAppStore } from "@/stores/app";
+import { useHumanChoicesStore } from "@/stores/humanChoices";
 import type { ImmersivePanel } from "@/types/immersive";
 
 const OrreryWorkbench = defineAsyncComponent(() => import("@/features/orrery/OrreryWorkbench.vue"));
 
 const store = useAppStore();
-const choices = ref<Record<string, unknown>[]>([]);
+const humanChoices = useHumanChoicesStore();
+const {
+  choices,
+  selectedChoice,
+  rationale: choiceRationale,
+  busy: choiceBusy,
+  completed: choiceCompleted,
+  message: choiceMessage,
+  error: choiceError,
+} = storeToRefs(humanChoices);
 const working = ref(false);
 const actionMessage = ref("");
 const narrow = window.matchMedia("(max-width: 760px)").matches;
@@ -28,12 +39,6 @@ const engine = ref<"spatial">("spatial");
 const backgroundImage = ref("");
 const instrumentsVisible = ref(normalizeInstrumentVisibility(localStorage.getItem("arcvellum.orreryInstruments")));
 const immersivePanels = ref<ImmersivePanel[]>([]);
-const selectedChoice = ref<Record<string, unknown> | null>(null);
-const choiceRationale = ref("");
-const choiceBusy = ref(false);
-const choiceMessage = ref("");
-const choiceError = ref("");
-const choiceCompleted = ref(false);
 const immersive = computed(() => mode.value === "immersive");
 const heroStyle = computed(() => ({ "--orrery-background-image": backgroundImage.value ? `url("${backgroundImage.value}")` : "none" }));
 
@@ -105,66 +110,31 @@ function handleGlobalModeRequest(event: CustomEvent<OrreryMode>): void {
 
 
 function openChoice(choice: Record<string, unknown>): void {
-  selectedChoice.value = choice;
-  choiceRationale.value = "";
-  choiceMessage.value = "";
-  choiceError.value = "";
-  choiceCompleted.value = false;
+  humanChoices.open(choice);
 }
 
 function closeChoice(): void {
-  selectedChoice.value = null;
-  choiceRationale.value = "";
-  choiceMessage.value = "";
-  choiceError.value = "";
-  choiceCompleted.value = false;
+  humanChoices.close();
 }
 
 async function submitChoice(option: Record<string, unknown>): Promise<void> {
   if (!store.currentProjectPath || !selectedChoice.value || choiceBusy.value) return;
-  const selected = String(option.id || option.label || "").trim();
-  if (!selected) {
-    choiceError.value = "这个选项缺少可提交的标识，请刷新项目后重试。";
-    return;
-  }
-  choiceBusy.value = true;
-  choiceError.value = "";
   try {
-    const result = await api<Record<string, unknown>>("/workflow/human-choice", {
-      method: "POST",
-      body: JSON.stringify({
-        project_root: store.currentProjectPath,
-        choice_id: selectedChoice.value.choice_id,
-        route: selectedChoice.value.route,
-        task_id: selectedChoice.value.task_id || "",
-        decision_type: selectedChoice.value.decision_type,
-        target: selectedChoice.value.target || {},
-        options: selectedChoice.value.options || [],
-        selected,
-        rationale: choiceRationale.value || `用户在 ArcVellum 中确认“${String(option.label || option.id)}”。`,
-        actor: "arcvellum-user",
-      }),
-    });
-    const effect = asRecord(result.effect);
-    choiceMessage.value = String(effect.summary || result.materialized || "选择已写入正式流程。");
-    choiceCompleted.value = true;
-    await Promise.all([loadChoices(), store.refreshWorkspace()]);
+    const result = await humanChoices.submit(store.currentProjectPath, option);
+    await store.refreshWorkspace();
     store.notice = choiceMessage.value;
+    if (result.consumed) window.setTimeout(() => humanChoices.close(), 480);
   } catch (cause) {
-    choiceError.value = cause instanceof Error ? cause.message : "暂时无法记录这项选择。";
     store.error = choiceError.value;
-  } finally {
-    choiceBusy.value = false;
   }
 }
 
 async function loadChoices(): Promise<void> {
-  if (!store.currentProjectPath) return;
-  const result: { items?: Record<string, unknown>[]; choices?: Record<string, unknown>[] } = await api<{
-    items?: Record<string, unknown>[];
-    choices?: Record<string, unknown>[];
-  }>(`/workflow/current-choice?${query({ project_root: store.currentProjectPath })}`).catch(() => ({ items: [] }));
-  choices.value = result.items || result.choices || [];
+  if (!store.currentProjectPath) {
+    humanChoices.reset();
+    return;
+  }
+  await humanChoices.load(store.currentProjectPath).catch(() => undefined);
 }
 
 async function prepareNextTask(): Promise<void> {

@@ -16,6 +16,7 @@ from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .advisor import ProjectAdvisor
 from .agent_observability import build_agent_observability
+from .agent_session_tracking import track_agent_session_event
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
 from .advisor_personas import persona_catalog, save_custom_persona, select_persona
 from .autopilot import AutopilotService
@@ -333,7 +334,14 @@ def create_app(config_override: dict[str, Any] | None = None):
             "reader_manifest": reader_snapshot(root),
             "project_progress": progress_snapshot(root),
             "autopilot_status": autopilot_status,
-            "agent_observability": build_agent_observability(str(root), autopilot_status, events, dashboard_snapshot(root)),
+            "agent_observability": build_agent_observability(
+                str(root),
+                autopilot_status,
+                events,
+                dashboard_snapshot(root),
+                jobs.list_agent_sessions(str(root), limit=30),
+                lifecycle.opencode_pool.status(),
+            ),
         }
 
     def shutdown_application():
@@ -709,7 +717,14 @@ def create_app(config_override: dict[str, Any] | None = None):
             status = autopilot.status(root)
             run = status.get("run") if isinstance(status.get("run"), dict) else {}
             events = jobs.autopilot_events_since(str(run.get("run_id") or ""), limit=80) if run.get("run_id") else []
-            return build_agent_observability(str(root), status, events, dashboard_snapshot(root))
+            return build_agent_observability(
+                str(root),
+                status,
+                events,
+                dashboard_snapshot(root),
+                jobs.list_agent_sessions(str(root), limit=30),
+                lifecycle.opencode_pool.status(),
+            )
         return _call(read)
 
     @app.get("/agent-observability/stream")
@@ -725,7 +740,14 @@ def create_app(config_override: dict[str, Any] | None = None):
                 status = autopilot.status(root)
                 run = status.get("run") if isinstance(status.get("run"), dict) else {}
                 events = jobs.autopilot_events_since(str(run.get("run_id") or ""), limit=80) if run.get("run_id") else []
-                payload = build_agent_observability(str(root), status, events, dashboard_snapshot(root))
+                payload = build_agent_observability(
+                    str(root),
+                    status,
+                    events,
+                    dashboard_snapshot(root),
+                    jobs.list_agent_sessions(str(root), limit=30),
+                    lifecycle.opencode_pool.status(),
+                )
                 revision = str(payload.get("revision") or "")
                 if revision != previous_revision:
                     yield _sse("agent.observability", payload)
@@ -972,6 +994,17 @@ def create_app(config_override: dict[str, Any] | None = None):
 
         def execute(cancel_event) -> dict[str, Any]:
             def emit(event: str, data: dict[str, Any]) -> None:
+                track_agent_session_event(
+                    jobs,
+                    project_root=str(_project(payload.project_root)),
+                    role="worker",
+                    runtime=payload.runtime,
+                    controller_id=str(job["job_id"]),
+                    task_id=payload.task_id,
+                    route=payload.route,
+                    event=event,
+                    data=data,
+                )
                 channel = f"worker:{job['job_id']}"
                 if event in EPHEMERAL_WORKER_EVENTS:
                     lifecycle.live_events.publish(channel, event, data)
@@ -1206,16 +1239,35 @@ def create_app(config_override: dict[str, Any] | None = None):
         root = _project(str(payload.get("project_root") or ""))
         result = _call(lambda: record_choice(config, root, payload))
         choice = result.get("choice") if isinstance(result.get("choice"), dict) else {}
+        resumed_run: dict[str, Any] | None = None
+        if result.get("consumed") is True:
+            autopilot_status = autopilot.status(root)
+            active_run = (
+                autopilot_status.get("run")
+                if isinstance(autopilot_status.get("run"), dict)
+                else {}
+            )
+            if (
+                active_run.get("status") == "paused"
+                and active_run.get("stop_reason")
+                in {"human-decision-required", "steward-escalation"}
+            ):
+                resumed_run = autopilot.resume(str(active_run.get("run_id") or ""))
         lifecycle.live_events.publish(
             f"project:{root}",
             "human.choice_recorded",
             {
                 "choice_id": str(choice.get("choice_id") or ""),
+                "receipt_id": str(result.get("receipt_id") or ""),
                 "decision_type": str(choice.get("decision_type") or ""),
+                "consumed": bool(result.get("consumed")),
                 "effect": result.get("effect") or {},
             },
         )
         lifecycle.live_events.notify()
+        result["autopilot_resumed"] = bool(resumed_run)
+        if resumed_run:
+            result["autopilot_run_id"] = str(resumed_run.get("run_id") or "")
         return result
 
     @app.get("/project/library")

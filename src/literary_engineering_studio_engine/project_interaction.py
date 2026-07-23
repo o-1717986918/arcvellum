@@ -211,18 +211,20 @@ def build_current_human_choices(
         dashboard_path = _rel(result.json_path, root)
     choices: list[dict[str, object]] = []
     seen = set()
+    resolved = _resolved_choice_ids(root)
 
     def add_choice(choice: dict[str, object] | None, step: str = "", next_action: str = "") -> None:
         if not choice:
             return
-        key = str(choice.get("choice_id") or "")
-        if not key or key in seen:
-            return
-        seen.add(key)
         if step:
             choice["task_step"] = step
         if next_action:
             choice["next_action"] = next_action
+        choice["choice_id"] = _stable_choice_id(choice)
+        key = str(choice["choice_id"])
+        if key in seen or key in resolved:
+            return
+        seen.add(key)
         choices.append(choice)
 
     for action in actions:
@@ -343,7 +345,7 @@ def record_human_choice(project_root: Path, payload: dict[str, object]) -> dict[
         "selected": selected,
         "rationale": truncate_text(str(payload.get("rationale") or "").strip(), 2000),
         "actor": truncate_text(str(payload.get("actor") or "user-ui"), 80),
-        "status": "submitted",
+        "status": "recorded",
         "recorded_at": _now(),
         "formal_effect": "human choice evidence only; downstream route gates still validate produced artifacts",
     }
@@ -351,24 +353,68 @@ def record_human_choice(project_root: Path, payload: dict[str, object]) -> dict[
     choices_dir.mkdir(parents=True, exist_ok=True)
     choice_path = choices_dir / f"{choice_id}.json"
     if choice_path.exists():
-        choice_path = choices_dir / f"{choice_id}-{_stamp()}.json"
-        record["choice_id"] = choice_path.stem
-    _write_json_atomic(choice_path, record)
-    _append_jsonl(choices_dir / "index.jsonl", record)
+        existing = read_json_file(choice_path)
+        same_choice = (
+            str(existing.get("decision_type") or "") == decision_type
+            and str(existing.get("selected") or "") == selected
+            and _safe_mapping(existing.get("target") if isinstance(existing.get("target"), dict) else {}) == record["target"]
+        )
+        if not same_choice:
+            raise ValueError("这个创作决定已经用另一项选择提交，不能静默覆盖。")
+        return {
+            "ok": True,
+            "choice": existing,
+            "choice_path": _rel(choice_path, root),
+            "index_path": "workflow/human_choices/index.jsonl",
+            "materialized": str(existing.get("materialized") or ""),
+            "duplicate": True,
+        }
     materialized = ""
     if bool(payload.get("materialize", True)) and decision_type == "branch_selection":
+        _write_json_atomic(choice_path, record)
         materialized = _materialize_branch_selection(root, record, choice_path)
     elif bool(payload.get("materialize", True)) and decision_type in {
         "asset_approval", "release_approval", "canon_patch_approval", "state_patch_confirmation"
     }:
         materialized = _materialize_approval(root, record)
+    record["materialized"] = materialized
+    record["consumed"] = bool(materialized)
+    record["status"] = "submitted" if record["consumed"] else "recorded"
+    _write_json_atomic(choice_path, record)
+    _append_jsonl(choices_dir / "index.jsonl", record)
     return {
         "ok": True,
         "choice": record,
         "choice_path": _rel(choice_path, root),
         "index_path": "workflow/human_choices/index.jsonl",
         "materialized": materialized,
+        "duplicate": False,
     }
+
+
+def finalize_human_choice(
+    project_root: Path,
+    choice_id: str,
+    *,
+    materialized: str,
+    effect: dict[str, object] | None = None,
+    consumed: bool = True,
+) -> dict[str, object]:
+    """Finalize a Studio-layer choice after its non-core effect succeeds."""
+
+    root = project_root.resolve()
+    safe_id = _safe_choice_id(choice_id)
+    path = root / "workflow" / "human_choices" / f"{safe_id}.json"
+    record = read_json_file(path)
+    if not record:
+        raise FileNotFoundError(f"human choice not found: {safe_id}")
+    record["materialized"] = truncate_text(str(materialized or ""), 1000)
+    record["effect"] = _safe_mapping(effect or {})
+    record["consumed"] = bool(consumed)
+    record["status"] = "submitted" if consumed else "recorded"
+    record["finalized_at"] = _now()
+    _write_json_atomic(path, record)
+    return record
 
 
 def _branch_choice(root: Path, scene_id: str) -> dict[str, object] | None:
@@ -772,6 +818,35 @@ def _safe_choice_id(value: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", choice_id) or ".." in choice_id:
         raise ValueError("invalid choice_id")
     return choice_id
+
+
+def _stable_choice_id(choice: dict[str, object]) -> str:
+    identity = {
+        "route": choice.get("route") or "",
+        "decision_type": choice.get("decision_type") or "",
+        "target": choice.get("target") or {},
+        "task_step": choice.get("task_step") or "",
+        "next_action": choice.get("next_action") or "",
+        "source_paths": choice.get("source_paths") or [],
+        "options": choice.get("options") or [],
+    }
+    digest = hashlib.sha256(
+        json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:24]
+    decision_type = _safe_target_id(str(choice.get("decision_type") or "general")) or "general"
+    return _safe_choice_id(f"choice.{decision_type}.{digest}")
+
+
+def _resolved_choice_ids(root: Path) -> set[str]:
+    folder = root / "workflow" / "human_choices"
+    if not folder.is_dir():
+        return set()
+    resolved: set[str] = set()
+    for path in folder.glob("choice.*.json"):
+        payload = read_json_file(path)
+        if payload.get("consumed") is True:
+            resolved.add(str(payload.get("choice_id") or path.stem))
+    return resolved
 
 
 def _make_id(prefix: str, *parts: str) -> str:

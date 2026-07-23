@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 from pathlib import Path
@@ -93,11 +94,14 @@ def current_choices(
 
 
 def record_choice(config: dict[str, Any], project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    before = current_choices(config, project_root)
     result = _function(config, "project_interaction", "record_human_choice")(project_root, payload)
-    if not bool(payload.get("materialize", True)):
-        return result
-
     choice = result.get("choice") if isinstance(result.get("choice"), dict) else {}
+    if result.get("duplicate") and choice.get("consumed") is True:
+        return _choice_receipt(config, project_root, result, before)
+    if not bool(payload.get("materialize", True)):
+        return _choice_receipt(config, project_root, result, before)
+
     decision_type = str(choice.get("decision_type") or payload.get("decision_type") or "")
     selected = str(choice.get("selected") or payload.get("selected") or "")
     actor = str(choice.get("actor") or payload.get("actor") or "user-ui")
@@ -130,7 +134,53 @@ def record_choice(config: dict[str, Any], project_root: Path, payload: dict[str,
             "summary": "已记录正式选择，状态机将按对应门禁继续验证。",
             "path": str(result.get("materialized") or result.get("choice_path") or ""),
         }
-    return result
+    materialized = str(result.get("materialized") or "")
+    finalized = _function(config, "project_interaction", "finalize_human_choice")(
+        project_root,
+        str(choice.get("choice_id") or payload.get("choice_id") or ""),
+        materialized=materialized,
+        effect=result.get("effect") if isinstance(result.get("effect"), dict) else {},
+        consumed=bool(materialized),
+    )
+    result["choice"] = finalized
+    return _choice_receipt(config, project_root, result, before)
+
+
+def _choice_receipt(
+    config: dict[str, Any],
+    project_root: Path,
+    result: dict[str, Any],
+    before: dict[str, Any],
+) -> dict[str, Any]:
+    choice = result.get("choice") if isinstance(result.get("choice"), dict) else {}
+    after = current_choices(config, project_root)
+    before_ids = [
+        str(item.get("choice_id") or "")
+        for item in before.get("choices", [])
+        if isinstance(item, dict)
+    ]
+    after_ids = [
+        str(item.get("choice_id") or "")
+        for item in after.get("choices", [])
+        if isinstance(item, dict)
+    ]
+    choice_id = str(choice.get("choice_id") or "")
+    selected = str(choice.get("selected") or "")
+    receipt_id = "receipt." + hashlib.sha256(f"{choice_id}:{selected}".encode("utf-8")).hexdigest()[:24]
+    consumed = bool(choice.get("consumed")) and choice_id not in after_ids
+    return {
+        **result,
+        "schema": "arcvellum/human-choice-receipt/v0.2",
+        "receipt_id": receipt_id,
+        "choice_id": choice_id,
+        "selected": selected,
+        "recorded": bool(choice),
+        "materialized": str(result.get("materialized") or choice.get("materialized") or ""),
+        "materialized_ok": bool(result.get("materialized") or choice.get("materialized")),
+        "consumed": consumed,
+        "state_before": {"pending_choice_ids": before_ids},
+        "state_after": {"pending_choice_ids": after_ids},
+    }
 
 
 def _choice_direction_message(choice: dict[str, Any]) -> str:

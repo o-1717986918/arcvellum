@@ -48,6 +48,35 @@ class DurableJobTests(unittest.TestCase):
             store.release_lock("project:a:route:b", first["job_id"])
             self.assertTrue(store.acquire_lock("project:a:route:b", second["job_id"], "two"))
 
+    def test_agent_session_updates_preserve_identity_and_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            created = store.upsert_agent_session(
+                "session-123456",
+                project_root="C:/work",
+                role="worker",
+                runtime="opencode",
+                model="provider/model",
+                status="running",
+                task_id="task-1",
+                route="scene-development",
+                controller_id="run-1",
+                last_event="runner.session.started",
+            )
+            updated = store.upsert_agent_session(
+                "session-123456",
+                project_root="",
+                role="",
+                runtime="",
+                status="complete",
+                last_event="runner.session.finished",
+            )
+            self.assertEqual(updated["model"], "provider/model")
+            self.assertEqual(updated["task_id"], "task-1")
+            self.assertEqual(updated["controller_id"], "run-1")
+            self.assertEqual(updated["event_count"], created["event_count"] + 1)
+            self.assertTrue(updated["finished_at"])
+
     def test_autopilot_lease_and_progress_are_cross_store_safe(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "studio.sqlite3"
@@ -64,6 +93,92 @@ class DurableJobTests(unittest.TestCase):
             self.assertEqual(second.read_autopilot_run(run["run_id"])["tasks_completed"], 2)
             first.release_autopilot_lease(run["run_id"], "controller-a")
             self.assertTrue(second.acquire_autopilot_lease(run["run_id"], "controller-b"))
+
+    def test_schema_eight_migrates_autopilot_progress_and_agent_sessions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "studio.sqlite3"
+            connection = sqlite3.connect(database)
+            connection.executescript(
+                """
+                CREATE TABLE autopilot_runs (
+                    run_id TEXT PRIMARY KEY,
+                    project_root TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    runtime TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    policy_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL DEFAULT '',
+                    current_route TEXT NOT NULL DEFAULT '',
+                    current_task_id TEXT NOT NULL DEFAULT '',
+                    tasks_completed INTEGER NOT NULL DEFAULT 0,
+                    failures INTEGER NOT NULL DEFAULT 0,
+                    consecutive_revisions INTEGER NOT NULL DEFAULT 0,
+                    estimated_cost REAL NOT NULL DEFAULT 0,
+                    last_error TEXT NOT NULL DEFAULT '',
+                    stop_reason TEXT NOT NULL DEFAULT ''
+                );
+                INSERT INTO autopilot_runs (
+                    run_id, project_root, mode, runtime, status, policy_json,
+                    created_at, updated_at, started_at
+                ) VALUES (
+                    'autopilot-legacy1234', 'C:/work', 'supervised_auto',
+                    'opencode', 'running', '{"mode":"supervised_auto"}',
+                    '2026-07-23T00:00:00+00:00',
+                    '2026-07-23T00:00:00+00:00',
+                    '2026-07-23T00:00:00+00:00'
+                );
+                PRAGMA user_version = 7;
+                """
+            )
+            connection.commit()
+            connection.close()
+            restarted = JobStore(database)
+            run = restarted.read_autopilot_run("autopilot-legacy1234")
+            self.assertEqual(run["route_index"], 0)
+            self.assertEqual(run["progress_fingerprint"], "")
+            updated = restarted.update_autopilot_run(
+                run["run_id"],
+                route_index=3,
+                progress_fingerprint="fingerprint-one",
+                stalled_cycles=2,
+                last_progress_at="2026-07-23T12:00:00+00:00",
+            )
+            self.assertEqual(updated["route_index"], 3)
+            self.assertEqual(updated["progress_fingerprint"], "fingerprint-one")
+            self.assertEqual(updated["stalled_cycles"], 2)
+
+            session = restarted.upsert_agent_session(
+                "ses_worker_001",
+                project_root="C:/work",
+                role="worker",
+                runtime="opencode",
+                model="provider/model",
+                task_id="scene-generate",
+                route="scene-development",
+                last_event="runner.session.started",
+            )
+            self.assertEqual(session["status"], "running")
+            self.assertEqual(session["event_count"], 1)
+            finished = restarted.upsert_agent_session(
+                "ses_worker_001",
+                project_root="C:/work",
+                role="worker",
+                runtime="opencode",
+                model="provider/model",
+                status="complete",
+                task_id="scene-generate",
+                route="scene-development",
+                last_event="runner.session.completed",
+            )
+            self.assertTrue(finished["finished_at"])
+            self.assertEqual(finished["event_count"], 2)
+            self.assertEqual(
+                [item["session_id"] for item in restarted.list_agent_sessions("C:/work")],
+                ["ses_worker_001"],
+            )
 
     def test_supervisor_persists_completion(self):
         with tempfile.TemporaryDirectory() as temporary:

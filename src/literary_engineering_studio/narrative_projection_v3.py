@@ -173,6 +173,7 @@ def _spatial_nodes(items: Any, edges: Any, grammar: str, rhythm_hints: dict[str,
                 "parent_id": parent_map.get(node_id),
                 "cluster_id": _cluster_id(node, grammar),
                 "time_band": _time_band(node, primary_count),
+                "completion_state": _completion_state(node),
                 "importance": _importance(node),
                 "detail_level": _detail_level(node, primary_count),
                 "world_hint": _world_hint(node, grammar, index),
@@ -419,6 +420,19 @@ def _importance(node: dict[str, Any]) -> float:
     elif status == "formal":
         base += 0.04
     return min(1.0, round(base, 3))
+
+
+def _completion_state(node: dict[str, Any]) -> str:
+    """Normalize heterogeneous project statuses into one visual lifecycle contract."""
+
+    status = str(node.get("status") or "").strip().lower()
+    if status in {"blocked", "failed", "conflict", "needs_revision", "revise"}:
+        return "blocked"
+    if status in {"current", "running", "active", "waiting_human"}:
+        return "active"
+    if status in {"formal", "complete", "completed", "pass", "promoted", "approved"}:
+        return "completed"
+    return "planned"
 
 
 def _detail_level(node: dict[str, Any], primary_count: int) -> str:

@@ -88,6 +88,7 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
             client = _Client()
             pool = _Pool(client)
             validator = _RepairingValidator()
+            events = []
             runtime = OpenCodeRuntime({"model": "fixture/model", "models": {"worker": "fixture/model"}})
             runtime.runtime_pool = pool
 
@@ -100,6 +101,7 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
                     prompt,
                     run_root,
                     timeout=10,
+                    event_sink=lambda event, data: events.append((event, data)),
                     output_validator=validator,
                     max_repairs=2,
                 )
@@ -114,6 +116,9 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
             self.assertEqual(result.metadata["repairs"], 1)
             self.assertTrue(result.metadata["service_reused"])
             self.assertFalse(client.aborted)
+            finished = [data for event, data in events if event == "runner.session.finished"]
+            self.assertEqual(finished[-1]["session_id"], "session-fixed")
+            self.assertEqual(finished[-1]["status"], "complete")
 
 
 if __name__ == "__main__":

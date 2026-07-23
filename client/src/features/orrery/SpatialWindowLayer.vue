@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Activity, ArrowUpRight, BookOpenText, CircleAlert, CircleCheck, Download, FileCheck2, Focus, GitBranch, PackageOpen, RefreshCw, Route, ScanSearch } from "lucide-vue-next";
 import SpatialWindowFrame from "@/features/orrery/SpatialWindowFrame.vue";
-import QualityView from "@/features/quality/QualityView.vue";
+import RulesInstrument from "@/features/quality/RulesInstrument.vue";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
@@ -27,6 +27,8 @@ const activeRunStatus = computed(() => String(activeRun.value.status || ""));
 const observedTask = computed(() => app.agentObservability?.active_task || null);
 const observedEvents = computed(() => (app.agentObservability?.recent_events || []).slice(-4).reverse());
 const observedSessions = computed(() => app.agentObservability?.sessions || []);
+const observedServices = computed(() => app.agentObservability?.services || []);
+const observedController = computed(() => app.agentObservability?.controller || null);
 const observedTimeline = computed(() => (app.agentObservability?.recent_events || []).slice(-12).reverse());
 const deliveryReady = computed(() => String(props.delivery?.status || "") === "ready");
 const progressParts = computed(() => asList<Record<string, unknown>>(props.progress?.parts));
@@ -42,6 +44,27 @@ function statusLabel(status: string): string {
 
 function runStatusLabel(status: string): string {
   return ({ running: "正在执行", paused: "等待继续", blocked: "等待处理", failed: "本轮停止", complete: "本轮完成" } as Record<string, string>)[status] || "等待任务";
+}
+
+function sessionStatusLabel(status: string): string {
+  return ({
+    queued: "排队",
+    running: "运行中",
+    waiting: "等待上游",
+    waiting_human: "等待你",
+    idle: "可复用",
+    failed: "失败",
+    cancelled: "已取消",
+    stopped: "已停止",
+    complete: "已归档",
+  } as Record<string, string>)[status] || "状态更新";
+}
+
+function elapsedLabel(seconds: number | undefined): string {
+  const value = Math.max(0, Number(seconds || 0));
+  if (value < 60) return `${value} 秒`;
+  if (value < 3600) return `${Math.floor(value / 60)} 分 ${value % 60} 秒`;
+  return `${Math.floor(value / 3600)} 小时 ${Math.floor(value % 3600 / 60)} 分`;
 }
 
 function choiceOptions(choice: Record<string, unknown>): Record<string, unknown>[] {
@@ -213,9 +236,35 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
             <div><dt>执行器</dt><dd>{{ observedTask?.runtime || '未启动' }}</dd></div>
             <div><dt>路线</dt><dd>{{ observedTask?.route || '等待任务' }}</dd></div>
             <div><dt>已完成</dt><dd>{{ Number(observedTask?.tasks_completed || 0) }} 项</dd></div>
-            <div><dt>异常</dt><dd>{{ Number(observedTask?.failures || 0) }} 项</dd></div>
+            <div><dt>停滞周期</dt><dd>{{ Number(observedController?.stalled_cycles || 0) }}</dd></div>
           </dl>
-          <section v-if="observedSessions.length" class="agent-session-strip"><span>会话</span><strong>{{ observedSessions[0]?.session_id || '当前会话' }}</strong><small>{{ observedSessions[0]?.event_count || 0 }} 条可见事件</small></section>
+          <section class="agent-service-deck">
+            <header><span>常驻服务</span><small>{{ observedServices.length ? `${observedServices.length} 个角色服务` : '按需启动' }}</small></header>
+            <div v-if="observedServices.length">
+              <article v-for="service in observedServices" :key="service.role_id || service.role" :data-health="service.healthy ? 'healthy' : 'failed'">
+                <i></i><div><strong>{{ service.role }}</strong><small>{{ service.model || '等待模型配置' }}</small></div>
+                <span>{{ service.active_leases ? `${service.active_leases} 个活动租约` : '温驻待命' }}</span>
+              </article>
+            </div>
+            <p v-else>OpenCode 服务会在主创、顾问或受托决策实际开始时按角色启动。</p>
+          </section>
+          <section class="agent-session-deck">
+            <header><span>真实会话</span><small>{{ observedSessions.length ? `${observedSessions.length} 条最近记录` : '等待第一条会话' }}</small></header>
+            <div v-if="observedSessions.length" class="agent-session-cards">
+              <article v-for="session in observedSessions" :key="`${session.role_id}-${session.session_id}`" :data-status="session.status">
+                <header><i></i><strong>{{ session.role }}</strong><span>{{ sessionStatusLabel(session.status) }}</span></header>
+                <p>{{ session.last_message || '会话状态已更新。' }}</p>
+                <dl>
+                  <div><dt>会话</dt><dd>{{ session.session_id }}</dd></div>
+                  <div><dt>模型</dt><dd>{{ session.model || '未记录' }}</dd></div>
+                  <div><dt>任务</dt><dd>{{ session.task_id || session.route || '项目咨询' }}</dd></div>
+                  <div><dt>耗时</dt><dd>{{ elapsedLabel(session.elapsed_seconds) }}</dd></div>
+                </dl>
+                <footer><span>{{ session.event_count }} 次状态更新</span><span v-if="session.retry_count">{{ session.retry_count }} 次受控重试</span></footer>
+              </article>
+            </div>
+            <p v-else>这里不会把自动推进控制器伪装成 Agent 会话；只有模型实际创建 session 后才会亮起一张卡。</p>
+          </section>
           <section class="agent-event-timeline">
             <header><span>执行轨迹</span><small>{{ observedTimeline.length ? '实时更新' : '等待第一条任务事件' }}</small></header>
             <ol v-if="observedTimeline.length"><li v-for="event in observedTimeline" :key="event.sequence"><i></i><div><strong>{{ event.stage }}</strong><p>{{ event.message }}</p></div><small>{{ event.route || '系统' }}</small></li></ol>
@@ -252,7 +301,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
         <div class="spatial-decision-window"><header><span class="instrument-overline">HUMAN CHOICE</span><strong class="instrument-title">由你决定的创作分岔</strong></header><div v-if="choices.length" class="spatial-decision-list"><article v-for="choice in choices" :key="String(choice.choice_id || choice.id)"><GitBranch :size="16" /><div><span v-if="choice.recommended" class="decision-recommendation">建议方向</span><strong>{{ choice.title || choice.prompt || '创作方向选择' }}</strong><SafeMarkdown :source="choice.summary || choice.description || '查看候选方向和它对后续创作的影响。'" /><ul v-if="choiceOptions(choice).length"><li v-for="option in choiceOptions(choice)" :key="String(option.id)">{{ option.label || option.id }}</li></ul></div><button class="text-button" @click="emit('choose', choice)">比较</button></article></div><p v-else>当前没有需要你决定的分支、设定或修订方向。正在运行的任务会出现在“推进”中，不会被误当成人工选择。</p></div>
       </template>
       <template v-else-if="item.kind === 'rules'">
-        <div class="spatial-rules-window"><div class="spatial-instrument-content"><span class="instrument-overline">NARRATIVE CONSTRAINTS</span><strong class="instrument-title">创作规则与叙事呼吸</strong><p>文风、Canon、字数预算、标点与表达规则会写入正式任务包，并在审查与晋升前复核。</p><div class="rule-signal-grid"><span :class="{ ready: Number(libraryCounts.style || 0) > 0 }">文风挂载 <b>{{ Number(libraryCounts.style || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.word_budget || 0) > 0 }">字数预算 <b>{{ Number(libraryCounts.word_budget || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.rhythm || 0) > 0 }">节奏合同 <b>{{ Number(libraryCounts.rhythm || 0) > 0 ? '已就绪' : '待补齐' }}</b></span></div></div><QualityView instrument /></div>
+        <div class="spatial-rules-window"><div class="spatial-instrument-content"><span class="instrument-overline">NARRATIVE CONSTRAINTS</span><strong class="instrument-title">创作规则与叙事呼吸</strong><p>文风、Canon、字数预算、标点与表达规则会写入正式任务包，并在审查与晋升前复核。</p><div class="rule-signal-grid"><span :class="{ ready: Number(libraryCounts.style || 0) > 0 }">文风挂载 <b>{{ Number(libraryCounts.style || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.word_budget || 0) > 0 }">字数预算 <b>{{ Number(libraryCounts.word_budget || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.rhythm || 0) > 0 }">节奏合同 <b>{{ Number(libraryCounts.rhythm || 0) > 0 ? '已就绪' : '待补齐' }}</b></span></div></div><RulesInstrument /></div>
       </template>
       <template v-else>
         <div class="spatial-instrument-content"><span class="instrument-overline">COMING INTO VIEW</span><strong class="instrument-title">{{ item.title }}</strong><p>这个仪表正在迁入新的空间工作台；它不会替代任何正式流程。</p></div>

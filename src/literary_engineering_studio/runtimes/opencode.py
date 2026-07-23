@@ -207,9 +207,11 @@ class OpenCodeRuntime(AgentRuntime):
             wait_status = _wait_for_session(client, session_id, deadline, cancellation)
             if wait_status == "cancelled":
                 emit("run.stopped", {"session_id": session_id, "reason": "cancelled"})
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "cancelled"})
                 return RuntimeResult(self.runtime_id, "cancelled", None, self.build_command(workspace), output_path, "runtime cancelled")
             if wait_status == "timeout":
                 client.abort(session_id)
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "timeout"})
                 return RuntimeResult(self.runtime_id, "timeout", None, self.build_command(workspace), output_path, f"timed out after {timeout}s")
 
             repairs = 0
@@ -226,7 +228,14 @@ class OpenCodeRuntime(AgentRuntime):
                         messages = client.messages(session_id)
                         assistant_text, _ = _assistant_result(messages)
                         output_path.write_text(assistant_text, encoding="utf-8")
-                        emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "preflight_failed"})
+                        emit(
+                            "runner.session.finished",
+                            {"session_id": session_id, "model": model, "status": "failed", "reason": "preflight_failed"},
+                        )
+                        emit(
+                            "runner.process.completed",
+                            {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "preflight_failed"},
+                        )
                         return RuntimeResult(
                             self.runtime_id,
                             "preflight_failed",
@@ -245,6 +254,15 @@ class OpenCodeRuntime(AgentRuntime):
                     if wait_status != "completed":
                         client.abort(session_id)
                         status = "cancelled" if wait_status == "cancelled" else "timeout"
+                        emit(
+                            "runner.session.finished",
+                            {
+                                "session_id": session_id,
+                                "model": model,
+                                "status": "cancelled" if status == "cancelled" else "failed",
+                                "reason": f"repair_{status}",
+                            },
+                        )
                         return RuntimeResult(self.runtime_id, status, None, self.build_command(workspace), output_path, f"repair {status}")
                     emit("repair.completed", {"attempt": repairs, "session_id": session_id})
 
@@ -256,10 +274,18 @@ class OpenCodeRuntime(AgentRuntime):
             diff = client.diff(session_id)
             diff_path.write_text(json.dumps(diff, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             if errors:
-                emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "failed", "errors": errors})
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "model_error"})
+                emit(
+                    "runner.process.completed",
+                    {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "failed", "errors": errors},
+                )
                 return RuntimeResult(self.runtime_id, "failed", 1, self.build_command(workspace), output_path, errors[0])
             emit("agent.message.completed", {"session_id": session_id, "text": assistant_text})
-            emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "completed"})
+            emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "complete"})
+            emit(
+                "runner.process.completed",
+                {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "completed"},
+            )
             return RuntimeResult(
                 self.runtime_id,
                 "completed",
@@ -282,7 +308,12 @@ class OpenCodeRuntime(AgentRuntime):
                 },
             )
         except Exception as exc:
-            emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "failed", "error": str(exc)})
+            if session_id:
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "runtime_error"})
+            emit(
+                "runner.process.completed",
+                {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "failed", "error": str(exc)},
+            )
             return RuntimeResult(self.runtime_id, "failed", 1, self.build_command(workspace), output_path if output_path.exists() else None, str(exc))
         finally:
             event_stop.set()

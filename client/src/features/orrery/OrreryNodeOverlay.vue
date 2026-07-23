@@ -2,6 +2,7 @@
 import { computed, type Component } from "vue";
 import { BadgeCheck, BookMarked, CircleHelp, Clapperboard, GitFork, Landmark, Orbit, Sparkles, UserRound } from "lucide-vue-next";
 import type { SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
+import { observationWeight } from "@/features/orrery/layout/observationWindow";
 
 const props = defineProps<{
   nodes: SpatialNarrativeNode[];
@@ -10,6 +11,8 @@ const props = defineProps<{
   focusNodeId?: string;
   level?: "book" | "chapter" | "scene";
   motionEvents?: SpatialNarrativeProjection["motion_events"];
+  timeCursor?: number;
+  timeWindow?: number;
 }>();
 const emit = defineEmits<{ select: [node: SpatialNarrativeNode]; focus: [node: SpatialNarrativeNode] }>();
 
@@ -83,6 +86,7 @@ function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
   return {
     transform: `translate3d(${anchor.x}px, ${anchor.y}px, 0) translate(-50%, -50%) scale(${anchor.scale})`,
     zIndex: Math.round(100 + anchor.scale * 160 + node.importance * 100),
+    "--observation-weight": observationWeight(node, props.timeCursor || 0, props.timeWindow || 3).toFixed(3),
   };
 }
 
@@ -137,6 +141,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       class="orrery-v3-node"
       :class="[{ selected: selectedNodeId === node.node_id }, focusClass(node), motionClass(node), overviewClass(node)]"
       :data-status="node.status"
+      :data-completion="node.completion_state"
       :data-type="node.type"
       :style="styleFor(node)"
       :aria-label="`${labelFor(node)}：${node.label}`"

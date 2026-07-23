@@ -181,17 +181,34 @@ def _book_graph(
     edges: list[dict[str, Any]] = []
     ordered = sorted(chapters, key=_order)
     formal_chars = _formal_chars_by_chapter(reader)
+    actions = dashboard.get("next_actions") if isinstance(dashboard.get("next_actions"), list) else []
+    active_targets = {
+        str(action.get("target") or "")
+        for action in actions
+        if isinstance(action, dict)
+    }
     for index, chapter in enumerate(ordered):
         chapter_scenes = chapters[chapter]
         promoted = sum(1 for scene in chapter_scenes if str(scene.get("id")) in formal_coverage)
         target = sum(_integer(_fact(scene, "目标字数")) for scene in chapter_scenes)
         actual = formal_chars.get(chapter, 0)
+        blocked = any(str(scene.get("status") or "").lower() in {"blocked", "failed", "conflict"} for scene in chapter_scenes)
+        active = promoted > 0 or any(str(scene.get("id") or "") in active_targets for scene in chapter_scenes)
+        chapter_status = (
+            "formal"
+            if promoted == len(chapter_scenes) and promoted
+            else "blocked"
+            if blocked
+            else "current"
+            if active
+            else "planned"
+        )
         nodes.append(
             _node(
                 f"chapter:{chapter}",
                 "chapter",
                 _chapter_label(chapter),
-                "formal" if promoted == len(chapter_scenes) and promoted else "current" if promoted else "planned",
+                chapter_status,
                 "scene-catalog",
                 chapter,
                 "overview",

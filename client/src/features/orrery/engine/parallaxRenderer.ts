@@ -2,7 +2,8 @@ import { Application, Container, Graphics } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
 import type { OrreryDepth, OrreryMotion, OrreryRenderQuality } from "@/services/orreryPreferences";
-import { DEFAULT_PARALLAX_VIEW, depthScale, parallaxViewFromDrag, scenePoint, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
+import { DEFAULT_PARALLAX_VIEW, depthScale, isSameParallaxView, parallaxViewFromDrag, scenePoint, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
+import { constellationClusterSize, stageActSize } from "@/features/orrery/layout/curveProfiles";
 
 // Book-scale work surface. The world is intentionally generous so a 300+ scene
 // projection can still fit without the camera clamping the last chapters.
@@ -284,7 +285,7 @@ export class NarrativeParallaxRenderer {
   }
 
   resetView(): void {
-    if (this.view.yaw === 0 && this.view.pitch === 0) return;
+    if (isSameParallaxView(this.view, DEFAULT_PARALLAX_VIEW)) return;
     const pivot = this.viewPivot();
     this.view = { ...DEFAULT_PARALLAX_VIEW };
     this.animation = null;
@@ -419,10 +420,78 @@ export class NarrativeParallaxRenderer {
       shadow.ellipse(center.x + 18, center.y + 28, width, height).stroke({ color: this.palette.shadow, width: 34, alpha: 0.34 });
       silhouette.ellipse(center.x, center.y, width, height).stroke({ color: this.palette.canon, width: 7, alpha: 0.4 });
     } else if (grammar === "constellation") {
-      const basis = Math.max(300, Math.min(1100, frame.width * 0.19));
-      for (const radius of [basis, basis * 1.58, basis * 2.24]) {
-        silhouette.ellipse(center.x, center.y, radius, radius * 0.44).stroke({ color: this.palette.core, width: 2, alpha: 0.18 });
-      }
+      const primaryCount = this.projection.nodes.filter((node) => node.type === "chapter" || node.type === "scene").length;
+      const families = this.projectedPrimaryGroups(constellationClusterSize(primaryCount));
+      families.forEach((family, index) => {
+        const width = Math.max(260, family.width + 260);
+        const height = Math.max(170, family.height + 190);
+        // Nested translucent ellipses read as a shallow stellar cloud without
+        // bitmap blur. Offset cores preserve near/far depth while orbiting.
+        shadow.ellipse(family.centerX + 24, family.centerY + 30, width * 0.64, height * 0.64)
+          .fill({ color: this.palette.shadow, alpha: 0.14 })
+          .stroke({ color: this.palette.shadow, width: 34, alpha: 0.18 });
+        silhouette.ellipse(family.centerX - width * 0.04, family.centerY + height * 0.03, width * 0.58, height * 0.54)
+          .fill({ color: index % 2 ? this.palette.branch : this.palette.core, alpha: 0.052 })
+          .stroke({ color: index % 2 ? this.palette.branch : this.palette.core, width: 2, alpha: 0.26 });
+        silhouette.ellipse(family.centerX + width * 0.05, family.centerY - height * 0.025, width * 0.43, height * 0.39)
+          .fill({ color: this.palette.canon, alpha: 0.055 })
+          .stroke({ color: this.palette.canon, width: 1.4, alpha: 0.22 });
+        silhouette.ellipse(family.centerX - width * 0.02, family.centerY, width * 0.22, height * 0.2)
+          .fill({ color: this.palette.label, alpha: 0.045 })
+          .stroke({ color: this.palette.label, width: 1, alpha: 0.18 });
+        const starCount = this.experience.quality === "efficient" ? 18 : 32;
+        for (let star = 0; star < starCount; star += 1) {
+          const theta = star * 2.399963 + index * 0.73;
+          const unitRadius = Math.sqrt((star + 1) / starCount);
+          const starX = family.centerX + Math.cos(theta) * width * 0.48 * unitRadius;
+          const starY = family.centerY + Math.sin(theta) * height * 0.42 * unitRadius;
+          const bright = star % 11 === 0;
+          silhouette.circle(starX, starY, bright ? 2.8 : star % 4 === 0 ? 1.65 : 0.9)
+            .fill({ color: star % 3 === 0 ? this.palette.canon : this.palette.label, alpha: bright ? 0.58 : 0.3 });
+          if (bright) {
+            silhouette.moveTo(starX - 7, starY).lineTo(starX + 7, starY)
+              .moveTo(starX, starY - 5).lineTo(starX, starY + 5)
+              .stroke({ color: this.palette.label, width: 1, alpha: 0.32 });
+          }
+        }
+        // This partial dust lane restores the concentric sweep of the early
+        // v0.9 design while keeping every stellar family independent.
+        silhouette.moveTo(family.centerX - width * 0.48, family.centerY + height * 0.07)
+          .bezierCurveTo(
+            family.centerX - width * 0.2,
+            family.centerY - height * 0.36,
+            family.centerX + width * 0.3,
+            family.centerY - height * 0.24,
+            family.centerX + width * 0.5,
+            family.centerY + height * 0.1,
+          )
+          .stroke({ color: index % 2 ? this.palette.core : this.palette.branch, width: 5, alpha: 0.16 });
+        if (index) {
+          const previous = families[index - 1];
+          const dx = family.centerX - previous.centerX;
+          const dy = family.centerY - previous.centerY;
+          silhouette.moveTo(previous.centerX, previous.centerY)
+            .bezierCurveTo(
+              previous.centerX + dx * 0.36,
+              previous.centerY + dy * 0.18 - 46,
+              family.centerX - dx * 0.34,
+              family.centerY - dy * 0.18 + 46,
+              family.centerX,
+              family.centerY,
+            )
+            .stroke({ color: this.palette.canon, width: 5, alpha: 0.11 });
+          silhouette.moveTo(previous.centerX, previous.centerY)
+            .bezierCurveTo(
+              previous.centerX + dx * 0.32,
+              previous.centerY + dy * 0.2 - 22,
+              family.centerX - dx * 0.3,
+              family.centerY - dy * 0.2 + 22,
+              family.centerX,
+              family.centerY,
+            )
+            .stroke({ color: this.palette.label, width: 1, alpha: 0.18 });
+        }
+      });
     } else if (grammar === "strata") {
       for (let index = 0; index < 5; index += 1) {
         const width = Math.max(1080, Math.min(3600, frame.width * 0.6)) - index * 140;
@@ -439,13 +508,98 @@ export class NarrativeParallaxRenderer {
         silhouette.poly(path).stroke({ color: side < 0 ? this.palette.core : this.palette.branch, width: 11, alpha: 0.34 });
       }
     } else if (grammar === "stage") {
-      const halfWidth = Math.max(660, Math.min(1680, frame.width * 0.32));
-      shadow.poly([center.x - halfWidth + 18, center.y - 220 + 28, center.x + halfWidth + 18, center.y - 310 + 28, center.x + halfWidth - 100 + 18, center.y + 148 + 28, center.x - halfWidth + 100 + 18, center.y + 238 + 28]).fill({ color: this.palette.shadow, alpha: 0.32 });
-      silhouette.poly([center.x - halfWidth, center.y - 220, center.x + halfWidth, center.y - 310, center.x + halfWidth - 100, center.y + 148, center.x - halfWidth + 100, center.y + 238]).fill({ color: this.palette.core, alpha: 0.1 }).stroke({ color: this.palette.canon, width: 2, alpha: 0.33 });
-      for (let index = 1; index < 7; index += 1) {
-        const x = center.x - halfWidth + index * (halfWidth * 2 / 6);
-        silhouette.moveTo(x, center.y - 226 - index * 15).lineTo(x - 88, center.y + 200 - index * 15).stroke({ color: this.palette.label, width: 1, alpha: 0.11 });
-      }
+      const primaryCount = this.projection.nodes.filter((node) => node.type === "chapter" || node.type === "scene").length;
+      const acts = this.projectedPrimaryGroups(stageActSize(primaryCount));
+      acts.forEach((act, index) => {
+        // The projection can span an entire chapter act even while the camera
+        // shows only its opening beats. Cap the scenic shell so it remains a
+        // stage around the nodes instead of a polygon covering the viewport.
+        const halfWidth = Math.max(300, Math.min(620, act.width / 2 + 165));
+        const halfHeight = Math.max(126, Math.min(250, act.height / 2 + 102));
+        const backY = act.centerY - halfHeight * 0.76;
+        const frontY = act.centerY + halfHeight;
+        const archTop = backY - Math.max(150, halfHeight * 0.92);
+        const wingWidth = Math.max(54, halfWidth * 0.13);
+        shadow.poly([
+          act.centerX - halfWidth + 20, backY + 26,
+          act.centerX + halfWidth + 20, backY + 6,
+          act.centerX + halfWidth * 0.82 + 20, frontY + 26,
+          act.centerX - halfWidth * 0.82 + 20, frontY + 42,
+        ]).fill({ color: this.palette.shadow, alpha: 0.27 });
+        silhouette.poly([
+          act.centerX - halfWidth, backY,
+          act.centerX + halfWidth, backY - 20,
+          act.centerX + halfWidth * 0.82, frontY,
+          act.centerX - halfWidth * 0.82, frontY + 16,
+        ]).fill({ color: index % 2 ? this.palette.branch : this.palette.core, alpha: 0.13 })
+          .stroke({ color: this.palette.canon, width: 2, alpha: 0.42 });
+        // Proscenium and curtain wings make the scenery a recognisable playing
+        // space instead of a generic quadrilateral behind the narrative route.
+        silhouette.poly([
+          act.centerX - halfWidth, backY,
+          act.centerX - halfWidth - wingWidth, backY + 30,
+          act.centerX - halfWidth - wingWidth * 0.72, archTop + 28,
+          act.centerX - halfWidth + wingWidth * 1.42, archTop + 12,
+          act.centerX - halfWidth + wingWidth * 1.82, backY + 12,
+        ]).fill({ color: index % 2 ? this.palette.branch : this.palette.core, alpha: 0.2 })
+          .stroke({ color: this.palette.canon, width: 2, alpha: 0.34 });
+        silhouette.poly([
+          act.centerX + halfWidth, backY - 20,
+          act.centerX + halfWidth + wingWidth, backY + 10,
+          act.centerX + halfWidth + wingWidth * 0.72, archTop + 8,
+          act.centerX + halfWidth - wingWidth * 1.42, archTop - 8,
+          act.centerX + halfWidth - wingWidth * 1.82, backY - 8,
+        ]).fill({ color: index % 2 ? this.palette.branch : this.palette.core, alpha: 0.2 })
+          .stroke({ color: this.palette.canon, width: 2, alpha: 0.34 });
+        silhouette.moveTo(act.centerX - halfWidth + wingWidth * 1.42, archTop + 12)
+          .bezierCurveTo(
+            act.centerX - halfWidth * 0.22,
+            archTop - 54,
+            act.centerX + halfWidth * 0.24,
+            archTop - 58,
+            act.centerX + halfWidth - wingWidth * 1.42,
+            archTop - 8,
+          )
+          .stroke({ color: this.palette.canon, width: 8, alpha: 0.24 });
+        // Crossing spotlights remain subtle so labels and interaction nodes are
+        // still the brightest objects on the stage.
+        silhouette.poly([
+          act.centerX - halfWidth * 0.38, archTop + 8,
+          act.centerX - halfWidth * 0.28, archTop + 8,
+          act.centerX + halfWidth * 0.16, frontY - 4,
+          act.centerX - halfWidth * 0.2, frontY + 8,
+        ]).fill({ color: this.palette.label, alpha: 0.036 });
+        silhouette.poly([
+          act.centerX + halfWidth * 0.34, archTop - 8,
+          act.centerX + halfWidth * 0.44, archTop - 8,
+          act.centerX + halfWidth * 0.2, frontY,
+          act.centerX - halfWidth * 0.1, frontY + 10,
+        ]).fill({ color: this.palette.canon, alpha: 0.045 });
+        for (let board = 1; board < 7; board += 1) {
+          const backX = act.centerX - halfWidth + board * (halfWidth * 2 / 7);
+          const frontX = act.centerX - halfWidth * 0.82 + board * (halfWidth * 1.64 / 7);
+          silhouette.moveTo(backX, backY - board * 2.8)
+            .lineTo(frontX, frontY + 16 - board * 2.2)
+            .stroke({ color: this.palette.label, width: 1, alpha: 0.1 });
+        }
+        silhouette.moveTo(act.centerX - halfWidth * 0.82, frontY + 16)
+          .bezierCurveTo(
+            act.centerX - halfWidth * 0.32,
+            frontY + 62,
+            act.centerX + halfWidth * 0.34,
+            frontY + 50,
+            act.centerX + halfWidth * 0.82,
+            frontY,
+          )
+          .stroke({ color: this.palette.label, width: 3, alpha: 0.18 });
+        for (let light = 0; light < 9; light += 1) {
+          const progress = light / 8;
+          const x = act.centerX - halfWidth * 0.72 + progress * halfWidth * 1.44;
+          const y = frontY + 18 + Math.sin(progress * Math.PI) * 12;
+          silhouette.circle(x, y, light % 4 === 0 ? 2.8 : 1.8)
+            .fill({ color: light % 3 === 0 ? this.palette.branch : this.palette.canon, alpha: 0.34 });
+        }
+      });
     } else {
       const route = spinePath(frame);
       shadow.poly(route.map((value, index) => index % 2 === 0 ? value + 18 : value + 22)).stroke({ color: this.palette.shadow, width: 50, alpha: 0.3 });
@@ -543,6 +697,33 @@ export class NarrativeParallaxRenderer {
       width: Math.max(1200, maxX - minX + 520),
       height: Math.max(720, maxY - minY + 420),
     };
+  }
+
+  private projectedPrimaryGroups(groupSize: number): Array<NarrativeFrame> {
+    if (!this.projection || !this.layout) return [];
+    const primary = this.projection.nodes
+      .filter((node) => node.type === "chapter" || node.type === "scene")
+      .sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
+    const result: Array<NarrativeFrame> = [];
+    for (let index = 0; index < primary.length; index += Math.max(1, groupSize)) {
+      const points = primary
+        .slice(index, index + groupSize)
+        .map((node) => this.layout?.points.get(node.node_id))
+        .filter((point): point is WorldPoint => Boolean(point))
+        .map((point) => this.projectPoint(point));
+      if (!points.length) continue;
+      const minX = Math.min(...points.map((point) => point.x));
+      const maxX = Math.max(...points.map((point) => point.x));
+      const minY = Math.min(...points.map((point) => point.y));
+      const maxY = Math.max(...points.map((point) => point.y));
+      result.push({
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY),
+      });
+    }
+    return result;
   }
 
   private syncRelationLod(): void {

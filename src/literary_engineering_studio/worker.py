@@ -102,10 +102,8 @@ class AgentWorker:
             selected_task_id = issued.fields["task_id"]
 
         opened = self.bridge.task_open(project, selected_task_id)
-        task_json_value = opened.fields.get("task_json")
-        if not task_json_value:
-            raise RuntimeError("task-open did not report task_json")
-        task = load_task_package(project, Path(task_json_value))
+        task_json_path = _resolve_task_json_path(project, selected_task_id, opened.fields.get("task_json", ""))
+        task = load_task_package(project, task_json_path)
         self._emit(
             "task.opened",
             {
@@ -371,7 +369,7 @@ class AgentWorker:
         project = _validate_project(Path(str(run.get("project_root") or "")))
         task_json = Path(str(run.get("task_json") or ""))
         if not task_json.is_file():
-            task_json = project / "workflow" / "tasks" / f"{run.get('task_id')}.json"
+            task_json = _resolve_task_json_path(project, str(run.get("task_id") or ""), str(task_json))
         task = load_task_package(project, task_json)
         sandbox = sandbox_from_run(run_root)
         preview = load_writeback_preview(run_root)
@@ -393,7 +391,7 @@ class AgentWorker:
         project = _validate_project(Path(str(run.get("project_root") or "")))
         task_json = Path(str(run.get("task_json") or ""))
         if not task_json.is_file():
-            task_json = project / "workflow" / "tasks" / f"{run.get('task_id')}.json"
+            task_json = _resolve_task_json_path(project, str(run.get("task_id") or ""), str(task_json))
         task = load_task_package(project, task_json)
         sandbox = sandbox_from_run(run_root)
         if str(run.get("task_id") or "") != task.task_id:
@@ -544,3 +542,21 @@ def _validate_project(value: Path) -> Path:
     if not (project / "project.yaml").exists():
         raise ValueError(f"not a Literary Engineering work project: {project}")
     return project
+
+
+def _resolve_task_json_path(project: Path, task_id: str, reported_path: str = "") -> Path:
+    """Resolve a formal task without trusting locale-sensitive CLI path text."""
+
+    normalized_id = str(task_id or "").strip()
+    if not normalized_id or any(char in normalized_id for char in ("/", "\\", ":")):
+        raise ValueError(f"invalid task id: {task_id}")
+    canonical = (project / "workflow" / "tasks" / f"{normalized_id}.task.json").resolve()
+    if canonical.is_file():
+        return canonical
+
+    raw = str(reported_path or "").strip()
+    if raw:
+        candidate = Path(raw).resolve()
+        if candidate.is_relative_to(project.resolve()) and candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"formal task package not found for task: {normalized_id}")

@@ -2,6 +2,7 @@ import { ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
 import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
 import type { SpatialGrammar, SpatialNarrativeProjection } from "@/types/spatial";
+import { defaultObservation } from "@/features/orrery/layout/observationWindow";
 
 const DEFAULT_GRAMMAR: SpatialGrammar = "spine";
 
@@ -13,6 +14,10 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
   const focus = ref("");
   const grammar = ref<SpatialGrammar>(DEFAULT_GRAMMAR);
   const projectRoot = ref("");
+  const timeCursor = ref(0);
+  const timeWindow = ref(3);
+  const cameraPreset = ref<"recommended" | "front" | "current-chapter" | "custom">("recommended");
+  let observationProject = "";
   let stream: EventStreamConnection | null = null;
   let requestSequence = 0;
 
@@ -32,7 +37,10 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     error.value = "";
     try {
       const payload = await api<SpatialNarrativeProjection>(`/narrative/projection/v3?${params()}`);
-      if (sequence === requestSequence) projection.value = payload;
+      if (sequence === requestSequence) {
+        projection.value = payload;
+        initializeObservation(payload);
+      }
     } catch (cause) {
       if (sequence === requestSequence) error.value = cause instanceof Error ? cause.message : "无法读取叙事场域。";
     } finally {
@@ -59,6 +67,7 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
       const current = projection.value;
       if (current && payload.sequence < current.sequence) return;
       projection.value = payload;
+      initializeObservation(payload);
     }, (cause) => {
       if (projectRoot.value === expectedRoot) error.value = cause instanceof Error ? cause.message : "叙事场域连接暂时中断。";
     });
@@ -69,11 +78,34 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     stream = null;
     projection.value = null;
     error.value = "";
+    observationProject = "";
   }
 
   function params(): string {
     return query({ project_root: projectRoot.value, level: level.value, focus: focus.value, grammar: grammar.value });
   }
 
-  return { projection, loading, error, level, focus, grammar, projectRoot, open, refresh, setView, close };
+  function initializeObservation(payload: SpatialNarrativeProjection): void {
+    if (observationProject === projectRoot.value) return;
+    const observation = defaultObservation(payload.nodes);
+    timeCursor.value = observation.cursor;
+    timeWindow.value = observation.window;
+    cameraPreset.value = "recommended";
+    observationProject = projectRoot.value;
+  }
+
+  function setObservation(next: { cursor?: number; window?: number }): void {
+    if (next.cursor !== undefined && Number.isFinite(next.cursor)) timeCursor.value = next.cursor;
+    if (next.window !== undefined && Number.isFinite(next.window)) timeWindow.value = Math.max(0.5, next.window);
+  }
+
+  function setCameraPreset(value: "recommended" | "front" | "current-chapter" | "custom"): void {
+    cameraPreset.value = value;
+  }
+
+  return {
+    projection, loading, error, level, focus, grammar, projectRoot,
+    timeCursor, timeWindow, cameraPreset,
+    open, refresh, setView, setObservation, setCameraPreset, close,
+  };
 });

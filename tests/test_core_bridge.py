@@ -64,6 +64,15 @@ class CoreBridgeTests(unittest.TestCase):
         self.assertEqual(fields["status"], "issued")
         self.assertEqual(fields["task_id"], "scene-demo")
 
+    def test_engine_subprocess_forces_utf8_transport_on_windows_code_pages(self):
+        bridge = CoreBridge(default_config())
+        with patch("literary_engineering_studio.core_bridge.run_hidden") as run:
+            run.return_value = type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            bridge.run(["--help"])
+        env = run.call_args.kwargs["env"]
+        self.assertEqual(env["PYTHONUTF8"], "1")
+        self.assertEqual(env["PYTHONIOENCODING"], "utf-8")
+
     def test_rejects_embedded_model_provider_commands(self):
         for args in (
             ["agent-run", "C:/project", "--provider", "auto"],

@@ -14,6 +14,7 @@ import uuid
 
 from .core_read_models import current_choices, mount_style, record_choice
 from .creative_steward import CreativeSteward, CreativeStewardCancelled
+from .agent_session_tracking import track_agent_session_event
 from .jobs import JobStore
 from .project_manager import read_directions, record_direction
 from .whole_book_release import WholeBookReleaseCoordinator
@@ -49,6 +50,31 @@ REVISION_TASK_MARKERS = (
     "canon-review-pass",
     "committee-pass",
 )
+NO_PROGRESS_LIMIT = 3
+PROGRESS_ROOTS = (
+    "project.yaml",
+    "canon",
+    "characters",
+    "world",
+    "plot",
+    "scenes",
+    "branches",
+    "drafts",
+    "reviews",
+    "style",
+    "workflow",
+    "delivery",
+    "releases",
+)
+PROGRESS_EXCLUDED_PARTS = {
+    ".git",
+    "__pycache__",
+    "dashboard",
+    "runtime_choices",
+    "task_runs",
+    "worker_runs",
+    "logs",
+}
 
 
 def is_revision_task(task_id: str) -> bool:
@@ -204,6 +230,7 @@ class AutopilotService:
 
     def start(self, project_root: Path, *, runtime: str = "opencode") -> dict[str, Any]:
         root = project_root.expanduser().resolve()
+        _validate_autopilot_project(root, runtime)
         active = self.store.latest_autopilot_run(str(root))
         if active and active["status"] == "running":
             return active
@@ -218,6 +245,7 @@ class AutopilotService:
             return run
         if run["status"] == "complete":
             raise ValueError("这次自动创作已经完成。")
+        _validate_autopilot_project(Path(run["project_root"]), str(run.get("runtime") or ""))
         self.store.update_autopilot_run(
             run_id,
             status="running",
@@ -318,7 +346,12 @@ class AutopilotService:
             if self.runtime_pool is not None
             else CreativeSteward(self.config)
         )
-        route_index = 0
+        setattr(
+            steward,
+            "event_sink",
+            lambda event, data: self._steward_event(run_id, event, data),
+        )
+        route_index = max(0, int(run.get("route_index") or 0))
         failure_by_task: dict[str, int] = {}
         try:
             while not stop.is_set():
@@ -344,12 +377,19 @@ class AutopilotService:
                 planned_route = ROUTE_ORDER[route_index]
                 dependency_route = planned_route == "scene-development" and _pending_asset_dependency(project)
                 route = "character-and-world-assets" if dependency_route else planned_route
-                self.store.update_autopilot_run(run_id, current_route=route, current_task_id="")
-                self.store.append_autopilot_event(
+                route_changed = str(run.get("current_route") or "") != route
+                self.store.update_autopilot_run(
                     run_id,
-                    "route.dependency_entered" if dependency_route else "route.entered",
-                    {"route": route, "resume_route": planned_route} if dependency_route else {"route": route},
+                    current_route=route,
+                    current_task_id="" if route_changed else str(run.get("current_task_id") or ""),
+                    route_index=route_index,
                 )
+                if route_changed:
+                    self.store.append_autopilot_event(
+                        run_id,
+                        "route.dependency_entered" if dependency_route else "route.entered",
+                        {"route": route, "resume_route": planned_route} if dependency_route else {"route": route},
+                    )
                 decision_handled = self._resolve_proactive_choice(run_id, project, route, policy, steward, stop=stop)
                 current_status = self.store.read_autopilot_run(run_id)
                 if stop.is_set() or (
@@ -362,6 +402,7 @@ class AutopilotService:
                 if self.execution_coordinator is not None and not self.execution_coordinator.acquire(project, owner):
                     self._pause_for(run_id, "project-busy", "同一作品已有另一项正式任务正在执行，请稍后继续。")
                     return
+                progress_before = _project_progress_fingerprint(project)
                 try:
                     result = AgentWorker(
                         self.config,
@@ -404,21 +445,64 @@ class AutopilotService:
 
                 if result.status == "route_ready":
                     if dependency_route:
+                        if _pending_asset_dependency(project):
+                            if self._register_no_progress(
+                                run_id,
+                                result.task_id or f"{route}:dependency",
+                                route,
+                                "依赖路线报告完成，但候选资产门禁仍未解除。",
+                            ):
+                                return
+                            continue
                         self.store.append_autopilot_event(
                             run_id,
                             "route.dependency_ready",
                             {"route": route, "resume_route": planned_route},
                         )
+                        self.store.update_autopilot_run(
+                            run_id,
+                            stalled_cycles=0,
+                            last_error="",
+                            progress_fingerprint=_project_progress_fingerprint(project),
+                            last_progress_at=_now(),
+                        )
                         continue
                     self.store.append_autopilot_event(run_id, "route.ready", {"route": route})
                     route_index += 1
+                    self.store.update_autopilot_run(
+                        run_id,
+                        route_index=route_index,
+                        current_task_id="",
+                        stalled_cycles=0,
+                        last_error="",
+                        progress_fingerprint=_project_progress_fingerprint(project),
+                        last_progress_at=_now(),
+                    )
                     continue
                 if result.status == "complete":
+                    progress_after = _project_progress_fingerprint(project)
+                    if progress_after == progress_before:
+                        if self._register_no_progress(
+                            run_id,
+                            result.task_id or f"{route}:unknown",
+                            route,
+                            "任务报告完成，但项目正式状态没有发生可验证变化。",
+                        ):
+                            return
+                        continue
                     self.store.advance_autopilot_run(
                         run_id,
                         consecutive_revisions=next_revision_count(run, result.task_id),
                         failures=0,
                         last_error="",
+                        progress_fingerprint=progress_after,
+                        stalled_cycles=0,
+                        last_progress_at=_now(),
+                    )
+                    self.store.append_autopilot_event(
+                        run_id,
+                        "progress.advanced",
+                        {"route": route, "task_id": result.task_id, "fingerprint": progress_after},
                     )
                     continue
                 if result.status == "waiting_writeback":
@@ -445,10 +529,23 @@ class AutopilotService:
                         _operational_decision(run, route, result.task_id, "writeback_approval", "approve", "授权策略允许导入已校验的预期产物。"),
                     )
                     if final.status == "complete":
+                        progress_after = _project_progress_fingerprint(project)
+                        if progress_after == progress_before:
+                            if self._register_no_progress(
+                                run_id,
+                                result.task_id or f"{route}:writeback",
+                                route,
+                                "写回报告完成，但正式项目没有出现新的可验证产物。",
+                            ):
+                                return
+                            continue
                         self.store.advance_autopilot_run(
                             run_id,
                             consecutive_revisions=next_revision_count(run, result.task_id),
                             failures=0,
+                            progress_fingerprint=progress_after,
+                            stalled_cycles=0,
+                            last_progress_at=_now(),
                         )
                         continue
                     result = final
@@ -616,11 +713,23 @@ class AutopilotService:
         return True
 
     def _worker_event(self, run_id: str, event: str, data: dict[str, Any]) -> None:
+        run = self.store.read_autopilot_run(run_id)
+        track_agent_session_event(
+            self.store,
+            project_root=str(run.get("project_root") or ""),
+            role="worker",
+            runtime=str(run.get("runtime") or "opencode"),
+            controller_id=run_id,
+            task_id=str(run.get("current_task_id") or ""),
+            route=str(run.get("current_route") or ""),
+            event=event,
+            data=data,
+        )
         if event == "task.opened":
             self.store.update_autopilot_run(
                 run_id,
                 current_task_id=str(data.get("task_id") or ""),
-                current_route=str(data.get("route") or self.store.read_autopilot_run(run_id).get("current_route") or ""),
+                current_route=str(data.get("route") or run.get("current_route") or ""),
             )
         if event in {"agent.message.delta", "runner.session.status"}:
             return
@@ -630,6 +739,62 @@ class AutopilotService:
             if cost > 0:
                 run = self.store.read_autopilot_run(run_id)
                 self.store.update_autopilot_run(run_id, estimated_cost=float(run["estimated_cost"]) + cost)
+
+    def _steward_event(self, run_id: str, event: str, data: dict[str, Any]) -> None:
+        run = self.store.read_autopilot_run(run_id)
+        track_agent_session_event(
+            self.store,
+            project_root=str(run.get("project_root") or ""),
+            role="steward",
+            runtime="opencode",
+            controller_id=run_id,
+            task_id=str(run.get("current_task_id") or ""),
+            route=str(run.get("current_route") or ""),
+            event=event,
+            data=data,
+        )
+        self.store.append_autopilot_event(run_id, event, data)
+
+    def _register_no_progress(self, run_id: str, task_id: str, route: str, message: str) -> bool:
+        run = self.store.read_autopilot_run(run_id)
+        stalled_cycles = int(run.get("stalled_cycles") or 0) + 1
+        changes: dict[str, Any] = {
+            "stalled_cycles": stalled_cycles,
+            "last_error": message,
+            "current_task_id": task_id,
+        }
+        if stalled_cycles == 2:
+            changes["last_recovery_at"] = _now()
+        self.store.update_autopilot_run(run_id, **changes)
+        self.store.append_autopilot_event(
+            run_id,
+            "progress.stalled",
+            {
+                "route": route,
+                "task_id": task_id,
+                "stalled_cycles": stalled_cycles,
+                "message": message,
+            },
+        )
+        if stalled_cycles == 2:
+            self.store.append_autopilot_event(
+                run_id,
+                "task.recovery_requested",
+                {
+                    "route": route,
+                    "task_id": task_id,
+                    "strategy": "re-open-current-formal-task",
+                },
+            )
+        if stalled_cycles >= NO_PROGRESS_LIMIT:
+            self._pause_for(
+                run_id,
+                "no-progress",
+                f"{message} 已连续 {stalled_cycles} 次未推进；系统已暂停，避免空转消耗。",
+            )
+            return True
+        time.sleep(0.15 * stalled_cycles)
+        return False
 
     def _pause_for(self, run_id: str, reason: str, message: str) -> None:
         self.store.update_autopilot_run(run_id, status="paused", stop_reason=reason, last_error=message)
@@ -667,6 +832,34 @@ def _pending_asset_dependency(project: Path) -> bool:
         and str(item.get("status") or "") != "ready"
         for item in assets
     )
+
+
+def _validate_autopilot_project(project: Path, runtime: str) -> None:
+    if not project.is_dir() or not (project / "project.yaml").is_file():
+        raise ValueError("自动创作需要先选择一个包含 project.yaml 的有效作品目录。")
+    if not str(runtime or "").strip():
+        raise ValueError("自动创作需要一个可用的 Agent Runtime。")
+
+
+def _project_progress_fingerprint(project: Path) -> str:
+    """Hash formal project evidence without reading manuscript bodies into memory."""
+
+    entries: list[str] = []
+    for relative in PROGRESS_ROOTS:
+        root = project / relative
+        candidates = [root] if root.is_file() else sorted(root.rglob("*")) if root.is_dir() else []
+        for path in candidates:
+            if not path.is_file():
+                continue
+            rel = path.relative_to(project)
+            if any(part.lower() in PROGRESS_EXCLUDED_PARTS for part in rel.parts):
+                continue
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            entries.append(f"{rel.as_posix()}:{stat.st_size}:{stat.st_mtime_ns}")
+    return hashlib.sha256("\n".join(entries).encode("utf-8")).hexdigest()
 
 
 def _operational_decision(run: dict[str, Any], route: str, task_id: str, decision_type: str, selected: str, rationale: str) -> dict[str, Any]:

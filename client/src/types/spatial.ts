@@ -2,6 +2,23 @@ import type { NarrativeEdge, NarrativeNode } from "@/types/api";
 
 export type SpatialGrammar = "spine" | "braid" | "strata" | "constellation" | "loop" | "stage";
 export type SpatialDetailLevel = "far" | "mid" | "near";
+export type SpatialCompletionState = "completed" | "active" | "planned" | "blocked";
+
+export interface SpatialOrientation {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface SpatialViewState {
+  orientation: SpatialOrientation;
+  pan: { x: number; y: number };
+  zoom: number;
+  time_cursor: number;
+  time_window: number;
+  camera_preset: "recommended" | "front" | "current-chapter" | "custom";
+}
 
 export interface SpatialWorldHint {
   surface: string;
@@ -28,6 +45,7 @@ export interface SpatialNarrativeNode extends NarrativeNode {
   parent_id: string | null;
   cluster_id: string;
   time_band: number;
+  completion_state: SpatialCompletionState;
   importance: number;
   detail_level: SpatialDetailLevel;
   world_hint: SpatialWorldHint;

@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from .advisor_snapshot import create_advisor_snapshot, project_hashes
 from .advisor_personas import active_persona
+from .agent_session_tracking import track_agent_session_event
 from .jobs import JobStore
 from .opencode_binary import locate_opencode
 from .opencode_server import OpenCodeServer
@@ -71,6 +72,7 @@ class ProjectAdvisor:
             snapshot.workspace,
             normalized,
             session["messages"],
+            project_root=project,
             studio_session_id=session_id,
             snapshot_digest=snapshot.digest,
             context=context or {},
@@ -110,6 +112,7 @@ class ProjectAdvisor:
         question: str,
         history: list[dict[str, Any]],
         *,
+        project_root: Path,
         studio_session_id: str,
         snapshot_digest: str,
         context: dict[str, Any],
@@ -137,6 +140,20 @@ class ProjectAdvisor:
         event_stop = threading.Event()
         event_thread: threading.Thread | None = None
         public_stream = _PublicAnswerStream(event_sink)
+        remote_id = ""
+        session_idle = False
+
+        def observe(event: str, data: dict[str, Any]) -> None:
+            track_agent_session_event(
+                self.store,
+                project_root=str(project_root),
+                role="advisor",
+                runtime="opencode",
+                controller_id=studio_session_id,
+                event=event,
+                data=data,
+            )
+
         try:
             if self.runtime_pool is not None:
                 lease = self.runtime_pool.acquire("advisor", workspace, model=model)
@@ -161,6 +178,16 @@ class ProjectAdvisor:
             )
             remote_id = previous[1] if can_resume and previous else ""
             if not remote_id:
+                if previous and previous[1]:
+                    observe(
+                        "advisor.session.finished",
+                        {
+                            "session_id": previous[1],
+                            "model": model,
+                            "status": "complete",
+                            "public_message": "项目快照已变化，旧顾问会话已归档。",
+                        },
+                    )
                 remote = client.create_session("Studio 项目顾问")
                 remote_id = str(remote.get("id") or "")
                 if lease is not None and remote_id:
@@ -168,6 +195,16 @@ class ProjectAdvisor:
                         self._remote_sessions[studio_session_id] = (snapshot_digest, remote_id, lease.generation)
             if not remote_id:
                 raise RuntimeError("OpenCode did not create an advisor session")
+            if not can_resume:
+                observe("advisor.session.created", {"session_id": remote_id, "model": model})
+            observe(
+                "advisor.session.started",
+                {
+                    "session_id": remote_id,
+                    "model": model,
+                    "public_message": "项目顾问正在阅读当前只读快照并组织答复。",
+                },
+            )
 
             if event_sink is not None:
                 def consume_events() -> None:
@@ -218,7 +255,16 @@ class ProjectAdvisor:
                 raise RuntimeError("advisor answer timed out")
             result = _parse_answer(_last_assistant_text(client.messages(remote_id)))
             public_stream.finish(result["message"])
+            observe("advisor.session.idle", {"session_id": remote_id, "model": model})
+            session_idle = True
             return result
+        except Exception:
+            if remote_id and not session_idle:
+                observe(
+                    "advisor.session.finished",
+                    {"session_id": remote_id, "model": model, "status": "failed", "reason": "advisor_error"},
+                )
+            raise
         finally:
             event_stop.set()
             if event_thread is not None:

@@ -123,6 +123,7 @@ class AutopilotTests(unittest.TestCase):
     def test_resume_clears_stale_finished_timestamp(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            (root / "project.yaml").write_text("title: test\n", encoding="utf-8")
             store = JobStore(root / "studio.sqlite3")
             policy = default_policy("supervised_auto")
             run = store.create_autopilot_run(str(root), mode=policy["mode"], runtime="opencode", policy=policy)
@@ -140,6 +141,104 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(resumed["status"], "running")
             self.assertEqual(resumed["finished_at"], "")
             launch.assert_called_once_with(run["run_id"])
+
+    def test_repeated_complete_without_formal_change_pauses_instead_of_spinning(self):
+        class EmptyCompleteWorker:
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                return WorkerRunResult(
+                    "complete", project, route, "unchanged-task", runtime_id,
+                    None, None, "claimed complete",
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(
+                str(project.resolve()), mode="full_auto", runtime="opencode", policy=policy
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", EmptyCompleteWorker),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            stopped = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(stopped["status"], "paused")
+            self.assertEqual(stopped["stop_reason"], "no-progress")
+            self.assertEqual(stopped["tasks_completed"], 0)
+            self.assertEqual(stopped["stalled_cycles"], 3)
+            events = store.autopilot_events_since(run["run_id"])
+            self.assertEqual(
+                len([event for event in events if event["event"] == "progress.stalled"]),
+                3,
+            )
+            self.assertTrue(any(event["event"] == "task.recovery_requested" for event in events))
+
+    def test_formal_file_change_resets_stall_counter_and_persists_route_index(self):
+        class ProgressingWorker:
+            calls = 0
+
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                self.__class__.calls += 1
+                if self.__class__.calls == 1:
+                    output = project / "plot" / "word_budget.json"
+                    output.parent.mkdir()
+                    output.write_text('{"target": 500000}\n', encoding="utf-8")
+                    return WorkerRunResult(
+                        "complete", project, route, "budget-task", runtime_id,
+                        None, None, "budget created",
+                    )
+                return WorkerRunResult(
+                    "route_ready", project, route, "", runtime_id,
+                    None, None, "route ready",
+                )
+
+        class FakeRelease:
+            def __init__(self, config):
+                self.config = config
+
+            def release(self, project, *, approved_by, autopilot_run_id=""):
+                return {"ok": True, "manifest_path": "release.json"}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(
+                str(project.resolve()), mode="full_auto", runtime="opencode", policy=policy
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", ProgressingWorker),
+                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            completed = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(completed["status"], "complete")
+            self.assertEqual(completed["tasks_completed"], 1)
+            self.assertEqual(completed["route_index"], 1)
+            self.assertEqual(completed["stalled_cycles"], 0)
+            self.assertTrue(completed["progress_fingerprint"])
 
     def test_explicit_authorization_renewal_updates_the_paused_run_snapshot(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -553,7 +652,10 @@ class AutopilotTests(unittest.TestCase):
                 patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
                 patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
                 patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("scene-development",)),
-                patch("literary_engineering_studio.autopilot._pending_asset_dependency", side_effect=[False, True, False]),
+                patch(
+                    "literary_engineering_studio.autopilot._pending_asset_dependency",
+                    side_effect=[False, True, False, False],
+                ),
             ):
                 service._run(run["run_id"], threading.Event())
 

@@ -16,7 +16,7 @@ from typing import Any
 JOB_SCHEMA = "literary-engineering-studio/worker-job/v0.3"
 EVENT_SCHEMA = "literary-engineering-studio/run-event/v0.3"
 EVENT_RETENTION_PER_JOB = 5000
-DATABASE_SCHEMA_VERSION = 7
+DATABASE_SCHEMA_VERSION = 8
 ACTIVE_STATUSES = {"queued", "running", "stopping"}
 TERMINAL_STATUSES = {
     "complete",
@@ -339,6 +339,129 @@ class JobStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def upsert_agent_session(
+        self,
+        session_id: str,
+        *,
+        project_root: str,
+        role: str,
+        runtime: str,
+        model: str = "",
+        status: str = "running",
+        task_id: str = "",
+        route: str = "",
+        controller_id: str = "",
+        last_event: str = "",
+        last_message: str = "",
+        retry_count: int = 0,
+    ) -> dict[str, Any]:
+        """Create or refresh the public lifecycle record for one real Agent session."""
+
+        session = _validate_agent_session_id(session_id)
+        normalized_status = str(status or "running").strip().lower()
+        if normalized_status not in {
+            "queued", "running", "waiting", "waiting_human", "idle",
+            "complete", "failed", "cancelled", "stopped",
+        }:
+            raise ValueError(f"unsupported Agent session status: {status}")
+        now = _now()
+        terminal = normalized_status in {"complete", "failed", "cancelled", "stopped"}
+        with self._write_lock, self._connection() as connection:
+            existing = connection.execute(
+                "SELECT * FROM agent_sessions WHERE session_id = ?",
+                (session,),
+            ).fetchone()
+            started_at = str(existing["started_at"]) if existing is not None else now
+            event_count = int(existing["event_count"] or 0) + (1 if last_event else 0) if existing is not None else (1 if last_event else 0)
+            project_value = str(project_root or (existing["project_root"] if existing is not None else ""))
+            role_value = str(role or (existing["role"] if existing is not None else "worker"))[:40]
+            runtime_value = str(runtime or (existing["runtime"] if existing is not None else ""))[:80]
+            model_value = str(model or (existing["model"] if existing is not None else ""))[:160]
+            task_value = str(task_id or (existing["task_id"] if existing is not None else ""))[:180]
+            route_value = str(route or (existing["route"] if existing is not None else ""))[:80]
+            controller_value = str(controller_id or (existing["controller_id"] if existing is not None else ""))[:180]
+            message_value = str(last_message or (existing["last_message"] if existing is not None else ""))[:600]
+            retry_value = max(
+                max(0, int(existing["retry_count"] or 0)) if existing is not None else 0,
+                max(0, int(retry_count or 0)),
+            )
+            connection.execute(
+                """
+                INSERT INTO agent_sessions (
+                    session_id, project_root, role, runtime, model, status,
+                    task_id, route, controller_id, started_at, updated_at,
+                    finished_at, event_count, last_event, last_message, retry_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    project_root = excluded.project_root,
+                    role = excluded.role,
+                    runtime = excluded.runtime,
+                    model = excluded.model,
+                    status = excluded.status,
+                    task_id = excluded.task_id,
+                    route = excluded.route,
+                    controller_id = excluded.controller_id,
+                    updated_at = excluded.updated_at,
+                    finished_at = excluded.finished_at,
+                    event_count = excluded.event_count,
+                    last_event = excluded.last_event,
+                    last_message = excluded.last_message,
+                    retry_count = excluded.retry_count
+                """,
+                (
+                    session,
+                    project_value,
+                    role_value,
+                    runtime_value,
+                    model_value,
+                    normalized_status,
+                    task_value,
+                    route_value,
+                    controller_value,
+                    started_at,
+                    now,
+                    now if terminal else "",
+                    event_count,
+                    str(last_event or "")[:120],
+                    message_value,
+                    retry_value,
+                ),
+            )
+        return self.read_agent_session(session)
+
+    def read_agent_session(self, session_id: str) -> dict[str, Any]:
+        session = _validate_agent_session_id(session_id)
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM agent_sessions WHERE session_id = ?",
+                (session,),
+            ).fetchone()
+        if row is None:
+            raise FileNotFoundError(f"Agent session not found: {session}")
+        return self._agent_session_row(row)
+
+    def list_agent_sessions(
+        self,
+        project_root: str,
+        *,
+        include_finished: bool = True,
+        limit: int = 60,
+    ) -> list[dict[str, Any]]:
+        finished_clause = "" if include_finished else "AND status NOT IN ('complete','failed','cancelled','stopped')"
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM agent_sessions
+                WHERE project_root = ? {finished_clause}
+                ORDER BY
+                    CASE WHEN finished_at = '' THEN 0 ELSE 1 END ASC,
+                    updated_at DESC
+                LIMIT ?
+                """,
+                (str(project_root or ""), max(1, min(200, int(limit)))),
+            ).fetchall()
+        return [self._agent_session_row(row) for row in rows]
+
     def append_advisor_message(self, session_id: str, role: str, payload: dict[str, Any]) -> dict[str, Any]:
         _validate_advisor_id(session_id)
         if role not in {"user", "advisor"}:
@@ -570,6 +693,8 @@ class JobStore:
         allowed = {
             "status", "current_route", "current_task_id", "tasks_completed", "failures",
             "consecutive_revisions", "estimated_cost", "last_error", "stop_reason", "finished_at",
+            "route_index", "progress_fingerprint", "stalled_cycles", "last_progress_at",
+            "last_recovery_at",
         }
         values = {key: value for key, value in changes.items() if key in allowed}
         if not values:
@@ -607,7 +732,11 @@ class JobStore:
         """Atomically advance a run after one task reaches its formal terminal state."""
 
         _validate_autopilot_id(run_id)
-        allowed = {"failures", "consecutive_revisions", "estimated_cost", "last_error", "current_route", "current_task_id"}
+        allowed = {
+            "failures", "consecutive_revisions", "estimated_cost", "last_error",
+            "current_route", "current_task_id", "route_index", "progress_fingerprint",
+            "stalled_cycles", "last_progress_at", "last_recovery_at",
+        }
         values = {key: value for key, value in changes.items() if key in allowed}
         values["updated_at"] = _now()
         assignments = ", ".join(["tasks_completed = tasks_completed + 1", *[f"{key} = ?" for key in values]])
@@ -903,7 +1032,12 @@ class JobStore:
                     consecutive_revisions INTEGER NOT NULL DEFAULT 0,
                     estimated_cost REAL NOT NULL DEFAULT 0,
                     last_error TEXT NOT NULL DEFAULT '',
-                    stop_reason TEXT NOT NULL DEFAULT ''
+                    stop_reason TEXT NOT NULL DEFAULT '',
+                    route_index INTEGER NOT NULL DEFAULT 0,
+                    progress_fingerprint TEXT NOT NULL DEFAULT '',
+                    stalled_cycles INTEGER NOT NULL DEFAULT 0,
+                    last_progress_at TEXT NOT NULL DEFAULT '',
+                    last_recovery_at TEXT NOT NULL DEFAULT ''
                 );
                 CREATE INDEX IF NOT EXISTS autopilot_runs_project_idx ON autopilot_runs(project_root, created_at);
                 CREATE TABLE IF NOT EXISTS autopilot_events (
@@ -931,6 +1065,26 @@ class JobStore:
                     revoked_at TEXT NOT NULL DEFAULT '',
                     FOREIGN KEY(run_id) REFERENCES autopilot_runs(run_id)
                 );
+                CREATE TABLE IF NOT EXISTS agent_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    project_root TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    runtime TEXT NOT NULL,
+                    model TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL,
+                    task_id TEXT NOT NULL DEFAULT '',
+                    route TEXT NOT NULL DEFAULT '',
+                    controller_id TEXT NOT NULL DEFAULT '',
+                    started_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL DEFAULT '',
+                    event_count INTEGER NOT NULL DEFAULT 0,
+                    last_event TEXT NOT NULL DEFAULT '',
+                    last_message TEXT NOT NULL DEFAULT '',
+                    retry_count INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS agent_sessions_project_idx
+                    ON agent_sessions(project_root, updated_at);
                 """
             )
             preference_columns = {
@@ -940,6 +1094,19 @@ class JobStore:
                 connection.execute(
                     "ALTER TABLE advisor_pinned_preferences ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
                 )
+            autopilot_columns = {
+                str(row[1]) for row in connection.execute("PRAGMA table_info(autopilot_runs)").fetchall()
+            }
+            autopilot_additions = {
+                "route_index": "INTEGER NOT NULL DEFAULT 0",
+                "progress_fingerprint": "TEXT NOT NULL DEFAULT ''",
+                "stalled_cycles": "INTEGER NOT NULL DEFAULT 0",
+                "last_progress_at": "TEXT NOT NULL DEFAULT ''",
+                "last_recovery_at": "TEXT NOT NULL DEFAULT ''",
+            }
+            for name, declaration in autopilot_additions.items():
+                if name not in autopilot_columns:
+                    connection.execute(f"ALTER TABLE autopilot_runs ADD COLUMN {name} {declaration}")
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
 
     def _append_autopilot_event_tx(
@@ -966,6 +1133,15 @@ class JobStore:
         payload["failures"] = int(payload.get("failures") or 0)
         payload["consecutive_revisions"] = int(payload.get("consecutive_revisions") or 0)
         payload["estimated_cost"] = float(payload.get("estimated_cost") or 0)
+        payload["route_index"] = int(payload.get("route_index") or 0)
+        payload["stalled_cycles"] = int(payload.get("stalled_cycles") or 0)
+        return payload
+
+    @staticmethod
+    def _agent_session_row(row: sqlite3.Row) -> dict[str, Any]:
+        payload = dict(row)
+        payload["event_count"] = int(payload.get("event_count") or 0)
+        payload["retry_count"] = int(payload.get("retry_count") or 0)
         return payload
 
     def _connect(self) -> sqlite3.Connection:
@@ -1070,6 +1246,13 @@ def _validate_autopilot_id(run_id: str) -> None:
         char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in run_id
     ):
         raise ValueError(f"invalid autopilot run id: {run_id}")
+
+
+def _validate_agent_session_id(session_id: str) -> str:
+    value = str(session_id or "").strip()
+    if not value or len(value) > 180 or any(char.isspace() or ord(char) < 32 for char in value):
+        raise ValueError(f"invalid Agent session id: {session_id}")
+    return value
 
 
 def _public_request(request: dict[str, Any]) -> dict[str, Any]:

@@ -295,6 +295,12 @@
 .detail-excerpt { padding-bottom: 18px; border-bottom: 1px solid var(--mineral-200); }
 .detail-body { max-height: 330px; padding: 18px; overflow-y: auto; background: var(--mineral-100); font-family: var(--font-display); line-height: 1.9; }
 .detail-body p { color: var(--ink-700); }
+.detail-body.safe-markdown { max-width: 76ch; }
+.safe-markdown { overflow-wrap: anywhere; }
+.safe-markdown :is(h1,h2,h3,h4) { margin: 1.25em 0 .55em; color: inherit; line-height: 1.3; }
+.safe-markdown pre { max-width: 100%; padding: 10px 12px; overflow: auto; background: color-mix(in srgb, currentColor 6%, transparent); border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: 4px; }
+.safe-markdown table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.safe-markdown :is(th,td) { min-width: 96px; padding: 6px 8px; text-align: left; border: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
 .detail-drawer dl { display: grid; gap: 10px; }
 .detail-drawer dl div { display: grid; grid-template-columns: 95px 1fr; gap: 12px; }
 .detail-drawer dt { color: var(--ink-500); font-size: 10px; }

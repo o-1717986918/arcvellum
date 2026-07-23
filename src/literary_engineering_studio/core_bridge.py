@@ -75,6 +75,12 @@ class CoreBridge:
         command = [self.python, "-m", self.module, *engine_args]
         env = os.environ.copy()
         env.pop("LEW_MAINTAINER_MODE", None)
+        # Frozen Windows sidecars inherit the machine console code page unless
+        # Python's UTF-8 mode is explicit. CLI fields carry project paths and
+        # titles, so legacy decoding can otherwise corrupt a valid Chinese
+        # project path before Studio validates the task package.
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
         with ENGINE_ACCESS_LOCK:
             completed = run_hidden(
                 command,

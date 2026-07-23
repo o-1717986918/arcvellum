@@ -235,7 +235,7 @@ export interface AgentObservableEvent {
 
 export interface AgentObservability {
   ok: boolean;
-  schema: "arcvellum/agent-observability/v1";
+  schema: "arcvellum/agent-observability/v1" | "arcvellum/agent-observability/v2";
   project_root: string;
   status: "active" | "idle";
   active_task: {
@@ -249,7 +249,43 @@ export interface AgentObservability {
     tasks_completed: number;
     failures: number;
   } | null;
-  sessions: Array<{ session_id: string; role: string; runtime: string; status: string; route: string; event_count: number; started_at: string }>;
+  controller?: {
+    run_id: string;
+    status: string;
+    route: string;
+    task_id: string;
+    tasks_completed: number;
+    stalled_cycles: number;
+    last_progress_at: string;
+  } | null;
+  services?: Array<{
+    role: string;
+    role_id?: string;
+    model: string;
+    status: string;
+    healthy: boolean;
+    active_leases: number;
+    restart_count: number;
+    started_at?: string;
+  }>;
+  sessions: Array<{
+    session_id: string;
+    role: string;
+    role_id?: string;
+    runtime: string;
+    model?: string;
+    status: string;
+    route: string;
+    task_id?: string;
+    event_count: number;
+    retry_count?: number;
+    last_event?: string;
+    last_message?: string;
+    started_at: string;
+    updated_at?: string;
+    finished_at?: string;
+    elapsed_seconds?: number;
+  }>;
   recent_events: AgentObservableEvent[];
   revision: string;
 }
@@ -320,9 +356,29 @@ export interface AutopilotRun {
   estimated_cost: number;
   last_error: string;
   stop_reason: string;
+  route_index: number;
+  progress_fingerprint: string;
+  stalled_cycles: number;
+  last_progress_at: string;
+  last_recovery_at: string;
   created_at: string;
   started_at: string;
   updated_at: string;
+}
+
+export interface HumanChoiceReceipt {
+  ok: boolean;
+  schema: "arcvellum/human-choice-receipt/v0.2";
+  receipt_id: string;
+  choice_id: string;
+  selected: string;
+  recorded: boolean;
+  materialized: string;
+  materialized_ok: boolean;
+  consumed: boolean;
+  effect: Record<string, unknown>;
+  state_before: Record<string, unknown>;
+  state_after: Record<string, unknown>;
 }
 
 export interface AutopilotStatus {
