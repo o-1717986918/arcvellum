@@ -10,7 +10,7 @@ from literary_engineering_studio.contracts import TASK_SCHEMA, load_task_package
 from literary_engineering_studio.sandbox import stage_task
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, canonicalize_task_outputs, validate_task_outputs
 import literary_engineering_studio_engine.task_registry as task_registry
-from literary_engineering_studio_engine.candidate_promotion import _candidate_review_content_match, _human_decision_notes
+from literary_engineering_studio_engine.candidate_promotion import _candidate_review_content_match, _human_decision_notes, _unresolved_review_notes
 from literary_engineering_studio_engine.review_ci import review_scene_draft
 from literary_engineering_studio_engine.scene_revision import _prompt_manifest
 from literary_engineering_studio_engine.workflow_state import _current_scene_candidate, _static_review_step
@@ -117,6 +117,35 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             }
         )
         self.assertEqual(notes, ["W-001: formal age conflict"])
+
+    def test_passing_style_evidence_does_not_reopen_candidate_revision(self):
+        notes = _unresolved_review_notes(
+            {
+                "conclusion": "pass",
+                "blocking_issues": [],
+                "warnings": [{"severity": "low", "message": "低于阈值，不作为阻塞问题。", "blocks_pass": False}],
+                "revision_actions": [],
+                "style_notes": ["保留一处明喻，承担场景核心意象功能，密度在阈值内。"],
+                "style_adherence": {"status": "pass", "deviations": [], "revision_actions": []},
+                "canon_writeback": {"status": "not_required", "canon_change": False, "no_canon_change_reason": "本场不新增正式世界规则。"},
+                "revision_integrity": {"status": "not_applicable", "anti_evasion_checked": True, "evasion_risks_unresolved": []},
+            }
+        )
+        self.assertEqual(notes, [])
+
+    def test_unclassified_warning_remains_a_revision_gate(self):
+        notes = _unresolved_review_notes(
+            {
+                "conclusion": "pass",
+                "blocking_issues": [],
+                "warnings": [{"severity": "low", "message": "这一处可能需要再看。"}],
+                "revision_actions": [],
+                "style_adherence": {"status": "pass", "deviations": [], "revision_actions": []},
+                "canon_writeback": {"status": "not_required", "canon_change": False, "no_canon_change_reason": "本场不新增正式世界规则。"},
+                "revision_integrity": {"status": "not_applicable", "anti_evasion_checked": True, "evasion_risks_unresolved": []},
+            }
+        )
+        self.assertEqual(notes, ["warnings"])
 
     def test_non_pass_scene_review_is_recordable_for_revision_routing(self):
         with patch("literary_engineering_studio_engine.scene_route_gates.candidate_review_gate", return_value={"status": "notes_unresolved", "message": "revise"}):

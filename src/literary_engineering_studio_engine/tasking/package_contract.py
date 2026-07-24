@@ -15,8 +15,17 @@ from pathlib import Path
 from ..prompt_registry import resolve_prompt_asset
 
 
-TASK_CONTRACT_REVISION = "2026-07-24.8"
+TASK_CONTRACT_REVISION = "2026-07-25.24"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
+_OPERATING_REFERENCE_PATHS = {
+    "SKILL.md",
+    "AGENTS.md",
+    "agentread.yaml",
+    "references/agent-run-protocol.md",
+    "references/cli-run-protocol.md",
+    "references/artifact-contracts.md",
+    "references/workflows.md",
+}
 RECHECK_REQUIRED_STATES = {
     "asset-review-pass",
     "asset-approval-revision",
@@ -66,6 +75,11 @@ PROMPT_METADATA_LIST_FIELDS = (
     "review_requirements",
     "forbidden_shortcuts",
 )
+AGENT_OUTPUT_CONTRACT = (
+    "Only create the files listed under Allowed Outputs / Expected Outputs for this task. "
+    "Studio owns CLI-protected prompt sidecars, lifecycle receipts, and other system-managed files; "
+    "do not create, complete, or replace them."
+)
 EXPLICIT_TASK_CONTRACT_FIELDS = {
     "execution_policy",
     "agent_role",
@@ -92,6 +106,7 @@ def task_contract_fingerprint(task: dict[str, object]) -> str:
             "command",
             "required_reading",
             "source_paths",
+            "agent_source_paths",
             "expected_outputs",
             "repair_targets",
             "repair_target_sha256",
@@ -140,6 +155,12 @@ def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
     }
     for field in PROMPT_METADATA_LIST_FIELDS:
         prompt_asset[field] = [str(item) for item in asset.metadata.get(field) or []]
+    # Prompt assets are shared with the standalone Skill, where a platform
+    # Agent may own a completion marker.  Inside Studio, lifecycle evidence
+    # and CLI scaffolds are Worker-owned.  Project the Studio-specific output
+    # boundary into every sandboxed task so the model never receives two
+    # contradictory write instructions.
+    prompt_asset["output_contract"] = [AGENT_OUTPUT_CONTRACT]
     enriched["prompt_asset"] = prompt_asset
 
     expected_outputs = [str(item) for item in enriched.get("expected_outputs") or []]
@@ -336,6 +357,10 @@ def render_task_markdown(task: dict[str, object], root: Path, *, completion_path
 
     task_id = str(task.get("task_id") or "")
     human_required = str(task.get("execution_policy") or "") == "human-required"
+    agent_source_paths = list(task.get("agent_source_paths") or [])
+    required_reading = [str(item) for item in task.get("required_reading") or []]
+    if agent_source_paths:
+        required_reading = [item for item in required_reading if item not in _OPERATING_REFERENCE_PATHS]
     lines = [
         f"# CLI 中介平台 Agent 任务：{task_id}",
         "",
@@ -358,21 +383,29 @@ def render_task_markdown(task: dict[str, object], root: Path, *, completion_path
         f"- agent_role: `{task.get('agent_role', '')}`",
         f"- context_trace: `{task.get('context_trace', '') or 'n/a'}`",
         f"- status: `{task.get('status', '')}`",
-        *([] if human_required else [f"- completion_marker: `{relative_to_root(completion_path, root)}`"]),
+        *([] if human_required else [f"- lifecycle_receipt: `{relative_to_root(completion_path, root)}` (由 Studio Worker 在预检通过后写入)"]),
         "",
-        *prompt_asset_lines(str(task.get("prompt_asset_id") or "")),
-        "",
-        "## Required Reading",
-        "",
+        *prompt_asset_lines(str(task.get("prompt_asset_id") or ""), studio_worker=True),
     ]
-    for item in task.get("required_reading") or []:
-        lines.append(f"- `{item}`")
-    lines.extend(["", "## Source Artifacts", ""])
-    source_paths = list(task.get("source_paths") or [])
+    if required_reading:
+        lines.extend(["", "## Required Reading", ""])
+        lines.extend(f"- `{item}`" for item in required_reading)
+    source_paths = agent_source_paths or list(task.get("source_paths") or [])
+    source_heading = "## Agent Source Artifacts" if agent_source_paths else "## Source Artifacts"
+    lines.extend(["", source_heading, ""])
     if source_paths:
         lines.extend(f"- `{item}`" for item in source_paths)
     else:
         lines.append("- 无。")
+    if agent_source_paths:
+        lines.extend(
+            [
+                "",
+                "## Source Boundary",
+                "",
+                "上列是平台 Agent 唯一需要阅读的项目资料。`source_paths` 中其余项目仅供 CLI/Studio Worker 复现确定性门禁；不得遍历目录、搜索项目或读取未列路径。",
+            ]
+        )
     lines.extend(["", "## Command", ""])
     command = str(task.get("command") or "").strip()
     if human_required:
@@ -387,23 +420,39 @@ def render_task_markdown(task: dict[str, object], root: Path, *, completion_path
     if style_constraints:
         lines.extend(["", "## Style Constraints", ""])
         lines.extend(f"- {item}" for item in style_constraints)
+    system_owned = task.get("system_owned_fields")
+    lifecycle = system_owned.get("lifecycle") if isinstance(system_owned, dict) and isinstance(system_owned.get("lifecycle"), dict) else {}
+    receipts = lifecycle.get("completion_receipts") if isinstance(lifecycle.get("completion_receipts"), list) else []
+    receipt_paths = {
+        str(item.get("path") or "")
+        for item in receipts
+        if isinstance(item, dict) and str(item.get("path") or "").strip()
+    }
+
     lines.extend(["", "## Expected Outputs", ""])
     expected_outputs = list(task.get("expected_outputs") or [])
-    if expected_outputs:
-        lines.extend(f"- 创建或覆盖 `{item}`" for item in expected_outputs)
+    core_managed = {str(item) for item in task.get("core_managed_outputs") or []}
+    agent_outputs = [
+        item
+        for item in expected_outputs
+        if str(item) not in receipt_paths and str(item) not in core_managed
+    ]
+    if agent_outputs:
+        lines.extend(f"- 创建或覆盖 `{item}`" for item in agent_outputs)
     elif human_required:
         lines.append("- No file output. Studio records the decision as formal evidence.")
     else:
         lines.append("- 本任务没有固定文件输出；完成前仍需通过 `task-submit` 记录证据。")
+    if receipt_paths:
+        lines.extend(["", "## Studio Lifecycle Receipt", ""])
+        lines.append("下列回执由 Studio Worker 在 Agent 产物通过确定性预检后自动写入。它们不是 Agent 的创作或审查输出。")
+        lines.extend(f"- 自动写入 `{item}`" for item in sorted(receipt_paths))
     core_managed_outputs = list(task.get("core_managed_outputs") or [])
     if core_managed_outputs:
         lines.extend(["", "## CLI Protected Outputs", ""])
-        lines.append("以下文件由本任务的 CLI Command 生成。平台 Agent 必须读取它们，但不得创建、覆盖、删除或用手写版本替代它们。")
+        lines.append("以下文件由 Studio Worker 或本任务的 CLI Command 维护。平台 Agent 必须读取它们，但不得创建、覆盖、删除或用手写版本替代它们。")
         lines.extend(f"- 只读 `{item}`" for item in core_managed_outputs)
-    system_owned = task.get("system_owned_fields")
     if isinstance(system_owned, dict):
-        lifecycle = system_owned.get("lifecycle") if isinstance(system_owned.get("lifecycle"), dict) else {}
-        receipts = lifecycle.get("completion_receipts") if isinstance(lifecycle.get("completion_receipts"), list) else []
         semantic = system_owned.get("semantic") if isinstance(system_owned.get("semantic"), dict) else {}
         if lifecycle or semantic:
             lines.extend(["", "## System-Owned Metadata", ""])
@@ -439,7 +488,7 @@ def render_task_markdown(task: dict[str, object], root: Path, *, completion_path
                 "",
                 "## Agent Execution",
                 "",
-                "[AGENT_TASK: 读取本任务的 Required Reading 和 Source Artifacts。按 Command 或 Hard Constraints 完成产物。完成后先运行 task-submit 记录你写出的产物，再运行 task-complete。不得只手写文件后跳到下一步。]",
+                "[AGENT_TASK: 只读取本任务列出的 Required Reading（如有）和 Agent Source Artifacts（没有该节时才读取 Source Artifacts）。完成必要阅读后立即创建或覆盖 Expected Outputs；不要枚举目录、反复读取资料或等待 Studio 生命周期回执。Studio Worker 会完成预检、提交、回执与状态推进。]",
                 "",
                 "推荐提交命令：",
                 "",
@@ -458,7 +507,7 @@ def render_task_markdown(task: dict[str, object], root: Path, *, completion_path
     return "\n".join(lines).rstrip() + "\n"
 
 
-def prompt_asset_lines(prompt_asset_id: str) -> list[str]:
+def prompt_asset_lines(prompt_asset_id: str, *, studio_worker: bool = False) -> list[str]:
     """Return a readable prompt-asset projection for the task sidecar."""
 
     lines = ["## Prompt Asset", ""]
@@ -500,6 +549,8 @@ def prompt_asset_lines(prompt_asset_id: str) -> list[str]:
         ("forbidden_shortcuts", "Forbidden Shortcuts"),
     ):
         values = [str(item) for item in asset.metadata.get(field) or []]
+        if field == "output_contract" and studio_worker:
+            values = [AGENT_OUTPUT_CONTRACT]
         if not values and field in {"optional_inputs", "style_constraints"}:
             continue
         lines.extend(["", f"### Prompt {title}", ""])

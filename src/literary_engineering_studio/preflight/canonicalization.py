@@ -487,6 +487,7 @@ def _canonicalize_asset_machine_metadata(task: TaskPackage, sandbox: SandboxMani
                 expected["status"] = "recheck_required"
             changes.extend(_write_machine_fields(review_path, review_rel, payload, expected, "asset-review"))
             changes.extend(_canonicalize_asset_review_action_targets(review_path, review_rel, payload, candidate_rel))
+            changes.extend(_canonicalize_asset_approval_revision(task, sandbox, review_path, review_rel, payload, candidate_rel))
 
     changes.extend(_canonicalize_asset_completion_markers(task, sandbox, completion_contract))
     return changes
@@ -533,6 +534,90 @@ def _canonicalize_asset_review_action_targets(
         return []
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return [{"path": relative, "field": "revision_actions.target", "reason": "attached task-owned candidate path to review field anchor"}]
+
+
+def _canonicalize_asset_approval_revision(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    review_path: Path,
+    review_rel: str,
+    review: dict[str, Any],
+    candidate_rel: str,
+) -> list[dict[str, str]]:
+    """Reset revision bookkeeping after a real approval-bound candidate change.
+
+    In this route the candidate change is creative work, while the review reset
+    is lifecycle evidence.  Keeping the latter machine-owned prevents a model
+    from stalling on a large review JSON solely to restate immutable status
+    fields.  The fresh independent review remains the authority for quality.
+    """
+
+    if task.current_state != "asset-approval-revision" or not candidate_rel:
+        return []
+    candidate_path = sandbox.workspace / Path(candidate_rel)
+    before = str(task.payload.get("candidate_sha256_before_revision") or "").strip().lower()
+    if not before or not candidate_path.is_file():
+        return []
+    current = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    if current == before:
+        return []
+
+    applied = review.get("applied_revision_actions")
+    if isinstance(applied, list) and applied:
+        return []
+    rationale = _latest_asset_approval_rationale(sandbox.workspace, str(review.get("candidate_id") or ""))
+    existing_round = review.get("revision_round")
+    round_value = existing_round + 1 if isinstance(existing_round, int) and not isinstance(existing_round, bool) else 1
+    review["status"] = "recheck_required"
+    review["revision_round"] = max(1, round_value)
+    review["applied_revision_actions"] = [
+        {
+            "id": "APPROVAL-REV-001",
+            "action": rationale or "Applied the latest approval-bound candidate revision.",
+            "evidence": f"{candidate_rel} changed from the approval-bound candidate digest; a fresh independent review must verify the exact semantic change.",
+        }
+    ]
+    review["revised_at"] = datetime.now(timezone.utc).isoformat()
+    review_path.write_text(json.dumps(review, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _append_approval_revision_notice(review_path.with_suffix(".md"), review["revision_round"], rationale)
+    return [
+        {"path": review_rel, "field": "approval-revision-reset", "reason": "generated deterministic approval-revision lifecycle evidence"}
+    ]
+
+
+def _latest_asset_approval_rationale(workspace: Path, candidate_id: str) -> str:
+    approvals = workspace / "workflow" / "approvals" / "index.jsonl"
+    if not approvals.is_file():
+        return ""
+    try:
+        records = [json.loads(line) for line in approvals.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return ""
+    for record in reversed(records):
+        if not isinstance(record, dict) or str(record.get("run_id") or "") != candidate_id:
+            continue
+        if str(record.get("decision") or "").strip().lower() not in {"revise", "reject"}:
+            continue
+        return str(record.get("notes") or "").strip()[:800]
+    return ""
+
+
+def _append_approval_revision_notice(report_path: Path, revision_round: int, rationale: str) -> None:
+    if not report_path.is_file():
+        return
+    try:
+        content = report_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    marker = "## Studio Revision Reset"
+    if marker in content:
+        return
+    note = rationale or "The latest approval requested a candidate-local revision."
+    report_path.write_text(
+        content.rstrip()
+        + f"\n\n{marker}\n\n- Revision round: {revision_round}\n- Approval rationale recorded for independent recheck: {note}\n",
+        encoding="utf-8",
+    )
 
 
 def _read_object(path: Path) -> dict[str, Any] | None:
@@ -657,6 +742,10 @@ def _canonicalize_scene_review_metadata(task: TaskPackage, sandbox: SandboxManif
     expected = {
         "schema": "literary-engineering-workbench/scene-review-agent/v1",
         "scene_id": str(task.payload.get("scene_id") or task.scene_id or "").strip(),
+        # The Agent does not choose which prose it is allowed to review.  Keep
+        # the exact candidate path alongside the digest so a following revision
+        # task cannot fall back to rewriting its own output in place.
+        "candidate": candidate_rel,
         "candidate_sha256": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
         "source_paths": [str(item).replace("\\", "/") for item in task.source_paths],
         "reviewer_session_id": _session_identity(task, "reviewer"),

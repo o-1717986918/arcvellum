@@ -105,8 +105,14 @@ class WorkerIntegrationTests(unittest.TestCase):
             self.assertTrue((sandbox.workspace / "_task" / "execution_contract.json").is_file())
             self.assertTrue((sandbox.workspace / "TASK_CONTEXT.json").is_file())
             self.assertTrue((sandbox.workspace / "workflow" / "studio" / "user_directions.md").is_file())
-            self.assertTrue((sandbox.workspace / "plot" / "story_architecture.candidate.json").is_file())
-            self.assertTrue((sandbox.workspace / "plot" / "story_architecture.agent_tasks.md").is_file())
+            # This first longform task is CLI-owned.  Its scaffold belongs to
+            # the control workspace until the state machine issues the
+            # following Agent task; exposing it early would blur the
+            # command/Agent boundary again.
+            self.assertTrue((sandbox.control_workspace / "plot" / "story_architecture.candidate.json").is_file())
+            self.assertTrue((sandbox.control_workspace / "plot" / "story_architecture.agent_tasks.md").is_file())
+            self.assertFalse((sandbox.workspace / "plot" / "story_architecture.candidate.json").exists())
+            self.assertFalse((sandbox.workspace / "plot" / "story_architecture.agent_tasks.md").exists())
             self.assertFalse((project / "plot" / "story_architecture.candidate.json").exists())
             self.assertFalse((project / "plot" / "word_budget" / "word_budget.json").exists())
             manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))

@@ -10,6 +10,9 @@ const store = useAppStore();
 const snapshot = ref<AutopilotStatus | null>(null);
 const busy = ref(false);
 const authorized = ref(false);
+const selectedMode = ref<AutopilotMode>("collaborative");
+const authorizationConfirmationRequired = ref(false);
+const modeChangeNotice = ref("");
 const liveStage = ref("等待开始");
 const liveDetail = ref("ArcVellum 会在这里显示真实推进阶段。 ");
 const lastActivityAt = ref("");
@@ -22,7 +25,8 @@ let clock = 0;
 
 const run = computed(() => snapshot.value?.run || null);
 const running = computed(() => run.value?.status === "running");
-const mode = computed(() => snapshot.value?.policy.mode || "collaborative");
+const mode = computed(() => selectedMode.value);
+const needsFullAutoAuthorization = computed(() => mode.value === "full_auto" && (!run.value || authorizationConfirmationRequired.value));
 const authorizationLimit = computed(() => {
   const reason = String(run.value?.stop_reason || "");
   return ["task-limit", "runtime-limit", "cost-limit", "revision-limit", "authorization-expired"].includes(reason) ? reason : "";
@@ -73,6 +77,9 @@ async function load(): Promise<void> {
   if (!store.currentProjectPath) return;
   try {
     snapshot.value = await api<AutopilotStatus>(`/autopilot/status?${query({ project_root: store.currentProjectPath })}`);
+    selectedMode.value = snapshot.value.policy.mode || "collaborative";
+    authorizationConfirmationRequired.value = false;
+    authorized.value = false;
     syncRenewalLimits();
     store.setAutopilotStatus(snapshot.value);
     if (snapshot.value.run?.status === "running") startStream(snapshot.value.run.run_id);
@@ -95,6 +102,16 @@ function syncRenewalLimits(): void {
 
 async function selectMode(next: AutopilotMode): Promise<void> {
   if (!snapshot.value || running.value || busy.value) return;
+  const previousMode = selectedMode.value;
+  const previousAuthorizationRequirement = authorizationConfirmationRequired.value;
+  selectedMode.value = next;
+  authorizationConfirmationRequired.value = next === "full_auto" && previousMode !== "full_auto";
+  authorized.value = false;
+  modeChangeNotice.value = next === "full_auto"
+    ? "全自动交付已选中。确认授权后，ArcVellum 才会继续执行。"
+    : next === "supervised_auto"
+      ? "已切换为监督创作。日常取舍将由创作代理处理。"
+      : "已切换为一起创作。重要选择会继续交给你。";
   busy.value = true;
   try {
     const policy: DelegationPolicy = {
@@ -106,13 +123,20 @@ async function selectMode(next: AutopilotMode): Promise<void> {
       ],
       release_policy: next === "full_auto" ? "delegated" : "require_user",
     };
-    await api("/autopilot/policy", {
+    const saved = await api<{ policy: DelegationPolicy; run?: AutopilotRun }>("/autopilot/policy", {
       method: "PUT",
       body: JSON.stringify({ project_root: store.currentProjectPath, policy }),
     });
-    authorized.value = false;
-    await load();
+    if (snapshot.value) {
+      snapshot.value.policy = saved.policy;
+      if (saved.run) snapshot.value.run = saved.run;
+      store.setAutopilotStatus({ ...snapshot.value });
+    }
+    store.notice = modeChangeNotice.value;
   } catch (cause) {
+    selectedMode.value = previousMode;
+    authorizationConfirmationRequired.value = previousAuthorizationRequirement;
+    modeChangeNotice.value = "";
     store.error = friendlyError(cause, "暂时无法更改创作模式。");
   } finally {
     busy.value = false;
@@ -120,7 +144,7 @@ async function selectMode(next: AutopilotMode): Promise<void> {
 }
 
 async function start(): Promise<void> {
-  if (!store.currentProjectPath || busy.value || (mode.value === "full_auto" && !authorized.value)) return;
+  if (!store.currentProjectPath || busy.value || (needsFullAutoAuthorization.value && !authorized.value)) return;
   busy.value = true;
   try {
     const result = await api<{ run: AutopilotRun }>("/autopilot/start", {
@@ -129,6 +153,8 @@ async function start(): Promise<void> {
     });
     if (snapshot.value) snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
+    authorizationConfirmationRequired.value = false;
+    modeChangeNotice.value = "全自动创作已获得本次授权，正在从当前任务继续。";
     startStream(result.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "连续创作暂时无法启动。");
@@ -154,12 +180,17 @@ async function pause(): Promise<void> {
 }
 
 async function resume(): Promise<void> {
-  if (!run.value || busy.value) return;
+  if (!run.value || busy.value || (needsFullAutoAuthorization.value && !authorized.value)) return;
   busy.value = true;
   try {
-    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, { method: "POST" });
+    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ authorized: mode.value !== "full_auto" || authorized.value || !needsFullAutoAuthorization.value }),
+    });
     if (snapshot.value) snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
+    authorizationConfirmationRequired.value = false;
+    modeChangeNotice.value = "全自动创作已获得本次授权，正在从暂停点继续。";
     startStream(result.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "暂时无法继续创作。");
@@ -187,9 +218,16 @@ async function renewAuthorization(): Promise<void> {
       body: JSON.stringify({ project_root: store.currentProjectPath, policy }),
     });
     snapshot.value.policy = saved.policy;
-    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, { method: "POST" });
+    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ authorized: mode.value !== "full_auto" || authorized.value || !needsFullAutoAuthorization.value }),
+    });
     snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
+    authorizationConfirmationRequired.value = false;
+    authorized.value = false;
+    modeChangeNotice.value = "授权范围已更新，连续修订窗口已重新计数，正在从暂停点继续。";
+    store.notice = modeChangeNotice.value;
     startStream(result.run.run_id);
   } catch (cause) {
     store.error = friendlyError(cause, "新的授权范围暂时无法生效。");
@@ -288,13 +326,19 @@ function routeText(route: string): string {
     </header>
 
     <div class="mode-selector">
-      <button v-for="item in modes" :key="item.id" :class="{ active: mode === item.id }" :disabled="running" @click="selectMode(item.id)">
+      <button v-for="item in modes" :key="item.id" :class="{ active: mode === item.id, pending: busy && mode === item.id }" :aria-pressed="mode === item.id" :disabled="running || busy" @click="selectMode(item.id)">
         <Bot v-if="item.id === 'full_auto'" :size="18" />
         <Sparkles v-else-if="item.id === 'supervised_auto'" :size="18" />
         <CircleCheck v-else :size="18" />
         <span><strong>{{ item.title }}</strong><small>{{ item.text }}</small></span>
       </button>
     </div>
+
+    <section v-if="modeChangeNotice" class="autopilot-mode-notice" aria-live="polite">
+      <ShieldAlert v-if="mode === 'full_auto'" :size="16" />
+      <CircleCheck v-else :size="16" />
+      <span><strong>{{ mode === 'full_auto' ? '全自动模式已准备好' : '创作模式已更新' }}</strong><small>{{ modeChangeNotice }}</small></span>
+    </section>
 
     <section v-if="authorizationLimit && !running" class="autopilot-renewal-urgent" aria-live="polite">
       <div><ShieldAlert :size="16" /><span><small>授权窗口已暂停</small><strong>{{ authorizationLimitText }}</strong></span></div>
@@ -316,8 +360,8 @@ function routeText(route: string): string {
       </div>
       <div class="autopilot-controls">
         <button v-if="running" class="secondary-button" :disabled="busy" @click="pause"><Pause :size="16" />暂停</button>
-        <button v-else-if="run && run.status !== 'complete'" class="primary-button" :disabled="busy" @click="resume"><RefreshCw :size="16" />继续</button>
-        <button v-else-if="run?.status !== 'complete'" class="primary-button" :disabled="busy || (mode === 'full_auto' && !authorized)" @click="start"><Play :size="16" />开始</button>
+        <button v-else-if="run && run.status !== 'complete'" class="primary-button" :disabled="busy || (needsFullAutoAuthorization && !authorized)" @click="resume"><RefreshCw :size="16" />{{ needsFullAutoAuthorization ? '确认授权并继续' : '继续' }}</button>
+        <button v-else-if="run?.status !== 'complete'" class="primary-button" :disabled="busy || (needsFullAutoAuthorization && !authorized)" @click="start"><Play :size="16" />{{ needsFullAutoAuthorization ? '确认授权并开始' : '开始' }}</button>
       </div>
     </div>
 
@@ -327,7 +371,7 @@ function routeText(route: string): string {
       <span><i></i>{{ lastActivityAt ? '连接活跃' : '正在建立连接' }}</span>
     </div>
 
-    <label v-if="mode === 'full_auto' && !running && run?.status !== 'complete'" class="autopilot-authorization">
+    <label v-if="needsFullAutoAuthorization && !running && run?.status !== 'complete'" class="autopilot-authorization">
       <input v-model="authorized" type="checkbox" />
       <ShieldAlert :size="16" />
       <span>我授权创作代理处理日常选择并生成最终交付；遇到设定冲突、质量反复失败或预算上限时必须停下。</span>

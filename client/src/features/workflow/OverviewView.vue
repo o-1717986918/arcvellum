@@ -168,6 +168,15 @@ async function handleActiveRun(): Promise<void> {
     }
     return;
   }
+  if (run.mode === "full_auto") {
+    if (immersive.value && !immersivePanels.value.includes("progress")) {
+      immersivePanels.value = ["progress", ...immersivePanels.value];
+    } else if (!immersive.value) {
+      document.querySelector(".autopilot-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    actionMessage.value = "全自动创作需要在推进仪表中确认授权后才能继续。";
+    return;
+  }
   working.value = true;
   try {
     const result = await api<{ run: NonNullable<typeof run> }>(`/autopilot/runs/${run.run_id}/resume`, { method: "POST" });

@@ -139,7 +139,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v0.95.1 fixes duplicate task-render receipt expiry, hardens CI packaging contracts, and improves repository maintenance safeguards."
+        --notes "ArcVellum v0.95.2 separates CLI control inputs from Agent-visible task inputs, hardens exact-candidate review gates, and prevents non-blocking review evidence from causing revision loops."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

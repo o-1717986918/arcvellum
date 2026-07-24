@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.prose.generate.v1
 match: route.scene-development.prose.generate.v1
-version: v1
+version: v2
 route: scene-development
 task_type: main-platform-agent-prose
 title: Scene Prose Generation Exact Prompt Asset
@@ -26,7 +26,7 @@ context_groups:
   - reader experience
   - narrative rhythm
 hard_constraints:
-  - Run generate-scene first; do not handwrite a formal candidate outside the CLI task package.
+  - Studio has already run generate-scene before this Agent task. Read the generated prompt manifest and sidecar; do not run CLI commands or handwrite a formal candidate outside the task package.
   - The main platform Agent must write body prose personally; subagents may only gather/check bounded evidence.
   - Apply mounted style, word budget, reader experience, narrative rhythm, scene bridge, scene function, reader question/promise-payoff, narrative distance, punctuation standard, anti-evasion, and new-character registration before drafting.
   - Candidate manifest must declare canon_change as true, false with no_canon_change_reason, or unknown for later canon-evolve.

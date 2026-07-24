@@ -3,13 +3,44 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.character_state_apply import apply_character_state_patch, state_patch_writeback_status
+from literary_engineering_studio_engine.workflow.state_scene import _state_patch_writeback_step
 
 
 class StateWritebackContractTests(unittest.TestCase):
+    def test_workflow_exposes_concrete_state_approval_apply_or_review_steps(self):
+        cases = {
+            "needs_approval": "state-patch-approval",
+            "pending_apply": "state-apply",
+            "missing": "state-agent-task",
+            "pass": "state-writeback",
+        }
+        for status, expected_key in cases.items():
+            with self.subTest(status=status), patch(
+                "literary_engineering_studio_engine.workflow.state_scene.state_patch_writeback_status",
+                return_value={"status": status, "patch": "characters/state_patches/scene_0001_state_patch.json"},
+            ):
+                step = _state_patch_writeback_step(Path("C:/example"), "scene_0001")
+                self.assertEqual(step["key"], expected_key)
+                self.assertEqual(step["display_key"], "state-writeback")
+
+    def test_state_apply_gate_imports_the_modular_writeback_status(self):
+        from literary_engineering_studio_engine.routes.scene.gates import _state_gate_validation
+
+        with tempfile.TemporaryDirectory() as temporary:
+            errors, notes = _state_gate_validation(
+                Path(temporary),
+                {"current_state": "state-apply", "scene_id": "scene_0001"},
+            )
+
+        self.assertTrue(errors)
+        self.assertEqual(notes, [])
+        self.assertNotIn("ModuleNotFoundError", "\n".join(errors))
+
     def test_reviewed_digest_bound_patch_requires_approval_then_applies_atomically(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

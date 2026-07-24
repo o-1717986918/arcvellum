@@ -432,6 +432,14 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertTrue(prompt_asset["review_requirements"])
             self.assertTrue(prompt_asset["forbidden_shortcuts"])
             self.assertTrue(prompt_asset["body"])
+            self.assertEqual(
+                prompt_asset["output_contract"],
+                [
+                    "Only create the files listed under Allowed Outputs / Expected Outputs for this task. "
+                    "Studio owns CLI-protected prompt sidecars, lifecycle receipts, and other system-managed files; "
+                    "do not create, complete, or replace them."
+                ],
+            )
             self.assertEqual(task["execution_policy"], "agent-required")
             self.assertEqual(task["agent_role"], "main-creative-agent")
             self.assertEqual(task["human_gate"]["source"], "task-registry")
@@ -462,6 +470,8 @@ class TaskContractTransportTests(unittest.TestCase):
                 "### Prompt Body",
             ):
                 self.assertIn(heading, rendered)
+            self.assertIn("Studio owns CLI-protected prompt sidecars", rendered)
+            self.assertNotIn("Write candidate Markdown, candidate manifest JSON, and completion marker", rendered)
             loaded = load_task_package(root, task_json)
             self.assertFalse(loaded.execution_contract.compatibility_derived)
             self.assertEqual(loaded.execution_contract.agent_role, "main-creative-agent")
@@ -504,6 +514,74 @@ class TaskContractTransportTests(unittest.TestCase):
         self.assertNotIn("task-submit", rendered)
         self.assertNotIn("task-complete", rendered)
         self.assertNotIn(".agent_completion.json", rendered)
+
+    def test_agent_task_markdown_keeps_lifecycle_receipts_out_of_agent_outputs(self):
+        task = _enrich_task_payload(
+            {
+                "task_id": "scene-development-scene_0001-composition-agent-task",
+                "route": "scene-development",
+                "scene_id": "scene_0001",
+                "current_state": "composition-agent-task",
+                "task_type": "platform-agent-judgment",
+                "prompt_asset_id": "route.scene-development.composition.review.execute.v1",
+                "expected_outputs": [
+                    "drafts/compositions/scene_0001_composition_review.json",
+                    "drafts/compositions/scene_0001_composition.agent_completion.json",
+                ],
+            }
+        )
+
+        rendered = _render_task_markdown(task, Path("."))
+
+        expected_section = rendered.split("## Expected Outputs", 1)[1].split("## Studio Lifecycle Receipt", 1)[0]
+        self.assertIn("scene_0001_composition_review.json", expected_section)
+        self.assertNotIn("agent_completion.json", expected_section)
+        self.assertIn("## Studio Lifecycle Receipt", rendered)
+        self.assertIn("Studio Worker 在 Agent 产物通过确定性预检后自动写入", rendered)
+
+    def test_agent_task_markdown_only_exposes_curated_agent_sources(self):
+        task = _enrich_task_payload(
+            {
+                "task_id": "scene-development-scene_0001-candidate-review",
+                "route": "scene-development",
+                "scene_id": "scene_0001",
+                "current_state": "candidate-review",
+                "task_type": "platform-agent-review",
+                "prompt_asset_id": "route.scene-development.agent-review.v1",
+                "source_paths": ["scenes/scene_0001.yaml", "canon", "characters", "style"],
+                "agent_source_paths": ["scenes/scene_0001.yaml", "drafts/candidates/scene_0001-platform-agent.md"],
+                "expected_outputs": ["reviews/agent/scene_0001_scene_review.json"],
+            }
+        )
+
+        rendered = _render_task_markdown(task, Path("."))
+        source_section = rendered.split("## Source Boundary", 1)[0]
+
+        self.assertIn("## Agent Source Artifacts", rendered)
+        self.assertIn("drafts/candidates/scene_0001-platform-agent.md", source_section)
+        self.assertNotIn("- `canon`", source_section)
+        self.assertIn("不得遍历目录、搜索项目或读取未列路径", rendered)
+
+    def test_agent_task_markdown_omits_unstaged_operating_manuals(self):
+        task = _enrich_task_payload(
+            {
+                "task_id": "scene-development-scene_0001-candidate-revision",
+                "route": "scene-development",
+                "scene_id": "scene_0001",
+                "current_state": "candidate-revision",
+                "task_type": "platform-agent-revision",
+                "prompt_asset_id": "route.scene-development.revision.v1",
+                "required_reading": ["SKILL.md", "AGENTS.md", "references/punctuation-standard.md"],
+                "agent_source_paths": ["drafts/candidates/scene_0001-platform-agent.md"],
+                "expected_outputs": ["drafts/revisions/scene_0001_revision.md"],
+            }
+        )
+
+        rendered = _render_task_markdown(task, Path("."))
+
+        self.assertNotIn("- `SKILL.md`", rendered)
+        self.assertNotIn("- `AGENTS.md`", rendered)
+        self.assertIn("- `references/punctuation-standard.md`", rendered)
 
     def test_human_decision_task_is_not_counted_as_an_unfinished_agent_sidecar(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -705,6 +783,84 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertIn("style/style-profile.md", payload["agent_source_paths"])
             self.assertNotIn("plot/word_budget/word_budget.agent_tasks.md", payload["agent_source_paths"])
 
+    def test_candidate_review_agent_sources_include_exact_candidate(self):
+        from literary_engineering_studio_engine.routes.scene.definition import _agent_reading_paths
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "drafts" / "candidates" / "scene_0001-platform-agent.md"
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("候选正文", encoding="utf-8")
+            manifest = candidate.with_suffix(".json")
+            manifest.write_text("{}", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text("scene_id: scene_0001", encoding="utf-8")
+
+            sources = _agent_reading_paths(
+                root,
+                [candidate.relative_to(root).as_posix(), manifest.relative_to(root).as_posix(), "canon"],
+                current_state="candidate-review",
+                scene_id="scene_0001",
+            )
+
+            self.assertIn(candidate.relative_to(root).as_posix(), sources)
+            self.assertIn(manifest.relative_to(root).as_posix(), sources)
+            self.assertNotIn("canon", sources)
+
+            revision = root / "drafts" / "revisions" / "scene_0001_revision.md"
+            revision.parent.mkdir(parents=True, exist_ok=True)
+            revision.write_text("修订候选正文", encoding="utf-8")
+            revision_manifest = revision.with_suffix(".json")
+            revision_manifest.write_text("{}", encoding="utf-8")
+            revision_sources = _agent_reading_paths(
+                root,
+                [revision.relative_to(root).as_posix(), revision_manifest.relative_to(root).as_posix(), "canon"],
+                current_state="candidate-review",
+                scene_id="scene_0001",
+            )
+            self.assertIn(revision.relative_to(root).as_posix(), revision_sources)
+            self.assertIn(revision_manifest.relative_to(root).as_posix(), revision_sources)
+            self.assertNotIn("canon", revision_sources)
+
+    def test_candidate_revision_agent_sources_include_cli_draft_and_review_inputs(self):
+        from literary_engineering_studio_engine.routes.scene.definition import _agent_reading_paths
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "drafts" / "candidates" / "scene_0001-platform-agent.md"
+            review = root / "reviews" / "agent" / "scene_0001_scene_review.json"
+            review_markdown = review.with_suffix(".md")
+            scene = root / "scenes" / "scene_0001.yaml"
+            candidate.parent.mkdir(parents=True)
+            review.parent.mkdir(parents=True)
+            scene.parent.mkdir(parents=True)
+            candidate.write_text("候选正文", encoding="utf-8")
+            review.write_text("{}", encoding="utf-8")
+            review_markdown.write_text("审查结论", encoding="utf-8")
+            scene.write_text("scene_id: scene_0001", encoding="utf-8")
+
+            sources = _agent_reading_paths(
+                root,
+                [
+                    candidate.relative_to(root).as_posix(),
+                    review.relative_to(root).as_posix(),
+                    review_markdown.relative_to(root).as_posix(),
+                    "scenes",
+                    "canon",
+                    "characters",
+                ],
+                current_state="candidate-revision",
+                scene_id="scene_0001",
+            )
+
+            self.assertIn(candidate.relative_to(root).as_posix(), sources)
+            self.assertIn(review.relative_to(root).as_posix(), sources)
+            self.assertIn(review_markdown.relative_to(root).as_posix(), sources)
+            self.assertNotIn("canon", sources)
+            self.assertNotIn("characters", sources)
+            self.assertNotIn("scenes", sources)
+
     def test_state_patch_preparation_does_not_merge_the_following_agent_review(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -725,6 +881,44 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertNotIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", preparation["expected_outputs"])
             self.assertIn("characters/state_patches/scene_0001_state_patch_review.json", review["expected_outputs"])
             self.assertIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", review["expected_outputs"])
+
+    def test_state_apply_stages_the_completed_state_review_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text("scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8")
+            character = root / "characters" / "narrator.yaml"
+            character.parent.mkdir()
+            character.write_text("name: 叙述者\nstate: {}\n", encoding="utf-8")
+            state_patch = root / "characters" / "state_patches" / "scene_0001_state_patch.json"
+            state_patch.parent.mkdir()
+            state_patch.write_text(
+                json.dumps(
+                    {
+                        "scene_id": "scene_0001",
+                        "characters": [{"character_id": "narrator"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            apply = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "state-apply", ""
+            )
+
+            self.assertEqual(apply["task_type"], "deterministic-cli")
+            self.assertTrue(str(apply["command"]).startswith("python -m literary_engineering_studio_engine state-apply"))
+            self.assertIn("characters/state_patches/scene_0001_state_patch.agent_tasks.md", apply["source_paths"])
+            self.assertIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", apply["source_paths"])
+            self.assertIn("characters/state_patches/scene_0001_state_patch_review.json", apply["source_paths"])
+            self.assertIn("characters/narrator.yaml", apply["source_paths"])
+            self.assertIn("characters/narrator.yaml", apply["expected_outputs"])
+            self.assertIn("characters/state_patches/scene_0001_state_apply.json", apply["expected_outputs"])
+            self.assertIn("characters/state_patches/scene_0001_state_apply.md", apply["expected_outputs"])
+            self.assertNotIn("characters/state_patches/scene_0001_state_patch_apply.json", apply["expected_outputs"])
 
 
 if __name__ == "__main__":

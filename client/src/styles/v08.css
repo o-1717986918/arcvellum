@@ -742,6 +742,8 @@ html[data-arcvellum-theme="modern"] .startup-paper { background-image: linear-gr
 .immersive-console-scroll .mode-selector > button:hover:not(:disabled), .immersive-console-scroll .mode-selector > button.active { color: var(--instrument-ink); background: color-mix(in srgb, var(--instrument-accent) 18%, var(--instrument-panel)); border-color: var(--instrument-accent); }
 .immersive-console-scroll .mode-selector small, .autopilot-copy p { color: var(--instrument-muted); }
 .immersive-console-scroll .autopilot-console { background: var(--instrument-deep); border-color: var(--instrument-line); }
+.immersive-console-scroll .autopilot-mode-notice { color: var(--instrument-ink); background: color-mix(in srgb, var(--instrument-accent) 16%, var(--instrument-panel)); border-color: color-mix(in srgb, var(--instrument-accent) 58%, var(--instrument-line)); }
+.immersive-console-scroll .autopilot-mode-notice small { color: var(--instrument-muted); }
 .immersive-console-scroll .autopilot-authorization { color: var(--orrery-canon); background: color-mix(in srgb, var(--orrery-canon) 12%, transparent); border-color: var(--orrery-canon); }
 .immersive-decisions article > span, .quality-instrument-findings strong { color: var(--instrument-warning); }
 .immersive-decisions h3, .immersive-empty strong, .immersive-route-ledger strong { color: var(--instrument-ink); }

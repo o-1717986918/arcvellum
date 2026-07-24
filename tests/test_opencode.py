@@ -112,7 +112,8 @@ class OpenCodeFoundationTests(unittest.TestCase):
         self.assertEqual(advisor_permissions["read"], "allow")
         self.assertEqual(advisor_permissions["edit"], "deny")
         steward_permissions = steward_profile("opencode/big-pickle")["agent"]["creative-steward"]["permission"]
-        self.assertEqual(steward_permissions["read"], "allow")
+        self.assertEqual(steward_permissions["read"], "deny")
+        self.assertEqual(steward_permissions["glob"], "deny")
         self.assertEqual(steward_permissions["edit"], "deny")
         self.assertEqual(steward_permissions["bash"], "deny")
 

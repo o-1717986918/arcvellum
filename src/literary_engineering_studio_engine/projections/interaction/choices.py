@@ -71,7 +71,7 @@ def build_current_human_choices(
             add_choice(_candidate_asset_alignment_choice(root, target), step, str(action.get("next_action") or ""))
         elif route == "scene-development" and step in {"candidate-review", "agent-review-task", "static-review", "revision-direction"}:
             add_choice(_direction_choice(route, target or "scene", "revision_direction"), step, str(action.get("next_action") or ""))
-        elif route == "scene-development" and step == "state-writeback":
+        elif route == "scene-development" and step in {"state-writeback", "state-patch-approval"}:
             add_choice(_state_patch_choice(root, target), step, str(action.get("next_action") or ""))
         elif route == "style-engineering":
             add_choice(_style_mount_choice(root), step, str(action.get("next_action") or ""))
@@ -288,6 +288,11 @@ def _approval_choice(root: Path, route: str, target: str, decision_type: str, su
     subject_sha256 = _asset_candidate_sha256(root, approval_target) if decision_type == "asset_approval" else (
         release_candidate_fingerprint(root, approval_target) if decision_type == "release_approval" else ""
     )
+    source_paths = (
+        _asset_approval_source_paths(root, approval_target)
+        if decision_type == "asset_approval"
+        else ["workflow/approvals/index.jsonl"]
+    )
     return {
         "choice_id": _make_id("choice", decision_type, choice_target),
         "route": route,
@@ -295,7 +300,7 @@ def _approval_choice(root: Path, route: str, target: str, decision_type: str, su
         "title": f"{approval_target} 等待用户审批",
         "summary": summary,
         "target": {"target_id": approval_target, **({"candidate_sha256": subject_sha256} if subject_sha256 else {})},
-        "source_paths": ["workflow/approvals/index.jsonl"],
+        "source_paths": source_paths,
         "options": [
             {"id": "approve", "label": "批准", "summary": "允许进入下一步正式流程。"},
             {"id": "revise", "label": "要求修改", "summary": "保留方向，但需要平台 Agent 修订后再审。"},
@@ -594,6 +599,32 @@ def _asset_candidate_sha256(root: Path, candidate_id: str) -> str:
         if path.is_file():
             return hashlib.sha256(path.read_bytes()).hexdigest()
     return ""
+
+
+def _asset_approval_source_paths(root: Path, candidate_id: str) -> list[str]:
+    """Supply the exact candidate and independent review evidence to a delegated approval."""
+
+    candidates = (
+        f"characters/candidates/{candidate_id}.json",
+        f"canon/candidates/world_rules/{candidate_id}.json",
+        f"canon/candidates/locations/{candidate_id}.json",
+        f"canon/candidates/organizations/{candidate_id}.json",
+        f"plot/candidates/outlines/{candidate_id}.json",
+        f"plot/candidates/chapters/{candidate_id}.json",
+        f"plot/candidates/scenes/{candidate_id}.json",
+    )
+    candidate_rel = next((relative for relative in candidates if (root / relative).is_file()), "")
+    paths = [
+        f"reviews/assets/{candidate_id}_review.json",
+        f"reviews/assets/{candidate_id}_review.md",
+    ]
+    if candidate_rel:
+        paths.extend([candidate_rel, candidate_rel.removesuffix(".json") + ".md"])
+    paths.append("workflow/approvals/index.jsonl")
+    # Keep the declared evidence contract stable before and after an approval
+    # record is written. Missing files are surfaced as missing evidence rather
+    # than silently changing the choice fingerprint.
+    return list(dict.fromkeys(paths))
 
 def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""

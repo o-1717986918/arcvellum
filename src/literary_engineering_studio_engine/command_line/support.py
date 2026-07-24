@@ -15,10 +15,10 @@ def cli_path(root: Path, value: str | Path) -> Path:
 def print_agent_task_notice(task_path: Path, *, project: Path | None = None) -> None:
     marker = default_agent_completion_path(task_path)
     print(f"agent_tasks_pending: {task_path}")
-    print(f"completion_marker_required: {marker}")
+    print(f"completion_receipt: {marker}")
     if project is not None:
         print(f"next_check: python -m literary_engineering_studio_engine agent-task-status \"{project}\"")
-    print("next_action: read the .agent_tasks.md sidecar, write all expected artifacts, then create the .agent_completion.json marker before running the next formal step.")
+    print("next_action: read the .agent_tasks.md sidecar and write the declared Agent-authored artifacts. Studio Worker creates the lifecycle receipt after deterministic preflight succeeds.")
 
 
 def print_human_decision_notice(task_path: Path, *, project: Path | None = None) -> None:

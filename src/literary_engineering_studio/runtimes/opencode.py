@@ -213,9 +213,16 @@ class OpenCodeRuntime(AgentRuntime):
                                 emit("runner.first_tool", {"session_id": session_id, "elapsed_ms": first_tool_ms})
                             if name == "usage.updated":
                                 usage_summary.update(data)
-                            emit(name, data)
                             if name == "runner.warning" and data.get("kind") == "session.error":
-                                errors.append(json.dumps(data.get("detail") or {}, ensure_ascii=False))
+                                raw_error = json.dumps(data.get("detail") or {}, ensure_ascii=False)
+                                errors.append(raw_error)
+                                data = {
+                                    **data,
+                                    "detail": _public_model_error(raw_error),
+                                    "retryable": _is_transient_stream_failure(raw_error),
+                                    "public_message": _public_model_error(raw_error),
+                                }
+                            emit(name, data)
                 except RuntimeError as exc:
                     if not event_stop.is_set():
                         emit("runner.warning", {"session_id": session_id, "kind": "event-stream", "detail": str(exc)})
@@ -227,7 +234,7 @@ class OpenCodeRuntime(AgentRuntime):
             mark_activity()
             emit("runner.session.started", {"runner_id": self.runtime_id, "session_id": session_id, "model": model})
             deadline = time.monotonic() + max(1, int(timeout))
-            session_idle_timeout = max(30, int(self.settings.get("session_idle_timeout_seconds") or 240))
+            session_idle_timeout = max(30, int(self.settings.get("session_idle_timeout_seconds") or 120))
             wait_status = _wait_for_session(
                 client,
                 session_id,
@@ -304,12 +311,13 @@ class OpenCodeRuntime(AgentRuntime):
                     client.prompt_async(session_id, text=repair_prompt, model=model, agent="literary-worker")
                     repair_deadline = time.monotonic() + min(300, max(60, int(timeout) // 3))
                     mark_activity()
+                    repair_idle_timeout = max(30, int(self.settings.get("repair_idle_timeout_seconds") or 75))
                     wait_status = _wait_for_session(
                         client,
                         session_id,
                         repair_deadline,
                         cancellation,
-                        idle_timeout=session_idle_timeout,
+                        idle_timeout=repair_idle_timeout,
                         last_activity=last_activity,
                     )
                     if wait_status != "completed":
@@ -335,12 +343,43 @@ class OpenCodeRuntime(AgentRuntime):
             diff = client.diff(session_id)
             diff_path.write_text(json.dumps(diff, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             if errors:
-                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "model_error"})
+                raw_error = errors[0]
+                transient = _is_transient_stream_failure(raw_error)
+                public_message = _public_model_error(raw_error)
+                emit(
+                    "runner.session.finished",
+                    {
+                        "session_id": session_id,
+                        "model": model,
+                        "status": "failed",
+                        "reason": "streaming_interrupted" if transient else "model_error",
+                        "public_message": public_message,
+                    },
+                )
                 emit(
                     "runner.process.completed",
-                    {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "failed", "errors": errors},
+                    {
+                        "runner_id": self.runtime_id,
+                        "session_id": session_id,
+                        "model": model,
+                        "status": "failed",
+                        "public_message": public_message,
+                        "retryable": transient,
+                    },
                 )
-                return RuntimeResult(self.runtime_id, "failed", 1, self.build_command(workspace), output_path, errors[0])
+                return RuntimeResult(
+                    self.runtime_id,
+                    "failed",
+                    1,
+                    self.build_command(workspace),
+                    output_path,
+                    public_message,
+                    {
+                        "session_id": session_id,
+                        "retryable": transient,
+                        "diagnostic_error": raw_error,
+                    },
+                )
             emit("agent.message.completed", {"session_id": session_id, "text": assistant_text})
             emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "complete"})
             emit(
@@ -404,6 +443,25 @@ def _assistant_result(messages: list[dict[str, Any]]) -> tuple[str, str]:
         if current:
             texts = current
     return "".join(texts), error
+
+
+def _is_transient_stream_failure(value: str) -> bool:
+    normalized = str(value or "").lower()
+    return any(
+        marker in normalized
+        for marker in (
+            "streaming response failed",
+            "stream interrupted",
+            "stream connection",
+            "connection reset",
+        )
+    )
+
+
+def _public_model_error(value: str) -> str:
+    if _is_transient_stream_failure(value):
+        return "模型流式连接短暂中断，ArcVellum 将保留当前任务并自动重试。"
+    return "模型未能完成当前任务，诊断信息已保留；ArcVellum 将按安全策略尝试恢复。"
 
 
 def _wait_for_session(

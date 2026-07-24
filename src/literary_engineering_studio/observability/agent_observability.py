@@ -15,6 +15,8 @@ from typing import Any
 
 
 SCHEMA = "arcvellum/agent-observability/v2"
+STALE_AFTER_SECONDS = 300
+_LIVE_SESSION_STATUSES = {"queued", "running", "waiting", "waiting_human"}
 
 
 def build_agent_observability(
@@ -24,13 +26,23 @@ def build_agent_observability(
     dashboard: dict[str, Any],
     sessions: list[dict[str, Any]] | None = None,
     services: list[dict[str, Any]] | None = None,
+    *,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     run = autopilot_status.get("run") if isinstance(autopilot_status.get("run"), dict) else {}
     current_task = dashboard.get("current_task") if isinstance(dashboard.get("current_task"), dict) else {}
     visible_events = [_visible_event(item) for item in events[-18:] if isinstance(item, dict)]
     active = _active_task(run, current_task, visible_events)
-    visible_sessions = [_visible_session(item) for item in (sessions or []) if isinstance(item, dict)]
+    reference_time = now or datetime.now(timezone.utc)
+    visible_sessions = [
+        _visible_session(item, now=reference_time)
+        for item in (sessions or [])
+        if isinstance(item, dict)
+    ]
     visible_services = [_visible_service(item) for item in (services or []) if isinstance(item, dict)]
+    last_activity_at = _last_activity_at(run, visible_events, visible_sessions)
+    stalled = _is_stalled(run, last_activity_at, now=now)
+    active = _active_task(run, current_task, visible_events, stalled=stalled)
     source = {
         "run": run,
         "events": visible_events,
@@ -38,17 +50,19 @@ def build_agent_observability(
         "sessions": visible_sessions,
         "services": visible_services,
     }
-    status = "active" if (
-        run and str(run.get("status")) == "running"
-        or any(item["status"] in {"queued", "running", "waiting", "waiting_human"} for item in visible_sessions)
-    ) else "idle"
+    run_status = str(run.get("status") or "")
+    has_live_session = any(item["status"] in _LIVE_SESSION_STATUSES for item in visible_sessions)
+    # A persisted session record can outlive its controller after a restart.
+    # When a formal run exists, its terminal/paused state is authoritative;
+    # otherwise the workbench would falsely advertise an old session as LIVE.
+    status = "stalled" if stalled else "active" if run_status == "running" or (not run and has_live_session) else "idle"
     return {
         "ok": True,
         "schema": SCHEMA,
         "project_root": project_root,
         "status": status,
         "active_task": active,
-        "controller": _controller(run),
+        "controller": _controller(run, last_activity_at=last_activity_at, stalled=stalled),
         "services": visible_services,
         "sessions": visible_sessions,
         "recent_events": visible_events,
@@ -56,11 +70,17 @@ def build_agent_observability(
     }
 
 
-def _active_task(run: dict[str, Any], task: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _active_task(
+    run: dict[str, Any],
+    task: dict[str, Any],
+    events: list[dict[str, Any]],
+    *,
+    stalled: bool = False,
+) -> dict[str, Any] | None:
     if not run and not task:
         return None
     latest = events[-1] if events else {}
-    status = str(run.get("status") or "waiting")
+    status = "stalled" if stalled else str(run.get("status") or "waiting")
     return {
         "role": "主创执行者",
         "runtime": str(run.get("runtime") or "未启动"),
@@ -74,7 +94,7 @@ def _active_task(run: dict[str, Any], task: dict[str, Any], events: list[dict[st
     }
 
 
-def _controller(run: dict[str, Any]) -> dict[str, Any] | None:
+def _controller(run: dict[str, Any], *, last_activity_at: str = "", stalled: bool = False) -> dict[str, Any] | None:
     if not run:
         return None
     return {
@@ -85,13 +105,53 @@ def _controller(run: dict[str, Any]) -> dict[str, Any] | None:
         "tasks_completed": _integer(run.get("tasks_completed")),
         "stalled_cycles": _integer(run.get("stalled_cycles")),
         "last_progress_at": str(run.get("last_progress_at") or ""),
+        "last_activity_at": last_activity_at,
+        "stalled": stalled,
+        "stale_after_seconds": STALE_AFTER_SECONDS,
     }
 
 
-def _visible_session(item: dict[str, Any]) -> dict[str, Any]:
-    status = str(item.get("status") or "idle")
+def _last_activity_at(run: dict[str, Any], events: list[dict[str, Any]], sessions: list[dict[str, Any]]) -> str:
+    candidates = [
+        str(run.get("last_progress_at") or ""),
+        str(run.get("updated_at") or ""),
+        *[str(item.get("at") or "") for item in events],
+        *[
+            str(item.get("updated_at") or item.get("started_at") or "")
+            for item in sessions
+            if item.get("status") in _LIVE_SESSION_STATUSES
+        ],
+    ]
+    valid = [(stamp, _parse_datetime(stamp)) for stamp in candidates if _parse_datetime(stamp) is not None]
+    return max(valid, key=lambda item: item[1])[0] if valid else ""
+
+
+def _is_stalled(run: dict[str, Any], last_activity_at: str, *, now: datetime | None) -> bool:
+    if str(run.get("status") or "") != "running" or not last_activity_at:
+        return False
+    activity = _parse_datetime(last_activity_at)
+    if activity is None:
+        return True
+    reference = now or datetime.now(timezone.utc)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return (reference.astimezone(timezone.utc) - activity).total_seconds() >= STALE_AFTER_SECONDS
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+
+def _visible_session(item: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
+    original_status = str(item.get("status") or "idle")
     started_at = str(item.get("started_at") or "")
     finished_at = str(item.get("finished_at") or "")
+    updated_at = str(item.get("updated_at") or "")
+    status = "interrupted" if _is_session_stale(original_status, updated_at, now=now) else original_status
     return {
         "session_id": _short_id(item.get("session_id")),
         "role": _role_label(item.get("role")),
@@ -104,12 +164,29 @@ def _visible_session(item: dict[str, Any]) -> dict[str, Any]:
         "event_count": _integer(item.get("event_count")),
         "retry_count": _integer(item.get("retry_count")),
         "last_event": str(item.get("last_event") or ""),
-        "last_message": _safe_message(item.get("last_message"), _session_message(status)),
+        "last_message": _safe_message(
+            item.get("last_message"),
+            "会话长时间未报告活动，已标记为中断；历史记录仍可供诊断。"
+            if status == "interrupted"
+            else _session_message(status),
+        ),
         "started_at": started_at,
-        "updated_at": str(item.get("updated_at") or ""),
+        "updated_at": updated_at,
         "finished_at": finished_at,
         "elapsed_seconds": _elapsed_seconds(started_at, finished_at),
     }
+
+
+def _is_session_stale(status: str, updated_at: str, *, now: datetime | None) -> bool:
+    if status not in _LIVE_SESSION_STATUSES:
+        return False
+    updated = _parse_datetime(updated_at)
+    if updated is None:
+        return True
+    reference = now or datetime.now(timezone.utc)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return (reference.astimezone(timezone.utc) - updated).total_seconds() >= STALE_AFTER_SECONDS
 
 
 def _visible_service(item: dict[str, Any]) -> dict[str, Any]:
@@ -185,6 +262,7 @@ def _session_message(status: str) -> str:
         "running": "会话正在执行当前任务。",
         "waiting": "会话正在等待上游结果。",
         "waiting_human": "会话正在等待你的决定。",
+        "interrupted": "会话已中断，正在等待运行时或用户重新发起。",
         "idle": "会话保持可复用，当前没有在生成内容。",
         "failed": "会话未能完成当前动作。",
         "cancelled": "会话已取消。",

@@ -113,6 +113,7 @@ describe("application store", () => {
     expect(initialReadPaths.some((path) => path.startsWith("/project/library?"))).toBe(false);
     const projectStreams = streamConnections.filter((item) => item.path.includes("/stream"));
     expect(projectStreams.filter((item) => item.path.startsWith("/project/workspace/stream"))).toHaveLength(1);
+    expect(projectStreams.filter((item) => item.path.startsWith("/agent-observability/stream"))).toHaveLength(1);
 
     const workspaceStream = projectStreams.find((item) => item.path.startsWith("/project/workspace/stream"));
     workspaceStream?.callback("workspace.snapshot", {

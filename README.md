@@ -4,7 +4,7 @@
 
 ArcVellum 是面向小说、剧本与伪记录作品的本地 Agent 创作平台。它把人物、世界观、情节、场景、文风、字数预算、审查证据和正式正文放进一条可恢复、可追溯的生产线；Agent 负责创作判断，文学工程内核负责签发任务、验证产物和阻止跳步。
 
-当前版本：**v0.95.1 Task Receipt Reliability Hotfix**。
+当前版本：**v0.95.2 Dual-Workspace Review Reliability**。
 
 ![ArcVellum v0.9.3 叙事星仪](docs/images/arcvellum-orrery-v093.png)
 
@@ -132,7 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 
 ## 项目状态
 
-当前源码与 Windows 正式安装包为 **v0.95.1**。本补丁修复了同一份 CLI Agent task sidecar 被重复渲染后，旧 completion receipt 因文件时间戳变化而被误判过期的问题；任务现在会以内容摘要绑定回执，保持真正重签任务的安全门禁，同时避免全自动创作出现伪阻塞。同步补足跨平台 CI 的 Tauri/OpenCode 打包契约与仓库治理基线。叙事星仪、阅读器、Agent 执行观测与正式交付仍来自同一份项目状态，而非独立演示数据。
+当前源码与 Windows 正式安装包为 **v0.95.2**。本版本将正式 CLI 控制工作区与 Agent 可见工作区分离：CLI 仍能读取完整项目依赖，模型只看到任务包准许的精简资料；模型产物经预检后再原子写回正式项目。审查门禁也区分了可追溯的低风险证据与真正待修的问题，避免审查通过后被无意义地再次派发修订。叙事星仪、阅读器、Agent 执行观测与正式交付仍来自同一份项目状态，而非独立演示数据。
 
 这仍是 Beta：核心文学工程状态机、空间星仪、阅读器、Agent 执行观测和安装版链路已可用；进入 v1.0 前仍需积累更多题材的长期项目样本、无人值守恢复证据、Windows 10/11 干净虚拟机的首次安装/覆盖升级矩阵，以及商业代码签名验证。
 
@@ -148,7 +148,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 - [v0.9.1 发行说明](docs/releases/v0.9.1.md)
 - [v0.9.4 发行说明](docs/releases/v0.9.4.md)
 - [v0.95.0 发行说明](docs/releases/v0.95.0.md)
-- [v0.95.1 发行说明](docs/releases/v0.95.1.md)
+- [v0.95.2 发行说明](docs/releases/v0.95.2.md)
 - [v0.9.3 发行说明](docs/releases/v0.9.3.md)
 - [v0.9.2 发行说明](docs/releases/v0.9.2.md)
 - [v0.9 空间星仪实施计划](docs/roadmap/arcvellum-v0.9-implementation-execution-plan.md)

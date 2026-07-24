@@ -74,6 +74,11 @@ def _build_asset_task_payload(root: Path, route: str, state: dict[str, object]) 
         "word_count_min": 0,
         "word_count_max": 0,
         "expected_outputs": expected_outputs,
+        "core_managed_outputs": [
+            _normalize_rel(item)
+            for item in blueprint.get("core_managed_outputs", [])
+            if _normalize_rel(item) in expected_outputs
+        ],
         "system_owned_fields": _asset_system_owned_fields(
             candidate_id=candidate_id,
             asset_type=asset_type,
@@ -134,6 +139,7 @@ def _asset_system_owned_fields(
         f"reviews/assets/{candidate_id}_review.json",
     )
     completion_status = "recheck_required" if current_state in {"asset-review-pass", "asset-approval-revision"} else "complete"
+    review_statuses = ["recheck_required"] if completion_status == "recheck_required" else ["pass", "failed", "revise_required"]
     return {
         "contract_version": "v1",
         "candidate": {
@@ -156,7 +162,7 @@ def _asset_system_owned_fields(
             "expected_artifacts_checked": completion_status == "complete",
         },
         "enums": {
-            "asset_review.status": ["pass", "failed", "revise_required"],
+            "asset_review.status": review_statuses,
             "asset_revision.review_status": ["recheck_required"],
             "completion.status": ["complete", "recheck_required"],
         },
@@ -178,6 +184,8 @@ def _asset_blueprint_for_state(root: Path, candidate_id: str, asset_type: str, c
     promoted_outputs = _asset_promoted_output_rels(root, candidate_path, asset_type)
     type_hint = asset_type or "<character|background-story|relationship|world|location|organization|outline|chapter-plan|scene-list>"
     compact_context = compact_asset_context_relpaths(root)
+    pending_revision_ids = _pending_revision_action_ids(root / review_json)
+    revision_evidence_requirement = _revision_evidence_requirement(pending_revision_ids)
     creation_sources = [*compact_context, creation_task]
     review_sources = [candidate_rel, candidate_report, review_task, *compact_context]
     table: dict[str, dict[str, object]] = {
@@ -260,6 +268,7 @@ def _asset_blueprint_for_state(root: Path, candidate_id: str, asset_type: str, c
                 "Do not create files outside Allowed Outputs. If an old review action asks for another asset or route, preserve it as a follow-up warning/promotion risk and revise only candidate-local findings.",
                 "Do not bury revise_required findings as harmless warnings.",
                 "Do not self-pass the review that requested this revision and do not replace critical findings with a clean verdict.",
+                revision_evidence_requirement,
                 "After revising the candidate and candidate report, preserve the previous findings as applied_revision_actions, set review status to recheck_required, and reset the review completion marker to recheck_required with expected_artifacts_checked=false.",
                 "A fresh asset-review-agent-task must independently inspect the revised candidate before approval is possible.",
             ],
@@ -279,10 +288,12 @@ def _asset_blueprint_for_state(root: Path, candidate_id: str, asset_type: str, c
             "command": "",
             "source_paths": [candidate_rel, candidate_report, review, review_json, "workflow/approvals/index.jsonl"],
             "expected_outputs": [candidate_rel, candidate_report, review, review_json, review_completion],
+            "core_managed_outputs": [review, review_json, review_completion],
             "hard_constraints": [
                 "Revise only the current candidate and its report against the latest matching approval decision rationale.",
                 "A revise or reject approval is not permission to approve, promote, or edit confirmed project assets.",
-                "After changing the candidate, record the approval rationale in applied_revision_actions, set the prior review to recheck_required, and reset its completion marker for independent review.",
+                _worker_managed_revision_evidence_requirement(pending_revision_ids),
+                "After a real candidate change, Studio Worker records the approval rationale in applied_revision_actions, sets the prior review to recheck_required, and resets its completion marker for independent review.",
                 "Do not self-pass the revised candidate; a fresh review and a new approval bound to the new candidate digest are mandatory.",
             ],
             "style_constraints": [],
@@ -518,6 +529,43 @@ def _asset_revision_gate_errors(
         if not path.exists():
             errors.append(f"{label} missing: {_rel(path, root)}")
     return errors
+
+
+def _pending_revision_action_ids(review_path: Path) -> list[str]:
+    """Read just the stable identifiers that a revision task must account for."""
+
+    payload, error = _read_optional_json(review_path)
+    if error:
+        return []
+    actions = payload.get("revision_actions") if isinstance(payload.get("revision_actions"), list) else []
+    identifiers: list[str] = []
+    for index, action in enumerate(actions, start=1):
+        if isinstance(action, dict):
+            identifier = str(action.get("id") or "").strip()
+        else:
+            identifier = ""
+        identifiers.append(identifier or f"revision-action-{index}")
+    return identifiers
+
+
+def _revision_evidence_requirement(action_ids: list[str]) -> str:
+    listed = ", ".join(f"`{item}`" for item in action_ids) if action_ids else "每一项原始 revision_action"
+    return (
+        "先完成候选资产修改，再重写 review JSON 的复审字段："
+        "`status` 必须为 `recheck_required`，`revision_round` 必须是 >= 1 的整数，"
+        "`applied_revision_actions` 必须是非空数组；数组内每项至少写 `id`、`action` 和 `evidence`。"
+        f"本轮必须逐项覆盖：{listed}。不得只保留旧 `revision_actions` 来代替落实证据。"
+    )
+
+
+def _worker_managed_revision_evidence_requirement(action_ids: list[str]) -> str:
+    listed = ", ".join(f"`{item}`" for item in action_ids) if action_ids else "当前审批理由"
+    return (
+        "先完成候选资产和候选报告的实质性修改。不要改写 review JSON、review Markdown 或 completion receipt；"
+        "Studio Worker 会在检测到候选摘要变化后，将审批理由写入 applied_revision_actions、"
+        "设置 review status 为 recheck_required，并重置独立复审回执。"
+        f"本轮候选修改必须可追溯地回应：{listed}。"
+    )
 
 
 def _file_sha256(path: Path) -> str:

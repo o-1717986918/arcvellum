@@ -13,6 +13,45 @@ from ...scene_route_support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
     _read_text, _unique,
 )
+
+
+def _state_patch_character_files(root: Path, state_patch: str) -> list[str]:
+    """Return the existing, in-project character files a state apply may mutate.
+
+    ``state-apply`` is deterministic, but it is still a multi-file write: the
+    patch receipt is not the only output.  Its target character records must be
+    staged into the control workspace and declared for atomic writeback too.
+    Never trust a patch path outside ``characters/`` or outside the project.
+    The apply command remains responsible for reporting malformed/missing
+    records; this helper only describes files that can safely cross the sandbox
+    boundary.
+    """
+
+    patch_path = root / f"{state_patch}.json"
+    if not patch_path.is_file():
+        return []
+    payload = _read_json(patch_path)
+    character_files: list[str] = []
+    for item in payload.get("characters") or []:
+        if not isinstance(item, dict):
+            continue
+        raw_path = str(item.get("file") or "").replace("\\", "/").strip()
+        if not raw_path:
+            character_id = str(item.get("character_id") or "").strip()
+            raw_path = f"characters/{character_id}.yaml" if character_id else ""
+        if not raw_path:
+            continue
+        candidate = _resolve_project_path(root, raw_path)
+        try:
+            relative = candidate.resolve().relative_to(root.resolve()).as_posix()
+        except (OSError, ValueError):
+            continue
+        if not relative.startswith("characters/") or not candidate.is_file():
+            continue
+        character_files.append(relative)
+    return _unique(character_files)
+
+
 def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_state: str, next_action: str) -> dict[str, object]:
     scene_path = _resolve_project_path(root, scene_rel)
     scene_text = _read_text(scene_path)
@@ -46,6 +85,8 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         revision_source = f"drafts/scenes/{scene_id}.md"
     revision = f"drafts/revisions/{scene_id}_revision"
     state_patch = f"characters/state_patches/{scene_id}_state_patch"
+    state_patch_character_files = _state_patch_character_files(root, state_patch)
+    state_apply = f"characters/state_patches/{scene_id}_state_apply"
     canon_patch = f"canon/patches/{scene_id}_canon_patch"
     direction_sources = (
         ["workflow/studio/user_directions.md"]
@@ -92,6 +133,10 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         dict.fromkeys(
             [
                 *context_sources,
+                # Formal longform materialization and word-budget gates inspect
+                # the complete scene inventory. This is control-workspace-only;
+                # definition.py still limits the Agent reading set.
+                "scenes",
                 context,
                 context_trace,
                 *chapter_contract_sources,
@@ -232,7 +277,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         },
         "composition-agent-task": {
             "task_type": "platform-agent-judgment",
-            "prompt_asset_id": "route.scene-development.composition.execute.v1",
+            "prompt_asset_id": "route.scene-development.composition.review.execute.v1",
             "command": "",
             "source_paths": list(dict.fromkeys([
                 *scene_runtime_sources,
@@ -243,7 +288,10 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             ])),
             "context_trace": context_trace,
             "expected_outputs": [composition_review, f"{composition}.agent_completion.json"],
-            "hard_constraints": ["Read the composition sidecar, write the schema-valid composition review with exact source digest, and then complete the marker."],
+            "hard_constraints": [
+                "Read the composition sidecar and write the schema-valid composition review with the exact source digest.",
+                "The Studio Worker materializes the lifecycle receipt only after deterministic preflight accepts the review.",
+            ],
             "style_constraints": [],
             "validation_gates": ["composition sidecar completion marker exists", "composition_review.v1 semantic artifact passes and declares generation readiness"],
             "next_allowed_states": ["scene-word-budget-contract"],
@@ -349,11 +397,11 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 *scene_character_asset_outputs,
             ],
             "hard_constraints": [
-                "Run generate-scene to obtain prompt manifest and sidecar, then the main platform agent personally writes the candidate body.",
+                "Studio has already run generate-scene in the isolated workspace. Read its prompt manifest and sidecar; then the main platform agent personally writes the candidate body. Do not run CLI commands in this task.",
                 "The candidate must not be drafted by a subagent and must not include workflow traces.",
                 *(
                     [
-                        "This scene declares named participants without formal character files. Run generate-scene, read each emitted character candidate sidecar, and create its schema-valid candidate JSON/report/completion before drafting prose.",
+                        "This scene declares named participants without formal character files. The CLI has already emitted each character candidate sidecar; read them and create each schema-valid candidate JSON/report before drafting prose. Completion receipts are Studio-owned.",
                         "Record those candidates in new_character_register with status=candidates_ready and an empty blocking_issues list. Do not promote them or pretend they are already formal characters.",
                     ]
                     if scene_character_assets
@@ -620,7 +668,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "source_paths": [scene_rel, context, context_trace, f"{state_patch}.md", f"{state_patch}.json", f"{state_patch}.agent_tasks.md", state_review],
             "context_trace": context_trace,
             "expected_outputs": [state_review, f"{state_patch}.agent_completion.json"],
-            "hard_constraints": ["Review state patch consequences, write a schema-valid state review with exact source digest, and complete the marker; do not apply state without approval."],
+            "hard_constraints": ["Review state patch consequences and write a schema-valid state review with exact source digest; Studio writes the completion marker after deterministic preflight passes. Do not apply state without approval."],
             "style_constraints": [],
             "validation_gates": ["state-evolve sidecar completion marker exists", "state_patch_review.v1 semantic artifact passes"],
             "next_allowed_states": ["state-patch-approval", "state-apply", "canon-patch-json", "ready"],
@@ -641,10 +689,25 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "task_type": "deterministic-cli",
             "prompt_asset_id": "route.scene-development.state-apply.v1",
             "command": f"python -m literary_engineering_studio_engine state-apply <project> --patch {state_patch}.json --approval-run-id {Path(state_patch).name}",
-            "source_paths": [scene_rel, f"{state_patch}.json", state_review, "workflow/approvals/index.jsonl"],
+            "source_paths": [
+                scene_rel,
+                f"{state_patch}.json",
+                f"{state_patch}.agent_tasks.md",
+                f"{state_patch}.agent_completion.json",
+                state_review,
+                "workflow/approvals/index.jsonl",
+                *state_patch_character_files,
+            ],
             "context_trace": context_trace,
-            "expected_outputs": [f"{state_patch}_apply.json", f"{state_patch}_apply.md"],
-            "hard_constraints": ["State apply must keep Canon untouched, use the exact approved patch, and write an atomic apply receipt."],
+            "expected_outputs": [
+                *state_patch_character_files,
+                f"{state_apply}.json",
+                f"{state_apply}.md",
+            ],
+            "hard_constraints": [
+                "State apply must keep Canon untouched, use the exact approved patch, and write every declared character record plus an atomic apply receipt.",
+                "Only character files explicitly named by the current approved patch may be modified.",
+            ],
             "style_constraints": [],
             "validation_gates": ["state apply receipt has the current patch digest and matching approval"],
             "next_allowed_states": ["canon-patch-json", "ready"],

@@ -97,7 +97,11 @@ def default_config() -> dict[str, Any]:
                 # reserve the creative Worker indefinitely.  This is separate
                 # from the larger per-task timeout used for genuinely long
                 # prose generation.
-                "session_idle_timeout_seconds": 240,
+                "session_idle_timeout_seconds": 120,
+                # Repair prompts should be concise file fixes.  A silent
+                # repair turn is almost always a stalled tool invocation,
+                # not legitimate long-form generation.
+                "repair_idle_timeout_seconds": 75,
             },
             "host-agent": {"enabled": True},
             "claude-code": {

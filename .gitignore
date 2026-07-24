@@ -28,3 +28,4 @@ src/literary_engineering_studio_engine/_engine/workflow/
 .tmp-*.log
 studio-*.log
 ignored
+.tmp-dev/

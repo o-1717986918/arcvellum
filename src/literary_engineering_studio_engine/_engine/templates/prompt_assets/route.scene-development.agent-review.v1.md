@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.agent-review.v1
 match: route.scene-development.agent-review.v1
-version: v1
+version: v2
 route: scene-development
 task_type: platform-agent-review
 title: Scene Agent Review Exact Prompt Asset
@@ -31,15 +31,15 @@ hard_constraints:
 style_constraints:
   - Be stricter than the writer about mechanical contrast, punctuation evasion, and AI-trace patterns.
 output_contract:
-  - Write scene_review.v1 JSON and Markdown report at the task package paths, then complete the sidecar.
+  - Write only the declared review JSON and Markdown report. Studio writes the protected sidecar and lifecycle receipt after deterministic preflight.
 review_requirements:
   - Review JSON must cite the exact candidate path.
   - Review JSON candidate_sha256 must equal the digest supplied in the task package.
-  - conclusion=pass requires no unresolved warnings, revision actions, style deviations, word-budget failure, reader-experience failure, rhythm/bridge failure, or new-character issues.
+  - conclusion=pass requires no unresolved warnings, revision actions, style deviations, word-budget failure, reader-experience failure, rhythm/bridge failure, or new-character issues. `style_notes` is an evidence ledger only: use it for concise positive or neutral observations; put every actionable style defect in warnings, revision_actions, or style_adherence.deviations. A below-threshold lint observation or an already-approved waiver may be retained only as a structured low/info warning with `blocks_pass: false`; otherwise a warning is treated as unresolved.
 forbidden_shortcuts:
   - Do not call a local dry-run or external hidden reviewer.
 ---
 
 # Exact Scene Agent Review Prompt Asset
 
-Judge the candidate as a formal gate, not as praise. Include narrative_rhythm_adherence and canon_writeback in the review result. Check scene function, reader effect, incoming pressure, outgoing hook, narrative distance, and texture variety, and do not let pass_with_notes behave like pass.
+Judge the candidate as a formal gate, not as praise. First read the exact candidate, the CLI-protected review skeleton, scene definition, composition review, branch selection, context trace, and mounted style evidence. Then immediately write the required `scene_review.v1` JSON and Markdown report. Do not inspect directories, search for more project files, or keep gathering background after those materials are sufficient. Include narrative_rhythm_adherence and canon_writeback in the review result. Check scene function, reader effect, incoming pressure, outgoing hook, narrative distance, and texture variety, and do not let pass_with_notes behave like pass.

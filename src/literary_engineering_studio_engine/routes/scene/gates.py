@@ -86,7 +86,7 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
     if current_state == "state-agent-task":
         errors.extend(semantic_artifact_errors(root, current_state, scene_id))
     if current_state in {"state-patch-approval", "state-apply"}:
-        from .character_state_apply import state_patch_writeback_status
+        from ...character_state_apply import state_patch_writeback_status
 
         state_status = state_patch_writeback_status(root, scene_id)
         value = str(state_status.get("status") or "")

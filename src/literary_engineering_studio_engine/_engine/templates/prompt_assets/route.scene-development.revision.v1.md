@@ -29,7 +29,7 @@ hard_constraints:
 style_constraints:
   - Revisions are semantic edits, not regex cleanup.
 output_contract:
-  - Write revision candidate, revision report, manifest, prompt manifest, and completion marker at the task package paths.
+  - Write only the declared revision candidate, revision report, and revision manifest. Studio preserves the CLI prompt manifest and sidecar, then writes lifecycle evidence after deterministic preflight.
 review_requirements:
   - Revision candidate must be re-reviewed before promotion or export.
   - Anti-evasion burden-of-proof is required when a transition, contrast, dash, or AI-trace issue is touched.

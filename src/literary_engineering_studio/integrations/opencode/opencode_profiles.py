@@ -12,8 +12,9 @@ def worker_profile(model: str) -> dict[str, Any]:
         "description": "Executes one Studio task package inside an isolated task sandbox.",
         "mode": "primary",
         "prompt": (
-            "Follow AGENT_TASK.md as the complete execution program. Read only staged sources. "
-            "Write only declared expected outputs. Never use shell, web, skills, subagents, or external directories."
+            "Follow AGENT_TASK.md as the complete execution program. Read only staged sources, then use the edit tool "
+            "to finish every Agent-authored declared output before replying. A pending JSON scaffold is not a completed "
+            "output. Write only declared expected outputs. Never use shell, web, skills, subagents, or external directories."
         ),
         "permission": {
             "*": "deny",
@@ -22,6 +23,7 @@ def worker_profile(model: str) -> dict[str, Any]:
             "grep": "allow",
             "list": "allow",
             "edit": "allow",
+            "write": "allow",
             "bash": "deny",
             "task": "deny",
             "external_directory": "deny",
@@ -76,15 +78,16 @@ def steward_profile(model: str) -> dict[str, Any]:
         "description": "Selects among bounded literary decisions from a read-only project snapshot.",
         "mode": "primary",
         "prompt": (
-            "Act as the delegated Creative Steward. Read the supplied snapshot, compare only the declared options, "
-            "and return one auditable decision. Never edit files, execute tools, invent new options, or impersonate the user."
+            "Act as the delegated Creative Steward. The decision prompt contains the complete bounded evidence packet. "
+            "Compare only the declared options and return one auditable JSON decision immediately. Never inspect files, "
+            "execute tools, invent new options, or impersonate the user."
         ),
         "permission": {
             "*": "deny",
-            "read": "allow",
-            "glob": "allow",
-            "grep": "allow",
-            "list": "allow",
+            "read": "deny",
+            "glob": "deny",
+            "grep": "deny",
+            "list": "deny",
             "edit": "deny",
             "bash": "deny",
             "task": "deny",

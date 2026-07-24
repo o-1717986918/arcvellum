@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import difflib
 import hashlib
@@ -27,11 +27,16 @@ IGNORED_RUNTIME_PATHS = {"AGENT_TASK.md", "_task", ".claude", ".codex", ".git"}
 class SandboxManifest:
     run_id: str
     run_root: Path
+    # ``workspace`` remains the Agent-visible workspace for compatibility with
+    # runtimes and existing run links.  The control workspace is never handed
+    # to a model; it exists solely for formal CLI commands and preflight.
     workspace: Path
     prompt_path: Path
     manifest_path: Path
     baseline_path: Path
     expected_outputs: tuple[str, ...]
+    control_workspace: Path | None = None
+    agent_workspace: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -63,15 +68,20 @@ def stage_task(
     if run_root.exists():
         raise FileExistsError(f"Studio run already exists: {run_root}")
     workspace = run_root / "workspace"
-    task_dir = workspace / "_task"
-    task_dir.mkdir(parents=True, exist_ok=False)
+    control_workspace = run_root / "control-workspace"
+    control_workspace.mkdir(parents=True, exist_ok=False)
 
     copied_sources: list[str] = []
     missing_sources: list[str] = []
     reference_paths = compact_task_references(task)
     agent_sources = task.payload.get("agent_source_paths")
     agent_sources = [str(item) for item in agent_sources] if isinstance(agent_sources, list) else []
-    for relative in _unique([*reference_paths, *task.source_paths, *agent_sources]):
+    # The control workspace must be able to run the exact CLI command and the
+    # exact deterministic preflight.  It intentionally receives the full task
+    # dependency set.  The Agent sees a separately materialized workspace
+    # below, containing only its explicit reading contract.
+    staged_sources = [*reference_paths, *task.source_paths, *agent_sources]
+    for relative in _unique(staged_sources):
         source = task.resolve_project_path(relative)
         if not source.exists():
             embedded = engine_root() / Path(relative)
@@ -80,12 +90,12 @@ def stage_task(
         if not source.exists():
             missing_sources.append(relative)
             continue
-        _copy_path(source, workspace / Path(relative))
+        _copy_path(source, control_workspace / Path(relative))
         copied_sources.append(relative)
 
     for relative in task.expected_outputs:
         source = task.resolve_project_path(relative)
-        destination = workspace / Path(relative)
+        destination = control_workspace / Path(relative)
         destination.parent.mkdir(parents=True, exist_ok=True)
         if source.exists():
             _copy_path(source, destination)
@@ -97,28 +107,18 @@ def stage_task(
     # or write changes back through the task boundary.
     project_descriptor = task.project_root / "project.yaml"
     if project_descriptor.is_file():
-        _copy_path(project_descriptor, workspace / "project.yaml")
+        _copy_path(project_descriptor, control_workspace / "project.yaml")
         if "project.yaml" not in copied_sources:
             copied_sources.append("project.yaml")
 
     direction_digest = task.project_root / "workflow" / "studio" / "user_directions.md"
     if direction_digest.is_file():
         relative = "workflow/studio/user_directions.md"
-        _copy_path(direction_digest, workspace / Path(relative))
+        _copy_path(direction_digest, control_workspace / Path(relative))
         copied_sources.append(relative)
 
-    shutil.copy2(task.task_json_path, task_dir / "task.json")
-    shutil.copy2(task.task_markdown_path, task_dir / "task.agent_tasks.md")
-    (task_dir / "execution_contract.json").write_text(
-        json.dumps(task.execution_contract.as_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
     prompt_path = workspace / "AGENT_TASK.md"
-    prompt_path.write_text(_render_agent_prompt(task, reference_paths=reference_paths), encoding="utf-8")
-    write_task_context(task, workspace / "TASK_CONTEXT.json", reference_paths=reference_paths)
-    baseline = _workspace_hashes(workspace)
-    baseline_path = run_root / "baseline.json"
-    baseline_path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    baseline_path = run_root / "agent-baseline.json"
     manifest_path = run_root / "run.json"
     payload = {
         "schema": MANIFEST_SCHEMA,
@@ -133,6 +133,7 @@ def stage_task(
         "route": task.route,
         "current_state": task.current_state,
         "workspace": str(workspace),
+        "control_workspace": str(control_workspace),
         "prompt": str(prompt_path),
         "copied_sources": copied_sources,
         "reference_paths": list(reference_paths),
@@ -143,7 +144,7 @@ def stage_task(
         "execution_contract": task.execution_contract.as_dict(),
     }
     manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return SandboxManifest(
+    sandbox = SandboxManifest(
         run_id=identifier,
         run_root=run_root,
         workspace=workspace,
@@ -151,21 +152,114 @@ def stage_task(
         manifest_path=manifest_path,
         baseline_path=baseline_path,
         expected_outputs=task.expected_outputs,
+        control_workspace=control_workspace,
+        agent_workspace=workspace,
+    )
+    materialize_agent_workspace(task, sandbox)
+    return sandbox
+
+
+def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
+    """Build the bounded Agent view from the fully reproducible control view."""
+
+    workspace = _agent_workspace(sandbox)
+    _remove_path(workspace)
+    workspace.mkdir(parents=True, exist_ok=False)
+    reference_paths = compact_task_references(task)
+    agent_sources = task.payload.get("agent_source_paths")
+    agent_sources = [str(item) for item in agent_sources] if isinstance(agent_sources, list) else list(task.source_paths)
+    visible_paths = _unique(
+        [
+            *reference_paths,
+            *agent_sources,
+            *task.expected_outputs,
+            *task.core_managed_outputs,
+            "project.yaml",
+            "workflow/studio/user_directions.md",
+        ]
+    )
+    copied: list[str] = []
+    missing: list[str] = []
+    for relative in visible_paths:
+        source = _control_workspace(sandbox) / Path(relative)
+        if not source.exists():
+            embedded = engine_root() / Path(relative)
+            if embedded.exists():
+                source = embedded
+        if not source.exists():
+            # Expected outputs are often intentionally created by the Agent.
+            if relative not in task.expected_outputs:
+                missing.append(relative)
+            continue
+        _copy_path(source, workspace / Path(relative))
+        copied.append(relative)
+
+    task_dir = workspace / "_task"
+    task_dir.mkdir(parents=True, exist_ok=False)
+    shutil.copy2(task.task_json_path, task_dir / "task.json")
+    shutil.copy2(task.task_markdown_path, task_dir / "task.agent_tasks.md")
+    (task_dir / "execution_contract.json").write_text(
+        json.dumps(task.execution_contract.as_dict(), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    sandbox.prompt_path.write_text(_render_agent_prompt(task, reference_paths=reference_paths), encoding="utf-8")
+    write_task_context(task, workspace / "TASK_CONTEXT.json", reference_paths=reference_paths)
+    refresh_sandbox_baseline(sandbox)
+    update_run_manifest(
+        sandbox.manifest_path,
+        agent_visible_paths=visible_paths,
+        agent_copied_sources=copied,
+        agent_missing_sources=missing,
+    )
+    return tuple(copied)
+
+
+def refresh_sandbox_baseline(sandbox: SandboxManifest) -> None:
+    """Refresh the Agent-only baseline after the bounded view is materialized."""
+
+    baseline = _workspace_hashes(_agent_workspace(sandbox))
+    sandbox.baseline_path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    update_run_manifest(
+        sandbox.manifest_path,
+        agent_baseline_refreshed_at=_now(),
+        agent_baseline_file_count=len(baseline),
     )
 
 
+def sync_agent_outputs_to_control(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
+    """Copy only declared Agent outputs back into the validation workspace."""
+
+    if task.execution_contract.execution_policy != "agent-required":
+        return ()
+    imported: list[str] = []
+    for relative in task.expected_outputs:
+        source = _agent_workspace(sandbox) / Path(relative)
+        if not source.exists():
+            continue
+        _copy_path(source, _control_workspace(sandbox) / Path(relative))
+        imported.append(relative)
+    update_run_manifest(sandbox.manifest_path, agent_outputs_staged_to_control=imported)
+    return tuple(imported)
+
+
+def control_sandbox_view(sandbox: SandboxManifest) -> SandboxManifest:
+    """Return a preflight view whose artifact root is the control workspace."""
+
+    return replace(sandbox, workspace=_control_workspace(sandbox))
+
+
 def inspect_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> WritebackPreview:
-    baseline = json.loads(sandbox.baseline_path.read_text(encoding="utf-8"))
-    current = _workspace_hashes(sandbox.workspace)
-    unexpected = _unexpected_changes(baseline, current, sandbox.expected_outputs)
-    if unexpected:
+    issues = sandbox_change_issues(sandbox)
+    if issues:
         raise ValueError(
-            "Agent runtime changed files outside expected_outputs: " + ", ".join(unexpected[:20])
+            issues[0]
         )
+    sync_agent_outputs_to_control(task, sandbox)
+    workspace = _control_workspace(sandbox)
 
     missing: list[str] = []
     for relative in sandbox.expected_outputs:
-        if not (sandbox.workspace / Path(relative)).exists():
+        if not (workspace / Path(relative)).exists():
             missing.append(relative)
     if missing:
         raise FileNotFoundError("Agent runtime did not create expected outputs: " + ", ".join(missing))
@@ -173,7 +267,7 @@ def inspect_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Wri
     contracts = {item.path: item for item in task.execution_contract.outputs}
     changes: list[dict[str, object]] = []
     for relative in sandbox.expected_outputs:
-        source = sandbox.workspace / Path(relative)
+        source = workspace / Path(relative)
         target = task.resolve_project_path(relative)
         contract = contracts.get(relative)
         changes.append(
@@ -254,7 +348,7 @@ def apply_expected_outputs(task: TaskPackage, sandbox: SandboxManifest, preview:
     imported: list[str] = []
     try:
         for relative in sandbox.expected_outputs:
-            source = sandbox.workspace / Path(relative)
+            source = _control_workspace(sandbox) / Path(relative)
             target = task.resolve_project_path(relative)
             _copy_path_atomically(source, target)
             imported.append(relative)
@@ -327,14 +421,17 @@ def sandbox_from_run(run_root: Path) -> SandboxManifest:
     manifest_path = root / "run.json"
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     workspace = Path(str(payload["workspace"])).resolve()
+    control_workspace = Path(str(payload.get("control_workspace") or workspace)).resolve()
     return SandboxManifest(
         run_id=str(payload["run_id"]),
         run_root=root,
         workspace=workspace,
         prompt_path=Path(str(payload["prompt"])).resolve(),
         manifest_path=manifest_path,
-        baseline_path=root / "baseline.json",
+        baseline_path=root / ("agent-baseline.json" if (root / "agent-baseline.json").exists() else "baseline.json"),
         expected_outputs=tuple(str(item) for item in payload.get("expected_outputs") or []),
+        control_workspace=control_workspace,
+        agent_workspace=workspace,
     )
 
 
@@ -358,7 +455,7 @@ def capture_core_managed_outputs(task: TaskPackage, sandbox: SandboxManifest) ->
     captured: list[str] = []
     digests: dict[str, str] = {}
     for relative in task.core_managed_outputs:
-        source = sandbox.workspace / Path(relative)
+        source = _control_workspace(sandbox) / Path(relative)
         if not source.exists():
             continue
         _copy_path(source, protected_root / Path(relative))
@@ -382,7 +479,7 @@ def restore_core_managed_outputs(sandbox: SandboxManifest) -> tuple[str, ...]:
     restored: list[str] = []
     for relative in protected:
         source = protected_root / Path(relative)
-        target = sandbox.workspace / Path(relative)
+        target = _agent_workspace(sandbox) / Path(relative)
         if not source.exists():
             continue
         if _path_digest(source) == _path_digest(target):
@@ -412,7 +509,7 @@ def _render_agent_prompt(task: TaskPackage, *, reference_paths: tuple[str, ...])
 
 def sandbox_change_issues(sandbox: SandboxManifest) -> list[str]:
     baseline = json.loads(sandbox.baseline_path.read_text(encoding="utf-8"))
-    current = _workspace_hashes(sandbox.workspace)
+    current = _workspace_hashes(_agent_workspace(sandbox))
     unexpected = _unexpected_changes(baseline, current, sandbox.expected_outputs)
     return ["Agent runtime changed files outside expected_outputs: " + ", ".join(unexpected[:20])] if unexpected else []
 
@@ -435,6 +532,14 @@ def _unexpected_changes(
             continue
         unexpected.append(relative)
     return unexpected
+
+
+def _control_workspace(sandbox: SandboxManifest) -> Path:
+    return sandbox.control_workspace or sandbox.workspace
+
+
+def _agent_workspace(sandbox: SandboxManifest) -> Path:
+    return sandbox.agent_workspace or sandbox.workspace
 
 
 def _workspace_hashes(root: Path) -> dict[str, str]:

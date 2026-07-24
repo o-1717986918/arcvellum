@@ -581,14 +581,28 @@ def _review_mentions_candidate(payload: dict[str, object], rel_candidate: str, c
 
 
 def _unresolved_review_notes(payload: dict[str, object]) -> list[str]:
+    """Return findings that still require another prose decision.
+
+    ``style_notes`` is deliberately not included here.  The review schema keeps
+    it as an evidence ledger: a passing reviewer may record why a retained
+    image, rhythm choice, or punctuation pattern is justified.  Treating every
+    such observation as an unresolved finding makes a clean ``pass`` select a
+    new revision task, which changes the reviewed candidate and creates an
+    artificial review/revision loop.  Actual style defects belong in warnings,
+    revision actions, or ``style_adherence.deviations`` and remain blocking.
+    """
+
     notes: list[str] = []
     conclusion = str(payload.get("conclusion") or "").strip().lower()
     if conclusion in {"pass_with_notes", "revise_required", "reject"}:
         notes.append(f"conclusion={conclusion}")
-    for key in ("blocking_issues", "warnings", "revision_actions", "style_notes"):
+    for key in ("blocking_issues", "revision_actions"):
         value = payload.get(key)
         if isinstance(value, list) and value:
             notes.append(key)
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list) and any(_warning_requires_followup(item) for item in warnings):
+        notes.append("warnings")
     style = payload.get("style_adherence")
     if isinstance(style, dict):
         style_status = str(style.get("status") or "").strip().lower()
@@ -632,6 +646,33 @@ def _unresolved_review_notes(payload: dict[str, object]) -> list[str]:
     if not revision_ok:
         notes.append(f"revision_integrity.{revision_status}:{revision_message}")
     return notes
+
+
+def _warning_requires_followup(value: object) -> bool:
+    """Distinguish an unresolved warning from recorded low-risk evidence.
+
+    A pass gate stays strict by default: strings and unclassified warnings are
+    unresolved.  A review may, however, retain a below-threshold lint result
+    or an already-recorded waiver as useful evidence.  Those observations are
+    non-blocking only when the reviewer explicitly marks them so, or when a
+    structured low/info record uses one of the narrow, auditable resolutions
+    below.  This prevents a completed pass from re-entering revision merely
+    because the reviewer explained why it is safe to pass.
+    """
+
+    if not isinstance(value, dict):
+        return True
+    if value.get("blocks_pass") is False:
+        return False
+    severity = str(value.get("severity") or "").strip().lower()
+    resolution = str(value.get("resolution") or "").strip().lower()
+    if severity not in {"info", "low", "note"}:
+        return True
+    if resolution in {"noted_below_threshold", "waived", "not_required", "non_blocking", "non-blocking"}:
+        return False
+    text = " ".join(str(value.get(key) or "") for key in ("message", "detail", "description")).lower()
+    nonblocking_markers = ("不作为阻塞", "不阻塞", "低于阈值", "已登记豁免", "not blocking", "below threshold", "waived")
+    return not any(marker in text for marker in nonblocking_markers)
 
 
 def _human_decision_notes(payload: dict[str, object]) -> list[str]:

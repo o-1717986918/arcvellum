@@ -17,12 +17,15 @@ from .sandbox import (
     SandboxManifest,
     apply_expected_outputs,
     capture_core_managed_outputs,
+    control_sandbox_view,
     inspect_expected_outputs,
     load_writeback_preview,
+    materialize_agent_workspace,
     rollback_expected_outputs,
     restore_core_managed_outputs,
     sandbox_from_run,
     stage_task,
+    sync_agent_outputs_to_control,
     update_run_manifest,
 )
 from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
@@ -135,6 +138,7 @@ class AgentWorker:
                 "run_id": sandbox.run_id,
                 "run_root": str(sandbox.run_root),
                 "workspace": str(sandbox.workspace),
+                "control_workspace": str(sandbox.control_workspace or sandbox.workspace),
                 "project_root": str(task.project_root),
                 "runner_id": active_runtime,
                 "task_id": task.task_id,
@@ -160,7 +164,7 @@ class AgentWorker:
                 )
             self._emit("core.command_started", {"task_id": task.task_id})
             try:
-                command_result = self.bridge.execute_task_command(task.command, sandbox.workspace)
+                command_result = self.bridge.execute_task_command(task.command, sandbox.control_workspace or sandbox.workspace)
             except (RuntimeError, ValueError, FileNotFoundError) as exc:
                 update_run_manifest(
                     sandbox.manifest_path,
@@ -186,6 +190,9 @@ class AgentWorker:
             protected = capture_core_managed_outputs(task, sandbox)
             if protected:
                 self._emit("core.outputs_protected", {"task_id": task.task_id, "paths": list(protected)})
+            if task.execution_contract.execution_policy == "agent-required":
+                visible = materialize_agent_workspace(task, sandbox)
+                self._emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
             self._emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
         return task, sandbox, None
 
@@ -249,7 +256,10 @@ class AgentWorker:
                 normalized = canonicalize_task_outputs(task, sandbox)
                 if normalized:
                     self._emit("validation.canonicalized", {"changes": normalized})
-                return validate_task_outputs(task, sandbox)
+                synced = sync_agent_outputs_to_control(task, sandbox)
+                if synced:
+                    self._emit("agent.outputs_staged", {"task_id": task.task_id, "paths": list(synced)})
+                return validate_task_outputs(task, control_sandbox_view(sandbox))
 
             runtime_kwargs.update(
                 {
@@ -404,7 +414,10 @@ class AgentWorker:
         normalized = canonicalize_task_outputs(task, sandbox)
         if normalized:
             self._emit("validation.canonicalized", {"changes": normalized, "recovery": True})
-        preflight = validate_task_outputs(task, sandbox)
+        synced = sync_agent_outputs_to_control(task, sandbox)
+        if synced:
+            self._emit("agent.outputs_staged", {"task_id": task.task_id, "paths": list(synced), "recovery": True})
+        preflight = validate_task_outputs(task, control_sandbox_view(sandbox))
         if not preflight.passed:
             update_run_manifest(
                 sandbox.manifest_path,

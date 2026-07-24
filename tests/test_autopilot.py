@@ -14,7 +14,12 @@ from literary_engineering_studio.autopilot import (
     next_revision_count,
     normalize_policy,
 )
-from literary_engineering_studio.creative_steward import _decision_prompt, _parse_decision
+from literary_engineering_studio.creative_steward import (
+    _decision_evidence_packet,
+    _decision_prompt,
+    _has_declared_selection,
+    _parse_decision,
+)
 from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.project_manager import record_direction
 from literary_engineering_studio.worker import WorkerRunResult
@@ -140,6 +145,24 @@ class AutopilotTests(unittest.TestCase):
 
             self.assertEqual(resumed["status"], "running")
             self.assertEqual(resumed["finished_at"], "")
+            launch.assert_called_once_with(run["run_id"])
+
+    def test_full_auto_resume_requires_fresh_frontend_authorization(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(str(root), mode=policy["mode"], runtime="opencode", policy=policy)
+            store.update_autopilot_run(run["run_id"], status="paused", stop_reason="user-request")
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with self.assertRaisesRegex(ValueError, "明确确认授权"):
+                service.resume(run["run_id"])
+            with patch.object(service, "_launch") as launch:
+                resumed = service.resume(run["run_id"], authorized=True)
+
+            self.assertEqual(resumed["status"], "running")
             launch.assert_called_once_with(run["run_id"])
 
     def test_lease_renewal_reclaims_a_missing_own_lease(self):
@@ -279,6 +302,31 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(result["run"]["run_id"], run["run_id"])
             events = store.autopilot_events_since(run["run_id"])
             self.assertTrue(any(event["event"] == "autopilot.authorization_updated" for event in events))
+
+    def test_explicit_authorization_renewal_resets_a_revision_limit_window(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(str(root), mode="full_auto", runtime="opencode", policy=policy)
+            store.update_autopilot_run(
+                run["run_id"],
+                status="paused",
+                stop_reason="revision-limit",
+                consecutive_revisions=policy["limits"]["max_consecutive_revisions"],
+                last_error="自动创作已到达授权上限。",
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            service.save_policy(root, policy)
+
+            renewed = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(renewed["consecutive_revisions"], 0)
+            self.assertEqual(renewed["stop_reason"], "")
+            self.assertEqual(renewed["last_error"], "")
+            self.assertEqual(DelegationPolicy(renewed["policy"]).limit_reason(renewed), "")
+            event = next(item for item in reversed(store.autopilot_events_since(run["run_id"])) if item["event"] == "autopilot.authorization_updated")
+            self.assertTrue(event["data"]["revision_window_reset"])
 
     def test_runtime_failure_recovers_complete_sandbox_before_retrying(self):
         class RecoveringWorker:
@@ -453,6 +501,16 @@ class AutopilotTests(unittest.TestCase):
         self.assertTrue(payload["requires_human"])
         self.assertEqual(payload["human_reason"], "设定证据冲突")
 
+    def test_steward_selection_requires_the_exact_declared_option_id(self):
+        choice = {
+            "options": [
+                {"id": "choice.asset.approve", "label": "批准"},
+                {"id": "choice.asset.revise", "label": "修订"},
+            ]
+        }
+        self.assertTrue(_has_declared_selection({"selected_option": "choice.asset.approve"}, choice))
+        self.assertFalse(_has_declared_selection({"selected_option": "approve"}, choice))
+
     def test_steward_release_prompt_respects_explicit_delegation(self):
         prompt = _decision_prompt(
             {
@@ -465,6 +523,19 @@ class AutopilotTests(unittest.TestCase):
         )
         self.assertIn("already passed DelegationPolicy authorization", prompt)
         self.assertNotIn("or the decision is release approval", prompt)
+
+    def test_steward_prompt_is_bounded_by_embedded_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            (workspace / "reviews").mkdir()
+            (workspace / "reviews" / "candidate.json").write_text('{"status":"pass"}', encoding="utf-8")
+            choice = {"source_paths": ["reviews/candidate.json", "missing.md"]}
+            packet = _decision_evidence_packet(workspace, choice)
+            prompt = _decision_prompt(choice, "", packet)
+
+            self.assertIn('<source path="reviews/candidate.json">', packet)
+            self.assertIn('status="missing"', packet)
+            self.assertIn("Do not read files, call tools", prompt)
 
     def test_proactive_steward_direction_reaches_worker_sandbox_contract(self):
         class FakeWorker:

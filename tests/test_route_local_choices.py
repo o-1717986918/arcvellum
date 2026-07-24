@@ -61,6 +61,11 @@ class RouteLocalChoiceTests(unittest.TestCase):
             candidate = root / "characters" / "candidates" / "scene-0001-林正.json"
             candidate.parent.mkdir(parents=True)
             candidate.write_text('{"candidate_id":"scene-0001-林正"}\n', encoding="utf-8")
+            candidate.with_suffix(".md").write_text("# 林正\n", encoding="utf-8")
+            review_dir = root / "reviews" / "assets"
+            review_dir.mkdir(parents=True)
+            (review_dir / "scene-0001-林正_review.json").write_text('{"status":"pass"}\n', encoding="utf-8")
+            (review_dir / "scene-0001-林正_review.md").write_text("# 独立审查\n", encoding="utf-8")
             state_path = root / "workflow" / "runtime_choices" / "character-and-world-assets.json"
             state_path.parent.mkdir(parents=True)
             state_path.write_text(
@@ -88,6 +93,16 @@ class RouteLocalChoiceTests(unittest.TestCase):
             self.assertEqual(choice["choice_id"], repeated["choices"][0]["choice_id"])
             self.assertEqual(choice["target"]["target_id"], "scene-0001-林正")
             self.assertTrue(choice["target"]["candidate_sha256"])
+            self.assertEqual(
+                choice["source_paths"],
+                [
+                    "reviews/assets/scene-0001-林正_review.json",
+                    "reviews/assets/scene-0001-林正_review.md",
+                    "characters/candidates/scene-0001-林正.json",
+                    "characters/candidates/scene-0001-林正.md",
+                    "workflow/approvals/index.jsonl",
+                ],
+            )
             recorded = project_interaction.record_human_choice(
                 root,
                 {**choice, "selected": "approve", "rationale": "角色候选通过审查。", "materialize": True},

@@ -49,6 +49,7 @@ export const useAppStore = defineStore("app", () => {
   let bootstrapStream: EventStreamConnection | null = null;
   let workspaceStream: EventStreamConnection | null = null;
   let autopilotStream: EventStreamConnection | null = null;
+  let agentObservabilityStream: EventStreamConnection | null = null;
 
   const currentProject = computed(
     () => projects.value.find((item) => item.path === currentProjectPath.value) || bootstrap.value?.project || null,
@@ -143,7 +144,7 @@ export const useAppStore = defineStore("app", () => {
     readerManifest.value = manifest;
     projectProgress.value = snapshot.project_progress;
     autopilotStatus.value = snapshot.autopilot_status;
-    agentObservability.value = snapshot.agent_observability;
+    applyAgentObservability(snapshot.agent_observability);
     if (added.length) notice.value = `有 ${added.length} 节新正文进入阅读长卷。`;
   }
 
@@ -196,9 +197,16 @@ export const useAppStore = defineStore("app", () => {
 
   async function loadAgentObservability(): Promise<void> {
     if (!currentProjectPath.value) return;
-    agentObservability.value = await api<AgentObservability>(
+    applyAgentObservability(await api<AgentObservability>(
       `/agent-observability?${query({ project_root: currentProjectPath.value })}`,
-    );
+    ));
+  }
+
+  function applyAgentObservability(snapshot: AgentObservability | null): void {
+    agentObservability.value = snapshot;
+    if (snapshot?.status === "stalled") {
+      notice.value = "执行信号已停滞。作品没有被写回；请在推进仪表中选择暂停后继续，重新建立任务会话。";
+    }
   }
 
   async function loadReaderUnit(unitId: string): Promise<string> {
@@ -246,6 +254,13 @@ export const useAppStore = defineStore("app", () => {
         applyWorkspaceSnapshot(data as unknown as ProjectWorkspaceSnapshot, root);
       },
     );
+    agentObservabilityStream = connectEventStream(
+      `/agent-observability/stream?${query({ project_root: root, interval_seconds: 1 })}`,
+      (event, data) => {
+        if (event !== "agent.observability") return;
+        applyAgentObservability(data as unknown as AgentObservability);
+      },
+    );
     const activeRun = autopilotStatus.value?.run;
     if (activeRun?.status === "running") {
       autopilotStream = connectEventStream(
@@ -266,8 +281,10 @@ export const useAppStore = defineStore("app", () => {
   function stopProjectStreams(): void {
     workspaceStream?.close();
     autopilotStream?.close();
+    agentObservabilityStream?.close();
     workspaceStream = null;
     autopilotStream = null;
+    agentObservabilityStream = null;
   }
 
   function clearMessages(): void {

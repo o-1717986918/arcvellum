@@ -135,6 +135,7 @@ class AutopilotStartRequest(BaseModel):
 
 class AutopilotControlRequest(BaseModel):
     reason: str = "user-request"
+    authorized: bool = False
 
 
 class WritebackDecisionRequest(BaseModel):

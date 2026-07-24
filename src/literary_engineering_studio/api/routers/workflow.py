@@ -85,7 +85,7 @@ def build_workflow_router(deps: WorkflowRouterDependencies) -> APIRouter:
             autopilot_status = deps.autopilot.status(root)
             active_run = autopilot_status.get("run") if isinstance(autopilot_status.get("run"), dict) else {}
             if active_run.get("status") == "paused" and active_run.get("stop_reason") in {"human-decision-required", "steward-escalation"}:
-                resumed_run = deps.autopilot.resume(str(active_run.get("run_id") or ""))
+                resumed_run = deps.autopilot.resume(str(active_run.get("run_id") or ""), authorized=True)
         deps.lifecycle.live_events.publish(
             f"project:{root}",
             "human.choice_recorded",

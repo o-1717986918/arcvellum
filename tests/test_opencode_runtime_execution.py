@@ -75,6 +75,19 @@ class _RepairingValidator:
         return PreflightResult(True, ())
 
 
+class _StreamingFailureClient(_Client):
+    def messages(self, _session_id):
+        return [
+            {
+                "info": {
+                    "role": "assistant",
+                    "error": {"name": "UnknownError", "data": {"message": '"Streaming response failed"'}},
+                },
+                "parts": [],
+            }
+        ]
+
+
 class OpenCodeRuntimeExecutionTests(unittest.TestCase):
     def test_failed_preflight_is_repaired_in_the_same_session(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -119,6 +132,39 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
             finished = [data for event, data in events if event == "runner.session.finished"]
             self.assertEqual(finished[-1]["session_id"], "session-fixed")
             self.assertEqual(finished[-1]["status"], "complete")
+
+    def test_streaming_failure_is_presented_as_retryable_user_safe_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = root / "prompt.md"
+            prompt.write_text("执行正式任务", encoding="utf-8")
+            client = _StreamingFailureClient()
+            pool = _Pool(client)
+            events = []
+            runtime = OpenCodeRuntime({"model": "fixture/model", "models": {"worker": "fixture/model"}})
+            runtime.runtime_pool = pool
+
+            with patch(
+                "literary_engineering_studio.runtimes.opencode.locate_opencode",
+                return_value=Path("opencode.exe"),
+            ):
+                result = runtime.execute(
+                    workspace,
+                    prompt,
+                    run_root,
+                    timeout=10,
+                    event_sink=lambda event, data: events.append((event, data)),
+                )
+
+            self.assertEqual(result.status, "failed")
+            self.assertTrue(result.metadata["retryable"])
+            self.assertIn("自动重试", result.message)
+            finished = [data for event, data in events if event == "runner.session.finished"]
+            self.assertEqual(finished[-1]["reason"], "streaming_interrupted")
 
 
 if __name__ == "__main__":

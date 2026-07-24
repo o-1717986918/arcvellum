@@ -146,6 +146,56 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         "style/creative_quality_profile.json",
         "style/style-profile.md",
     }
+    if current_state == "candidate-review":
+        candidate_paths = [
+            relative
+            for relative in source_paths
+            if relative.startswith(("drafts/candidates/", "drafts/revisions/"))
+            and relative.endswith((".md", ".json"))
+        ]
+        review_minimum = [
+            *candidate_paths,
+            f"scenes/{scene_id}.yaml",
+            f"drafts/compositions/{scene_id}_composition_review.json",
+            f"branches/{scene_id}/branch_selection.md",
+            f"memory/context_packets/{scene_id}.md",
+            f"memory/context_packets/{scene_id}.trace.json",
+            "style/creative_quality_profile.json",
+            "style/style-profile.md",
+            "plot/word_budget/word_budget.json",
+        ]
+        return _unique([relative for relative in review_minimum if (root / relative).is_file()])
+
+    if current_state in {"candidate-revision", "static-revision"}:
+        # revise-scene receives these paths as explicit command arguments before
+        # the main Agent starts.  Keep them in the same curated set the sandbox
+        # stages, otherwise the CLI can generate an Agent task package that its
+        # own isolated workspace cannot execute.
+        revision_inputs = [
+            relative
+            for relative in source_paths
+            if (
+                relative.startswith(("drafts/candidates/", "drafts/scenes/", "reviews/agent/"))
+                or relative == f"reviews/{scene_id}-review.md"
+            )
+            and relative.endswith((".md", ".json"))
+        ]
+        revision_minimum = [
+            *revision_inputs,
+            f"scenes/{scene_id}.yaml",
+            f"drafts/compositions/{scene_id}_composition.md",
+            f"drafts/compositions/{scene_id}_composition.json",
+            f"drafts/compositions/{scene_id}_composition_review.json",
+            f"branches/{scene_id}/branch_selection.md",
+            f"memory/context_packets/{scene_id}.md",
+            f"memory/context_packets/{scene_id}.trace.json",
+            "plot/word_budget/word_budget.json",
+            "plot/rhythm_plan.json",
+            "style/creative_quality_profile.json",
+            "style/style-profile.md",
+        ]
+        return _unique([relative for relative in revision_minimum if (root / relative).is_file()])
+
     if current_state in prose_states:
         scene_path = _resolve_project_path(root, f"scenes/{scene_id}.yaml")
         scene_text = scene_path.read_text(encoding="utf-8", errors="ignore") if scene_path.is_file() else ""

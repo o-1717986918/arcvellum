@@ -104,8 +104,13 @@ def build_automation_router(deps: AutomationRouterDependencies) -> APIRouter:
         return call_handler(lambda: {"ok": True, "run": deps.autopilot.pause(run_id, reason=payload.reason)})
 
     @router.post("/autopilot/runs/{run_id}/resume")
-    def autopilot_resume(run_id: str):
-        return call_handler(lambda: {"ok": True, "run": deps.autopilot.resume(run_id)})
+    def autopilot_resume(run_id: str, payload: AutopilotControlRequest | None = None):
+        return call_handler(
+            lambda: {
+                "ok": True,
+                "run": deps.autopilot.resume(run_id, authorized=bool(payload and payload.authorized)),
+            }
+        )
 
     @router.get("/autopilot/runs/{run_id}/events")
     def autopilot_events(run_id: str, after: int = 0, limit: int = 300):

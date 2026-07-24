@@ -237,7 +237,7 @@ export interface AgentObservability {
   ok: boolean;
   schema: "arcvellum/agent-observability/v1" | "arcvellum/agent-observability/v2";
   project_root: string;
-  status: "active" | "idle";
+  status: "active" | "idle" | "stalled";
   active_task: {
     role: string;
     runtime: string;
@@ -257,6 +257,9 @@ export interface AgentObservability {
     tasks_completed: number;
     stalled_cycles: number;
     last_progress_at: string;
+    last_activity_at?: string;
+    stalled?: boolean;
+    stale_after_seconds?: number;
   } | null;
   services?: Array<{
     role: string;

@@ -104,6 +104,7 @@ def _public_message(event: str, data: dict[str, Any]) -> str:
             return {
                 "timeout": "会话等待模型响应超时，已安全停止。",
                 "preflight_failed": "产物未通过确定性预检，会话已停止并保留修订证据。",
+                "streaming_interrupted": "模型流式连接短暂中断，当前任务已保留并会按策略重试。",
                 "model_error": "模型返回未能形成可验收产物，会话已停止。",
                 "decision_error": "受托决定未形成有效结果，会话已停止。",
                 "advisor_error": "项目顾问未能完成本次答复。",

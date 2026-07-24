@@ -27,6 +27,7 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_errors,
     semantic_artifact_relative_path,
 )
+from literary_engineering_studio_engine.continuity_ledger import continuity_ledger_status
 from literary_engineering_studio_engine.flow_gates import branch_selection_status
 
 
@@ -37,7 +38,17 @@ def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Prefli
     for message in sandbox_change_issues(sandbox):
         issues.append(PreflightIssue("unexpected-change", "workspace", message, "撤销所有不属于 Allowed Outputs 的修改。"))
 
+    completion_outputs = {
+        contract.path
+        for contract in task.execution_contract.outputs
+        if contract.kind == "completion-evidence"
+    }
     for relative in task.expected_outputs:
+        # Lifecycle receipts are created by canonicalize_task_outputs after
+        # substantive Agent output exists.  They must never be presented as a
+        # missing file the Agent should repair by hand.
+        if relative in completion_outputs:
+            continue
         path = sandbox.workspace / relative
         if not path.exists():
             issues.append(PreflightIssue("missing-output", relative, "预期产物不存在。", "创建该产物并按 Output Contract 填写完整内容。"))
@@ -58,6 +69,7 @@ def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Prefli
     _validate_scene_revision_contract(task, sandbox, issues)
     _validate_source_extraction_revision(task, sandbox, issues)
     _validate_semantic_task_contract(task, sandbox, issues)
+    _validate_continuity_ledger_contract(task, sandbox, issues)
     _validate_branch_selection_contract(task, sandbox, issues)
     return PreflightResult(not issues, tuple(issues))
 
@@ -87,9 +99,94 @@ def _validate_semantic_task_contract(
                 "semantic-contract",
                 relative,
                 message,
-                "完成任务要求的 Agent 判断；保留已有有效内容，并修正 semantic artifact 的 schema、scene_id、列表字段与完成状态。",
+                _semantic_artifact_repair_instruction(current_state, relative),
             )
         )
+
+
+def _semantic_artifact_repair_instruction(current_state: str, relative: str) -> str:
+    """Give the repair turn an executable contract, not a schema-name hint."""
+
+    if current_state == "composition-agent-task":
+        return (
+            f"打开 `{relative}` 并替换 pending 模板。若编排确实合格，必须写入 "
+            '`status="complete"`、`verdict="pass"`、`ready_for_generation=true`、非空 `evidence_paths`、'
+            "非空 `findings`、`required_changes=[]`；保留既有 schema、scene_id、source_artifact 和 "
+            "composition_sha256。若不合格，不得伪造 pass，改为 needs_revision/revise_required 并列出具体修订项。"
+        )
+    if current_state == "state-agent-task":
+        return (
+            f"打开 `{relative}` 并替换 pending 模板。若状态补丁有充分正文/构图依据，必须写入 "
+            '`status="complete"`、`verdict="pass"`、`approval_recommendation="approve"`、非空 '
+            '`evidence_paths`、非空 `findings`、`required_changes=[]`；保留既有 schema、scene_id、'
+            "source_artifact 和 state_patch_sha256。不要自行创建 completion marker。若证据不足，使用 "
+            "needs_revision/revise_required/hold，并列出可执行的 required_changes。"
+        )
+    if current_state == "canon-agent-task":
+        return (
+            f"打开 `{relative}` 并替换 pending 模板。若 Canon 候选或无变化理由有充分证据，必须写入 "
+            '`status="complete"`、`verdict="pass"`、`approval_recommendation="approve"`、非空 '
+            '`evidence_paths`、非空 `findings`、`required_changes=[]`；保留既有 schema、scene_id、'
+            "source_artifact 和 canon_patch_sha256。不要自行创建 completion marker。若证据不足，使用 "
+            "needs_revision/revise_required/hold，并列出可执行的 required_changes。"
+        )
+    return "完成任务要求的 Agent 判断；保留已有有效内容，并修正 semantic artifact 的 schema、scene_id、列表字段、证据和完成状态。"
+
+
+def _validate_continuity_ledger_contract(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    issues: list[PreflightIssue],
+) -> None:
+    """Run the core ledger contract before any Agent output can be imported.
+
+    Continuity ledgers predate the generic semantic-artifact registry, so they
+    need their own bridge here. Without it a pending scaffold can pass Studio
+    preflight and fail only after formal writeback, leaving the user with a
+    misleading core-CLI error instead of an in-session repair turn.
+    """
+
+    current_state = str(task.current_state or task.payload.get("current_state") or "")
+    if current_state not in {"continuity-ledger-agent-task", "continuity-ledger-review"}:
+        return
+    scene_id = str(task.payload.get("scene_id") or "").strip()
+    if not scene_id:
+        return
+    review = current_state == "continuity-ledger-review"
+    passed, message, _payload = continuity_ledger_status(sandbox.workspace, scene_id, require_review=review)
+    if passed:
+        return
+    relative = (
+        f"reviews/continuity/{scene_id}_ledger_review.json"
+        if review
+        else f"plot/ledger_deltas/{scene_id}.json"
+    )
+    issues.append(
+        PreflightIssue(
+            "continuity-ledger-contract",
+            relative,
+            message,
+            _continuity_ledger_repair_instruction(scene_id, review=review),
+        )
+    )
+
+
+def _continuity_ledger_repair_instruction(scene_id: str, *, review: bool) -> str:
+    """Describe the missing editorial record without inviting a bypass."""
+
+    if review:
+        return (
+            f"重写 `reviews/continuity/{scene_id}_ledger_review.json` 的 pending 模板。保留 schema、scene_id、"
+            "delta_path 和精确 delta_sha256；以独立审查会话写入 `status=complete`、`verdict=pass`、非空 "
+            "findings、`required_changes=[]`。若 delta 有实质缺陷，不得伪造 pass，应写入可执行的 "
+            "required_changes；不要创建 completion receipt。"
+        )
+    return (
+        f"重写 `plot/ledger_deltas/{scene_id}.json`，不能保留 pending 初始化模板。保留 schema、scene_id 和 "
+        "source_draft；以已晋升正文为唯一证据。若新增/更新读者问题或承诺，写入非空 evidence_paths 与具体 "
+        "changes；若确实无变化，两个 changes 列表可为空，但必须写出具体 no_change_reason。完成后设置 "
+        "`status=complete`；不要编辑正式账本或创建 completion receipt。"
+    )
 
 
 def _validate_branch_selection_contract(

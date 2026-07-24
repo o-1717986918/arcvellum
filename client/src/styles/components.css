@@ -427,6 +427,12 @@
 .mode-selector strong, .mode-selector small { display: block; }
 .mode-selector strong { color: var(--ink-900); font-size: 11px; }
 .mode-selector small { margin-top: 5px; font-size: 9px; line-height: 1.55; }
+.mode-selector > button.pending { cursor: progress; opacity: .72; }
+.autopilot-mode-notice { display: flex; align-items: flex-start; gap: 9px; margin-top: 10px; padding: 10px 12px; color: var(--jade-800); background: color-mix(in srgb, var(--jade-100) 82%, transparent); border: 1px solid var(--jade-300); border-radius: 6px; }
+.autopilot-mode-notice > svg { flex: 0 0 auto; margin-top: 1px; }
+.autopilot-mode-notice strong, .autopilot-mode-notice small { display: block; }
+.autopilot-mode-notice strong { font-size: 10px; }
+.autopilot-mode-notice small { margin-top: 3px; color: var(--ink-600); font-size: 9px; line-height: 1.5; }
 .autopilot-console { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 15px; margin-top: 12px; padding: 16px; color: white; background: var(--moss-900); border-radius: 6px; }
 .autopilot-progress-mark { display: grid; place-items: center; width: 45px; height: 45px; color: #9cc9b8; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.1); border-radius: 50%; }
 .autopilot-progress-mark.running svg { animation: advisor-pulse 2.4s ease-in-out infinite; }

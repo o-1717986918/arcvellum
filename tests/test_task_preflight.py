@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import json
 import os
 import tempfile
@@ -9,12 +10,93 @@ from literary_engineering_studio.contracts import TASK_SCHEMA, TaskPackage, load
 from literary_engineering_studio.sandbox import SandboxManifest, stage_task
 from literary_engineering_studio.task_preflight import (
     COMPLETION_SCHEMA,
+    _semantic_artifact_repair_instruction,
     canonicalize_task_outputs,
     validate_task_outputs,
 )
 
 
 class TaskPreflightTests(unittest.TestCase):
+    def test_continuity_delta_pending_template_is_repaired_before_core_writeback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            draft = workspace / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("已晋升正文。", encoding="utf-8")
+            delta = workspace / "plot" / "ledger_deltas" / "scene_0001.json"
+            delta.parent.mkdir(parents=True)
+            delta.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/continuity-ledger-delta/v1",
+                        "status": "pending_agent_judgment",
+                        "scene_id": "scene_0001",
+                        "source_draft": "drafts/scenes/scene_0001.md",
+                        "source_draft_sha256": "",
+                        "writer_session_id": "",
+                        "evidence_paths": [],
+                        "reader_question_changes": [],
+                        "promise_changes": [],
+                        "no_change_reason": "",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0001-continuity-ledger-agent-task",
+                    "route": "scene-development",
+                    "scene_id": "scene_0001",
+                    "current_state": "continuity-ledger-agent-task",
+                    "task_type": "platform-agent-judgment",
+                    "execution_policy": "agent-required",
+                    "expected_outputs": ["plot/ledger_deltas/scene_0001.json"],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+            sandbox.baseline_path.write_text(
+                json.dumps(
+                    {"drafts/scenes/scene_0001.md": hashlib.sha256(draft.read_bytes()).hexdigest()}
+                ),
+                encoding="utf-8",
+            )
+
+            canonicalize_task_outputs(task, sandbox)
+            failed = validate_task_outputs(task, sandbox)
+            self.assertFalse(failed.passed)
+            issue = next(item for item in failed.issues if item.code == "continuity-ledger-contract")
+            self.assertIn("incomplete", issue.message)
+            self.assertIn("no_change_reason", issue.repair)
+
+            payload = json.loads(delta.read_text(encoding="utf-8"))
+            payload.update({"status": "complete", "no_change_reason": "本场没有新增或改变读者责任。"})
+            delta.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            canonicalize_task_outputs(task, sandbox)
+            self.assertTrue(validate_task_outputs(task, sandbox).passed)
+
+    def test_state_semantic_repair_instruction_names_every_terminal_field(self):
+        instruction = _semantic_artifact_repair_instruction(
+            "state-agent-task",
+            "characters/state_patches/scene_0001_state_patch_review.json",
+        )
+        self.assertIn('status="complete"', instruction)
+        self.assertIn('verdict="pass"', instruction)
+        self.assertIn('approval_recommendation="approve"', instruction)
+        self.assertIn("不要自行创建 completion marker", instruction)
+
     def test_roleplay_completed_status_alias_is_normalized_before_gate_validation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

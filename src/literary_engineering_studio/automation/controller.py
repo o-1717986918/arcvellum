@@ -101,10 +101,28 @@ class AutopilotService:
             runtime_window_started_at = _now()
             run_policy = {**policy, "runtime_window_started_at": runtime_window_started_at}
             renewed = self.store.update_autopilot_run_policy(active["run_id"], run_policy)
+            # A revision cap is deliberately a per-authorization safety window:
+            # its purpose is to stop an unattended run and request fresh human
+            # consent, not to permanently poison the run.  Without resetting
+            # this durable counter, the UI can successfully save and resume a
+            # renewed policy only for the controller to pause again before it
+            # is allowed to claim another task.
+            if str(active.get("stop_reason") or "") == "revision-limit":
+                renewed = self.store.update_autopilot_run(
+                    active["run_id"],
+                    consecutive_revisions=0,
+                    last_error="",
+                    stop_reason="",
+                )
             self.store.append_autopilot_event(
                 active["run_id"],
                 "autopilot.authorization_updated",
-                {"mode": policy["mode"], "limits": policy["limits"], "runtime_window_started_at": runtime_window_started_at},
+                {
+                    "mode": policy["mode"],
+                    "limits": policy["limits"],
+                    "runtime_window_started_at": runtime_window_started_at,
+                    "revision_window_reset": str(active.get("stop_reason") or "") == "revision-limit",
+                },
             )
             saved["run"] = renewed
         return saved
@@ -120,12 +138,15 @@ class AutopilotService:
         self._launch(run["run_id"])
         return run
 
-    def resume(self, run_id: str) -> dict[str, Any]:
+    def resume(self, run_id: str, *, authorized: bool = False) -> dict[str, Any]:
         run = self.store.read_autopilot_run(run_id)
         if run["status"] == "running":
             return run
         if run["status"] == "complete":
             raise ValueError("这次自动创作已经完成。")
+        run_policy = run.get("policy") if isinstance(run.get("policy"), dict) else {}
+        if str(run_policy.get("mode") or run.get("mode") or "") == "full_auto" and not authorized:
+            raise ValueError("全自动交付需要在推进仪表中明确确认授权后才能继续。")
         _validate_autopilot_project(Path(run["project_root"]), str(run.get("runtime") or ""))
         self.store.update_autopilot_run(
             run_id,
