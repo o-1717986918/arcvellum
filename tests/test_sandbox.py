@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.sandbox import (
@@ -14,6 +15,7 @@ from literary_engineering_studio.sandbox import (
     stage_task,
 )
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio.runtime.task_program import build_task_context, render_worker_program
 
 
 class SandboxTests(unittest.TestCase):
@@ -101,6 +103,46 @@ class SandboxTests(unittest.TestCase):
             rollback_expected_outputs(task, sandbox, imported)
             self.assertEqual(target.read_text(encoding="utf-8"), "旧正文。\n")
 
+    def test_mid_writeback_failure_restores_every_preexisting_output(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload["expected_outputs"] = [
+                "drafts/candidates/scene_0001.md",
+                "drafts/candidates/scene_0001.json",
+            ]
+            task.task_json_path.write_text(json.dumps(_enrich_task_payload(payload)), encoding="utf-8")
+            task = load_task_package(root, task.task_json_path)
+            first = root / "drafts/candidates/scene_0001.md"
+            second = root / "drafts/candidates/scene_0001.json"
+            first.parent.mkdir(parents=True)
+            first.write_text("旧正文。\n", encoding="utf-8")
+            second.write_text('{"old": true}\n', encoding="utf-8")
+            sandbox = stage_task(task, Path(runs), runtime="host-agent", run_id="run-atomic-failure")
+            (sandbox.workspace / "drafts/candidates/scene_0001.md").write_text("新正文。\n", encoding="utf-8")
+            (sandbox.workspace / "drafts/candidates/scene_0001.json").write_text('{"new": true}\n', encoding="utf-8")
+            preview = inspect_expected_outputs(task, sandbox)
+
+            from literary_engineering_studio import sandbox as sandbox_module
+
+            original = sandbox_module._copy_path_atomically
+            calls = 0
+
+            def fail_second(source, target):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise OSError("simulated second output failure")
+                return original(source, target)
+
+            with patch("literary_engineering_studio.sandbox._copy_path_atomically", side_effect=fail_second):
+                with self.assertRaises(OSError):
+                    apply_expected_outputs(task, sandbox, preview)
+
+            self.assertEqual(first.read_text(encoding="utf-8"), "旧正文。\n")
+            self.assertEqual(second.read_text(encoding="utf-8"), '{"old": true}\n')
+
     def test_exact_prompt_omits_host_manuals_but_keeps_domain_references(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
             root = Path(temporary)
@@ -129,6 +171,25 @@ class SandboxTests(unittest.TestCase):
             self.assertFalse((sandbox.workspace / "SKILL.md").exists())
             self.assertFalse((sandbox.workspace / "references/workflows.md").exists())
             self.assertTrue((sandbox.workspace / "docs/modules/domain-guide.md").is_file())
+
+    def test_worker_program_shows_curated_agent_sources_not_cli_dependency_folders(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = self._task(root)
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload["source_paths"] = ["scenes/scene_0001.yaml", "canon", "characters", "style"]
+            payload["agent_source_paths"] = ["scenes/scene_0001.yaml", "memory/context_packets/scene_0001.md"]
+            task.task_json_path.write_text(json.dumps(_enrich_task_payload(payload)), encoding="utf-8")
+            task = load_task_package(root, task.task_json_path)
+
+            context = build_task_context(task)
+            program = render_worker_program(task)
+
+            self.assertEqual(context["source_paths"], ["scenes/scene_0001.yaml", "memory/context_packets/scene_0001.md"])
+            self.assertEqual(context["workspace_dependency_paths"], ["scenes/scene_0001.yaml", "canon", "characters", "style"])
+            source_section = program.split("## Reference Material", 1)[0]
+            self.assertNotIn("`canon`", source_section)
+            self.assertIn("workspace_dependency_paths", program)
 
     def test_restores_cli_managed_outputs_after_agent_mutation(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:

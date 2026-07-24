@@ -103,14 +103,26 @@ export function connectEventStream(
   let controller: AbortController | null = null;
 
   const run = async () => {
+    let retryDelay = 500;
     while (active) {
       controller = new AbortController();
+      let receivedEvent = false;
       try {
-        await streamApi(path, { method: "GET", signal: controller.signal }, onEvent);
+        await streamApi(path, { method: "GET", signal: controller.signal }, (event, data) => {
+          receivedEvent = true;
+          retryDelay = 500;
+          onEvent(event, data);
+        });
       } catch (cause) {
         if (active && !(cause instanceof DOMException && cause.name === "AbortError")) onError?.(cause);
       }
-      if (active) await new Promise((resolve) => window.setTimeout(resolve, 750));
+      if (active) {
+        // A transient local sidecar restart should not create a fixed-rate
+        // retry storm.  Once an event arrives the normal fast cadence returns.
+        const jitter = Math.round(Math.random() * Math.min(250, retryDelay / 4));
+        await new Promise((resolve) => window.setTimeout(resolve, retryDelay + jitter));
+        retryDelay = receivedEvent ? 500 : Math.min(8_000, retryDelay * 2);
+      }
     }
   };
   void run();

@@ -121,12 +121,26 @@
         "properties": {
           "path": {"type": "string"},
           "kind": {"type": "string"},
+          "schema_name": {"type": "string"},
+          "consumed_by": {"type": "string"},
           "writeback_policy": {
             "enum": ["automatic", "preview-required", "approval-required", "none"]
           }
         },
         "additionalProperties": false
       }
+    },
+    "semantic_artifact": {
+      "type": "object",
+      "required": ["path", "kind", "schema_name", "consumed_by", "writeback_policy"],
+      "properties": {
+        "path": {"type": "string"},
+        "kind": {"type": "string"},
+        "schema_name": {"type": "string"},
+        "consumed_by": {"type": "string"},
+        "writeback_policy": {"enum": ["automatic", "preview-required", "approval-required", "none"]}
+      },
+      "additionalProperties": false
     },
     "command": {
       "type": "string"

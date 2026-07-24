@@ -144,6 +144,26 @@ class LongformMaterializerTests(unittest.TestCase):
             self.assertIn('title: "告别"', first)
             self.assertIn('chapter_id: "chapter_0001"', first)
 
+    def test_materializer_ignores_compact_scene_character_share_table(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_inputs(root)
+            inventory = root / "plot/candidates/scenes/word_budget_scene_inventory.md"
+            inventory.write_text(
+                inventory.read_text(encoding="utf-8").replace(
+                    "| scene_id | name | target_chars | function | participants | conflict | information_release | consequence | setup_payoff_role | rhythm_role | obligation |",
+                    "| SC-001 | 场景名 | 目标中文内容字符 | 功能 | 参与角色 | 冲突 | 信息释放 | 行动后果 | 伏笔设置/回收 | 节奏角色 | 读者义务 |",
+                )
+                + "\n## 字符计数\n\n| 场景 | 目标中文内容字符 | 占章节比 |\n"
+                + "| --- | --- | --- |\n| SC-001 | 1200 | 50% |\n| SC-002 | 1200 | 50% |\n",
+                encoding="utf-8",
+            )
+
+            result = materialize_longform_plan(root)
+
+            self.assertEqual(len(result.scene_paths), 2)
+            self.assertTrue((root / "scenes/scene_0001.yaml").is_file())
+
     def test_scoped_status_allows_a_staged_active_scene_without_copying_full_inventory(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

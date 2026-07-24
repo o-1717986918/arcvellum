@@ -11,12 +11,12 @@ from typing import Any, Callable
 
 from .advisor_snapshot import create_advisor_snapshot, project_hashes
 from .advisor_personas import active_persona
-from .agent_session_tracking import track_agent_session_event
-from .jobs import JobStore
-from .opencode_binary import locate_opencode
-from .opencode_server import OpenCodeServer
-from .process_manager import ProcessManager
-from .runtime_events import normalize_opencode_event
+from ..observability.agent_session_tracking import track_agent_session_event
+from ..jobs import JobStore
+from ..integrations.opencode.opencode_binary import locate_opencode
+from ..integrations.opencode.opencode_server import OpenCodeServer
+from ..process_manager import ProcessManager
+from ..observability.runtime_events import normalize_opencode_event
 
 
 ANSWER_SCHEMA = "arcvellum/advisor-answer/v0.2"

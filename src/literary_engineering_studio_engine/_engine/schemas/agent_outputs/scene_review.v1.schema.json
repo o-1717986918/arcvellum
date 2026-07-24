@@ -2,7 +2,7 @@
   "schema_id": "scene_review.v1",
   "schema_value": "literary-engineering-workbench/scene-review-agent/v1",
   "required": ["schema", "scene_id", "candidate_sha256", "conclusion", "summary", "blocking_issues", "warnings", "revision_actions", "character_logic", "canon_risks", "style_notes", "style_adherence", "word_budget_adherence", "reader_experience_adherence", "narrative_rhythm_adherence", "canon_writeback", "new_character_register", "revision_integrity", "source_paths"],
-  "recommended": ["agent_confidence", "next_gate", "creative_quality_profile"],
+  "recommended": ["agent_confidence", "next_gate", "creative_quality_profile", "reviewer_session_id"],
   "types": {
     "schema": "str",
     "scene_id": "str",
@@ -25,7 +25,8 @@
     "revision_integrity": "dict",
     "agent_confidence": "str",
     "next_gate": "str",
-    "creative_quality_profile": "dict"
+    "creative_quality_profile": "dict",
+    "reviewer_session_id": "str"
   },
   "enums": {
     "conclusion": ["pass", "pass_with_notes", "revise_required", "reject"]

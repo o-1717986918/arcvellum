@@ -3,12 +3,47 @@ import sqlite3
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.supervisor import WorkerSupervisor
 
 
 class DurableJobTests(unittest.TestCase):
+    def test_create_rolls_back_job_when_initial_event_write_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            with patch.object(store, "_append_event_tx", side_effect=RuntimeError("event write failed")):
+                with self.assertRaisesRegex(RuntimeError, "event write failed"):
+                    store.create({"project_root": "work"})
+
+            with store._connection() as connection:
+                count = connection.execute("SELECT COUNT(*) AS count FROM jobs").fetchone()["count"]
+            self.assertEqual(count, 0)
+
+    def test_claim_rolls_back_status_when_started_event_write_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            job = store.create({"project_root": "work"})
+            with patch.object(store, "_append_event_tx", side_effect=RuntimeError("event write failed")):
+                with self.assertRaisesRegex(RuntimeError, "event write failed"):
+                    store.claim(job["job_id"], "worker-one")
+
+            self.assertEqual(store.read(job["job_id"])["status"], "queued")
+            self.assertEqual(store.events_since(job["job_id"])[-1]["event"], "run.queued")
+
+    def test_project_lock_rolls_back_when_lock_event_write_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            job = store.create({"project_root": "work"})
+            with patch.object(store, "_append_event_tx", side_effect=RuntimeError("event write failed")):
+                with self.assertRaisesRegex(RuntimeError, "event write failed"):
+                    store.acquire_lock("project:work:route:scene", job["job_id"], "worker-one")
+
+            with store._connection() as connection:
+                count = connection.execute("SELECT COUNT(*) AS count FROM project_locks").fetchone()["count"]
+            self.assertEqual(count, 0)
+
     def test_database_migration_creates_backup(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "studio.sqlite3"

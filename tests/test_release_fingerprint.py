@@ -5,7 +5,7 @@ import unittest
 
 from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.release_fingerprint import release_candidate_fingerprint
-import literary_engineering_studio_engine.task_registry as task_registry
+import literary_engineering_studio_engine.export_release_route as export_release_route
 from literary_engineering_studio_engine.workflow_state import _export_package_step, _release_approval_step
 
 
@@ -46,7 +46,7 @@ class ReleaseFingerprintTests(unittest.TestCase):
             root = Path(temporary)
             manifest = _write_export(root)
             self.assertEqual(_export_package_step(root, "chapter_0001", manifest)["status"], "blocked")
-            self.assertTrue(task_registry._export_package_gate_errors(root, "chapter_0001"))
+            self.assertTrue(export_release_route._export_package_gate_errors(root, "chapter_0001"))
 
     def test_release_approval_becomes_stale_when_delivery_text_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -55,11 +55,11 @@ class ReleaseFingerprintTests(unittest.TestCase):
             fingerprint = release_candidate_fingerprint(root, "chapter_0001")
             record_workflow_approval(root, "release-chapter_0001", "approve", subject_sha256=fingerprint)
 
-            self.assertEqual(task_registry._release_approval_gate_errors(root, "chapter_0001"), [])
+            self.assertEqual(export_release_route._release_approval_gate_errors(root, "chapter_0001"), [])
             self.assertEqual(_release_approval_step(root, "release-chapter_0001", manifest)["status"], "pass")
 
             (root / "exports" / "chapter_0001" / "novel.md").write_text("# 第一章\n\n潮声退去了。\n", encoding="utf-8")
-            self.assertTrue(task_registry._release_approval_gate_errors(root, "chapter_0001"))
+            self.assertTrue(export_release_route._release_approval_gate_errors(root, "chapter_0001"))
             self.assertEqual(_release_approval_step(root, "release-chapter_0001", manifest)["status"], "missing")
 
     def test_manifest_timestamp_does_not_invalidate_release_content(self):

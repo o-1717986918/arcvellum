@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from literary_engineering_studio import core_read_models
 from literary_engineering_studio_engine import project_interaction
+from literary_engineering_studio_engine import project_interaction_choices
 from literary_engineering_studio_engine import workflow_state
 
 
@@ -24,7 +25,7 @@ class RouteLocalChoiceTests(unittest.TestCase):
                 )
 
             with patch.object(
-                project_interaction,
+                project_interaction_choices,
                 "build_workflow_dashboard",
                 side_effect=AssertionError("whole-project dashboard scan used"),
             ):
@@ -70,7 +71,7 @@ class RouteLocalChoiceTests(unittest.TestCase):
             )
 
             with patch.object(
-                project_interaction,
+                project_interaction_choices,
                 "build_workflow_state",
                 return_value=SimpleNamespace(json_path=state_path),
             ):
@@ -97,7 +98,7 @@ class RouteLocalChoiceTests(unittest.TestCase):
                 "scene-0001-林正",
             )
             with patch.object(
-                project_interaction,
+                project_interaction_choices,
                 "build_workflow_state",
                 return_value=SimpleNamespace(json_path=state_path),
             ):
@@ -130,7 +131,7 @@ class RouteLocalChoiceTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with patch.object(
-                project_interaction,
+                project_interaction_choices,
                 "_route_choice_actions",
                 return_value=([
                     {

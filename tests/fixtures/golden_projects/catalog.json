@@ -1,0 +1,11 @@
+{
+  "schema": "arcvellum/golden-project-catalog/v1",
+  "projects": [
+    {"id": "linear-mystery", "title": "雨钟疑案", "work_type": "novel", "target_length": 30000, "premise": "一名修钟匠追查每夜提前响起的钟。", "inject": "不是旧钟坏了——是有人在替它报时。"},
+    {"id": "multi-party-conflict", "title": "盐港三方", "work_type": "novel", "target_length": 60000, "premise": "港口税令迫使商会、渔民与巡防队重新站队。", "inject": "不是他们不愿谈判，而是每一方都要付出代价。"},
+    {"id": "historical-style", "title": "北城旧簿", "work_type": "pseudo-record", "target_length": 45000, "premise": "一份县衙旧簿记录了赈灾银的去向。", "inject": "不是账目遗漏。是有人把人名抹掉了。"},
+    {"id": "multi-volume-growth", "title": "远行者学会离开", "work_type": "novel", "target_length": 120000, "premise": "一名少年在五卷旅程中从控制同伴转向共同承担。", "inject": "不是胜利让他轻松——是代价终于找上门。"},
+    {"id": "dense-canon-world", "title": "浮城条约", "work_type": "novel", "target_length": 80000, "premise": "浮城的空气配给条例与旧条约同时失效。", "inject": "不是条例失灵，而是条约从来没有被签过。"},
+    {"id": "continuation-rewrite", "title": "岸线之后", "work_type": "novel", "target_length": 50000, "premise": "在已有短篇结尾之后，主角必须处理未被说明的离别。", "inject": "不是她忘了那封信——是她一直没敢拆开。"}
+  ]
+}

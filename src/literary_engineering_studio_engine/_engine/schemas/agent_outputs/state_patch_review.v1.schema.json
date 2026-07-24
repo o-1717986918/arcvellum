@@ -1,0 +1,9 @@
+{
+  "schema_id": "state_patch_review.v1",
+  "schema_value": "literary-engineering-workbench/state-patch-review/v1",
+  "required": ["schema", "scene_id", "status", "source_artifact", "state_patch_sha256", "evidence_paths", "verdict", "findings", "approval_recommendation", "required_changes"],
+  "types": {
+    "schema": "str", "scene_id": "str", "status": "str", "source_artifact": "str", "state_patch_sha256": "str", "evidence_paths": "list", "verdict": "str", "findings": "list", "approval_recommendation": "str", "required_changes": "list"
+  },
+  "enums": {"status": ["complete", "needs_revision", "blocked"], "verdict": ["pass", "revise_required", "blocked"], "approval_recommendation": ["approve", "hold", "reject"]}
+}

@@ -1,0 +1,9 @@
+{
+  "schema_id": "roleplay_result.v1",
+  "schema_value": "literary-engineering-workbench/roleplay-result/v1",
+  "required": ["schema", "scene_id", "status", "source_artifact", "evidence_paths", "character_actions", "world_consequences", "branch_pressures", "canon_risks", "writeback_candidates"],
+  "types": {
+    "schema": "str", "scene_id": "str", "status": "str", "source_artifact": "str", "evidence_paths": "list", "character_actions": "list", "world_consequences": "list", "branch_pressures": "list", "canon_risks": "list", "writeback_candidates": "list"
+  },
+  "enums": {"status": ["complete", "needs_revision", "blocked"]}
+}

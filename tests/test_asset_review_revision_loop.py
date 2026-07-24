@@ -10,7 +10,8 @@ from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, valida
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.asset_context import compact_asset_context_relpaths
-import literary_engineering_studio_engine.task_registry as task_registry
+import literary_engineering_studio_engine.asset_route as asset_route
+from literary_engineering_studio_engine.asset_workshop import _dry_payload, promote_candidate_asset
 from literary_engineering_studio_engine.workflow_state import _asset_state
 
 
@@ -52,6 +53,25 @@ def _review_payload(status: str = "revise_required") -> dict[str, object]:
 
 
 class AssetReviewRevisionLoopTests(unittest.TestCase):
+    def test_promotion_uses_candidate_path_as_the_canonical_machine_id(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "characters" / "candidates" / "protagonist-foundation.json"
+            candidate.parent.mkdir(parents=True)
+            payload = _dry_payload("character", "protagonist-foundation", root, "", "protagonist", None)
+            payload["candidate_id"] = "protagonist-foundation-v1"
+            payload["asset_type"] = "character_profile"
+            candidate.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            record_workflow_approval(root, "protagonist-foundation", "approve", subject_sha256=digest)
+
+            result = promote_candidate_asset(root, candidate, group="character", approval_run_id="protagonist-foundation")
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(result.manifest_path.name, "protagonist-foundation_promotion.json")
+            self.assertEqual(manifest["candidate_id"], "protagonist-foundation")
+            self.assertEqual(manifest["approval_run_id"], "protagonist-foundation")
+
     def test_approval_revise_routes_to_digest_bound_revision_task(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -83,7 +103,7 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
 
             state = _asset_state(root, {"candidate": candidate, "asset_type": "character", "creation_task": creation_task})
             self.assertEqual(state["current_step"], "asset-approval-revision")
-            payload = task_registry._build_asset_task_payload(root, "character-and-world-assets", state)
+            payload = asset_route.build_task_payload(root, "character-and-world-assets", state)
             self.assertEqual(payload["current_state"], "asset-approval-revision")
             self.assertEqual(payload["candidate_sha256_before_revision"], digest)
             self.assertIn("workflow/approvals/index.jsonl", payload["source_paths"])
@@ -193,8 +213,8 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
             (review_dir / "protagonist_review.md").write_text("# 审查\n\n需要修订。\n", encoding="utf-8")
             write_agent_completion_marker(task_path, root=root, handled_by="reviewer")
 
-            recorded = task_registry._asset_review_gate_errors(root, "protagonist", require_pass=False)
-            approval = task_registry._asset_review_gate_errors(root, "protagonist", require_pass=True)
+            recorded = asset_route._asset_review_gate_errors(root, "protagonist", require_pass=False)
+            approval = asset_route._asset_review_gate_errors(root, "protagonist", require_pass=True)
 
             self.assertEqual(recorded, [])
             self.assertTrue(any("status must be pass" in item for item in approval))
@@ -344,13 +364,13 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
 
             before = hashlib.sha256(candidate.read_bytes()).hexdigest()
             unchanged_task = {"candidate_sha256_before_revision": before}
-            errors = task_registry._asset_revision_gate_errors(root, unchanged_task, candidate, "protagonist")
+            errors = asset_route._asset_revision_gate_errors(root, unchanged_task, candidate, "protagonist")
             self.assertTrue(any("did not change" in item for item in errors))
 
             payload = _candidate_payload()
             payload["psychology"] = {"fear": "再次迟疑", "moral_line": "即使受罚也不伪造证据"}
             candidate.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            self.assertEqual(task_registry._asset_revision_gate_errors(root, unchanged_task, candidate, "protagonist"), [])
+            self.assertEqual(asset_route._asset_revision_gate_errors(root, unchanged_task, candidate, "protagonist"), [])
 
 
 if __name__ == "__main__":

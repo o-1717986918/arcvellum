@@ -75,13 +75,20 @@ class OutputContract:
     path: str
     kind: str
     writeback_policy: str
+    schema_name: str = ""
+    consumed_by: str = ""
 
     def as_dict(self) -> dict[str, str]:
-        return {
+        result = {
             "path": self.path,
             "kind": self.kind,
             "writeback_policy": self.writeback_policy,
         }
+        if self.schema_name:
+            result["schema_name"] = self.schema_name
+        if self.consumed_by:
+            result["consumed_by"] = self.consumed_by
+        return result
 
 
 @dataclass(frozen=True)
@@ -155,6 +162,13 @@ class TaskPackage:
     @property
     def expected_outputs(self) -> tuple[str, ...]:
         return tuple(str(item) for item in self.payload.get("expected_outputs") or [])
+
+    @property
+    def semantic_artifact(self) -> dict[str, str]:
+        value = self.payload.get("semantic_artifact")
+        if not isinstance(value, dict):
+            return {}
+        return {key: str(value.get(key) or "") for key in ("path", "kind", "schema_name", "consumed_by", "writeback_policy")}
 
     @property
     def core_managed_outputs(self) -> tuple[str, ...]:
@@ -303,6 +317,18 @@ def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:
             raise ValueError(f"task package field must be a list: {field}")
     if "output_contracts" in payload:
         _parse_output_contracts(payload["output_contracts"])
+    if "semantic_artifact" in payload:
+        semantic = payload["semantic_artifact"]
+        if not isinstance(semantic, dict):
+            raise ValueError("task package semantic_artifact must be an object")
+        path = str(semantic.get("path") or "").strip()
+        if not path or path not in {str(item) for item in payload.get("expected_outputs") or []}:
+            raise ValueError("task package semantic_artifact path must be an expected output")
+        for field in ("kind", "schema_name", "consumed_by"):
+            if not str(semantic.get(field) or "").strip():
+                raise ValueError(f"task package semantic_artifact.{field} must not be empty")
+        if str(semantic.get("writeback_policy") or "") not in {"automatic", "preview-required", "approval-required", "none"}:
+            raise ValueError("task package semantic_artifact.writeback_policy is invalid")
     prompt_asset = payload.get("prompt_asset")
     if prompt_asset is not None:
         if not isinstance(prompt_asset, dict):
@@ -389,5 +415,9 @@ def _parse_output_contracts(values: list[Any]) -> tuple[OutputContract, ...]:
         policy = str(value.get("writeback_policy") or "").strip()
         if not path or not kind or policy not in {"automatic", "preview-required", "approval-required", "none"}:
             raise ValueError("invalid task package output contract")
-        parsed.append(OutputContract(str(normalize_relative_path(path)), kind, policy))
+        schema_name = str(value.get("schema_name") or "").strip()
+        consumed_by = str(value.get("consumed_by") or "").strip()
+        if bool(schema_name) != bool(consumed_by):
+            raise ValueError("semantic output contracts require both schema_name and consumed_by")
+        parsed.append(OutputContract(str(normalize_relative_path(path)), kind, policy, schema_name, consumed_by))
     return tuple(parsed)

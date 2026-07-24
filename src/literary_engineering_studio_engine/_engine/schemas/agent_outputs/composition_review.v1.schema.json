@@ -1,0 +1,9 @@
+{
+  "schema_id": "composition_review.v1",
+  "schema_value": "literary-engineering-workbench/composition-review/v1",
+  "required": ["schema", "scene_id", "status", "source_artifact", "composition_sha256", "evidence_paths", "verdict", "findings", "required_changes", "ready_for_generation"],
+  "types": {
+    "schema": "str", "scene_id": "str", "status": "str", "source_artifact": "str", "composition_sha256": "str", "evidence_paths": "list", "verdict": "str", "findings": "list", "required_changes": "list", "ready_for_generation": "bool"
+  },
+  "enums": {"status": ["complete", "needs_revision", "blocked"], "verdict": ["pass", "revise_required", "blocked"]}
+}

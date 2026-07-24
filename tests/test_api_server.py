@@ -49,6 +49,25 @@ class ApiServerTests(unittest.TestCase):
         connections = self.client.get("/model-connections").json()
         self.assertEqual(connections["managed_by"], "agent-runner")
 
+    def test_health_exposes_desktop_startup_nonce_only_after_authentication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env = {
+                "LES_API_TOKEN": "test-desktop-bootstrap-token",
+                "LES_STARTUP_NONCE": "test-startup-nonce",
+                "LES_CONFIG_PATH": str(root / "config.json"),
+                "LES_DATA_ROOT": str(root / "data"),
+            }
+            with patch.dict(os.environ, env):
+                with TestClient(create_app(self.config)) as desktop:
+                    self.assertEqual(desktop.get("/health").status_code, 401)
+                    response = desktop.get(
+                        "/health",
+                        headers={"Authorization": "Bearer test-desktop-bootstrap-token"},
+                    )
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()["startup_nonce"], "test-startup-nonce")
+
     def test_bootstrap_endpoint_defers_model_catalog_until_settings(self):
         service = self.client.app.state.bootstrap
         service._catalog_loader = lambda _config: {

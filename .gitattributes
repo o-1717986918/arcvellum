@@ -1,0 +1,11 @@
+# Keep executable project contracts stable across Windows developer machines
+# and Linux CI runners.  Binary assets remain untouched.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.exe binary

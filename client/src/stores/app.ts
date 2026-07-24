@@ -18,6 +18,7 @@ import type {
 } from "@/types/api";
 
 interface ProjectWorkspaceSnapshot {
+  project_root?: string;
   dashboard: DashboardResponse;
   library: LibraryResponse;
   delivery: DeliveryResponse;
@@ -119,15 +120,21 @@ export const useAppStore = defineStore("app", () => {
 
   async function refreshWorkspace(): Promise<void> {
     if (!currentProjectPath.value) return;
+    const requestedRoot = currentProjectPath.value;
     error.value = "";
     const snapshot = await api<ProjectWorkspaceSnapshot>(
-      `/project/workspace?${query({ project_root: currentProjectPath.value })}`,
+      `/project/workspace?${query({ project_root: requestedRoot })}`,
     );
-    applyWorkspaceSnapshot(snapshot);
+    // Requests from a project that was just closed or switched must never
+    // repaint the current workbench after their response finally arrives.
+    if (requestedRoot !== currentProjectPath.value) return;
+    applyWorkspaceSnapshot(snapshot, requestedRoot);
     startProjectStreams();
   }
 
-  function applyWorkspaceSnapshot(snapshot: ProjectWorkspaceSnapshot): void {
+  function applyWorkspaceSnapshot(snapshot: ProjectWorkspaceSnapshot, expectedRoot = currentProjectPath.value): void {
+    if (expectedRoot !== currentProjectPath.value) return;
+    if (snapshot.project_root && snapshot.project_root !== currentProjectPath.value) return;
     const manifest = snapshot.reader_manifest;
     const added = manifest?.delta?.initial ? [] : manifest?.delta?.added || [];
     dashboard.value = snapshot.dashboard;
@@ -236,7 +243,7 @@ export const useAppStore = defineStore("app", () => {
       `/project/workspace/stream?${query({ project_root: root, interval_seconds: 2 })}`,
       (event, data) => {
         if (event !== "workspace.snapshot") return;
-        applyWorkspaceSnapshot(data as unknown as ProjectWorkspaceSnapshot);
+        applyWorkspaceSnapshot(data as unknown as ProjectWorkspaceSnapshot, root);
       },
     );
     const activeRun = autopilotStatus.value?.run;

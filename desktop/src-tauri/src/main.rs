@@ -1,12 +1,17 @@
 use std::{
-    net::{TcpListener, TcpStream},
+    fs,
+    io::{Read, Write},
+    net::TcpStream,
     sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
 
 use tauri::{path::BaseDirectory, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use tauri_plugin_shell::{process::{CommandChild, CommandEvent}, ShellExt};
+use tauri_plugin_shell::{
+    process::{CommandChild, CommandEvent},
+    ShellExt,
+};
 use uuid::Uuid;
 
 struct StudioSidecar(Mutex<Option<CommandChild>>);
@@ -19,20 +24,68 @@ fn emit_startup_error(window: &WebviewWindow, message: &str) {
     let _ = window.eval(&script);
 }
 
-fn free_port() -> Result<u16, Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    Ok(listener.local_addr()?.port())
-}
-
-fn wait_for_server(port: u16, timeout: Duration) -> bool {
+fn wait_for_server(port: u16, token: &str, startup_nonce: &str, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
+    let expected_nonce = format!("\"startup_nonce\":\"{}\"", startup_nonce);
     while Instant::now() < deadline {
-        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            return true;
+        if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) {
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+            let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+            let request = format!(
+                "GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nConnection: close\r\n\r\n"
+            );
+            if stream.write_all(request.as_bytes()).is_ok() {
+                let mut response = String::new();
+                if stream.read_to_string(&mut response).is_ok()
+                    && response.contains(" 200 ")
+                    && response.contains(&expected_nonce)
+                {
+                    return true;
+                }
+            }
         }
         thread::sleep(Duration::from_millis(150));
     }
     false
+}
+
+fn wait_for_ready_file(
+    path: &std::path::Path,
+    token: &str,
+    startup_nonce: &str,
+    timeout: Duration,
+) -> Option<u16> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
+                let port = payload
+                    .get("port")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0) as u16;
+                let is_expected = payload
+                    .get("application_id")
+                    .and_then(|value| value.as_str())
+                    == Some("arcvellum-studio")
+                    && payload
+                        .get("protocol_version")
+                        .and_then(|value| value.as_str())
+                        == Some("arcvellum-sidecar/v1")
+                    && payload
+                        .get("startup_nonce")
+                        .and_then(|value| value.as_str())
+                        == Some(startup_nonce);
+                if is_expected
+                    && port > 0
+                    && wait_for_server(port, token, startup_nonce, Duration::from_secs(4))
+                {
+                    return Some(port);
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(90));
+    }
+    None
 }
 
 fn main() {
@@ -50,10 +103,10 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
-            let port = free_port()?;
-            let port_arg = port.to_string();
+            let port_arg = "0".to_string();
             let parent_pid = std::process::id().to_string();
             let token = Uuid::new_v4().simple().to_string();
+            let startup_nonce = Uuid::new_v4().simple().to_string();
             let projects_root = app
                 .path()
                 .document_dir()
@@ -61,13 +114,18 @@ fn main() {
                 .join("ArcVellum")
                 .join("Works");
             let _ = std::fs::create_dir_all(&projects_root);
+            let runtime_root = projects_root.parent().unwrap_or(&projects_root).join(".runtime");
+            let _ = std::fs::create_dir_all(&runtime_root);
+            let ready_file = runtime_root.join(format!("sidecar-{}.json", startup_nonce));
+            let _ = std::fs::remove_file(&ready_file);
+            let ready_arg = ready_file.to_string_lossy().to_string();
             let main_window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("ArcVellum")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(980.0, 680.0)
                 .initialization_script(&format!(
-                    "window.__LES_API_TOKEN = '{}'; window.__LES_API_BASE = 'http://127.0.0.1:{}';",
-                    token, port
+                    "window.__LES_API_TOKEN = '{}'; window.__LES_API_BASE = ''; window.__ARCVELLUM_BACKEND_READY = false;",
+                    token
                 ))
                 .build()?;
             let opencode = app
@@ -82,10 +140,13 @@ fn main() {
                     "127.0.0.1",
                     "--port",
                     &port_arg,
+                    "--ready-file",
+                    &ready_arg,
                     "--parent-pid",
                     &parent_pid,
                 ])
                 .env("LES_API_TOKEN", &token)
+                .env("LES_STARTUP_NONCE", &startup_nonce)
                 .env("LES_PROJECTS_ROOT", &projects_root)
                 .env("LES_OPENCODE_EXECUTABLE", opencode)
                 .spawn()?;
@@ -124,11 +185,14 @@ fn main() {
                     }
                 }
             });
+            let readiness_token = token.clone();
+            let readiness_nonce = startup_nonce.clone();
             thread::spawn(move || {
-                if wait_for_server(port, Duration::from_secs(45)) {
-                    let _ = main_window.eval(
-                        "window.dispatchEvent(new CustomEvent('arcvellum:backend-ready'));",
+                if let Some(port) = wait_for_ready_file(&ready_file, &readiness_token, &readiness_nonce, Duration::from_secs(45)) {
+                    let script = format!(
+                        "window.__LES_API_BASE = 'http://127.0.0.1:{port}'; window.__ARCVELLUM_BACKEND_READY = true; window.dispatchEvent(new CustomEvent('arcvellum:backend-ready'));"
                     );
+                    let _ = main_window.eval(&script);
                 } else {
                     emit_startup_error(
                         &main_window,
@@ -142,7 +206,10 @@ fn main() {
         .expect("failed to build ArcVellum");
 
     app.run(|app, event| {
-        if matches!(event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
+        if matches!(
+            event,
+            tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+        ) {
             if let Some(state) = app.try_state::<StudioSidecar>() {
                 if let Ok(mut guard) = state.0.lock() {
                     if let Some(child) = guard.take() {

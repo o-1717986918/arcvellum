@@ -74,7 +74,12 @@ class WorkerIntegrationTests(unittest.TestCase):
                 )
             self.assertEqual(result.status, "complete")
             self.assertEqual(result.runtime, "deterministic-engine")
-            self.assertTrue((project / "plot" / "word_budget" / "word_budget.json").is_file())
+            # Longform planning now starts with the candidate story
+            # architecture.  A word budget is intentionally unavailable until
+            # that architecture receives independent review.
+            self.assertTrue((project / "plot" / "story_architecture.candidate.json").is_file())
+            self.assertTrue((project / "plot" / "story_architecture.agent_tasks.md").is_file())
+            self.assertFalse((project / "plot" / "word_budget" / "word_budget.json").exists())
 
     def test_prepares_real_core_task_for_host_agent(self):
         config = default_config()
@@ -100,7 +105,9 @@ class WorkerIntegrationTests(unittest.TestCase):
             self.assertTrue((sandbox.workspace / "_task" / "execution_contract.json").is_file())
             self.assertTrue((sandbox.workspace / "TASK_CONTEXT.json").is_file())
             self.assertTrue((sandbox.workspace / "workflow" / "studio" / "user_directions.md").is_file())
-            self.assertTrue((sandbox.workspace / "plot" / "word_budget" / "word_budget.json").is_file())
+            self.assertTrue((sandbox.workspace / "plot" / "story_architecture.candidate.json").is_file())
+            self.assertTrue((sandbox.workspace / "plot" / "story_architecture.agent_tasks.md").is_file())
+            self.assertFalse((project / "plot" / "story_architecture.candidate.json").exists())
             self.assertFalse((project / "plot" / "word_budget" / "word_budget.json").exists())
             manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(manifest["missing_sources"], [])

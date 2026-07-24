@@ -8,7 +8,7 @@ from literary_engineering_studio.contracts import TASK_SCHEMA, load_task_package
 from literary_engineering_studio.sandbox import stage_task
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, validate_task_outputs
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-import literary_engineering_studio_engine.task_registry as task_registry
+from literary_engineering_studio_engine.review_audit_route import _review_audit_blueprint_for_state
 
 
 def _canon_review(conclusion: str = "revise_required") -> dict[str, object]:
@@ -92,7 +92,7 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
             (project / "reviews" / "canon_lint.json").write_text(json.dumps(_lint_payload(), ensure_ascii=False), encoding="utf-8")
             (project / "reviews" / "canon_lint.md").write_text("# Canon Lint\n", encoding="utf-8")
 
-            blueprint = task_registry._review_audit_blueprint_for_state(project, "canon-review-pass", "repair")
+            blueprint = _review_audit_blueprint_for_state(project, "canon-review-pass", "repair")
             self.assertEqual(blueprint["repair_targets"], ["canon/world_rules.yaml"])
             before = hashlib.sha256(target.read_bytes()).hexdigest()
             task_json = self._write_task(

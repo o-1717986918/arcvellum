@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -6,7 +7,14 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from literary_engineering_studio.config import default_config
-from literary_engineering_studio.opencode_binary import bundle_manifest, locate_opencode
+from literary_engineering_studio.opencode_binary import (
+    _write_installation_receipt,
+    bundle_manifest,
+    ensure_opencode_integrity,
+    install_pinned_opencode,
+    locate_opencode,
+    verify_opencode,
+)
 from literary_engineering_studio.opencode_client import OpenCodeClient, OpenCodeEndpoint, split_model
 from literary_engineering_studio.opencode_control import disconnect_provider
 from literary_engineering_studio.opencode_profiles import advisor_profile, steward_profile, worker_profile, write_profile
@@ -26,6 +34,72 @@ class OpenCodeFoundationTests(unittest.TestCase):
             executable = Path(temporary) / "opencode-fixture.exe"
             executable.write_bytes(b"fixture")
             self.assertEqual(locate_opencode({"executable": str(executable)}), executable.resolve())
+
+    def test_installation_receipt_detects_tampered_binary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            executable = Path(temporary) / "opencode.exe"
+            executable.write_bytes(b"fixture")
+            manifest = bundle_manifest()
+            with patch("literary_engineering_studio.opencode_binary.current_target", return_value="windows-x64-baseline"):
+                _write_installation_receipt(executable, manifest, "windows-x64-baseline")
+                verified = verify_opencode(executable)
+                self.assertTrue(verified["verified"])
+                executable.write_bytes(b"tampered")
+                self.assertEqual(verify_opencode(executable)["verification_state"], "receipt-mismatch")
+                with self.assertRaisesRegex(RuntimeError, "integrity verification failed"):
+                    ensure_opencode_integrity(executable)
+
+    def test_build_time_receipt_is_not_treated_as_a_tamper_event(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            executable = Path(temporary) / "opencode.exe"
+            executable.write_bytes(b"fixture")
+            (Path(temporary) / "opencode-installation.json").write_text(
+                json.dumps(
+                    {
+                        "status": "build-time-receipt-required",
+                        "version": "1.18.3",
+                        "target": "windows-x64-baseline",
+                        "executable": "opencode.exe",
+                        "binary_sha256": "BUILD_TIME_RECEIPT_REQUIRED",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("literary_engineering_studio.opencode_binary.current_target", return_value="windows-x64-baseline"):
+                verification = ensure_opencode_integrity(executable)
+            self.assertEqual(verification["verification_state"], "build-time-receipt-required")
+
+    def test_install_replaces_unrecorded_build_cache_with_verified_receipt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive_path = root / "fixture.zip"
+            with __import__("zipfile").ZipFile(archive_path, "w") as archive:
+                archive.writestr("opencode.exe", b"verified fixture")
+            manifest = {
+                "version": "fixture",
+                "targets": {
+                    "windows-x64-baseline": {
+                        "archive": "fixture.zip",
+                        "url": "https://example.invalid/fixture.zip",
+                        "sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+                        "executable": "opencode.exe",
+                    }
+                },
+            }
+            destination = root / "expanded"
+            destination.mkdir()
+            (destination / "opencode.exe").write_bytes(b"unrecorded cache")
+            with (
+                patch("literary_engineering_studio.opencode_binary.bundle_manifest", return_value=manifest),
+                patch("literary_engineering_studio.opencode_binary.current_target", return_value="windows-x64-baseline"),
+                patch("literary_engineering_studio.opencode_binary.urlopen") as download,
+            ):
+                result = install_pinned_opencode(destination)
+                verification = verify_opencode(destination / "opencode.exe")
+            self.assertEqual(result["status"], "installed")
+            self.assertTrue(verification["verified"])
+            self.assertEqual((destination / "opencode.exe").read_bytes(), b"verified fixture")
+            download.assert_not_called()
 
     def test_worker_and_advisor_profiles_enforce_capabilities(self):
         worker = worker_profile("opencode/big-pickle")

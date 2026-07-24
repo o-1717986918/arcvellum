@@ -1,0 +1,173 @@
+"""Stable task payload facade for the formal scene-development route."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import re
+
+from ...scene_route_blueprints import _blueprint_for_state
+from ...scene_route_gates import (
+    _candidate_review_gate_errors,
+    _composition_gate_errors,
+    _state_gate_validation,
+)
+from ...scene_route_support import _file_sha256, _static_review_conclusion, _unique
+from ...semantic_task_contracts import semantic_artifact_contract
+from ...task_paths import (
+    TASK_SCHEMA,
+    normalize_relative_path as _normalize_rel,
+    now as _now,
+    resolve_project_path as _resolve_project_path,
+    task_id as _task_id,
+)
+
+
+def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) -> dict[str, object]:
+    scene_id = str(scene_state.get("scene_id") or "")
+    scene_rel = str(scene_state.get("scene") or f"scenes/{scene_id}.yaml")
+    current_state = str(scene_state.get("current_step") or "")
+    next_action = str(scene_state.get("next_action") or "")
+    blueprint = _blueprint_for_state(root, scene_id, scene_rel, current_state, next_action)
+    task_id = _task_id(route, scene_id, current_state)
+    expected_outputs = _unique([_normalize_rel(item) for item in blueprint["expected_outputs"]])
+    source_paths = _unique([_normalize_rel(item) for item in blueprint["source_paths"]])
+    word_target, word_minimum, word_maximum = _scene_word_count_contract(root, scene_rel, blueprint)
+    payload = {
+        "schema": TASK_SCHEMA,
+        "task_id": task_id,
+        "status": "issued",
+        "created_at": _now(),
+        "route": route,
+        "scene_id": scene_id,
+        "scene": scene_rel,
+        "current_state": current_state,
+        "task_type": blueprint["task_type"],
+        "prompt_asset_id": blueprint["prompt_asset_id"],
+        "command": blueprint["command"],
+        "required_reading": [
+            "SKILL.md", "AGENTS.md", "agentread.yaml", "references/agent-run-protocol.md",
+            "references/cli-run-protocol.md", "references/punctuation-standard.md",
+        ],
+        "source_paths": source_paths,
+        "context_trace": blueprint.get("context_trace", ""),
+        "hard_constraints": blueprint["hard_constraints"],
+        "style_constraints": blueprint["style_constraints"],
+        "word_count_target": word_target,
+        "word_count_min": word_minimum,
+        "word_count_max": word_maximum,
+        "agent_source_paths": _agent_reading_paths(root, source_paths, current_state=current_state, scene_id=scene_id),
+        "expected_outputs": expected_outputs,
+        "submission_command": f"python -m literary_engineering_studio_engine task-submit <project> --task-id {task_id} --from <artifact>",
+        "completion_command": f"python -m literary_engineering_studio_engine task-complete <project> --task-id {task_id}",
+        "validation_gates": blueprint["validation_gates"],
+        "forbidden_shortcuts": [
+            "Do not hand-write same-named formal files to bypass the documented command.",
+            "Do not use debug/bypass flags such as --allow-unreviewed, --allow-review-notes, --include-blocked, --allow-unapproved, --allow-missing-composition, --allow-unselected-composition, --allow-recommended-branch, or --allow-missing-branch.",
+            "Do not treat this task as complete until task-submit and task-complete have succeeded.",
+            "Do not let subagents draft, revise, polish, expand, or finalize creative body text.",
+            "Do not write API keys or provider secrets into the work project.",
+        ],
+        "next_allowed_states": blueprint["next_allowed_states"],
+    }
+    for key in ("candidate", "revision_source"):
+        if blueprint.get(key):
+            payload[key] = blueprint[key]
+    if blueprint.get("scene_character_assets"):
+        payload["scene_character_assets"] = blueprint["scene_character_assets"]
+    if blueprint.get("core_managed_outputs"):
+        payload["core_managed_outputs"] = [str(item) for item in blueprint["core_managed_outputs"]]
+    semantic = semantic_artifact_contract(current_state, scene_id)
+    if semantic is not None:
+        payload["semantic_artifact"] = semantic
+    if current_state in {"candidate-revision", "static-revision"} and blueprint.get("revision_source"):
+        source = _resolve_project_path(root, str(blueprint["revision_source"]))
+        if source.is_file():
+            payload["candidate_sha256_before_revision"] = _file_sha256(source)
+    return payload
+
+
+def _scene_word_count_contract(root: Path, scene_rel: str, blueprint: dict[str, object]) -> tuple[int, int, int]:
+    """Carry the formal scene budget into every task package.
+
+    The CLI gate already reads these values from scene YAML.  Repeating them in
+    the Agent contract keeps the writing task from seeing a meaningless zero
+    while preserving any route-specific explicit override.
+    """
+
+    text = _resolve_project_path(root, scene_rel).read_text(encoding="utf-8", errors="ignore")
+
+    def value(key: str, fallback: object) -> int:
+        match = re.search(rf"(?m)^\s*{re.escape(key)}:\s*['\"]?([0-9][0-9,_]*)", text)
+        raw = match.group(1) if match else fallback
+        try:
+            return max(0, int(str(raw or 0).replace(",", "").replace("_", "")))
+        except (TypeError, ValueError):
+            return 0
+
+    return (
+        value("word_count_target", blueprint.get("word_count_target", 0)),
+        value("word_count_min", blueprint.get("word_count_min", 0)),
+        value("word_count_max", blueprint.get("word_count_max", 0)),
+    )
+
+
+def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: str, scene_id: str) -> list[str]:
+    """Separate CLI dependency staging from the main Agent's bounded reading list.
+
+    Formal commands may need broad folders in their isolated workspace.  Those
+    folders are implementation dependencies, not an invitation for a prose
+    Agent to recursively inspect every world, character, or archive file.
+    Context packets and the exact task artifacts carry the focused evidence.
+    """
+
+    prose_states = {
+        "candidate-generation-provenance",
+        "generation-agent-task",
+        "candidate-review",
+        "agent-review-task",
+        "candidate-revision",
+        "static-review",
+        "static-revision",
+    }
+    prose_minimum = {
+        "project.yaml",
+        f"scenes/{scene_id}.yaml",
+        f"memory/context_packets/{scene_id}.md",
+        f"memory/context_packets/{scene_id}.trace.json",
+        f"branches/{scene_id}/roleplay_result.json",
+        f"branches/{scene_id}/branch_manifest.json",
+        f"branches/{scene_id}/branch_selection.md",
+        f"drafts/compositions/{scene_id}_composition.md",
+        f"drafts/compositions/{scene_id}_composition.json",
+        f"drafts/compositions/{scene_id}_composition_review.json",
+        "plot/outline.md",
+        "plot/word_budget/word_budget.json",
+        "plot/rhythm_plan.json",
+        "style/creative_quality_profile.json",
+        "style/style-profile.md",
+    }
+    if current_state in prose_states:
+        scene_path = _resolve_project_path(root, f"scenes/{scene_id}.yaml")
+        scene_text = scene_path.read_text(encoding="utf-8", errors="ignore") if scene_path.is_file() else ""
+        chapter_match = re.search(r"(?m)^\s*(?:chapter_obligation_id|chapter_id):\s*['\"]?([^'\"\n#]+)", scene_text)
+        if chapter_match:
+            prose_minimum.add(f"plot/chapter_obligations/{chapter_match.group(1).strip().strip(chr(34)).strip(chr(39))}.json")
+        return _unique([relative for relative in prose_minimum if (root / relative).is_file()])
+
+    curated: list[str] = []
+    for relative in source_paths:
+        path = _resolve_project_path(root, relative)
+        if path.is_dir():
+            continue
+        curated.append(relative)
+    for relative in ("style/creative_quality_profile.json", "style/style-profile.md"):
+        if (root / relative).is_file():
+            curated.append(relative)
+    return _unique(curated)
+
+
+build_task_payload = _build_task_payload
+blueprint_for_state = _blueprint_for_state
+validate_task = _state_gate_validation
+composition_gate_errors = _composition_gate_errors
+candidate_review_gate_errors = _candidate_review_gate_errors

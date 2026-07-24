@@ -7,7 +7,7 @@ import unittest
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.canon_evolver import apply_canon_patch
-import literary_engineering_studio_engine.task_registry as task_registry
+from literary_engineering_studio_engine.review_audit_route import build_task_payload
 from literary_engineering_studio_engine.workflow_state import _review_audit_state
 
 
@@ -57,7 +57,7 @@ class CanonPatchRouteTests(unittest.TestCase):
             awaiting = _review_audit_state(root)
             self.assertEqual(awaiting["current_step"], "canon-patch-approval")
             self.assertEqual(awaiting["patch_id"], patch.stem)
-            approval_task = task_registry._build_review_audit_task_payload(root, "review-and-audit", awaiting)
+            approval_task = build_task_payload(root, "review-and-audit", awaiting)
             self.assertEqual(approval_task["task_type"], "human-approval-boundary")
 
             digest = hashlib.sha256(patch.read_bytes()).hexdigest()
@@ -81,7 +81,7 @@ class CanonPatchRouteTests(unittest.TestCase):
 
             state = _review_audit_state(root)
             self.assertEqual(state["current_step"], "canon-patch-revision")
-            task = task_registry._build_review_audit_task_payload(root, "review-and-audit", state)
+            task = build_task_payload(root, "review-and-audit", state)
             self.assertEqual(task["task_type"], "platform-agent-revision")
             self.assertIn(patch.relative_to(root).as_posix(), task["repair_targets"])
             self.assertEqual(task["repair_target_sha256_before_revision"][patch.relative_to(root).as_posix()], digest)

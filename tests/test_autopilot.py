@@ -142,6 +142,22 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(resumed["finished_at"], "")
             launch.assert_called_once_with(run["run_id"])
 
+    def test_lease_renewal_reclaims_a_missing_own_lease(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: test\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(str(root), mode=policy["mode"], runtime="opencode", policy=policy)
+            service = AutopilotService({"application": {"data_root": str(root), "lease_seconds": 90}}, store)
+            owner = "controller-a"
+
+            self.assertTrue(store.acquire_autopilot_lease(run["run_id"], owner))
+            store.release_autopilot_lease(run["run_id"], owner)
+
+            self.assertEqual(service._renew_or_reclaim_lease(run["run_id"], owner), "reclaimed")
+            self.assertTrue(store.renew_autopilot_lease(run["run_id"], owner))
+
     def test_repeated_complete_without_formal_change_pauses_instead_of_spinning(self):
         class EmptyCompleteWorker:
             def __init__(self, config, **kwargs):

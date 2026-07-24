@@ -39,7 +39,10 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    # Uvicorn requires valid standard streams during startup.  On Windows the
+    # Tauri shell starts this sidecar with CREATE_NO_WINDOW, so retaining the
+    # console subsystem keeps Uvicorn reliable without exposing a terminal.
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
