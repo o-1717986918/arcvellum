@@ -66,6 +66,12 @@ jobs:
           python -m PyInstaller --noconfirm --clean packaging/studio_sidecar.spec
           New-Item -ItemType Directory -Force -Path desktop/src-tauri/binaries | Out-Null
           Copy-Item -Force dist/literary-engineering-studio-sidecar.exe desktop/src-tauri/binaries/literary-engineering-studio-sidecar-x86_64-pc-windows-msvc.exe
+          python -m literary_engineering_studio opencode-install --destination build/vendor/opencode-v1.18.3/expanded
+          New-Item -ItemType Directory -Force -Path desktop/src-tauri/resources | Out-Null
+          Copy-Item -Force build/vendor/opencode-v1.18.3/expanded/opencode.exe desktop/src-tauri/resources/opencode.exe
+          Copy-Item -Force build/vendor/opencode-v1.18.3/expanded/opencode-installation.json desktop/src-tauri/resources/opencode-installation.json
+          Copy-Item -Force src/literary_engineering_studio/vendor/OPENCODE-NOTICE.md desktop/src-tauri/resources/OPENCODE-NOTICE.md
+          Copy-Item -Force src/literary_engineering_studio/vendor/OPENCODE-LICENSE.txt desktop/src-tauri/resources/OPENCODE-LICENSE.txt
       - name: Check Tauri shell compilation against the frozen resource
         shell: pwsh
         run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
