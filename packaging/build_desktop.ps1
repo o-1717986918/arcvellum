@@ -124,7 +124,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v0.95 strengthens the formal literary workflow, task-contract reliability, narrative rhythm and continuity evidence, modular core boundaries, and the immersive Narrative Orrery."
+        --notes "ArcVellum v0.95.1 fixes duplicate task-render receipt expiry, hardens CI packaging contracts, and improves repository maintenance safeguards."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location
