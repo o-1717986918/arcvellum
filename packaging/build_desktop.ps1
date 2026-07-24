@@ -30,6 +30,21 @@ function Assert-NativeSuccess([string]$Step) {
     }
 }
 
+function Invoke-CmdWithRetry([string]$Command, [string]$Step, [int]$Attempts = 3) {
+    for ($attempt = 1; $attempt -le $Attempts; $attempt += 1) {
+        cmd /c $Command
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        if ($attempt -eq $Attempts) {
+            throw "$Step failed with exit code $LASTEXITCODE after $Attempts attempts"
+        }
+        $delay = 10 * $attempt
+        Write-Warning "$Step failed with exit code $LASTEXITCODE; retrying in $delay seconds ($attempt/$Attempts)."
+        Start-Sleep -Seconds $delay
+    }
+}
+
 function Assert-BundleTargetsAvailable {
     $BundleDir = Join-Path $TauriRoot "target\release\bundle\nsis"
     if (-not (Test-Path -LiteralPath $BundleDir)) { return }
@@ -115,8 +130,8 @@ try {
         --binary $SidecarTarget `
         --manifest $SidecarProvenance
     Assert-NativeSuccess "Frozen sidecar provenance verification"
-    cmd /c npm run desktop:build
-    Assert-NativeSuccess "Tauri desktop build"
+    # Tauri fetches NSIS helper binaries on first use. Retry transient upstream 5xx failures.
+    Invoke-CmdWithRetry -Command "npm run desktop:build" -Step "Tauri desktop build"
     $StudioVersion = python -c "from literary_engineering_studio import __version__; print(__version__)"
     Assert-NativeSuccess "Read Studio version"
     python (Join-Path $Root "packaging\build_update_manifest.py") `
