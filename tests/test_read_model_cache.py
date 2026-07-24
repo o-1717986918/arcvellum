@@ -2,7 +2,9 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest import mock
 
+from literary_engineering_studio import read_model_cache
 from literary_engineering_studio.read_model_cache import ReadModelCache
 
 
@@ -43,6 +45,21 @@ class ReadModelCacheTests(unittest.TestCase):
             time.sleep(0.12)
             self.assertEqual(cache.get("dashboard", project, build)["value"], 1)
             self.assertEqual(len(calls), 1)
+
+    def test_does_not_deep_scan_again_before_ttl_when_root_signature_is_stable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: stable\n", encoding="utf-8")
+            cache = ReadModelCache(ttl_seconds=30)
+            with mock.patch.object(
+                read_model_cache,
+                "project_revision_fingerprint",
+                wraps=read_model_cache.project_revision_fingerprint,
+            ) as fingerprint:
+                cache.get("dashboard", project, lambda: {"value": 1})
+                calls_after_first_read = fingerprint.call_count
+                cache.get("dashboard", project, lambda: {"value": 2})
+                self.assertEqual(fingerprint.call_count, calls_after_first_read)
 
 
 if __name__ == "__main__":

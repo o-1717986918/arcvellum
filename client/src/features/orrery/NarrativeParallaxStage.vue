@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NarrativeParallaxRenderer, type StageAnchor } from "@/features/orrery/engine/parallaxRenderer";
-import { DEFAULT_PARALLAX_VIEW, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
+import { copyParallaxView, DEFAULT_PARALLAX_VIEW, isSameParallaxView, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
 
 const props = defineProps<{
@@ -226,8 +226,7 @@ function resetStaticCamera(): void {
   staticCameraReady = false;
   staticDrag = null;
   staticOrbit = null;
-  staticView.yaw = DEFAULT_PARALLAX_VIEW.yaw;
-  staticView.pitch = DEFAULT_PARALLAX_VIEW.pitch;
+  copyParallaxView(staticView, DEFAULT_PARALLAX_VIEW);
 }
 
 function hashNode(value: string): number {
@@ -322,8 +321,7 @@ function moveStaticDrag(event: PointerEvent): void {
   if (staticOrbit?.pointerId === event.pointerId) {
     event.preventDefault();
     const nextView = parallaxViewFromDrag(staticOrbit.view, event.clientX - staticOrbit.clientX, event.clientY - staticOrbit.clientY);
-    staticView.yaw = nextView.yaw;
-    staticView.pitch = nextView.pitch;
+    copyParallaxView(staticView, nextView);
     recenterStaticView(staticOrbit.pivot);
     emitStaticAnchors();
     return;
@@ -364,10 +362,9 @@ function resetView(): void {
     renderer.resetView();
     return;
   }
-  if (!staticProjection.value || (staticView.yaw === 0 && staticView.pitch === 0)) return;
+  if (!staticProjection.value || isSameParallaxView(staticView, DEFAULT_PARALLAX_VIEW)) return;
   const pivot = staticViewPivot();
-  staticView.yaw = DEFAULT_PARALLAX_VIEW.yaw;
-  staticView.pitch = DEFAULT_PARALLAX_VIEW.pitch;
+  copyParallaxView(staticView, DEFAULT_PARALLAX_VIEW);
   recenterStaticView(pivot);
   emitStaticAnchors();
 }

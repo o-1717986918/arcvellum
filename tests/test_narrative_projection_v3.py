@@ -77,9 +77,27 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         scene = next(node for node in projection["nodes"] if node["node_id"] == "scene:scene_0001")
         self.assertEqual(scene["world_hint"]["grammar"], "braid")
         self.assertIn(scene["detail_level"], {"near", "mid", "far"})
+        self.assertIn(scene["completion_state"], {"completed", "active", "planned", "blocked"})
         self.assertNotIn("x", scene)
         self.assertNotIn("y", scene)
         self.assertGreaterEqual(projection["summary"]["cluster_count"], 1)
+
+    def test_book_completion_state_comes_from_formal_scene_coverage_and_active_target(self):
+        active = self._projection(level="book", grammar="spine")
+        chapter = next(node for node in active["nodes"] if node["type"] == "chapter")
+        self.assertEqual(chapter["completion_state"], "active")
+
+        self.reader = {
+            "units": [{
+                "chapter_id": "chapter_0001",
+                "coverage": ["scene_0001", "scene_0002"],
+                "chinese_content_chars": 3800,
+            }],
+            "total_chinese_content_chars": 3800,
+        }
+        completed = self._projection(level="book", grammar="spine")
+        chapter = next(node for node in completed["nodes"] if node["type"] == "chapter")
+        self.assertEqual(chapter["completion_state"], "completed")
 
     def test_detail_levels_keep_the_whole_book_on_one_scene_river(self):
         library = {"sections": {key: list(value) if isinstance(value, list) else value for key, value in self.library["sections"].items()}}

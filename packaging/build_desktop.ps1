@@ -22,6 +22,7 @@ $SidecarSource = Join-Path $Root "dist\literary-engineering-studio-sidecar.exe"
 $SidecarTarget = Join-Path $BinaryDir "literary-engineering-studio-sidecar-$TargetTriple.exe"
 $SidecarProvenance = Join-Path $Root "build\sidecar-provenance.json"
 $OpenCodeSource = Join-Path $Root "build\vendor\opencode-v1.18.3\expanded\opencode.exe"
+$OpenCodeReceipt = Join-Path (Split-Path $OpenCodeSource) "opencode-installation.json"
 
 function Assert-NativeSuccess([string]$Step) {
     if ($LASTEXITCODE -ne 0) {
@@ -60,6 +61,8 @@ try {
         python -m pip install "pyinstaller==6.21.0"
         Assert-NativeSuccess "PyInstaller installation"
     }
+    python (Join-Path $Root "scripts\verify_version_sync.py")
+    Assert-NativeSuccess "Version synchronization check"
     if (-not $SkipNodeInstall -or -not (Test-Path (Join-Path $Root "node_modules"))) {
         cmd /c npm install
         Assert-NativeSuccess "Node dependency installation"
@@ -67,6 +70,9 @@ try {
     if (-not (Test-Path $OpenCodeSource)) {
         python -m literary_engineering_studio opencode-install --destination (Split-Path $OpenCodeSource)
         Assert-NativeSuccess "OpenCode installation"
+    }
+    if (-not (Test-Path $OpenCodeReceipt)) {
+        throw "Pinned OpenCode installation receipt is missing. Remove the vendor directory and run opencode-install again."
     }
 
     cmd /c npm run client:build
@@ -84,6 +90,7 @@ try {
         --manifest $SidecarProvenance
     Assert-NativeSuccess "Frozen sidecar provenance write"
     Copy-Item -Force -LiteralPath $OpenCodeSource -Destination (Join-Path $ResourceDir "opencode.exe")
+    Copy-Item -Force -LiteralPath $OpenCodeReceipt -Destination (Join-Path $ResourceDir "opencode-installation.json")
     Copy-Item -Force -LiteralPath (Join-Path $Root "src\literary_engineering_studio\vendor\OPENCODE-NOTICE.md") -Destination (Join-Path $ResourceDir "OPENCODE-NOTICE.md")
     Copy-Item -Force -LiteralPath (Join-Path $Root "src\literary_engineering_studio\vendor\OPENCODE-LICENSE.txt") -Destination (Join-Path $ResourceDir "OPENCODE-LICENSE.txt")
 
@@ -117,7 +124,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v0.9 adds the 2.5D Narrative Orrery, compact spatial instruments, formal rhythm observability, and real delivery progress streaming."
+        --notes "ArcVellum v0.95 strengthens the formal literary workflow, task-contract reliability, narrative rhythm and continuity evidence, modular core boundaries, and the immersive Narrative Orrery."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

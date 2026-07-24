@@ -13,7 +13,7 @@ from typing import Any
 from collections.abc import Callable, Sequence
 
 from ..config import default_data_root
-from ..opencode_binary import bundle_manifest, locate_opencode
+from ..opencode_binary import bundle_manifest, ensure_opencode_integrity, locate_opencode
 from ..opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
 from ..runtime_events import normalize_opencode_event
@@ -37,6 +37,10 @@ class OpenCodeRuntime(AgentRuntime):
         if executable is None:
             return RuntimeAvailability(self.runtime_id, False, "", "pinned OpenCode binary is not installed")
         try:
+            verification = ensure_opencode_integrity(executable)
+        except RuntimeError as exc:
+            return RuntimeAvailability(self.runtime_id, False, str(executable), str(exc))
+        try:
             completed = run_hidden(
                 [str(executable), "--version"],
                 text=True,
@@ -50,7 +54,10 @@ class OpenCodeRuntime(AgentRuntime):
             return RuntimeAvailability(self.runtime_id, False, str(executable), f"version probe failed: {exc}")
         version = (completed.stdout.strip() or completed.stderr.strip()).splitlines()[0]
         expected = str(bundle_manifest()["version"])
+        integrity = str(verification.get("verification_state") or "")
         detail = version if version == expected else f"{version}; pinned version is {expected}"
+        if integrity != "receipt-verified":
+            detail += f"; integrity={integrity}"
         return RuntimeAvailability(self.runtime_id, completed.returncode == 0, str(executable), detail)
 
     def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
@@ -101,6 +108,7 @@ class OpenCodeRuntime(AgentRuntime):
         executable = locate_opencode(self.settings)
         if executable is None:
             raise RuntimeError("pinned OpenCode binary is not installed")
+        ensure_opencode_integrity(executable)
         models = self.settings.get("models") if isinstance(self.settings.get("models"), dict) else {}
         model = str(models.get("worker") or self.settings.get("worker_model") or self.settings.get("model") or "").strip()
         if "/" not in model:
@@ -128,6 +136,17 @@ class OpenCodeRuntime(AgentRuntime):
         first_text_ms = 0
         first_tool_ms = 0
         usage_summary: dict[str, Any] = {}
+        activity_lock = threading.Lock()
+        last_activity_at = execution_started
+
+        def mark_activity() -> None:
+            nonlocal last_activity_at
+            with activity_lock:
+                last_activity_at = time.monotonic()
+
+        def last_activity() -> float:
+            with activity_lock:
+                return last_activity_at
 
         def emit(name: str, data: dict[str, Any]) -> None:
             _append_event(events_path, name, data)
@@ -176,6 +195,9 @@ class OpenCodeRuntime(AgentRuntime):
                 try:
                     for raw in client.events(event_stop):
                         for name, data in normalize_opencode_event(raw, session_id=session_id, tool_states=tool_states):
+                            event_session = str(data.get("session_id") or "")
+                            if not event_session or event_session == session_id:
+                                mark_activity()
                             if name in {"agent.message.delta", "tool.started"} and not first_public_event:
                                 first_public_event = True
                                 first_public_event_ms = round((time.monotonic() - execution_started) * 1000)
@@ -202,15 +224,48 @@ class OpenCodeRuntime(AgentRuntime):
             event_thread.start()
             prompt = self.load_execution_prompt(prompt_path)
             client.prompt_async(session_id, text=prompt, model=model, agent="literary-worker")
+            mark_activity()
             emit("runner.session.started", {"runner_id": self.runtime_id, "session_id": session_id, "model": model})
             deadline = time.monotonic() + max(1, int(timeout))
-            wait_status = _wait_for_session(client, session_id, deadline, cancellation)
+            session_idle_timeout = max(30, int(self.settings.get("session_idle_timeout_seconds") or 240))
+            wait_status = _wait_for_session(
+                client,
+                session_id,
+                deadline,
+                cancellation,
+                idle_timeout=session_idle_timeout,
+                last_activity=last_activity,
+            )
             if wait_status == "cancelled":
                 emit("run.stopped", {"session_id": session_id, "reason": "cancelled"})
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "cancelled"})
                 return RuntimeResult(self.runtime_id, "cancelled", None, self.build_command(workspace), output_path, "runtime cancelled")
             if wait_status == "timeout":
                 client.abort(session_id)
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "timeout"})
                 return RuntimeResult(self.runtime_id, "timeout", None, self.build_command(workspace), output_path, f"timed out after {timeout}s")
+            if wait_status == "idle_timeout":
+                client.abort(session_id)
+                restarted = self.runtime_pool.invalidate(lease, reason="session-idle-timeout") if lease is not None and self.runtime_pool is not None else False
+                emit(
+                    "runner.session.finished",
+                    {
+                        "session_id": session_id,
+                        "model": model,
+                        "status": "failed",
+                        "reason": "idle_timeout",
+                        "idle_timeout_seconds": session_idle_timeout,
+                        "service_restarted": restarted,
+                    },
+                )
+                return RuntimeResult(
+                    self.runtime_id,
+                    "timeout",
+                    None,
+                    self.build_command(workspace),
+                    output_path,
+                    f"session produced no activity for {session_idle_timeout}s",
+                )
 
             repairs = 0
             final_preflight = None
@@ -226,7 +281,14 @@ class OpenCodeRuntime(AgentRuntime):
                         messages = client.messages(session_id)
                         assistant_text, _ = _assistant_result(messages)
                         output_path.write_text(assistant_text, encoding="utf-8")
-                        emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "preflight_failed"})
+                        emit(
+                            "runner.session.finished",
+                            {"session_id": session_id, "model": model, "status": "failed", "reason": "preflight_failed"},
+                        )
+                        emit(
+                            "runner.process.completed",
+                            {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "preflight_failed"},
+                        )
                         return RuntimeResult(
                             self.runtime_id,
                             "preflight_failed",
@@ -241,10 +303,27 @@ class OpenCodeRuntime(AgentRuntime):
                     emit("repair.started", {"attempt": repairs, "issue_count": payload.get("issue_count", 0), "session_id": session_id})
                     client.prompt_async(session_id, text=repair_prompt, model=model, agent="literary-worker")
                     repair_deadline = time.monotonic() + min(300, max(60, int(timeout) // 3))
-                    wait_status = _wait_for_session(client, session_id, repair_deadline, cancellation)
+                    mark_activity()
+                    wait_status = _wait_for_session(
+                        client,
+                        session_id,
+                        repair_deadline,
+                        cancellation,
+                        idle_timeout=session_idle_timeout,
+                        last_activity=last_activity,
+                    )
                     if wait_status != "completed":
                         client.abort(session_id)
                         status = "cancelled" if wait_status == "cancelled" else "timeout"
+                        emit(
+                            "runner.session.finished",
+                            {
+                                "session_id": session_id,
+                                "model": model,
+                                "status": "cancelled" if status == "cancelled" else "failed",
+                                "reason": f"repair_{status}",
+                            },
+                        )
                         return RuntimeResult(self.runtime_id, status, None, self.build_command(workspace), output_path, f"repair {status}")
                     emit("repair.completed", {"attempt": repairs, "session_id": session_id})
 
@@ -256,10 +335,18 @@ class OpenCodeRuntime(AgentRuntime):
             diff = client.diff(session_id)
             diff_path.write_text(json.dumps(diff, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             if errors:
-                emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "failed", "errors": errors})
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "model_error"})
+                emit(
+                    "runner.process.completed",
+                    {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "failed", "errors": errors},
+                )
                 return RuntimeResult(self.runtime_id, "failed", 1, self.build_command(workspace), output_path, errors[0])
             emit("agent.message.completed", {"session_id": session_id, "text": assistant_text})
-            emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "completed"})
+            emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "complete"})
+            emit(
+                "runner.process.completed",
+                {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "completed"},
+            )
             return RuntimeResult(
                 self.runtime_id,
                 "completed",
@@ -282,7 +369,12 @@ class OpenCodeRuntime(AgentRuntime):
                 },
             )
         except Exception as exc:
-            emit("runner.process.completed", {"runner_id": self.runtime_id, "status": "failed", "error": str(exc)})
+            if session_id:
+                emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "runtime_error"})
+            emit(
+                "runner.process.completed",
+                {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "failed", "error": str(exc)},
+            )
             return RuntimeResult(self.runtime_id, "failed", 1, self.build_command(workspace), output_path if output_path.exists() else None, str(exc))
         finally:
             event_stop.set()
@@ -314,12 +406,22 @@ def _assistant_result(messages: list[dict[str, Any]]) -> tuple[str, str]:
     return "".join(texts), error
 
 
-def _wait_for_session(client, session_id: str, deadline: float, cancellation: threading.Event) -> str:
+def _wait_for_session(
+    client,
+    session_id: str,
+    deadline: float,
+    cancellation: threading.Event,
+    *,
+    idle_timeout: int | float | None = None,
+    last_activity: Callable[[], float] | None = None,
+) -> str:
     seen_busy = False
     while time.monotonic() < deadline:
         if cancellation.is_set():
             client.abort(session_id)
             return "cancelled"
+        if idle_timeout and last_activity is not None and time.monotonic() - last_activity() >= float(idle_timeout):
+            return "idle_timeout"
         status_map = client.session_status()
         status = status_map.get(session_id) if isinstance(status_map, dict) else None
         state = str(status.get("type") or "") if isinstance(status, dict) else ""

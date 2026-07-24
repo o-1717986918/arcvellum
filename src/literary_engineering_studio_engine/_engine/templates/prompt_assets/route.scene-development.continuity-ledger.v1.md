@@ -1,0 +1,37 @@
+---
+schema: literary-engineering-workbench/prompt-asset/v1
+prompt_asset_id: route.scene-development.continuity-ledger.v1
+match: route.scene-development.continuity-ledger.v1
+version: v1
+route: scene-development
+task_type: platform-agent-continuity-ledger
+title: Reader Question and Promise Ledger Contract
+required_inputs:
+  - promoted draft
+  - promotion manifest
+  - existing reader-question ledger
+  - existing promise ledger
+context_groups:
+  - evidence in exact promoted prose
+  - open reader questions
+  - promises and payoff windows
+  - scene bridge hooks
+hard_constraints:
+  - Only the main Agent may make the editorial delta judgment.
+  - Every ledger change must cite promoted prose evidence.
+  - A review session must differ from the delta writer session.
+output_contract:
+  - Write only the declared delta/review records and completion evidence.
+  - Formal ledgers are changed only by deterministic apply-continuity-ledger.
+  - Use the literal lifecycle enum `status: complete` when the record is ready; never invent prose lifecycle labels such as `agent_judged`.
+review_requirements:
+  - Reject a promise without setup evidence or a question that merely repeats an older open question.
+  - Flag overdue questions and promises that are delayed without a new pressure or consequence.
+forbidden_shortcuts:
+  - Do not infer ledger changes from unpromoted candidates or task commentary.
+  - Do not directly edit formal ledger files.
+---
+
+# Continuity Ledger
+
+Track what the reader has actually been invited to expect. A ledger entry is not a decorative label: it records a question, promise, delay, payoff, reversal, or closure with textual evidence and a future responsibility. Keep it concise, exact, and causally useful to the next scene.

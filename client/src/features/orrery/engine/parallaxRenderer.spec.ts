@@ -1,20 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { orientWorldPoint, parallaxViewFromDrag, scenePoint } from "@/features/orrery/engine/parallaxProjection";
+import {
+  DEFAULT_PARALLAX_VIEW,
+  IDENTITY_PARALLAX_VIEW,
+  orientWorldPoint,
+  parallaxViewFromDrag,
+  scenePoint,
+} from "@/features/orrery/engine/parallaxProjection";
 
 describe("parallax camera orientation", () => {
-  it("keeps the baseline oblique projection when the camera has not rotated", () => {
-    expect(scenePoint({ x: 2, y: 3, z: 4 }, "deep")).toEqual({ x: 96368, y: 10968 });
+  it("opens with a restrained oblique view while retaining a testable front view", () => {
+    const point = { x: 2, y: 3, z: 4 };
+    expect(scenePoint(point, "deep", IDENTITY_PARALLAX_VIEW)).toEqual({ x: 96368, y: 10968 });
+    expect(scenePoint(point, "deep", DEFAULT_PARALLAX_VIEW)).not.toEqual(
+      scenePoint(point, "deep", IDENTITY_PARALLAX_VIEW),
+    );
   });
 
-  it("changes the projected field under a bounded yaw and pitch", () => {
-    const initial = scenePoint({ x: 8, y: 1, z: -3 }, "deep");
-    const rotated = scenePoint({ x: 8, y: 1, z: -3 }, "deep", { yaw: 0.4, pitch: -0.18 });
-    expect(rotated).not.toEqual(initial);
-    expect(orientWorldPoint({ x: 1, y: 2, z: 3 }, { yaw: 4, pitch: -4 })).toEqual(orientWorldPoint({ x: 1, y: 2, z: 3 }, { yaw: 0.66, pitch: -0.34 }));
+  it("preserves vector length under quaternion rotation", () => {
+    const point = { x: 1, y: 2, z: 3 };
+    const view = parallaxViewFromDrag(DEFAULT_PARALLAX_VIEW, 730, -510);
+    const rotated = orientWorldPoint(point, view);
+    expect(Math.hypot(rotated.x, rotated.y, rotated.z)).toBeCloseTo(Math.hypot(1, 2, 3), 10);
+    expect(Math.hypot(view.x, view.y, view.z, view.w)).toBeCloseTo(1, 10);
   });
 
-  it("uses the same bounded middle-drag response for every renderer path", () => {
-    expect(parallaxViewFromDrag({ yaw: 0, pitch: 0 }, 50, -25)).toEqual({ yaw: 0.26, pitch: 0.095 });
-    expect(parallaxViewFromDrag({ yaw: 0.6, pitch: -0.3 }, 200, 200)).toEqual({ yaw: 0.66, pitch: -0.34 });
+  it("does not clamp large middle-drag gestures", () => {
+    const medium = parallaxViewFromDrag(IDENTITY_PARALLAX_VIEW, 200, 200);
+    const large = parallaxViewFromDrag(IDENTITY_PARALLAX_VIEW, 900, 900);
+    expect(large).not.toEqual(medium);
+    expect(orientWorldPoint({ x: 3, y: -2, z: 5 }, large)).not.toEqual(
+      orientWorldPoint({ x: 3, y: -2, z: 5 }, medium),
+    );
+  });
+
+  it("passes smoothly through a full yaw without reversing the depth axis", () => {
+    const point = { x: 4, y: 1, z: -2 };
+    const almostFull = parallaxViewFromDrag(
+      IDENTITY_PARALLAX_VIEW,
+      (Math.PI * 2 - 0.01) / 0.0052,
+      0,
+    );
+    const full = parallaxViewFromDrag(
+      IDENTITY_PARALLAX_VIEW,
+      (Math.PI * 2) / 0.0052,
+      0,
+    );
+    const near = orientWorldPoint(point, almostFull);
+    const returned = orientWorldPoint(point, full);
+    expect(Math.hypot(near.x - returned.x, near.y - returned.y, near.z - returned.z)).toBeLessThan(0.06);
+    expect(returned.x).toBeCloseTo(point.x, 8);
+    expect(returned.z).toBeCloseTo(point.z, 8);
   });
 });

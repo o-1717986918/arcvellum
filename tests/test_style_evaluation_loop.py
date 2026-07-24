@@ -6,7 +6,7 @@ import unittest
 
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.platform_agent_tasks import write_platform_style_prompt_eval_task
-import literary_engineering_studio_engine.task_registry as task_registry
+from literary_engineering_studio_engine.style_engineering_route import build_task_payload, validate_task
 from literary_engineering_studio_engine.workflow_state import _style_engineering_state
 
 
@@ -63,7 +63,7 @@ class StyleEvaluationLoopTests(unittest.TestCase):
             (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
             profile = _profile(root, quality=False)
 
-            errors, _notes = task_registry._style_engineering_state_gate_validation(
+            errors, _notes = validate_task(
                 root,
                 {"current_state": "style-prompt-agent-task", "profile_dir": profile.relative_to(root).as_posix()},
             )
@@ -80,7 +80,7 @@ class StyleEvaluationLoopTests(unittest.TestCase):
 
             state = _style_engineering_state(root, profile)
             self.assertEqual(state["current_step"], "style-eval-task-file")
-            prepare = task_registry._build_style_engineering_task_payload(root, "style-engineering", state)
+            prepare = build_task_payload(root, "style-engineering", state)
             self.assertNotIn("<reference>", prepare["command"])
             self.assertIn("--mode blind-review", prepare["command"])
 
@@ -115,7 +115,7 @@ class StyleEvaluationLoopTests(unittest.TestCase):
             _write_current_score(profile, 30)
             failed = _style_engineering_state(root, profile)
             self.assertEqual(failed["current_step"], "style-eval-revision")
-            revision = task_registry._build_style_engineering_task_payload(root, "style-engineering", failed)
+            revision = build_task_payload(root, "style-engineering", failed)
             self.assertIn(profile.relative_to(root).as_posix() + "/style_prompt.md", revision["repair_targets"])
             self.assertIn(candidate.relative_to(root).as_posix(), revision["repair_targets"])
 

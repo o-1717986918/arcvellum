@@ -64,9 +64,9 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
 
     def test_workflow_routes_semantic_failure_to_revision_but_infrastructure_failure_to_review(self):
         candidate = Path("C:/project/drafts/candidates/scene_0001-platform-agent.md")
-        with patch("literary_engineering_studio_engine.workflow_state.candidate_review_gate", return_value={"status": "style_lint_failed", "review": "reviews/agent/scene_0001_scene_review.json", "message": "lint"}):
+        with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value={"status": "style_lint_failed", "review": "reviews/agent/scene_0001_scene_review.json", "message": "lint"}):
             revision = _review_step(Path("C:/project"), "scene_0001", candidate)
-        with patch("literary_engineering_studio_engine.workflow_state.candidate_review_gate", return_value={"status": "task_incomplete", "review": "reviews/agent/scene_0001_scene_review.json", "message": "marker"}):
+        with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value={"status": "task_incomplete", "review": "reviews/agent/scene_0001_scene_review.json", "message": "marker"}):
             review = _review_step(Path("C:/project"), "scene_0001", candidate)
 
         self.assertEqual(revision["key"], "candidate-revision")
@@ -85,7 +85,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                 "message": "formal age conflict",
                 "candidate_sha256": digest,
             }
-            with patch("literary_engineering_studio_engine.workflow_state.candidate_review_gate", return_value=gate):
+            with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value=gate):
                 pending = _review_step(root, "scene_0001", candidate)
             self.assertEqual(pending["key"], "candidate-human-decision")
             self.assertEqual(pending["status"], "human_required")
@@ -102,7 +102,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                 ) + "\n",
                 encoding="utf-8",
             )
-            with patch("literary_engineering_studio_engine.workflow_state.candidate_review_gate", return_value=gate):
+            with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value=gate):
                 routed = _review_step(root, "scene_0001", candidate)
             self.assertEqual(routed["key"], "candidate-revision")
             self.assertEqual(routed["status"], "needs_revision")
@@ -119,7 +119,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
         self.assertEqual(notes, ["W-001: formal age conflict"])
 
     def test_non_pass_scene_review_is_recordable_for_revision_routing(self):
-        with patch("literary_engineering_studio_engine.task_registry.candidate_review_gate", return_value={"status": "notes_unresolved", "message": "revise"}):
+        with patch("literary_engineering_studio_engine.scene_route_gates.candidate_review_gate", return_value={"status": "notes_unresolved", "message": "revise"}):
             errors = task_registry._candidate_review_gate_errors(Path("C:/project"), {"scene_id": "scene_0001"}, Path("candidate.md"), require_pass=False)
             promotion_errors = task_registry._candidate_review_gate_errors(Path("C:/project"), {"scene_id": "scene_0001"}, Path("candidate.md"), require_pass=True)
 

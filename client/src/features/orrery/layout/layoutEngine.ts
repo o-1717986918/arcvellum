@@ -1,4 +1,5 @@
 import type { SpatialGrammar, SpatialLayout, SpatialNarrativeNode, WorldPoint } from "@/types/spatial";
+import { curveProfilePoint } from "@/features/orrery/layout/curveProfiles";
 
 const PRIMARY = new Set(["chapter", "scene"]);
 const NARRATIVE_TYPES = new Set(["chapter", "scene"]);
@@ -122,94 +123,10 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
   const arc = Math.sin(phase * 0.82);
   const swell = Math.cos(phase * 0.96);
 
-  if (grammar === "braid") {
-    const ribbon = Math.sin(phase * 1.18) * 2.15;
-    return { x: axis, y: 1.16 + rise + Math.sin(phase * 0.42) * 0.34, z: depth + ribbon * 0.54 };
-  }
-  if (grammar === "strata") {
-    const stratum = Math.floor(rank / 12);
-    return { x: axis, y: 1.08 + rise - stratum * 0.66, z: depth + (rank % 12 - 5.5) * 0.11 };
-  }
-  if (grammar === "constellation") {
-    // A constellation should read as a stellar route, not three alternating
-    // spokes. Earlier arms reassigned every next chapter to another side of
-    // the stage, which forced the chronological curve into sharp zigzags.
-    // This is a bounded Archimedean drift: a chapter cluster advances through
-    // one broad stellar arc while a low-frequency wave supplies visual breath.
-    const progress = visualCount <= 1 ? 0 : visualRank / Math.max(1, visualCount - 1);
-    const groupAngle = -2.42 + progress * Math.PI * 1.18 + Math.sin(progress * Math.PI * 2) * 0.14;
-    const orbitalBreath = Math.sin(progress * Math.PI * 3.1 + 0.42) * 0.78;
-    const groupRadius = 7.1 + visualRank * 1.24 + Math.sin(progress * Math.PI) * 1.75 + orbitalBreath;
-    const localAngle = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.12 : 0;
-    const localRadius = cluster ? (cluster.localRank - (cluster.size - 1) / 2) * 0.5 : 0;
-    return {
-      x: Math.cos(groupAngle + localAngle) * (groupRadius + localRadius),
-      y: 1.2 + arc * 0.44 + cadence + orbitalBreath * 0.12,
-      z: Math.sin(groupAngle + localAngle) * (groupRadius + localRadius) + depth * 0.28,
-    };
-  }
-  if (grammar === "loop") {
-    // The old loop turned by 0.61 radians per chapter while growing its radius
-    // by less than one unit. That made adjacent revolutions almost touch and
-    // compressed long books into a decorative coil. This is an open Fermat-
-    // inspired orbital ribbon: slow angular advance, stronger radial advance,
-    // and a small irrational modulation to avoid a mechanical perfect spiral.
-    // A full revolution now leaves roughly forty units of clearance, so the
-    // reader can pan through recurring motifs without chronological overlap.
-    const angle = -2.32 + visualRank * 0.305 + Math.sin(visualRank * 0.37 + 0.4) * 0.032;
-    const radius = 16.8 + visualRank * 2.62 + Math.sin(visualRank * 0.21) * 0.46 + lift * 0.34;
-    const offset = clusterRibbonOffset(cluster, angle + Math.PI / 2, 1.05, 0.48);
-    return {
-      x: Math.cos(angle) * radius + offset.x,
-      y: 1.14 + arc * 0.36 + cadence + offset.y,
-      z: Math.sin(angle) * radius + depth * 0.12 + offset.z,
-    };
-  }
-  if (grammar === "stage") {
-    // A stage should read as a procession of playing areas, not a 6-column
-    // grid that folds chapter seven back underneath chapter one. Its apron
-    // advances strictly in reading order while the back wall follows a broad
-    // two-frequency curtain wave. The derivative supplies the tangent used by
-    // scenes in the same chapter, producing a clear local bay without a hard
-    // geometric reset at an arbitrary chapter count.
-    const stagePhase = visualRank * 0.46;
-    const stageX = visualRank * 14.4 - 8.2;
-    const stageZ = Math.sin(stagePhase) * 6.4 + Math.sin(stagePhase * 0.41 + 0.74) * 2.15 + lift * 1.3;
-    const stageSlope = Math.cos(stagePhase) * 6.4 * 0.46 + Math.cos(stagePhase * 0.41 + 0.74) * 2.15 * 0.41;
-    const offset = clusterRibbonOffset(cluster, Math.atan2(stageSlope, 14.4), 1.72, 0.84);
-    return {
-      x: stageX + offset.x,
-      y: 1.2 + arc * 0.42 + cadence + offset.y,
-      z: stageZ + swell * 0.38 + offset.z,
-    };
-  }
-  // Spine: a single advancing narrative river. Its x-axis is strictly
-  // monotonic, while the y/z contour reads the formal rhythm plan: tension
-  // lifts a beat, a hand-off relaxes it, and set-pieces receive a small extra
-  // clearing. The single book-scale contour is deliberately half a wave, not
-  // a repeating sine, so long works never curl into rings.
-  return {
-    x: axis,
-    y: 1.1 + rise,
-    z: depth,
-  };
-}
-
-function clusterRibbonOffset(cluster: SceneCluster | undefined, tangentAngle: number, stride: number, lateralBreath: number): WorldPoint {
-  if (!cluster || cluster.size <= 1) return { x: 0, y: 0, z: 0 };
-  const centered = cluster.localRank - (cluster.size - 1) / 2;
-  // The scenes remain a chapter-sized phrase along the main route. A bounded
-  // normal displacement gives the phrase a slight fan without turning the
-  // cluster itself into another spiral.
-  const along = centered * stride;
-  const across = Math.sin(centered * 1.17) * lateralBreath;
-  const tangent = { x: Math.cos(tangentAngle), z: Math.sin(tangentAngle) };
-  const normal = { x: -tangent.z, z: tangent.x };
-  return {
-    x: tangent.x * along + normal.x * across,
-    y: Math.sin(centered * 0.88) * 0.16,
-    z: tangent.z * along + normal.z * across,
-  };
+  return curveProfilePoint(grammar, {
+    axis, phase, depth, rise, arc, swell, cadence, lift,
+    visualRank, visualCount, rank, cluster,
+  });
 }
 
 function narrativeAxis(timeline: number): number {

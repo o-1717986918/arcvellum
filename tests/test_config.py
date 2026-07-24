@@ -2,10 +2,15 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, load_config, save_config
+from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, load_config, repository_root, save_config
 
 
 class ConfigTests(unittest.TestCase):
+    def test_repository_root_is_the_checkout_root_not_src_directory(self):
+        root = repository_root()
+        self.assertTrue((root / "pyproject.toml").is_file())
+        self.assertTrue((root / "src" / "literary_engineering_studio_engine").is_dir())
+
     def test_default_config_has_no_model_provider(self):
         config = default_config()
         self.assertNotIn("model", config)

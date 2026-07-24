@@ -17,6 +17,7 @@ const node: SpatialNarrativeNode = {
   parent_id: null,
   cluster_id: "cluster:one",
   time_band: 1,
+  completion_state: "active",
   importance: 0.8,
   detail_level: "near",
   world_hint: { surface: "narrative", grammar: "stage", elevation_band: "foreground", occlusion_priority: 1 },

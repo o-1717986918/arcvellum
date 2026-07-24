@@ -1,0 +1,7 @@
+{
+  "schema_id": "story_architecture.v1",
+  "schema_value": "literary-engineering-workbench/story-architecture/v1",
+  "required": ["schema", "status", "writer_session_id", "premise", "central_dramatic_question", "protagonist_initial_misbelief", "protagonist_desire", "protagonist_need", "counterforce", "thematic_contradiction", "change_vector", "midpoint_irreversibility", "endgame_choice", "ending_state", "volume_obligations", "non_negotiable_payoffs"],
+  "types": {"schema": "str", "status": "str", "writer_session_id": "str", "premise": "str", "central_dramatic_question": "str", "protagonist_initial_misbelief": "str", "protagonist_desire": "str", "protagonist_need": "str", "counterforce": "str", "thematic_contradiction": "str", "change_vector": "str", "midpoint_irreversibility": "str", "endgame_choice": "str", "ending_state": "str", "volume_obligations": "list", "non_negotiable_payoffs": "list"},
+  "enums": {"status": ["complete", "needs_revision", "blocked"]}
+}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ArcVellum",
-  "version": "0.9.4",
+  "version": "0.95.0",
   "identifier": "cn.literary-engineering.studio",
   "build": {
     "frontendDist": "../dist"
@@ -18,7 +18,7 @@
     "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "externalBin": ["binaries/literary-engineering-studio-sidecar"],
-    "resources": ["resources/opencode.exe", "resources/OPENCODE-NOTICE.md", "resources/OPENCODE-LICENSE.txt"],
+    "resources": ["resources/opencode.exe", "resources/opencode-installation.json", "resources/OPENCODE-NOTICE.md", "resources/OPENCODE-LICENSE.txt"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -1,0 +1,8 @@
+{
+  "schema": "arcvellum/opencode-installation/v1",
+  "version": "1.18.3",
+  "target": "windows-x64-baseline",
+  "executable": "opencode.exe",
+  "archive_sha256": "cd987a173b62ce0fb5fea6807e5271a26c1ca3bc1b5f8f5d4eb6497bbe770d9e",
+  "binary_sha256": "3ab7d15a01c77750a0935c4729bb6367ce9913c79d9658d011b917a1421e6dc8"
+}

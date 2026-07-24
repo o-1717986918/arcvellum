@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { BookOpenText, Filter, Search, Sparkle, X } from "lucide-vue-next";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
+import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import { asList, asRecord, displayValue, labelFor, manuscriptItems, sectionEntries } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 
@@ -21,7 +22,7 @@ const items = computed(() => {
     )
     .filter((item) => {
       if (!needle) return true;
-      return [item.title, item.subtitle, item.excerpt, displayValue(item.badges)].join(" ").toLowerCase().includes(needle);
+      return plainSearchText([item.title, item.subtitle, item.excerpt, item.body, displayValue(item.badges)].join(" ")).includes(needle);
     });
 });
 const prose = computed(() => manuscriptItems((store.library || null) as Record<string, unknown> | null));
@@ -35,6 +36,19 @@ function keyPoints(item: Record<string, unknown>): string[] {
     .filter((fact) => !["path", "路径", "机器字符"].includes(String(fact.label || "")))
     .slice(0, 3)
     .map((fact) => `${fact.label}：${displayValue(fact.value)}`);
+}
+
+function plainSearchText(value: unknown): string {
+  return String(value || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[`*_>#|()\[\]~-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function plainSnippet(value: unknown): string {
+  return plainSearchText(value).slice(0, 180) || "这条资料还没有摘要。";
 }
 </script>
 
@@ -64,7 +78,7 @@ function keyPoints(item: Record<string, unknown>): string[] {
           <button v-for="item in items" :key="`${item.sectionKey}-${item.id}`" class="archive-card" @click="selected = item">
             <span class="archive-kind">{{ labelFor(item.sectionKey) }}</span>
             <h2>{{ item.title || "未命名资料" }}</h2>
-            <p>{{ item.excerpt || "这条资料还没有摘要。" }}</p>
+            <p>{{ plainSnippet(item.excerpt || item.body) }}</p>
             <ul v-if="keyPoints(item).length">
               <li v-for="point in keyPoints(item)" :key="point"><Sparkle :size="12" />{{ point }}</li>
             </ul>
@@ -75,10 +89,8 @@ function keyPoints(item: Record<string, unknown>): string[] {
 
         <aside v-if="selected" class="detail-drawer">
           <header><div><span>{{ labelFor(selected.sectionKey) }}</span><h2>{{ selected.title }}</h2></div><button class="icon-button" @click="selected = null"><X :size="18" /></button></header>
-          <p class="detail-excerpt">{{ selected.excerpt }}</p>
-          <div v-if="selected.body" class="detail-body">
-            <p v-for="(paragraph, index) in String(selected.body).split(/\n{2,}/)" :key="index">{{ paragraph.replace(/^#+\s*/, '') }}</p>
-          </div>
+          <SafeMarkdown v-if="selected.excerpt" class="detail-excerpt" variant="evidence" :source="selected.excerpt" />
+          <SafeMarkdown v-if="selected.body" class="detail-body" variant="document" :source="selected.body" />
           <dl v-if="asList(selected.facts).length">
             <div v-for="fact in asList<Record<string, unknown>>(selected.facts)" :key="String(fact.label)"><dt>{{ fact.label }}</dt><dd>{{ displayValue(fact.value) }}</dd></div>
           </dl>

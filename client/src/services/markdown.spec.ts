@@ -23,4 +23,13 @@ describe("renderSafeMarkdown", () => {
   it("tolerates partial streaming markdown", () => {
     expect(() => renderSafeMarkdown("```text\nunfinished")).not.toThrow();
   });
+
+  it("renders archive tables while stripping hostile embedded markup", () => {
+    const html = renderSafeMarkdown("| 人物 | 影响 |\n| --- | --- |\n| 阿青 | 改变下一场选择 |\n\n<svg onload=\"alert(1)\"></svg><a href=\"data:text/html,boom\">bad</a>");
+    expect(html).toContain("<table>");
+    expect(html).toContain("<td>阿青</td>");
+    expect(html).not.toContain("<svg");
+    expect(html).not.toContain("onload");
+    expect(html).not.toContain("data:text/html");
+  });
 });

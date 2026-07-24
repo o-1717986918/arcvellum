@@ -69,8 +69,13 @@ onMounted(async () => {
   const returning = window.localStorage.getItem("arcvellum.startup-seen") === "1";
   window.setTimeout(() => (startupVisualSkippable.value = true), 600);
   window.setTimeout(() => (startupMinimumElapsed.value = true), returning ? 560 : 1950);
-  await store.initialize();
-  if (store.currentProjectPath) await store.refreshWorkspace();
+  try {
+    await waitForBackendReady();
+    await store.initialize();
+    if (store.currentProjectPath) await store.refreshWorkspace();
+  } catch (cause) {
+    store.reportStartupError(cause instanceof Error ? cause.message : "本地创作服务没有成功启动。");
+  }
 });
 
 watch(
@@ -111,6 +116,29 @@ onBeforeUnmount(() => {
 function handleStartupError(event: Event): void {
   const detail = (event as CustomEvent<{ message?: string }>).detail;
   store.reportStartupError(detail?.message || "本地创作服务没有成功启动，请重试。");
+}
+
+async function waitForBackendReady(): Promise<void> {
+  // Browser development uses Vite's local proxy; the packaged desktop client
+  // waits for Tauri to inject the nonce-verified loopback endpoint instead.
+  if (!window.__LES_API_TOKEN || window.__ARCVELLUM_BACKEND_READY) return;
+  await new Promise<void>((resolve, reject) => {
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onFailure = (event: Event) => {
+      cleanup();
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      reject(new Error(detail?.message || "本地创作服务没有成功启动。"));
+    };
+    const cleanup = () => {
+      window.removeEventListener("arcvellum:backend-ready", onReady);
+      window.removeEventListener("arcvellum:startup-error", onFailure);
+    };
+    window.addEventListener("arcvellum:backend-ready", onReady, { once: true });
+    window.addEventListener("arcvellum:startup-error", onFailure, { once: true });
+  });
 }
 </script>
 

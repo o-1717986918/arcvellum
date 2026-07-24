@@ -1,0 +1,479 @@
+"""Evidence gates for the formal scene-development route."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+
+from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
+from ...anti_ai_style import style_lint_gate, style_lint_gate_message
+from ...canon_evolver import canon_writeback_status
+from ...candidate_promotion import candidate_generation_gate, candidate_review_gate
+from ...context_broker import context_trace_status
+from ...creative_quality import load_creative_quality_profile
+from ...draft_text import final_body_from_draft_path
+from ...flow_gates import FlowGateError, branch_selection_status, ensure_composition_ready_for_generation
+from ...narrative_rhythm import narrative_rhythm_contract
+from ...reader_experience import ensure_reader_experience_ready, reader_experience_adherence_for_body
+from ...scene_character_assets import scene_character_asset_requirements
+from ...semantic_task_contracts import semantic_artifact_errors, semantic_artifact_relative_path
+from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
+from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
+from ...word_budget import ensure_scene_word_budget_ready, word_budget_adherence_for_body
+from ...scene_route_support import (
+    _file_sha256, _parse_datetime, _read_optional_json, _read_text,
+    _static_review_conclusion,
+)
+def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[str], list[str]]:
+    """Run current-state-specific gates after expected outputs exist."""
+
+    current_state = str(task.get("current_state") or "")
+    scene_id = str(task.get("scene_id") or "")
+    errors: list[str] = []
+    notes: list[str] = []
+    if not current_state:
+        return errors, notes
+
+    if current_state in {"context-packet", "context-trace"}:
+        errors.extend(_context_trace_gate_errors(root, scene_id))
+    if current_state == "roleplay-simulation":
+        errors.extend(_roleplay_gate_errors(root, scene_id))
+    if current_state == "roleplay-agent-task":
+        errors.extend(_roleplay_gate_errors(root, scene_id))
+        errors.extend(semantic_artifact_errors(root, current_state, scene_id))
+    if current_state in {"branch-manifest", "branch-agent-task"}:
+        errors.extend(_branch_manifest_gate_errors(root, scene_id))
+    if current_state == "branch-selection":
+        branch_errors, branch_notes = _branch_selection_gate(root, scene_id)
+        errors.extend(branch_errors)
+        notes.extend(branch_notes)
+    if current_state == "composition-json":
+        errors.extend(_composition_prepare_gate_errors(root, scene_id))
+    if current_state == "composition-agent-task":
+        errors.extend(_composition_gate_errors(root, scene_id))
+    if current_state == "composition-agent-task":
+        errors.extend(semantic_artifact_errors(root, current_state, scene_id))
+    if current_state == "scene-word-budget-contract":
+        errors.extend(_word_budget_gate_errors(root, task))
+    if current_state == "reader-experience-contract":
+        errors.extend(_reader_experience_gate_errors(root, task))
+    if current_state == "scene-rhythm-contract":
+        errors.extend(_narrative_rhythm_gate_errors(root, scene_id))
+    if current_state in {"candidate-generation-provenance", "generation-agent-task"}:
+        candidate = _candidate_path_for_task(root, task)
+        errors.extend(_candidate_generation_gate_errors(root, task, candidate))
+        errors.extend(_candidate_body_gate_errors(root, task, candidate))
+    if current_state == "candidate-revision":
+        candidate = _candidate_path_for_task(root, task)
+        errors.extend(_candidate_generation_gate_errors(root, task, candidate))
+        errors.extend(_candidate_body_gate_errors(root, task, candidate))
+        errors.extend(_scene_revision_gate_errors(root, task, candidate))
+    if current_state in {"candidate-review", "agent-review-task"}:
+        candidate = _candidate_path_for_task(root, task)
+        errors.extend(_candidate_generation_gate_errors(root, task, candidate))
+        errors.extend(_candidate_review_gate_errors(root, task, candidate, require_pass=current_state == "agent-review-task"))
+    if current_state in {"promotion-manifest", "promoted-draft"}:
+        errors.extend(_promotion_gate_errors(root, task))
+    if current_state == "static-review":
+        errors.extend(_static_review_gate_errors(root, scene_id, require_pass=False))
+    if current_state == "static-revision":
+        candidate = _candidate_path_for_task(root, task)
+        errors.extend(_candidate_generation_gate_errors(root, task, candidate))
+        errors.extend(_candidate_body_gate_errors(root, task, candidate))
+        errors.extend(_scene_revision_gate_errors(root, task, candidate))
+    if current_state in {"state-patch-json", "state-agent-task"}:
+        errors.extend(_state_patch_gate_errors(root, scene_id))
+    if current_state == "state-agent-task":
+        errors.extend(semantic_artifact_errors(root, current_state, scene_id))
+    if current_state in {"state-patch-approval", "state-apply"}:
+        from .character_state_apply import state_patch_writeback_status
+
+        state_status = state_patch_writeback_status(root, scene_id)
+        value = str(state_status.get("status") or "")
+        if current_state == "state-patch-approval" and value not in {"pending_apply", "pass", "not_required"}:
+            errors.append(str(state_status.get("message") or "state patch approval is incomplete"))
+        if current_state == "state-apply" and value != "pass":
+            errors.append(str(state_status.get("message") or "state apply is incomplete"))
+    if current_state in {"canon-patch-json", "canon-agent-task"}:
+        errors.extend(_canon_writeback_gate_errors(root, scene_id))
+    if current_state == "canon-agent-task":
+        errors.extend(semantic_artifact_errors(root, current_state, scene_id))
+    if current_state in {"continuity-ledger-agent-task", "continuity-ledger-review", "continuity-ledger-apply"}:
+        passed, message, _delta = continuity_ledger_status(root, scene_id, require_review=current_state != "continuity-ledger-agent-task")
+        if not passed:
+            errors.append(message)
+    if current_state in {"continuity-ledger-agent-task", "continuity-ledger-review"}:
+        passed, message = continuity_ledger_task_status(root, scene_id, review=current_state == "continuity-ledger-review")
+        if not passed:
+            errors.append(message)
+    if current_state == "continuity-ledger-apply" and not (root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json").is_file():
+        errors.append("continuity ledger apply receipt is missing")
+    return errors, notes
+
+def _context_trace_gate_errors(root: Path, scene_id: str) -> list[str]:
+    if not scene_id:
+        return ["context task missing scene_id; cannot validate context trace"]
+    context = root / "memory" / "context_packets" / f"{scene_id}.md"
+    if not context.exists():
+        return [f"context packet is missing: {_rel(context, root)}"]
+    status = context_trace_status(root, scene_id, context)
+    if not status.passed:
+        return [status.message]
+    return []
+
+
+def _roleplay_gate_errors(root: Path, scene_id: str) -> list[str]:
+    path = root / "branches" / scene_id / "roleplay_simulation.md"
+    text = _read_text(path)
+    if not text:
+        return [f"roleplay simulation is empty or unreadable: {_rel(path, root)}"]
+    if "正式 CLI 来源" not in text or "simulate-scene" not in text:
+        return [
+            "roleplay simulation lacks CLI provenance text from simulate-scene; "
+            "manual RP files are exploratory/debug-only for the formal route"
+        ]
+    return []
+
+
+def _branch_manifest_gate_errors(root: Path, scene_id: str) -> list[str]:
+    path = root / "branches" / scene_id / "branch_manifest.json"
+    payload, error = _read_optional_json(path)
+    if error:
+        return [error]
+    if not payload:
+        return [f"branch manifest is missing or empty: {_rel(path, root)}"]
+    provenance = payload.get("formal_cli_provenance") if isinstance(payload.get("formal_cli_provenance"), dict) else {}
+    created_by = str(provenance.get("created_by") or "")
+    if created_by != "branch-simulate":
+        return [
+            "branch manifest lacks formal_cli_provenance.created_by=branch-simulate; "
+            "run branch-simulate --agent instead of hand-writing the manifest"
+        ]
+    if provenance.get("agent_tasks_requested") is not True:
+        return ["branch manifest was not created with --agent; branch sidecar is required for formal route"]
+    roleplay_result = semantic_artifact_relative_path("roleplay-agent-task", scene_id)
+    if str(payload.get("roleplay_result") or "").replace("\\", "/") != roleplay_result:
+        return ["branch manifest does not declare the exact roleplay_result consumed by branch-simulate"]
+    evidence = payload.get("roleplay_evidence")
+    if not isinstance(evidence, dict) or str(evidence.get("status") or "") != "complete":
+        return ["branch manifest does not contain completed roleplay semantic evidence"]
+    return []
+
+
+def _branch_selection_gate(root: Path, scene_id: str) -> tuple[list[str], list[str]]:
+    selection = root / "branches" / scene_id / "branch_selection.md"
+    branch_state = branch_selection_status(selection)
+    if branch_state.get("status") != "selected":
+        return [str(branch_state.get("message") or "branch selection is not selected")], []
+    manifest = root / "branches" / scene_id / "branch_manifest.json"
+    payload, error = _read_optional_json(manifest)
+    if error:
+        return [error], []
+    branches = payload.get("branches") if isinstance(payload, dict) else None
+    branch_ids = {
+        str(item.get("branch_id") or item.get("id") or "").strip()
+        for item in branches
+        if isinstance(item, dict)
+    } if isinstance(branches, list) else set()
+    selected = str(branch_state.get("selected_branch") or "").strip()
+    if not branch_ids:
+        return [f"branch manifest has no selectable branches: {_rel(manifest, root)}"], []
+    if selected not in branch_ids:
+        return [f"selected_branch `{selected}` is not present in {_rel(manifest, root)}"], []
+    return [], [f"branch selection: {selected}"]
+
+
+def _composition_gate_errors(root: Path, scene_id: str) -> list[str]:
+    composition = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
+    try:
+        payload = ensure_composition_ready_for_generation(root, composition)
+    except (FlowGateError, json.JSONDecodeError, OSError, ValueError) as exc:
+        return [str(exc)]
+    flow_gate = payload.get("flow_gate") if isinstance(payload.get("flow_gate"), dict) else {}
+    if flow_gate.get("ready_for_generation") is not True:
+        return ["composition ready_for_generation must be true before prose generation"]
+    provenance = payload.get("formal_cli_provenance") if isinstance(payload.get("formal_cli_provenance"), dict) else {}
+    if provenance.get("agent_tasks_requested") is not True:
+        return ["composition was not created with --agent-tasks; composition sidecar is required"]
+    return []
+
+
+def _composition_prepare_gate_errors(root: Path, scene_id: str) -> list[str]:
+    """Validate the CLI composition output before its Agent review exists.
+
+    ``composition-json`` is the deterministic preparation state.  Its command
+    deliberately creates an *incomplete* semantic-review template for the
+    following ``composition-agent-task`` state.  Requiring that review here
+    makes the state machine reject its own freshly generated scaffold and
+    repeatedly retry the same task.  The full semantic gate stays in
+    :func:`_composition_gate_errors`, where it belongs.
+    """
+
+    composition = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
+    if not composition.is_file():
+        return [f"composition JSON is missing: {_rel(composition, root)}"]
+    try:
+        payload = json.loads(composition.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"composition JSON is unreadable: {exc}"]
+    if not isinstance(payload, dict):
+        return ["composition JSON must contain an object"]
+    provenance = payload.get("formal_cli_provenance")
+    provenance = provenance if isinstance(provenance, dict) else {}
+    if str(provenance.get("created_by") or "") != "compose-scene":
+        return ["composition JSON lacks formal_cli_provenance.created_by=compose-scene"]
+    if provenance.get("agent_tasks_requested") is not True:
+        return ["composition JSON was not created with --agent-tasks"]
+    if str(payload.get("selection_source") or "") != "selection":
+        return ["composition JSON must consume a formal branch selection"]
+    if not str(payload.get("selected_branch") or "").strip():
+        return ["composition JSON is missing selected_branch"]
+    return []
+
+
+def _word_budget_gate_errors(root: Path, task: dict[str, object]) -> list[str]:
+    scene_path = _scene_path_for_task(root, task)
+    try:
+        contract = ensure_scene_word_budget_ready(root, scene_path)
+    except (FileNotFoundError, ValueError) as exc:
+        return [str(exc)]
+    if contract.get("status") == "not_required":
+        return []
+    errors: list[str] = []
+    scene_inventory_task = root / "plot" / "word_budget" / "scene_inventory_expansion.agent_tasks.md"
+    if scene_inventory_task.exists():
+        completion = agent_task_completion_status(scene_inventory_task, root=root)
+        if completion.get("complete") is not True:
+            errors.append(f"scene-inventory word-budget sidecar is incomplete: {completion.get('message')}")
+    scene_inventory_review = root / "reviews" / "word_budget" / "scene_inventory_review.md"
+    if scene_inventory_task.exists() and not scene_inventory_review.exists():
+        errors.append("formal longform scene generation requires reviews/word_budget/scene_inventory_review.md")
+    return errors
+
+
+def _reader_experience_gate_errors(root: Path, task: dict[str, object]) -> list[str]:
+    scene_path = _scene_path_for_task(root, task)
+    try:
+        contract = ensure_reader_experience_ready(root, scene_path)
+    except (FileNotFoundError, ValueError) as exc:
+        return [str(exc)]
+    if contract.get("status") == "not_required":
+        return []
+    return []
+
+
+def _narrative_rhythm_gate_errors(root: Path, scene_id: str) -> list[str]:
+    scene_path = root / "scenes" / f"{scene_id}.yaml"
+    if not scene_path.is_file():
+        return [f"scene file is missing for narrative rhythm contract: {_rel(scene_path, root)}"]
+    contract = narrative_rhythm_contract(root, scene_path)
+    if str(contract.get("status") or "") == "pass":
+        return []
+    return [f"narrative rhythm/bridge contract is not ready: {contract.get('message') or 'missing required fields'}"]
+
+
+def _candidate_generation_gate_errors(root: Path, task: dict[str, object], candidate: Path) -> list[str]:
+    scene_id = str(task.get("scene_id") or candidate.stem.split("-")[0])
+    gate = candidate_generation_gate(root, scene_id, candidate)
+    if gate.get("status") == "pass":
+        return []
+    details: list[str] = [str(gate.get("message") or "candidate generation gate failed")]
+    missing = gate.get("missing")
+    invalid = gate.get("invalid")
+    if isinstance(missing, list) and missing:
+        details.append("missing=" + ", ".join(str(item) for item in missing))
+    if isinstance(invalid, list) and invalid:
+        details.append("invalid=" + ", ".join(str(item) for item in invalid))
+    return ["; ".join(details)]
+
+
+def _candidate_body_gate_errors(root: Path, task: dict[str, object], candidate: Path) -> list[str]:
+    if not candidate.exists():
+        return [f"candidate Markdown is missing: {_rel(candidate, root)}"]
+    scene_path = _scene_path_for_task(root, task)
+    body = final_body_from_draft_path(candidate)
+    errors: list[str] = []
+    if not body:
+        errors.append(f"candidate has no cleaned deliverable body: {_rel(candidate, root)}")
+        return errors
+    scene_id = str(task.get("scene_id") or scene_path.stem)
+    lint_gate = style_lint_gate(body, profile=load_creative_quality_profile(root), scope=scene_id)
+    if lint_gate.get("status") == "blocking":
+        errors.append(f"candidate failed Style Lint Gate: {style_lint_gate_message(lint_gate)}")
+    budget = word_budget_adherence_for_body(root, scene_path, body)
+    if budget.get("status") not in {"pass", "not_required"}:
+        errors.append(f"candidate failed scene word-budget gate: {budget.get('message')}")
+    reader = reader_experience_adherence_for_body(root, scene_path, body)
+    if reader.get("status") not in {"pass", "not_required"}:
+        errors.append(f"candidate failed reader-experience gate: {reader.get('message')}")
+    return errors
+
+
+def _candidate_review_gate_errors(
+    root: Path,
+    task: dict[str, object],
+    candidate: Path,
+    *,
+    require_pass: bool = True,
+) -> list[str]:
+    scene_id = str(task.get("scene_id") or candidate.stem.split("-")[0])
+    gate = candidate_review_gate(root, scene_id, candidate)
+    if gate.get("status") == "pass":
+        return []
+    if not require_pass:
+        infrastructure_failures = {
+            "schema_failed",
+            "task_incomplete",
+            "stale_or_wrong_source",
+            "creative_quality_review_stale",
+        }
+        if str(gate.get("status") or "") not in infrastructure_failures:
+            return []
+    message = str(gate.get("message") or "candidate review gate failed")
+    lint_gate = gate.get("style_lint")
+    if isinstance(lint_gate, dict) and lint_gate.get("status") == "blocking":
+        message += f"; Style Lint Gate: {style_lint_gate_message(lint_gate)}"
+    return [message]
+
+
+def _scene_revision_gate_errors(root: Path, task: dict[str, object], candidate: Path) -> list[str]:
+    errors: list[str] = []
+    source_rel = str(task.get("revision_source") or "").strip()
+    previous_hash = str(task.get("candidate_sha256_before_revision") or "").strip().lower()
+    if not source_rel or not previous_hash:
+        errors.append("scene revision task is missing exact source candidate hash provenance")
+    elif not candidate.is_file():
+        errors.append(f"scene revision candidate is missing: {_rel(candidate, root)}")
+    elif _file_sha256(candidate) == previous_hash:
+        errors.append("scene revision candidate is unchanged from the exact reviewed source")
+
+    scene_id = str(task.get("scene_id") or candidate.stem.replace("_revision", ""))
+    base = root / "drafts" / "revisions" / f"{scene_id}_revision"
+    manifest_path = base.with_suffix(".json")
+    report = base.with_name(base.name + "_report.md")
+    prompt = base.with_suffix(".prompt.json")
+    sidecar = base.with_suffix(".agent_tasks.md")
+    completion = default_agent_completion_path(sidecar)
+    for path, label in ((report, "revision report"), (prompt, "revision prompt manifest"), (sidecar, "revision sidecar")):
+        if not path.is_file():
+            errors.append(f"{label} missing: {_rel(path, root)}")
+    payload, error = _read_optional_json(manifest_path)
+    if error:
+        errors.append(error)
+    else:
+        if payload.get("schema") != "literary-engineering-workbench/scene-revision/v0.1":
+            errors.append("scene revision manifest has wrong or missing schema")
+        if str(payload.get("scene_id") or "") != scene_id:
+            errors.append(f"scene revision manifest scene_id mismatch: {payload.get('scene_id') or 'missing'}")
+        if payload.get("ready_for_review") is not False:
+            errors.append("scene revision manifest ready_for_review must remain false until independent AgentReview")
+        if payload.get("anti_evasion_protocol_applied") is not True:
+            errors.append("scene revision manifest must record anti_evasion_protocol_applied=true")
+        applied_fields = ("revision_actions_applied", "warnings_addressed", "style_notes_addressed", "style_adherence_addressed")
+        if not any(payload.get(field) for field in applied_fields):
+            errors.append("scene revision manifest must record at least one applied review repair")
+        unresolved = payload.get("evasion_risks_unresolved")
+        if unresolved not in (None, False, "", [], {}):
+            errors.append("scene revision manifest has unresolved anti-evasion risks")
+    completion_state = agent_task_completion_status(sidecar, root=root)
+    if completion_state.get("complete") is not True:
+        errors.append(f"scene revision sidecar is incomplete: {completion_state.get('message')}")
+    return errors
+
+
+def _promotion_gate_errors(root: Path, task: dict[str, object]) -> list[str]:
+    scene_id = str(task.get("scene_id") or "")
+    manifest_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
+    payload, error = _read_optional_json(manifest_path)
+    if error:
+        return [error]
+    if not payload:
+        return [f"promotion manifest is missing or empty: {_rel(manifest_path, root)}"]
+    errors: list[str] = []
+    if payload.get("allow_unreviewed") is True:
+        errors.append("promotion manifest uses allow_unreviewed=true; debug review bypass is forbidden for formal Skill hosts")
+    if payload.get("allow_review_notes") is True:
+        errors.append("promotion manifest uses allow_review_notes=true; pass_with_notes must be revised and re-reviewed")
+    candidate_value = str(payload.get("candidate") or "")
+    if not candidate_value:
+        errors.append("promotion manifest does not record candidate path")
+        return errors
+    candidate = _resolve_project_path(root, candidate_value)
+    errors.extend(_candidate_generation_gate_errors(root, task, candidate))
+    errors.extend(_candidate_review_gate_errors(root, task, candidate))
+    draft = root / "drafts" / "scenes" / f"{scene_id}.md"
+    if draft.exists() and not final_body_from_draft_path(draft):
+        errors.append(f"promoted draft has no cleaned deliverable body: {_rel(draft, root)}")
+    return errors
+
+
+def _static_review_gate_errors(root: Path, scene_id: str, *, require_pass: bool = True) -> list[str]:
+    path = root / "reviews" / f"{scene_id}-review.md"
+    conclusion = _static_review_conclusion(path)
+    allowed = {"pass", "pass_with_notes", "revise_required", "reject"}
+    draft = root / "drafts" / "scenes" / f"{scene_id}.md"
+    if conclusion not in allowed:
+        return [f"static review conclusion must be recorded; got {conclusion or 'missing'} at {_rel(path, root)}"]
+    if not _static_review_matches_draft(path, draft):
+        return [f"static review is stale for current promoted draft at {_rel(path, root)}"]
+    if not require_pass or conclusion == "pass":
+        return []
+    return [f"static review conclusion must be pass; got {conclusion or 'missing'} at {_rel(path, root)}"]
+
+
+def _static_review_matches_draft(review: Path, draft: Path) -> bool:
+    if not review.is_file() or not draft.is_file():
+        return False
+    match = re.search(r"(?m)^-\s*审查对象 SHA-256：`([0-9a-fA-F]{64})`\s*$", _read_text(review))
+    return bool(match and match.group(1).lower() == _file_sha256(draft))
+
+
+def _state_patch_gate_errors(root: Path, scene_id: str) -> list[str]:
+    path = root / "characters" / "state_patches" / f"{scene_id}_state_patch.json"
+    payload, error = _read_optional_json(path)
+    if error:
+        return [error]
+    if not payload:
+        return [f"state patch JSON is missing or empty: {_rel(path, root)}"]
+    errors: list[str] = []
+    if str(payload.get("schema") or "") != "literary-engineering-workbench/character-state-patch/v0.1":
+        errors.append("state patch JSON has wrong or missing schema")
+    if str(payload.get("scene_id") or "") not in {"", scene_id}:
+        errors.append(f"state patch scene_id mismatch: {payload.get('scene_id')}")
+    if str(payload.get("status") or "").strip().lower() not in {"pending_human_approval", "candidate", "reviewed", "approved"}:
+        errors.append("state patch status must remain candidate/review/approval-scoped")
+    return errors
+
+
+def _canon_writeback_gate_errors(root: Path, scene_id: str) -> list[str]:
+    status = canon_writeback_status(root, scene_id)
+    state = str(status.get("status") or "")
+    if state in {"pass", "not_required"}:
+        return []
+    return [f"canon writeback gate is not complete for {scene_id}: {status.get('message')}"]
+
+
+def _candidate_path_for_task(root: Path, task: dict[str, object]) -> Path:
+    candidates = [
+        *[str(item) for item in task.get("submitted_artifacts") or []],
+        *[str(item) for item in task.get("expected_outputs") or []],
+        *[str(item) for item in task.get("source_paths") or []],
+    ]
+    for item in candidates:
+        normalized = item.replace("\\", "/")
+        if not normalized.endswith(".md"):
+            continue
+        if normalized.endswith(".agent_tasks.md") or normalized.endswith(".prompt.md"):
+            continue
+        if "/drafts/candidates/" in f"/{normalized}" or "/drafts/revisions/" in f"/{normalized}":
+            return _resolve_project_path(root, item)
+    scene_id = str(task.get("scene_id") or "scene")
+    return root / "drafts" / "candidates" / f"{scene_id}-platform-agent.md"
+
+
+def _scene_path_for_task(root: Path, task: dict[str, object]) -> Path:
+    scene = str(task.get("scene") or "")
+    if scene:
+        return _resolve_project_path(root, scene)
+    scene_id = str(task.get("scene_id") or "scene_0001")
+    return root / "scenes" / f"{scene_id}.yaml"

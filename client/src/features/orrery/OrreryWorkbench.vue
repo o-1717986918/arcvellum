@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Activity, BookOpenText, BookPlus, ChevronDown, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
+import { Activity, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
@@ -15,6 +15,7 @@ import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import { api, query } from "@/services/api";
 import { manuscriptItems } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
+import { useHumanChoicesStore } from "@/stores/humanChoices";
 import { useSpatialProjectionStore } from "@/stores/spatialProjection";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
 import type { SpatialGrammar, SpatialNarrativeNode, SpatialNarrativeProjection, SpatialNodeDetail } from "@/types/spatial";
@@ -26,10 +27,11 @@ const app = useAppStore();
 const router = useRouter();
 const spatial = useSpatialProjectionStore();
 const windows = useSpatialWindowsStore();
+const humanChoices = useHumanChoicesStore();
 const stage = ref<InstanceType<typeof NarrativeParallaxStage> | null>(null);
 const listMode = ref(false);
 const anchors = ref<Record<string, { x: number; y: number; visible: boolean; scale: number }>>({});
-const choices = ref<Record<string, unknown>[]>([]);
+const choices = computed(() => humanChoices.choices);
 const healthExpanded = ref(false);
 const projectBandOpen = ref(false);
 const activeCharacterId = ref("");
@@ -67,6 +69,12 @@ const activeChapterId = computed(() => {
   const selected = projection.value.nodes.find((node) => node.node_id === windows.selectedNodeId);
   if (selected?.type === "chapter") return selected.source_id || selected.node_id;
   return selected?.type === "scene" ? String(selected.metrics.chapter_id || "") : "";
+});
+const timeBounds = computed(() => {
+  const bands = projection.value?.nodes
+    .filter((node) => node.type === "chapter" || node.type === "scene")
+    .map((node) => Number(node.time_band || 0)) || [0];
+  return { min: Math.min(...bands), max: Math.max(...bands) };
 });
 
 watch(() => app.currentProjectPath, (root) => {
@@ -209,13 +217,10 @@ function grammarLabel(grammar: SpatialGrammar): string {
 
 async function loadChoices(): Promise<void> {
   if (!app.currentProjectPath) {
-    choices.value = [];
+    humanChoices.reset();
     return;
   }
-  const result: { items?: Record<string, unknown>[]; choices?: Record<string, unknown>[] } = await api<{ items?: Record<string, unknown>[]; choices?: Record<string, unknown>[] }>(
-    `/workflow/current-choice?${query({ project_root: app.currentProjectPath })}`,
-  ).catch(() => ({ items: [] }));
-  choices.value = result.items || result.choices || [];
+  await humanChoices.load(app.currentProjectPath).catch(() => undefined);
 }
 
 async function loadChapterRail(root: string): Promise<void> {
@@ -248,6 +253,7 @@ async function loadChapterRail(root: string): Promise<void> {
     <nav class="orrery-v3-controls" aria-label="叙事场域控制">
       <div class="orrery-v3-levels" role="tablist"><button :class="{ active: spatial.level === 'book' }" @click="setLevel('book')">全书</button><button :class="{ active: spatial.level === 'chapter' }" @click="setLevel('chapter')">章节</button><button :class="{ active: spatial.level === 'scene' }" @click="setLevel('scene')">场景</button></div>
       <label><Layers3 :size="14" /><select :value="spatial.grammar" aria-label="叙事空间构型" @change="setGrammar"><option v-for="grammar in projection?.available_grammars || []" :key="grammar" :value="grammar">{{ grammarLabel(grammar) }}</option></select></label>
+      <label class="orrery-time-observer" title="调整观测时点；全书节点不会被删除"><Clock3 :size="14" /><input type="range" :min="timeBounds.min" :max="timeBounds.max" step="1" :value="spatial.timeCursor" aria-label="叙事观测时点" @input="spatial.setObservation({ cursor: Number(($event.target as HTMLInputElement).value) })" /><output>{{ Math.round(spatial.timeCursor) }}</output></label>
       <span></span>
       <button class="orrery-v3-icon" title="完整显示当前构型" @click="stage?.fit()"><Focus :size="16" /></button>
       <button class="orrery-v3-icon" title="复位伪 3D 视角；中键拖动可调整视角" aria-label="复位伪 3D 视角" @click="resetView"><RotateCcw :size="15" /></button>
@@ -260,7 +266,7 @@ async function loadChapterRail(root: string): Promise<void> {
     <div v-else-if="projection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
       <NarrativeParallaxStage ref="stage" :projection="projection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
       <NarrativeSpineLayer :projection="projection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
-      <OrreryNodeOverlay :nodes="projection.nodes" :anchors="anchors" :level="projection.level" :motion-events="projection.motion_events" :selected-node-id="windows.selectedNodeId" :focus-node-id="windows.selectedNodeId" @select="selectNode" @focus="focusNodeObject" />
+      <OrreryNodeOverlay :nodes="projection.nodes" :anchors="anchors" :level="projection.level" :motion-events="projection.motion_events" :time-cursor="spatial.timeCursor" :time-window="spatial.timeWindow" :selected-node-id="windows.selectedNodeId" :focus-node-id="windows.selectedNodeId" @select="selectNode" @focus="focusNodeObject" />
       <NarrativeHealthRail :dashboard="props.dashboard" :expanded="healthExpanded" @toggle="healthExpanded = !healthExpanded" />
       <CharacterThreadRail :nodes="projection.nodes" :edges="projection.edges" :active-character-id="activeCharacterId" @select="selectCharacter" />
       <button class="orrery-v3-progress-spindle" :class="{ 'is-calibrated': progress?.status === 'calibrated' }" title="查看作品总体进度" @click="windows.openInstrument('progress')">

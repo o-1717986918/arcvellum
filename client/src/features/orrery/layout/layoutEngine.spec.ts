@@ -17,6 +17,7 @@ function node(id: string, type: string, order: number, parentId: string | null =
     parent_id: parentId,
     cluster_id: "cluster:one",
     time_band: order,
+    completion_state: "planned",
     importance: 0.5,
     detail_level: "near",
     world_hint: { surface: "narrative", grammar: "spine", elevation_band: "midground", occlusion_priority: 1 },
@@ -128,21 +129,36 @@ describe("buildSpatialLayout", () => {
     }
   });
 
-  it("moves constellation chapter clusters along a continuous stellar route instead of alternating spokes", () => {
-    const chapters = Array.from({ length: 8 }, (_value, index) => {
+  it("arranges a long constellation as separated stellar families", () => {
+    const chapters = Array.from({ length: 72 }, (_value, index) => {
       const item = node(`scene:${index + 1}`, "scene", index + 1);
       item.metrics.chapter_id = `chapter_${String(index + 1).padStart(4, "0")}`;
       return item;
     });
     const result = buildSpatialLayout("constellation", "constellation-route", chapters, "project-seed");
     const points = chapters.map((item) => result.points.get(item.node_id)!);
-    for (let index = 1; index < points.length - 1; index += 1) {
-      const incoming = { x: points[index].x - points[index - 1].x, z: points[index].z - points[index - 1].z };
-      const outgoing = { x: points[index + 1].x - points[index].x, z: points[index + 1].z - points[index].z };
-      const cosine = (incoming.x * outgoing.x + incoming.z * outgoing.z) / (Math.hypot(incoming.x, incoming.z) * Math.hypot(outgoing.x, outgoing.z));
-      // A route may turn, but it must not reverse into the previous chapter's
-      // space; that is the geometric source of unreadable full-book webs.
-      expect(cosine).toBeGreaterThan(-0.25);
+    const familySize = 9;
+    const centers = Array.from({ length: 8 }, (_value, family) => {
+      const group = points.slice(family * familySize, (family + 1) * familySize);
+      return {
+        x: group.reduce((sum, point) => sum + point.x, 0) / group.length,
+        z: group.reduce((sum, point) => sum + point.z, 0) / group.length,
+        span: Math.hypot(
+          Math.max(...group.map((point) => point.x)) - Math.min(...group.map((point) => point.x)),
+          Math.max(...group.map((point) => point.z)) - Math.min(...group.map((point) => point.z)),
+        ),
+      };
+    });
+    expect(centers.every((center) => center.span > 8)).toBe(true);
+    const firstFamily = points.slice(0, familySize);
+    const firstFamilySteps = firstFamily.slice(1).map((point, index) => Math.hypot(
+      point.x - firstFamily[index].x,
+      point.y - firstFamily[index].y,
+      point.z - firstFamily[index].z,
+    ));
+    expect(Math.max(...firstFamilySteps)).toBeLessThan(12);
+    for (let index = 1; index < centers.length; index += 1) {
+      expect(centers[index].x - centers[index - 1].x).toBeGreaterThan(20);
     }
   });
 
@@ -161,19 +177,21 @@ describe("buildSpatialLayout", () => {
     expect(Math.hypot(points[24].x - points[0].x, points[24].z - points[0].z)).toBeGreaterThan(28);
   });
 
-  it("keeps the stage grammar advancing through broad bays without grid foldback", () => {
-    const chapters = Array.from({ length: 20 }, (_value, index) => {
+  it("keeps the stage grammar advancing through separated bowed acts", () => {
+    const chapters = Array.from({ length: 72 }, (_value, index) => {
       const item = node(`scene:${index + 1}`, "scene", index + 1);
       item.metrics.chapter_id = `chapter_${String(index + 1).padStart(4, "0")}`;
       return item;
     });
     const result = buildSpatialLayout("stage", "stage-promenade", chapters, "project-seed");
     const points = chapters.map((item) => result.points.get(item.node_id)!);
-    expect(points.every((point, index) => index === 0 || point.x > points[index - 1].x + 12)).toBe(true);
-    // The curtain wave is visible, but never so compressed that an act reads
-    // as a flat rail or a stacked grid.
-    const zSpan = Math.max(...points.map((point) => point.z)) - Math.min(...points.map((point) => point.z));
-    expect(zSpan).toBeGreaterThan(8);
+    const actSize = 10;
+    const firstAct = points.slice(0, actSize);
+    const secondAct = points.slice(actSize, actSize * 2);
+    expect(firstAct.every((point, index) => index === 0 || point.x > firstAct[index - 1].x + 2)).toBe(true);
+    expect(secondAct[0].x - firstAct[firstAct.length - 1].x).toBeGreaterThan(7);
+    const firstDepth = Math.max(...firstAct.map((point) => point.z)) - Math.min(...firstAct.map((point) => point.z));
+    expect(firstDepth).toBeGreaterThan(6);
   });
 
   it("gives every grammar a stable local separation for dense narrative sequences", () => {

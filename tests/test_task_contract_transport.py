@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+from importlib import import_module
 import re
 import tempfile
 import unittest
@@ -8,6 +9,10 @@ from unittest.mock import patch
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio_engine.agent_task_status import build_agent_task_status, build_route_audit
 import literary_engineering_studio_engine.agent_task_status as agent_task_status
+import literary_engineering_studio_engine.agent_task_inventory as agent_task_inventory
+import literary_engineering_studio_engine.route_audit_common as route_audit_common
+import literary_engineering_studio_engine.asset_route as asset_route
+import literary_engineering_studio_engine.export_release_route as export_release_route
 import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.platform_agent_tasks import write_project_seed_asset_tasks
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload, _render_task_markdown, complete_task, submit_task
@@ -23,7 +28,7 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertEqual(len(results), 2)
             self.assertTrue((root / "canon/candidates/world_rules/world-foundation.agent_tasks.md").is_file())
             self.assertTrue((root / "characters/candidates/protagonist-foundation.agent_tasks.md").is_file())
-            blueprint = task_registry._asset_blueprint_for_state(
+            blueprint = asset_route._asset_blueprint_for_state(
                 root,
                 "asset-intake",
                 "",
@@ -54,7 +59,7 @@ class TaskContractTransportTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            blueprint = task_registry._asset_blueprint_for_state(
+            blueprint = asset_route._asset_blueprint_for_state(
                 root,
                 "protagonist-foundation",
                 "character",
@@ -66,7 +71,7 @@ class TaskContractTransportTests(unittest.TestCase):
 
     def test_export_and_publish_declare_every_deterministic_delivery_write(self):
         root = Path(".").resolve()
-        export = task_registry._export_release_blueprint_for_state(
+        export = export_release_route._export_release_blueprint_for_state(
             root,
             "chapter_0001",
             "export-package",
@@ -77,7 +82,7 @@ class TaskContractTransportTests(unittest.TestCase):
         self.assertIn("exports/chapter_0001/chapter_0001_novel.layout.json", export["expected_outputs"])
         self.assertIn("exports/chapter_0001/chapter_0001_novel.inspection.json", export["expected_outputs"])
 
-        publish = task_registry._export_release_blueprint_for_state(
+        publish = export_release_route._export_release_blueprint_for_state(
             root,
             "chapter_0001",
             "publish-release",
@@ -126,6 +131,7 @@ class TaskContractTransportTests(unittest.TestCase):
                 root, "scene_0001", "scenes/scene_0001.yaml", "candidate-generation-provenance", ""
             )
 
+            self.assertIn("--out drafts/candidates/scene_0001-platform-agent.md", blueprint["command"])
             self.assertIn("characters/candidates/scene-0001-林正.json", blueprint["expected_outputs"])
             self.assertEqual(blueprint["scene_character_assets"][0]["name"], "林正")
             payload = task_registry._build_task_payload(
@@ -146,6 +152,29 @@ class TaskContractTransportTests(unittest.TestCase):
                 payload["core_managed_outputs"],
             )
 
+    def test_candidate_generation_writes_to_the_current_revision_candidate(self):
+        """A resumed route must never let the CLI create an untracked default candidate."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("project:\n  title: 潮线\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text("scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8")
+            revision = root / "drafts" / "revisions" / "scene_0001_revision.md"
+            revision.parent.mkdir(parents=True)
+            revision.write_text("旧修订候选\n", encoding="utf-8")
+
+            blueprint = task_registry._blueprint_for_state(
+                root,
+                "scene_0001",
+                "scenes/scene_0001.yaml",
+                "candidate-generation-provenance",
+                "",
+            )
+
+            self.assertIn("--out drafts/revisions/scene_0001_revision.md", blueprint["command"])
+            self.assertIn("drafts/revisions/scene_0001_revision.prompt.json", blueprint["expected_outputs"])
+
     def test_candidate_review_transports_its_schema_and_protects_the_cli_sidecar(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -160,6 +189,8 @@ class TaskContractTransportTests(unittest.TestCase):
 
             self.assertEqual(blueprint["candidate"], "drafts/candidates/scene_0001-platform-agent.md")
             self.assertIn("--materialization-scope scene", blueprint["command"])
+            self.assertIn("--draft drafts/candidates/scene_0001-platform-agent.md", blueprint["command"])
+            self.assertNotIn(" --out ", blueprint["command"])
             self.assertIn("schemas/agent_outputs/scene_review.v1.schema.json", blueprint["source_paths"])
             self.assertIn(
                 "reviews/agent/scene_0001_scene_review.agent_tasks.md",
@@ -269,6 +300,41 @@ class TaskContractTransportTests(unittest.TestCase):
 
             self.assertEqual(task_registry._composition_gate_errors(root, "scene_0001"), [])
 
+    def test_scene_blueprint_reads_an_existing_review_when_preparing_revision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("project:\n  title: 潮线\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text("scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8")
+            review = root / "reviews" / "agent" / "scene_0001_scene_review.json"
+            review.parent.mkdir(parents=True)
+            review.write_text(
+                json.dumps({"candidate": "drafts/candidates/scene_0001-platform-agent.md"}),
+                encoding="utf-8",
+            )
+
+            blueprint = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "candidate-revision", ""
+            )
+
+            self.assertIn("drafts/candidates/scene_0001-platform-agent.md", blueprint["source_paths"])
+
+    def test_continuity_apply_stages_the_promoted_draft_needed_for_digest_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text("scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8")
+
+            blueprint = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "continuity-ledger-apply", ""
+            )
+
+            self.assertIn("drafts/scenes/scene_0001.md", blueprint["source_paths"])
+            self.assertIn("plot/ledger_deltas/scene_0001.json", blueprint["source_paths"])
+            self.assertIn("reviews/continuity/scene_0001_ledger_review.json", blueprint["source_paths"])
+
     def test_revision_promotion_targets_exact_current_candidate_and_overwrites_formal_draft(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -312,7 +378,19 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertEqual(result.current_state, "context-packet")
 
     def test_every_declared_task_type_has_an_exact_execution_contract(self):
-        source = Path(task_registry.__file__).read_text(encoding="utf-8")
+        route_modules = [
+            "scene_development_route.py",
+            "longform_planning_route.py",
+            "source_ingest_route.py",
+            "style_engineering_route.py",
+            "asset_route.py",
+            "review_audit_route.py",
+            "export_release_route.py",
+        ]
+        source = "\n".join(
+            Path(import_module(f"literary_engineering_studio_engine.{name.removesuffix('.py')}").__file__).read_text(encoding="utf-8")
+            for name in route_modules
+        )
         declared = set(re.findall(r'"task_type"\s*:\s*"([^"]+)"', source))
         self.assertTrue(declared)
         self.assertEqual(declared - set(task_registry.TASK_TYPE_EXECUTION), set())
@@ -459,8 +537,8 @@ class TaskContractTransportTests(unittest.TestCase):
         historical_path.is_absolute.return_value = True
         historical_path.exists.side_effect = PermissionError("denied")
 
-        with patch.object(agent_task_status, "Path", return_value=historical_path):
-            exists = agent_task_status._path_exists(Path("C:/project"), "C:\\unreadable\\runtime\\punctuation-standard.md")
+        with patch.object(route_audit_common, "Path", return_value=historical_path):
+            exists = agent_task_inventory._path_exists(Path("C:/project"), "C:\\unreadable\\runtime\\punctuation-standard.md")
 
         self.assertFalse(exists)
 
@@ -591,6 +669,62 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertEqual(opened.status, "opened")
             self.assertEqual(refreshed["task_contract_revision"], task_registry.TASK_CONTRACT_REVISION)
             self.assertEqual(refreshed["command"], "python -m literary_engineering_studio_engine seed-project-assets <project>")
+
+    def test_scene_task_payload_carries_yaml_word_budget_and_curated_agent_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\nword_count_target: 1300\nword_count_min: 1170\nword_count_max: 1430\n",
+                encoding="utf-8",
+            )
+            (root / "canon").mkdir()
+            (root / "characters").mkdir()
+            (root / "style").mkdir()
+            (root / "style" / "style-profile.md").write_text("style", encoding="utf-8")
+
+            payload = task_registry._build_task_payload(
+                root,
+                "scene-development",
+                {
+                    "scene_id": "scene_0001",
+                    "scene": "scenes/scene_0001.yaml",
+                    "current_step": "candidate-generation-provenance",
+                    "next_action": "",
+                },
+            )
+
+            self.assertEqual(payload["word_count_target"], 1300)
+            self.assertEqual(payload["word_count_min"], 1170)
+            self.assertEqual(payload["word_count_max"], 1430)
+            self.assertNotIn("canon", payload["agent_source_paths"])
+            self.assertNotIn("characters", payload["agent_source_paths"])
+            self.assertNotIn("style", payload["agent_source_paths"])
+            self.assertIn("style/style-profile.md", payload["agent_source_paths"])
+            self.assertNotIn("plot/word_budget/word_budget.agent_tasks.md", payload["agent_source_paths"])
+
+    def test_state_patch_preparation_does_not_merge_the_following_agent_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text("scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8")
+
+            preparation = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "state-patch-json", ""
+            )
+            review = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "state-agent-task", ""
+            )
+
+            self.assertEqual(preparation["task_type"], "deterministic-cli")
+            self.assertIn("characters/state_patches/scene_0001_state_patch_review.json", preparation["expected_outputs"])
+            self.assertNotIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", preparation["expected_outputs"])
+            self.assertIn("characters/state_patches/scene_0001_state_patch_review.json", review["expected_outputs"])
+            self.assertIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", review["expected_outputs"])
 
 
 if __name__ == "__main__":
