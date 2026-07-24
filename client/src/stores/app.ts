@@ -229,6 +229,10 @@ export const useAppStore = defineStore("app", () => {
     modelCatalog.value = catalog;
   }
 
+  function applyModelCatalog(catalog: ModelCatalog | null): void {
+    if (catalog) modelCatalog.value = catalog;
+  }
+
   function startBootstrapStream(): void {
     if (bootstrapStream) return;
     bootstrapStream = connectEventStream("/application/bootstrap/stream?interval_seconds=1", (event, data) => {
@@ -335,6 +339,7 @@ export const useAppStore = defineStore("app", () => {
     setAutopilotStatus,
     setAutopilotRun,
     loadModelCatalog,
+    applyModelCatalog,
     clearMessages,
     reportStartupError,
     stopProjectStreams,

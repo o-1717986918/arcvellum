@@ -54,12 +54,19 @@ export interface ProviderItem {
   model_count: number;
 }
 
+export interface ConnectionPreset {
+  id: string;
+  label: string;
+  group: string;
+}
+
 export interface ModelCatalog {
   runner?: string;
   version?: string;
   selected_model?: string;
   selected_models?: Record<"worker" | "advisor" | "steward", string>;
   providers: ProviderItem[];
+  connection_presets?: ConnectionPreset[];
   connected_provider_count?: number;
   available_model_count?: number;
 }

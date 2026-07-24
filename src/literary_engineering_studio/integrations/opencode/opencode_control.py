@@ -10,6 +10,11 @@ from typing import Any, Iterator
 from ...application.config import default_data_root, save_config
 from .opencode_binary import locate_opencode
 from .opencode_server import OpenCodeServer, OpenCodeServerHandle
+from .provider_definitions import (
+    connection_presets,
+    opencode_provider_overrides,
+    register_custom_provider,
+)
 from ...process_manager import ProcessManager
 
 
@@ -59,6 +64,7 @@ def provider_catalog(config: dict[str, Any], *, runtime_pool=None) -> dict[str, 
             "providers": providers,
             "connected_provider_count": sum(1 for item in providers if item["connected"]),
             "available_model_count": sum(len(item["models"]) for item in providers),
+            "connection_presets": connection_presets(),
         }
 
 
@@ -73,6 +79,28 @@ def set_api_credential(config: dict[str, Any], provider_id: str, credential: str
     return provider_catalog(config, runtime_pool=runtime_pool)
 
 
+def connect_custom_provider(
+    config: dict[str, Any],
+    definition: dict[str, Any],
+    credential: str,
+    *,
+    runtime_pool=None,
+) -> dict[str, Any]:
+    """Register an OpenAI-compatible endpoint, then save its key in OpenCode.
+
+    The public definition is persisted because every isolated role profile
+    needs it at startup.  The credential is deliberately delegated to
+    OpenCode's auth storage and never written to Studio's configuration.
+    """
+
+    normalized = register_custom_provider(config, definition)
+    save_config(config)
+    # The newly registered endpoint must be present in the profile that
+    # receives its credential.  A short-lived control profile is reliable even
+    # when a long-lived advisor service is still finishing an older session.
+    return set_api_credential(config, normalized["id"], credential, runtime_pool=None)
+
+
 def disconnect_provider(config: dict[str, Any], provider_id: str, *, runtime_pool=None) -> dict[str, Any]:
     normalized_id = _validated_provider_id(provider_id)
     if normalized_id == "opencode":
@@ -85,12 +113,19 @@ def disconnect_provider(config: dict[str, Any], provider_id: str, *, runtime_poo
     runners = config.setdefault("agent_runners", {})
     opencode = runners.setdefault("opencode", {})
     selected_model = str(opencode.get("model") or "")
-    if selected_model.startswith(normalized_id + "/"):
+    models = opencode.setdefault("models", {})
+    affected_roles = [
+        role
+        for role, value in models.items()
+        if str(value).startswith(normalized_id + "/")
+    ]
+    if selected_model.startswith(normalized_id + "/") or affected_roles:
         opencode["model"] = fallback
-        models = opencode.setdefault("models", {})
         for role, value in list(models.items()):
             if str(value).startswith(normalized_id + "/"):
                 models[role] = fallback
+        for role in ("worker", "advisor", "steward"):
+            models.setdefault(role, fallback)
         section = config.setdefault("model_connections", {})
         connections = section.setdefault("connections", [])
         record = next(
@@ -152,6 +187,7 @@ def select_model(config: dict[str, Any], qualified_model: str, *, role: str = "a
         connections.append(record)
     record["provider_family"] = model.split("/", 1)[0]
     record["selected_model"] = model
+    record["selected_models"] = _selected_models(config)
     record["authentication_state"] = "runner-managed"
     record["endpoint_health"] = "probe-required"
     save_config(config)
@@ -170,7 +206,10 @@ def _control_session(config: dict[str, Any], *, runtime_pool=None) -> Iterator[O
         root = Path(temporary)
         workspace = root / "workspace"
         workspace.mkdir()
-        if runtime_pool is not None:
+        # A persistent role service can predate a just-saved custom endpoint.
+        # Use an isolated control profile for catalog/auth operations whenever
+        # definitions exist so settings always reflects the current config.
+        if runtime_pool is not None and not opencode_provider_overrides(config):
             lease = runtime_pool.acquire("advisor", workspace)
             try:
                 yield type("ControlHandle", (), {"client": lease.client})()
@@ -185,6 +224,7 @@ def _control_session(config: dict[str, Any], *, runtime_pool=None) -> Iterator[O
             run_root=root / "run",
             role="advisor",
             model=model,
+            provider_overrides=opencode_provider_overrides(config),
         )
         try:
             yield handle

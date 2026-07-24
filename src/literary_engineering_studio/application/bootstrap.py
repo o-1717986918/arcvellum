@@ -59,6 +59,16 @@ class ApplicationBootstrapService:
             self._catalog_future = self._executor.submit(self._load_catalog)
             return True
 
+    def record_model_catalog(self, catalog: dict[str, Any]) -> None:
+        """Replace a stale startup snapshot after a user changes a connection."""
+
+        if not isinstance(catalog, dict):
+            return
+        with self._lock:
+            self._catalog = dict(catalog)
+            self._catalog_error = ""
+            self._catalog_loaded_at = _now()
+
     def snapshot(self) -> dict[str, Any]:
         lifecycle_state, lifecycle_error = self._lifecycle_state()
         engine_state = self._core_engine_state()

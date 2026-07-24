@@ -10,6 +10,14 @@ import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
+const customProvider = reactive({
+  provider_id: "my-compatible-api",
+  display_name: "我的兼容模型服务",
+  base_url: "",
+  models_text: "",
+  context: "",
+  output: "",
+});
 const selectedModels = reactive({ worker: "", advisor: "", steward: "" });
 const busy = ref(false);
 const feedback = ref("");
@@ -28,6 +36,26 @@ const experience = reactive({
 const providers = computed(() => store.modelCatalog?.providers || []);
 const connectedProviders = computed(() => providers.value.filter((provider) => provider.connected));
 const models = computed(() => connectedProviders.value.flatMap((provider) => provider.models || []));
+const connectionPresets = computed(() => store.modelCatalog?.connection_presets || [
+  { id: "deepseek", label: "DeepSeek", group: "常用国内服务" },
+  { id: "zhipuai", label: "智谱 AI（GLM）", group: "常用国内服务" },
+  { id: "alibaba-cn", label: "阿里云百炼（中国区）", group: "常用国内服务" },
+  { id: "moonshotai-cn", label: "月之暗面 Kimi（中国区）", group: "常用国内服务" },
+  { id: "minimax-cn", label: "MiniMax（中国区）", group: "常用国内服务" },
+  { id: "siliconflow-cn", label: "硅基流动（中国区）", group: "常用国内服务" },
+  { id: "openai", label: "OpenAI", group: "国际服务" },
+  { id: "anthropic", label: "Anthropic Claude", group: "国际服务" },
+  { id: "google", label: "Google Gemini", group: "国际服务" },
+  { id: "openrouter", label: "OpenRouter", group: "国际服务" },
+]);
+const isCustomProvider = computed(() => credential.provider_id === "__custom__");
+const presetGroups = computed(() => {
+  const groups = new Map<string, typeof connectionPresets.value>();
+  for (const preset of connectionPresets.value) {
+    groups.set(preset.group, [...(groups.get(preset.group) || []), preset]);
+  }
+  return [...groups.entries()].map(([label, items]) => ({ label, items }));
+});
 
 onMounted(async () => {
   Object.assign(experience, readOrreryExperience());
@@ -63,11 +91,23 @@ async function connectProvider(): Promise<void> {
   busy.value = true;
   feedback.value = "";
   try {
-    await api("/model-connections/opencode/credential", {
-      method: "PUT",
-      body: JSON.stringify(credential),
-    });
+    const result = isCustomProvider.value
+      ? await api<any>("/model-connections/opencode/custom", {
+          method: "PUT",
+          body: JSON.stringify({
+            provider_id: customProvider.provider_id,
+            display_name: customProvider.display_name,
+            base_url: customProvider.base_url,
+            models: parseCustomModels(),
+            credential: credential.credential,
+          }),
+        })
+      : await api<any>("/model-connections/opencode/credential", {
+          method: "PUT",
+          body: JSON.stringify(credential),
+        });
     credential.credential = "";
+    store.applyModelCatalog(result);
     await store.loadModelCatalog();
     feedback.value = "模型服务已经连接。";
   } catch (cause) {
@@ -79,14 +119,30 @@ async function connectProvider(): Promise<void> {
 
 async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> {
   if (!selectedModels[role]) return;
-  await api("/model-connections/opencode/model", {
+  const result = await api<any>("/model-connections/opencode/model", {
     method: "PUT",
     body: JSON.stringify({ model: selectedModels[role], role }),
   });
   const labels = { worker: "正文与审查", advisor: "创作顾问", steward: "自动审批" };
-  feedback.value = `${labels[role]}模型已经更新。`;
-  await store.loadModelCatalog();
+  store.applyModelCatalog(result.catalog || result);
+  const pendingRoles = Array.isArray(result.runtime?.pending_roles) ? result.runtime.pending_roles : [];
+  feedback.value = pendingRoles.includes(role)
+    ? `${labels[role]}模型已保存；当前任务结束后会自动切换。`
+    : `${labels[role]}模型已经更新。`;
   syncSelectedModels();
+}
+
+function parseCustomModels(): Array<{ id: string; name: string; context: number; output: number }> {
+  const context = Number(customProvider.context) || 0;
+  const output = Number(customProvider.output) || 0;
+  return customProvider.models_text
+    .split(/[\n,]/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      const [id, rawName] = value.split("|").map((item) => item.trim());
+      return { id, name: rawName || id, context, output };
+    });
 }
 
 function syncSelectedModels(): void {
@@ -238,13 +294,20 @@ function pathValue(key: string): string {
       </section>
 
       <section class="settings-section connection-form-section">
-        <header><span class="section-icon iris"><KeyRound :size="18" /></span><div><h2>连接模型服务</h2><p>密钥只交给本机 OpenCode 凭证存储。</p></div></header>
+        <header><span class="section-icon iris"><KeyRound :size="18" /></span><div><h2>连接模型服务</h2><p>预设服务即连即用；兼容接口可填写专属地址和模型。密钥只交给本机 OpenCode 凭证存储。</p></div></header>
         <form @submit.prevent="connectProvider">
-          <label class="field"><span>服务</span><select v-model="credential.provider_id"><option value="deepseek">DeepSeek</option><option value="anthropic">Anthropic</option><option value="openai">OpenAI compatible</option><option value="google">Google</option></select></label>
+          <label class="field"><span>服务</span><select v-model="credential.provider_id"><optgroup v-for="group in presetGroups" :key="group.label" :label="group.label"><option v-for="preset in group.items" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup><option value="__custom__">自定义 OpenAI 兼容接口</option></select></label>
+          <template v-if="isCustomProvider">
+            <label class="field"><span>服务标识</span><input v-model.trim="customProvider.provider_id" required placeholder="例如 my-company-gateway" /></label>
+            <label class="field"><span>显示名称</span><input v-model.trim="customProvider.display_name" required placeholder="例如 我的团队模型网关" /></label>
+            <label class="field"><span>接口地址</span><input v-model.trim="customProvider.base_url" required type="url" placeholder="https://example.com/v1" /></label>
+            <label class="field"><span>模型 ID</span><textarea v-model="customProvider.models_text" required rows="3" placeholder="一行一个；可写“模型ID | 显示名称”&#10;例如 qwen-plus | Qwen Plus"></textarea></label>
+            <div class="connection-limits"><label class="field"><span>上下文长度（可选）</span><input v-model="customProvider.context" inputmode="numeric" placeholder="例如 128000" /></label><label class="field"><span>最大输出（可选）</span><input v-model="customProvider.output" inputmode="numeric" placeholder="例如 8192" /></label></div>
+          </template>
           <label class="field"><span>API 密钥</span><input v-model="credential.credential" required type="password" autocomplete="new-password" placeholder="输入后不会再次显示" /></label>
-          <button class="primary-button wide" :disabled="busy || !credential.credential"><KeyRound :size="16" />建立连接</button>
+          <button class="primary-button wide" :disabled="busy || !credential.credential || (isCustomProvider && (!customProvider.provider_id || !customProvider.base_url || !customProvider.models_text))"><KeyRound :size="16" />建立连接</button>
         </form>
-        <p class="privacy-note"><Settings :size="15" />界面、普通日志和作品文件都不会回显密钥原文。</p>
+        <p class="privacy-note"><Settings :size="15" />接口地址与模型名称会保存在本机，以便重启后保持选择；界面、普通日志和作品文件都不会回显密钥原文。</p>
       </section>
     </div>
 

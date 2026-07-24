@@ -55,4 +55,40 @@ describe("AutopilotPanel", () => {
     expect(wrapper.text()).toContain("确认授权并开始");
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true);
   });
+
+  it("labels the counter as formal gate advances rather than finished creative works", async () => {
+    apiMock.mockImplementation(async (path: string) => {
+      if (path.startsWith("/autopilot/status")) {
+        return {
+          ok: true,
+          policy,
+          run: {
+            run_id: "run-counter",
+            project_root: "C:\\ArcVellum\\作品",
+            mode: "collaborative",
+            runtime: "opencode",
+            status: "running",
+            current_route: "scene-development",
+            current_task_id: "scene-review",
+            tasks_completed: 85,
+            failures: 0,
+            consecutive_revisions: 0,
+            estimated_cost: 0,
+            last_error: "",
+            stop_reason: "",
+          },
+        };
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const { useAppStore } = await import("@/stores/app");
+    useAppStore().setCurrentProject("C:\\ArcVellum\\作品", false);
+    const wrapper = mount(AutopilotPanel, { global: { plugins: [pinia] } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("已通过正式门禁 85 次");
+    expect(wrapper.text()).not.toContain("已经完成 85 项创作任务");
+  });
 });

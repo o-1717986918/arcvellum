@@ -367,6 +367,7 @@
 .provider-list strong { font-size: 11px; }
 .provider-list p { margin: 2px 0 0; font-size: 9px; }
 .connection-form-section form { display: grid; gap: 14px; }
+.connection-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .privacy-note { display: flex; gap: 7px; margin: 16px 0 0; font-size: 9px; }
 .bootstrap-status-panel { margin-top: 26px; }
 .bootstrap-status-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

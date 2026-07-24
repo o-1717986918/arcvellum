@@ -514,6 +514,27 @@ def sandbox_change_issues(sandbox: SandboxManifest) -> list[str]:
     return ["Agent runtime changed files outside expected_outputs: " + ", ".join(unexpected[:20])] if unexpected else []
 
 
+def changed_agent_outputs(sandbox: SandboxManifest, *, include_completion_receipts: bool = False) -> tuple[str, ...]:
+    """Return declared outputs that changed after the Agent workspace was staged.
+
+    Recovery may only reuse a timed-out sandbox when the Agent actually wrote a
+    fresh, substantive output.  Completion receipts are Worker-owned and are
+    therefore excluded by default: a receipt alone must never make stale prose
+    or a stale review recoverable.
+    """
+
+    baseline = json.loads(sandbox.baseline_path.read_text(encoding="utf-8"))
+    current = _workspace_hashes(_agent_workspace(sandbox))
+    changed: list[str] = []
+    for relative in sandbox.expected_outputs:
+        normalized = str(relative).replace("\\", "/")
+        if not include_completion_receipts and normalized.endswith(".agent_completion.json"):
+            continue
+        if baseline.get(normalized) != current.get(normalized):
+            changed.append(normalized)
+    return tuple(changed)
+
+
 def _unexpected_changes(
     baseline: dict[str, str],
     current: dict[str, str],

@@ -211,7 +211,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
             </section>
             <dl class="progress-run-facts">
               <div><dt>路线</dt><dd>{{ observedTask?.route || activeRun.current_route || currentTask.route || '等待下一步' }}</dd></div>
-              <div><dt>已完成</dt><dd>{{ Number(observedTask?.tasks_completed || activeRun.tasks_completed || 0) }} 项</dd></div>
+              <div><dt>正式推进</dt><dd>{{ Number(observedTask?.tasks_completed || activeRun.tasks_completed || 0) }} 次</dd></div>
               <div><dt>节点</dt><dd>{{ projection?.summary.node_count || 0 }}</dd></div>
             </dl>
             <section v-if="observedTask || observedEvents.length" class="agent-pulse"><header><span><Activity :size="14" />{{ observedTask?.role || '执行观察' }}</span><small>{{ observedTask?.stage || '等待新的任务事件' }}</small></header><ol v-if="observedEvents.length"><li v-for="event in observedEvents" :key="event.sequence"><i></i><div><strong>{{ event.stage }}</strong><p>{{ event.message }}</p></div></li></ol></section>
@@ -235,7 +235,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
           <dl class="agent-runtime-facts">
             <div><dt>执行器</dt><dd>{{ observedTask?.runtime || '未启动' }}</dd></div>
             <div><dt>路线</dt><dd>{{ observedTask?.route || '等待任务' }}</dd></div>
-            <div><dt>已完成</dt><dd>{{ Number(observedTask?.tasks_completed || 0) }} 项</dd></div>
+            <div><dt>正式推进</dt><dd>{{ Number(observedTask?.tasks_completed || 0) }} 次</dd></div>
             <div><dt>停滞周期</dt><dd>{{ Number(observedController?.stalled_cycles || 0) }}</dd></div>
           </dl>
           <section class="agent-service-deck">

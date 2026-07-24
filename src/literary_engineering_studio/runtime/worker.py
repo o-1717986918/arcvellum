@@ -17,6 +17,7 @@ from .sandbox import (
     SandboxManifest,
     apply_expected_outputs,
     capture_core_managed_outputs,
+    changed_agent_outputs,
     control_sandbox_view,
     inspect_expected_outputs,
     load_writeback_preview,
@@ -396,7 +397,7 @@ class AgentWorker:
         return self._finalize(task, sandbox, preview, approved_by=approved_by)
 
     def resume_from_run(self, run_root: Path) -> WorkerRunResult:
-        """Resume only when an existing sandbox is already complete and valid."""
+        """Resume a timed-out run only when it contains fresh valid Agent output."""
         run = load_run(run_root)
         project = _validate_project(Path(str(run.get("project_root") or "")))
         task_json = Path(str(run.get("task_json") or ""))
@@ -408,6 +409,15 @@ class AgentWorker:
             raise ValueError("recovery sandbox task identity does not match its task package")
 
         self._emit("run.resume_started", {"run_root": str(sandbox.run_root), "task_id": task.task_id})
+        changed_outputs = changed_agent_outputs(sandbox)
+        if not changed_outputs:
+            message = "recovery requires fresh Agent-authored expected outputs; the sandbox only contains staged or stale files"
+            update_run_manifest(
+                sandbox.manifest_path,
+                recovery={"status": "rejected", "reason": "no-fresh-agent-output"},
+            )
+            self._emit("run.resume_rejected", {"reason": "no-fresh-agent-output", "task_id": task.task_id})
+            raise ValueError(message)
         restored = restore_core_managed_outputs(sandbox)
         if restored:
             self._emit("core.outputs_restored", {"task_id": task.task_id, "paths": list(restored), "recovery": True})
@@ -429,7 +439,7 @@ class AgentWorker:
         update_run_manifest(
             sandbox.manifest_path,
             status="recovery_preflight_passed",
-            recovery={"status": "accepted", "preflight": preflight.as_dict()},
+            recovery={"status": "accepted", "fresh_outputs": list(changed_outputs), "preflight": preflight.as_dict()},
         )
         self._emit("validation.passed", {"kind": "recovery-preflight", **preflight.as_dict()})
         return self._complete_outputs(task, sandbox, str(run.get("runtime") or "opencode"))

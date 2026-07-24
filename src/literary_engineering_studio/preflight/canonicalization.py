@@ -697,13 +697,14 @@ def _canonicalize_asset_completion_markers(
 
 
 def _canonicalize_scene_review_metadata(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Fill deterministic identity fields for a scene review without changing its judgement.
+    """Normalize mechanical review metadata without weakening evidence binding.
 
-    A review Agent supplies the verdict and evidence.  The candidate digest,
-    scene id, schema discriminator, and source list are task-owned facts.  By
-    restoring those facts before validation, the repair loop can focus on
-    genuinely missing review evidence instead of wasting a model turn on a
-    copied hash or a guessed schema label.
+    A review Agent supplies the verdict and evidence.  The schema label,
+    scene id, candidate path, source list, and reviewer identity are task-owned
+    facts.  The candidate digest is deliberately *not* normalized: it is the
+    cryptographic assertion that this judgement was made against this exact
+    prose revision.  Replacing a stale digest here would make an old verdict
+    appear to review newly written text.
     """
 
     if task.current_state not in {"candidate-review", "agent-review-task"}:
@@ -743,10 +744,10 @@ def _canonicalize_scene_review_metadata(task: TaskPackage, sandbox: SandboxManif
         "schema": "literary-engineering-workbench/scene-review-agent/v1",
         "scene_id": str(task.payload.get("scene_id") or task.scene_id or "").strip(),
         # The Agent does not choose which prose it is allowed to review.  Keep
-        # the exact candidate path alongside the digest so a following revision
-        # task cannot fall back to rewriting its own output in place.
+        # the exact candidate path alongside the Agent-authored digest so a
+        # following revision task cannot fall back to rewriting its own output
+        # in place.
         "candidate": candidate_rel,
-        "candidate_sha256": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
         "source_paths": [str(item).replace("\\", "/") for item in task.source_paths],
         "reviewer_session_id": _session_identity(task, "reviewer"),
     }

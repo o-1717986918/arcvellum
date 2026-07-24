@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.config import default_config, load_config
 from literary_engineering_studio.opencode_binary import (
     _write_installation_receipt,
     bundle_manifest,
@@ -16,8 +16,12 @@ from literary_engineering_studio.opencode_binary import (
     verify_opencode,
 )
 from literary_engineering_studio.opencode_client import OpenCodeClient, OpenCodeEndpoint, split_model
-from literary_engineering_studio.opencode_control import disconnect_provider
+from literary_engineering_studio.opencode_control import disconnect_provider, select_model
 from literary_engineering_studio.opencode_profiles import advisor_profile, steward_profile, worker_profile, write_profile
+from literary_engineering_studio.integrations.opencode.provider_definitions import (
+    opencode_provider_overrides,
+    register_custom_provider,
+)
 from literary_engineering_studio.runtime_events import normalize_opencode_event
 
 
@@ -124,6 +128,47 @@ class OpenCodeFoundationTests(unittest.TestCase):
             self.assertEqual(payload["model"], "opencode/big-pickle")
             self.assertFalse(payload["autoupdate"])
             self.assertEqual(payload["share"], "disabled")
+
+    def test_custom_compatible_provider_is_written_into_isolated_profile_without_credentials(self):
+        config = default_config()
+        register_custom_provider(
+            config,
+            {
+                "provider_id": "team-gateway",
+                "display_name": "Team Gateway",
+                "base_url": "https://models.example.test/v1",
+                "models": [{"id": "writer-1", "name": "Writer One", "context": 128000, "output": 8192}],
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = write_profile(
+                Path(temporary),
+                role="worker",
+                model="team-gateway/writer-1",
+                provider_overrides=opencode_provider_overrides(config),
+            )
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        provider = payload["provider"]["team-gateway"]
+        self.assertEqual(provider["options"]["baseURL"], "https://models.example.test/v1")
+        self.assertIn("writer-1", provider["models"])
+        self.assertNotIn("credential", json.dumps(payload).lower())
+        self.assertNotIn("api_key", json.dumps(payload).lower())
+
+    def test_role_model_selection_persists_across_restart(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "config.json"
+            with patch.dict("os.environ", {"LES_CONFIG_PATH": str(config_path)}):
+                config = default_config()
+                worker = select_model(config, "zhipuai/glm-5", role="worker")
+                advisor = select_model(config, "alibaba-cn/qwen-plus", role="advisor")
+                reloaded = load_config()
+        settings = reloaded["agent_runners"]["opencode"]
+        self.assertEqual(worker["selected_models"]["worker"], "zhipuai/glm-5")
+        self.assertEqual(advisor["selected_models"]["advisor"], "alibaba-cn/qwen-plus")
+        self.assertEqual(settings["model"], "zhipuai/glm-5")
+        self.assertEqual(settings["models"]["worker"], "zhipuai/glm-5")
+        self.assertEqual(settings["models"]["advisor"], "alibaba-cn/qwen-plus")
+        self.assertNotEqual(settings["models"]["worker"], "opencode/deepseek-v4-flash-free")
 
     def test_event_normalizer_drops_reasoning_and_keeps_text_delta(self):
         reasoning = normalize_opencode_event(

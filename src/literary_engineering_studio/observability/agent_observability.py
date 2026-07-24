@@ -231,6 +231,7 @@ def _event_stage(event: str, data: dict[str, Any]) -> tuple[str, str]:
         "worker.human.required": ("等待你的决定", "这一步需要由你确认，系统不会替你伪造批准。"),
         "task.recovery_started": ("恢复上次任务", "正在从已保存的任务状态恢复。"),
         "task.recovery_succeeded": ("恢复完成", "已恢复可验证产物，继续执行前仍会检查门禁。"),
+        "task.recovery_rejected": ("未采用旧成果", "上一轮没有可验证的新产物，系统不会把缓存当作正式交付。"),
         "task.failed": ("任务暂停", "本轮任务没有通过验证，等待处理后可从原处继续。"),
         "decision.started": ("评估受托决定", "受控决策代理正在比较已有选项，不会替代你的未授权选择。"),
         "decision.delegated": ("已记录受托决定", "已将可审计的决定写入项目的正式记录。"),

@@ -139,7 +139,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v0.95.2 separates CLI control inputs from Agent-visible task inputs, hardens exact-candidate review gates, and prevents non-blocking review evidence from causing revision loops."
+        --notes "ArcVellum v0.95.3 adds common model-provider presets, persistent role-based model selection, and OpenAI-compatible custom endpoints while preserving credential isolation."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

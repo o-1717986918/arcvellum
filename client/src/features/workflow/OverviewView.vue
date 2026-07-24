@@ -240,7 +240,7 @@ function advanceSpatialRun(): void {
           <h2>{{ activeRunTitle }}</h2>
           <p v-if="activeRun.status === 'running'">这项任务正在真实执行；可打开推进仪表查看读取、创作、修订和验收进度。</p>
           <p v-else>{{ activeRun.last_error || "任务保留在原处，处理完当前问题后可以继续。" }}</p>
-          <div class="task-evidence"><span>已完成任务</span><strong>{{ activeRun.tasks_completed }} 项</strong></div>
+          <div class="task-evidence"><span>正式门禁通过</span><strong>{{ activeRun.tasks_completed }} 次</strong></div>
           <button class="primary-button wide" :disabled="working" @click="handleActiveRun">
             <Play :size="16" />{{ activeRun.status === 'running' ? '查看实时推进' : (working ? '正在继续……' : '继续当前任务') }}<ArrowRight :size="16" />
           </button>

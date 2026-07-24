@@ -106,7 +106,13 @@ def steward_profile(model: str) -> dict[str, Any]:
     return _base_profile("creative-steward", agent, model)
 
 
-def write_profile(directory: Path, *, role: str, model: str) -> Path:
+def write_profile(
+    directory: Path,
+    *,
+    role: str,
+    model: str,
+    provider_overrides: dict[str, dict[str, Any]] | None = None,
+) -> Path:
     root = directory.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     if role == "advisor":
@@ -115,6 +121,8 @@ def write_profile(directory: Path, *, role: str, model: str) -> Path:
         payload = steward_profile(model)
     else:
         payload = worker_profile(model)
+    if provider_overrides:
+        payload["provider"] = provider_overrides
     path = root / "opencode.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path

@@ -104,7 +104,7 @@ p { color: var(--ink-500); line-height: 1.72; }
   .workspace-header .context-label, .inline-notice { display: none; }
   .view { padding: 23px 16px 48px; }
   h1 { font-size: 30px; }
-  .field-row, .field-row.three { grid-template-columns: 1fr; }
+  .field-row, .field-row.three, .connection-limits { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }

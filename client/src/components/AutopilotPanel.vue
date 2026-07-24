@@ -277,7 +277,7 @@ function applyWorkerActivity(event: string, data: Record<string, unknown>): void
     "worker.validation.passed": ["检查已经通过", "当前阶段的确定性门禁已确认。"],
     "task.recovery_started": ["正在接管已有成果", "上一轮虽已超时，ArcVellum 会先检查现有产物，不从头重写。"],
     "task.recovery_succeeded": ["已有成果已恢复", "有效产物已经通过预检，正在继续正式写回。"],
-    "task.recovery_rejected": ["已有成果还不完整", "只在无法安全接管时才会重新执行当前任务。"],
+    "task.recovery_rejected": ["旧成果未被采用", "上一轮没有留下可验证的新产物，系统会保留门禁并重新处理当前任务。"],
   };
   const value = stages[event];
   if (!value) return;
@@ -355,7 +355,7 @@ function routeText(route: string): string {
         <span>{{ running ? routeText(run?.current_route || '') : '当前状态' }}</span>
         <strong>{{ running ? liveStage : statusText }}</strong>
         <p v-if="running">{{ liveDetail }}</p>
-        <small v-if="run">已经完成 {{ run.tasks_completed }} 项创作任务 · 预计费用 ${{ run.estimated_cost.toFixed(2) }}</small>
+        <small v-if="run">已通过正式门禁 {{ run.tasks_completed }} 次 · 预计费用 ${{ run.estimated_cost.toFixed(2) }}</small>
         <small v-else>你可以随时暂停、改变方向，再从原处继续。</small>
       </div>
       <div class="autopilot-controls">

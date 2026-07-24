@@ -71,6 +71,21 @@ class OpenCodeCredentialRequest(BaseModel):
     credential: str
 
 
+class CustomProviderModelRequest(BaseModel):
+    id: str
+    name: str = ""
+    context: int = 0
+    output: int = 0
+
+
+class CustomProviderConnectionRequest(BaseModel):
+    provider_id: str
+    display_name: str
+    base_url: str
+    models: list[CustomProviderModelRequest]
+    credential: str
+
+
 class ModelSelectionRequest(BaseModel):
     model: str
     role: str = "all"

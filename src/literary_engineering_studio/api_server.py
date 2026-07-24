@@ -93,7 +93,13 @@ from .narrative_projection_v3 import (
 )
 from .project_progress import build_project_progress
 from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
-from .opencode_control import disconnect_provider, provider_catalog, select_model, set_api_credential
+from .opencode_control import (
+    connect_custom_provider,
+    disconnect_provider,
+    provider_catalog,
+    select_model,
+    set_api_credential,
+)
 from .runner_probe import probe_agent_runner
 from .project_manager import (
     create_project,
@@ -236,9 +242,11 @@ def create_app(config_override: dict[str, Any] | None = None):
                 probe_agent_runner=lambda *args, **kwargs: probe_agent_runner(*args, **kwargs),
                 provider_catalog=lambda *args, **kwargs: provider_catalog(*args, **kwargs),
                 set_api_credential=lambda *args, **kwargs: set_api_credential(*args, **kwargs),
+                connect_custom_provider=lambda *args, **kwargs: connect_custom_provider(*args, **kwargs),
                 disconnect_provider=lambda *args, **kwargs: disconnect_provider(*args, **kwargs),
                 select_model=lambda *args, **kwargs: select_model(*args, **kwargs),
                 model_connection_status=lambda settings: model_connection_status(settings),
+                cache_model_catalog=bootstrap.record_model_catalog,
             )
         )
     )

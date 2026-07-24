@@ -177,6 +177,47 @@ class ApiServerTests(unittest.TestCase):
         disconnect.assert_called_once()
         self.assertEqual(disconnect.call_args.args[1], "deepseek")
 
+    def test_model_selection_updates_bootstrap_catalog_instead_of_replaying_default(self):
+        catalog = {
+            "runner": "opencode",
+            "selected_model": "zhipuai/glm-5",
+            "selected_models": {"worker": "zhipuai/glm-5", "advisor": "zhipuai/glm-5", "steward": "zhipuai/glm-5"},
+            "providers": [],
+            "connected_provider_count": 1,
+            "available_model_count": 1,
+        }
+        with (
+            patch("literary_engineering_studio.api_server.select_model", return_value={"selected_model": "zhipuai/glm-5", "selected_models": catalog["selected_models"], "saved": True}),
+            patch("literary_engineering_studio.api_server.provider_catalog", return_value=catalog),
+        ):
+            response = self.client.put("/model-connections/opencode/model", json={"model": "zhipuai/glm-5", "role": "all"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["catalog"]["selected_model"], "zhipuai/glm-5")
+        self.assertEqual(self.client.app.state.bootstrap.snapshot()["model_catalog"]["selected_model"], "zhipuai/glm-5")
+
+    def test_custom_provider_connection_is_exposed_through_control_api(self):
+        catalog = {
+            "runner": "opencode",
+            "selected_model": "my-gateway/qwen-plus",
+            "providers": [],
+            "connected_provider_count": 1,
+            "available_model_count": 1,
+        }
+        with patch("literary_engineering_studio.api_server.connect_custom_provider", return_value=catalog) as connect:
+            response = self.client.put(
+                "/model-connections/opencode/custom",
+                json={
+                    "provider_id": "my-gateway",
+                    "display_name": "My Gateway",
+                    "base_url": "https://models.example.test/v1",
+                    "models": [{"id": "qwen-plus", "name": "Qwen Plus", "context": 128000, "output": 8192}],
+                    "credential": "test-placeholder-key",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.assertEqual(connect.call_args.args[1]["provider_id"], "my-gateway")
+
     def test_frontend_is_served(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)

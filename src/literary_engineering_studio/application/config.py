@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-CONFIG_SCHEMA = "literary-engineering-studio/config/v0.4"
+CONFIG_SCHEMA = "literary-engineering-studio/config/v0.5"
 
 
 def repository_root() -> Path:
@@ -91,6 +91,9 @@ def default_config() -> dict[str, Any]:
                     "advisor": "opencode/big-pickle",
                     "steward": "opencode/big-pickle",
                 },
+                # Public endpoint/model definitions only.  API keys remain
+                # in OpenCode's own credential store, never in this file.
+                "custom_providers": [],
                 "data_root": str(default_data_root()),
                 "idle_timeout_seconds": 900,
                 # A busy model session that stops emitting activity should not

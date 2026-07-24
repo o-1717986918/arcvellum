@@ -622,7 +622,7 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertIn("drafts/candidates/scene_0001-platform-agent.md", normalized["source_paths"])
             remaining = validate_task_outputs(task, sandbox)
             self.assertTrue(any(item.code == "scene-review-schema-invalid" for item in remaining.issues))
-            self.assertFalse(any(item.code == "scene-review-candidate-digest-mismatch" for item in remaining.issues))
+            self.assertTrue(any(item.code == "scene-review-candidate-digest-mismatch" for item in remaining.issues))
             self.assertIn("必须逐一读取", (sandbox.workspace / "AGENT_TASK.md").read_text(encoding="utf-8"))
 
     def test_asset_schema_is_rejected_before_writeback(self):

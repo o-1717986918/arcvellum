@@ -8,7 +8,12 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException
 
 from ..common import call_handler
-from ..models import ModelSelectionRequest, OpenCodeCredentialRequest, RunnerProbeRequest
+from ..models import (
+    CustomProviderConnectionRequest,
+    ModelSelectionRequest,
+    OpenCodeCredentialRequest,
+    RunnerProbeRequest,
+)
 
 
 @dataclass(frozen=True)
@@ -21,9 +26,11 @@ class RunnerRouterDependencies:
     probe_agent_runner: Callable[..., dict[str, Any]]
     provider_catalog: Callable[..., dict[str, Any]]
     set_api_credential: Callable[..., dict[str, Any]]
+    connect_custom_provider: Callable[..., dict[str, Any]]
     disconnect_provider: Callable[..., dict[str, Any]]
     select_model: Callable[..., dict[str, Any]]
     model_connection_status: Callable[[dict[str, Any]], list[dict[str, Any]]]
+    cache_model_catalog: Callable[[dict[str, Any]], None]
 
 
 def build_runner_router(deps: RunnerRouterDependencies) -> APIRouter:
@@ -82,30 +89,58 @@ def build_runner_router(deps: RunnerRouterDependencies) -> APIRouter:
 
     @router.put("/model-connections/opencode/credential")
     def opencode_model_credential(payload: OpenCodeCredentialRequest):
-        return call_handler(
-            lambda: {
-                "ok": True,
-                **deps.set_api_credential(
-                    deps.config,
-                    payload.provider_id,
-                    payload.credential,
-                    runtime_pool=deps.lifecycle.opencode_pool,
-                ),
-            }
-        )
+        def connect():
+            catalog = deps.set_api_credential(
+                deps.config,
+                payload.provider_id,
+                payload.credential,
+                runtime_pool=deps.lifecycle.opencode_pool,
+            )
+            deps.cache_model_catalog(catalog)
+            return {"ok": True, **catalog}
+
+        return call_handler(connect)
+
+    @router.put("/model-connections/opencode/custom")
+    def opencode_custom_provider(payload: CustomProviderConnectionRequest):
+        def connect():
+            deps.lifecycle.opencode_pool.reload_provider_profiles()
+            catalog = deps.connect_custom_provider(
+                deps.config,
+                {
+                    "provider_id": payload.provider_id,
+                    "display_name": payload.display_name,
+                    "base_url": payload.base_url,
+                    "models": [item.model_dump() for item in payload.models],
+                },
+                payload.credential,
+                runtime_pool=deps.lifecycle.opencode_pool,
+            )
+            deps.cache_model_catalog(catalog)
+            return {"ok": True, **catalog}
+
+        return call_handler(connect)
 
     @router.delete("/model-connections/opencode/credential/{provider_id}")
     def opencode_model_disconnect(provider_id: str):
-        return call_handler(
-            lambda: {
-                "ok": True,
-                **deps.disconnect_provider(deps.config, provider_id, runtime_pool=deps.lifecycle.opencode_pool),
-            }
-        )
+        def disconnect():
+            catalog = deps.disconnect_provider(deps.config, provider_id, runtime_pool=deps.lifecycle.opencode_pool)
+            deps.lifecycle.opencode_pool.reconcile_model_selection()
+            deps.cache_model_catalog(catalog)
+            return {"ok": True, **catalog}
+
+        return call_handler(disconnect)
 
     @router.put("/model-connections/opencode/model")
     def opencode_model_select(payload: ModelSelectionRequest):
-        return call_handler(lambda: {"ok": True, **deps.select_model(deps.config, payload.model, role=payload.role)})
+        def select():
+            selection = deps.select_model(deps.config, payload.model, role=payload.role)
+            runtime = deps.lifecycle.opencode_pool.reconcile_model_selection()
+            catalog = deps.provider_catalog(deps.config, runtime_pool=deps.lifecycle.opencode_pool)
+            deps.cache_model_catalog(catalog)
+            return {"ok": True, **selection, "runtime": runtime, "catalog": catalog}
+
+        return call_handler(select)
 
     @router.get("/model-connections")
     def model_connections():

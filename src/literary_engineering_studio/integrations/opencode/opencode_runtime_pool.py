@@ -11,6 +11,7 @@ from typing import Any
 
 from .opencode_binary import ensure_opencode_integrity, locate_opencode
 from .opencode_client import OpenCodeClient, OpenCodeEndpoint
+from .provider_definitions import opencode_provider_overrides
 from .opencode_server import OpenCodeServer, OpenCodeServerHandle
 from ...process_manager import ProcessManager
 
@@ -176,6 +177,41 @@ class OpenCodeRuntimePool:
                 for service in self._services.values()
             ]
 
+    def reconcile_model_selection(self) -> dict[str, list[str]]:
+        """Discard only idle services whose persisted role model changed.
+
+        A running task keeps its pinned session.  The next lease receives the
+        newly selected model, while the response makes the short transition
+        visible to the caller instead of silently continuing with an old one.
+        """
+
+        restarted: list[str] = []
+        pending: list[str] = []
+        with self._lock:
+            for role, service in list(self._services.items()):
+                if service.model == self.model_for(role):
+                    continue
+                if service.active_leases:
+                    pending.append(role)
+                else:
+                    self._stop_role_locked(role)
+                    restarted.append(role)
+        return {"restarted_roles": restarted, "pending_roles": pending}
+
+    def reload_provider_profiles(self) -> dict[str, list[str]]:
+        """Discard idle services after changing persistent custom endpoints."""
+
+        restarted: list[str] = []
+        pending: list[str] = []
+        with self._lock:
+            for role, service in list(self._services.items()):
+                if service.active_leases:
+                    pending.append(role)
+                else:
+                    self._stop_role_locked(role)
+                    restarted.append(role)
+        return {"restarted_roles": restarted, "pending_roles": pending}
+
     def shutdown(self) -> None:
         self._stop.set()
         self._reaper.join(timeout=2)
@@ -205,6 +241,7 @@ class OpenCodeRuntimePool:
             profile_root=role_root / "profile",
             role=role,
             model=model,
+            provider_overrides=opencode_provider_overrides(self.config),
         )
         service = _RoleService(
             role=role,

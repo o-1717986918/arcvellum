@@ -37,9 +37,15 @@ class OpenCodeServer:
         role: str,
         model: str,
         profile_root: Path | None = None,
+        provider_overrides: dict[str, dict[str, object]] | None = None,
     ) -> OpenCodeServerHandle:
         profile_root = (profile_root or (run_root / "opencode-profile")).expanduser().resolve()
-        profile_path = write_profile(profile_root, role=role, model=model)
+        profile_path = write_profile(
+            profile_root,
+            role=role,
+            model=model,
+            provider_overrides=provider_overrides,
+        )
         state_root = self.shared_data_root / "opencode"
         for path in (state_root / "config", state_root / "data", state_root / "cache", state_root / "state"):
             path.mkdir(parents=True, exist_ok=True)

@@ -8,6 +8,7 @@ from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.sandbox import (
     apply_expected_outputs,
     capture_core_managed_outputs,
+    changed_agent_outputs,
     import_expected_outputs,
     inspect_expected_outputs,
     materialize_agent_workspace,
@@ -62,6 +63,17 @@ class SandboxTests(unittest.TestCase):
             imported = import_expected_outputs(task, sandbox)
             self.assertEqual(imported, ("drafts/candidates/scene_0001.md",))
             self.assertEqual((task.project_root / imported[0]).read_text(encoding="utf-8"), "正文。\n")
+
+    def test_reports_only_fresh_substantive_agent_outputs_for_recovery(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            task = self._task(Path(temporary))
+            sandbox = stage_task(task, Path(runs), runtime="host-agent", run_id="run-recovery-freshness")
+            self.assertEqual(changed_agent_outputs(sandbox), ())
+
+            output = sandbox.workspace / "drafts" / "candidates" / "scene_0001.md"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text("本次 Agent 实际写出的新正文。\n", encoding="utf-8")
+            self.assertEqual(changed_agent_outputs(sandbox), ("drafts/candidates/scene_0001.md",))
 
     def test_rejects_source_modification(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
