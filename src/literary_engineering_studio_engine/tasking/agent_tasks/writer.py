@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from ...resources import engine_path
 AGENT_TASK_MARKER = "[AGENT_TASK:"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 COMPLETE_STATUSES = {"complete", "completed", "done", "handled", "pass"}
+TASK_DIGEST_PREFIX = "<!-- agent-task-digest: "
 
 
 def default_agent_tasks_path(artifact_path: Path) -> Path:
@@ -29,6 +31,19 @@ def default_agent_completion_path(task_path: Path) -> Path:
     if name.endswith(suffix):
         return task_path.with_name(name[: -len(suffix)] + ".agent_completion.json")
     return task_path.with_suffix(".agent_completion.json")
+
+
+def agent_task_digest(task_path: Path) -> str:
+    """Return the stable identity digest declared by an agent-task sidecar."""
+
+    text = task_path.read_text(encoding="utf-8")
+    first_line, _, remainder = text.partition("\n")
+    if first_line.startswith(TASK_DIGEST_PREFIX) and first_line.endswith(" -->"):
+        declared = first_line[len(TASK_DIGEST_PREFIX) : -len(" -->")].strip().lower()
+        if len(declared) == 64 and all(char in "0123456789abcdef" for char in declared):
+            return declared
+        text = remainder
+    return hashlib.sha256(text.replace("\r\n", "\n").encode("utf-8")).hexdigest()
 
 
 def agent_task_completion_status(task_path: Path, *, root: Path | None = None) -> dict[str, object]:
@@ -50,16 +65,6 @@ def agent_task_completion_status(task_path: Path, *, root: Path | None = None) -
     if not completion_path.exists():
         state["message"] = f"missing explicit platform-agent completion marker: {rel_completion}"
         return state
-    # Reissuing a CLI task package deliberately invalidates its old completion
-    # receipt.  Otherwise a changed context or contract could reuse a marker
-    # written for instructions the agent has not actually read.
-    if completion_path.stat().st_mtime_ns < task_path.stat().st_mtime_ns:
-        state["status"] = "stale_completion"
-        state["message"] = (
-            f"completion marker predates the current task sidecar: {rel_completion}; "
-            "read the reissued task package and write a fresh completion marker"
-        )
-        return state
     try:
         payload = json.loads(completion_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
@@ -69,6 +74,26 @@ def agent_task_completion_status(task_path: Path, *, root: Path | None = None) -
     if not isinstance(payload, dict):
         state["status"] = "invalid_completion"
         state["message"] = f"completion marker root is not an object: {rel_completion}"
+        return state
+    current_digest = agent_task_digest(task_path)
+    marker_digest = str(payload.get("task_digest") or "").strip().lower()
+    # New receipts use a content identity. This makes duplicate deterministic
+    # writes harmless while still invalidating a materially reissued task.
+    # Older receipts retain the conservative timestamp behavior until handled
+    # once by the current runtime.
+    if marker_digest and marker_digest != current_digest:
+        state["status"] = "stale_completion"
+        state["message"] = (
+            f"completion marker targets a different task revision: {rel_completion}; "
+            "read the reissued task package and write a fresh completion marker"
+        )
+        return state
+    if not marker_digest and completion_path.stat().st_mtime_ns < task_path.stat().st_mtime_ns:
+        state["status"] = "stale_completion"
+        state["message"] = (
+            f"completion marker predates the current task sidecar: {rel_completion}; "
+            "read the reissued task package and write a fresh completion marker"
+        )
         return state
     marker_status = str(payload.get("status") or "").strip().lower()
     completed = payload.get("completed") is True or marker_status in COMPLETE_STATUSES
@@ -87,6 +112,7 @@ def agent_task_completion_status(task_path: Path, *, root: Path | None = None) -
             "message": f"platform-agent task completed: {rel_completion}",
             "handled_by": str(payload.get("handled_by") or ""),
             "completed_at": str(payload.get("completed_at") or ""),
+            "task_digest": current_digest,
         }
     )
     return state
@@ -110,6 +136,7 @@ def write_agent_completion_marker(
         "status": "complete",
         "handled_by": handled_by,
         "completed_at": datetime.now(timezone.utc).isoformat(),
+        "task_digest": agent_task_digest(task_path),
         "expected_artifacts_checked": True,
         "notes": notes or [],
     }
@@ -136,17 +163,19 @@ def write_agent_tasks(
     punctuation_ref = _punctuation_reference()
     if punctuation_ref and punctuation_ref not in expanded_sources:
         expanded_sources.append(punctuation_ref)
-    output_path.write_text(
-        render_agent_tasks_document(
-            title=title,
-            root=root,
-            source_paths=expanded_sources,
-            tasks=tasks,
-            notes=notes or [],
-            task_path=output_path,
-        ),
-        encoding="utf-8",
+    document = render_agent_tasks_document(
+        title=title,
+        root=root,
+        source_paths=expanded_sources,
+        tasks=tasks,
+        notes=notes or [],
+        task_path=output_path,
     )
+    digest = hashlib.sha256(document.replace("\r\n", "\n").encode("utf-8")).hexdigest()
+    document = f"{TASK_DIGEST_PREFIX}{digest} -->\n{document}"
+    if output_path.exists() and output_path.read_text(encoding="utf-8") == document:
+        return output_path
+    output_path.write_text(document, encoding="utf-8")
     return output_path
 
 
@@ -222,6 +251,7 @@ def render_agent_tasks_document(
   "status": "complete",
   "handled_by": "platform-agent",
   "completed_at": "ISO-8601 时间",
+  "task_digest": "复制本文件顶部 agent-task-digest 的值",
   "expected_artifacts_checked": true,
   "notes": []
 }}
