@@ -8,6 +8,7 @@ import {
   CircleHelp,
   Cog,
   FolderKanban,
+  Fingerprint,
   LibraryBig,
   PackageCheck,
   Info,
@@ -36,6 +37,7 @@ const nav = [
   { to: "/overview", label: "创作总控", icon: Boxes, needsProject: true },
   { to: "/reader", label: "阅读", icon: BookOpenText, needsProject: true },
   { to: "/archive", label: "档案管理", icon: LibraryBig, needsProject: true },
+  { to: "/style", label: "文风工坊", icon: Fingerprint, needsProject: true },
   { to: "/quality", label: "创作规则", icon: SlidersHorizontal, needsProject: true },
   { to: "/delivery", label: "交付", icon: PackageCheck, needsProject: true },
   { to: "/settings", label: "设置", icon: Settings2, needsProject: false },
@@ -94,7 +96,7 @@ watch(showStartup, (visible) => {
 watch(
   () => store.currentProjectPath,
   (path) => {
-    if (!path && ["overview", "reader", "library", "archive", "delivery"].includes(String(route.name))) void router.push("/projects");
+    if (!path && ["overview", "reader", "library", "archive", "style", "quality", "delivery"].includes(String(route.name))) void router.push("/projects");
   },
 );
 

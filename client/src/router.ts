@@ -9,6 +9,7 @@ export const router = createRouter({
     { path: "/reader", name: "reader", component: () => import("@/features/reader/ReaderView.vue"), meta: { label: "阅读" } },
     { path: "/library", name: "library", component: () => import("@/features/library/LibraryView.vue"), meta: { label: "作品档案" } },
     { path: "/archive", name: "archive", component: () => import("@/features/archive/ArchiveView.vue"), meta: { label: "档案管理" } },
+    { path: "/style", name: "style", component: () => import("@/features/style-atelier/StyleAtelierView.vue"), meta: { label: "文风工坊" } },
     { path: "/quality", name: "quality", component: () => import("@/features/quality/QualityView.vue"), meta: { label: "创作规则" } },
     { path: "/delivery", name: "delivery", component: () => import("@/features/delivery/DeliveryView.vue"), meta: { label: "交付" } },
     { path: "/settings", name: "settings", component: () => import("@/features/settings/SettingsView.vue"), meta: { label: "设置" } },
