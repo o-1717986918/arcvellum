@@ -61,6 +61,56 @@ class StyleApplicationServiceTests(unittest.TestCase):
             self.assertEqual(versions.status_code, 200)
             self.assertEqual(versions.json()["schema"], "arcvellum/style-version-catalog/v1")
 
+    def test_workbench_composes_safe_journey_and_empty_library_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            project, profile, target_id = _formal_reviewed_profile(base)
+            built = build_style_profile_version(
+                project,
+                profile,
+                target_id=target_id,
+            )
+
+            workbench = StyleApplicationService().workbench(
+                project,
+                base / "missing-library",
+            )
+
+            self.assertEqual(
+                workbench["schema"],
+                "arcvellum/style-atelier-workbench/v1",
+            )
+            self.assertEqual(workbench["summary"]["built_count"], 1)
+            self.assertEqual(workbench["summary"]["reviewed_count"], 1)
+            self.assertEqual(
+                [item["id"] for item in workbench["journey"]],
+                ["sources", "profiles", "evaluation", "review", "versions", "mount"],
+            )
+            self.assertIn("style library is unavailable", workbench["issues"])
+            self.assertNotIn(str(base), json.dumps(workbench, ensure_ascii=False))
+            self.assertEqual(
+                workbench["versions"][0]["version_id"],
+                built.version_id,
+            )
+
+            config = default_config()
+            config["application"]["data_root"] = str(base / "data")
+            config["application"]["database_path"] = str(base / "data" / "studio.sqlite3")
+            config["worker"]["runs_root"] = str(base / "runs")
+            client = TestClient(create_app(config))
+            response = client.get(
+                "/style-lab/workbench",
+                params={
+                    "project_root": str(project),
+                    "style_library_root": str(base / "missing-library"),
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.json()["revision"],
+                workbench["revision"],
+            )
+
     def test_style_quality_and_copy_risk_are_projected_as_independent_signals(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

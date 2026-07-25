@@ -87,6 +87,49 @@ class StyleApplicationService:
             version_id=version_id,
         )
 
+    def workbench(
+        self,
+        project_root: Path,
+        library_root: Path | None = None,
+    ) -> dict[str, object]:
+        """Compose the user-facing Style Atelier read model without paths."""
+
+        project = project_root.expanduser().resolve()
+        try:
+            author_catalog = self.authors(library_root)
+        except FileNotFoundError:
+            author_catalog = {
+                "schema": "arcvellum/style-author-catalog/v1",
+                "authors": [],
+                "count": 0,
+                "issues": ["style library is unavailable"],
+            }
+        version_catalog = self.version_catalog(
+            library_root,
+            project_root=project,
+        )
+        authors = list(author_catalog["authors"])
+        versions = list(version_catalog["versions"])
+        summary = _workbench_summary(authors, versions)
+        payload = {
+            "schema": "arcvellum/style-atelier-workbench/v1",
+            "authors": authors,
+            "versions": versions,
+            "active_mount": version_catalog["active_mount"],
+            "summary": summary,
+            "journey": _workbench_journey(summary),
+            "issues": list(
+                dict.fromkeys(
+                    [
+                        *author_catalog.get("issues", []),
+                        *version_catalog.get("issues", []),
+                    ]
+                )
+            ),
+        }
+        payload["revision"] = _json_hash(payload)
+        return payload
+
     def _project_authors(self, root: Path) -> tuple[list[dict[str, object]], list[str]]:
         authors: list[dict[str, object]] = []
         issues: list[str] = []
@@ -194,6 +237,75 @@ def _safe_active_mount(payload: dict[str, object]) -> dict[str, object]:
         "integrity",
     }
     return {key: payload[key] for key in allowed if key in payload}
+
+
+def _workbench_summary(
+    authors: list[dict[str, object]],
+    versions: list[dict[str, object]],
+) -> dict[str, int]:
+    return {
+        **_catalog_summary(authors),
+        **_version_summary(versions),
+    }
+
+
+def _catalog_summary(authors: list[dict[str, object]]) -> dict[str, int]:
+    works = [
+        work
+        for author in authors
+        for work in author.get("works", [])
+        if isinstance(work, dict)
+    ]
+    sources = [
+        source
+        for work in works
+        for source in work.get("sources", [])
+        if isinstance(source, dict)
+    ]
+    return {
+        "author_count": len(authors),
+        "work_count": len(works),
+        "source_count": len(sources),
+        "source_character_count": sum(
+            int(source.get("character_count") or 0) for source in sources
+        ),
+        "profile_count": sum(int(author.get("profile_count") or 0) for author in authors),
+    }
+
+
+def _version_summary(versions: list[dict[str, object]]) -> dict[str, int]:
+    return {
+        "evaluated_count": sum(
+            1
+            for version in versions
+            if int(version.get("accepted_evaluation_count") or 0) > 0
+        ),
+        "reviewed_count": sum(
+            1 for version in versions if version.get("review_status") == "pass"
+        ),
+        "built_count": sum(1 for version in versions if version.get("built") is True),
+        "mounted_count": sum(1 for version in versions if version.get("mounted") is True),
+    }
+
+
+def _workbench_journey(summary: dict[str, int]) -> list[dict[str, object]]:
+    stages = (
+        ("sources", "来源与权利", summary["source_count"]),
+        ("profiles", "文风抽象", summary["profile_count"]),
+        ("evaluation", "隔离评测", summary["evaluated_count"]),
+        ("review", "独立审查", summary["reviewed_count"]),
+        ("versions", "不可变版本", summary["built_count"]),
+        ("mount", "作品挂载", summary["mounted_count"]),
+    )
+    return [
+        {
+            "id": stage_id,
+            "label": label,
+            "status": "ready" if count > 0 else "waiting",
+            "count": count,
+        }
+        for stage_id, label, count in stages
+    ]
 
 
 def _resolve_relative(root: Path, relative: str) -> Path | None:

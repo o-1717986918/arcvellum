@@ -47,6 +47,7 @@ class StyleLabRouterDependencies:
     style_library: Callable[[dict[str, Any], str], dict[str, Any]]
     style_authors: Callable[[Path | None], dict[str, object]]
     style_versions: Callable[[Path | None, Path | None], dict[str, object]]
+    style_workbench: Callable[[Path, Path | None], dict[str, object]]
     style_version_detail: Callable[[Path, str, str], dict[str, object]]
     authoring: StyleAuthoringService
     tasks: StyleTaskService
@@ -72,6 +73,15 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
             lambda: deps.style_versions(
                 _optional_path(style_library_root),
                 resolve_project_root(project_root) if project_root else None,
+            )
+        )
+
+    @router.get("/style-lab/workbench")
+    def style_lab_workbench(project_root: str, style_library_root: str = ""):
+        return call_handler(
+            lambda: deps.style_workbench(
+                resolve_project_root(project_root),
+                _optional_path(style_library_root),
             )
         )
 
