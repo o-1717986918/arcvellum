@@ -6,6 +6,8 @@ import ast
 from pathlib import Path
 import unittest
 
+from scripts.architecture_audit import scan_dependency_violations
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 ENGINE_ROOT = REPOSITORY_ROOT / "src" / "literary_engineering_studio_engine"
@@ -27,6 +29,9 @@ class ModuleDependencyDirectionTests(unittest.TestCase):
                     violations.append(path.relative_to(REPOSITORY_ROOT).as_posix())
                     break
         self.assertEqual(violations, [])
+
+    def test_studio_domain_boundaries_do_not_gain_forbidden_imports(self):
+        self.assertEqual(scan_dependency_violations(REPOSITORY_ROOT), [])
 
 
 if __name__ == "__main__":
