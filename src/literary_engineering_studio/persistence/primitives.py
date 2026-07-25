@@ -12,7 +12,7 @@ EVENT_SCHEMA = "literary-engineering-studio/run-event/v0.3"
 
 EVENT_RETENTION_PER_JOB = 5000
 
-DATABASE_SCHEMA_VERSION = 8
+DATABASE_SCHEMA_VERSION = 9
 
 ACTIVE_STATUSES = {"queued", "running", "stopping"}
 

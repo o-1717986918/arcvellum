@@ -12,6 +12,8 @@ import threading
 import uuid
 from typing import Any
 
+from .asset_revisions import ASSET_REVISION_SCHEMA_SQL, AssetRevisionStoreMixin
+from .asset_transactions import ASSET_TRANSACTION_SCHEMA_SQL, AssetTransactionStoreMixin
 from .autopilot_runs import AutopilotStoreMixin
 from .sessions import SessionStoreMixin
 from .primitives import (
@@ -31,9 +33,12 @@ from .primitives import (
 )
 
 
-
-
-class JobStore(AutopilotStoreMixin, SessionStoreMixin):
+class JobStore(
+    AssetTransactionStoreMixin,
+    AssetRevisionStoreMixin,
+    AutopilotStoreMixin,
+    SessionStoreMixin,
+):
     def __init__(self, location: Path):
         resolved = location.expanduser().resolve()
         self.path = resolved if resolved.suffix in {".db", ".sqlite", ".sqlite3"} else resolved / "studio.sqlite3"
@@ -273,21 +278,6 @@ class JobStore(AutopilotStoreMixin, SessionStoreMixin):
             ).fetchone()
         return dict(row) if row is not None else None
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     def health(self) -> dict[str, Any]:
         with self._connection() as connection:
             job_count = int(connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
@@ -510,7 +500,7 @@ class JobStore(AutopilotStoreMixin, SessionStoreMixin):
                 );
                 CREATE INDEX IF NOT EXISTS agent_sessions_project_idx
                     ON agent_sessions(project_root, updated_at);
-                """
+                """ + ASSET_TRANSACTION_SCHEMA_SQL + ASSET_REVISION_SCHEMA_SQL
             )
             preference_columns = {
                 str(row[1]) for row in connection.execute("PRAGMA table_info(advisor_pinned_preferences)").fetchall()
@@ -533,7 +523,6 @@ class JobStore(AutopilotStoreMixin, SessionStoreMixin):
                 if name not in autopilot_columns:
                     connection.execute(f"ALTER TABLE autopilot_runs ADD COLUMN {name} {declaration}")
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
-
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=30, isolation_level="DEFERRED")
