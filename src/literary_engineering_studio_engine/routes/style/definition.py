@@ -8,11 +8,14 @@ implementation home for every route.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 
 from ...agent_tasks import agent_task_completion_status
+from ...literary.style.session import (
+    load_style_session,
+    style_session_gate_errors,
+    style_session_holdout_reference,
+)
 from ...style_prompt import style_prompt_quality_report
 from ...task_paths import (
     TASK_SCHEMA,
@@ -21,6 +24,13 @@ from ...task_paths import (
     relative_path,
     resolve_project_path,
     task_id,
+)
+from .session_contract import build_style_route_session_context
+from .support import (
+    file_sha256 as _file_sha256,
+    read_optional_json as _read_optional_json,
+    read_text as _read_text,
+    unique as _unique,
 )
 
 
@@ -110,20 +120,19 @@ def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_s
     eval_completion = f"{eval_dir}/platform_agent_candidate.agent_completion.json"
     eval_json = f"{eval_dir}/style_eval_current.json"
     eval_report = f"{eval_dir}/style_eval_current.md"
-    profile_path = resolve_project_path(root, profile_dir)
-    reference_path = next(
-        (path for path in sorted((profile_path / "corpus").glob("*.txt")) if path.is_file() and path.stat().st_size > 0),
-        None,
-    )
-    reference = relative_path(reference_path, root) if reference_path is not None else ""
+    session_context = build_style_route_session_context(root, profile_dir)
+    reference = session_context.reference
     table: dict[str, dict[str, object]] = {
         "style-profile": {
-            "task_type": "deterministic-cli-or-repair",
+            "task_type": "deterministic-cli" if session_context.active else "deterministic-cli-or-repair",
             "prompt_asset_id": "route.style-engineering.profile.v1",
-            "command": "python -m literary_engineering_studio_engine style-profile <corpus> --out-dir <profile-dir> --name <name>",
-            "source_paths": [profile_dir],
-            "expected_outputs": [profile, metrics],
-            "hard_constraints": ["Compile or repair style-profile.md and style_metrics.json before prompt generation."],
+            "command": session_context.profile_command,
+            "source_paths": list(session_context.profile_sources),
+            "expected_outputs": list(session_context.compile_outputs),
+            "hard_constraints": [
+                "Compile or repair style-profile.md and style_metrics.json before prompt generation.",
+                "Use only the declared training corpus; holdout evidence is isolated from compilation.",
+            ],
             "style_constraints": [],
             "validation_gates": ["style profile exists", "style metrics exists"],
             "next_allowed_states": ["style-prompt-task-file"],
@@ -177,15 +186,15 @@ def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_s
         "style-eval-setup": {
             "task_type": "human-approval-boundary",
             "prompt_asset_id": "route.style-engineering.eval.setup.v1",
-            "command": "Import at least one authorized or public-domain UTF-8 corpus text into this style profile.",
+            "command": "Select at least one rights-declared holdout source that is disjoint from training evidence.",
             "source_paths": [profile, metrics, corpus_manifest],
             "expected_outputs": [],
             "hard_constraints": [
                 "Do not fabricate a source corpus or claim authorization that the user did not provide.",
-                "The formal evaluation reference must be a real non-empty UTF-8 text in the profile corpus.",
+                "The formal evaluation reference must be a real non-empty UTF-8 holdout text that was not compiled into the profile.",
             ],
             "style_constraints": [],
-            "validation_gates": ["authorized corpus reference exists"],
+            "validation_gates": ["rights-declared isolated holdout reference exists"],
             "next_allowed_states": ["style-eval-task-file"],
         },
         "style-eval-task-file": {
@@ -328,6 +337,8 @@ def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[
 
 def profile_gate_errors(root: Path, profile_dir: Path) -> list[str]:
     errors: list[str] = []
+    if (profile_dir / "style_session.json").exists():
+        errors.extend(style_session_gate_errors(profile_dir))
     for path in (profile_dir / "style-profile.md", profile_dir / "style_metrics.json"):
         if not path.exists():
             errors.append(f"style profile artifact missing: {relative_path(path, root)}")
@@ -359,7 +370,20 @@ def prompt_gate_errors(root: Path, profile_dir: Path, *, require_quality: bool =
 
 
 def eval_reference_gate_errors(root: Path, profile_dir: Path) -> list[str]:
-    references = [path for path in sorted((profile_dir / "corpus").glob("*.txt")) if path.is_file() and path.stat().st_size > 0]
+    if load_style_session(profile_dir):
+        errors = style_session_gate_errors(profile_dir)
+        reference = style_session_holdout_reference(profile_dir)
+        if reference is None:
+            errors.append(
+                f"isolated holdout reference missing under "
+                f"{relative_path(profile_dir / 'evaluation_inputs' / 'holdout', root)}"
+            )
+        return errors
+    references = [
+        path
+        for path in sorted((profile_dir / "corpus").glob("*.txt"))
+        if path.is_file() and path.stat().st_size > 0
+    ]
     if references:
         return []
     return [f"authorized style evaluation reference missing under {relative_path(profile_dir / 'corpus', root)}"]
@@ -474,35 +498,3 @@ def declared_repair_targets_changed(root: Path, task: dict[str, object], label: 
         if path.is_file() and previous and _file_sha256(path) != previous:
             return []
     return [f"{label} did not change any declared planning candidate; review-only edits cannot complete revision"]
-
-
-def _file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _read_optional_json(path: Path) -> tuple[dict[str, object], str]:
-    if not path.exists():
-        return {}, f"JSON file missing: {path}"
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        return {}, f"invalid JSON: {relative_path(path, path.parent)} ({exc.msg})"
-    except OSError as exc:
-        return {}, str(exc)
-    if not isinstance(payload, dict):
-        return {}, f"JSON root is not an object: {path}"
-    return payload, ""
-
-
-def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore").strip() if path.exists() else ""
-
-
-def _unique(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in items:
-        if item and item not in seen:
-            result.append(item)
-            seen.add(item)
-    return result

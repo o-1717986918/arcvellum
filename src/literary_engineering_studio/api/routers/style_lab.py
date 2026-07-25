@@ -14,9 +14,15 @@ from ...application.style.transactions import (
     StyleSourceDuplicateError,
     StyleTransactionError,
 )
+from ...application.style.task_service import StyleTaskService
+from literary_engineering_studio_engine.literary.style.session import (
+    StyleSessionConflictError,
+    StyleSessionError,
+)
 from ..common import call_handler, project_root as resolve_project_root
 from ..models import (
     StyleAuthorCreateRequest,
+    StyleCompileRequest,
     StyleMountRequest,
     StyleSourceCreateRequest,
     StyleWorkCreateRequest,
@@ -32,6 +38,7 @@ class StyleLabRouterDependencies:
     style_authors: Callable[[Path | None], dict[str, object]]
     style_versions: Callable[[Path | None, Path | None], dict[str, object]]
     authoring: StyleAuthoringService
+    tasks: StyleTaskService
 
 
 def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
@@ -69,6 +76,29 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
                 payload.style_id,
             )
         )
+
+    @router.post("/style-lab/compile")
+    def style_lab_compile(payload: StyleCompileRequest):
+        try:
+            result = deps.tasks.compile(
+                resolve_project_root(payload.project_root),
+                _optional_path(payload.style_library_root),
+                author_id=payload.author_id,
+                profile_id=payload.profile_id,
+                display_name=payload.display_name,
+                training_sources=[
+                    item.model_dump() if hasattr(item, "model_dump") else item.dict()
+                    for item in payload.training_sources
+                ],
+                holdout_sources=[
+                    item.model_dump() if hasattr(item, "model_dump") else item.dict()
+                    for item in payload.holdout_sources
+                ],
+                runtime=payload.runtime,
+            )
+            return {"ok": True, **result}
+        except StyleSessionError as exc:
+            raise _style_session_error(exc) from exc
 
     return router
 
@@ -138,3 +168,14 @@ def _transaction_error(exc: Exception) -> HTTPException:
     if isinstance(exc, StyleSourceDuplicateError):
         details["existing"] = exc.existing
     return HTTPException(status_code=status, detail=details)
+
+
+def _style_session_error(exc: StyleSessionError) -> HTTPException:
+    status = 409 if isinstance(exc, StyleSessionConflictError) else 400
+    return HTTPException(
+        status_code=status,
+        detail={
+            "code": getattr(exc, "code", "style_session_invalid"),
+            "message": str(exc),
+        },
+    )

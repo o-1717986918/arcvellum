@@ -15,6 +15,7 @@ from typing import Any, Callable
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .application.style import StyleApplicationService, StyleAuthoringService
+from .application.style.task_service import StyleTaskService
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
 from .api.models import (
     ArchiveAssetArchiveRequest,
@@ -442,7 +443,15 @@ def create_app(config_override: dict[str, Any] | None = None):
     )
 
     app.include_router(
-        build_style_lab_router(_style_lab_dependencies(config))
+        build_style_lab_router(
+            _style_lab_dependencies(
+                config,
+                launch_style_worker=lambda request: launch_worker(
+                    worker_dependencies,
+                    WorkerRequest(**request),
+                ),
+            )
+        )
     )
 
     app.include_router(
@@ -466,7 +475,11 @@ def create_app(config_override: dict[str, Any] | None = None):
     return app
 
 
-def _style_lab_dependencies(config: dict[str, Any]) -> StyleLabRouterDependencies:
+def _style_lab_dependencies(
+    config: dict[str, Any],
+    *,
+    launch_style_worker: Callable[[dict[str, str]], dict[str, object]],
+) -> StyleLabRouterDependencies:
     application = StyleApplicationService()
     return StyleLabRouterDependencies(
         config=config,
@@ -479,4 +492,5 @@ def _style_lab_dependencies(config: dict[str, Any]) -> StyleLabRouterDependencie
             project_root=project,
         ),
         authoring=StyleAuthoringService(),
+        tasks=StyleTaskService(launch_style_worker),
     )

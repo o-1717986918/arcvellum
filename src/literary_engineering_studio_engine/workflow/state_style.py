@@ -5,6 +5,11 @@ import hashlib
 from pathlib import Path
 
 from ..agent_tasks import agent_task_completion_status
+from ..literary.style.session import (
+    load_style_session,
+    style_session_gate_errors,
+    style_session_holdout_reference,
+)
 from ..style_prompt import style_prompt_quality_report
 from .state_common import _file_step, _read, _read_json, _rel, _slug_profile_id
 
@@ -13,15 +18,20 @@ def _style_engineering_states(root: Path) -> list[dict[str, object]]:
     style_root = root / "style"
     if not style_root.exists():
         return []
+    profile_dirs = {
+        path.parent
+        for pattern in ("**/style-profile.md", "**/style_session.json")
+        for path in style_root.glob(pattern)
+    }
     states: list[dict[str, object]] = []
-    for profile in sorted(style_root.glob("**/style-profile.md")):
+    for profile_dir in sorted(profile_dirs):
         try:
-            parts = profile.relative_to(style_root).parts
+            parts = profile_dir.relative_to(style_root).parts
         except ValueError:
-            parts = profile.parts
-        if profile.parent == style_root or "mounted" in parts:
+            parts = profile_dir.parts
+        if profile_dir == style_root or "mounted" in parts:
             continue
-        states.append(_style_engineering_state(root, profile.parent))
+        states.append(_style_engineering_state(root, profile_dir))
     return states
 
 
@@ -62,14 +72,27 @@ def _style_engineering_state(root: Path, profile_dir: Path) -> dict[str, object]
 def _style_profile_step(root: Path, profile_dir: Path) -> dict[str, object]:
     profile = profile_dir / "style-profile.md"
     metrics = profile_dir / "style_metrics.json"
+    session_errors = (
+        style_session_gate_errors(profile_dir)
+        if (profile_dir / "style_session.json").exists()
+        else []
+    )
     missing = [_rel(path, root) for path in (profile, metrics) if not path.exists()]
-    if missing:
+    if missing or session_errors:
+        messages = []
+        if missing:
+            messages.append("missing " + ", ".join(missing))
+        messages.extend(session_errors)
         return {
             "key": "style-profile",
-            "status": "missing",
+            "status": "blocked" if session_errors else "missing",
             "path": _rel(profile_dir, root),
-            "message": "missing " + ", ".join(missing),
-            "next_action": "run style-profile / style-lab-compile to create style-profile.md and style_metrics.json",
+            "message": "; ".join(messages),
+            "next_action": (
+                "repair the style session evidence before compilation"
+                if session_errors
+                else "run the formal style-profile task to create style-profile.md and style_metrics.json"
+            ),
         }
     return {
         "key": "style-profile",
@@ -189,6 +212,8 @@ def _style_eval_readiness_step(root: Path, profile_dir: Path, candidate: Path, c
 
 
 def _style_eval_reference(profile_dir: Path) -> Path | None:
+    if load_style_session(profile_dir):
+        return style_session_holdout_reference(profile_dir)
     candidates = sorted((profile_dir / "corpus").glob("*.txt"))
     return next((path for path in candidates if path.is_file() and path.stat().st_size > 0), None)
 

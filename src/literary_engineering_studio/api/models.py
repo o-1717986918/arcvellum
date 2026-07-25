@@ -58,6 +58,22 @@ class StyleSourceCreateRequest(BaseModel):
     rights_declaration: str
 
 
+class StyleSourceSelectionRequest(BaseModel):
+    work_id: str
+    source_id: str
+
+
+class StyleCompileRequest(BaseModel):
+    project_root: str
+    style_library_root: str = ""
+    author_id: str
+    profile_id: str = "default"
+    display_name: str = ""
+    training_sources: list[StyleSourceSelectionRequest]
+    holdout_sources: list[StyleSourceSelectionRequest]
+    runtime: str = "opencode"
+
+
 class ProjectCreateRequest(BaseModel):
     parent_directory: str = ""
     title: str
@@ -306,6 +322,8 @@ __all__ = [
     "StyleAuthorCreateRequest",
     "StyleWorkCreateRequest",
     "StyleSourceCreateRequest",
+    "StyleSourceSelectionRequest",
+    "StyleCompileRequest",
     "WorkerRequest",
     "WorkerRetryRequest",
     "WritebackDecisionRequest",
