@@ -4,7 +4,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..agent_tasks import agent_task_completion_status
+from ..literary.ingest import SOURCE_INGEST_SCHEMA_V2, verify_ingest_manifest
 from .state_common import _longform_review_step, _read_json, _rel
+
+
+SOURCE_INGEST_SCHEMA_V1 = "literary-engineering-workbench/source-ingest/v1"
+SOURCE_INGEST_SCHEMAS = {SOURCE_INGEST_SCHEMA_V1, SOURCE_INGEST_SCHEMA_V2}
+
+
 def _source_ingest_states(root: Path) -> list[dict[str, object]]:
     imports = root / "sources" / "imports"
     if not imports.exists():
@@ -56,19 +63,33 @@ def _source_manifest_step(root: Path, manifest_path: Path, report_path: Path, ta
             "next_action": "run source-ingest with source/text/title/work-id to create manifest, report, and extraction sidecar",
         }
     payload = _read_json(manifest_path)
-    if payload.get("schema") != "literary-engineering-workbench/source-ingest/v1":
+    schema = payload.get("schema")
+    validation_errors = (
+        verify_ingest_manifest(root, payload)
+        if schema == SOURCE_INGEST_SCHEMA_V2
+        else []
+    )
+    if schema not in SOURCE_INGEST_SCHEMAS or validation_errors:
         return {
             "key": "source-manifest",
             "status": "invalid",
             "path": _rel(manifest_path, root),
-            "message": "source_manifest.json is invalid or has wrong schema",
+            "message": (
+                "; ".join(validation_errors)
+                if validation_errors
+                else "source_manifest.json is invalid or has wrong schema"
+            ),
             "next_action": "rerun source-ingest or repair the manifest from source evidence",
         }
     return {
         "key": "source-manifest",
         "status": "pass",
         "path": _rel(manifest_path, root),
-        "message": f"source manifest exists; chunks={payload.get('chunk_count', 0)}",
+        "message": (
+            f"source manifest exists; schema={schema}; "
+            f"segments={payload.get('segment_count', 0)}; "
+            f"chunks={payload.get('chunk_count', 0)}"
+        ),
         "next_action": "",
     }
 

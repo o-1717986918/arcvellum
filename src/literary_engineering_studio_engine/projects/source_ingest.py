@@ -10,9 +10,19 @@ import re
 from shutil import rmtree
 
 from ..agent_tasks import write_agent_tasks
+from ..literary.ingest import (
+    EXTRACTOR_VERSION,
+    SOURCE_INGEST_SCHEMA_V2,
+    SUPPORTED_SOURCE_EXTENSIONS,
+    StagedSourceImport,
+    commit_import,
+    import_revision,
+    recover_interrupted_import,
+    stage_source_import,
+)
 
 
-TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
+TEXT_EXTENSIONS = SUPPORTED_SOURCE_EXTENSIONS
 INGEST_MODES = {"continuation", "rewrite", "adaptation", "analysis"}
 
 
@@ -38,9 +48,10 @@ def ingest_existing_work(
     work_id: str = "",
     mode: str = "continuation",
     chunk_size: int = 6000,
+    rights_declaration: str = "",
     overwrite: bool = False,
 ) -> SourceIngestResult:
-    """Store source text and write an agent task for reverse project extraction."""
+    """Preserve sources and write a candidate-only reverse extraction task."""
 
     root = project_root.resolve()
     if not (root / "project.yaml").exists():
@@ -52,103 +63,36 @@ def ingest_existing_work(
 
     resolved_source = source.resolve() if source else None
     resolved_id = _slug(work_id or title or (resolved_source.stem if resolved_source else "existing-work"))
-    import_dir = root / "sources" / "imports" / resolved_id
+    imports_dir = root / "sources" / "imports"
+    import_dir = imports_dir / resolved_id
+    recover_interrupted_import(import_dir)
     if import_dir.exists() and any(import_dir.iterdir()):
         if not overwrite:
             raise FileExistsError(f"source import already exists: {import_dir}")
-        rmtree(import_dir)
-
-    raw_dir = import_dir / "raw"
-    chunk_dir = import_dir / "chunks"
-    extracted_dir = import_dir / "extracted"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    chunk_dir.mkdir(parents=True, exist_ok=True)
-    extracted_dir.mkdir(parents=True, exist_ok=True)
-    _ensure_candidate_dirs(root)
-
-    source_records = _read_sources(resolved_source, text=text, title=title)
-    raw_records: list[dict[str, object]] = []
-    combined_sections: list[str] = []
-    for index, record in enumerate(source_records, start=1):
-        raw_name = f"{index:03d}-{_safe_filename(record['label'])}.txt"
-        raw_path = raw_dir / raw_name
-        raw_path.write_text(str(record["text"]), encoding="utf-8")
-        raw_records.append(
-            {
-                "label": record["label"],
-                "input_path": record.get("input_path", ""),
-                "raw_path": _rel(raw_path, root),
-                "char_count": len(str(record["text"])),
-            }
+    staging_dir = imports_dir / f".{resolved_id}.importing"
+    if staging_dir.exists():
+        rmtree(staging_dir)
+    try:
+        artifacts = _stage_import(
+            root=root,
+            staging_dir=staging_dir,
+            work_id=resolved_id,
+            source=resolved_source,
+            text=text,
+            title=title,
+            mode=mode,
+            chunk_size=chunk_size,
+            rights_declaration=rights_declaration,
         )
-        combined_sections.append(f"\n\n[source:{index:03d} label={record['label']}]\n\n{record['text']}")
+        commit_import(staging_dir, import_dir, overwrite=overwrite)
+    except Exception:
+        if staging_dir.exists():
+            rmtree(staging_dir)
+        raise
 
-    normalized = _normalize_text("\n".join(combined_sections))
-    chunks = _chunks(normalized, chunk_size)
-    chunk_records: list[dict[str, object]] = []
-    offset = 0
-    for index, chunk in enumerate(chunks, start=1):
-        chunk_path = chunk_dir / f"chunk_{index:04d}.md"
-        chunk_path.write_text(_render_chunk(resolved_id, index, chunk, offset), encoding="utf-8")
-        chunk_records.append(
-            {
-                "chunk_id": f"chunk_{index:04d}",
-                "path": _rel(chunk_path, root),
-                "char_start": offset,
-                "char_end": offset + len(chunk),
-                "char_count": len(chunk),
-            }
-        )
-        offset += len(chunk)
-
-    candidate_outputs = _candidate_outputs(resolved_id)
     manifest_path = import_dir / "source_manifest.json"
     report_path = import_dir / "source_ingest.md"
     task_path = import_dir / "extract_project_files.agent_tasks.md"
-
-    manifest = {
-        "schema": "literary-engineering-workbench/source-ingest/v1",
-        "work_id": resolved_id,
-        "title": title,
-        "mode": mode,
-        "created_at": _now(),
-        "source_count": len(raw_records),
-        "chunk_count": len(chunk_records),
-        "raw_sources": raw_records,
-        "chunks": chunk_records,
-        "candidate_outputs": candidate_outputs,
-        "guardrails": [
-            "Source extraction is evidence, not canon.",
-            "All extracted facts, characters, world rules, outlines, and style notes remain candidates.",
-            "Use short evidence references instead of copying long source passages.",
-            "Do not write directly to confirmed canon, character files, official plot files, drafts, exports, or releases.",
-        ],
-    }
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    report_path.write_text(
-        _render_report(
-            root=root,
-            work_id=resolved_id,
-            title=title,
-            mode=mode,
-            manifest_path=manifest_path,
-            raw_records=raw_records,
-            chunk_records=chunk_records,
-            candidate_outputs=candidate_outputs,
-        ),
-        encoding="utf-8",
-    )
-    _write_extraction_task(
-        root=root,
-        work_id=resolved_id,
-        title=title,
-        mode=mode,
-        manifest_path=manifest_path,
-        report_path=report_path,
-        chunk_paths=[root / record["path"] for record in chunk_records],
-        candidate_outputs=candidate_outputs,
-        task_path=task_path,
-    )
 
     return SourceIngestResult(
         project_root=root,
@@ -157,58 +101,125 @@ def ingest_existing_work(
         manifest_path=manifest_path,
         report_path=report_path,
         task_path=task_path,
-        source_count=len(raw_records),
-        chunk_count=len(chunk_records),
-        candidate_outputs=candidate_outputs,
+        source_count=int(artifacts["source_count"]),
+        chunk_count=int(artifacts["chunk_count"]),
+        candidate_outputs=dict(artifacts["candidate_outputs"]),
     )
 
 
-def _read_sources(source: Path | None, *, text: str, title: str) -> list[dict[str, object]]:
-    records: list[dict[str, object]] = []
-    if source:
-        files = _collect_source_files(source)
-        for file in files:
-            records.append(
-                {
-                    "label": file.stem,
-                    "input_path": str(file),
-                    "text": file.read_text(encoding="utf-8"),
-                }
-            )
-    if text:
-        records.append(
-            {
-                "label": title or "inline-source",
-                "input_path": "",
-                "text": text,
-            }
-        )
-    if not records:
-        raise ValueError("no readable text sources found")
-    return records
+def _stage_import(
+    *,
+    root: Path,
+    staging_dir: Path,
+    work_id: str,
+    source: Path | None,
+    text: str,
+    title: str,
+    mode: str,
+    chunk_size: int,
+    rights_declaration: str,
+) -> dict[str, object]:
+    _ensure_candidate_dirs(root)
+    logical_import = f"sources/imports/{work_id}"
+    staged = stage_source_import(
+        staging_dir=staging_dir,
+        logical_import=logical_import,
+        work_id=work_id,
+        source=source,
+        text=text,
+        title=title,
+        rights_declaration=rights_declaration,
+        chunk_size=chunk_size,
+    )
+    logical_evidence = f"{logical_import}/evidence_index.json"
+    candidate_outputs = _candidate_outputs(work_id)
+    logical_manifest = root / logical_import / "source_manifest.json"
+    logical_report = root / logical_import / "source_ingest.md"
+    manifest = _source_manifest(
+        work_id=work_id,
+        mode=mode,
+        rights_declaration=rights_declaration,
+        logical_evidence=logical_evidence,
+        staged=staged,
+        candidate_outputs=candidate_outputs,
+    )
+    manifest["import_revision"] = import_revision(manifest)
+    (staging_dir / "source_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (staging_dir / "source_ingest.md").write_text(
+        _render_report(
+            root=root,
+            work_id=work_id,
+            title=str(manifest["title"]),
+            mode=mode,
+            manifest_path=logical_manifest,
+            raw_records=list(staged.raw_records),
+            chunk_records=list(staged.chunk_records),
+            candidate_outputs=candidate_outputs,
+            evidence_path=root / logical_evidence,
+            segment_count=staged.segment_count,
+        ),
+        encoding="utf-8",
+    )
+    _write_extraction_task(
+        root=root,
+        work_id=work_id,
+        title=str(manifest["title"]),
+        mode=mode,
+        manifest_path=logical_manifest,
+        report_path=logical_report,
+        evidence_path=root / logical_evidence,
+        chunk_paths=[root / str(record["path"]) for record in staged.chunk_records],
+        candidate_outputs=candidate_outputs,
+        task_path=staging_dir / "extract_project_files.agent_tasks.md",
+        task_identity_path=root / logical_import / "extract_project_files.agent_tasks.md",
+    )
+    return {
+        "source_count": staged.source_count,
+        "chunk_count": staged.chunk_count,
+        "candidate_outputs": candidate_outputs,
+    }
 
 
-def _collect_source_files(source: Path) -> list[Path]:
-    if not source.exists():
-        raise FileNotFoundError(f"source path does not exist: {source}")
-    if source.is_file():
-        if source.suffix.lower() not in TEXT_EXTENSIONS:
-            raise ValueError(f"unsupported source text extension: {source.suffix}")
-        return [source]
-    files: list[Path] = []
-    for path in sorted(source.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in TEXT_EXTENSIONS:
-            continue
-        try:
-            parts = path.relative_to(source).parts
-        except ValueError:
-            parts = path.parts
-        if any(part.startswith(".") for part in parts):
-            continue
-        files.append(path)
-    if not files:
-        raise ValueError(f"no .txt/.md source files found under: {source}")
-    return files
+def _source_manifest(
+    *,
+    work_id: str,
+    mode: str,
+    rights_declaration: str,
+    logical_evidence: str,
+    staged: StagedSourceImport,
+    candidate_outputs: dict[str, str],
+) -> dict[str, object]:
+    return {
+        "schema": SOURCE_INGEST_SCHEMA_V2,
+        "work_id": work_id,
+        "title": staged.title,
+        "mode": mode,
+        "created_at": _now(),
+        "extractor_version": EXTRACTOR_VERSION,
+        "rights_declaration": rights_declaration.strip(),
+        "source_count": staged.source_count,
+        "segment_count": staged.segment_count,
+        "chunk_count": staged.chunk_count,
+        "source_documents": list(staged.source_documents),
+        "raw_sources": list(staged.raw_records),
+        "evidence_index": {
+            "path": logical_evidence,
+            "revision": staged.evidence_revision,
+            "segment_count": staged.segment_count,
+            "evidence_count": staged.segment_count,
+        },
+        "chunks": list(staged.chunk_records),
+        "candidate_outputs": candidate_outputs,
+        "guardrails": [
+            "Source extraction is evidence, not canon.",
+            "All extracted facts, characters, world rules, outlines, and style notes remain candidates.",
+            "Use evidence ids and bounded source ranges instead of copying long source passages.",
+            "Do not write directly to confirmed canon, character files, official plot files, drafts, exports, or releases.",
+        ],
+    }
 
 
 def _candidate_outputs(work_id: str) -> dict[str, str]:
@@ -244,11 +255,19 @@ def _write_extraction_task(
     mode: str,
     manifest_path: Path,
     report_path: Path,
+    evidence_path: Path,
     chunk_paths: list[Path],
     candidate_outputs: dict[str, str],
     task_path: Path,
+    task_identity_path: Path,
 ) -> None:
-    source_paths = [manifest_path, report_path, *chunk_paths]
+    source_paths = [
+        root / "project.yaml",
+        manifest_path,
+        report_path,
+        evidence_path,
+        *chunk_paths,
+    ]
     output_lines = "\n".join(f"- {key}: `{path}`" for key, path in candidate_outputs.items())
     write_agent_tasks(
         task_path,
@@ -259,12 +278,13 @@ def _write_extraction_task(
             "这是已有作品反推标准项目文件的正式平台 Agent 任务。",
             "CLI 只完成导入、分块和任务说明；人物、世界观、剧情、文风的判断由平台 agent 完成。",
             "所有输出都写入候选区或 source_ingest review，不得自动晋升为 canon。",
+            "每条候选结论必须引用 evidence_index.json 中存在的 evidence id，不得自造引用。",
             f"提取模式：{mode}",
         ],
         tasks=[
             (
                 "读取源作品与边界",
-                f"""读取 `{_rel(manifest_path, root)}`、`{_rel(report_path, root)}` 和所有 chunk。确认作品标题 `{title or work_id}`、使用目的 `{mode}`、已有项目的 canon/characters/plot/style 现状，以及任何用户给出的续写、改写或分析边界。""",
+                f"""读取 `project.yaml`、`{_rel(manifest_path, root)}`、`{_rel(report_path, root)}`、`{_rel(evidence_path, root)}` 和所有 chunk。确认作品标题 `{title or work_id}`、使用目的 `{mode}`、项目身份和清单中声明的边界。不要尝试读取 task package 未列出的项目资料；只使用证据索引中可解析的 evidence id。""",
             ),
             (
                 "反推项目简报",
@@ -287,6 +307,7 @@ def _write_extraction_task(
                 f"""创建或覆盖 `{candidate_outputs['review']}`。审查本次反推结果的证据强度、矛盾、缺漏、版权/授权和续写风险，列出可晋升候选、必须人工确认项、建议下一步。不要写入 `[AGENT_TASK: ...]`。候选输出清单：\n{output_lines}""",
             ),
         ],
+        identity_path=task_identity_path,
     )
 
 
@@ -300,6 +321,8 @@ def _render_report(
     raw_records: list[dict[str, object]],
     chunk_records: list[dict[str, object]],
     candidate_outputs: dict[str, str],
+    evidence_path: Path,
+    segment_count: int,
 ) -> str:
     lines = [
         f"# 源作品导入：{title or work_id}",
@@ -308,17 +331,24 @@ def _render_report(
         f"- mode: `{mode}`",
         f"- manifest: `{_rel(manifest_path, root)}`",
         f"- source_count: {len(raw_records)}",
+        f"- segment_count: {segment_count}",
         f"- chunk_count: {len(chunk_records)}",
+        f"- evidence_index: `{_rel(evidence_path, root)}`",
         "",
         "## Raw Sources",
         "",
     ]
     for record in raw_records:
-        lines.append(f"- `{record['raw_path']}`：{record['char_count']} chars")
+        lines.append(
+            f"- `{record['source_id']}` → `{record['raw_path']}`：{record['char_count']} chars"
+        )
     lines.extend(["", "## Chunks", ""])
     for record in chunk_records:
         lines.append(
-            f"- `{record['chunk_id']}` `{record['path']}` chars {record['char_start']}-{record['char_end']}"
+            f"- `{record['chunk_id']}` `{record['path']}` "
+            f"segments={len(record.get('segment_ids', []))} "
+            f"evidence={len(record.get('evidence_refs', []))} "
+            f"chars {record['char_start']}-{record['char_end']}"
         )
     lines.extend(
         [
@@ -339,39 +369,6 @@ def _render_report(
         ]
     )
     return "\n".join(lines).rstrip() + "\n"
-
-
-def _render_chunk(work_id: str, index: int, text: str, offset: int) -> str:
-    return "\n".join(
-        [
-            f"# Source Chunk {index:04d}",
-            "",
-            f"- work_id: `{work_id}`",
-            f"- chunk_id: `chunk_{index:04d}`",
-            f"- char_start: {offset}",
-            f"- char_end: {offset + len(text)}",
-            "",
-            "## Text",
-            "",
-            text.strip(),
-            "",
-        ]
-    )
-
-
-def _normalize_text(text: str) -> str:
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    lines = [line.rstrip() for line in text.splitlines()]
-    return "\n".join(lines).strip() + "\n"
-
-
-def _chunks(text: str, chunk_size: int) -> list[str]:
-    size = max(int(chunk_size or 6000), 200)
-    return [text[index : index + size] for index in range(0, len(text), size)] or [text]
-
-
-def _safe_filename(value: object) -> str:
-    return _slug(str(value))[:60] or "source"
 
 
 def _slug(value: str) -> str:

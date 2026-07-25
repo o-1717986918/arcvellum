@@ -86,12 +86,22 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     ):
         source_ingest = sub.add_parser(command, help=help_text)
         source_ingest.add_argument("project", help="Work project directory.")
-        source_ingest.add_argument("--source", default="", help="Source .txt/.md file or directory.")
+        source_ingest.add_argument("--source", default="", help="Source .txt/.md/.docx file or directory.")
         source_ingest.add_argument("--text", default="", help="Inline source text.")
         source_ingest.add_argument("--title", default="", help="Source work title.")
         source_ingest.add_argument("--work-id", default="", help="Stable import id. Defaults to title/source stem.")
         source_ingest.add_argument("--mode", default="continuation", choices=sorted(INGEST_MODES))
-        source_ingest.add_argument("--chunk-size", type=int, default=6000, help="Character count per source chunk.")
+        source_ingest.add_argument(
+            "--chunk-size",
+            type=int,
+            default=6000,
+            help="Target characters per semantic source chunk; structural boundaries are preserved.",
+        )
+        source_ingest.add_argument(
+            "--rights-declaration",
+            default="",
+            help="Rights or authorization declaration recorded with every preserved source.",
+        )
         source_ingest.add_argument("--overwrite", action="store_true", help="Overwrite an existing import directory.")
 
     register_style_commands(sub)

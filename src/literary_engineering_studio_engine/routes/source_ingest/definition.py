@@ -12,7 +12,12 @@ from pathlib import Path
 import re
 
 from ...agent_tasks import agent_task_completion_status
+from ...literary.ingest import SOURCE_INGEST_SCHEMA_V2, verify_ingest_manifest
 from ...task_paths import TASK_SCHEMA, normalize_relative_path, now, read_json, relative_path, resolve_project_path, task_id
+
+
+SOURCE_INGEST_SCHEMA_V1 = "literary-engineering-workbench/source-ingest/v1"
+SOURCE_INGEST_SCHEMAS = {SOURCE_INGEST_SCHEMA_V1, SOURCE_INGEST_SCHEMA_V2}
 
 
 def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict[str, object]:
@@ -88,16 +93,29 @@ def blueprint_for_state(root: Path, work_id: str, import_dir: str, current_state
     completion = f"{import_dir}/extract_project_files.agent_completion.json"
     report = f"{import_dir}/source_ingest.md"
     chunks = [str(item.get("path") or "") for item in manifest.get("chunks", []) if isinstance(item, dict)]
+    evidence_path = evidence_path_from_manifest(manifest)
+    extraction_sources = extraction_source_paths(
+        import_dir, report, task_path, evidence_path, chunks
+    )
     candidate_values = list(candidate_outputs.values())
     review = candidate_outputs.get("review", f"reviews/source_ingest/{work_id}_extraction_review.md")
     table: dict[str, dict[str, object]] = {
         "source-manifest": {
             "task_type": "deterministic-cli-or-repair",
             "prompt_asset_id": "route.source-ingest.import.v1",
-            "command": "python -m literary_engineering_studio_engine source-ingest <project> --source <source> --title <title> --work-id <work-id>",
+            "command": "python -m literary_engineering_studio_engine source-ingest <project> --source <source> --title <title> --work-id <work-id> --rights-declaration <declaration>",
             "source_paths": ["project.yaml"],
-            "expected_outputs": [f"{import_dir}/source_manifest.json", report, task_path],
-            "hard_constraints": ["Run source-ingest with explicit source/text/title/work-id when starting a new import.", "If repairing an invalid manifest, preserve source evidence and candidate output paths."],
+            "expected_outputs": [
+                f"{import_dir}/source_manifest.json",
+                report,
+                f"{import_dir}/evidence_index.json",
+                task_path,
+            ],
+            "hard_constraints": [
+                "Run source-ingest with explicit source/text/title/work-id when starting a new import.",
+                "Record a rights declaration and preserve immutable source bytes, extracted text, ranges, and hashes.",
+                "If repairing an invalid manifest, preserve source evidence and candidate output paths.",
+            ],
             "style_constraints": [],
             "validation_gates": ["source manifest exists", "source ingest report exists", "extraction sidecar exists", "source_manifest schema is valid"],
             "next_allowed_states": ["extraction-agent-task"],
@@ -106,7 +124,7 @@ def blueprint_for_state(root: Path, work_id: str, import_dir: str, current_state
             "task_type": "platform-agent-extraction",
             "prompt_asset_id": "route.source-ingest.extract-project-files.v1",
             "command": "",
-            "source_paths": [f"{import_dir}/source_manifest.json", report, task_path, *chunks],
+            "source_paths": extraction_sources,
             "expected_outputs": [*candidate_values, completion],
             "hard_constraints": ["Read extract_project_files.agent_tasks.md and all source chunks before writing extracted candidates.", "Every extracted claim must include evidence_refs, confidence, unknowns, and contradiction notes when relevant.", "Write only candidate assets and source-ingest review; do not overwrite confirmed project files."],
             "style_constraints": ["For style notes from non-public-domain or unauthorized sources, abstract high-level craft features only."],
@@ -117,7 +135,13 @@ def blueprint_for_state(root: Path, work_id: str, import_dir: str, current_state
             "task_type": "platform-agent-revision",
             "prompt_asset_id": "route.source-ingest.extraction-review.v1",
             "command": "",
-            "source_paths": [f"{import_dir}/source_manifest.json", *chunks, *[item for item in candidate_values if item != review], review],
+            "source_paths": [
+                f"{import_dir}/source_manifest.json",
+                evidence_path,
+                *chunks,
+                *[item for item in candidate_values if item != review],
+                review,
+            ],
             "expected_outputs": [*[item for item in candidate_values if item != review], review],
             "repair_targets": [item for item in candidate_values if item != review],
             "hard_constraints": ["Revise the extracted candidate files against every review finding, then rewrite the review honestly.", "At least one declared extracted candidate must change; editing only the review conclusion is forbidden.", "The extraction review must be a clean pass before source-derived candidates are treated as route-ready.", "pass_with_notes, missing evidence, copied long passages, or direct canon writeback are blocking."],
@@ -169,8 +193,10 @@ def manifest_gate_errors(root: Path, import_dir: Path) -> list[str]:
     payload, error = _read_optional_json(manifest_path)
     if error:
         return [*errors, error]
-    if payload.get("schema") != "literary-engineering-workbench/source-ingest/v1":
+    if payload.get("schema") not in SOURCE_INGEST_SCHEMAS:
         errors.append("source_manifest.json has wrong or missing schema")
+    if payload.get("schema") == SOURCE_INGEST_SCHEMA_V2:
+        errors.extend(verify_ingest_manifest(root, payload))
     if not payload.get("work_id"):
         errors.append("source_manifest.json must contain work_id")
     if not isinstance(payload.get("chunks"), list) or not payload.get("chunks"):
@@ -178,6 +204,30 @@ def manifest_gate_errors(root: Path, import_dir: Path) -> list[str]:
     if not isinstance(payload.get("candidate_outputs"), dict) or not payload.get("candidate_outputs"):
         errors.append("source_manifest.json must contain candidate_outputs")
     return errors
+
+
+def evidence_path_from_manifest(manifest: dict[str, object]) -> str:
+    record = manifest.get("evidence_index")
+    if isinstance(record, dict) and str(record.get("path") or "").strip():
+        return str(record["path"])
+    return ""
+
+
+def extraction_source_paths(
+    import_dir: str,
+    report: str,
+    task_path: str,
+    evidence_path: str,
+    chunks: list[str],
+) -> list[str]:
+    return [
+        "project.yaml",
+        f"{import_dir}/source_manifest.json",
+        report,
+        task_path,
+        evidence_path,
+        *chunks,
+    ]
 
 
 def extraction_gate_errors(root: Path, import_dir: Path, work_id: str, *, require_review_pass: bool) -> list[str]:

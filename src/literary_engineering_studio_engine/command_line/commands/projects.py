@@ -138,6 +138,7 @@ def handle(args, parser) -> int | None:
             work_id=args.work_id,
             mode=args.mode,
             chunk_size=args.chunk_size,
+            rights_declaration=args.rights_declaration,
             overwrite=args.overwrite,
         )
         print(f"source_import: {result.import_dir}")

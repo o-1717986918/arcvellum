@@ -157,6 +157,7 @@ def write_agent_tasks(
     source_paths: list[Path],
     tasks: list[tuple[str, str]],
     notes: list[str] | None = None,
+    identity_path: Path | None = None,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     expanded_sources = list(source_paths)
@@ -169,7 +170,7 @@ def write_agent_tasks(
         source_paths=expanded_sources,
         tasks=tasks,
         notes=notes or [],
-        task_path=output_path,
+        task_path=identity_path or output_path,
     )
     digest = hashlib.sha256(document.replace("\r\n", "\n").encode("utf-8")).hexdigest()
     document = f"{TASK_DIGEST_PREFIX}{digest} -->\n{document}"
