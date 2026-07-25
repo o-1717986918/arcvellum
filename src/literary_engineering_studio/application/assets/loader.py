@@ -24,6 +24,13 @@ class AssetLoader:
         content = path.read_text(encoding="utf-8")
         return self._record(root, definition, local_id, path, content)
 
+    def resolve_path(self, project_root: Path, asset_id: str) -> Path:
+        """Resolve a registered asset path without requiring it to exist."""
+
+        root = self._project_root(project_root)
+        definition, local_id = self.registry.parse_asset_id(asset_id)
+        return self._asset_path(root, definition, local_id)
+
     def list(self, project_root: Path) -> tuple[AssetRecord, ...]:
         root = self._project_root(project_root)
         records: list[AssetRecord] = []
