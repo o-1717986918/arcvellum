@@ -334,7 +334,7 @@ def _asset_blueprint_for_state(root: Path, candidate_id: str, asset_type: str, c
             "task_type": "deterministic-cli",
             "prompt_asset_id": "route.character-world-assets.promote.v1",
             "command": f"python -m literary_engineering_studio_engine promote-candidate-asset <project> {candidate_rel} --group {group or '<group>'} --approval-run-id {candidate_id}",
-            "source_paths": [candidate_rel, review, review_json, "workflow/approvals/index.jsonl"],
+            "source_paths": _asset_promotion_sources(candidate_rel, candidate_id),
             "expected_outputs": [promotion, promotion_report, *promoted_outputs],
             "hard_constraints": [
                 "Promote only after clean review and matching approve record.",
@@ -710,6 +710,18 @@ def _asset_type_from_payload_or_path(root: Path, candidate: Path, payload: dict[
         if rel.startswith(folder.as_posix() + "/"):
             return item_type
     return ""
+
+
+def _asset_promotion_sources(candidate: str, candidate_id: str) -> list[str]:
+    review_base = f"reviews/assets/{candidate_id}_review"
+    return [
+        candidate,
+        f"{review_base}.md",
+        f"{review_base}.json",
+        f"{review_base}.agent_tasks.md",
+        f"{review_base}.agent_completion.json",
+        "workflow/approvals/index.jsonl",
+    ]
 
 
 def _asset_promotion_group(asset_type: str) -> str:

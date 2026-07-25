@@ -59,6 +59,12 @@ def _asset_states(root: Path, *, include_intake: bool = False) -> list[dict[str,
     return states
 
 
+def asset_candidate_states(root: Path, *, include_intake: bool = False) -> tuple[dict[str, object], ...]:
+    """Expose the derived candidate lifecycle without leaking route internals."""
+
+    return tuple(_asset_states(root, include_intake=include_intake))
+
+
 def _asset_intake_state() -> dict[str, object]:
     return {
         "target_id": "asset-intake",

@@ -60,6 +60,45 @@ def build_formal_stale_propagation(
     }
 
 
+def build_formal_stale_preview(
+    project_root: Path,
+    changed_relative_paths: tuple[str, ...],
+) -> dict[str, object]:
+    """Project affected formal scene chains without mutating project truth."""
+
+    root = project_root.resolve()
+    relatives = {
+        value.replace("\\", "/").lstrip("./")
+        for value in changed_relative_paths
+        if value.strip()
+    }
+    entries: list[dict[str, object]] = []
+    trace_root = root / "memory" / "context_packets"
+    if trace_root.is_dir() and relatives:
+        for trace_path in sorted(trace_root.glob("*.trace.json")):
+            payload = _read_json(trace_path)
+            matched = sorted(relative for relative in relatives if _trace_loaded_path(payload, relative))
+            if not matched:
+                continue
+            scene_id = str(payload.get("scene_id") or trace_path.name.removesuffix(".trace.json"))
+            entries.append(
+                {
+                    "scene_id": scene_id,
+                    "context_trace": trace_path.relative_to(root).as_posix(),
+                    "changed_paths": matched,
+                }
+            )
+    return {
+        "schema": "arcvellum/archive-stale-preview/v1",
+        "status": "would-propagate" if entries else "not-required",
+        "mechanism": "engine-context-trace-sha256",
+        "scene_ids": sorted({str(entry["scene_id"]) for entry in entries}),
+        "entries": entries,
+        "invalidated_stages": list(_DOWNSTREAM_STAGES) if entries else [],
+        "historical_prose": "preserved",
+    }
+
+
 def _trace_loaded_path(payload: dict[str, Any], relative: str) -> bool:
     sources = payload.get("loaded_sources")
     if not isinstance(sources, list):

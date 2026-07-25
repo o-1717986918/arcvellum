@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException
 
@@ -11,6 +11,13 @@ from ...application.assets.contracts import OwnerOverrideTransaction, SemanticRe
 from ...application.assets.impact import build_asset_impact
 from ...application.assets.loader import AssetLoader
 from ...application.assets.owner_transactions import AssetVersionConflictError, OwnerTransactionService
+from ...application.assets.promotion import (
+    CandidateIdentityConflictError,
+    CandidateNotFoundError,
+    CandidatePromotionNotReadyError,
+    CandidatePromotionPreviewStaleError,
+    CandidatePromotionService,
+)
 from ...application.assets.recycle_bin import (
     ArchiveReferenceConflictError,
     RecycleBinService,
@@ -20,12 +27,14 @@ from ...application.assets.registry import AssetViewRegistry
 from ...application.assets.revisions import AssetRevisionIndex, AssetRevisionService
 from ...application.assets.validation import validate_asset_content
 from ...projections.archive.service import ArchiveProjectionService
+from ...projections.archive.candidates import project_candidate_detail, project_candidate_list
 from ..common import call_handler, project_root as resolve_project_root
 from ..models import (
     ArchiveAssetCommitRequest,
     ArchiveAssetContentRequest,
     ArchiveAssetArchiveRequest,
     ArchiveAssetRestoreRequest,
+    ArchiveCandidatePromotionRequest,
     ArchiveRestorePreviewRequest,
 )
 
@@ -38,13 +47,20 @@ class ArchiveRouterDependencies:
     transactions: OwnerTransactionService
     revisions: AssetRevisionService
     recycle_bin: RecycleBinService
+    candidates: CandidatePromotionService
+    launch_worker: Callable[[dict[str, str]], dict[str, Any]] | None = None
 
 
-def default_archive_dependencies(index: AssetRevisionIndex) -> ArchiveRouterDependencies:
+def default_archive_dependencies(
+    index: AssetRevisionIndex,
+    *,
+    launch_worker: Callable[[dict[str, str]], dict[str, Any]] | None = None,
+) -> ArchiveRouterDependencies:
     registry = AssetViewRegistry.default()
     loader = AssetLoader(registry)
     revisions = AssetRevisionService(index)
     recycle_bin = RecycleBinService(registry, loader, index)
+    candidates = CandidatePromotionService()
     return ArchiveRouterDependencies(
         registry=registry,
         loader=loader,
@@ -52,6 +68,8 @@ def default_archive_dependencies(index: AssetRevisionIndex) -> ArchiveRouterDepe
         transactions=OwnerTransactionService(registry, loader, revisions),
         revisions=revisions,
         recycle_bin=recycle_bin,
+        candidates=candidates,
+        launch_worker=launch_worker,
     )
 
 
@@ -61,6 +79,31 @@ def build_archive_router(deps: ArchiveRouterDependencies) -> APIRouter:
     @router.get("/archive/tree")
     def archive_tree(project_root: str):
         return call_handler(lambda: {"ok": True, **deps.projections.tree(resolve_project_root(project_root))})
+
+    @router.get("/archive/candidates")
+    def archive_candidates(project_root: str):
+        return call_handler(
+            lambda: {
+                "ok": True,
+                **project_candidate_list(deps.candidates.list(resolve_project_root(project_root))),
+            }
+        )
+
+    @router.get("/archive/candidates/{candidate_id}")
+    def archive_candidate(candidate_id: str, project_root: str):
+        try:
+            return {
+                "ok": True,
+                **project_candidate_detail(
+                    deps.candidates.detail(resolve_project_root(project_root), candidate_id)
+                ),
+            }
+        except CandidateNotFoundError as exc:
+            raise _candidate_error(404, "candidate_not_found", candidate_id, exc) from exc
+        except CandidateIdentityConflictError as exc:
+            raise _candidate_error(409, "candidate_identity_conflict", candidate_id, exc) from exc
+        except ValueError as exc:
+            raise _candidate_error(400, "candidate_validation", candidate_id, exc) from exc
 
     @router.get("/archive/assets/{asset_id}")
     def archive_asset(asset_id: str, project_root: str):
@@ -101,6 +144,10 @@ def build_archive_router(deps: ArchiveRouterDependencies) -> APIRouter:
     @router.post("/archive/assets/{asset_id}/restore")
     def restore_asset_from_recycle_bin(asset_id: str, payload: ArchiveAssetRestoreRequest):
         return _restore_asset(deps, asset_id, payload)
+
+    @router.post("/archive/candidates/{candidate_id}/promote")
+    def promote_archive_candidate(candidate_id: str, payload: ArchiveCandidatePromotionRequest):
+        return _promote_candidate(deps, candidate_id, payload)
 
     return router
 
@@ -238,10 +285,59 @@ def _restore_asset(
     return {"ok": True, "receipt": receipt}
 
 
+def _promote_candidate(
+    deps: ArchiveRouterDependencies,
+    candidate_id: str,
+    payload: ArchiveCandidatePromotionRequest,
+) -> dict[str, object]:
+    try:
+        request = deps.candidates.worker_request(
+            resolve_project_root(payload.project_root),
+            candidate_id,
+            preview_digest=payload.preview_digest,
+        )
+        if deps.launch_worker is None:
+            raise RuntimeError("Archive candidate Worker launcher is unavailable")
+        job = deps.launch_worker(request)
+    except CandidateNotFoundError as exc:
+        raise _candidate_error(404, "candidate_not_found", candidate_id, exc) from exc
+    except CandidateIdentityConflictError as exc:
+        raise _candidate_error(409, "candidate_identity_conflict", candidate_id, exc) from exc
+    except CandidatePromotionNotReadyError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "promotion_not_ready",
+                "message": str(exc),
+                "candidate_id": candidate_id,
+                "blockers": list(exc.blockers),
+            },
+        ) from exc
+    except CandidatePromotionPreviewStaleError as exc:
+        raise _candidate_error(409, "promotion_preview_stale", candidate_id, exc) from exc
+    except ValueError as exc:
+        raise _candidate_error(400, "candidate_validation", candidate_id, exc) from exc
+    except RuntimeError as exc:
+        raise _candidate_error(503, "worker_unavailable", candidate_id, exc) from exc
+    return {
+        "ok": True,
+        "candidate_id": candidate_id,
+        "job_id": str(job.get("job_id") or ""),
+        "status": str(job.get("status") or "queued"),
+    }
+
+
 def _conflict(code: str, asset_id: str, exc: Exception) -> HTTPException:
     return HTTPException(
         status_code=409,
         detail={"code": code, "message": str(exc), "asset_id": asset_id},
+    )
+
+
+def _candidate_error(status_code: int, code: str, candidate_id: str, exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": str(exc), "candidate_id": candidate_id},
     )
 
 

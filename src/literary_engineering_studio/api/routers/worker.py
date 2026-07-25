@@ -31,7 +31,7 @@ def _request_data(payload: WorkerRequest) -> dict[str, Any]:
     return payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
 
 
-def _launch_worker(deps: WorkerRouterDependencies, payload: WorkerRequest, *, resume_run_root: Path | None = None):
+def launch_worker(deps: WorkerRouterDependencies, payload: WorkerRequest, *, resume_run_root: Path | None = None):
     request_data = _request_data(payload)
     job = deps.jobs.create(request_data, idempotency_key=payload.idempotency_key)
 
@@ -139,7 +139,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
 
     @router.post("/worker/run")
     def worker_run(payload: WorkerRequest):
-        return _launch_worker(deps, payload)
+        return launch_worker(deps, payload)
 
     @router.get("/worker/jobs/{job_id}")
     def worker_job(job_id: str):
@@ -228,7 +228,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
                 candidate = Path(str((resources or {}).get("task_sandbox") or ""))
                 if candidate.is_dir() and (candidate / "run.json").is_file():
                     resume_root = candidate
-            return _launch_worker(deps, retry, resume_run_root=resume_root)
+            return launch_worker(deps, retry, resume_run_root=resume_root)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (RuntimeError, ValueError, TypeError) as exc:

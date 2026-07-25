@@ -213,11 +213,17 @@ class ArchiveAssetRestoreRequest(BaseModel):
     reason: str
 
 
+class ArchiveCandidatePromotionRequest(BaseModel):
+    project_root: str
+    preview_digest: str
+
+
 __all__ = [
     "ArchiveAssetArchiveRequest",
     "ArchiveAssetCommitRequest",
     "ArchiveAssetContentRequest",
     "ArchiveAssetRestoreRequest",
+    "ArchiveCandidatePromotionRequest",
     "ArchiveRestorePreviewRequest",
     "AdvisorCustomPersonaRequest",
     "AdvisorInboxReadRequest",

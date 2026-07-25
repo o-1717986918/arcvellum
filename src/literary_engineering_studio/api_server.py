@@ -20,6 +20,7 @@ from .api.models import (
     ArchiveAssetCommitRequest,
     ArchiveAssetContentRequest,
     ArchiveAssetRestoreRequest,
+    ArchiveCandidatePromotionRequest,
     ArchiveRestorePreviewRequest,
     AdvisorCustomPersonaRequest,
     AdvisorInboxReadRequest,
@@ -62,7 +63,7 @@ from .api.routers.narrative import NarrativeRouterDependencies, build_narrative_
 from .api.routers.delivery import DeliveryRouterDependencies, build_delivery_router
 from .api.routers.style_lab import StyleLabRouterDependencies, build_style_lab_router
 from .api.routers.project_details import ProjectDetailRouterDependencies, build_project_detail_router
-from .api.routers.worker import WorkerRouterDependencies, build_worker_router
+from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
 from .advisor import ProjectAdvisor
 from .agent_observability import build_agent_observability
 from .api_read_models import ProjectReadModels
@@ -170,6 +171,19 @@ def _narrative_dependencies(
         v3_stream_state=v3_stream_state,
         stream_lock=stream_lock,
         sse=_sse,
+    )
+
+
+def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any) -> WorkerRouterDependencies:
+    return WorkerRouterDependencies(
+        config=config,
+        jobs=jobs,
+        lifecycle=lifecycle,
+        worker_factory=lambda *args, **kwargs: AgentWorker(*args, **kwargs),
+        project_lock_key=lambda project_root, route: project_lock_key(project_root, route),
+        track_agent_session_event=lambda *args, **kwargs: track_agent_session_event(*args, **kwargs),
+        ephemeral_worker_events=EPHEMERAL_WORKER_EVENTS,
+        coalesce_live_events=lambda events: coalesce_live_events(events),
     )
 
 
@@ -369,7 +383,18 @@ def create_app(config_override: dict[str, Any] | None = None):
         )
     )
 
-    app.include_router(build_archive_router(default_archive_dependencies(jobs)))
+    worker_dependencies = _worker_dependencies(config, jobs, lifecycle)
+    app.include_router(
+        build_archive_router(
+            default_archive_dependencies(
+                jobs,
+                launch_worker=lambda request: launch_worker(
+                    worker_dependencies,
+                    WorkerRequest(**request),
+                ),
+            )
+        )
+    )
 
     app.include_router(
         build_library_router(
@@ -441,18 +466,7 @@ def create_app(config_override: dict[str, Any] | None = None):
     )
 
     app.include_router(
-        build_worker_router(
-            WorkerRouterDependencies(
-                config=config,
-                jobs=jobs,
-                lifecycle=lifecycle,
-                worker_factory=lambda *args, **kwargs: AgentWorker(*args, **kwargs),
-                project_lock_key=lambda project_root, route: project_lock_key(project_root, route),
-                track_agent_session_event=lambda *args, **kwargs: track_agent_session_event(*args, **kwargs),
-                ephemeral_worker_events=EPHEMERAL_WORKER_EVENTS,
-                coalesce_live_events=lambda events: coalesce_live_events(events),
-            )
-        )
+        build_worker_router(worker_dependencies)
     )
 
     return app
