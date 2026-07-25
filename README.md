@@ -179,8 +179,12 @@ npm run client:dev
 | `protocol/` | 正式工作流共享的任务与项目契约 |
 | `tests/` | 内核、API、Runtime、预检与集成测试 |
 | `docs/architecture/` | 内核审查、双工作区与模块边界说明 |
+| `docs/roadmap/` | 当前开发目标、长期产品路线与执行指导 |
 | `docs/releases/` | 版本记录与签名发布流程 |
 | `packaging/` | Windows 打包与更新清单脚本 |
+
+长期目标与分阶段实施方案见
+[ArcVellum v0.96 - v1.0 长期产品与 Runtime 路线图](docs/roadmap/arcvellum-post-v0.95.3-long-horizon-product-and-runtime-roadmap.md)。
 
 ### 验证命令
 
