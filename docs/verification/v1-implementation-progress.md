@@ -310,6 +310,64 @@
   - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W2-4：候选资产投影与单一晋升门禁
+
+- Status: complete
+- Commits: `6e8a4ff`, `42189f9`
+- Added:
+  - 候选资产拥有独立稳定 ID、Registry 投影和来源定位，不与正式资产或回收条目混淆；
+  - 候选详情集中呈现 source、review、completion、impact 和 output contract，不要求前端理解 Engine 内部目录；
+  - 晋升预览由 Engine 原有 Gate 计算 exact review、completion、digest、结构校验和阻断原因；
+  - Studio 只创建受控 Worker 任务，实际晋升继续委托 Engine 单一 promotion 实现；
+  - 人工批准绑定候选 revision、preview digest、目标路径和 task command，旧预览或候选变化后必须重新批准；
+  - 晋升成功后保留既有 promotion manifest、Mutation Receipt 和 stale 传播语义；
+  - `/archive/candidates`、候选详情、晋升预览和晋升执行 API；
+  - 错误响应使用稳定 code/details，前端不再依赖解析任意错误文本。
+- Boundary:
+  - 不允许 Archive 直接复制候选文件到正式目录；
+  - Owner Override、restore 和普通资产 commit 均不能伪造候选晋升；
+  - 候选审查、完成标记和 digest 任一失效时，必须回到 Engine 重新生成正式证据；
+  - 前端只批准既有预览，不拥有删除 Gate 或改写 task command 的能力。
+- Exit evidence:
+  - focused Archive/API suite: 38 passed, 1 skipped；
+  - candidate promotion success、stale preview、review mismatch、digest mismatch 和 approval mismatch 均有回归测试；
+  - Architecture Audit: no new violation；
+  - `git diff --check`: passed。
+
+## W2-5：Narrative Archive 前端工作台与真实项目兼容
+
+- Status: complete
+- Commit: `9dcd373`
+- Added:
+  - 新增独立 `/archive` Narrative Archive 工作台，保持旧 `/library` 只读入口可访问；
+  - 三栏紧凑深色布局：正式资产树、多标签校勘区、影响/历史/候选/回收证据区；
+  - 正式详情、多标签切换、字段导航、完整源文本编辑、预校验和影响预览；
+  - 作者权威提交必须显式填写理由，并绑定 owner waiver 与 exact base revision；
+  - Revision Timeline、受控恢复预览、归档、回收站恢复和 stale 证据展示；
+  - 候选 Gate、阻断原因、输出影响和人工批准卡片，晋升仍经既有 Worker 与 Engine Gate；
+  - Archive 核心资料先加载，人工选择异步补充；选择服务缓慢或不可用不再阻塞首个正式资产打开；
+  - API client 增加结构化 `ApiError`，保留 code、message、status 和 details；
+  - 前端测试命令固定使用 Vitest runner config loader，消除受限 Windows 环境下的 esbuild 配置加载失败；
+  - Registry 稳定 ID 支持安全的 Unicode 字母和数字，继续拒绝路径分隔符、冒号、空格、`..`、非法起始字符和超长 ID；
+  - 真实项目 `1+1=2` 可完整投影 79 个正式资产和 3 个候选资产，不再因中文角色文件名使整棵资产树失败。
+- Browser evidence:
+  - 1440×900 桌面视口完成真实 API 验收，三栏保持同高、无横向溢出；
+  - 首个正式资产可在人工选择请求尚未返回时自动打开；
+  - 窄视口降级为可滚动纵向布局，资产树、编辑区和证据区仍可使用；
+  - 修复浅色原生滚动条和过小辅助文本，Archive 保持暗色校勘台视觉，不出现突兀白色面板。
+- Boundary:
+  - 当前字段导航用于理解结构，正式修改仍采用 Registry 校验过的完整源文本，尚未为七种资产分别建立深度结构化表单；
+  - 本批没有开放任意文件浏览、路径输入、Shell 或绕过语义审查的保存方式；
+  - 本批没有实现“新建正式资产”，因此 W2 整体仍未达到退出标准；
+  - 候选浏览器截图未作为门禁证据，候选交互由 store/component/API 测试覆盖。
+- Exit evidence:
+  - Python full suite: 461 passed, 1 skipped；
+  - Client full suite: 84 passed；
+  - Client production build、typecheck、desktop frontend sync 和 v0.9 build verification: passed；
+  - `python -m compileall -q src benchmarks scripts`: passed；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-4 先建立候选资产目录、稳定候选 ID、独立审查证据和对现有 Engine promotion 的单一受控适配，完成“候选预览 -> 影响确认 -> 人工批准 -> 正式晋升 -> receipt/stale”的后端闭环。不得通过复制候选文件、OwnerOverride 或 Archive restore 伪造晋升。候选晋升闭环通过完整门禁后，再开始 `features/archive/` 前端 IDE、Revision Timeline 和 RecycleBinPanel。
+下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-6 只补齐当前真实退出缺口：Registry 驱动的受控资产创建。创建流程必须由资产类型声明能力、生成稳定 ID、预览目标、结构与引用校验、语义审查/作者权威策略、乐观冲突检查、原子提交、Mutation Receipt、历史索引和 stale 传播共同约束；不得退化成任意路径或任意文本文件创建。后端闭环和失败测试通过后，再给 Archive IDE 增加与七种已注册资产相符的创建入口，并评估哪些高频资产值得进一步提供结构化表单。W2 退出前必须以真实项目完成“创建 -> 编辑 -> 历史 -> 归档 -> 恢复 -> 候选晋升”的整链验收。
