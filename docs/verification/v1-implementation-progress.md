@@ -11,9 +11,9 @@
 ## 当前结论
 
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
-- W1 Living Narrative Field 已完成关系可见性和人物引用两个批次；正文窗口三态已经实现，但仍等待全页面集成退出门禁。
-- 当前尚未完成 W1 的流更新稳定性、大规模投影验收与后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 411 tests、Client 65 tests、Client production build、Python compileall、Architecture Audit 全部通过。
+- W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态和工作区语义 revision 稳定性四个可回滚批次。
+- 当前尚未完成 W1 的 100/300/1000 节点投影与视觉性能验收，以及后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
+- 最近一次全量证据：Python 414 tests、Client 69 tests、Client production build、Python compileall、Architecture Audit 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -68,8 +68,8 @@
 
 ## W1-3：正文长卷三态
 
-- Status: implementation complete; integration exit pending
-- Commit: `09c02c1`
+- Status: complete
+- Commits: `09c02c1`, `d226883`
 - Added:
   - `peek / reading / immersive` 三态窗口契约；
   - 作品级窗口状态持久化与旧布局升级；
@@ -81,18 +81,35 @@
   - 不改变正式正文、阅读清单或后端投影；
   - 不把阅读器全屏状态保存在组件私有变量中；
   - 不允许旧持久化数据注入未知阅读器状态。
-- Passed evidence:
-  - Python full suite: 411 passed；
-  - Client full suite: 65 passed；
+- Exit evidence:
+  - Python full suite: 414 passed；
+  - Client full suite: 69 passed；
   - Client production build: passed；
   - `python -m compileall -q src`: passed；
   - Architecture Audit: 37 existing file debts, 230 existing function debts, 0 cycles, no new violation；
-  - `git diff --check`: passed。
-- Pending integration gate:
-  - 实际开发页面在 SSE/工作区刷新时反复触发 Vue `patchElement` 空节点异常，新仪表因此无法稳定挂载；
-  - 独立 `HEAD` 对照工作树在提交 `9751e08` 上稳定复现相同异常，已确认不是 W1-3 引入；
-  - 必须先修复该基线问题，再完成三态窗口的实际截图、拖动返回和多窗口共存验收，届时才能把本项改为 `complete`。
+  - `git diff --check`: passed；
+  - 实际浏览器：`reading 388×640 -> immersive 1248×688 -> reading 388×640` 精确恢复；
+  - 实际浏览器：拖动后保持 `388×640`，与推进仪表双窗口共存；
+  - 实际浏览器：连续 5.2 秒工作区 SSE 后，窗口位置、尺寸、模式和窗口数量均保持稳定；
+  - 实际截图：窄窗标题不再逐字竖排，沉浸态隐藏无关全局观测控件。
+
+## W1-S1：工作区语义 revision 与稳定流更新
+
+- Status: complete
+- Commit: `d226883`
+- Added:
+  - 工作区总 revision 与 dashboard/library/delivery/progress/prose/agent-observability 分区 revision；
+  - narrative v3 `projection_revision` 兼容字段；
+  - SSE 优先使用服务端显式语义 revision，不再对含墙钟计数的整包数据反复发事件；
+  - Agent 会话 `elapsed_seconds` 保留可见更新，但不再污染语义 revision；
+  - Pinia 按分区 revision 更新，未变化的读模型保持对象身份；
+  - 星仪投影 store 忽略相同 `projection_revision`，避免无意义重排；
+  - 阅读器窗口在观测状态变化时保持同一挂载实例的组件回归测试。
+- Boundary:
+  - 不降低 Agent 会话可观察性；
+  - 不以客户端节流掩盖服务端语义不稳定；
+  - 不把窗口几何或正文阅读状态写回作品项目。
 
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先修复 SSE/工作区刷新导致的 Vue DOM 补丁异常，恢复仪表窗口稳定挂载并完成 W1-3 产品级验收；该稳定性闭环完成前，不开始大规模 fixture 或 Archive 写模型。
+下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先建立 100/300/1000 节点大规模投影 fixture、投影/SSE/布局性能预算和关键视觉回归证据，完成 W1 的剩余退出门禁；在 W1 大规模正确性与性能未闭环前，不开始 Archive 写模型。
