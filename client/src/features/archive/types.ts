@@ -1,5 +1,37 @@
 export type ArchiveRecord = Record<string, unknown>;
 
+export type ArchiveFieldKind =
+  | "text"
+  | "markdown"
+  | "number"
+  | "choice"
+  | "string-list"
+  | "object"
+  | "table";
+
+export interface ArchiveFieldDefinition extends ArchiveRecord {
+  name: string;
+  label: string;
+  kind: ArchiveFieldKind;
+  section: string;
+  required: boolean;
+  help_text?: string;
+  options?: string[];
+}
+
+export interface ArchiveStructuredField extends ArchiveFieldDefinition {
+  defined: boolean;
+  value: unknown;
+}
+
+export interface ArchiveStructuredDocument extends ArchiveRecord {
+  asset_id: string;
+  editor_kind: string;
+  document_format: "yaml" | "json";
+  source_revision: string;
+  fields: ArchiveStructuredField[];
+}
+
 export interface ArchiveAssetItem extends ArchiveRecord {
   asset_id: string;
   asset_type: string;
@@ -24,6 +56,7 @@ export interface ArchiveAssetDetail extends ArchiveAssetItem {
   source_path?: string;
   schema_id?: string;
   writable_fields?: string[];
+  field_definitions?: ArchiveFieldDefinition[];
   reference_fields?: string[];
 }
 
@@ -60,6 +93,7 @@ export interface ArchiveCreationOption extends ArchiveRecord {
   id_field?: string;
   fixed_id?: string;
   writable_fields?: string[];
+  field_definitions?: ArchiveFieldDefinition[];
   template: string;
   available: boolean;
   unavailable_reason?: string;
@@ -80,4 +114,9 @@ export interface ArchiveCreationPreview extends ArchiveRecord {
   asset?: ArchiveRecord;
   validation?: ArchiveRecord;
   impact?: ArchiveRecord;
+}
+
+export interface ArchiveHistory extends ArchiveRecord {
+  revisions?: ArchiveRecord[];
+  transactions?: ArchiveRecord[];
 }

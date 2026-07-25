@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
-import { api, query } from "@/services/api";
+import { api } from "@/services/api";
 import { useAppStore } from "@/stores/app";
 import type {
   ArchiveAssetDetail,
@@ -9,19 +9,29 @@ import type {
   ArchiveCreationOption,
   ArchiveCreationPayload,
   ArchiveCreationPreview,
-  ArchiveRecord,
+  ArchiveStructuredDocument,
   RecycleEntry,
 } from "../types";
-
-interface ArchiveTreeResponse {
-  groups?: ArchiveAssetGroup[];
-  items?: ArchiveRecord[];
-}
-
-interface ArchiveHistoryResponse extends ArchiveRecord {
-  revisions?: ArchiveRecord[];
-  transactions?: ArchiveRecord[];
-}
+import {
+  commitArchiveCreation,
+  commitArchiveEdit,
+  fetchArchiveAsset,
+  fetchArchiveCandidate,
+  fetchArchiveWorkspace,
+  fetchStructuredDocument,
+  previewArchiveCreation,
+  previewArchiveEdit,
+  refreshArchiveMutation,
+  renderStructuredDocument,
+} from "../services/archiveClient";
+import {
+  useArchiveSessions,
+} from "./archiveSessions";
+import { useArchiveEditorState } from "./archiveEditorState";
+import {
+  archiveErrorMessage as messageFor,
+  expectedImpactNames,
+} from "./archiveMessages";
 
 export const useArchiveStore = defineStore("archive", () => {
   const app = useAppStore();
@@ -30,37 +40,43 @@ export const useArchiveStore = defineStore("archive", () => {
   const recycleEntries = ref<RecycleEntry[]>([]);
   const creationOptions = ref<ArchiveCreationOption[]>([]);
   const creationPreview = shallowRef<ArchiveCreationPreview | null>(null);
-  const selectedAsset = shallowRef<ArchiveAssetDetail | null>(null);
-  const selectedCandidate = shallowRef<ArchiveCandidate | null>(null);
-  const history = shallowRef<ArchiveHistoryResponse>({});
-  const draft = ref("");
-  const validation = shallowRef<Record<string, unknown> | null>(null);
-  const impact = shallowRef<Record<string, unknown> | null>(null);
+  const editor = useArchiveEditorState();
+  const {
+    selectedAsset,
+    selectedCandidate,
+    history,
+    draft,
+    structuredDocument,
+    validation,
+    impact,
+  } = editor;
   const promotionJob = shallowRef<Record<string, unknown> | null>(null);
   const busy = ref(false);
   const error = ref("");
   const notice = ref("");
-  const openTabs = ref<Array<{ id: string; title: string; kind: "asset" | "candidate" }>>([]);
+  const sessions = useArchiveSessions();
+  const openTabs = sessions.openTabs;
+  const activeTabKey = sessions.activeTabKey;
+  const loadedProjectRoot = ref("");
 
-  const dirty = computed(() => Boolean(selectedAsset.value && draft.value !== selectedAsset.value.content));
+  const dirty = editor.dirty;
+  const dirtyAssetIds = sessions.dirtyAssetIds;
   const projectRoot = computed(() => app.currentProjectPath);
 
   async function loadWorkspace(): Promise<void> {
     if (!projectRoot.value) return;
+    if (loadedProjectRoot.value && loadedProjectRoot.value !== projectRoot.value) {
+      resetEditorWorkspace();
+    }
+    loadedProjectRoot.value = projectRoot.value;
     busy.value = true;
     error.value = "";
     try {
-      const suffix = query({ project_root: projectRoot.value });
-      const [tree, candidateList, recycle, creation] = await Promise.all([
-        api<ArchiveTreeResponse>(`/archive/tree?${suffix}`),
-        api<{ items?: ArchiveCandidate[] }>(`/archive/candidates?${suffix}`),
-        api<{ items?: RecycleEntry[] }>(`/archive/recycle-bin?${suffix}`),
-        api<{ items?: ArchiveCreationOption[] }>(`/archive/creation/options?${suffix}`),
-      ]);
-      assetGroups.value = tree.groups || [];
-      candidates.value = candidateList.items || [];
-      recycleEntries.value = recycle.items || [];
-      creationOptions.value = creation.items || [];
+      const workspace = await fetchArchiveWorkspace(projectRoot.value);
+      assetGroups.value = workspace.groups;
+      candidates.value = workspace.candidates;
+      recycleEntries.value = workspace.recycleEntries;
+      creationOptions.value = workspace.creationOptions;
     } catch (cause) {
       error.value = messageFor(cause, "作品档案暂时没有读取成功。");
       throw cause;
@@ -71,22 +87,43 @@ export const useArchiveStore = defineStore("archive", () => {
 
   async function openAsset(assetId: string): Promise<void> {
     if (!projectRoot.value) return;
+    persistCurrentAssetSession();
+    const cached = sessions.asset(assetId);
+    if (cached) {
+      error.value = "";
+      editor.restore(cached);
+      sessions.open(assetId, cached.asset.title, "asset");
+      return;
+    }
     busy.value = true;
     error.value = "";
     selectedCandidate.value = null;
     try {
-      const encoded = encodeURIComponent(assetId);
-      const suffix = query({ project_root: projectRoot.value });
-      const [detail, revisions] = await Promise.all([
-        api<{ asset: ArchiveAssetDetail }>(`/archive/assets/${encoded}?${suffix}`),
-        api<ArchiveHistoryResponse>(`/archive/assets/${encoded}/history?${suffix}`),
-      ]);
-      selectedAsset.value = detail.asset;
-      history.value = revisions;
-      draft.value = detail.asset.content;
-      validation.value = null;
-      impact.value = null;
-      pushTab(assetId, detail.asset.title, "asset");
+      const detail = await fetchArchiveAsset(projectRoot.value, assetId);
+      let structure: ArchiveStructuredDocument | null = null;
+      try {
+        structure = await fetchStructuredDocument(
+          projectRoot.value,
+          assetId,
+          detail.asset.content,
+        );
+      } catch (cause) {
+        error.value = messageFor(
+          cause,
+          "这份资料暂时无法建立结构化表单，请使用专家源文本修复结构。",
+        );
+      }
+      const session = {
+        asset: detail.asset,
+        draft: detail.asset.content,
+        validation: null,
+        impact: null,
+        structure,
+        history: detail.history,
+      };
+      sessions.save(session);
+      editor.restore(session);
+      sessions.open(assetId, detail.asset.title, "asset");
     } catch (cause) {
       error.value = messageFor(cause, "这份作品资料暂时无法打开。");
       throw cause;
@@ -97,15 +134,14 @@ export const useArchiveStore = defineStore("archive", () => {
 
   async function openCandidate(candidateId: string): Promise<void> {
     if (!projectRoot.value) return;
+    persistCurrentAssetSession();
     busy.value = true;
     error.value = "";
     selectedAsset.value = null;
     try {
-      const response = await api<{ candidate: ArchiveCandidate }>(
-        `/archive/candidates/${encodeURIComponent(candidateId)}?${query({ project_root: projectRoot.value })}`,
-      );
+      const response = await fetchArchiveCandidate(projectRoot.value, candidateId);
       selectedCandidate.value = response.candidate;
-      pushTab(candidateId, response.candidate.title || candidateId, "candidate");
+      sessions.open(candidateId, response.candidate.title || candidateId, "candidate");
     } catch (cause) {
       error.value = messageFor(cause, "候选资料暂时无法打开。");
       throw cause;
@@ -116,8 +152,60 @@ export const useArchiveStore = defineStore("archive", () => {
 
   function updateDraft(content: string): void {
     draft.value = content;
+    structuredDocument.value = null;
     validation.value = null;
     impact.value = null;
+    persistCurrentAssetSession();
+  }
+
+  async function applyStructuredFields(fields: Record<string, unknown>): Promise<void> {
+    const asset = requireAsset();
+    const structure = structuredDocument.value;
+    if (!structure) throw new Error("字段契约已过期，请重新打开这份资料。");
+    busy.value = true;
+    error.value = "";
+    try {
+      const response = await renderStructuredDocument(
+        projectRoot.value,
+        asset.asset_id,
+        draft.value,
+        structure.source_revision,
+        fields,
+      );
+      draft.value = response.content;
+      structuredDocument.value = response.structure;
+      validation.value = response.validation;
+      impact.value = null;
+      notice.value = "字段修改已应用到当前草稿，保存正式版本前仍需检查影响。";
+      persistCurrentAssetSession();
+    } catch (cause) {
+      error.value = messageFor(cause, "字段修改没有应用到当前草稿。");
+      throw cause;
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  async function reloadStructuredDocument(): Promise<void> {
+    const asset = requireAsset();
+    busy.value = true;
+    error.value = "";
+    try {
+      structuredDocument.value = await fetchStructuredDocument(
+        projectRoot.value,
+        asset.asset_id,
+        draft.value,
+      );
+      persistCurrentAssetSession();
+    } catch (cause) {
+      error.value = messageFor(
+        cause,
+        "当前草稿无法建立结构化表单，请在专家源文本中修复格式。",
+      );
+      throw cause;
+    } finally {
+      busy.value = false;
+    }
   }
 
   async function previewEdit(): Promise<void> {
@@ -125,14 +213,14 @@ export const useArchiveStore = defineStore("archive", () => {
     busy.value = true;
     error.value = "";
     try {
-      const endpoint = `/archive/assets/${encodeURIComponent(asset.asset_id)}`;
-      const body = JSON.stringify({ project_root: projectRoot.value, content: draft.value });
-      const [validationResponse, impactResponse] = await Promise.all([
-        api<{ validation: Record<string, unknown> }>(`${endpoint}/validate`, { method: "POST", body }),
-        api<{ impact: Record<string, unknown> }>(`${endpoint}/impact`, { method: "POST", body }),
-      ]);
-      validation.value = validationResponse.validation;
-      impact.value = impactResponse.impact;
+      const preview = await previewArchiveEdit(
+        projectRoot.value,
+        asset.asset_id,
+        draft.value,
+      );
+      validation.value = preview.validation;
+      impact.value = preview.impact;
+      persistCurrentAssetSession();
     } catch (cause) {
       error.value = messageFor(cause, "变更检查没有完成。");
       throw cause;
@@ -149,18 +237,14 @@ export const useArchiveStore = defineStore("archive", () => {
     busy.value = true;
     error.value = "";
     try {
-      const response = await api<{ receipt: Record<string, unknown> }>(
-        `/archive/assets/${encodeURIComponent(asset.asset_id)}/commit`,
+      const response = await commitArchiveEdit(
+        projectRoot.value,
+        asset.asset_id,
         {
-          method: "POST",
-          body: JSON.stringify({
-            project_root: projectRoot.value,
-            base_revision: asset.revision,
-            content: draft.value,
-            semantic_review: "waived",
-            reason,
-            expected_impacts: expectedImpactNames(impact.value || {}),
-          }),
+          baseRevision: asset.revision,
+          content: draft.value,
+          reason,
+          expectedImpacts: expectedImpactNames(impact.value || {}),
         },
       );
       selectedAsset.value = {
@@ -172,6 +256,7 @@ export const useArchiveStore = defineStore("archive", () => {
       impact.value = null;
       notice.value = "作者版本已保存，相关创作链路会按正式失效证据重新检查。";
       await refreshAfterMutation(asset.asset_id);
+      persistCurrentAssetSession();
     } catch (cause) {
       error.value = messageFor(cause, "作者版本没有保存成功。");
       throw cause;
@@ -185,13 +270,7 @@ export const useArchiveStore = defineStore("archive", () => {
     error.value = "";
     creationPreview.value = null;
     try {
-      const response = await api<{ preview: ArchiveCreationPreview }>("/archive/creation/preview", {
-        method: "POST",
-        body: JSON.stringify({
-          project_root: projectRoot.value,
-          ...payload,
-        }),
-      });
+      const response = await previewArchiveCreation(projectRoot.value, payload);
       creationPreview.value = response.preview;
       return response.preview;
     } catch (cause) {
@@ -210,16 +289,10 @@ export const useArchiveStore = defineStore("archive", () => {
     busy.value = true;
     error.value = "";
     try {
-      const response = await api<{ asset_id: string; receipt: ArchiveRecord }>(
-        "/archive/creation/commit",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            project_root: projectRoot.value,
-            ...payload,
-            preview_digest: preview.preview_digest,
-          }),
-        },
+      const response = await commitArchiveCreation(
+        projectRoot.value,
+        payload,
+        preview.preview_digest,
       );
       creationPreview.value = null;
       notice.value = "新资料已进入正式档案，并建立了首个作者版本。";
@@ -250,8 +323,7 @@ export const useArchiveStore = defineStore("archive", () => {
           reason,
         }),
       });
-      closeTab(asset.asset_id);
-      selectedAsset.value = null;
+      await closeTab(asset.asset_id, "asset", true);
       notice.value = "资料已移入项目回收站。";
       await loadWorkspace();
     } finally {
@@ -308,8 +380,38 @@ export const useArchiveStore = defineStore("archive", () => {
     await loadWorkspace();
   }
 
-  function closeTab(id: string): void {
-    openTabs.value = openTabs.value.filter((tab) => tab.id !== id);
+  async function closeTab(
+    id: string,
+    kind: "asset" | "candidate",
+    discard = false,
+  ): Promise<boolean> {
+    persistCurrentAssetSession();
+    const session = kind === "asset" ? sessions.asset(id) : null;
+    if (session && session.draft !== session.asset.content && !discard) {
+      error.value = `“${session.asset.title}”还有未保存修改。请先保存或使用“放弃草稿”，再关闭标签。`;
+      return false;
+    }
+    const closingKey = sessions.key(id, kind);
+    const index = sessions.remove(id, kind);
+    if (activeTabKey.value !== closingKey) return true;
+
+    editor.reset();
+    activeTabKey.value = "";
+    const fallback = sessions.fallback(index);
+    if (fallback?.kind === "asset") await openAsset(fallback.id);
+    if (fallback?.kind === "candidate") await openCandidate(fallback.id);
+    return true;
+  }
+
+  async function discardCurrentDraft(): Promise<void> {
+    const asset = requireAsset();
+    draft.value = asset.content;
+    validation.value = null;
+    impact.value = null;
+    structuredDocument.value = null;
+    persistCurrentAssetSession();
+    await reloadStructuredDocument();
+    notice.value = "未保存的修改已放弃，当前标签恢复到正式版本。";
   }
 
   function clearMessages(): void {
@@ -317,10 +419,14 @@ export const useArchiveStore = defineStore("archive", () => {
     notice.value = "";
   }
 
-  function pushTab(id: string, title: string, kind: "asset" | "candidate"): void {
-    if (!openTabs.value.some((tab) => tab.id === id && tab.kind === kind)) {
-      openTabs.value.push({ id, title, kind });
-    }
+  function persistCurrentAssetSession(): void {
+    const snapshot = editor.snapshot();
+    if (snapshot) sessions.save(snapshot);
+  }
+
+  function resetEditorWorkspace(): void {
+    sessions.reset();
+    editor.reset();
   }
 
   function requireAsset(): ArchiveAssetDetail {
@@ -329,14 +435,9 @@ export const useArchiveStore = defineStore("archive", () => {
   }
 
   async function refreshAfterMutation(assetId: string): Promise<void> {
-    const encoded = encodeURIComponent(assetId);
-    history.value = await api<ArchiveHistoryResponse>(
-      `/archive/assets/${encoded}/history?${query({ project_root: projectRoot.value })}`,
-    );
-    const tree = await api<ArchiveTreeResponse>(
-      `/archive/tree?${query({ project_root: projectRoot.value })}`,
-    );
-    assetGroups.value = tree.groups || [];
+    const refreshed = await refreshArchiveMutation(projectRoot.value, assetId);
+    history.value = refreshed.history;
+    assetGroups.value = refreshed.groups;
   }
 
   return {
@@ -349,6 +450,7 @@ export const useArchiveStore = defineStore("archive", () => {
     selectedCandidate,
     history,
     draft,
+    structuredDocument,
     validation,
     impact,
     promotionJob,
@@ -357,10 +459,13 @@ export const useArchiveStore = defineStore("archive", () => {
     notice,
     openTabs,
     dirty,
+    dirtyAssetIds,
     loadWorkspace,
     openAsset,
     openCandidate,
     updateDraft,
+    applyStructuredFields,
+    reloadStructuredDocument,
     previewEdit,
     commitEdit,
     previewCreation,
@@ -371,17 +476,7 @@ export const useArchiveStore = defineStore("archive", () => {
     promoteCandidate,
     refreshCandidate,
     closeTab,
+    discardCurrentDraft,
     clearMessages,
   };
 });
-
-function expectedImpactNames(impact: Record<string, unknown>): string[] {
-  const values = impact.stale_categories;
-  if (Array.isArray(values)) return values.map(String);
-  const categories = impact.categories;
-  return Array.isArray(categories) ? categories.map(String) : [];
-}
-
-function messageFor(cause: unknown, fallback: string): string {
-  return cause instanceof Error && cause.message ? cause.message : fallback;
-}

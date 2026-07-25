@@ -64,6 +64,7 @@ describe("archive store", () => {
       if (path.endsWith("/history?project_root=C%3A%5CArcVellum%5C%E6%BD%AE%E7%BA%BF")) {
         return { revisions: [], transactions: [] };
       }
+      if (path.endsWith("/structure")) return characterStructure();
       if (path.endsWith("/validate")) return { validation: { valid: true, issues: [] } };
       if (path.endsWith("/impact")) return { impact: { summary: { reference_count: 2 }, stale_categories: ["context"] } };
       if (path.endsWith("/commit")) {
@@ -150,6 +151,9 @@ describe("archive store", () => {
       if (path.startsWith("/archive/assets/character%3Amei/history")) {
         return { revisions: [], transactions: [] };
       }
+      if (path.startsWith("/archive/assets/character%3Amei/structure")) {
+        return characterStructure("character:mei", "梅汐", "sha256:new");
+      }
       if (path.startsWith("/archive/assets/character%3Amei")) {
         return {
           asset: {
@@ -182,4 +186,113 @@ describe("archive store", () => {
     expect(store.creationPreview).toBeNull();
     expect(store.notice).toContain("新资料");
   });
+
+  it("keeps independent drafts per tab and refuses to close a dirty asset", async () => {
+    apiMock.mockImplementation(async (path: string) => {
+      const isMei = path.includes("character%3Amei");
+      if (path.endsWith("/structure")) {
+        return characterStructure(
+          isMei ? "character:mei" : "character:lin",
+          isMei ? "梅汐" : "林澈",
+          isMei ? "sha256:mei" : "sha256:lin",
+        );
+      }
+      if (path.includes("/history")) return { revisions: [], transactions: [] };
+      if (path.startsWith("/archive/assets/")) {
+        return {
+          asset: {
+            asset_id: isMei ? "character:mei" : "character:lin",
+            asset_type: "character",
+            title: isMei ? "梅汐" : "林澈",
+            revision: isMei ? "sha256:mei" : "sha256:lin",
+            content: `character_id: ${isMei ? "mei" : "lin"}\nname: ${isMei ? "梅汐" : "林澈"}\n`,
+          },
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const { useArchiveStore } = await import("./archive");
+    const store = useArchiveStore();
+
+    await store.openAsset("character:lin");
+    store.updateDraft("character_id: lin\nname: 林汐\n");
+    await store.openAsset("character:mei");
+    store.updateDraft("character_id: mei\nname: 梅潮\n");
+    await store.openAsset("character:lin");
+
+    expect(store.draft).toContain("林汐");
+    expect(store.dirtyAssetIds).toEqual(expect.arrayContaining(["character:lin", "character:mei"]));
+    await expect(store.closeTab("character:lin", "asset")).resolves.toBe(false);
+    expect(store.openTabs.some((tab) => tab.id === "character:lin")).toBe(true);
+    expect(store.error).toContain("未保存修改");
+    await store.discardCurrentDraft();
+    await expect(store.closeTab("character:lin", "asset")).resolves.toBe(true);
+    expect(store.openTabs.some((tab) => tab.id === "character:lin")).toBe(false);
+    expect(store.selectedAsset?.asset_id).toBe("character:mei");
+  });
+
+  it("applies registered structured values to the current draft before formal preview", async () => {
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.endsWith("/render-structured")) {
+        const body = JSON.parse(String(init?.body));
+        expect(body.source_revision).toBe("sha256:source");
+        expect(body.fields).toEqual({ name: "林汐" });
+        return {
+          content: "character_id: lin\nname: 林汐\n",
+          validation: { valid: true, issues: [] },
+          structure: characterStructure("character:lin", "林汐", "sha256:rendered"),
+        };
+      }
+      if (path.endsWith("/structure")) return characterStructure();
+      if (path.includes("/history")) return { revisions: [], transactions: [] };
+      if (path.startsWith("/archive/assets/")) {
+        return {
+          asset: {
+            asset_id: "character:lin",
+            asset_type: "character",
+            title: "林澈",
+            revision: "sha256:old",
+            content: "character_id: lin\nname: 林澈\n",
+          },
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const { useArchiveStore } = await import("./archive");
+    const store = useArchiveStore();
+    await store.openAsset("character:lin");
+
+    await store.applyStructuredFields({ name: "林汐" });
+
+    expect(store.draft).toContain("name: 林汐");
+    expect(store.dirty).toBe(true);
+    expect(store.validation?.valid).toBe(true);
+    expect(store.impact).toBeNull();
+  });
 });
+
+function characterStructure(
+  assetId = "character:lin",
+  name = "林澈",
+  revision = "sha256:source",
+) {
+  return {
+    schema: "arcvellum/archive-structured-document/v1",
+    asset_id: assetId,
+    editor_kind: "form",
+    document_format: "yaml",
+    source_revision: revision,
+    fields: [
+      {
+        name: "name",
+        label: "姓名",
+        kind: "text",
+        section: "身份",
+        required: true,
+        defined: true,
+        value: name,
+        options: [],
+      },
+    ],
+  };
+}

@@ -8,6 +8,7 @@ import {
   Database,
   FilePlus2,
   RefreshCw,
+  RotateCcw,
   Save,
   SearchCheck,
   ShieldAlert,
@@ -58,7 +59,10 @@ onMounted(async () => {
   try {
     await archive.loadWorkspace();
     const first = archive.assetGroups.flatMap((group) => group.items)[0];
-    if (first) await archive.openAsset(first.asset_id);
+    if (first) {
+      await archive.openAsset(first.asset_id);
+      if (!archive.structuredDocument) editorMode.value = "source";
+    }
   } catch {
     // The Archive store already exposes a user-facing failure message.
   }
@@ -71,8 +75,12 @@ async function selectTab(id: string, kind: "asset" | "candidate"): Promise<void>
   try {
     mode.value = kind === "candidate" ? "candidate" : "formal";
     if (kind === "candidate") await archive.openCandidate(id);
-    else await archive.openAsset(id);
+    else {
+      await archive.openAsset(id);
+      await ensureStructuredEditor();
+    }
   } catch {
+    if (archive.selectedAsset && !archive.structuredDocument) editorMode.value = "source";
     // Store state preserves the actionable error.
   }
 }
@@ -81,7 +89,9 @@ async function openAsset(assetId: string): Promise<void> {
   mode.value = "formal";
   try {
     await archive.openAsset(assetId);
+    await ensureStructuredEditor();
   } catch {
+    if (archive.selectedAsset && !archive.structuredDocument) editorMode.value = "source";
     // Store state preserves the actionable error.
   }
 }
@@ -108,6 +118,49 @@ async function runPreview(): Promise<void> {
     await archive.previewEdit();
   } catch {
     // Store state preserves the actionable error.
+  }
+}
+
+async function changeEditorMode(value: "structure" | "source"): Promise<void> {
+  if (value === "structure") {
+    try {
+      await ensureStructuredEditor();
+    } catch {
+      editorMode.value = "source";
+      // Store state preserves the actionable error.
+      return;
+    }
+  }
+  editorMode.value = value;
+}
+
+async function applyStructuredFields(fields: Record<string, unknown>): Promise<void> {
+  try {
+    await archive.applyStructuredFields(fields);
+  } catch {
+    // Store state preserves the actionable error.
+  }
+}
+
+async function closeTab(id: string, kind: "asset" | "candidate"): Promise<void> {
+  try {
+    await archive.closeTab(id, kind);
+  } catch (cause) {
+    archive.error = actionMessage(cause, "标签没有关闭。");
+  }
+}
+
+async function discardDraft(): Promise<void> {
+  try {
+    await archive.discardCurrentDraft();
+  } catch (cause) {
+    archive.error = actionMessage(cause, "当前草稿没有恢复。");
+  }
+}
+
+async function ensureStructuredEditor(): Promise<void> {
+  if (archive.selectedAsset && !archive.structuredDocument) {
+    await archive.reloadStructuredDocument();
   }
 }
 
@@ -247,17 +300,20 @@ function actionMessage(cause: unknown, fallback: string): string {
         <AssetTabs
           :tabs="archive.openTabs"
           :active-id="activeId"
-          :dirty="archive.dirty"
+          :dirty-ids="archive.dirtyAssetIds"
           @select="selectTab"
-          @close="archive.closeTab"
+          @close="closeTab"
         />
         <AssetEditorPane
           v-if="archive.selectedAsset"
           :asset="archive.selectedAsset"
           :model-value="archive.draft"
           :mode="editorMode"
+          :structure="archive.structuredDocument"
+          :busy="archive.busy"
           @update:model-value="archive.updateDraft"
-          @update:mode="editorMode = $event"
+          @update:mode="changeEditorMode"
+          @apply-structure="applyStructuredFields"
         />
         <div v-else class="archive-workspace-empty"><Database :size="28" /><strong>选择一份正式资料</strong><p>人物、场景和世界规则会在这里以作者版本打开。</p></div>
       </section>
@@ -268,6 +324,7 @@ function actionMessage(cause: unknown, fallback: string): string {
           <label><span>修改原因</span><textarea v-model="editReason" placeholder="说明这次修改要解决什么问题"></textarea></label>
           <label class="archive-owner-check"><input v-model="ownerWaiver" type="checkbox" /><span>以作者决定为准，保留审计并重新检查受影响链路</span></label>
           <div>
+            <button :disabled="!archive.dirty || archive.busy" title="放弃当前标签的未保存修改" @click="discardDraft"><RotateCcw :size="14" />放弃草稿</button>
             <button :disabled="!archive.dirty || archive.busy" @click="runPreview"><SearchCheck :size="14" />检查变更</button>
             <button class="primary" :disabled="!archive.dirty || !editReason.trim() || !ownerWaiver || archive.validation?.valid !== true || archive.busy" @click="saveOwnerVersion"><Save :size="14" />保存版本</button>
           </div>

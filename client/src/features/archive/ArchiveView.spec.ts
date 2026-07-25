@@ -42,6 +42,26 @@ describe("Narrative Archive view", () => {
       if (path.startsWith("/archive/assets/character%3Alin/history")) {
         return Promise.resolve({ revisions: [], transactions: [] });
       }
+      if (path.startsWith("/archive/assets/character%3Alin/structure")) {
+        return Promise.resolve({
+          asset_id: "character:lin",
+          editor_kind: "form",
+          document_format: "yaml",
+          source_revision: "sha256:source",
+          fields: [
+            {
+              name: "name",
+              label: "姓名",
+              kind: "text",
+              section: "身份",
+              required: true,
+              defined: true,
+              value: "林澈",
+              options: [],
+            },
+          ],
+        });
+      }
       if (path.startsWith("/archive/assets/character%3Alin")) {
         return Promise.resolve({
           asset: {
