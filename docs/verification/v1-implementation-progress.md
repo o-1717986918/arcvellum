@@ -19,7 +19,7 @@
 - W1 已满足当前路线定义的性能、导航、焦点、空间语法、主题、多窗口与 canvas 非空退出门禁。
 - W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、Registry 驱动的结构化编辑、状态化引导和隔离真实项目作者闭环。
 - W2 已满足统一实施方案当前定义的产品、Gate、Stable Knowledge 与架构出口；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 473 tests passed、1 skipped；Client 90 tests passed；Client production build、desktop frontend sync、Python compileall、Architecture Audit 与 `git diff --check` 全部通过。
+- 最近一次全量证据：Python 488 tests passed、1 skipped；Client 90 tests passed；Client production build、desktop frontend sync、Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -647,12 +647,44 @@
   - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W3-3C：不可变 StyleProfileVersion 构建与物化
+
+- Status: complete
+- Commit: `93dd64e`
+- Added:
+  - Engine 新增内容寻址的 `StyleProfileVersion`；版本身份由 builder、style/session 身份、来源权利与摘要、Prompt 质量、确定性评测证据、独立语义审查及 completion 摘要共同计算，Agent 不能自报版本号或正式路径；
+  - 只有当前 formal session、500-2500 汉字内容 Prompt、完整 Prompt/Evaluation sidecar、exact accepted score 与 exact passing independent review 同时有效时，版本才可构建；
+  - `build-style-version` 是受 Route Blueprint 管理的确定性 CLI/Worker 任务，不调用 Runtime、LLM 或任意 Shell；输入和全部输出均由机器声明；
+  - 版本目录使用临时目录完整物化后原子重命名；相同内容幂等复用，非空或摘要不匹配的既有版本进入显式 `style-version-conflict` 人工边界，不能静默覆盖；
+  - `style_version.json` 保存稳定身份、来源权利、Prompt 质量、评测/审查证据和逐产物 SHA-256；完整性检查会重算每个包内文件；
+  - 版本包不复制训练语料或 holdout 正文，只保存来源身份、摘要、权利、Prompt、指标、评测和审查结论；
+  - 同时物化旧 `style_skill.json`、`STYLE.md` 与既有目录形状，已通过旧 `mount_style_skill()` 兼容测试；
+  - 正式 style route 在独立审查后进入 `style-version-build`，构建完成才 ready；旧式无 formal session 的 profile 保持原兼容状态。
+- Unified implementation boundary:
+  - Engine `literary/style/version*.py` 独占版本身份、构建格式、完整性与冲突规则；route 只声明状态、读写集与验证；
+  - Studio Worker 只执行 Engine 下发的确定性任务，没有第二套版本服务、同步模型调用或 HTTP 内构建；
+  - package renderer 与 version contract 被拆分，Architecture Audit 未新增文件债务、函数债务或依赖环。
+- Adaptive orchestration boundary:
+  - `StyleProfileVersion` 是通过正式 Gate 后形成的可引用 Derived Knowledge；Planner 将来只能引用 `style_id/version_id/content_hash`；
+  - Planner 不能 build、修改、覆盖或 mount 版本，也不能把计划文本、未经独立审查的 Prompt 或 holdout 正文当作正式版本；
+  - 本批未实现 mount、项目激活或前端管理，避免把版本构建与 Stable Knowledge 写入混为一个可绕过动作。
+- Failure and verification evidence:
+  - Reviewer JSON/报告/completion 内容参与版本身份；Reviewer 摘要变化会产生不同 content hash 和 version ID；
+  - Prompt 在语义审查后变化会使构建 Gate 失效，不能包装过期审查；
+  - 已存在版本被篡改时，重建稳定抛出 immutable conflict 并使 route 进入人工边界；
+  - 真实 deterministic Worker 构建、重复幂等构建、包摘要完整性和旧挂载兼容均通过；
+  - Python full suite: 488 passed, 1 skipped；
+  - Prompt Registry: 48 assets, 83 task prompt ids, passed；
+  - `python -m compileall -q src tests`: passed；
+  - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3C 只实现已通过独立审查证据的确定性版本构建与物化：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3D 只封闭正式版本的 Studio 应用边界与端到端验收：
 
-1. 定义不可变 `StyleProfileVersion` 身份、内容摘要、来源 session、评测与审查证据链。
-2. 只有 exact accepted score + exact passing semantic review 才能 build；任何摘要漂移都阻断。
-3. build 是确定性 CLI/Worker 任务，不调用模型，不接受 Agent 自报版本号或正式路径。
-4. 版本目录必须原子创建、幂等复用、拒绝身份冲突，并保持旧 Style Skill 读取兼容。
-5. 本批不做项目 mount、前端完整管理或自适应编排；这些分别属于后续 W3-3D/W3-4 与 AO 阶段。
+1. 为不可变版本增加安全列表、详情和构建状态投影，不公开语料正文、holdout 或内部绝对路径。
+2. Studio API 只能通过受控意图启动现有 `style-engineering` Worker，不在请求线程直接 build 或复制版本 Gate。
+3. 增加从资料来源选择、正式会话、Prompt/评测/独立审查、确定性版本构建到 API 可见版本的完整端到端测试。
+4. 明确 mount/activation 是否属于 W3-4；若 W3-3D 只展示版本，就不得提前修改项目正式挂载状态。
+5. 完成 W3-3 exit audit，核对 rights、holdout 隔离、独立 Reviewer、版本不可变性、旧读取兼容和架构质量。
