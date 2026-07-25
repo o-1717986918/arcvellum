@@ -72,6 +72,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             ("POST", "/style-lab/sources"),
             ("POST", "/style-lab/compile"),
             ("GET", "/style-lab/versions"),
+            ("GET", "/style-lab/versions/{style_id}/{version_id}"),
             ("GET", "/project/rhythm-plan"),
             ("PUT", "/project/rhythm-plan"),
             ("GET", "/narrative/projection/v3"),

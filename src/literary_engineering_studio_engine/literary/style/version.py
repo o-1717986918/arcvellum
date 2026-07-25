@@ -26,10 +26,10 @@ from .version_package import (
     materialize_style_version,
 )
 from .version_contracts import (
-    COMPATIBLE_STYLE_SKILL_SCHEMA,
     STYLE_VERSION_BUILDER,
     STYLE_VERSION_SCHEMA,
 )
+from .version_inspection import inspect_style_version_directory
 
 
 
@@ -203,8 +203,10 @@ def inspect_style_profile_version(plan: StyleVersionPlan) -> tuple[str, tuple[st
 
 
 def style_profile_version_errors(plan: StyleVersionPlan) -> list[str]:
-    manifest = _read_object(plan.paths.manifest)
-    errors: list[str] = []
+    manifest, standalone_errors = inspect_style_version_directory(
+        plan.paths.version_dir
+    )
+    errors = list(standalone_errors)
     expected = {
         "schema": STYLE_VERSION_SCHEMA,
         "style_id": plan.style_id,
@@ -215,9 +217,7 @@ def style_profile_version_errors(plan: StyleVersionPlan) -> list[str]:
     for field, value in expected.items():
         if manifest.get(field) != value:
             errors.append(f"style version manifest has invalid {field}")
-    errors.extend(_artifact_integrity_errors(plan, manifest))
-    errors.extend(_compatibility_errors(plan))
-    return errors
+    return list(dict.fromkeys(errors))
 
 
 def style_version_source_paths(plan: StyleVersionPlan) -> tuple[Path, ...]:
@@ -283,47 +283,6 @@ def _completion_errors(root: Path, task: Path, label: str) -> list[str]:
     if state.get("complete") is True:
         return []
     return [f"{label} sidecar is incomplete: {state.get('message')}"]
-
-
-def _artifact_integrity_errors(
-    plan: StyleVersionPlan,
-    manifest: dict[str, Any],
-) -> list[str]:
-    artifacts = manifest.get("artifacts")
-    if not isinstance(artifacts, dict):
-        return ["style version manifest artifacts are missing"]
-    expected = {
-        path.relative_to(plan.paths.version_dir).as_posix()
-        for path in plan.paths.package_files()
-    }
-    if set(artifacts) != expected:
-        return ["style version manifest artifact inventory is incomplete or unexpected"]
-    errors: list[str] = []
-    for relative in sorted(expected):
-        path = _safe_version_path(plan.paths.version_dir, relative)
-        if not path.is_file() or str(artifacts.get(relative) or "") != _sha256(path):
-            errors.append(f"style version artifact is missing or stale: {relative}")
-    return errors
-
-
-def _compatibility_errors(plan: StyleVersionPlan) -> list[str]:
-    payload = _read_object(plan.paths.compatibility_manifest)
-    expected = {
-        "schema": COMPATIBLE_STYLE_SKILL_SCHEMA,
-        "style_id": plan.style_id,
-        "version_id": plan.version_id,
-        "content_hash": plan.content_hash,
-        "review_status": "pass",
-    }
-    errors = [
-        f"compatible style skill has invalid {field}"
-        for field, value in expected.items()
-        if payload.get(field) != value
-    ]
-    quality = _prompt_quality(plan.paths.version_dir, prompt_name="prompt.md")
-    if not quality.get("length_ok") or not quality.get("structure_ok"):
-        errors.append("compatible style skill prompt fails quality gates")
-    return errors
 
 
 def _source_evidence(session: dict[str, object]) -> list[dict[str, object]]:
@@ -429,15 +388,6 @@ def _is_empty_task_scaffold(plan: StyleVersionPlan) -> bool:
         )
         for entry in entries
     )
-
-
-def _safe_version_path(version_dir: Path, relative: str) -> Path:
-    if not relative or Path(relative).is_absolute():
-        raise StyleVersionConflictError(f"style version artifact path is invalid: {relative}")
-    path = (version_dir / relative).resolve()
-    if not path.is_relative_to(version_dir.resolve()):
-        raise StyleVersionConflictError("style version artifact path escapes version directory")
-    return path
 
 
 def _inside(root: Path, path: Path) -> Path:

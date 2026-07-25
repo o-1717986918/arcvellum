@@ -27,8 +27,11 @@ class StyleVersionState(str, Enum):
     PROFILE = "profile"
     PROMPT_CANDIDATE = "prompt-candidate"
     EVALUATED = "evaluated"
+    ENGINEERING = "engineering"
+    BUILD_READY = "build-ready"
     MOUNTABLE = "mountable"
     MOUNTED = "mounted"
+    CONFLICT = "conflict"
 
 
 @dataclass(frozen=True)

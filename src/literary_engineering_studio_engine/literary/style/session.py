@@ -131,6 +131,21 @@ def load_style_session(profile_dir: Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def formal_style_profile_dirs(project_root: Path) -> tuple[Path, ...]:
+    """Return project-local formal style profiles without exposing library layout."""
+
+    root = project_root.expanduser().resolve()
+    atelier = root / "style" / "atelier"
+    if not atelier.is_dir():
+        return ()
+    profiles: list[Path] = []
+    for manifest in sorted(atelier.glob("*/*/style_session.json")):
+        profile = manifest.parent.resolve()
+        if manifest.is_file() and profile.is_relative_to(root):
+            profiles.append(profile)
+    return tuple(profiles)
+
+
 def style_session_source_paths(profile_dir: Path) -> tuple[Path, ...]:
     payload = load_style_session(profile_dir)
     paths: list[Path] = []

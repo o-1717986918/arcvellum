@@ -10,9 +10,39 @@ from literary_engineering_studio_engine.style_prompt import style_prompt_quality
 
 from .contracts import StyleVersionState
 from .evaluation_projection import project_evaluations
+from .formal_version_projection import (
+    project_formal_version_detail,
+    project_formal_versions,
+)
 
 
 class StyleVersionProjectionService:
+    def project_work_versions(
+        self,
+        project_root: Path,
+        *,
+        active_style_id: str = "",
+        active_content_hash: str = "",
+    ) -> tuple[list[dict[str, object]], list[str]]:
+        return project_formal_versions(
+            project_root,
+            active_style_id=active_style_id,
+            active_content_hash=active_content_hash,
+        )
+
+    def version_detail(
+        self,
+        project_root: Path,
+        *,
+        style_id: str,
+        version_id: str,
+    ) -> dict[str, object]:
+        return project_formal_version_detail(
+            project_root,
+            style_id=style_id,
+            version_id=version_id,
+        )
+
     def project_author_versions(
         self,
         library_root: Path,

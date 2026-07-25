@@ -35,21 +35,35 @@ class StyleApplicationService:
         *,
         project_root: Path | None = None,
     ) -> dict[str, object]:
-        root = self._library_root(library_root)
         active = active_project_style(project_root) if project_root is not None else {}
         active_style_id = str(active.get("style_id") or "")
         active_hash = str(active.get("content_hash") or active.get("version_hash") or "")
         versions: list[dict[str, object]] = []
         issues: list[str] = []
-        for author_dir in self._author_dirs(root):
-            projected, author_issues = self.versions.project_author_versions(
-                root,
-                author_dir,
+        try:
+            root = self._library_root(library_root)
+        except FileNotFoundError:
+            if project_root is None:
+                raise
+            issues.append("style library is unavailable")
+        else:
+            for author_dir in self._author_dirs(root):
+                projected, author_issues = self.versions.project_author_versions(
+                    root,
+                    author_dir,
+                    active_style_id=active_style_id,
+                    active_content_hash=active_hash,
+                )
+                versions.extend(projected)
+                issues.extend(author_issues)
+        if project_root is not None:
+            projected, project_issues = self.versions.project_work_versions(
+                project_root,
                 active_style_id=active_style_id,
                 active_content_hash=active_hash,
             )
             versions.extend(projected)
-            issues.extend(author_issues)
+            issues.extend(project_issues)
         revision = _json_hash({"versions": versions, "active": _safe_active_mount(active)})
         return {
             "schema": "arcvellum/style-version-catalog/v1",
@@ -59,6 +73,19 @@ class StyleApplicationService:
             "active_mount": _safe_active_mount(active),
             "issues": issues,
         }
+
+    def version_detail(
+        self,
+        project_root: Path,
+        *,
+        style_id: str,
+        version_id: str,
+    ) -> dict[str, object]:
+        return self.versions.version_detail(
+            project_root,
+            style_id=style_id,
+            version_id=version_id,
+        )
 
     def _project_authors(self, root: Path) -> tuple[list[dict[str, object]], list[str]]:
         authors: list[dict[str, object]] = []

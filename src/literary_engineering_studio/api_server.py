@@ -491,6 +491,9 @@ def _style_lab_dependencies(
             library,
             project_root=project,
         ),
+        style_version_detail=lambda project, style_id, version_id: application.version_detail(
+            project, style_id=style_id, version_id=version_id
+        ),
         authoring=StyleAuthoringService(),
         tasks=StyleTaskService(launch_style_worker),
     )
