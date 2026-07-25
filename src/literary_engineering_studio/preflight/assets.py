@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from ..contracts import TaskPackage
+from .asset_evidence import review_digest_issues
 from .common import PreflightIssue
 from ..sandbox import SandboxManifest
 
@@ -129,10 +130,10 @@ def _validate_asset_review_contract(
     for field in ("candidate", "candidate_id", "asset_type"):
         if not isinstance(payload.get(field), str) or not str(payload.get(field) or "").strip():
             add(field, f"字段 `{field}` 必须是非空字符串。", f"从任务包与候选文件中填写精确的 `{field}`。")
+    issues.extend(review_digest_issues(task, sandbox, payload, review_rel))
     for field in ("blocking_issues", "warnings", "revision_actions", "promotion_risks"):
         if not isinstance(payload.get(field), list):
             add(field, f"字段 `{field}` 必须是数组。", f"将 `{field}` 写为数组；没有内容时使用 []。")
-
     status = str(payload.get("status") or "").strip().lower()
     if task.current_state in {"asset-review-pass", "asset-approval-revision"}:
         if status != "recheck_required":

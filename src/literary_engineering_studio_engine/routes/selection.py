@@ -48,6 +48,18 @@ def select_style_engineering_state(_root: Path, payload: dict[str, object], scen
 
 def select_asset_state(_root: Path, payload: dict[str, object], scene: Path | str | None) -> dict[str, object] | None:
     items = [item for item in payload.get("assets", []) if isinstance(item, dict)]
+    candidate_paths: dict[str, set[str]] = {}
+    for item in items:
+        candidate_id = str(item.get("candidate_id") or item.get("target_id") or "").strip()
+        if not candidate_id:
+            continue
+        candidate_paths.setdefault(candidate_id, set()).add(str(item.get("candidate") or ""))
+    duplicates = sorted(candidate_id for candidate_id, paths in candidate_paths.items() if len(paths) > 1)
+    if duplicates:
+        raise ValueError(
+            "duplicate asset candidate id is not allowed across candidate directories: "
+            + ", ".join(duplicates)
+        )
     return _select_target(items, scene, exact_fields=("candidate_id", "target_id"), suffix_fields=("candidate",))
 
 

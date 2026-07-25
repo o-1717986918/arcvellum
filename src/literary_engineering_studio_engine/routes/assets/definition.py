@@ -11,12 +11,18 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-import re
 
 from ...agent_schema import load_schema_spec, validate_payload
 from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
 from ...asset_context import compact_asset_context_relpaths
 from ...asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES, PROMOTABLE_GROUPS
+from ...literary.assets.promotion import (
+    approval_gate_errors as _shared_approval_gate_errors,
+    approval_matches_file as _shared_approval_matches_file,
+    candidate_review_gate_errors as _shared_review_gate_errors,
+    file_sha256 as _shared_file_sha256,
+    promotion_output_paths as _shared_promotion_output_paths,
+)
 from ...task_paths import (
     TASK_SCHEMA,
     normalize_relative_path as _normalize_rel,
@@ -86,6 +92,7 @@ def _build_asset_task_payload(root: Path, route: str, state: dict[str, object]) 
             current_state=current_state,
             source_paths=source_paths,
             expected_outputs=expected_outputs,
+            candidate_sha256=_candidate_digest(root, candidate),
         ),
         "submission_command": f"python -m literary_engineering_studio_engine task-submit <project> --task-id {task_id} --from <artifact>",
         "completion_command": f"python -m literary_engineering_studio_engine task-complete <project> --task-id {task_id}",
@@ -114,6 +121,7 @@ def _asset_system_owned_fields(
     current_state: str,
     source_paths: list[str],
     expected_outputs: list[str],
+    candidate_sha256: str = "",
 ) -> dict[str, object]:
     """Describe machine-owned asset metadata separately from Agent-authored content.
 
@@ -155,6 +163,7 @@ def _asset_system_owned_fields(
             "candidate": candidate,
             "candidate_id": candidate_id,
             "asset_type": asset_type,
+            "candidate_sha256": candidate_sha256,
         },
         "completion": {
             "schema": "literary-engineering-workbench/agent-task-completion/v1",
@@ -367,17 +376,17 @@ def _asset_state_gate_validation(root: Path, task: dict[str, object]) -> tuple[l
             errors.append(f"asset review sidecar missing: {_rel(review_task, root)}")
     if current_state == "asset-review-agent-task":
         errors.extend(_asset_creation_gate_errors(root, candidate))
-        errors.extend(_asset_review_gate_errors(root, candidate_id, require_pass=False))
+        errors.extend(_task_review_gate_errors(root, candidate, candidate_id, require_pass=False))
     if current_state in {"asset-review-pass", "asset-approval-revision"}:
         errors.extend(_asset_creation_gate_errors(root, candidate))
         errors.extend(_asset_revision_gate_errors(root, task, candidate, candidate_id))
     if current_state == "asset-approval":
         errors.extend(_asset_creation_gate_errors(root, candidate))
-        errors.extend(_asset_review_gate_errors(root, candidate_id, require_pass=True))
+        errors.extend(_task_review_gate_errors(root, candidate, candidate_id, require_pass=True))
         errors.extend(_asset_approval_gate_errors(root, candidate_id, candidate))
     if current_state == "asset-promotion":
         errors.extend(_asset_creation_gate_errors(root, candidate))
-        errors.extend(_asset_review_gate_errors(root, candidate_id, require_pass=True))
+        errors.extend(_task_review_gate_errors(root, candidate, candidate_id, require_pass=True))
         errors.extend(_asset_approval_gate_errors(root, candidate_id, candidate))
         errors.extend(_asset_promotion_gate_errors(root, candidate_id))
     if current_state in {"asset-creation-agent-task", "asset-review-task-file"} and not errors:
@@ -432,46 +441,42 @@ def _asset_creation_gate_errors(root: Path, candidate: Path) -> list[str]:
     return errors
 
 
-def _asset_review_gate_errors(root: Path, candidate_id: str, *, require_pass: bool) -> list[str]:
-    review = root / "reviews" / "assets" / f"{candidate_id}_review.md"
-    review_json = review.with_suffix(".json")
-    review_task = review_json.with_suffix(".agent_tasks.md")
-    errors: list[str] = []
-    state = agent_task_completion_status(review_task, root=root)
-    if state.get("complete") is not True:
-        errors.append(f"asset review sidecar is incomplete: {state.get('message')}")
-    payload, error = _read_optional_json(review_json)
-    if error:
-        errors.append(error)
-    else:
-        status = str(payload.get("status") or "").strip().lower()
-        allowed_statuses = {"pass", "failed", "revise_required"}
-        if status not in allowed_statuses:
-            errors.append(
-                f"asset review status must be one of {', '.join(sorted(allowed_statuses))}; "
-                f"got {status or 'missing'} at {_rel(review_json, root)}"
-            )
-        if require_pass and status != "pass":
-            errors.append(f"asset review status must be pass; got {status or 'missing'} at {_rel(review_json, root)}")
-        blocking = payload.get("blocking_issues")
-        if not isinstance(blocking, list):
-            errors.append("asset review blocking_issues must be a list")
-        elif require_pass and blocking:
-            errors.append(f"asset review has blocking_issues: {len(blocking)}")
-        revisions = payload.get("revision_actions")
-        if not isinstance(revisions, list):
-            errors.append("asset review revision_actions must be a list")
-        elif require_pass and revisions:
-            errors.append(f"asset review has unresolved revision_actions: {len(revisions)}")
-        for field in ("warnings", "promotion_risks"):
-            if not isinstance(payload.get(field), list):
-                errors.append(f"asset review {field} must be a list")
-        candidate_ref = str(payload.get("candidate") or "").strip()
-        if candidate_ref and Path(candidate_ref).stem != candidate_id:
-            errors.append(f"asset review candidate mismatch: {candidate_ref} does not match {candidate_id}")
-    if not review.exists():
-        errors.append(f"asset review report missing: {_rel(review, root)}")
-    return errors
+def _asset_review_gate_errors(
+    root: Path,
+    candidate_id: str,
+    *,
+    require_pass: bool,
+    candidate: Path | None = None,
+    asset_type: str = "",
+) -> list[str]:
+    """Compatibility wrapper around the shared exact-content review gate."""
+
+    candidate_path = candidate or _candidate_path_for_id(root, candidate_id)
+    payload = _read_json(candidate_path)
+    resolved_type = asset_type or _asset_type_from_payload_or_path(root, candidate_path, payload)
+    return _shared_review_gate_errors(
+        root,
+        candidate_path,
+        asset_type=resolved_type,
+        require_pass=require_pass,
+    )
+
+
+def _task_review_gate_errors(
+    root: Path,
+    candidate: Path,
+    candidate_id: str,
+    *,
+    require_pass: bool,
+) -> list[str]:
+    asset_type = _asset_type_from_payload_or_path(root, candidate, _read_json(candidate))
+    return _asset_review_gate_errors(
+        root,
+        candidate_id,
+        require_pass=require_pass,
+        candidate=candidate,
+        asset_type=asset_type,
+    )
 
 
 def _asset_revision_gate_errors(
@@ -576,6 +581,11 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _candidate_digest(root: Path, candidate: str) -> str:
+    path = _resolve_project_path(root, candidate) if candidate else None
+    return _shared_file_sha256(path) if path is not None and path.is_file() else ""
+
+
 def _read_optional_json(path: Path) -> tuple[dict[str, object], str]:
     if not path.exists():
         return {}, f"JSON file missing: {path}"
@@ -616,23 +626,11 @@ def _parse_datetime(value: str) -> datetime | None:
 
 
 def _asset_approval_gate_errors(root: Path, candidate_id: str, candidate: Path) -> list[str]:
-    approval = _approval_record_for_run(root, candidate_id)
-    if str(approval.get("decision") or "") == "approve" and _approval_matches_file(approval, candidate):
-        return []
-    return [f"asset promotion requires current-content approve record for run_id {candidate_id}; got {approval.get('decision') or 'missing/stale'}"]
+    return _shared_approval_gate_errors(root, candidate_id, candidate)
 
 
 def _approval_matches_file(approval: dict[str, object], subject: Path) -> bool:
-    if not approval or not subject.is_file():
-        return False
-    recorded = str(approval.get("subject_sha256") or "").strip().lower()
-    if recorded:
-        return recorded == _file_sha256(subject)
-    recorded_at = _parse_datetime(str(approval.get("recorded_at") or ""))
-    if recorded_at is None:
-        return False
-    subject_time = datetime.fromtimestamp(subject.stat().st_mtime, tz=timezone.utc)
-    return subject_time <= recorded_at
+    return _shared_approval_matches_file(approval, subject)
 
 
 def _asset_promotion_gate_errors(root: Path, candidate_id: str) -> list[str]:
@@ -682,6 +680,22 @@ def _asset_candidate_path_for_task(root: Path, task: dict[str, object]) -> Path:
     return root / "characters" / "candidates" / f"{candidate_id}.json"
 
 
+def _candidate_path_for_id(root: Path, candidate_id: str) -> Path:
+    matches: list[Path] = []
+    seen: set[Path] = set()
+    for folder in ASSET_CANDIDATE_DIRS.values():
+        candidate = root / folder / f"{candidate_id}.json"
+        if candidate.is_file() and candidate not in seen:
+            matches.append(candidate)
+            seen.add(candidate)
+    if len(matches) > 1:
+        paths = ", ".join(_rel(path, root) for path in matches)
+        raise ValueError(f"duplicate asset candidate id {candidate_id}: {paths}")
+    if matches:
+        return matches[0]
+    return root / "characters" / "candidates" / f"{candidate_id}.json"
+
+
 def _is_asset_candidate_rel(value: str) -> bool:
     normalized = value.replace("\\", "/").lstrip("/")
     return any(normalized.startswith(folder.as_posix() + "/") for folder in ASSET_CANDIDATE_DIRS.values())
@@ -717,37 +731,7 @@ def _asset_promoted_output_rels(root: Path, candidate: Path, asset_type: str) ->
     if not candidate.is_file():
         return []
     payload = _read_json(candidate)
-    normalized = asset_type.strip().lower().replace("_", "-")
-
-    def safe_id(value: object, fallback: str) -> str:
-        cleaned = re.sub(r"[^A-Za-z0-9_\-\u4e00-\u9fff]+", "_", str(value or fallback).strip()).strip("_")
-        return cleaned or "asset"
-
-    if normalized == "character":
-        character_id = safe_id(payload.get("character_id"), "agent_character")
-        return [f"characters/{character_id}.yaml"]
-    if normalized == "background-story":
-        character_id = safe_id(payload.get("target_character_id"), "agent_character")
-        return [f"characters/{character_id}.yaml"]
-    if normalized == "relationship":
-        return ["plot/relationship_graph.json"]
-    if normalized == "world":
-        return ["canon/world_rules.yaml"]
-    if normalized == "location":
-        return ["canon/locations.yaml"]
-    if normalized == "organization":
-        return ["canon/organizations.yaml"]
-
-    outputs = ["plot/outline.md"]
-    scene_list = payload.get("scene_list") if isinstance(payload.get("scene_list"), list) else []
-    for item in scene_list:
-        if not isinstance(item, dict):
-            continue
-        scene_id = safe_id(item.get("scene_id"), "scene_candidate")
-        output = f"scenes/{scene_id}.yaml"
-        if output not in outputs:
-            outputs.append(output)
-    return outputs
+    return [_rel(path, root) for path in _shared_promotion_output_paths(root, asset_type, payload)]
 
 
 def _approval_record_for_run(root: Path, run_id: str) -> dict[str, object]:

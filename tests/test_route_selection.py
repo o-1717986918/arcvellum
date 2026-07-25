@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+import tempfile
 import unittest
 
 from literary_engineering_studio_engine.route_selection import (
@@ -6,6 +8,7 @@ from literary_engineering_studio_engine.route_selection import (
     select_export_release_state,
     select_source_ingest_state,
 )
+from literary_engineering_studio_engine.workflow.state_assets import _asset_states
 
 
 class RouteSelectionTests(unittest.TestCase):
@@ -37,6 +40,47 @@ class RouteSelectionTests(unittest.TestCase):
         }
         selected = select_export_release_state(Path("."), payload, "chapter-1")
         self.assertEqual(selected["chapter_id"], "chapter-1")
+
+    def test_duplicate_asset_candidate_ids_are_rejected_instead_of_silently_selecting_one(self):
+        payload = {
+            "assets": [
+                {
+                    "candidate_id": "shared-foundation",
+                    "candidate": "characters/candidates/shared-foundation.json",
+                    "status": "pending",
+                },
+                {
+                    "candidate_id": "shared-foundation",
+                    "candidate": "canon/candidates/world_rules/shared-foundation.json",
+                    "status": "pending",
+                },
+            ]
+        }
+
+        with self.assertRaisesRegex(ValueError, "duplicate asset candidate id"):
+            select_asset_state(Path("."), payload, "shared-foundation")
+
+    def test_asset_state_inventory_preserves_cross_directory_identity_conflicts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative, asset_type in (
+                ("characters/candidates/shared-foundation.json", "character"),
+                ("canon/candidates/world_rules/shared-foundation.json", "world"),
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    json.dumps({"candidate_id": "shared-foundation", "asset_type": asset_type}),
+                    encoding="utf-8",
+                )
+
+            states = _asset_states(root)
+
+            self.assertEqual(len(states), 2)
+            self.assertEqual({str(item["candidate"]) for item in states}, {
+                "characters/candidates/shared-foundation.json",
+                "canon/candidates/world_rules/shared-foundation.json",
+            })
 
 
 if __name__ == "__main__":

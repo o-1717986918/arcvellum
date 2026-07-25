@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..contracts import TaskPackage
+from .asset_evidence import review_machine_fields
 from .common import REVIEW_CONCLUSION, REVIEW_CONCLUSION_VARIANT
 from ..sandbox import SandboxManifest
 from literary_engineering_studio_engine.agent_schema import load_schema_spec
@@ -477,12 +478,10 @@ def _canonicalize_asset_machine_metadata(task: TaskPackage, sandbox: SandboxMani
         review_path = sandbox.workspace / Path(review_rel)
         payload = _read_object(review_path)
         if payload is not None:
-            expected = {
-                "schema": str(review_contract.get("schema") or "literary-engineering-workbench/candidate-asset-review/v0.1"),
-                "candidate": str(review_contract.get("candidate") or candidate_rel),
-                "candidate_id": str(review_contract.get("candidate_id") or candidate_id),
-                "asset_type": str(review_contract.get("asset_type") or asset_type),
-            }
+            expected = review_machine_fields(
+                task, sandbox, payload, review_contract,
+                candidate=candidate_rel, candidate_id=candidate_id, asset_type=asset_type,
+            )
             if task.current_state in {"asset-review-pass", "asset-approval-revision"}:
                 expected["status"] = "recheck_required"
             changes.extend(_write_machine_fields(review_path, review_rel, payload, expected, "asset-review"))

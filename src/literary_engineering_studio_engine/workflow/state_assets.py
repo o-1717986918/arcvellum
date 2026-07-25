@@ -42,17 +42,18 @@ def _asset_states(root: Path, *, include_intake: bool = False) -> list[dict[str,
         for candidate in sorted(base.glob("*.json")):
             if candidate.name.endswith(".agent_completion.json") or candidate.name.endswith(".submission.json"):
                 continue
-            candidate_id = candidate.stem
-            record = records.setdefault(candidate_id, {"candidate": candidate, "asset_type": asset_type})
+            record_key = _rel(candidate, root)
+            record = records.setdefault(record_key, {"candidate": candidate, "asset_type": asset_type})
             record["candidate"] = candidate
             record["asset_type"] = str(_read_json(candidate).get("asset_type") or asset_type)
         for task in sorted(base.glob("*.agent_tasks.md")):
-            candidate_id = _agent_task_base(task).stem
-            record = records.setdefault(candidate_id, {"candidate": _agent_task_base(task).with_suffix(".json"), "asset_type": asset_type})
+            candidate = _agent_task_base(task).with_suffix(".json")
+            record_key = _rel(candidate, root)
+            record = records.setdefault(record_key, {"candidate": candidate, "asset_type": asset_type})
             record["creation_task"] = task
-            record.setdefault("candidate", _agent_task_base(task).with_suffix(".json"))
+            record.setdefault("candidate", candidate)
             record.setdefault("asset_type", asset_type)
-    states = [_asset_state(root, record) for _candidate_id, record in sorted(records.items())]
+    states = [_asset_state(root, record) for _candidate_path, record in sorted(records.items())]
     if not states and include_intake:
         states.append(_asset_intake_state())
     return states

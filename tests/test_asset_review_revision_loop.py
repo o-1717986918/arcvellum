@@ -64,6 +64,23 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
             payload["asset_type"] = "character_profile"
             candidate.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            review_dir = root / "reviews" / "assets"
+            review_dir.mkdir(parents=True)
+            review_task = review_dir / "protagonist-foundation_review.agent_tasks.md"
+            review_task.write_text("# review\n", encoding="utf-8")
+            review = _review_payload("pass")
+            review.update(
+                {
+                    "candidate": "characters/candidates/protagonist-foundation.json",
+                    "candidate_id": "protagonist-foundation",
+                    "candidate_sha256": digest,
+                }
+            )
+            (review_dir / "protagonist-foundation_review.json").write_text(
+                json.dumps(review, ensure_ascii=False), encoding="utf-8"
+            )
+            (review_dir / "protagonist-foundation_review.md").write_text("# 审查通过\n", encoding="utf-8")
+            write_agent_completion_marker(review_task, root=root, handled_by="reviewer")
             record_workflow_approval(root, "protagonist-foundation", "approve", subject_sha256=digest)
 
             result = promote_candidate_asset(root, candidate, group="character", approval_run_id="protagonist-foundation")
@@ -208,12 +225,17 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
     def test_non_pass_review_is_recordable_but_not_approvable(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            candidate = root / "characters" / "candidates" / "protagonist.json"
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text(json.dumps(_candidate_payload(), ensure_ascii=False), encoding="utf-8")
             review_dir = root / "reviews" / "assets"
             review_dir.mkdir(parents=True)
             task_path = review_dir / "protagonist_review.agent_tasks.md"
             task_path.write_text("# review\n", encoding="utf-8")
+            review_payload = _review_payload()
+            review_payload["candidate_sha256"] = hashlib.sha256(candidate.read_bytes()).hexdigest()
             (review_dir / "protagonist_review.json").write_text(
-                json.dumps(_review_payload(), ensure_ascii=False), encoding="utf-8"
+                json.dumps(review_payload, ensure_ascii=False), encoding="utf-8"
             )
             (review_dir / "protagonist_review.md").write_text("# 审查\n\n需要修订。\n", encoding="utf-8")
             write_agent_completion_marker(task_path, root=root, handled_by="reviewer")
@@ -297,6 +319,9 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
             revised_review.update(
                 {
                     "status": "recheck_required",
+                    "candidate_sha256": hashlib.sha256(
+                        (sandbox.workspace / candidate_rel).read_bytes()
+                    ).hexdigest(),
                     "applied_revision_actions": [
                         {"action": "明确道德边界", "evidence": "psychology.moral_line 已改为不伪造证据"}
                     ],
