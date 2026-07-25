@@ -13,6 +13,8 @@ vi.mock("@/services/api", () => ({
 describe("Narrative Archive view", () => {
   beforeEach(() => {
     apiMock.mockReset();
+    window.localStorage.clear();
+    document.body.innerHTML = "";
   });
 
   it("opens the first formal asset without waiting for the human-choice query", async () => {
@@ -100,6 +102,16 @@ describe("Narrative Archive view", () => {
     expect(wrapper.find(".archive-editor-pane").exists()).toBe(true);
     expect(wrapper.text()).toContain("林澈");
     expect(wrapper.findAll(".archive-tabs > div")).toHaveLength(1);
+    expect(document.querySelector('[role="dialog"]')?.getAttribute("aria-label"))
+      .toBe("先分清正式、候选与回收站");
+    expect(wrapper.find('[data-tour-id="archive-tree"]').exists()).toBe(true);
+    expect(wrapper.find('[data-tour-id="archive-editor"]').exists()).toBe(true);
+    expect(wrapper.find('[data-tour-id="archive-author-transaction"]').exists()).toBe(true);
+
+    document.querySelector<HTMLButtonElement>('[title="暂时跳过"]')?.click();
+    await flushPromises();
+    expect(window.localStorage.getItem("arcvellum.module-tour.archive.v1")).toBe("1");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     wrapper.unmount();
   });
 });

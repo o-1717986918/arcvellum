@@ -5,6 +5,7 @@ import {
   Archive,
   BookOpenText,
   CheckCheck,
+  Compass,
   Database,
   FilePlus2,
   RefreshCw,
@@ -26,6 +27,12 @@ import RevisionTimeline from "./components/RevisionTimeline.vue";
 import { useArchiveStore } from "./stores/archive";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
+import GuidedTour from "@/features/onboarding/components/GuidedTour.vue";
+import {
+  hasCompletedTour,
+  markTourCompleted,
+} from "@/features/onboarding/services/tourState";
+import type { GuidedTourStep } from "@/features/onboarding/types";
 import type { RecycleEntry } from "./types";
 import type { ArchiveCreationPayload } from "./types";
 import "./archive.css";
@@ -41,6 +48,8 @@ const ownerWaiver = ref(false);
 const archiveReason = ref("");
 const restoreReason = ref("");
 const showCreation = ref(false);
+const showTour = ref(false);
+const ARCHIVE_TOUR_VERSION = 1;
 
 const activeId = computed(() =>
   archive.selectedAsset?.asset_id || archive.selectedCandidate?.candidate_id || "",
@@ -54,6 +63,48 @@ const candidateChoice = computed(() => {
     return choice.decision_type === "asset_approval" && target.target_id === id;
   }) || null;
 });
+const tourSteps = computed<GuidedTourStep[]>(() => {
+  const formalCount = archive.assetGroups.reduce(
+    (sum, group) => sum + group.items.length,
+    0,
+  );
+  return [
+    {
+      targetId: "archive-modes",
+      eyebrow: "档案的三种状态",
+      title: "先分清正式、候选与回收站",
+      body: `当前有 ${formalCount} 份正式资料、${archive.candidates.length} 个候选。候选不会因为出现在这里就自动成为作品事实。`,
+    },
+    {
+      targetId: "archive-tree",
+      eyebrow: "作品资产",
+      title: "按作品概念找资料，不必翻项目文件",
+      body: "人物、场景、世界规则与叙事账本都以稳定身份列在这里。筛选只改变当前列表，不改变作品内容。",
+    },
+    ...(archive.selectedAsset ? [
+      {
+        targetId: "archive-editor",
+        eyebrow: "受控校勘",
+        title: `正在编辑“${archive.selectedAsset.title}”`,
+        body: "默认结构化编辑只开放 Registry 允许的字段；专家源文本用于修复复杂格式。两种模式共享同一份未保存草稿。",
+      },
+      {
+        targetId: "archive-author-transaction",
+        eyebrow: archive.dirty ? "有未保存修改" : "作者权威事务",
+        title: archive.dirty ? "先检查影响，再保存版本" : "修改不会直接越过工程保护",
+        body: "保存前必须说明原因、检查结构与影响，并确认作者决定。Schema、引用、版本冲突和原子写入不能被豁免。",
+      },
+    ] : []),
+    {
+      targetId: "archive-candidates",
+      eyebrow: "候选进入正式作品",
+      title: "晋升仍由 Engine Gate 决定",
+      body: archive.candidates.length
+        ? `当前 ${archive.candidates.length} 个候选会显示独立审查、作者决定和晋升证据。`
+        : "候选出现后会在这里显示审查、作者决定和晋升证据；档案界面不会伪造通过状态。",
+    },
+  ];
+});
 
 onMounted(async () => {
   try {
@@ -63,6 +114,7 @@ onMounted(async () => {
       await archive.openAsset(first.asset_id);
       if (!archive.structuredDocument) editorMode.value = "source";
     }
+    showTour.value = !hasCompletedTour("archive", ARCHIVE_TOUR_VERSION);
   } catch {
     // The Archive store already exposes a user-facing failure message.
   }
@@ -70,6 +122,15 @@ onMounted(async () => {
     choices.error = actionMessage(cause, "候选审批信息暂时没有载入，不影响正式档案工作。");
   });
 });
+
+function replayTour(): void {
+  showTour.value = true;
+}
+
+function closeTour(): void {
+  showTour.value = false;
+  markTourCompleted("archive", ARCHIVE_TOUR_VERSION);
+}
 
 async function selectTab(id: string, kind: "asset" | "candidate"): Promise<void> {
   try {
@@ -262,13 +323,14 @@ function actionMessage(cause: unknown, fallback: string): string {
       </div>
       <div class="archive-header-actions">
         <RouterLink to="/library"><BookOpenText :size="15" />回到亲用户浏览</RouterLink>
+        <button title="查看本页引导" @click="replayTour"><Compass :size="15" /></button>
         <button :disabled="archive.busy" title="重新读取作品资产" @click="reloadWorkspace"><RefreshCw :size="15" /></button>
       </div>
     </header>
 
-    <nav class="archive-mode-bar" aria-label="档案工作区">
+    <nav class="archive-mode-bar" data-tour-id="archive-modes" aria-label="档案工作区">
       <button :class="{ active: mode === 'formal' }" @click="mode = 'formal'"><Database :size="15" />正式资产<span>{{ archive.assetGroups.reduce((sum, group) => sum + group.items.length, 0) }}</span></button>
-      <button :class="{ active: mode === 'candidate' }" @click="mode = 'candidate'"><Sparkles :size="15" />候选与晋升<span>{{ archive.candidates.length }}</span></button>
+      <button data-tour-id="archive-candidates" :class="{ active: mode === 'candidate' }" @click="mode = 'candidate'"><Sparkles :size="15" />候选与晋升<span>{{ archive.candidates.length }}</span></button>
       <button :class="{ active: mode === 'recycle' }" @click="mode = 'recycle'"><Archive :size="15" />回收站<span>{{ archive.recycleEntries.length }}</span></button>
       <i></i>
       <button class="archive-create-trigger" @click="showCreation = true"><FilePlus2 :size="15" />新建资料</button>
@@ -285,6 +347,7 @@ function actionMessage(cause: unknown, fallback: string): string {
 
     <main class="archive-ide-grid">
       <AssetTree
+        data-tour-id="archive-tree"
         :groups="archive.assetGroups"
         :candidates="archive.candidates"
         :recycle-entries="archive.recycleEntries"
@@ -306,6 +369,7 @@ function actionMessage(cause: unknown, fallback: string): string {
         />
         <AssetEditorPane
           v-if="archive.selectedAsset"
+          data-tour-id="archive-editor"
           :asset="archive.selectedAsset"
           :model-value="archive.draft"
           :mode="editorMode"
@@ -318,7 +382,7 @@ function actionMessage(cause: unknown, fallback: string): string {
         <div v-else class="archive-workspace-empty"><Database :size="28" /><strong>选择一份正式资料</strong><p>人物、场景和世界规则会在这里以作者版本打开。</p></div>
       </section>
 
-      <aside v-if="mode === 'formal'" class="archive-revision-spine">
+      <aside v-if="mode === 'formal'" class="archive-revision-spine" data-tour-id="archive-author-transaction">
         <section class="archive-save-panel">
           <header><Save :size="15" /><strong>作者事务</strong></header>
           <label><span>修改原因</span><textarea v-model="editReason" placeholder="说明这次修改要解决什么问题"></textarea></label>
@@ -372,6 +436,13 @@ function actionMessage(cause: unknown, fallback: string): string {
       @reset-preview="archive.resetCreationPreview"
       @preview="previewCreation"
       @create="createAsset"
+    />
+    <GuidedTour
+      :active="showTour"
+      :steps="tourSteps"
+      complete-label="开始管理档案"
+      @complete="closeTour"
+      @dismiss="closeTour"
     />
   </div>
 </template>

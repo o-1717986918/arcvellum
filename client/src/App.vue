@@ -164,7 +164,7 @@ async function waitForBackendReady(): Promise<void> {
         </div>
       </div>
 
-      <div class="project-switcher" data-tour="project">
+      <div class="project-switcher" data-tour-id="project">
         <label for="project-switcher">当前作品</label>
         <div class="select-wrap">
           <BookOpenText :size="16" aria-hidden="true" />
@@ -183,12 +183,12 @@ async function waitForBackendReady(): Promise<void> {
         <p>{{ store.currentProject?.premise || "从一个创作方向开始。" }}</p>
       </div>
 
-      <button class="sidebar-orrery-entry" data-tour="orrery" :disabled="!store.hasProject" title="进入叙事星仪全景工作台" @click="enterImmersiveOrrery">
+      <button class="sidebar-orrery-entry" data-tour-id="orrery" :disabled="!store.hasProject" title="进入叙事星仪全景工作台" @click="enterImmersiveOrrery">
         <span class="sidebar-orrery-orbit"><Orbit :size="19" /></span>
         <span class="sidebar-orrery-label"><strong>叙事星仪</strong><small>沉浸全景</small></span>
       </button>
 
-      <nav class="main-nav" data-tour="navigation" aria-label="主导航">
+      <nav class="main-nav" data-tour-id="navigation" aria-label="主导航">
         <RouterLink
           v-for="item in nav"
           :key="item.to"
@@ -208,7 +208,7 @@ async function waitForBackendReady(): Promise<void> {
           <button class="icon-button" title="重新读取状态" @click="store.initialize"><RefreshCw :size="16" /></button>
         </div>
         <div class="sidebar-meta-links">
-          <RouterLink class="quiet-link" data-tour="help" to="/help" title="使用帮助"><CircleHelp :size="16" /><span>使用帮助</span></RouterLink>
+          <RouterLink class="quiet-link" data-tour-id="help" to="/help" title="使用帮助"><CircleHelp :size="16" /><span>使用帮助</span></RouterLink>
           <RouterLink class="quiet-link" to="/details" title="作品与应用详情"><Info :size="16" /><span>详情</span></RouterLink>
         </div>
       </div>

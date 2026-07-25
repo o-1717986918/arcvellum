@@ -508,7 +508,7 @@ async function scrollToEnd(): Promise<void> {
 <template>
   <button
     class="advisor-orb"
-    data-tour="advisor"
+    data-tour-id="advisor"
     :class="{ open }"
     :disabled="!store.hasProject"
     :style="orbStyle"
