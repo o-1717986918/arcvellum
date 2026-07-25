@@ -11,9 +11,9 @@
 ## 当前结论
 
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
-- W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态和工作区语义 revision 稳定性四个可回滚批次。
-- 当前尚未完成 W1 的 100/300/1000 节点投影与视觉性能验收，以及后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 414 tests、Client 69 tests、Client production build、Python compileall、Architecture Audit 全部通过。
+- W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态、工作区语义 revision、100/300/1000 规模基准和 v3 增量传输六个可回滚批次。
+- 当前尚未完成 W1 的真实浏览器大规模视觉与像素验收，以及后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
+- 最近一次全量证据：Python 423 tests、Client 76 tests、Client production build、Python compileall、Architecture Audit 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -110,6 +110,43 @@
   - 不以客户端节流掩盖服务端语义不稳定；
   - 不把窗口几何或正文阅读状态写回作品项目。
 
+## W1-4A：100/300/1000 规模基准
+
+- Status: complete
+- Commit: `727fa24`
+- Added:
+  - 稳定的 100/300/1000 场景文学证据 fixture；
+  - book 聚合投影与 scene 全书细粒度投影的可重复后端基准；
+  - 六种空间语法的 1000 节点有限坐标、可寻址和布局耗时回归；
+  - 已建立节点在全书扩张时保持 X/Z 不漂移、Y 仅随宏观节奏受限呼吸的契约。
+- Baseline:
+  - 1000 场景 scene 投影：1049 nodes、3024 edges、约 1.985 MB；
+  - 当前机器基线中位构建耗时约 110 ms；
+  - 六种语法均可完成 1000 节点布局，无非有限坐标或节点丢失。
+
+## W1-4B：Narrative v3 增量 SSE
+
+- Status: complete
+- Commit: `191eb1e`
+- Added:
+  - digest-bound `arcvellum/narrative-projection-patch/v1` 协议；
+  - 首帧完整 snapshot、后续语义变化 patch 的 FastAPI SSE 路由；
+  - nodes / edges / metadata 的增删改与顺序契约；
+  - 前端 exact-base 原子应用、旧序列忽略、base mismatch 自动回源；
+  - SSE 路由集成测试，证明同一连接依次收到 snapshot 和 patch；
+  - 1000 场景单节点转换基准。
+- Baseline:
+  - 全量约 1.985 MB；
+  - 单节点 patch 约 120 KB，占全量 6.05%；
+  - 只 upsert 1 个节点、0 条边，应用后 revision、nodes 和 edges 精确等于目标图。
+- Exit evidence:
+  - Python full suite: 423 passed；
+  - Client full suite: 76 passed；
+  - Client production build: passed；
+  - `python -m compileall -q src benchmarks scripts`: passed；
+  - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先建立 100/300/1000 节点大规模投影 fixture、投影/SSE/布局性能预算和关键视觉回归证据，完成 W1 的剩余退出门禁；在 W1 大规模正确性与性能未闭环前，不开始 Archive 写模型。
+下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先建立可由浏览器直接加载的 100/300/1000 视觉验收项目，完成六种语法、四个 focus、窗口共存、主题切换、远中近 LOD 和 canvas 像素非空验证；在 W1 大规模视觉正确性未闭环前，不开始 Archive 写模型。
