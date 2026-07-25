@@ -414,12 +414,45 @@
   - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W2-7A：字段契约与保格式结构化文档边界
+
+- Status: complete
+- Commit: `3c7d07e`
+- Added:
+  - `AssetViewRegistry` 的七种资产从字段名列表升级为统一 `AssetFieldDefinition` 契约，声明字段类型、分区、必填性、帮助信息与有限选项；字段契约必须与 `writable_fields` 完全一致；
+  - 人物、场景和世界规则使用共享表单契约，地点、组织、承诺与读者问题使用共享表格契约，不为每种资产复制独立编辑器协议；
+  - 新增 `ruamel.yaml` round-trip 文档编解码层，拒绝重复键、递归别名、非对象根、异常深度和异常节点数量，同时保留未修改 YAML 的注释、引号与字段顺序；
+  - JSON ledger 与 YAML 资产通过同一个受控结构化编辑服务投影和回写；
+  - 结构化回写只接受 Registry 注册的顶层可写字段，稳定 ID 和其他机器所有字段不能通过表单提交；
+  - 结构化投影绑定源文本 digest；用户切换模式或草稿变化后，旧投影会以稳定 `structured_draft_stale` 冲突拒绝覆盖；
+  - `/archive/assets/{asset_id}/structure` 和 `/archive/assets/{asset_id}/render-structured` 只返回投影或新的 draft，不直接修改正式项目；
+  - 结构化回写后重新执行既有确定性资产校验，真正 commit 仍走 Owner Override、revision、impact、history、stale propagation 与原有事务链；
+  - YAML 正式校验从正则抽取升级为完整结构解析，重复键、错误根类型、错误引用类型和损坏嵌套不能再借语义审查豁免进入正式资产；
+  - 结构化编辑路由被拆入独立 HTTP 边界模块，未抬高 `archive.py` 文件债务或架构基线。
+- Unified implementation boundary:
+  - 只建立 `application/assets` 写模型与 API 投影，不改变 `projections/archive` 的只读职责；
+  - Engine 继续唯一拥有候选审查、正式晋升、Canon/人物状态 Gate 和任务生命周期；
+  - 本批没有让前端直接解析或重写 YAML，也没有把完整项目结构暴露为任意文件编辑器。
+- Adaptive orchestration boundary:
+  - `CreativeExecutionPlan` 不能通过结构化编辑服务直接修改 Stable Knowledge；
+  - 将来 Agent 只能产出候选或受 task package 约束的提议，结构化 Owner 编辑是显式作者事务，不是 Agent 编排自由度；
+  - Plan Compiler、Runtime 和 Archive 写模型之间没有新增反向依赖或第二套正式写入路径。
+- Failure evidence:
+  - 未注册字段、错误字段值形状、旧 source revision 和重复 YAML key 均有确定性反例；
+  - JSON ledger 与带注释、引号和扩展机器字段的 YAML 均完成无项目写入的 round-trip；
+  - 结构化 API 不接收目标路径，且错误使用稳定 code 区分文档、字段与版本冲突。
+- Exit evidence:
+  - Python full suite: 472 passed, 1 skipped；
+  - `python -m compileall -q src tests`: passed；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、自适应创作编排方案、模块边界和本文件。W2-7 只处理仍有证据的 Archive 退出缺口：
+下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、自适应创作编排方案、模块边界和本文件。W2-7B/7C 只处理仍有证据的 Archive 退出缺口：
 
-1. 以 Registry 的 `editor_kind`、字段契约和 schema metadata 建立共享的结构化编辑框架，优先覆盖人物、场景、JSON ledger 和列表型 catalog；不得为七类资产复制七套表单。
-2. Markdown/长文本字段提供安全渲染与编辑切换；表格型列表提供稳定增删改和排序；高级源文本模式继续保留，所有模式必须共享同一 draft、revision、validate、impact 和 commit。
+1. 前端以新字段契约实现共享表单、Markdown 与表格编辑器；高级源文本模式继续保留，所有模式共享 exact draft、revision、validate、impact 和 commit。
+2. 多标签草稿必须逐资产保存，关闭脏标签时显式阻止或确认，不允许切换资产静默丢失未保存内容。
 3. 增加模块级状态化引导，直接绑定真实 UI 状态和稳定 tour id，不写一篇悬空说明书。
 4. 使用隔离真实项目完成创建、结构化编辑、源文本往返、历史、归档、恢复和候选晋升；不可晋升候选只证明 Gate 有效，不能替代一条真正成功的候选晋升验收。
-5. W2 退出审计必须逐项对照统一实施方案和长期路线；只有用户能从前端创建、编辑、晋升、归档、恢复主要资产，schema/引用不可被作者豁免，关键修改准确传播 stale，且架构债务不增长，才能进入 W3。
+5. W2 退出审计必须逐项对照四类权威文档；只有用户能从前端创建、编辑、晋升、归档、恢复主要资产，schema/引用不可被作者豁免，关键修改准确传播 stale，且架构债务不增长，才能进入 W3。
