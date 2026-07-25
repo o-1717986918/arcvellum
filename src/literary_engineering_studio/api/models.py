@@ -195,6 +195,20 @@ class ArchiveAssetCommitRequest(BaseModel):
     expected_impacts: list[str] = []
 
 
+class ArchiveAssetCreatePreviewRequest(BaseModel):
+    project_root: str
+    asset_type: str
+    local_id: str = ""
+    content: str
+    semantic_review: str = "required"
+    reason: str
+    expected_impacts: list[str] = []
+
+
+class ArchiveAssetCreateCommitRequest(ArchiveAssetCreatePreviewRequest):
+    preview_digest: str
+
+
 class ArchiveRestorePreviewRequest(BaseModel):
     project_root: str
     revision: str
@@ -222,6 +236,8 @@ __all__ = [
     "ArchiveAssetArchiveRequest",
     "ArchiveAssetCommitRequest",
     "ArchiveAssetContentRequest",
+    "ArchiveAssetCreateCommitRequest",
+    "ArchiveAssetCreatePreviewRequest",
     "ArchiveAssetRestoreRequest",
     "ArchiveCandidatePromotionRequest",
     "ArchiveRestorePreviewRequest",

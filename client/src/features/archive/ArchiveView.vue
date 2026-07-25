@@ -6,6 +6,7 @@ import {
   BookOpenText,
   CheckCheck,
   Database,
+  FilePlus2,
   RefreshCw,
   Save,
   SearchCheck,
@@ -14,6 +15,7 @@ import {
   Trash2,
 } from "lucide-vue-next";
 import AssetEditorPane from "./components/AssetEditorPane.vue";
+import AssetCreationPanel from "./components/AssetCreationPanel.vue";
 import AssetImpactPanel from "./components/AssetImpactPanel.vue";
 import AssetTabs from "./components/AssetTabs.vue";
 import AssetTree from "./components/AssetTree.vue";
@@ -24,6 +26,7 @@ import { useArchiveStore } from "./stores/archive";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
 import type { RecycleEntry } from "./types";
+import type { ArchiveCreationPayload } from "./types";
 import "./archive.css";
 
 const app = useAppStore();
@@ -36,6 +39,7 @@ const editReason = ref("");
 const ownerWaiver = ref(false);
 const archiveReason = ref("");
 const restoreReason = ref("");
+const showCreation = ref(false);
 
 const activeId = computed(() =>
   archive.selectedAsset?.asset_id || archive.selectedCandidate?.candidate_id || "",
@@ -172,6 +176,24 @@ async function restore(item: RecycleEntry): Promise<void> {
   }
 }
 
+async function previewCreation(payload: ArchiveCreationPayload): Promise<void> {
+  try {
+    await archive.previewCreation(payload);
+  } catch {
+    // Store state preserves the actionable error.
+  }
+}
+
+async function createAsset(payload: ArchiveCreationPayload): Promise<void> {
+  try {
+    await archive.createAsset(payload);
+    showCreation.value = false;
+    mode.value = "formal";
+  } catch {
+    // Store state preserves the actionable error.
+  }
+}
+
 function actionMessage(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback;
 }
@@ -196,6 +218,7 @@ function actionMessage(cause: unknown, fallback: string): string {
       <button :class="{ active: mode === 'candidate' }" @click="mode = 'candidate'"><Sparkles :size="15" />候选与晋升<span>{{ archive.candidates.length }}</span></button>
       <button :class="{ active: mode === 'recycle' }" @click="mode = 'recycle'"><Archive :size="15" />回收站<span>{{ archive.recycleEntries.length }}</span></button>
       <i></i>
+      <button class="archive-create-trigger" @click="showCreation = true"><FilePlus2 :size="15" />新建资料</button>
       <small v-if="archive.busy">正在核对项目文件…</small>
       <small v-else>所有正式写入都有版本与回执</small>
     </nav>
@@ -282,5 +305,16 @@ function actionMessage(cause: unknown, fallback: string): string {
         @restore="restore"
       />
     </main>
+
+    <AssetCreationPanel
+      v-if="showCreation"
+      :options="archive.creationOptions"
+      :preview="archive.creationPreview"
+      :busy="archive.busy"
+      @close="showCreation = false"
+      @reset-preview="archive.resetCreationPreview"
+      @preview="previewCreation"
+      @create="createAsset"
+    />
   </div>
 </template>

@@ -30,6 +30,7 @@ class AssetViewDefinition:
     filename_template: str
     writable_fields: tuple[str, ...]
     reference_fields: tuple[str, ...]
+    supports_create: bool
     supports_promotion: bool
     supports_archive: bool
     fixed_id: str = ""
@@ -122,11 +123,60 @@ class OwnerOverrideTransaction:
     def as_dict(self) -> dict[str, object]:
         return {
             "schema": "arcvellum/owner-override/v1",
+            "operation": "replace",
             "transaction_id": self.transaction_id,
             "asset_id": self.asset_id,
             "asset_type": self.asset_type,
             "base_revision": self.base_revision,
             "patch": list(self.patch),
+            "authority": self.authority,
+            "semantic_review": self.semantic_review.value,
+            "reason": self.reason,
+            "expected_impacts": list(self.expected_impacts),
+        }
+
+
+@dataclass(frozen=True)
+class OwnerAssetCreation:
+    transaction_id: str
+    asset_id: str
+    asset_type: str
+    content: str
+    authority: str
+    semantic_review: SemanticReview
+    reason: str
+    expected_impacts: tuple[str, ...]
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        asset_id: str,
+        asset_type: str,
+        content: str,
+        semantic_review: SemanticReview,
+        reason: str,
+        expected_impacts: tuple[str, ...] = (),
+    ) -> "OwnerAssetCreation":
+        return cls(
+            transaction_id=f"owner-create-{uuid.uuid4().hex}",
+            asset_id=asset_id,
+            asset_type=asset_type,
+            content=content,
+            authority="owner",
+            semantic_review=semantic_review,
+            reason=reason.strip(),
+            expected_impacts=expected_impacts,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "schema": "arcvellum/owner-asset-creation/v1",
+            "operation": "create",
+            "transaction_id": self.transaction_id,
+            "asset_id": self.asset_id,
+            "asset_type": self.asset_type,
+            "precondition": "absent",
             "authority": self.authority,
             "semantic_review": self.semantic_review.value,
             "reason": self.reason,

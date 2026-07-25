@@ -91,6 +91,61 @@ class ArchiveApiTests(unittest.TestCase):
         self.assertEqual(stale.status_code, 409)
         self.assertEqual(stale.json()["detail"]["code"], "version_conflict")
 
+    def test_controlled_asset_creation_previews_then_commits_without_accepting_paths(self):
+        options = self.client.get(
+            "/archive/creation/options",
+            params={"project_root": str(self.root)},
+        )
+        self.assertEqual(options.status_code, 200)
+        character = next(
+            item for item in options.json()["items"] if item["asset_type"] == "character"
+        )
+        content = str(character["template"]).replace("__ASSET_ID__", "mei")
+        content = content.replace('name: ""', 'name: "梅汐"', 1)
+        payload = {
+            "project_root": str(self.root),
+            "asset_type": "character",
+            "local_id": "mei",
+            "content": content,
+            "semantic_review": "waived",
+            "reason": "作者创建新的正式人物资产。",
+        }
+        preview = self.client.post("/archive/creation/preview", json=payload)
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.json()["preview"]["committable"])
+        committed = self.client.post(
+            "/archive/creation/commit",
+            json={
+                **payload,
+                "preview_digest": preview.json()["preview"]["preview_digest"],
+            },
+        )
+        self.assertEqual(committed.status_code, 200)
+        self.assertEqual(committed.json()["asset_id"], "character:mei")
+        self.assertTrue((self.root / "characters" / "mei.yaml").is_file())
+        self.assertNotIn(str(self.root), options.text)
+
+        conflict = self.client.post(
+            "/archive/creation/commit",
+            json={
+                **payload,
+                "preview_digest": preview.json()["preview"]["preview_digest"],
+            },
+        )
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json()["detail"]["code"], "asset_creation_conflict")
+
+        invalid = self.client.post(
+            "/archive/creation/preview",
+            json={
+                **payload,
+                "local_id": "../outside",
+                "content": content.replace("mei", "../outside"),
+            },
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.json()["detail"]["code"], "creation_validation")
+
     def test_history_rebuild_and_restore_preview_never_mutate_the_asset(self):
         detail = self.client.get(
             "/archive/assets/character:lin",

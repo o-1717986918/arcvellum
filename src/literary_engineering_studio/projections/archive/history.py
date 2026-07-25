@@ -21,6 +21,7 @@ def project_asset_history(
             "transaction_id": item["transaction_id"],
             "base_revision": item["base_revision"],
             "new_revision": item["new_revision"],
+            "operation": item.get("operation", "replace"),
             "authority": item["authority"],
             "semantic_review": item["semantic_review"],
             "reason": item["reason"],

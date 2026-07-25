@@ -16,7 +16,7 @@ class AssetLoader:
         self.registry = registry
 
     def load(self, project_root: Path, asset_id: str) -> AssetRecord:
-        root = self._project_root(project_root)
+        root = self.project_root(project_root)
         definition, local_id = self.registry.parse_asset_id(asset_id)
         path = self._asset_path(root, definition, local_id)
         if not path.is_file():
@@ -27,12 +27,12 @@ class AssetLoader:
     def resolve_path(self, project_root: Path, asset_id: str) -> Path:
         """Resolve a registered asset path without requiring it to exist."""
 
-        root = self._project_root(project_root)
+        root = self.project_root(project_root)
         definition, local_id = self.registry.parse_asset_id(asset_id)
         return self._asset_path(root, definition, local_id)
 
     def list(self, project_root: Path) -> tuple[AssetRecord, ...]:
-        root = self._project_root(project_root)
+        root = self.project_root(project_root)
         records: list[AssetRecord] = []
         for definition in self.registry.definitions():
             if definition.fixed_id:
@@ -65,7 +65,7 @@ class AssetLoader:
         return resolved
 
     @staticmethod
-    def _project_root(project_root: Path) -> Path:
+    def project_root(project_root: Path) -> Path:
         root = project_root.expanduser().resolve()
         if not root.is_dir() or not (root / "project.yaml").is_file():
             raise ValueError("archive project must contain project.yaml")

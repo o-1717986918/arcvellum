@@ -116,6 +116,7 @@ class OwnerTransactionService:
         new_revision = content_revision(after)
         receipt = {
             "schema": "arcvellum/mutation-receipt/v1",
+            "operation": "replace",
             "transaction_id": transaction.transaction_id,
             "asset_id": transaction.asset_id,
             "asset_type": transaction.asset_type,

@@ -38,6 +38,7 @@ describe("Narrative Archive view", () => {
       }
       if (path.startsWith("/archive/candidates")) return Promise.resolve({ items: [] });
       if (path.startsWith("/archive/recycle-bin")) return Promise.resolve({ items: [] });
+      if (path.startsWith("/archive/creation/options")) return Promise.resolve({ items: [] });
       if (path.startsWith("/archive/assets/character%3Alin/history")) {
         return Promise.resolve({ revisions: [], transactions: [] });
       }

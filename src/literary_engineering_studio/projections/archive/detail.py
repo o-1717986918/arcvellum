@@ -22,6 +22,7 @@ def project_asset_detail(record: AssetRecord, registry: AssetViewRegistry) -> di
             "editor_kind": definition.editor_kind.value,
             "writable_fields": list(definition.writable_fields),
             "reference_fields": list(definition.reference_fields),
+            "supports_create": definition.supports_create,
             "supports_promotion": definition.supports_promotion,
             "supports_archive": definition.supports_archive,
         },

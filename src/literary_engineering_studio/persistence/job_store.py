@@ -15,6 +15,7 @@ from typing import Any
 from .asset_revisions import ASSET_REVISION_SCHEMA_SQL, AssetRevisionStoreMixin
 from .asset_transactions import ASSET_TRANSACTION_SCHEMA_SQL, AssetTransactionStoreMixin
 from .autopilot_runs import AutopilotStoreMixin
+from .migrations import ensure_additive_columns
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
 from .sessions import SessionStoreMixin
 from .primitives import (
@@ -504,26 +505,7 @@ class JobStore(
                     ON agent_sessions(project_root, updated_at);
                 """ + ASSET_TRANSACTION_SCHEMA_SQL + ASSET_REVISION_SCHEMA_SQL + RECYCLE_BIN_SCHEMA_SQL
             )
-            preference_columns = {
-                str(row[1]) for row in connection.execute("PRAGMA table_info(advisor_pinned_preferences)").fetchall()
-            }
-            if "position" not in preference_columns:
-                connection.execute(
-                    "ALTER TABLE advisor_pinned_preferences ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
-                )
-            autopilot_columns = {
-                str(row[1]) for row in connection.execute("PRAGMA table_info(autopilot_runs)").fetchall()
-            }
-            autopilot_additions = {
-                "route_index": "INTEGER NOT NULL DEFAULT 0",
-                "progress_fingerprint": "TEXT NOT NULL DEFAULT ''",
-                "stalled_cycles": "INTEGER NOT NULL DEFAULT 0",
-                "last_progress_at": "TEXT NOT NULL DEFAULT ''",
-                "last_recovery_at": "TEXT NOT NULL DEFAULT ''",
-            }
-            for name, declaration in autopilot_additions.items():
-                if name not in autopilot_columns:
-                    connection.execute(f"ALTER TABLE autopilot_runs ADD COLUMN {name} {declaration}")
+            ensure_additive_columns(connection)
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
 
     def _connect(self) -> sqlite3.Connection:

@@ -7,6 +7,7 @@ export interface ArchiveAssetItem extends ArchiveRecord {
   revision?: string;
   editor_kind?: string;
   supports_archive?: boolean;
+  supports_create?: boolean;
   supports_promotion?: boolean;
 }
 
@@ -50,4 +51,33 @@ export interface RecycleEntry extends ArchiveRecord {
   title?: string;
   status?: string;
   reason?: string;
+}
+
+export interface ArchiveCreationOption extends ArchiveRecord {
+  asset_type: string;
+  schema_id?: string;
+  editor_kind?: string;
+  id_field?: string;
+  fixed_id?: string;
+  writable_fields?: string[];
+  template: string;
+  available: boolean;
+  unavailable_reason?: string;
+}
+
+export interface ArchiveCreationPayload {
+  asset_type: string;
+  local_id: string;
+  content: string;
+  semantic_review: "waived";
+  reason: string;
+  expected_impacts: string[];
+}
+
+export interface ArchiveCreationPreview extends ArchiveRecord {
+  preview_digest: string;
+  committable: boolean;
+  asset?: ArchiveRecord;
+  validation?: ArchiveRecord;
+  impact?: ArchiveRecord;
 }

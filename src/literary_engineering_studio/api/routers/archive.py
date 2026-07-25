@@ -7,7 +7,12 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException
 
-from ...application.assets.contracts import OwnerOverrideTransaction, SemanticReview
+from ...application.assets.contracts import OwnerAssetCreation, OwnerOverrideTransaction, SemanticReview
+from ...application.assets.creation import (
+    AssetCreationConflictError,
+    AssetCreationPreviewStaleError,
+    OwnerCreationService,
+)
 from ...application.assets.impact import build_asset_impact
 from ...application.assets.loader import AssetLoader
 from ...application.assets.owner_transactions import AssetVersionConflictError, OwnerTransactionService
@@ -32,6 +37,8 @@ from ..common import call_handler, project_root as resolve_project_root
 from ..models import (
     ArchiveAssetCommitRequest,
     ArchiveAssetContentRequest,
+    ArchiveAssetCreateCommitRequest,
+    ArchiveAssetCreatePreviewRequest,
     ArchiveAssetArchiveRequest,
     ArchiveAssetRestoreRequest,
     ArchiveCandidatePromotionRequest,
@@ -45,6 +52,7 @@ class ArchiveRouterDependencies:
     loader: AssetLoader
     projections: ArchiveProjectionService
     transactions: OwnerTransactionService
+    creation: OwnerCreationService
     revisions: AssetRevisionService
     recycle_bin: RecycleBinService
     candidates: CandidatePromotionService
@@ -66,6 +74,7 @@ def default_archive_dependencies(
         loader=loader,
         projections=ArchiveProjectionService(registry, loader, revisions, recycle_bin),
         transactions=OwnerTransactionService(registry, loader, revisions),
+        creation=OwnerCreationService(registry, loader, revisions),
         revisions=revisions,
         recycle_bin=recycle_bin,
         candidates=candidates,
@@ -75,6 +84,7 @@ def default_archive_dependencies(
 
 def build_archive_router(deps: ArchiveRouterDependencies) -> APIRouter:
     router = APIRouter()
+    _register_creation_routes(router, deps)
 
     @router.get("/archive/tree")
     def archive_tree(project_root: str):
@@ -152,6 +162,25 @@ def build_archive_router(deps: ArchiveRouterDependencies) -> APIRouter:
     return router
 
 
+def _register_creation_routes(
+    router: APIRouter,
+    deps: ArchiveRouterDependencies,
+) -> None:
+    @router.get("/archive/creation/options")
+    def archive_creation_options(project_root: str):
+        return call_handler(
+            lambda: {"ok": True, **deps.creation.options(resolve_project_root(project_root))}
+        )
+
+    @router.post("/archive/creation/preview")
+    def archive_creation_preview(payload: ArchiveAssetCreatePreviewRequest):
+        return _preview_creation(deps, payload)
+
+    @router.post("/archive/creation/commit")
+    def archive_creation_commit(payload: ArchiveAssetCreateCommitRequest):
+        return _commit_creation(deps, payload)
+
+
 def _validate_asset(
     deps: ArchiveRouterDependencies,
     asset_id: str,
@@ -162,6 +191,97 @@ def _validate_asset(
     deps.loader.load(root, asset_id)
     result = validate_asset_content(root, definition, local_id, payload.content)
     return {"ok": True, "schema": "arcvellum/archive-validation/v1", "validation": result.as_dict()}
+
+
+def _preview_creation(
+    deps: ArchiveRouterDependencies,
+    payload: ArchiveAssetCreatePreviewRequest,
+) -> dict[str, Any]:
+    creation = _creation_from_payload(deps, payload)
+    try:
+        preview = deps.creation.preview(resolve_project_root(payload.project_root), creation)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return call_handler(lambda: _raise(exc))
+    return {"ok": True, "preview": preview}
+
+
+def _commit_creation(
+    deps: ArchiveRouterDependencies,
+    payload: ArchiveAssetCreateCommitRequest,
+) -> dict[str, Any]:
+    creation = _creation_from_payload(deps, payload)
+    try:
+        receipt = deps.creation.create(
+            resolve_project_root(payload.project_root),
+            creation,
+            preview_digest=payload.preview_digest,
+        )
+    except AssetCreationConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "asset_creation_conflict",
+                "message": str(exc),
+                "asset_id": creation.asset_id,
+            },
+        ) from exc
+    except AssetCreationPreviewStaleError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "creation_preview_stale",
+                "message": str(exc),
+                "asset_id": creation.asset_id,
+            },
+        ) from exc
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return call_handler(lambda: _raise(exc))
+    return {"ok": True, "asset_id": creation.asset_id, "receipt": receipt}
+
+
+def _creation_from_payload(
+    deps: ArchiveRouterDependencies,
+    payload: ArchiveAssetCreatePreviewRequest,
+) -> OwnerAssetCreation:
+    try:
+        semantic_review = SemanticReview(payload.semantic_review)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "validation", "message": "semantic_review must be required or waived"},
+        ) from exc
+    try:
+        definition = deps.registry.definition(payload.asset_type)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "creation_validation", "message": str(exc)},
+        ) from exc
+    if not definition.supports_create:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "creation_not_supported",
+                "message": f"asset creation is not supported for {payload.asset_type}",
+            },
+        )
+    local_id = definition.fixed_id or payload.local_id.strip()
+    asset_id = deps.registry.asset_id(definition, local_id)
+    try:
+        deps.registry.parse_asset_id(asset_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "creation_validation", "message": str(exc)},
+        ) from exc
+    return OwnerAssetCreation.create(
+        asset_id=asset_id,
+        asset_type=definition.asset_type,
+        content=payload.content,
+        semantic_review=semantic_review,
+        reason=payload.reason,
+        expected_impacts=tuple(str(item) for item in payload.expected_impacts),
+    )
 
 
 def _impact_asset(

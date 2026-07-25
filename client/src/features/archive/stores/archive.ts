@@ -6,6 +6,9 @@ import type {
   ArchiveAssetDetail,
   ArchiveAssetGroup,
   ArchiveCandidate,
+  ArchiveCreationOption,
+  ArchiveCreationPayload,
+  ArchiveCreationPreview,
   ArchiveRecord,
   RecycleEntry,
 } from "../types";
@@ -25,6 +28,8 @@ export const useArchiveStore = defineStore("archive", () => {
   const assetGroups = ref<ArchiveAssetGroup[]>([]);
   const candidates = ref<ArchiveCandidate[]>([]);
   const recycleEntries = ref<RecycleEntry[]>([]);
+  const creationOptions = ref<ArchiveCreationOption[]>([]);
+  const creationPreview = shallowRef<ArchiveCreationPreview | null>(null);
   const selectedAsset = shallowRef<ArchiveAssetDetail | null>(null);
   const selectedCandidate = shallowRef<ArchiveCandidate | null>(null);
   const history = shallowRef<ArchiveHistoryResponse>({});
@@ -46,14 +51,16 @@ export const useArchiveStore = defineStore("archive", () => {
     error.value = "";
     try {
       const suffix = query({ project_root: projectRoot.value });
-      const [tree, candidateList, recycle] = await Promise.all([
+      const [tree, candidateList, recycle, creation] = await Promise.all([
         api<ArchiveTreeResponse>(`/archive/tree?${suffix}`),
         api<{ items?: ArchiveCandidate[] }>(`/archive/candidates?${suffix}`),
         api<{ items?: RecycleEntry[] }>(`/archive/recycle-bin?${suffix}`),
+        api<{ items?: ArchiveCreationOption[] }>(`/archive/creation/options?${suffix}`),
       ]);
       assetGroups.value = tree.groups || [];
       candidates.value = candidateList.items || [];
       recycleEntries.value = recycle.items || [];
+      creationOptions.value = creation.items || [];
     } catch (cause) {
       error.value = messageFor(cause, "作品档案暂时没有读取成功。");
       throw cause;
@@ -173,6 +180,64 @@ export const useArchiveStore = defineStore("archive", () => {
     }
   }
 
+  async function previewCreation(payload: ArchiveCreationPayload): Promise<ArchiveCreationPreview> {
+    busy.value = true;
+    error.value = "";
+    creationPreview.value = null;
+    try {
+      const response = await api<{ preview: ArchiveCreationPreview }>("/archive/creation/preview", {
+        method: "POST",
+        body: JSON.stringify({
+          project_root: projectRoot.value,
+          ...payload,
+        }),
+      });
+      creationPreview.value = response.preview;
+      return response.preview;
+    } catch (cause) {
+      error.value = messageFor(cause, "新资料检查没有完成。");
+      throw cause;
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  async function createAsset(payload: ArchiveCreationPayload): Promise<string> {
+    const preview = creationPreview.value;
+    if (!preview?.preview_digest || !preview.committable) {
+      throw new Error("请先完成新资料检查，并处理所有结构问题。");
+    }
+    busy.value = true;
+    error.value = "";
+    try {
+      const response = await api<{ asset_id: string; receipt: ArchiveRecord }>(
+        "/archive/creation/commit",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            project_root: projectRoot.value,
+            ...payload,
+            preview_digest: preview.preview_digest,
+          }),
+        },
+      );
+      creationPreview.value = null;
+      notice.value = "新资料已进入正式档案，并建立了首个作者版本。";
+      await loadWorkspace();
+      await openAsset(response.asset_id);
+      return response.asset_id;
+    } catch (cause) {
+      error.value = messageFor(cause, "新资料没有创建成功。");
+      throw cause;
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  function resetCreationPreview(): void {
+    creationPreview.value = null;
+  }
+
   async function archiveAsset(reason: string): Promise<void> {
     const asset = requireAsset();
     busy.value = true;
@@ -278,6 +343,8 @@ export const useArchiveStore = defineStore("archive", () => {
     assetGroups,
     candidates,
     recycleEntries,
+    creationOptions,
+    creationPreview,
     selectedAsset,
     selectedCandidate,
     history,
@@ -296,6 +363,9 @@ export const useArchiveStore = defineStore("archive", () => {
     updateDraft,
     previewEdit,
     commitEdit,
+    previewCreation,
+    createAsset,
+    resetCreationPreview,
     archiveAsset,
     restoreEntry,
     promoteCandidate,

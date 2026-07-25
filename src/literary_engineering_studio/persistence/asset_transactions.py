@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS archive_asset_transactions (
     asset_type TEXT NOT NULL,
     base_revision TEXT NOT NULL,
     new_revision TEXT NOT NULL,
+    operation TEXT NOT NULL DEFAULT 'replace',
     authority TEXT NOT NULL,
     semantic_review TEXT NOT NULL,
     reason TEXT NOT NULL,
@@ -55,10 +56,10 @@ class AssetTransactionStoreMixin:
                 """
                 INSERT INTO archive_asset_transactions (
                     transaction_id, project_root, asset_id, asset_type,
-                    base_revision, new_revision, authority, semantic_review,
+                    base_revision, new_revision, operation, authority, semantic_review,
                     reason, impact_json, stale_json, receipt_path,
                     transaction_path, before_snapshot, after_snapshot, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     normalized["transaction_id"],
@@ -67,6 +68,7 @@ class AssetTransactionStoreMixin:
                     normalized["asset_type"],
                     normalized["base_revision"],
                     normalized["new_revision"],
+                    normalized["operation"],
                     normalized["authority"],
                     normalized["semantic_review"],
                     normalized["reason"],
@@ -139,6 +141,7 @@ def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
         "asset_type": str(record.get("asset_type") or "").strip(),
         "base_revision": base_revision,
         "new_revision": new_revision,
+        "operation": str(record.get("operation") or "replace").strip(),
         "authority": str(record.get("authority") or "").strip(),
         "semantic_review": str(record.get("semantic_review") or "").strip(),
         "reason": str(record.get("reason") or "").strip(),
@@ -162,6 +165,8 @@ def _validate_transaction_id(transaction_id: str) -> None:
 def _validate_record_fields(record: dict[str, Any]) -> None:
     if record["authority"] != "owner":
         raise ValueError("archive transaction authority must be owner")
+    if record["operation"] not in {"replace", "create"}:
+        raise ValueError("archive transaction operation must be replace or create")
     if not record["asset_type"] or not record["reason"]:
         raise ValueError("archive transaction type and reason are required")
 
@@ -191,5 +196,6 @@ def _transaction_identity(record: dict[str, Any]) -> tuple[object, ...]:
         record.get("asset_id"),
         record.get("base_revision"),
         record.get("new_revision"),
+        record.get("operation"),
         record.get("receipt_path"),
     )

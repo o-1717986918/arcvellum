@@ -21,6 +21,7 @@ def project_asset_tree(
             "title": record.title,
             "revision": record.revision,
             "editor_kind": definition.editor_kind.value,
+            "supports_create": definition.supports_create,
             "supports_promotion": definition.supports_promotion,
             "supports_archive": definition.supports_archive,
         }
@@ -33,6 +34,7 @@ def project_asset_tree(
                 "asset_type": definition.asset_type,
                 "schema_id": definition.schema_id,
                 "editor_kind": definition.editor_kind.value,
+                "supports_create": definition.supports_create,
                 "count": len(group_items),
                 "items": group_items,
             }
