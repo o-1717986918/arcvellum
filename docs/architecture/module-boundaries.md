@@ -79,6 +79,17 @@ v0.96 - v1.0 的功能扩展必须同时遵守本文件与[统一工程实施方
 
 该 route 只写候选资产，不能直接覆写正式 Canon、人物或大纲。`task_registry.py` 仅在 Route Catalog 中注入该 route 的 builder 和 validator；原有 source-ingest 的重复实现已经删除。相关验收：`tests/test_source_ingest_route.py`、`tests/test_task_contract_transport.py`、`tests/test_worker_integration.py`。
 
+Project Archaeology 的确定性源文本层位于 `src/literary_engineering_studio_engine/literary/ingest/`：
+
+- `contracts.py` 拥有 `SourceDocument`、`SourceRange`、`SourceSegment`、`SourceEvidenceRef` 和 `SourceChunk`；
+- `readers/` 只读取 TXT、Markdown 与 DOCX 的正文、标题层级、段落样式和脚注，不推断人物、事件或 Canon；
+- `segmentation.py` 只把可靠边界投影为卷、章、节、段落、脚注和语义 chunk；
+- `evidence.py` 建立并验证 source/range/hash/extractor/confidence 证据图；
+- `importer.py` 负责不可变原文保全、staging/backup 事务和中断恢复；
+- `projects/source_ingest.py` 继续作为兼容 facade，组装候选输出与平台 Agent sidecar，但不复制 reader、分段或证据算法。
+
+`source-ingest/v1` 继续可读；新导入写 `source-ingest/v2`。v2 正式 Gate 必须验证原始文件与提取文本 hash、range/segment/evidence 对应关系、chunk 引用、导入 revision 和项目相对路径。Agent 只读取 task package 明确列出的项目身份、manifest、evidence index 和 chunks；所有反推结论仍只写候选区。
+
 ### Longform-Planning Route
 
 `src/literary_engineering_studio_engine/longform_planning_route.py` 负责长篇规划任务包、故事架构 Gate、字数预算/场景库存/章节义务的候选-审查链，以及物化前的保护性约束。其文学顺序必须保持为：story architecture → independent review → word budget → inventory → chapter obligations → reviewed materialization。

@@ -889,12 +889,47 @@
   - Architecture Audit: 36 existing file debts, 227 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W4-1：Project Archaeology 确定性源证据纵向切片
+
+- Status: complete
+- Commit: `71826fa`
+- Added:
+  - Engine 新增不可变 `SourceDocument`、`SourceRange`、`SourceSegment`、`SourceEvidenceRef` 和 `SourceChunk` 契约；source-ingest 新导入升级为 v2，同时保留 v1 route/state 读取兼容；
+  - TXT 与 Markdown 使用严格 UTF-8 读取和稳定段落/标题边界；DOCX 使用标准库 OpenXML 读取正文、标题层级、段落样式、表格文本和被引用脚注，不引入额外二进制或第三方解析依赖；
+  - 原始输入字节和标准化提取文本分别不可变保存并记录 SHA-256；manifest 只保存项目相对路径，不泄露用户绝对路径；
+  - 确定性分段保留卷、章、节、段落、场景分隔和脚注，chunk 以 source/结构/目标大小为边界并携带 exact segment/evidence 引用；
+  - `evidence_index.json` 保存 source、range、segment、字符/段落范围、hash、extractor version 和确定性 confidence；正式 Gate 校验原文、提取文本、range/segment/evidence、chunk 引用、计数与 import revision；
+  - 覆盖导入通过 `.importing` staging 和 `.backup` 事务提交；解析或写入失败时旧导入保持不变，启动新导入前可恢复中断备份；
+  - sidecar writer 增加可选逻辑身份路径，使 staging 中生成的任务仍绑定最终正式 task/completion 路径；
+  - CLI 新增 `--rights-declaration`，并明确支持 TXT/Markdown/DOCX 与语义 chunk；source-ingest task package 只指示 Agent 读取实际获准的 `project.yaml`、manifest、报告、evidence index 和 chunks。
+- Unified implementation boundary:
+  - `projects/source_ingest.py` 保持兼容 facade；reader、分段、证据和事务实现全部位于 `literary/ingest/`；
+  - reader 不做文学事实推断，evidence 不做实体合并，route 不直接晋升 Canon；Agent 生成的人物、世界、情节和文风仍只进入候选输出；
+  - 本批没有建设第二套 Archive、任务系统、模型调用或前端流程。
+- Adaptive orchestration boundary:
+  - task package 的可见 source paths 与 Worker 沙箱读取集一致，不再要求 Agent 读取未暂存的整个项目；
+  - evidence ID 和范围由机器拥有，Agent 只能引用，不能自造或改写；
+  - v2 manifest/evidence 破损时 workflow state 与 route gate fail closed，不让反推任务在伪证据上继续。
+- Failure and verification evidence:
+  - 新回归覆盖多文件稳定顺序、Markdown 标题、DOCX 正文/表格/脚注顺序、权利声明、相对路径、原始与提取 hash、range/evidence 篡改、chunk 引用、sidecar 正式身份和失败覆盖回滚；
+  - Python full suite: 517 passed, 1 skipped；
+  - Client full suite: 97 passed；
+  - TypeScript check、Vite production build、desktop frontend sync 和 v0.9 build verification passed；
+  - Prompt Registry: 48 assets, 83 task prompt ids, passed；
+  - `python -m compileall -q src benchmarks scripts tests`: passed；
+  - Architecture Audit: 36 existing file debts, 226 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+- Not yet complete:
+  - Agent 候选实体尚未使用统一机器 schema，别名/共指、同名消歧和跨 chunk fan-in 尚未实现；
+  - 事件时间约束、因果冲突、多解释保留和领域级候选复核尚未进入正式 route；
+  - 候选项目重建、Archive 批量晋升、四种产品模式和 Archaeology 前端仍属于后续 W4 批次。
+
 ## 下一批
 
-W3 Exit Audit 已通过。下一批开始前仍必须重新读取四份主指导文档和本账本，进入 W4 Project Archaeology 的最小纵向切片：
+W4-1 已通过。下一批开始前仍重新读取四份主指导文档和本账本，进入 W4-2“实体、别名与冲突候选”：
 
-1. 先审计现有 `source-ingest`、Archive 候选晋升、DOCX 读取和 task package，确定可复用契约与兼容 facade；不先建前端。
-2. 建立 `SourceDocument`、`SourceRange` 和 `SourceEvidenceRef` 的 Engine-owned schema，使 TXT/Markdown/DOCX 的稳定分段、hash、权利声明和位置证据使用同一口径。
-3. 先实现确定性读取、结构分割和证据索引；Agent 只能在受控 chunk 上生成实体、事件和设定候选，不能把推断直接写成正式 Canon。
-4. 用同名不同人、一人多名、时间矛盾和中断恢复反例验证候选与冲突模型，再接入现有 source-ingest Gate 和 Archive promotion。
-5. 第一批只交付可恢复的 import → segment → evidence 纵向链；实体 fan-in、全书重建、四种产品模式和 Archaeology 前端在后续 W4 批次逐步开放。
+1. 先审阅 source-ingest 当前候选 Markdown、Archive candidate identity、Agent preflight/schema 和 fan-in 能力，避免平行资产协议。
+2. 建立 `EntityMentionCandidate`、`EntityCandidate`、`AliasHypothesis`、`EventCandidate`、`TemporalConstraint` 和 `ConflictSet` 的 Engine-owned schema；所有结论绑定 W4-1 evidence refs。
+3. 为 chunk extraction、全书 alias/coreference aggregation 和 conflict review 分离任务与 barrier；同名不同人、一人多名、未知指代和矛盾时间不得静默合并。
+4. 先完成机器契约、确定性合并边界、Agent task/preflight 与 route Gate，再接 Archive 候选晋升；本批仍不提前建设 Archaeology 前端。
+5. 用跨 chunk 别名、同名冲突、时间循环、低置信度和中断重跑验证幂等、可恢复及无直接 Canon 写回。
