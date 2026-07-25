@@ -855,12 +855,46 @@
   - `git diff --check`: passed；
   - 真实开发服务和“1+1=2”项目完成宽屏、720px 窄屏截图验收；版本长标识不再产生横向滚动，页面 `body/shell/version rack` 的 `scrollWidth == clientWidth`。
 
+## W3-5C/W3-6：受控文风工程、精确挂载与 W3 Exit Audit
+
+- Status: complete
+- Commits: `b5066fd`, `ac1eb4d`, `a359400`, `2d6e114`, `6c93403`
+- Added:
+  - Style Atelier 现在可受控建立作者和作品、声明来源权利并导入文本；来源正文只进入 Engine 管理的不可变证据，不在工作台、任务状态或挂载预览中回显；
+  - 编译、评测、独立审查和构建继续通过正式 `style-engineering` task、Worker/job 与 Agent Runtime 执行；客户端只启动任务并通过 SSE 观察真实 queue/running/writeback/complete/failed 状态；
+  - Worker 控制台支持写回批准或拒绝、停止、失败后重试和按正式 route 状态继续推进；任务到达真实终态后才按 revision 刷新工作台，不用固定轮询伪造进度；
+  - Engine/Studio 新增 exact version 挂载预览：比较当前与目标不可变版本的安全证据，并投影依赖旧 mount snapshot 的未晋升场景、阶段和产物数量；
+  - 已晋升正文通过 Historical Truth 验证从 stale 影响中排除；界面明确说明历史正文保留，不把版本切换解释为自动重写；
+  - 挂载确认必须重新提交 exact `style_id/version_id/content_hash` 与最新 `preview_revision`；预览缺失、过期或目标发生变化时事务 fail closed；
+  - Style Atelier 增加紧凑的版本挂载面和确认窗口，显示版本证据差异、未晋升场景刷新范围及历史正文边界；未构建、冲突或缺失稳定身份的版本不会出现可用挂载动作。
+- Unified implementation boundary:
+  - Vue 只消费 typed read model、Worker SSE 与挂载应用服务，不复制可挂载性、历史晋升验证或 stale 计算；
+  - Studio `application/style/` 只组合安全比较、影响投影和 Engine 唯一挂载事务；API router 只校验 DTO、映射稳定错误并装配服务；
+  - Engine 继续拥有不可变版本、完整性、评测、审查、mount snapshot 和 scene stale 真相；没有引入第二套文风状态机或同步模型调用。
+- Adaptive orchestration boundary:
+  - 文风创意判断仍由正式主 Agent 在 CLI task package 内完成；客户端和 Worker 不以启发式文本替代评测或审查；
+  - 自动授权或人工确认都不能删除 review、integrity、exact identity 和 preview revision Gate；
+  - 来源导入、Agent 长任务、写回和挂载分别保留稳定 transaction/job/task/mount receipt，可作为后续计划 provenance 和 stale 重发证据。
+- Browser evidence:
+  - 最新 Studio API 在 `127.0.0.1:8791` 启动并通过 health；开发客户端在真实项目“1+1=2”上读取最新 Style Atelier 投影；
+  - 文风工程控制台、来源证据、版本证据和挂载区均显示为用户可读状态，没有原始来源、绝对路径或内部 JSON 泄漏；
+  - 1280×720 实际页面滚动到挂载区后，挂载控件保持 516×48 的稳定尺寸，版本证据区完整可见，页面无横向溢出；
+  - 当前真实项目尚无已审构建版本，因此没有为视觉演示而运行模型或篡改项目；确认窗口由组件测试和 exact transaction Store 测试验收。
+- Exit evidence:
+  - Python full suite: 513 passed, 1 skipped；
+  - Client full suite: 97 passed；
+  - TypeScript check、Vite production build、desktop frontend sync 和 v0.9 build verification passed；
+  - Prompt Registry: 48 assets, 83 task prompt ids, passed；
+  - `python -m compileall -q src benchmarks scripts tests`: passed；
+  - Architecture Audit: 36 existing file debts, 227 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前仍必须重新读取四份主指导文档和本账本。进入 W3-5C/W3-6：
+W3 Exit Audit 已通过。下一批开始前仍必须重新读取四份主指导文档和本账本，进入 W4 Project Archaeology 的最小纵向切片：
 
-1. 复用现有异步 Style task、Worker/job、SSE 与 Agent observability，建立作者、作品、来源、编译、评测、独立审查和构建的受控操作面；不得在 Vue 中同步调用模型。
-2. 为长任务显示真实队列、运行、失败、完成与下一动作；任务完成后按 revision 刷新工作台，不能靠固定轮询伪装进度。
-3. 建立版本详情/比较和项目挂载确认面；挂载只提交 exact `style_id/version_id/content_hash`，切换前展示对未晋升场景的 stale 影响。
-4. 约束编辑只生成受控候选，不覆盖已经审查的不可变版本；来源权利声明必须在导入前明确。
-5. 完成 API、store、组件、可访问性、响应式布局、前端测试、生产构建与 W3 Exit Audit；未通过前不进入 W4。
+1. 先审计现有 `source-ingest`、Archive 候选晋升、DOCX 读取和 task package，确定可复用契约与兼容 facade；不先建前端。
+2. 建立 `SourceDocument`、`SourceRange` 和 `SourceEvidenceRef` 的 Engine-owned schema，使 TXT/Markdown/DOCX 的稳定分段、hash、权利声明和位置证据使用同一口径。
+3. 先实现确定性读取、结构分割和证据索引；Agent 只能在受控 chunk 上生成实体、事件和设定候选，不能把推断直接写成正式 Canon。
+4. 用同名不同人、一人多名、时间矛盾和中断恢复反例验证候选与冲突模型，再接入现有 source-ingest Gate 和 Archive promotion。
+5. 第一批只交付可恢复的 import → segment → evidence 纵向链；实体 fan-in、全书重建、四种产品模式和 Archaeology 前端在后续 W4 批次逐步开放。
