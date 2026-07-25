@@ -828,12 +828,39 @@
 - 旧版 promotion manifest 缺少 `historical_evidence` 时继续走原有当前 Gate 校验，不自动追认历史有效性。
 - 本批没有建设 Style Atelier 前端，也没有提前实现 W4 Project Archaeology 或自适应任务 DAG。
 
+## W3-5A/W3-5B：Style Atelier 工作台投影与客户端骨架
+
+- Status: complete
+- Commits: `22f454b`, `5d976e3`
+- Added:
+  - Studio `StyleApplicationService.workbench()` 和 `GET /style-lab/workbench` 把作者、作品、来源权利、文风抽象、隔离评测、独立审查、不可变版本和当前挂载组合为单一用户工作台投影；
+  - 投影不公开绝对路径、来源原文或内部运行参数；公共文风资料库缺失时保持安全空状态，并继续显示作品内正式版本；
+  - Vue 新增独立 `style-atelier` feature，包含 typed contract、API client、Pinia store、来源谱系、六阶段证据链、版本架和版本证据区；
+  - 一级导航新增“文风工坊”，项目路由保护同步覆盖该页面；初始焦点优先选择证据最完整的作者，并保持作者、作品与版本上下文一致；
+  - 唯一视觉签名为“文风证据织机”，用真实来源、评测、审查、版本和挂载状态构成进度链；没有把内部 JSON、文件路径或超长 hash 暴露为主要界面内容；
+  - 页面采用现有多主题 instrument tokens，在 720px 窄屏下按来源、证据、版本顺序重排，并保持整页与版本区无横向溢出。
+- Unified implementation boundary:
+  - Vue 只消费 read model 和版本详情，不复制评测、完整性、可挂载性或版本选择算法；
+  - Engine 继续拥有不可变版本与挂载真相，Studio application service 只做安全投影，API router 只装配依赖；
+  - 本批为只读客户端骨架，没有把创建、编译、构建、挂载或 Agent 调用直接塞进页面。
+- Adaptive orchestration boundary:
+  - 工作台显示真实阶段状态，不根据文件存在性伪造“完成”；
+  - 未来长任务必须继续通过 Worker/job/observability 执行，页面不能同步等待模型或自行写正式资产；
+  - 未来挂载仍只提交 exact stable identity，并由 Engine 重新验证。
+- Failure and verification evidence:
+  - Store 回归覆盖 workbench 加载、已挂载版本优先、版本证据详情和未构建版本不误取详情；
+  - Client: 92 tests passed；
+  - TypeScript check、Vite production build、desktop frontend sync 和 v0.9 build verification passed；
+  - Architecture Audit: 36 existing file debts, 227 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed；
+  - 真实开发服务和“1+1=2”项目完成宽屏、720px 窄屏截图验收；版本长标识不再产生横向滚动，页面 `body/shell/version rack` 的 `scrollWidth == clientWidth`。
+
 ## 下一批
 
-下一批开始前仍必须重新读取四份主指导文档和本账本。进入 W3-5/W3-6，但先核对现有 Style Lab API、Archive/IDE 交互模式与前端路由，避免重造：
+下一批开始前仍必须重新读取四份主指导文档和本账本。进入 W3-5C/W3-6：
 
-1. 建立 Style Atelier 的专用 read model/store，把作者项目、来源权利、编译、评测、独立审查、不可变版本、当前挂载与失效影响组织成一个用户可理解的工作台投影。
-2. 复用现有异步 task/run、SSE、Agent observability 与稳定 ID，不在 Vue 页面中执行领域判断，也不增加同步 HTTP LLM。
-3. 前端先完成来源/权利、评测/Review、版本历史/比较、项目挂载四个闭环；约束编辑只能生成受控候选，不直接覆盖已审查版本。
-4. 所有长任务显示真实运行状态、失败原因和下一动作；挂载必须提交 exact version option，切换前展示对未晋升场景的 stale 影响。
-5. 完成 API、store、组件、可访问性、响应式布局、前端测试与生产构建后，再做 W3 Exit Audit；未通过前不进入 W4。
+1. 复用现有异步 Style task、Worker/job、SSE 与 Agent observability，建立作者、作品、来源、编译、评测、独立审查和构建的受控操作面；不得在 Vue 中同步调用模型。
+2. 为长任务显示真实队列、运行、失败、完成与下一动作；任务完成后按 revision 刷新工作台，不能靠固定轮询伪装进度。
+3. 建立版本详情/比较和项目挂载确认面；挂载只提交 exact `style_id/version_id/content_hash`，切换前展示对未晋升场景的 stale 影响。
+4. 约束编辑只生成受控候选，不覆盖已经审查的不可变版本；来源权利声明必须在导入前明确。
+5. 完成 API、store、组件、可访问性、响应式布局、前端测试、生产构建与 W3 Exit Audit；未通过前不进入 W4。
