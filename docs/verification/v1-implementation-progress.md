@@ -245,6 +245,34 @@
   - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W2-2：修订历史、可重建索引与正式失效证据
+
+- Status: complete
+- Commits: `d955e30`, `d41dba9`, `e2ef298`
+- Added:
+  - Studio SQLite schema 升级到 v9，并在现有 `JobStore` 连接、写锁、备份和迁移协议下增加 `archive_asset_transactions` 与 `archive_asset_revisions`；
+  - transaction 与 before/after revision 在同一数据库事务写入，重复 receipt 幂等；revision 写入失败会回滚 transaction 行；
+  - 项目 `workflow/archive/transactions/*/receipt.json` 与快照继续作为正式真相源，SQLite 只保存可重建索引；
+  - 历史读取可从项目 receipt 自动同步丢失的索引；索引暂时不可用时，已成功的项目写入不会被伪装成失败，Mutation Receipt 会记录 `history_index=rebuild-required`；
+  - `/archive/assets/{asset_id}/history` 返回不含绝对路径的 revision、transaction、影响和失效摘要；
+  - `/archive/assets/{asset_id}/restore/preview` 从受控 revision 索引定位快照，重新校验项目边界、软链接、UTF-8 和内容 digest，只生成基于当前 revision 的 OwnerOverride 预览，不修改资产；
+  - 作者事务提交后，使用 Engine 既有 Context Trace SHA-256 freshness 机制验证受影响场景；receipt 记录具体 scene、trace、原因和下游阶段，正式 workflow 会回到 `context-trace`；
+  - 已晋升正文只作为历史事实保留，不被 Archive 提交或恢复预览静默改写；
+  - Archive router 的新增逻辑继续委托 application/projection service，没有抬高 API 或架构债务基线。
+- Boundary:
+  - 没有增加第二套 task/stale 状态机；Context、RP、Branch、Composition、Candidate、Review 和 Promotion 的失效仍由 Engine 派生状态与 Gate 判断；
+  - SQLite 不保存大段正文 diff，也不取代项目 receipt/snapshot；
+  - 本批不执行实际 restore、archive、永久删除、候选晋升或前端编辑；
+  - `not-required` 表示当前没有 Context Trace 消费该资产，不表示所有文本引用都已自动修订；
+  - 软链接越界测试在当前 Windows 权限不足时仍跳过，运行时代码继续做 resolved parent boundary 检查。
+- Exit evidence:
+  - Python full suite: 444 passed, 1 skipped；
+  - Client full suite: 79 passed；
+  - Client production build and desktop frontend sync: passed；
+  - `python -m compileall -q src benchmarks scripts`: passed；
+  - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-2 优先建立 revision/transaction 的 SQLite 索引、历史投影、正式 stale propagation 与恢复预览；必须先证明这些能力不复制 Engine promotion，也不静默改写已晋升正文，再决定是否进入归档/恢复或前端 Archive IDE。
+下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-3 优先完成可逆归档与实际恢复事务、回收站索引和失败回滚；必须继续复用 OwnerOverride/Engine promotion 边界，禁止通过移动文件伪造候选晋升或删除正式历史。完成后再进入候选手动晋升与前端 Archive IDE。
