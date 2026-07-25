@@ -26,8 +26,10 @@ from ...task_paths import (
     task_id,
 )
 from .session_contract import build_style_route_session_context
+from .review_contract import style_review_blueprints, validate_style_review_task
 from .support import (
     file_sha256 as _file_sha256,
+    declared_repair_targets_changed,
     read_optional_json as _read_optional_json,
     read_text as _read_text,
     unique as _unique,
@@ -92,6 +94,11 @@ def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict
         ],
         "next_allowed_states": blueprint["next_allowed_states"],
     }
+    if blueprint.get("agent_source_paths"):
+        payload["agent_source_paths"] = [
+            normalize_relative_path(item)
+            for item in blueprint["agent_source_paths"]
+        ]
     repair_targets = [str(item) for item in blueprint.get("repair_targets", [])]
     if repair_targets:
         payload["repair_targets"] = repair_targets
@@ -266,6 +273,7 @@ def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_s
             "next_allowed_states": ["style-eval-score-file"],
         },
     }
+    table.update(style_review_blueprints(root, profile_id, profile_dir))
     default = {
         "task_type": "manual-route-repair",
         "prompt_asset_id": "route.style-engineering.repair.v1",
@@ -322,17 +330,25 @@ def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[
             errors.append("style evaluation revision must make the previous deterministic score stale")
     if current_state == "style-eval-readiness":
         errors.extend(eval_current_score_errors(root, profile_dir, require_accepted=True))
-    if current_state in {"style-prompt-agent-task", "style-prompt-quality"} and not errors:
-        notes.append("style prompt task completed and quality gate passed")
-    if current_state == "style-eval-agent-task" and not errors:
-        notes.append("style evaluation candidate completed; deterministic scoring is next")
-    if current_state == "style-eval-score-file" and not errors:
-        notes.append("deterministic style score recorded for the exact current candidate")
-    if current_state == "style-eval-revision" and not errors:
-        notes.append("style prompt/evaluation candidate revised; fresh deterministic scoring is required")
-    if current_state == "style-eval-readiness" and not errors:
-        notes.append("style evaluation readiness passed")
+    review_errors, review_notes = validate_style_review_task(root, task, profile_dir)
+    errors.extend(review_errors)
+    notes.extend(review_notes)
+    if not errors:
+        notes.extend(_style_validation_notes(current_state))
     return errors, notes
+
+
+def _style_validation_notes(current_state: str) -> list[str]:
+    messages = {
+        "style-prompt-agent-task": "style prompt task completed and quality gate passed",
+        "style-prompt-quality": "style prompt task completed and quality gate passed",
+        "style-eval-agent-task": "style evaluation candidate completed; deterministic scoring is next",
+        "style-eval-score-file": "deterministic style score recorded for the exact current candidate",
+        "style-eval-revision": "style prompt/evaluation candidate revised; fresh deterministic scoring is required",
+        "style-eval-readiness": "style evaluation readiness passed",
+    }
+    message = messages.get(current_state)
+    return [message] if message else []
 
 
 def profile_gate_errors(root: Path, profile_dir: Path) -> list[str]:
@@ -450,29 +466,6 @@ def eval_current_score_errors(root: Path, profile_dir: Path, *, require_accepted
     return errors
 
 
-def accepted_style_eval_jsons(profile_dir: Path) -> list[Path]:
-    accepted: list[Path] = []
-    for path in sorted((profile_dir / "evaluation_results").glob("*/style_eval_*.json")):
-        payload, error = _read_optional_json(path)
-        if error:
-            continue
-        risk = str(payload.get("risk_level") or "")
-        try:
-            score = float(payload.get("overall_score") or 0)
-        except (TypeError, ValueError):
-            score = 0.0
-        if risk in {"high_copy_risk", "low_similarity"} or score < 45:
-            continue
-        accepted.append(path)
-    return accepted
-
-
-def eval_gate_errors(root: Path, profile_dir: Path) -> list[str]:
-    if accepted_style_eval_jsons(profile_dir):
-        return []
-    return [f"accepted style_eval_*.json missing under {relative_path(profile_dir / 'evaluation_results', root)}"]
-
-
 def profile_dir_for_task(root: Path, task: dict[str, object]) -> Path:
     profile_dir = str(task.get("profile_dir") or "").strip()
     if profile_dir:
@@ -484,17 +477,3 @@ def profile_dir_for_task(root: Path, task: dict[str, object]) -> Path:
             return resolve_project_path(root, normalized).parent
     profile_id = str(task.get("profile_id") or task.get("target_id") or task.get("scene_id") or "style-profile")
     return root / "style" / profile_id
-
-
-def declared_repair_targets_changed(root: Path, task: dict[str, object], label: str) -> list[str]:
-    targets = [str(item) for item in task.get("repair_targets") or [] if str(item).strip()]
-    hashes = task.get("repair_target_sha256_before_revision")
-    before = hashes if isinstance(hashes, dict) else {}
-    if not targets or not before:
-        return [f"{label} is missing declared repair target hash provenance"]
-    for target in targets:
-        path = resolve_project_path(root, target)
-        previous = str(before.get(target) or "").strip().lower()
-        if path.is_file() and previous and _file_sha256(path) != previous:
-            return []
-    return [f"{label} did not change any declared planning candidate; review-only edits cannot complete revision"]

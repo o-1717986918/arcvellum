@@ -308,16 +308,18 @@ def _parse_scalar(value: str) -> object:
 
 def _task_registry_prompt_ids(root: Path) -> list[str]:
     engine_root = Path(__file__).resolve().parents[1]
-    candidates = [
-        root / "src" / "literary_engineering_studio_engine" / "routes" / route / "definition.py"
-        for route in ("scene", "longform", "source_ingest", "style", "assets", "review", "export")
-    ]
-    candidates.extend(
-        engine_root / "routes" / route / "definition.py"
-        for route in ("scene", "longform", "source_ingest", "style", "assets", "review", "export")
-    )
+    route_roots = {
+        root / "src" / "literary_engineering_studio_engine" / "routes",
+        engine_root / "routes",
+    }
+    candidates = {
+        path
+        for route_root in route_roots
+        if route_root.is_dir()
+        for path in route_root.glob("*/*.py")
+    }
     prompt_ids: set[str] = set()
-    for path in candidates:
+    for path in sorted(candidates):
         if path.exists():
             prompt_ids.update(re.findall(r'"prompt_asset_id"\s*:\s*"([^"]+)"', path.read_text(encoding="utf-8")))
     return sorted(prompt_ids)

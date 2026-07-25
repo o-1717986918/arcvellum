@@ -1285,6 +1285,122 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertNotIn("branch-selection-contract", {item.code for item in result.issues})
             self.assertNotIn("branch-selection-membership", {item.code for item in result.issues})
 
+    def test_style_review_machine_evidence_and_independent_identity_are_worker_owned(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            profile_rel = "style/style-fixture"
+            profile = workspace / profile_rel
+            evaluation = profile / "evaluation_results" / "formal"
+            evaluation.mkdir(parents=True)
+            (workspace / "project.yaml").write_text("title: fixture\n", encoding="utf-8")
+            artifacts = {
+                profile / "style_session.json": {
+                    "request_digest": "request-a",
+                    "training_sources": [],
+                    "holdout_sources": [],
+                },
+                profile / "style-profile.md": "# Style profile\n",
+                profile / "style_metrics.json": {},
+                profile / "style_prompt.md": "# Style prompt\n",
+                profile / "style_prompt.agent.json": {"writer_session_id": "studio:writer:prompt"},
+                evaluation / "platform_agent_candidate.md": "候选文本。",
+                evaluation / "platform_agent_candidate.prompt.json": {
+                    "writer_session_id": "studio:writer:evaluation"
+                },
+                evaluation / "style_eval_current.json": {
+                    "schema": "literary-engineering-workbench/style-eval/v0.1",
+                    "overall_score": 80,
+                    "risk_level": "acceptable",
+                },
+                evaluation / "style_eval_current.md": "# Score\n",
+            }
+            for path, content in artifacts.items():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if isinstance(content, str):
+                    path.write_text(content, encoding="utf-8")
+                else:
+                    path.write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+            candidate = evaluation / "platform_agent_candidate.md"
+            score_path = evaluation / "style_eval_current.json"
+            score = json.loads(score_path.read_text(encoding="utf-8"))
+            score["candidate_sha256"] = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            score_path.write_text(json.dumps(score, ensure_ascii=False), encoding="utf-8")
+            report = evaluation / "style_semantic_review.md"
+            report.write_text("# Independent review\n\nPass.\n", encoding="utf-8")
+            review = evaluation / "style_semantic_review.json"
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "wrong",
+                        "status": "reviewed",
+                        "profile_id": "wrong",
+                        "evidence": {"candidate_sha256": "forged"},
+                        "prompt_writer_session_id": "forged",
+                        "evaluation_writer_session_id": "forged",
+                        "reviewer_session_id": "forged",
+                        "checked_dimensions": [],
+                        "review_report_path": "wrong.md",
+                        "review_report_sha256": "forged",
+                        "verdict": "pass",
+                        "summary": "可用。",
+                        "findings": [],
+                        "required_changes": [],
+                        "effectiveness_assessment": "有效。",
+                        "copy_risk_assessment": "风险可控。",
+                        "evidence_limitations": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "style-engineering-style-fixture-style-review-agent-task",
+                    "route": "style-engineering",
+                    "current_state": "style-review-agent-task",
+                    "profile_dir": profile_rel,
+                    "target_id": "style-fixture",
+                    "expected_outputs": [
+                        f"{profile_rel}/evaluation_results/formal/style_semantic_review.json",
+                        f"{profile_rel}/evaluation_results/formal/style_semantic_review.md",
+                    ],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            canonicalize_task_outputs(task, sandbox)
+
+            normalized = json.loads(review.read_text(encoding="utf-8"))
+            self.assertEqual(normalized["schema"], "arcvellum/style-semantic-review/v1")
+            self.assertEqual(normalized["status"], "complete")
+            self.assertEqual(normalized["profile_id"], "style-fixture")
+            self.assertEqual(normalized["prompt_writer_session_id"], "studio:writer:prompt")
+            self.assertEqual(normalized["evaluation_writer_session_id"], "studio:writer:evaluation")
+            self.assertEqual(
+                normalized["reviewer_session_id"],
+                "studio:reviewer:style-engineering-style-fixture-style-review-agent-task",
+            )
+            self.assertEqual(
+                normalized["review_report_sha256"],
+                hashlib.sha256(report.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                normalized["evidence"]["candidate_sha256"],
+                hashlib.sha256(candidate.read_bytes()).hexdigest(),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

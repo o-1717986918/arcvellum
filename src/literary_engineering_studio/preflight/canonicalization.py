@@ -11,6 +11,7 @@ from typing import Any
 from ..contracts import TaskPackage
 from .asset_evidence import review_machine_fields
 from .common import REVIEW_CONCLUSION, REVIEW_CONCLUSION_VARIANT
+from .style_metadata import canonicalize_style_machine_metadata
 from ..sandbox import SandboxManifest
 from literary_engineering_studio_engine.agent_schema import load_schema_spec
 from literary_engineering_studio_engine.semantic_task_contracts import (
@@ -26,7 +27,7 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(_canonicalize_semantic_artifact_metadata(task, sandbox))
     changes.extend(_canonicalize_story_architecture_metadata(task, sandbox))
     changes.extend(_canonicalize_continuity_ledger_metadata(task, sandbox))
-    changes.extend(_canonicalize_style_machine_metadata(task, sandbox))
+    changes.extend(canonicalize_style_machine_metadata(task, sandbox))
     changes.extend(_canonicalize_project_review_metadata(task, sandbox))
     changes.extend(_canonicalize_agent_completion_markers(task, sandbox))
     changes.extend(_canonicalize_scene_candidate_manifest(task, sandbox))
@@ -242,50 +243,6 @@ def _canonicalize_continuity_ledger_metadata(task: TaskPackage, sandbox: Sandbox
             }
             _normalize_complete_status(payload, expected)
             changes.extend(_write_machine_fields(path, review_rel, payload, expected, "continuity-ledger-review"))
-    return changes
-
-
-def _canonicalize_style_machine_metadata(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Supply stable profile paths and evaluation mode for style tasks."""
-
-    state = str(task.current_state or "")
-    if state not in {"style-prompt-agent-task", "style-prompt-quality", "style-eval-agent-task", "style-eval-revision"}:
-        return []
-    profile_dir = str(task.payload.get("profile_dir") or "").replace("\\", "/").strip()
-    if not profile_dir:
-        return []
-    changes: list[dict[str, str]] = []
-    agent_rel = f"{profile_dir}/style_prompt.agent.json"
-    agent_path = sandbox.workspace / agent_rel
-    agent_payload = _read_object(agent_path)
-    if agent_payload is not None:
-        changes.extend(
-            _write_machine_fields(
-                agent_path,
-                agent_rel,
-                agent_payload,
-                {
-                    "schema": "literary-engineering-workbench/style-prompt-agent/v1",
-                    "source_paths": [str(item).replace("\\", "/") for item in task.source_paths],
-                },
-                "style-prompt",
-            )
-        )
-    if state in {"style-eval-agent-task", "style-eval-revision"}:
-        manifest_rel = f"{profile_dir}/evaluation_results/formal/platform_agent_candidate.prompt.json"
-        manifest_path = sandbox.workspace / manifest_rel
-        payload = _read_object(manifest_path)
-        if payload is not None:
-            candidate_rel = f"{profile_dir}/evaluation_results/formal/platform_agent_candidate.md"
-            reference = next((str(item).replace("\\", "/") for item in task.source_paths if str(item).lower().endswith(".txt")), "")
-            expected = {
-                "mode": "blind-review",
-                "style_prompt": f"{profile_dir}/style_prompt.md",
-                "reference": reference,
-                "input": "project.yaml",
-                "candidate": candidate_rel,
-            }
-            changes.extend(_write_machine_fields(manifest_path, manifest_rel, payload, expected, "style-evaluation"))
     return changes
 
 

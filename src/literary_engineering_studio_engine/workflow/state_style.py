@@ -10,6 +10,11 @@ from ..literary.style.session import (
     style_session_gate_errors,
     style_session_holdout_reference,
 )
+from ..literary.style.review import (
+    inspect_style_semantic_review,
+    style_eval_generation_digest_errors,
+    style_review_paths,
+)
 from ..style_prompt import style_prompt_quality_report
 from .state_common import _file_step, _read, _read_json, _rel, _slug_profile_id
 
@@ -53,10 +58,11 @@ def _style_engineering_state(root: Path, profile_dir: Path) -> dict[str, object]
         _style_prompt_quality_step(root, prompt_path),
         _style_eval_setup_step(root, profile_dir, eval_reference),
         _file_step("style-eval-task-file", eval_task, "prepare the formal style evaluation task with a concrete corpus reference and project direction input"),
-        _style_eval_agent_step(root, eval_task, eval_candidate, eval_manifest),
+        _style_eval_agent_step(root, profile_dir, eval_task, eval_candidate, eval_manifest),
         _style_eval_score_step(root, eval_candidate, eval_current),
         _style_eval_readiness_step(root, profile_dir, eval_candidate, eval_current),
     ]
+    steps.extend(_style_review_steps(root, profile_dir, _slug_profile_id(profile_id)))
     first_open = next((step for step in steps if step["status"] != "pass"), None)
     return {
         "target_id": _slug_profile_id(profile_id),
@@ -163,13 +169,22 @@ def _style_eval_setup_step(root: Path, profile_dir: Path, reference: Path | None
     }
 
 
-def _style_eval_agent_step(root: Path, task_path: Path, candidate: Path, manifest: Path) -> dict[str, object]:
+def _style_eval_agent_step(
+    root: Path,
+    profile_dir: Path,
+    task_path: Path,
+    candidate: Path,
+    manifest: Path,
+) -> dict[str, object]:
     state = agent_task_completion_status(task_path, root=root)
     missing = [_rel(path, root) for path in (candidate, manifest) if not path.is_file()]
-    complete = state.get("complete") is True and not missing
+    digest_errors = style_eval_generation_digest_errors(root, profile_dir)
+    complete = state.get("complete") is True and not missing and not digest_errors
     message = str(state.get("message") or "")
     if missing:
         message = (message + "; " if message else "") + "missing " + ", ".join(missing)
+    if digest_errors:
+        message = (message + "; " if message else "") + "; ".join(digest_errors[:4])
     return {
         "key": "style-eval-agent-task",
         "status": "pass" if complete else str(state.get("status") or "pending"),
@@ -177,6 +192,49 @@ def _style_eval_agent_step(root: Path, task_path: Path, candidate: Path, manifes
         "message": message,
         "next_action": "" if complete else "complete the formal style evaluation candidate, prompt manifest, and sidecar marker",
     }
+
+
+def _style_review_steps(
+    root: Path,
+    profile_dir: Path,
+    target_id: str,
+) -> list[dict[str, object]]:
+    state = inspect_style_semantic_review(
+        root,
+        profile_dir,
+        target_id=target_id,
+    )
+    paths = style_review_paths(profile_dir)
+    preparation_passed = state.stage != "prepare"
+    agent_passed = state.stage in {"revision", "ready"}
+    readiness_key = "style-review-revision" if state.stage == "revision" else "style-review-readiness"
+    return [
+        {
+            "key": "style-review-task-file",
+            "status": "pass" if preparation_passed else "missing",
+            "path": _rel(paths.task, root),
+            "message": "digest-bound review task exists" if preparation_passed else state.message,
+            "next_action": "" if preparation_passed else "prepare the independent digest-bound style semantic review task",
+        },
+        {
+            "key": "style-review-agent-task",
+            "status": "pass" if agent_passed else ("pending" if state.stage == "agent" else "blocked"),
+            "path": _rel(paths.review_json, root),
+            "message": "independent review recorded" if agent_passed else state.message,
+            "next_action": "" if agent_passed else "complete the independent style semantic review JSON, report, and sidecar receipt",
+        },
+        {
+            "key": readiness_key,
+            "status": "pass" if state.stage == "ready" else "blocked",
+            "path": _rel(paths.review_json, root),
+            "message": state.message,
+            "next_action": "" if state.stage == "ready" else (
+                "repair the prompt/evaluation candidate, then rerun deterministic evaluation and independent review"
+                if state.stage == "revision"
+                else "complete the preceding independent style review steps"
+            ),
+        },
+    ]
 
 
 def _style_eval_score_step(root: Path, candidate: Path, current: Path) -> dict[str, object]:

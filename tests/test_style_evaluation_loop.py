@@ -8,6 +8,10 @@ from literary_engineering_studio_engine.agent_tasks import write_agent_completio
 from literary_engineering_studio_engine.platform_agent_tasks import write_platform_style_prompt_eval_task
 from literary_engineering_studio_engine.style_engineering_route import build_task_payload, validate_task
 from literary_engineering_studio_engine.workflow_state import _style_engineering_state
+from literary_engineering_studio_engine.literary.style.review import (
+    prepare_style_semantic_review,
+    style_review_machine_values,
+)
 
 
 def _quality_prompt() -> str:
@@ -120,7 +124,67 @@ class StyleEvaluationLoopTests(unittest.TestCase):
             self.assertIn(candidate.relative_to(root).as_posix(), revision["repair_targets"])
 
             _write_current_score(profile, 80)
-            self.assertEqual(_style_engineering_state(root, profile)["status"], "ready")
+            accepted = _style_engineering_state(root, profile)
+            self.assertEqual(accepted["current_step"], "style-review-task-file")
+            prepare_review = build_task_payload(root, "style-engineering", accepted)
+            self.assertIn("prepare-style-review", prepare_review["command"])
+
+            paths = prepare_style_semantic_review(
+                root,
+                profile.relative_to(root),
+                target_id=str(accepted["target_id"]),
+            )
+            task_text = paths.task.read_text(encoding="utf-8")
+            self.assertNotIn("潮声在旧城墙下", task_text)
+            review_state = _style_engineering_state(root, profile)
+            self.assertEqual(review_state["current_step"], "style-review-agent-task")
+            review_task = build_task_payload(root, "style-engineering", review_state)
+
+            paths.review_markdown.write_text(
+                "# 文风工程独立语义审查\n\n- 结论：`pass`\n\n"
+                "提示词约束具体，评测结果支持其复现叙事机制，未见连续表达复制风险。\n",
+                encoding="utf-8",
+            )
+            review = json.loads(paths.review_json.read_text(encoding="utf-8"))
+            review.update(
+                {
+                    "status": "complete",
+                    "verdict": "pass",
+                    "summary": "提示词可执行，确定性证据与文学判断一致。",
+                    "findings": [],
+                    "required_changes": [],
+                    "effectiveness_assessment": "能够约束叙述距离、节奏和意象调度。",
+                    "copy_risk_assessment": "未发现依赖连续参考表达的证据。",
+                    "evidence_limitations": ["Reviewer 未读取原始 holdout 正文。"],
+                }
+            )
+            review.update(
+                style_review_machine_values(
+                    root,
+                    profile,
+                    target_id=str(accepted["target_id"]),
+                    reviewer_session_id="studio:reviewer:style-review-test",
+                )
+            )
+            paths.review_json.write_text(
+                json.dumps(review, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            write_agent_completion_marker(
+                paths.task,
+                root=root,
+                handled_by="independent-reviewer",
+            )
+            errors, notes = validate_task(root, review_task)
+            self.assertEqual(errors, [], errors)
+            self.assertIn("independent style semantic review recorded", notes)
+            final_state = _style_engineering_state(root, profile)
+            self.assertEqual(final_state["status"], "ready")
+
+            prompt = profile / "style_prompt.md"
+            prompt.write_text(prompt.read_text(encoding="utf-8") + "\n新增约束。\n", encoding="utf-8")
+            stale = _style_engineering_state(root, profile)
+            self.assertEqual(stale["current_step"], "style-review-task-file")
 
 
 if __name__ == "__main__":
