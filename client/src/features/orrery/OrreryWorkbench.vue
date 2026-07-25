@@ -173,11 +173,11 @@ async function openChapterFromRail(nodeId: string): Promise<void> {
   // The rail is a global table of contents. It never replaces the full-book
   // canvas: scene mode still needs one entry scene for its detail contract,
   // but the camera lands at the centre of the whole chapter cluster.
-  const entryScene = projection.value?.nodes
+  const entryScene = String(chapter.metrics.entry_scene_id || "") || projection.value?.nodes
     .filter((node) => node.type === "scene" && String(node.metrics.chapter_id || "") === chapter.source_id)
-    .sort((left, right) => left.order - right.order)[0];
+    .sort((left, right) => left.order - right.order)[0]?.node_id.replace(/^scene:/, "") || "";
   if (spatial.level === "scene") {
-    await spatial.setView({ level: "scene", focus: entryScene?.node_id.replace(/^scene:/, "") || "" });
+    await spatial.setView({ level: "scene", focus: entryScene });
   } else {
     await spatial.setView({ level: "chapter", focus: chapter.source_id });
   }
@@ -193,6 +193,14 @@ async function focusChapterCluster(chapterId: string, chapterNodeId: string): Pr
   const currentProjection = projection.value;
   if (!currentLayout || !currentProjection) return;
   const chapterProjectionNode = currentProjection.nodes.find((node) => node.type === "chapter" && node.source_id === chapterId);
+  const clusterPoints = currentProjection.nodes
+    .filter((node) => node.type === "scene" && String(node.metrics.chapter_id || "") === chapterId)
+    .map((node) => currentLayout.points.get(node.node_id))
+    .filter((point): point is NonNullable<typeof point> => Boolean(point));
+  if (clusterPoints.length) {
+    stage.value?.focusCluster(clusterPoints, chapterNodeId);
+    return;
+  }
   const point = chapterClusterFocusPoint(currentProjection.nodes, currentLayout.points, chapterId)
     || currentLayout.points.get(chapterNodeId)
     || currentLayout.points.get(chapterProjectionNode?.node_id || "");

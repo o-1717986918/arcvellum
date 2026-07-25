@@ -102,7 +102,11 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     const current = projection.value;
     const currentRevision = current?.projection_revision || current?.revision || "";
     const nextRevision = payload.projection_revision || payload.revision || "";
-    if (current && currentRevision && currentRevision === nextRevision) return;
+    const sameView = current
+      && current.level === payload.level
+      && current.focus === payload.focus
+      && current.spatial_grammar === payload.spatial_grammar;
+    if (current && sameView && currentRevision && currentRevision === nextRevision) return;
     projection.value = payload;
     initializeObservation(payload);
   }

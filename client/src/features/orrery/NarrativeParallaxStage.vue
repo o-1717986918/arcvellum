@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NarrativeParallaxRenderer, type StageAnchor } from "@/features/orrery/engine/parallaxRenderer";
-import { copyParallaxView, DEFAULT_PARALLAX_VIEW, isSameParallaxView, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
+import { copyParallaxView, DEFAULT_PARALLAX_VIEW, fittedCameraFrame, isSameParallaxView, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
 
 const props = defineProps<{
@@ -266,6 +266,15 @@ function focus(point: WorldPoint, nodeId = ""): void {
   focusStaticPoint(point);
 }
 
+function focusCluster(points: WorldPoint[], nodeId = ""): void {
+  if (!points.length) return;
+  if (renderer) {
+    renderer.focusCluster(points, nodeId);
+    return;
+  }
+  focusStaticCluster(points);
+}
+
 function fitStaticCamera(): void {
   const target = host.value;
   if (!target) return;
@@ -294,6 +303,22 @@ function focusStaticPoint(point: WorldPoint): void {
   staticCamera.x = world.x;
   staticCamera.y = world.y;
   staticCamera.scale = Math.max(0.72, staticCamera.scale);
+  staticCameraReady = true;
+  emitStaticAnchors();
+}
+
+function focusStaticCluster(points: WorldPoint[]): void {
+  const target = host.value;
+  if (!target || !points.length) return;
+  const rect = target.getBoundingClientRect();
+  const primary = props.projection.nodes.filter((node) => node.type === "chapter" || node.type === "scene").sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
+  const first = props.layout.points.get(primary[0]?.node_id || "") || { x: 0, y: 0, z: 0 };
+  const worlds = points.map((point) => staticWorldPoint(point, first));
+  const frame = fittedCameraFrame(worlds, { width: rect.width - 240, height: rect.height - 210 }, { minWidth: 720, minHeight: 500, padX: 420, padY: 360, minScale: 0.12, maxScale: 1.32 });
+  if (!frame) return;
+  staticCamera.x = frame.centerX;
+  staticCamera.y = frame.centerY;
+  staticCamera.scale = frame.scale;
   staticCameraReady = true;
   emitStaticAnchors();
 }
@@ -401,7 +426,7 @@ function recenterStaticView(pivot: WorldPoint | null): void {
   staticCamera.y = world.y;
 }
 
-defineExpose({ fit, focus, openingSegment, resetView });
+defineExpose({ fit, focus, focusCluster, openingSegment, resetView });
 </script>
 
 <template>

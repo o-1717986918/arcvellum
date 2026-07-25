@@ -1,11 +1,18 @@
 import type { SpatialOrientation, WorldPoint } from "@/types/spatial";
 import type { OrreryDepth } from "@/services/orreryPreferences";
 
-const ORIGIN = { x: 96000, y: 11000 };
+export const NARRATIVE_STAGE = {
+  width: 520000,
+  height: 22000,
+  origin: { x: 96000, y: 11000 },
+} as const;
+const ORIGIN = NARRATIVE_STAGE.origin;
 const YAW_PER_PIXEL = 0.0052;
 const PITCH_PER_PIXEL = 0.0038;
 
 export type ParallaxView = SpatialOrientation;
+export interface PlaneBounds { minX: number; maxX: number; minY: number; maxY: number; centerX: number; centerY: number }
+export interface CameraFrame { centerX: number; centerY: number; scale: number }
 
 export const IDENTITY_PARALLAX_VIEW: ParallaxView = { x: 0, y: 0, z: 0, w: 1 };
 // The opening shot is deliberately oblique: enough depth to read chapter
@@ -55,6 +62,28 @@ export function scenePoint(
     x: ORIGIN.x + oriented.x * 126 * xFactor + oriented.z * 29 * zFactor,
     y: ORIGIN.y + oriented.z * 58 * zFactor - oriented.y * 88,
   };
+}
+
+export function planeBounds(points: Array<{ x: number; y: number }>): PlaneBounds | null {
+  if (!points.length) return null;
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  return { minX, maxX, minY, maxY, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+}
+
+export function fittedCameraFrame(
+  points: Array<{ x: number; y: number }>,
+  viewport: { width: number; height: number },
+  limits: { minWidth: number; minHeight: number; padX: number; padY: number; minScale: number; maxScale: number },
+): CameraFrame | null {
+  const bounds = planeBounds(points);
+  if (!bounds) return null;
+  const width = Math.max(limits.minWidth, bounds.maxX - bounds.minX + limits.padX);
+  const height = Math.max(limits.minHeight, bounds.maxY - bounds.minY + limits.padY);
+  const scale = Math.max(limits.minScale, Math.min(limits.maxScale, Math.min(viewport.width / width, viewport.height / height)));
+  return { centerX: bounds.centerX, centerY: bounds.centerY, scale };
 }
 
 export function depthScale(point: WorldPoint, depth: OrreryDepth, view: ParallaxView): number {

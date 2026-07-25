@@ -213,7 +213,7 @@ def _book_graph(
                 chapter,
                 "overview",
                 subtitle=f"{len(chapter_scenes)} 场 · 正文 {actual:,} 字",
-                metrics={"scene_count": len(chapter_scenes), "promoted_count": promoted, "word_target": target, "formal_chars": actual},
+                metrics={"scene_count": len(chapter_scenes), "promoted_count": promoted, "word_target": target, "formal_chars": actual, "entry_scene_id": str(chapter_scenes[0].get("id", ""))},
                 order=index,
             )
         )

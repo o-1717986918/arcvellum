@@ -2,12 +2,25 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PARALLAX_VIEW,
   IDENTITY_PARALLAX_VIEW,
+  fittedCameraFrame,
   orientWorldPoint,
   parallaxViewFromDrag,
   scenePoint,
 } from "@/features/orrery/engine/parallaxProjection";
 
 describe("parallax camera orientation", () => {
+  it("fits a complete chapter cluster inside the available camera frame", () => {
+    const frame = fittedCameraFrame(
+      [{ x: 100, y: 40 }, { x: 1500, y: 260 }, { x: 720, y: 120 }],
+      { width: 804 - 240, height: 898 - 210 },
+      { minWidth: 720, minHeight: 500, padX: 420, padY: 360, minScale: 0.12, maxScale: 1.32 },
+    );
+    expect(frame).not.toBeNull();
+    expect(frame?.centerX).toBe(800);
+    expect(frame?.scale).toBeGreaterThanOrEqual(0.12);
+    expect(frame?.scale).toBeLessThan(0.5);
+  });
+
   it("opens with a restrained oblique view while retaining a testable front view", () => {
     const point = { x: 2, y: 3, z: 4 };
     expect(scenePoint(point, "deep", IDENTITY_PARALLAX_VIEW)).toEqual({ x: 96368, y: 10968 });

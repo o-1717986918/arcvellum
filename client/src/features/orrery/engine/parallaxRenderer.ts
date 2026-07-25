@@ -2,14 +2,14 @@ import { Application, Container, Graphics } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
 import type { OrreryDepth, OrreryMotion, OrreryRenderQuality } from "@/services/orreryPreferences";
-import { DEFAULT_PARALLAX_VIEW, depthScale, isSameParallaxView, parallaxViewFromDrag, scenePoint, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
+import { DEFAULT_PARALLAX_VIEW, NARRATIVE_STAGE, depthScale, fittedCameraFrame, isSameParallaxView, parallaxViewFromDrag, planeBounds, scenePoint, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import { constellationClusterSize, stageActSize } from "@/features/orrery/layout/curveProfiles";
 
 // Book-scale work surface. The world is intentionally generous so a 300+ scene
 // projection can still fit without the camera clamping the last chapters.
-const WORLD_WIDTH = 192000;
-const WORLD_HEIGHT = 22000;
-const ORIGIN = { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 };
+const WORLD_WIDTH = NARRATIVE_STAGE.width;
+const WORLD_HEIGHT = NARRATIVE_STAGE.height;
+const ORIGIN = NARRATIVE_STAGE.origin;
 
 // Narrative facts and their DOM labels stay on the work plane. Only the
 // atmospheric environment receives differential motion, so a long pan never
@@ -229,10 +229,8 @@ export class NarrativeParallaxRenderer {
 
   showOpeningSegment(): void {
     if (!this.layout || !this.projection) return;
-    // A chapter-rail focus may still be easing when the reader changes
-    // grammar. The old interpolation uses a different coordinate system and
-    // can otherwise pull a fresh loop/constellation shot back to an off-screen
-    // or all-book camera after this method has chosen its local opening shot.
+    // Cancel easing from the previous coordinate system before selecting a
+    // local opening shot in the new grammar.
     this.animation = null;
     this.focusedNodeId = "";
     const primary = this.projection.nodes
@@ -246,9 +244,6 @@ export class NarrativeParallaxRenderer {
     // The opening shot is a reading surface, not a miniature of the whole
     // book.  Keep only the next readable run in view; the full river remains
     // one click away through fit(), pan and the chapter rail.
-    // A detailed scene view should open as a readable stretch of narrative,
-    // not as a compressed inventory. The rest of the book remains available
-    // through pan, zoom and the permanent chapter rail.
     const stageGrammar = this.layout.grammar === "stage";
     const radialGrammar = this.layout.grammar === "loop" || this.layout.grammar === "constellation";
     const visibleCount = stageGrammar
@@ -282,6 +277,15 @@ export class NarrativeParallaxRenderer {
     this.emitAnchors(true);
     const target = this.projectPoint(point);
     this.animateTo(target.x, target.y, Math.min(1.8, 0.86 + importance * 0.58), 680);
+  }
+
+  focusCluster(points: WorldPoint[], nodeId = ""): void {
+    const projected = points.map((point) => this.projectPoint(point));
+    const frame = fittedCameraFrame(projected, { width: Math.max(480, this.host.clientWidth - 240), height: Math.max(360, this.host.clientHeight - 210) }, { minWidth: 720, minHeight: 500, padX: 420, padY: 360, minScale: 0.12, maxScale: 1.32 });
+    if (!frame) return;
+    this.focusedNodeId = nodeId;
+    this.emitAnchors(true);
+    this.animateTo(frame.centerX, frame.centerY, frame.scale, 720);
   }
 
   resetView(): void {
@@ -686,16 +690,13 @@ export class NarrativeParallaxRenderer {
       .map((node) => this.layout?.points.get(node.node_id))
       .filter((point): point is WorldPoint => Boolean(point))
       .map((point) => this.projectPoint(point));
-    if (!projected.length) return { centerX: ORIGIN.x, centerY: ORIGIN.y, width: 1880, height: 900 };
-    const minX = Math.min(...projected.map((point) => point.x));
-    const maxX = Math.max(...projected.map((point) => point.x));
-    const minY = Math.min(...projected.map((point) => point.y));
-    const maxY = Math.max(...projected.map((point) => point.y));
+    const bounds = planeBounds(projected);
+    if (!bounds) return { centerX: ORIGIN.x, centerY: ORIGIN.y, width: 1880, height: 900 };
     return {
-      centerX: (minX + maxX) / 2,
-      centerY: (minY + maxY) / 2,
-      width: Math.max(1200, maxX - minX + 520),
-      height: Math.max(720, maxY - minY + 420),
+      centerX: bounds.centerX,
+      centerY: bounds.centerY,
+      width: Math.max(1200, bounds.maxX - bounds.minX + 520),
+      height: Math.max(720, bounds.maxY - bounds.minY + 420),
     };
   }
 
@@ -712,15 +713,13 @@ export class NarrativeParallaxRenderer {
         .filter((point): point is WorldPoint => Boolean(point))
         .map((point) => this.projectPoint(point));
       if (!points.length) continue;
-      const minX = Math.min(...points.map((point) => point.x));
-      const maxX = Math.max(...points.map((point) => point.x));
-      const minY = Math.min(...points.map((point) => point.y));
-      const maxY = Math.max(...points.map((point) => point.y));
+      const bounds = planeBounds(points);
+      if (!bounds) continue;
       result.push({
-        centerX: (minX + maxX) / 2,
-        centerY: (minY + maxY) / 2,
-        width: Math.max(1, maxX - minX),
-        height: Math.max(1, maxY - minY),
+        centerX: bounds.centerX,
+        centerY: bounds.centerY,
+        width: Math.max(1, bounds.maxX - bounds.minX),
+        height: Math.max(1, bounds.maxY - bounds.minY),
       });
     }
     return result;

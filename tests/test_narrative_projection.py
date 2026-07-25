@@ -63,6 +63,7 @@ class NarrativeProjectionTests(unittest.TestCase):
         self.assertEqual(projection["timeline"][0]["node_id"], chapter["node_id"])
         self.assertEqual(chapter["metrics"]["word_target"], 2700)
         self.assertEqual(chapter["metrics"]["formal_chars"], 1180)
+        self.assertEqual(chapter["metrics"]["entry_scene_id"], "scene_0001")
         self.assertEqual(chapter["source_type"], "scene-catalog")
         self.assertTrue(all(edge["source"] in {node["node_id"] for node in projection["nodes"]} for edge in projection["edges"]))
 

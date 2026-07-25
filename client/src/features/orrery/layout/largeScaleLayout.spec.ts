@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_PARALLAX_VIEW, NARRATIVE_STAGE, scenePoint } from "@/features/orrery/engine/parallaxProjection";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import type { SpatialGrammar, SpatialNarrativeNode } from "@/types/spatial";
 
@@ -36,6 +37,16 @@ describe("large-scale spatial layout", () => {
       expect(layout.points.get("promise:0701")).toBeDefined();
     }
     console.info("ArcVellum grammar scale baseline", JSON.stringify(measurements));
+  }, 30_000);
+
+  it("keeps a thousand-node narrative inside the navigable stage", () => {
+    const layout = buildSpatialLayout("spine", "scale-stage-bounds", largeNarrativeNodes(1000), "scale-fixture");
+    const projected = [...layout.points.values()].map((point) => scenePoint(point, "deep", DEFAULT_PARALLAX_VIEW));
+
+    expect(Math.min(...projected.map((point) => point.x))).toBeGreaterThan(0);
+    expect(Math.max(...projected.map((point) => point.x))).toBeLessThan(NARRATIVE_STAGE.width);
+    expect(Math.min(...projected.map((point) => point.y))).toBeGreaterThan(0);
+    expect(Math.max(...projected.map((point) => point.y))).toBeLessThan(NARRATIVE_STAGE.height);
   }, 30_000);
 
   it("keeps established chapter clusters stable when a long book grows", () => {
