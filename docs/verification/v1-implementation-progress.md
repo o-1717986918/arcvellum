@@ -761,12 +761,47 @@
   - compose/generate/revise/review 尚未绑定同一 machine-owned mount snapshot；
   - 版本切换后的上下文与正式下游任务 stale propagation 尚未完成端到端验收。
 
+## W3-4B：Studio 受控挂载入口与决策链迁移
+
+- Status: complete
+- Commit: `beb9fda`
+- Added:
+  - Studio 新增 `StyleMountApplicationService`，只把项目根和 exact `style_id/version_id/content_hash`、scope、priority 交给 Engine W3-4A 唯一挂载事务；没有复制版本发现、完整性、评测或原子写入算法；
+  - `POST /style-lab/mount` 不再接受 `style_library_root`、调用方路径或 `allow_unreviewed`；Pydantic DTO 禁止额外字段，scope/priority 最终仍由 Engine 枚举验证；
+  - API 将版本缺失映射为 404、不可变版本/hash/完整性冲突映射为 409、非法挂载意图映射为 422，并返回稳定 code 与用户可见 message；
+  - `GET /style-lab/mounts` 改用安全挂载投影，只公开状态、稳定身份、审查/完整性和执行优先级，不泄露项目绝对路径；
+  - Engine 文风决策卡只扫描项目内已构建且完整性通过的不可变版本；每个选项携带 exact 三元身份，未构建的 Prompt、旧散装 skill 和损坏版本不再作为正式选项；
+  - human choice 安全记录保留文风选项的稳定身份字段；调用者选中未声明 option 时，application service 在进入 Engine 前拒绝；
+  - 前端结构化选择和 Creative Steward 现在都通过同一 `record_choice -> StyleMountApplicationService -> Engine mount transaction` 物化；Steward 不再执行第二次旧式挂载；
+  - 成功物化会 finalize 并消费决策卡，审计证据同时记录 active manifest 与 mount receipt；失败的选择保持未消费，可在问题修复后按相同身份重试。
+- Unified implementation boundary:
+  - Studio 写入副作用从旧 read-model 主函数拆到 `application/choice_effects.py`；文风选项扫描从通用 choices 拆到 Engine `projections/interaction/style_choices.py`；
+  - `api_server.py` 只装配无状态 mount application service，handler 不直接写文件；Engine 仍不导入 Studio；
+  - 旧 `core_read_models.mount_style()` 与 legacy Engine mount API 暂时保留兼容，但 Studio 正式 API、人类决策和 Autopilot 已不再调用。
+- Adaptive orchestration boundary:
+  - Steward 只能从 CLI/read-model 声明的 exact version options 中选择，不能提交路径、任意 hash 或未审查版本；
+  - 文风挂载仍是受控 Stable Knowledge 事务；自动授权只替代用户选择，不替代 Engine 完整性与审查 Gate；
+  - 挂载收据成为未来 plan provenance 和 stale propagation 的正式输入。
+- Failure and verification evidence:
+  - 回归覆盖调用方路径字段拒绝、hash 冲突稳定错误、未声明选项拒绝、API exact mount、挂载状态无绝对路径、决策卡消费及 Steward 单次受控物化；
+  - Python full suite: 504 passed, 1 skipped；
+  - Client: 90 tests passed；TypeScript check 与 production build passed；
+  - Prompt Registry: 48 assets, 83 task prompt ids, passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: 36 existing file debts, 227 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+- Not yet complete:
+  - compose/generate/revise/review 仍需显式保存并验证同一个 machine-owned mount snapshot；
+  - 版本切换尚未对依赖旧 mount hash 的 Context、Composition、Generation、Revision 和 Review 形成统一 stale 原因与重发链；
+  - Style Atelier 的版本选择/切换界面属于 W3-5/W3-6，本批未提前建设。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-4B 只实现 Studio 受控挂载入口与既有决策链迁移：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-4C 只实现统一 mount snapshot 与版本切换失效传播：
 
-1. 新增独立 application service 调用 Engine 唯一挂载用例；Studio 不复制版本解析、完整性或原子事务。
-2. 正式 API 只接受 `style_id/version_id/content_hash`、scope 和 priority；拒绝 caller path、`allow_unreviewed` 和任意项目文件字段。
-3. 将文风挂载的人类决策、自动推进和 interaction choice 从旧 `style_id + library path` 迁移到 exact version identity。
-4. API 对 not found、integrity conflict、invalid intent 和已幂等激活提供稳定状态码与亲用户错误，不让 HTTP handler 直接写文件。
-5. 增加 API -> application service -> Engine mount 的成功与失败测试；本批仍不进入 Prompt 消费和 Style Atelier UI。
+1. 先审阅 Context Broker、Prompt Pack、Composition、Generation、Revision、AgentReview 当前文风读取点和各自正式 manifest，禁止给四阶段各造一套版本字段。
+2. 新增 Engine-owned `StyleMountSnapshot`，至少包含 `style_id/version_id/content_hash/prompt_sha256` 和 snapshot digest；只从通过完整性检查的 active mount 生成。
+3. Context trace、composition manifest、generation prompt/candidate manifest、revision manifest 和 review 证据必须保存同一 snapshot digest；任何阶段不得只保存路径或 display style ID。
+4. 新挂载版本后，依赖旧 digest 的未晋升 Context/Composition/Generation/Revision/Review 统一进入 machine-owned stale；已晋升正文保持 Historical Truth，不自动重写。
+5. Prompt reader 遇到 versioned active mount integrity conflict 时必须 fail closed，不能退回旧 prompt 或项目散装 style 文件。
+6. 用真实 scene chain 覆盖同一 hash 消费、挂载切换、stale 重发和已晋升正文不变；本批仍不建设前端。
