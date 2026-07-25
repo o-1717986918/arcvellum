@@ -1,93 +1,159 @@
 # ArcVellum
 
-> 让百万字长篇像软件工程一样可维护，也像一本真正的书一样可阅读。
+> A literary engineering studio for long-form fiction: let agents create, let the system remember, and let people stay in command.
 
-ArcVellum 是面向小说、剧本与伪记录作品的本地 Agent 创作平台。它把人物、世界观、情节、场景、文风、字数预算、审查证据和正式正文放进一条可恢复、可追溯的生产线；Agent 负责创作判断，文学工程内核负责签发任务、验证产物和阻止跳步。
+[![Release](https://img.shields.io/github/v/release/o-1717986918/arcvellum?display_name=tag&sort=semver)](https://github.com/o-1717986918/arcvellum/releases)
+[![License](https://img.shields.io/github/license/o-1717986918/arcvellum)](LICENSE)
+[![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-2d7465)](https://github.com/o-1717986918/arcvellum/releases)
 
-当前版本：**v0.95.2 Dual-Workspace Review Reliability**。
+ArcVellum 是一款面向小说、剧本与伪记录作品的本地 Agent 创作平台。它不把长篇创作当成一段越滚越长的聊天记录，而是把人物、世界观、场景、文风、字数预算、审查证据和正式正文维护成一个可持续推进的文学项目。
 
-![ArcVellum v0.9.3 叙事星仪](docs/images/arcvellum-orrery-v093.png)
+它要解决的不是“让 AI 多写一点”，而是“让几十万字之后的作品，仍然记得自己为什么这样写”。
 
-## 为什么需要它
+![ArcVellum 叙事星仪](docs/images/arcvellum-orrery-v093.png)
 
-普通 AI 写作工具擅长写一段，却很难维护几十万字：人物会漂移、篇幅会坍缩、分支推演会被省略，审查也容易变成模型给自己放行。ArcVellum 不靠一条更长的 Prompt 解决这些问题，而是把创作拆成可验证的正式任务：
+## 写作者能得到什么
 
-- **长篇规模有预算**：目标字数映射到卷、章、场景和剧情库存，生成与审查共同读取场景目标。
-- **正文生成有前置推演**：角色扮演、分支比较、节奏、衔接、读者问题和 Promise/Payoff 进入正式链路。
-- **设定演化有证据**：Canon、人物背景、状态变化和新角色候选独立维护，写回必须通过门禁。
-- **文风约束进入生成层**：可挂载文风 Prompt 在正文生成前生效，并由确定性 Style Lint 与 AgentReview 复核。
-- **Review 不能被跳过**：候选稿、审查、受限修订、晋升和导出使用同一份内容指纹。
-- **最终作品保持干净**：Markdown 与 DOCX 过滤任务标记、Scene ID、Canon 注释、状态补丁和审查记录。
+### 写一部作品，而不是攒一堆生成结果
 
-## v0.9 新体验
+多数 AI 写作工具能写出一段不错的场景；真正困难的是写到十章、五十章甚至数百个场景之后，人物还能不能自洽，伏笔还能不能兑现，篇幅会不会坍缩，模型会不会偷偷跳过本该发生的推演与审查。
 
-### 叙事星仪进入可工作的空间场域
+ArcVellum 为个人创作者提供了一张长期创作的工作台：
 
-Narrative Orrery 现在是一块可平移、缩放和聚焦的 2.5D 叙事场域：真实作品资料被编排为章节长卷、人物轨迹、候选分支、审查债务、Canon 锚点和当前任务。场景形成、分支出现、正文增长与设定写回会触发有语义的生长、分叉、锚定与潮汐，而不是装饰性特效。它保留阅读顺序作为单向主脉络，并用正式 `timeline_order` 拉开故事时间跨度；闪回和时间重叠会被压缩而不会让长卷倒退。大型作品在全书视图按章节聚合，场景细节按需展开，并保留键盘列表和 WebGL 降级模式。
+- **作品会记得。** 世界规则、人物履历、秘密、关系、地点、场景状态与背景故事都是正式资料，而不是散落在聊天记录里的“上下文”。
+- **故事有形状。** 字数预算、场景功能、叙事节奏、读者问题、承诺与兑现、场景衔接都会进入规划、生成与审查。
+- **流程不靠自觉。** 角色推演、分支比较、编剧态、审查、修订、晋升、状态演化是有证据的正式环节，而不是一段 Prompt 里的可选建议。
+- **正文可以随时阅读。** 已晋升正文会自动汇集成一部可搜索、可书签、可连续阅读的作品；推进创作与读小说不再是两件割裂的事。
+- **控制不必像写代码。** 你可以在可视化界面、自然语言顾问和决策卡之间切换。你负责方向、判断与品味，系统负责记忆、任务和约束。
 
-星仪提供工作台与全视口沉浸两种模式。沉浸模式不是功能缩水的屏保：项目生命体征、当前任务、自动推进、人工决策、创作规则与叙事节奏、正式正文和路线健康度都保留在四侧原生仪表中。仪器窗可以多开、折叠、拖动、调整尺寸、置顶和复位，并使用紧凑的深矿物玻璃与独立滚动区。苔夜星仪、靛紫航图、黑曜黄铜、书柜暖调和冷峻现代五套主题拥有独立环境、互补语义色与半透明材质；用户还可切换场景动效、伪 3D 纵深和渲染质量。所有节点和动效仍来自项目真实状态，背景不承载虚假数据。
+ArcVellum 适合在意连续性、人物后果、文风、节奏，以及“这真的是同一部作品吗”这一问题的创作者。
 
-### 创作规则由用户掌握
+## 一眼看见作品正在长成什么
 
-Creative Quality Profile 把标点、破折号、逗号链、碎句、显性转折、比喻依赖和项目禁用表达包装成普通用户能理解的规则页。每条规则可设为关闭、提醒或阻断，也可登记有理由的场景范围例外。Compose、Generate、Review、Revise、Promote 与 Release 使用同一份版本摘要，修改规则不会悄悄改判旧稿。
+### 叙事星仪 Narrative Orrery
+
+ArcVellum 的中心不是普通仪表盘，而是一片可平移、缩放、聚焦的 2.5D 叙事场域。章节锚点、场景簇、人物联系、候选分支、Canon 压力、审查债务、字数增长与当前任务，都会由真实项目状态投影为可阅读的故事脉络。
+
+星仪可在工作台与全视口沉浸模式之间切换。推进、决策、规则、节奏、项目健康度和正文等仪器窗围绕场域工作，支持多开、拖动、缩放、折叠与复位。主题、动效强度、伪 3D 纵深与渲染质量都由用户掌控；它不是装饰性星空，而是作品结构的可视化观察面。
 
 ### 一本会随创作生长的书
 
-正式正文阅读器按作品顺序自动拼接已晋升内容，支持分章或连续阅读、目录、全文搜索、书签、阅读位置恢复、字号、行距、日夜主题和全屏。正文按需加载，50 万字作品不会被摘要截断；创作继续推进时，新正文会温和提示，不会把读者从当前位置拽走。
+通过门禁的场景会自动进入正式正文阅读器。阅读器支持连续/分章模式、全文搜索、目录、书签、阅读位置恢复、字号、行距、日夜主题与全屏。创作继续推进时，新晋升的正文会温和提示，不会把读者从当前页强行拽走。
 
-![ArcVellum v0.9.3 正文阅读器](docs/images/arcvellum-reader-v093.png)
+![ArcVellum 正文阅读器](docs/images/arcvellum-reader-v093.png)
 
 ### 一位有边界的创作顾问
 
-悬浮顾问支持五种内置人格和自定义人格。它既能自然讨论人物、结构、节奏与下一步，也能作为受控的自然语言项目控制台：理解“继续创作”“暂停”“恢复”“记录这条方向”“准备下一项任务”或“打开正文”等明确意图，并生成可确认的白名单动作。顾问只读取项目投影，不拥有文件、Shell 或正式写回权限；全自动授权、发布和 Canon 正式写回仍必须经过专门确认与工程门禁。
+悬浮顾问可以用自然语言讨论人物、结构、节奏、文风和下一步，并把“继续创作”“暂停”“记录这个方向”“打开正文”等明确意图翻译为可确认的 Studio 动作。
 
-顾问会话在应用生命周期内复用独立的只读 Agent 服务，回答支持安全 Markdown；正文 Worker 与自动审批则使用各自隔离的服务和模型槽，互不共享权限或上下文。
+它不是拥有隐藏文件权限的万能进程：顾问只读取项目投影，只能提出白名单动作，不能绕过审查、正文晋升、Canon 写回或交付门禁。创作判断仍然可以自由，项目权限必须保持克制。
 
-![ArcVellum v0.9.3 Agent 执行中心](docs/images/arcvellum-agent-runtime-v093.png)
+## ArcVellum 与普通 AI 写作工具的差别
 
-### 帮助、详情和责任边界不再藏在开发文档里
+| 常见做法 | ArcVellum 的做法 |
+| --- | --- |
+| 一条超长 Prompt 加一段持续聊天 | 维护一套有明确事实来源的文学项目资产 |
+| 模型自己判断哪些步骤值得做 | CLI 状态机签发下一项允许执行的任务 |
+| 同一个模型写完又自己说“没问题” | 确定性 Lint、证据校验、审查任务与正文晋升门禁共同把关 |
+| 决策和产物埋在不可追溯的聊天里 | 分支、选择、状态变化、审查和失败都有可查证记录 |
+| 单场景成功却可能毁掉整本书 | Canon、人物状态、读者承诺、节奏与字数预算一起检查 |
+| 工具一多，普通作者无从下手 | 桌面端把复杂状态包装成可读的项目面板、选择和正文 |
 
-侧栏可直接进入使用帮助与作品/应用详情；协议页说明本地数据、第三方模型、OpenCode Runner、素材权利和公开发布责任。启动异常可以重新检查或导出过滤凭证与正文的诊断报告。
+## 核心架构：让 Agent 创作，让系统守住作品
 
-### 安装后即可开始
-
-- Windows 默认作品库为 `Documents/ArcVellum/Works`，也可在设置中更改。
-- 桌面启动使用单文档过渡，后台进程在 Windows 下隐藏运行。
-- 模型目录只在进入“连接与模型”或主动刷新时加载。
-- Provider 列表在固定高度内滚动，不再拉长整个设置页。
-- 安装包包含本地服务、文学工程内核和 OpenCode Runner，不要求预装 Python、Node.js、Rust 或浏览器。
-
-## 工作方式
+ArcVellum 将**创作智能**与**项目权力**分开。模型可以推演、写作、审查与提出建议；它不能静默改写项目事实、伪造流程产物，或自行跨越创作路线。
 
 ```mermaid
 flowchart LR
-    UI["ArcVellum 客户端\n作品、正文、选择、顾问"] --> API["本地应用服务\nSSE、项目与应用状态"]
-    API --> CORE["文学工程内核\n任务包、状态机、硬门禁"]
-    CORE --> BOX["单任务隔离工作区"]
-    BOX --> WORKER["Agent Worker\n创作、推演、审查"]
-    WORKER --> GATE["Schema、Lint、差异与正式写回"]
-    GATE --> CORE
-    API --> READER["正式正文阅读器"]
-    API --> ADVISOR["只读创作顾问"]
-    API --> OBS["Narrative Orrery\n叙事星仪与真实事件流"]
-    CORE --> RELEASE["完整 Markdown、DOCX 与发布清单"]
+    Writer["创作者\n方向、选择、批准"] --> Studio["ArcVellum Studio\nTauri 桌面端 + Vue 客户端"]
+    Studio --> API["本地应用服务\nFastAPI、SSE、项目读模型"]
+    API --> Engine["文学工程内核\nCLI 状态机 + 正式门禁"]
+
+    Engine --> Package["任务包\n允许资料、预期产物、约束"]
+    Package --> Sandbox["隔离任务工作区"]
+    Sandbox --> Runtime["Agent Runtime\nOpenCode Worker / 兼容执行器"]
+    Runtime --> Preflight["预检\nSchema、溯源、Lint、差异"]
+    Preflight --> Engine
+
+    Engine --> Project["项目资产\nCanon、人物、场景、账本、草稿"]
+    API --> Orrery["Narrative Orrery\n实时叙事观测"]
+    API --> Reader["正文阅读器\n仅展示已晋升内容"]
+    Engine --> Delivery["正式交付\n清洁 Markdown、DOCX、交付证据"]
 ```
 
-ArcVellum 内嵌文学工程内核，不依赖另一个 Skill 仓库。OpenCode 随安装包交付；Claude Code 与宿主 Agent 适配器保留为高级兼容方式。模型推理仍需要网络以及用户选择的有效模型服务。
+### 四条架构原则
 
-## 快速开始
+1. **CLI 是唯一权威。** 正式路线不是一份待办清单，而是状态机。它决定下一项可执行任务，并验证推进所需证据。
+2. **Agent 只能在任务范围内工作。** 每个任务包都声明允许读取的资料和允许产出的文件。Agent 在沙箱里工作，只有通过预检的结果才能写回正式项目。
+3. **创作候选与项目事实必须分层。** 正文候选、Canon 提案、人物状态补丁与已晋升正文不是同一种东西，各自拥有不同的来源、审查和写回规则。
+4. **界面只展示真实状态。** 星仪、决策中心、阅读器、任务面板与进度条都投影自同一份受内核验证的项目状态，而不是演示数据。
 
-### 普通用户
+这使 ArcVellum 能同时保留文学创作的自由度与大型项目应有的约束力。
 
-1. 从 [GitHub Releases](https://github.com/o-1717986918/arcvellum/releases) 下载 Windows x64 安装程序。
-2. 启动 ArcVellum，在默认作品库新建作品，或打开现有工程目录。
-3. 进入“设置 > 连接与模型”，连接模型并选择默认模型。
-4. 在项目总控写下创作方向，选择协作、监督自动或全自动模式。
-5. 在“正文”边推进边阅读，在“交付”导出完整 Markdown 或 DOCX。
+## 一条可复查的创作路线
 
-密钥由本地 Agent Runner 的认证机制管理，不进入作品、任务包、普通日志或 Studio 配置。
+具体任务会随项目而变，但单个场景的正式开发遵循一条稳定的契约：
 
-### 开发者
+```mermaid
+flowchart LR
+    A["规划\n大纲、场景库存、字数预算"] --> B["上下文\nCanon、人物状态、读者契约"]
+    B --> C["推演\n角色扮演与世界后果"]
+    C --> D["决策\n比较分支并记录选择"]
+    D --> E["编剧态\n功能、节奏、衔接与正文约束"]
+    E --> F["草稿\nAgent 生成正文候选"]
+    F --> G["审查 + Lint\n文风、Canon、连续性、读者效果"]
+    G --> H["修订或晋升\n内容指纹保护"]
+    H --> I["演化\n状态、Canon 候选、连续性账本"]
+    I --> J["审计与交付\n章节、长篇、导出检查"]
+```
+
+### 创作过程中会实际检查什么
+
+- **篇幅与剧情库存：** 汉字目标会从全书映射到卷、章和场景。短篇幅的大纲不能靠硬拉长句子来伪装成一部长篇。
+- **叙事节奏：** 场景功能、速度、密度、转向、叙述距离、前场压力、后场钩子和读者效果会进入编剧态与 Review。
+- **连续性：** Canon 规则、禁止变化、人物的 belief/desire/fear/background story、关系与状态变化保持显式。
+- **读者体验：** 问题、承诺、暂扣、兑现、张力和章节结尾策略会被记录，避免场景像互不相干的短视频。
+- **文风与反 AI 腔：** 已挂载文风在生成前就进入约束。确定性 Style Lint 与语义审查共同检查机械对照、标点误用和其他项目规则。
+- **证据链：** 候选稿、Review、修订、晋升和交付由内容指纹关联，避免“审查的是 A，最后发布的是 B”。
+
+## 技术路线
+
+ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学工程内核。
+
+| 层级 | 技术 | 职责 |
+| --- | --- | --- |
+| 桌面壳 | Tauri + Rust | Windows 安装包、自动更新、本地进程生命周期、安全桥接 |
+| 产品界面 | Vue 3 + TypeScript + Vite | 星仪、阅读器、决策、设置与流式项目视图 |
+| 应用服务 | FastAPI + SSE | 本地认证 API、实时读模型、事件流与项目控制 |
+| 文学工程内核 | Python CLI | 路线状态机、任务包、Schema、门禁、审计与交付准备 |
+| Agent Runtime | 内置 OpenCode Runner | 权限不同的 Worker/Advisor 会话与隔离 Profile |
+| 模型连接 | OpenCode Provider Catalog | 常用厂商预设、按角色选模、OpenAI 兼容自定义端点 |
+| 项目格式 | 人类可读文件 + 账本 | Canon、人物、场景、Review 和交付物的长期保存 |
+| 交付 | Markdown/DOCX 管线 | 过滤流程痕迹后的完整作品输出 |
+
+### 模型连接不锁定厂商
+
+内置 Runner 提供 DeepSeek、智谱 AI、阿里云百炼、Moonshot、MiniMax、SiliconFlow、OpenAI、Anthropic、Google、OpenRouter、Groq 等常用预设，也支持自定义 OpenAI-compatible 接口。
+
+模型选择按角色持久保存。切换模型时，未来的空闲 Worker 会更新为新选择，正在运行的任务不会被粗暴中断。凭证由 Runner 的认证机制管理，不进入项目文件、任务包、普通日志或 Studio 常规配置。
+
+## 安装后即可开始
+
+### Windows 桌面端
+
+1. 在 [Releases](https://github.com/o-1717986918/arcvellum/releases) 下载最新 x64 安装程序。
+2. 启动 ArcVellum。默认作品库为 `Documents/ArcVellum/Works`，也可在设置中调整。
+3. 打开 **设置 -> 连接与模型**，连接模型服务并为不同角色选择模型。
+4. 新建作品，写下创作大方向与约束，再选择协作、监督自动或全自动推进方式。
+5. 通过星仪理解项目，通过阅读器阅读已晋升正文，通过“交付”导出完整作品。
+
+安装包包含本地应用服务、文学工程内核和 OpenCode Runner；无需预先安装 Python、Node.js、Rust、浏览器或其他 Agent 平台。模型推理仍需要用户自行选择并授权的模型服务或本地端点。
+
+### 自动更新
+
+ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.95.3**。
+
+## 开发者入口
 
 ```powershell
 git clone https://github.com/o-1717986918/arcvellum.git
@@ -97,13 +163,26 @@ npm ci
 python -m literary_engineering_studio serve --port 8791
 ```
 
-浏览器开发模式访问 `http://127.0.0.1:8791/`。Vue 热更新开发可运行：
+Vue 热更新开发：
 
 ```powershell
 npm run client:dev
 ```
 
-## 开发验证
+### 仓库地图
+
+| 路径 | 用途 |
+| --- | --- |
+| `src/literary_engineering_studio/` | 应用服务、Runtime、CLI 集成与产品模块 |
+| `client/` | Vue 客户端与叙事星仪渲染器 |
+| `desktop/` | Tauri 桌面壳、更新器与安全桌面桥接 |
+| `protocol/` | 正式工作流共享的任务与项目契约 |
+| `tests/` | 内核、API、Runtime、预检与集成测试 |
+| `docs/architecture/` | 内核审查、双工作区与模块边界说明 |
+| `docs/releases/` | 版本记录与签名发布流程 |
+| `packaging/` | Windows 打包与更新清单脚本 |
+
+### 验证命令
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -115,44 +194,36 @@ cd desktop/src-tauri
 cargo check --locked
 ```
 
-Windows 候选构建：
+本地构建 Windows 候选包：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 -SkipPythonInstall -SkipNodeInstall
 ```
 
-## 安全边界
+## 安全、边界与责任
 
-- 本地服务默认只监听 `127.0.0.1`，桌面通过启动令牌建立受认证会话。
-- Agent 只在任务沙箱中运行，越出 `expected_outputs` 的文件不会写回项目。
-- 顾问与 CreativeSteward 使用只读投影，并在调用前后校验项目哈希。
-- 用户选择、代理决定、审批、写回、失败、费用和发布身份均持久化审计。
-- 正式模式不调用 `unreview`、debug waiver 或 `allow-unapproved` 类绕过开关。
-- 数据库迁移前自动备份；诊断报告过滤凭证、正文全文和完整项目路径。
+- 本地服务默认只监听 `127.0.0.1`；桌面端通过启动令牌建立已认证会话。
+- Agent Runner 按能力隔离并在任务沙箱中执行，越出 `expected_outputs` 的文件不能晋升到正式项目。
+- 顾问与自动创作管家只通过只读项目投影工作；人工选择、策略、审批、写回、失败和发布身份都可审计。
+- 凭证与项目资产隔离。诊断报告会过滤凭证、正文全文与完整本地路径。
+- ArcVellum 不会授予用户对输入素材、模仿对象或最终发布的权利。创作者应自行遵守素材权利、模型服务条款与发布责任。
 
-## 项目状态
+## 项目状态与 v1.0 方向
 
-当前源码与 Windows 正式安装包为 **v0.95.2**。本版本将正式 CLI 控制工作区与 Agent 可见工作区分离：CLI 仍能读取完整项目依赖，模型只看到任务包准许的精简资料；模型产物经预检后再原子写回正式项目。审查门禁也区分了可追溯的低风险证据与真正待修的问题，避免审查通过后被无意义地再次派发修订。叙事星仪、阅读器、Agent 执行观测与正式交付仍来自同一份项目状态，而非独立演示数据。
+ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本地 Agent Runtime、正式文学工作流门禁、2.5D 叙事星仪、正文阅读与清洁导出均已可用。
 
-这仍是 Beta：核心文学工程状态机、空间星仪、阅读器、Agent 执行观测和安装版链路已可用；进入 v1.0 前仍需积累更多题材的长期项目样本、无人值守恢复证据、Windows 10/11 干净虚拟机的首次安装/覆盖升级矩阵，以及商业代码签名验证。
+走向 v1.0 的重点不是继续堆功能，而是积累证据：更多题材的长期项目样本、无人值守恢复验证、Windows 10/11 干净环境下的安装/覆盖升级矩阵、更强的模型连接诊断，以及在真实稿件上的创作质量评估。
 
-进一步阅读：
+推荐阅读：
 
-- [v0.7.0 阅读、顾问与叙事观测计划](docs/roadmap/arcvellum-v0.5.1-v0.7-reader-advisor-observatory-plan.md)
-- [v0.7.0 发行说明](docs/releases/v0.7.0.md)
-- [v0.7.1-v0.8 创作控制与叙事星仪计划](docs/roadmap/arcvellum-v0.7.1-v0.8-creative-control-and-narrative-orrery-plan.md)
-- [v0.7.1 安装版连接热修](docs/releases/v0.7.1.md)
-- [v0.8.0 发行说明](docs/releases/v0.8.0.md)
-- [v0.8 Agent Runtime 与沉浸星仪执行计划](docs/roadmap/arcvellum-v0.8-agent-runtime-and-immersive-orrery-execution-plan.md)
-- [v0.9.0 发行说明](docs/releases/v0.9.0.md)
-- [v0.9.1 发行说明](docs/releases/v0.9.1.md)
-- [v0.9.4 发行说明](docs/releases/v0.9.4.md)
-- [v0.95.0 发行说明](docs/releases/v0.95.0.md)
-- [v0.95.2 发行说明](docs/releases/v0.95.2.md)
-- [v0.9.3 发行说明](docs/releases/v0.9.3.md)
-- [v0.9.2 发行说明](docs/releases/v0.9.2.md)
-- [v0.9 空间星仪实施计划](docs/roadmap/arcvellum-v0.9-implementation-execution-plan.md)
 - [当前内核审查](docs/architecture/current-core-review.md)
-- [发布与签名说明](docs/releases/RELEASING.md)
+- [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
+- [模块边界](docs/architecture/module-boundaries.md)
+- [发布与签名指南](docs/releases/RELEASING.md)
+- [v0.95.3 发行说明](docs/releases/v0.95.3.md)
+- [贡献指南](CONTRIBUTING.md)
+- [安全策略](SECURITY.md)
 
-License: MIT
+## License
+
+[MIT](LICENSE)
