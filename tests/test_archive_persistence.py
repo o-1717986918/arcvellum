@@ -1,32 +1,37 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from literary_engineering_studio.jobs import JobStore
 
 
 class ArchivePersistenceTests(unittest.TestCase):
+    @staticmethod
+    def _record() -> dict[str, object]:
+        return {
+            "transaction_id": "owner-transaction-one",
+            "project_root": "C:/work",
+            "asset_id": "character:lin",
+            "asset_type": "character",
+            "base_revision": "sha256:" + ("a" * 64),
+            "new_revision": "sha256:" + ("b" * 64),
+            "authority": "owner",
+            "semantic_review": "waived",
+            "reason": "作者调整角色权重。",
+            "impact": {"stale_categories": ["context"]},
+            "stale_propagation": {"status": "propagated", "scene_ids": ["scene_0001"]},
+            "receipt_path": "workflow/archive/transactions/owner-transaction-one/receipt.json",
+            "transaction_path": "workflow/archive/transactions/owner-transaction-one/transaction.json",
+            "before_snapshot": "workflow/archive/transactions/owner-transaction-one/before.yaml",
+            "after_snapshot": "workflow/archive/transactions/owner-transaction-one/after.yaml",
+            "created_at": "2026-07-25T00:00:00+00:00",
+        }
+
     def test_transaction_and_revisions_share_one_durable_index_write(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")
-            record = {
-                "transaction_id": "owner-transaction-one",
-                "project_root": "C:/work",
-                "asset_id": "character:lin",
-                "asset_type": "character",
-                "base_revision": "sha256:" + ("a" * 64),
-                "new_revision": "sha256:" + ("b" * 64),
-                "authority": "owner",
-                "semantic_review": "waived",
-                "reason": "作者调整角色权重。",
-                "impact": {"stale_categories": ["context"]},
-                "stale_propagation": {"status": "propagated", "scene_ids": ["scene_0001"]},
-                "receipt_path": "workflow/archive/transactions/owner-transaction-one/receipt.json",
-                "transaction_path": "workflow/archive/transactions/owner-transaction-one/transaction.json",
-                "before_snapshot": "workflow/archive/transactions/owner-transaction-one/before.yaml",
-                "after_snapshot": "workflow/archive/transactions/owner-transaction-one/after.yaml",
-                "created_at": "2026-07-25T00:00:00+00:00",
-            }
+            record = self._record()
 
             store.record_asset_transaction(record)
 
@@ -46,6 +51,20 @@ class ArchivePersistenceTests(unittest.TestCase):
             # Receipt synchronization is idempotent.
             store.record_asset_transaction(record)
             self.assertEqual(len(store.list_asset_transactions("C:/work", "character:lin")), 1)
+
+    def test_revision_index_failure_rolls_back_the_transaction_row(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            with patch.object(
+                store,
+                "_record_asset_revision_tx",
+                side_effect=RuntimeError("revision write failed"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "revision write failed"):
+                    store.record_asset_transaction(self._record())
+
+            self.assertEqual(store.list_asset_transactions("C:/work", "character:lin"), [])
+            self.assertEqual(store.list_asset_revisions("C:/work", "character:lin"), [])
 
     def test_schema_migration_adds_archive_indexes_without_losing_existing_jobs(self):
         with tempfile.TemporaryDirectory() as temporary:
