@@ -1,5 +1,6 @@
 import type { NarrativeEdge, NarrativeNode } from "@/types/api";
 import type { NarrativeFocusLevel, NarrativeFocusScope } from "@/features/orrery/model/focusScope";
+import type { CharacterReference } from "@/features/orrery/model/characters";
 import type { RelationFamily, RelationFocusState, RelationVisibilityProfile } from "@/features/orrery/model/relations";
 
 export type SpatialGrammar = "spine" | "braid" | "strata" | "constellation" | "loop" | "stage";
@@ -82,6 +83,7 @@ export interface SpatialNarrativeProjection {
   focus: string;
   focus_scope: NarrativeFocusScope;
   relation_profiles: RelationVisibilityProfile[];
+  character_references: CharacterReference[];
   spatial_grammar: SpatialGrammar;
   available_grammars: SpatialGrammar[];
   layout_seed: string;

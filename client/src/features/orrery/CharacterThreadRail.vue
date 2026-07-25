@@ -1,46 +1,47 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Link2, UserRound } from "lucide-vue-next";
-import type { SpatialNarrativeEdge, SpatialNarrativeNode } from "@/types/spatial";
+import { CircleAlert, Link2, UserRound } from "lucide-vue-next";
+import {
+  buildCharacterThreadGroups,
+  type CharacterReference,
+} from "@/features/orrery/model/characters";
+import type { SpatialNarrativeNode } from "@/types/spatial";
 
 const props = defineProps<{
   nodes: SpatialNarrativeNode[];
-  edges: SpatialNarrativeEdge[];
+  references: CharacterReference[];
   activeCharacterId?: string;
+  activeChapterId?: string;
 }>();
 const emit = defineEmits<{ select: [nodeId: string] }>();
 
-const threads = computed(() => {
-  const chapters = new Set(props.nodes.filter((node) => node.type === "chapter").map((node) => node.node_id));
-  const characters = new Map(props.nodes.filter((node) => node.type === "character").map((node) => [node.node_id, node]));
-  const participation = new Map<string, Set<string>>();
-  for (const edge of props.edges) {
-    if (edge.type !== "participates") continue;
-    const characterId = chapters.has(edge.source) ? edge.target : chapters.has(edge.target) ? edge.source : "";
-    const chapterId = chapters.has(edge.source) ? edge.source : chapters.has(edge.target) ? edge.target : "";
-    if (!characterId || !chapterId || !characters.has(characterId)) continue;
-    const linked = participation.get(characterId) || new Set<string>();
-    linked.add(chapterId);
-    participation.set(characterId, linked);
-  }
-  return [...participation.entries()]
-    .map(([nodeId, chapterIds]) => ({ node: characters.get(nodeId)!, count: chapterIds.size }))
-    .sort((left, right) => right.count - left.count || left.node.label.localeCompare(right.node.label));
-});
+const groups = computed(() => buildCharacterThreadGroups(
+  props.references,
+  props.nodes,
+  String(props.activeChapterId || "").replace(/^chapter:/, ""),
+));
 </script>
 
 <template>
-  <aside v-if="threads.length" class="character-thread-rail" aria-label="人物章节关系">
+  <aside v-if="groups.length" class="character-thread-rail" aria-label="人物章节关系">
     <div><Link2 :size="12" /><span>人物线索</span></div>
-    <button
-      v-for="thread in threads.slice(0, 7)"
-      :key="thread.node.node_id"
-      :class="{ active: activeCharacterId === thread.node.node_id }"
-      :title="`${thread.node.label} 进入 ${thread.count} 个章节`"
-      :aria-pressed="activeCharacterId === thread.node.node_id"
-      @click="emit('select', activeCharacterId === thread.node.node_id ? '' : thread.node.node_id)"
-    >
-      <UserRound :size="13" /><span>{{ thread.node.label }}</span><small>{{ thread.count }} 章</small>
-    </button>
+    <section v-for="group in groups" :key="group.id" :data-group="group.id">
+      <small>{{ group.label }}</small>
+      <button
+        v-for="thread in group.items.slice(0, group.id === 'book' ? 6 : 4)"
+        :key="thread.node.node_id"
+        :class="{ active: activeCharacterId === thread.node.node_id, unresolved: group.id === 'unresolved' }"
+        :title="thread.reference.resolution === 'resolved'
+          ? `${thread.node.label} 进入 ${thread.chapterCount} 个章节、${thread.sceneCount} 个场景`
+          : `${thread.node.label} 尚未唯一解析为正式人物`"
+        :aria-pressed="activeCharacterId === thread.node.node_id"
+        @click="emit('select', activeCharacterId === thread.node.node_id ? '' : thread.node.node_id)"
+      >
+        <CircleAlert v-if="group.id === 'unresolved'" :size="13" />
+        <UserRound v-else :size="13" />
+        <span>{{ thread.node.label }}</span>
+        <small>{{ thread.reference.resolution === "resolved" ? `${thread.chapterCount} 章` : "待确认" }}</small>
+      </button>
+    </section>
   </aside>
 </template>

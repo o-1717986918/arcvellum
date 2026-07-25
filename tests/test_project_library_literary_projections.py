@@ -8,6 +8,26 @@ from literary_engineering_studio_engine.project_library import build_project_lib
 
 
 class ProjectLibraryLiteraryProjectionTests(unittest.TestCase):
+    def test_library_preserves_character_aliases_and_scene_participant_refs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "character-reference-projection"
+            init_work_project(InitOptions(target=root, title="人物引用", work_type="novel", target_length=12000, premise="测试人物别名。"))
+            (root / "characters" / "lin.yaml").write_text(
+                "character_id: lin\nname: 林澈\naliases: [阿澈, 小林]\nimportance: major\n",
+                encoding="utf-8",
+            )
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\nparticipants: [阿澈]\nparticipant_refs: [lin]\n",
+                encoding="utf-8",
+            )
+            library = build_project_library(root)
+        character = next(item for item in library["sections"]["characters"] if item["id"] == "lin")
+        scene = next(item for item in library["sections"]["scenes"] if item["id"] == "scene_0001")
+        self.assertEqual(character["aliases"], ["阿澈", "小林"])
+        self.assertEqual(character["importance"], "major")
+        self.assertEqual(scene["participants"], ["阿澈"])
+        self.assertEqual(scene["participant_refs"], ["lin"])
+
     def test_library_projects_architecture_ledgers_decisions_and_context_health(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "library-projection"

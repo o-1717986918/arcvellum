@@ -11,8 +11,10 @@ from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan
 
 from . import narrative_projection as narrative_projection_v2
 from .narrative.base_adapter import build_compatible_base, requested_focus
+from .narrative.characters import augment_character_graph, build_character_references
 from .narrative.grammar import SPATIAL_GRAMMARS, resolve_grammar
 from .narrative.relations import build_focused_relations
+from .narrative.revision import build_projection_revision, build_source_revisions
 from .narrative_projection import projection_delta, projection_motion_events
 
 
@@ -34,46 +36,42 @@ def build_narrative_projection_v3(
     camera-space placement, while this model exposes only reproducible narrative facts.
     """
 
-    base = build_compatible_base(
-        config, project_root, level, focus, dashboard_payload, library_payload
+    effective_library = (
+        library_payload
+        if isinstance(library_payload, dict)
+        else narrative_projection_v2.build_library(config, project_root.resolve())
     )
+    base = build_compatible_base(config, project_root, level, focus, dashboard_payload, effective_library)
     selected_grammar = resolve_grammar(grammar, base)
     rhythm_hints = _rhythm_hints(project_root)
-    nodes = _spatial_nodes(base.get("nodes", []), base.get("edges", []), selected_grammar, rhythm_hints)
+    character_references = build_character_references(effective_library)
+    raw_nodes, raw_edges = augment_character_graph(
+        base.get("nodes", []),
+        base.get("edges", []),
+        character_references,
+    )
+    nodes = _spatial_nodes(raw_nodes, raw_edges, selected_grammar, rhythm_hints)
     edges, focus_scope, relation_profiles = build_focused_relations(
-        base.get("edges", []), nodes, level, requested_focus(focus, base))
+        raw_edges, nodes, level, requested_focus(focus, base))
     clusters = _clusters(nodes)
     # Reuse the v2 read-model entry so cached deployments and test fixtures
     # observe exactly the same reader evidence as the base projection.
     reader_payload = narrative_projection_v2.build_reader_manifest(project_root)
-    effective_dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else {}
-    source_revisions = {
-        "narrative_v2": str(base.get("revision") or ""),
-        "dashboard": _digest(effective_dashboard),
-        "library": _digest(library_payload or {}),
-        "reader": _digest({
-            "revision": reader_payload.get("revision"),
-            "units": reader_payload.get("units"),
-            "total_chinese_content_chars": reader_payload.get("total_chinese_content_chars"),
-        }),
-        "jobs": _digest({
-            "current_task": effective_dashboard.get("current_task"),
-            "next_actions": effective_dashboard.get("next_actions"),
-            "active_run": effective_dashboard.get("active_run"),
-        }),
-        "rhythm": _digest(rhythm_hints),
-    }
-    revision = _digest(
-        {
-            "base": base.get("revision"),
-            "grammar": selected_grammar,
-            "nodes": nodes,
-            "edges": edges,
-            "clusters": clusters,
-            "focus_scope": focus_scope.as_dict(),
-            "relation_profiles": relation_profiles,
-            "source_revisions": source_revisions,
-        }
+    reference_payload = [item.as_dict() for item in character_references]
+    source_revisions = build_source_revisions(
+        base, dashboard_payload, effective_library, reader_payload, rhythm_hints, _digest
+    )
+    revision = build_projection_revision(
+        base_revision=base.get("revision"),
+        grammar=selected_grammar,
+        nodes=nodes,
+        edges=edges,
+        clusters=clusters,
+        focus_scope=focus_scope.as_dict(),
+        relation_profiles=relation_profiles,
+        character_references=reference_payload,
+        source_revisions=source_revisions,
+        digest=_digest,
     )
     summary = dict(base.get("summary") or {})
     summary.update(
@@ -95,6 +93,7 @@ def build_narrative_projection_v3(
         "focus": focus_scope.focus_id,
         "focus_scope": focus_scope.as_dict(),
         "relation_profiles": relation_profiles,
+        "character_references": reference_payload,
         "spatial_grammar": selected_grammar,
         "available_grammars": sorted(SPATIAL_GRAMMARS),
         "layout_seed": _digest({"project": str(project_root.resolve()), "grammar": selected_grammar})[:16],

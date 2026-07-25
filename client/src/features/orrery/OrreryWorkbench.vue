@@ -268,7 +268,13 @@ async function loadChapterRail(root: string): Promise<void> {
       <NarrativeSpineLayer :projection="projection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
       <OrreryNodeOverlay :nodes="projection.nodes" :anchors="anchors" :level="projection.level" :motion-events="projection.motion_events" :time-cursor="spatial.timeCursor" :time-window="spatial.timeWindow" :selected-node-id="windows.selectedNodeId" :focus-node-id="windows.selectedNodeId" @select="selectNode" @focus="focusNodeObject" />
       <NarrativeHealthRail :dashboard="props.dashboard" :expanded="healthExpanded" @toggle="healthExpanded = !healthExpanded" />
-      <CharacterThreadRail :nodes="projection.nodes" :edges="projection.edges" :active-character-id="activeCharacterId" @select="selectCharacter" />
+      <CharacterThreadRail
+        :nodes="projection.nodes"
+        :references="projection.character_references"
+        :active-character-id="activeCharacterId"
+        :active-chapter-id="activeChapterId"
+        @select="selectCharacter"
+      />
       <button class="orrery-v3-progress-spindle" :class="{ 'is-calibrated': progress?.status === 'calibrated' }" title="查看作品总体进度" @click="windows.openInstrument('progress')">
         <span>WORK IN FORMATION</span>
         <strong>{{ Number.isFinite(overallProgress) ? `${overallProgress.toFixed(1)}%` : '待校准' }}</strong>

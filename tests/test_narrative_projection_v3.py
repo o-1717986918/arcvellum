@@ -80,6 +80,10 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
             ["scene:scene_0001", "scene:scene_0002"],
         )
         self.assertEqual(len(projection["relation_profiles"]), 11)
+        self.assertEqual(
+            {item["character_id"] for item in projection["character_references"]},
+            {"lin", "wen"},
+        )
         branch_edge = next(edge for edge in projection["edges"] if edge["type"] == "branch")
         self.assertEqual(branch_edge["relation_family"], "scene-branch")
         self.assertEqual(branch_edge["focus_state"], "attached")
@@ -201,6 +205,50 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.assertEqual(projection["focus_scope"]["anchor_node_ids"], ["character:lin"])
         self.assertIn("character:wen", projection["focus_scope"]["context_node_ids"])
         self.assertTrue(any(node["type"] == "chapter" for node in projection["nodes"]))
+
+    def test_alias_and_unresolved_character_mentions_survive_detail_projection(self):
+        library = {
+            "sections": {
+                **self.library["sections"],
+                "characters": [
+                    {"id": "lin", "title": "林澈", "aliases": ["阿澈"], "status": "major", "path": "characters/lin.yaml"},
+                    {"id": "wen", "title": "闻舟", "aliases": [], "status": "major", "path": "characters/wen.yaml"},
+                ],
+                "scenes": [
+                    {
+                        **self.library["sections"]["scenes"][0],
+                        "participants": ["阿澈", "陌生来客"],
+                        "participant_refs": [],
+                    },
+                    self.library["sections"]["scenes"][1],
+                ],
+            }
+        }
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "literary_engineering_studio.narrative_projection.build_reader_manifest",
+            return_value=self.reader,
+        ):
+            projection = build_narrative_projection_v3(
+                {},
+                Path(temporary),
+                level="chapter",
+                focus="chapter_0001",
+                library_payload=library,
+                dashboard_payload=self.dashboard,
+            )
+        references = projection["character_references"]
+        lin = next(item for item in references if item["character_id"] == "lin")
+        unresolved = next(item for item in references if item["resolution"] == "unresolved")
+        self.assertEqual(lin["scene_ids"], ["scene_0001", "scene_0002"])
+        self.assertEqual(unresolved["display_name"], "陌生来客")
+        self.assertIn(unresolved["node_id"], {item["node_id"] for item in projection["nodes"]})
+        self.assertTrue(
+            any(
+                edge["source"] == unresolved["node_id"]
+                and edge["target"] == "scene:scene_0001"
+                for edge in projection["edges"]
+            )
+        )
 
     def test_v3_exposes_the_formal_rhythm_plan_as_a_spatial_hint(self):
         with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):

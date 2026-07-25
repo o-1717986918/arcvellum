@@ -12,6 +12,7 @@ time:
 
 location: ""
 participants: []
+participant_refs: []
 referenced_characters: []
 context_policy:
   include_major_characters: true

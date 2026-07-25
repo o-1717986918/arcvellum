@@ -1,0 +1,60 @@
+{
+  "resolutions": [
+    "resolved",
+    "unresolved",
+    "ambiguous"
+  ],
+  "cases": [
+    {
+      "name": "resolved alias",
+      "payload": {
+        "reference_id": "lin",
+        "node_id": "character:lin",
+        "character_id": "lin",
+        "display_name": "林澈",
+        "aliases": [
+          "阿澈",
+          "林澈"
+        ],
+        "resolution": "resolved",
+        "matched_names": [
+          "阿澈"
+        ],
+        "candidate_character_ids": [
+          "lin"
+        ],
+        "scene_ids": [
+          "scene_0001"
+        ],
+        "chapter_ids": [
+          "chapter_0001"
+        ],
+        "importance": "major",
+        "source_id": "characters/lin.yaml"
+      }
+    },
+    {
+      "name": "unresolved mention",
+      "payload": {
+        "reference_id": "unresolved:001122334455",
+        "node_id": "character:unresolved:001122334455",
+        "character_id": "",
+        "display_name": "无名旅客",
+        "aliases": [],
+        "resolution": "unresolved",
+        "matched_names": [
+          "无名旅客"
+        ],
+        "candidate_character_ids": [],
+        "scene_ids": [
+          "scene_0002"
+        ],
+        "chapter_ids": [
+          "chapter_0001"
+        ],
+        "importance": "unresolved",
+        "source_id": ""
+      }
+    }
+  ]
+}

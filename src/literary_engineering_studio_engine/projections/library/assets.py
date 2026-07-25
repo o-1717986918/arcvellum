@@ -39,6 +39,7 @@ def _character_items(root: Path, overrides: dict[str, object]) -> list[dict[str,
         text = _read_text(path)
         character_id = scalar_from_yaml_text(text, "character_id") or path.stem
         name = scalar_from_yaml_text(text, "name") or file_label(path)
+        aliases = list_from_yaml_text(text, "aliases", limit=32)
         importance = scalar_from_yaml_text(text, "importance") or "secondary"
         role = scalar_from_yaml_text(text, "role") or importance
         background = nested_scalar_from_yaml_text(text, "background_story", "summary")
@@ -48,6 +49,8 @@ def _character_items(root: Path, overrides: dict[str, object]) -> list[dict[str,
             "kind": "characters",
             "id": character_id,
             "title": name,
+            "aliases": aliases,
+            "importance": importance,
             "subtitle": role,
             "path": _rel(path, root),
             "status": "major" if importance == "major" else "supporting",
@@ -104,12 +107,15 @@ def _scene_items(root: Path, overrides: dict[str, object]) -> list[dict[str, obj
         scene_id = scalar_from_yaml_text(text, "scene_id") or path.stem
         chapter_id = scalar_from_yaml_text(text, "chapter_id") or "未分章"
         goal = scalar_from_yaml_text(text, "scene_goal") or nested_scalar_from_yaml_text(text, "reader_experience", "reader_question")
-        participants = list_from_yaml_text(text, "participants")
+        participants = list_from_yaml_text(text, "participants", limit=32)
+        participant_refs = list_from_yaml_text(text, "participant_refs", limit=32)
         target = scalar_from_yaml_text(text, "word_count_target") or "0"
         item = {
             "kind": "scenes",
             "id": scene_id,
             "title": _display_scene_name(scene_id),
+            "participants": participants,
+            "participant_refs": participant_refs,
             "subtitle": chapter_id,
             "path": _rel(path, root),
             "status": scalar_from_yaml_text(text, "status") or "planned",

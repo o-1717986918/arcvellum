@@ -1,5 +1,6 @@
 character_id: ""
 name: ""
+aliases: []
 role: ""
 importance: secondary  # major | secondary | cameo
 
