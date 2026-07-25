@@ -87,6 +87,13 @@ class StyleBuildRequest(BaseModel):
     runtime: str = "opencode"
 
 
+class StyleAdvanceRequest(BaseModel):
+    project_root: str
+    author_id: str
+    profile_id: str
+    runtime: str = "opencode"
+
+
 class ProjectCreateRequest(BaseModel):
     parent_directory: str = ""
     title: str
@@ -332,6 +339,7 @@ __all__ = [
     "RhythmPlanRequest",
     "RunnerProbeRequest",
     "StyleMountRequest",
+    "StyleAdvanceRequest",
     "StyleAuthorCreateRequest",
     "StyleBuildRequest",
     "StyleWorkCreateRequest",

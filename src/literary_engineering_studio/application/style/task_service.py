@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Callable
 
+from literary_engineering_studio_engine.tasking.registry import issue_next_task
 from literary_engineering_studio_engine.literary.style.lab import (
     ensure_style_library,
 )
@@ -55,21 +57,34 @@ class StyleTaskService:
             training_sources=_selections(training_sources),
             holdout_sources=_selections(holdout_sources),
         )
-        relative = session.profile_dir.relative_to(project).as_posix()
-        job = self._launch_worker(
-            {
-                "project_root": str(project),
-                "route": "style-engineering",
-                "runtime": runtime.strip() or "opencode",
-                "task_id": "",
-                "scene": relative,
-                "idempotency_key": f"style-compile:{session.request_digest}",
-            }
+        execution = self._launch_current_task(
+            project,
+            session.profile_dir,
+            runtime=runtime,
         )
         return {
             "schema": "arcvellum/style-compile-job/v1",
             "session": _public_session(session, project),
-            "job": job,
+            **execution,
+        }
+
+    def advance(
+        self,
+        project_root: Path,
+        *,
+        author_id: str,
+        profile_id: str,
+        runtime: str,
+    ) -> dict[str, object]:
+        project = project_root.expanduser().resolve()
+        profile = resolve_formal_style_profile(
+            project,
+            author_id=author_id,
+            profile_id=profile_id,
+        )
+        return {
+            "schema": "arcvellum/style-advance-job/v1",
+            **self._launch_current_task(project, profile, runtime=runtime),
         }
 
     def build(
@@ -102,15 +117,10 @@ class StyleTaskService:
                 _build_block_message(stage),
                 stage=stage,
             )
-        job = self._launch_worker(
-            {
-                "project_root": str(project),
-                "route": "style-engineering",
-                "runtime": runtime.strip() or "opencode",
-                "task_id": "",
-                "scene": profile.relative_to(project).as_posix(),
-                "idempotency_key": f"style-build:{plan.content_hash}",
-            }
+        execution = self._launch_current_task(
+            project,
+            profile,
+            runtime=runtime,
         )
         return {
             "schema": "arcvellum/style-build-job/v1",
@@ -118,8 +128,43 @@ class StyleTaskService:
             "style_id": plan.style_id,
             "version_id": plan.version_id,
             "content_hash": plan.content_hash,
-            "job": job,
+            **execution,
         }
+
+    def _launch_current_task(
+        self,
+        project: Path,
+        profile: Path,
+        *,
+        runtime: str,
+    ) -> dict[str, object]:
+        relative = profile.relative_to(project).as_posix()
+        issued = issue_next_task(
+            project,
+            route="style-engineering",
+            scene=relative,
+        )
+        task = {
+            "task_id": issued.task_id,
+            "current_state": issued.current_state,
+            "status": issued.status,
+        }
+        if issued.status == "ready" or not issued.task_id:
+            return {"status": "ready", "task": task, "job": None}
+        if issued.task_json_path is None:
+            raise RuntimeError("style task package was not materialized")
+        contract_digest = hashlib.sha256(issued.task_json_path.read_bytes()).hexdigest()
+        job = self._launch_worker(
+            {
+                "project_root": str(project),
+                "route": "style-engineering",
+                "runtime": runtime.strip() or "opencode",
+                "task_id": issued.task_id,
+                "scene": relative,
+                "idempotency_key": f"style-task:{issued.task_id}:{contract_digest}",
+            }
+        )
+        return {"status": str(job.get("status") or "queued"), "task": task, "job": job}
 
 
 def _selections(rows: list[dict[str, str]]) -> tuple[StyleSourceSelection, ...]:

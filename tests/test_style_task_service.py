@@ -150,7 +150,17 @@ class StyleTaskServiceTests(unittest.TestCase):
             self.assertNotIn("pending_platform_agent", json.dumps(result))
             self.assertEqual(requests[0]["route"], "style-engineering")
             self.assertEqual(requests[0]["scene"], "style/atelier/classic-author/studio-task")
-            self.assertTrue(requests[0]["idempotency_key"].startswith("style-compile:"))
+            self.assertEqual(requests[0]["task_id"], result["task"]["task_id"])
+            self.assertTrue(requests[0]["idempotency_key"].startswith("style-task:"))
+
+            repeated = StyleTaskService(launch).advance(
+                root,
+                author_id="classic-author",
+                profile_id="studio-task",
+                runtime="opencode",
+            )
+            self.assertEqual(repeated["task"]["task_id"], result["task"]["task_id"])
+            self.assertEqual(requests[1]["idempotency_key"], requests[0]["idempotency_key"])
 
     def test_build_intent_only_launches_exact_ready_version_task(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -176,10 +186,8 @@ class StyleTaskServiceTests(unittest.TestCase):
                 requests[0]["scene"],
                 "style/atelier/classic-author/measured-prose",
             )
-            self.assertEqual(
-                requests[0]["idempotency_key"],
-                "style-build:" + result["content_hash"],
-            )
+            self.assertEqual(requests[0]["task_id"], result["task"]["task_id"])
+            self.assertTrue(requests[0]["idempotency_key"].startswith("style-task:"))
 
             build_style_profile_version(root, profile)
             repeated = service.build(

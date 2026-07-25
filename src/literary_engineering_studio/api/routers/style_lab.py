@@ -32,6 +32,7 @@ from literary_engineering_studio_engine.literary.style.session import (
 )
 from ..common import call_handler, project_root as resolve_project_root
 from ..models import (
+    StyleAdvanceRequest,
     StyleAuthorCreateRequest,
     StyleBuildRequest,
     StyleCompileRequest,
@@ -176,6 +177,29 @@ def _register_engineering_routes(
                     "message": str(exc),
                 },
             ) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "style_profile_not_found",
+                    "message": str(exc),
+                },
+            ) from exc
+        except StyleSessionError as exc:
+            raise _style_session_error(exc) from exc
+
+    @router.post("/style-lab/advance")
+    def style_lab_advance(payload: StyleAdvanceRequest):
+        try:
+            return {
+                "ok": True,
+                **deps.tasks.advance(
+                    resolve_project_root(payload.project_root),
+                    author_id=payload.author_id,
+                    profile_id=payload.profile_id,
+                    runtime=payload.runtime,
+                ),
+            }
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404,
