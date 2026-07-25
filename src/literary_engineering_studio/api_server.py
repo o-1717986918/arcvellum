@@ -16,6 +16,8 @@ from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
 from .api.models import (
+    ArchiveAssetCommitRequest,
+    ArchiveAssetContentRequest,
     AdvisorCustomPersonaRequest,
     AdvisorInboxReadRequest,
     AdvisorInboxSettingsRequest,
@@ -45,6 +47,7 @@ from .api.models import (
 )
 from .api.streaming import sse as _sse, stream_read_model as _stream_read_model, visible_delta_chunks as _visible_delta_chunks
 from .api.routers.application import ApplicationRouterDependencies, build_application_router
+from .api.routers.archive import build_archive_router, default_archive_dependencies
 from .api.routers.runners import RunnerRouterDependencies, build_runner_router
 from .api.routers.projects import ProjectRouterDependencies, build_project_router
 from .api.routers.quality import QualityRouterDependencies, build_quality_router
@@ -362,6 +365,8 @@ def create_app(config_override: dict[str, Any] | None = None):
             )
         )
     )
+
+    app.include_router(build_archive_router(default_archive_dependencies()))
 
     app.include_router(
         build_library_router(

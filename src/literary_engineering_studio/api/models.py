@@ -181,7 +181,23 @@ class RhythmPlanRequest(BaseModel):
     book_profile: dict[str, Any] | None = None
 
 
+class ArchiveAssetContentRequest(BaseModel):
+    project_root: str
+    content: str
+
+
+class ArchiveAssetCommitRequest(BaseModel):
+    project_root: str
+    base_revision: str
+    content: str
+    semantic_review: str = "required"
+    reason: str
+    expected_impacts: list[str] = []
+
+
 __all__ = [
+    "ArchiveAssetCommitRequest",
+    "ArchiveAssetContentRequest",
     "AdvisorCustomPersonaRequest",
     "AdvisorInboxReadRequest",
     "AdvisorInboxSettingsRequest",
