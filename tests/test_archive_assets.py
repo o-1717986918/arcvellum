@@ -74,6 +74,30 @@ class ArchiveAssetTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.loader.load(self.root, "character:escaped")
 
+    def test_registry_accepts_unicode_stable_ids_without_weakening_path_safety(self):
+        unicode_asset = self.root / "characters" / "scene-0001-叙述者.yaml"
+        unicode_asset.write_text(
+            "character_id: scene-0001-叙述者\nname: 叙述者\nimportance: secondary\n",
+            encoding="utf-8",
+        )
+
+        tree = ArchiveProjectionService(self.registry, self.loader).tree(self.root)
+
+        self.assertIn(
+            "character:scene-0001-叙述者",
+            {item["asset_id"] for item in tree["items"]},
+        )
+        for unsafe_id in (
+            "character:../叙述者",
+            "character:角色/叙述者",
+            "character:角色\\叙述者",
+            "character:角色:叙述者",
+            "character: 叙述者",
+        ):
+            with self.subTest(unsafe_id=unsafe_id):
+                with self.assertRaises(ValueError):
+                    self.registry.parse_asset_id(unsafe_id)
+
     def test_validation_keeps_structural_rules_even_when_owner_waives_semantic_review(self):
         definition = self.registry.definition("character")
         result = validate_asset_content(

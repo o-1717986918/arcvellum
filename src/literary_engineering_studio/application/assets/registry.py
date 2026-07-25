@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import re
-
 from .contracts import AssetViewDefinition, EditorKind
 
-
-_LOCAL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,119}")
 
 _DEFAULT_DEFINITIONS = (
     AssetViewDefinition(
@@ -151,7 +147,7 @@ class AssetViewRegistry:
             raise ValueError("asset_id must use <asset-type>:<stable-id>")
         asset_type, local_id = asset_id.split(":", 1)
         definition = self.definition(asset_type)
-        if not _LOCAL_ID.fullmatch(local_id) or ".." in local_id:
+        if not _valid_local_id(local_id):
             raise ValueError("invalid archive asset stable id")
         if definition.fixed_id and local_id != definition.fixed_id:
             raise ValueError(f"{asset_type} uses fixed id {definition.fixed_id}")
@@ -160,3 +156,11 @@ class AssetViewRegistry:
     @staticmethod
     def asset_id(definition: AssetViewDefinition, local_id: str) -> str:
         return f"{definition.asset_type}:{local_id}"
+
+
+def _valid_local_id(local_id: str) -> bool:
+    """Accept project-native Unicode names without accepting path syntax."""
+
+    if not 1 <= len(local_id) <= 120 or ".." in local_id or not local_id[0].isalnum():
+        return False
+    return all(character.isalnum() or character in "_.-" for character in local_id)

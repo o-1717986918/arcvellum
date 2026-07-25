@@ -38,6 +38,33 @@ describe("API client", () => {
         name: "ApiError",
         status: 400,
         message: "请选择一个可写入的文件夹。",
+        code: "",
+        details: {},
+      }),
+    );
+  });
+
+  it("preserves structured conflict codes, messages, and blockers", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "promotion_not_ready",
+            message: "候选尚未通过独立审查。",
+            blockers: ["缺少审查回执", "缺少作者批准"],
+          },
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(api("/archive/candidates/lin/promote", { method: "POST" })).rejects.toEqual(
+      expect.objectContaining<ApiError>({
+        name: "ApiError",
+        status: 409,
+        code: "promotion_not_ready",
+        message: "候选尚未通过独立审查。",
+        details: expect.objectContaining({ blockers: ["缺少审查回执", "缺少作者批准"] }),
       }),
     );
   });

@@ -10,11 +10,15 @@ function authorizedHeaders(source?: HeadersInit): Headers {
 
 export class ApiError extends Error {
   status: number;
+  code: string;
+  details: Record<string, unknown>;
 
-  constructor(message: string, status = 0) {
+  constructor(message: string, status = 0, code = "", details: Record<string, unknown> = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -44,8 +48,17 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await authorizedFetch(path, init);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = typeof payload?.detail === "string" ? payload.detail : `请求失败（${response.status}）`;
-    throw new ApiError(detail, response.status);
+    const detail = payload?.detail;
+    if (detail && typeof detail === "object") {
+      const details = detail as Record<string, unknown>;
+      throw new ApiError(
+        typeof details.message === "string" ? details.message : `请求失败（${response.status}）`,
+        response.status,
+        typeof details.code === "string" ? details.code : "",
+        details,
+      );
+    }
+    throw new ApiError(typeof detail === "string" ? detail : `请求失败（${response.status}）`, response.status);
   }
   return payload as T;
 }
