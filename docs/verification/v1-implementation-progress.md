@@ -447,12 +447,43 @@
   - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W2-7B：共享结构化编辑器与逐资产草稿会话
+
+- Status: complete
+- Commit: `63fbb68`
+- Added:
+  - 前端通过后端 `AssetFieldDefinition` 契约生成共享结构化表单，不在 Vue 中复制资产 schema、可写字段或正式 Gate；
+  - 统一支持短文本、数值、有限选项、字符串列表、Markdown、对象与表格字段，对象/表格沿用同一递归值编辑器，复杂字段在宽屏跨列、窄屏自动单列；
+  - Markdown 字段提供安全编辑/预览，原始 YAML/JSON 保留为明确的专家模式；无效源文本仍可进入专家模式修复，不会被结构化投影失败锁死；
+  - 结构化编辑只把实际变更字段提交给 `render-structured`，得到的新内容仍只是当前 draft，不直接 commit 或晋升；
+  - 每个已打开正式资产拥有独立 draft、structure、validation、impact 和 history 会话；切换标签不会覆盖其他草稿；
+  - 脏标签不能静默关闭，用户必须先保存或显式“放弃草稿”；放弃后恢复 exact 正式内容并重新加载结构化投影；
+  - 项目切换清空所有资产会话，标签关闭后的回退选择具有确定顺序；
+  - Archive transport、消息、编辑器状态和标签会话被拆到独立 service/composable，Pinia store 保持应用编排职责，没有形成新的巨型组件或反向依赖；
+  - 生产构建同步到桌面前端资源。
+- Unified implementation boundary:
+  - `features/archive/` 是独立作者工作面，旧 `LibraryView` 继续保持亲用户只读入口；
+  - UI 只消费 Studio API 的 Registry 与投影，不读取 sidecar Markdown，不实现 Engine promotion 或 Gate 判断；
+  - 所有编辑模式共享同一 draft、revision、validate、impact 和 Owner Override commit 链。
+- Adaptive orchestration boundary:
+  - Archive 编辑器只表达作者事务；`CreativeExecutionPlan`、Planner 和 Runtime 没有获得直接修改正式资产的能力；
+  - Stable Knowledge 仍只能通过资产候选/Engine 晋升或显式 Owner Override 进入正式项目；
+  - 将来计划节点失效只消费 Archive mutation receipt，不复制本批的版本或写回生命周期。
+- Failure and interaction evidence:
+  - 组件测试证明只发送实际变化字段，Markdown 预览使用安全渲染，表格支持增删和重排；
+  - store 测试证明两个资产草稿相互隔离、脏标签关闭被拒绝、放弃后可关闭且回退标签稳定；
+  - 使用真实项目 `1+1=2` 进行只读视觉验收，确认人物、场景、世界规则和 ledger 均可由 Registry 打开；没有修改该项目；
+  - 1440px 宽屏和 900px 窄屏均完成截图验收，页面无浏览器 error/warning。
+- Exit evidence:
+  - Client full suite: 90 passed；
+  - Client production build、typecheck、desktop frontend sync 和 v0.9 build verification: passed；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、自适应创作编排方案、模块边界和本文件。W2-7B/7C 只处理仍有证据的 Archive 退出缺口：
+下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、自适应创作编排方案、模块边界和本文件。W2-7C 只处理仍有证据的 Archive 退出缺口：
 
-1. 前端以新字段契约实现共享表单、Markdown 与表格编辑器；高级源文本模式继续保留，所有模式共享 exact draft、revision、validate、impact 和 commit。
-2. 多标签草稿必须逐资产保存，关闭脏标签时显式阻止或确认，不允许切换资产静默丢失未保存内容。
-3. 增加模块级状态化引导，直接绑定真实 UI 状态和稳定 tour id，不写一篇悬空说明书。
-4. 使用隔离真实项目完成创建、结构化编辑、源文本往返、历史、归档、恢复和候选晋升；不可晋升候选只证明 Gate 有效，不能替代一条真正成功的候选晋升验收。
-5. W2 退出审计必须逐项对照四类权威文档；只有用户能从前端创建、编辑、晋升、归档、恢复主要资产，schema/引用不可被作者豁免，关键修改准确传播 stale，且架构债务不增长，才能进入 W3。
+1. 增加模块级状态化引导，直接绑定真实 UI 状态和稳定 tour id，不写一篇悬空说明书。
+2. 使用隔离真实项目完成创建、结构化编辑、源文本往返、历史、归档、恢复和候选晋升；不可晋升候选只证明 Gate 有效，不能替代一条真正成功的候选晋升验收。
+3. W2 退出审计必须逐项对照四类权威文档；只有用户能从前端创建、编辑、晋升、归档、恢复主要资产，schema/引用不可被作者豁免，关键修改准确传播 stale，且架构债务不增长，才能进入 W3。
