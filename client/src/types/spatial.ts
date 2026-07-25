@@ -1,4 +1,5 @@
 import type { NarrativeEdge, NarrativeNode } from "@/types/api";
+import type { NarrativeFocusLevel, NarrativeFocusScope } from "@/features/orrery/model/focusScope";
 
 export type SpatialGrammar = "spine" | "braid" | "strata" | "constellation" | "loop" | "stage";
 export type SpatialDetailLevel = "far" | "mid" | "near";
@@ -74,8 +75,9 @@ export interface SpatialNarrativeProjection {
   revision: string;
   sequence: number;
   source_revisions: Record<string, string>;
-  level: "book" | "chapter" | "scene";
+  level: NarrativeFocusLevel;
   focus: string;
+  focus_scope: NarrativeFocusScope;
   spatial_grammar: SpatialGrammar;
   available_grammars: SpatialGrammar[];
   layout_seed: string;

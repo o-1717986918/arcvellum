@@ -10,12 +10,13 @@ from typing import Any
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan
 
 from . import narrative_projection as narrative_projection_v2
-from .narrative_projection import build_narrative_projection, projection_delta, projection_motion_events
+from .narrative import resolve_narrative_focus_scope
+from .narrative.base_adapter import build_compatible_base, requested_focus
+from .narrative.grammar import SPATIAL_GRAMMARS, resolve_grammar
+from .narrative_projection import projection_delta, projection_motion_events
 
 
 PROJECTION_SCHEMA = "arcvellum/narrative-projection/v3"
-SPATIAL_GRAMMARS = {"spine", "braid", "strata", "constellation", "loop", "stage"}
-
 
 def build_narrative_projection_v3(
     config: dict[str, Any],
@@ -33,19 +34,17 @@ def build_narrative_projection_v3(
     camera-space placement, while this model exposes only reproducible narrative facts.
     """
 
-    base = build_narrative_projection(
-        config,
-        project_root,
-        level=level,
-        focus=focus,
-        dashboard_payload=dashboard_payload,
-        library_payload=library_payload,
+    base = build_compatible_base(
+        config, project_root, level, focus, dashboard_payload, library_payload
     )
-    selected_grammar = _resolve_grammar(grammar, base)
+    selected_grammar = resolve_grammar(grammar, base)
     rhythm_hints = _rhythm_hints(project_root)
     nodes = _spatial_nodes(base.get("nodes", []), base.get("edges", []), selected_grammar, rhythm_hints)
     edges = _spatial_edges(base.get("edges", []), nodes)
     clusters = _clusters(nodes)
+    focus_scope = resolve_narrative_focus_scope(
+        level, requested_focus(focus, base), nodes, edges
+    )
     # Reuse the v2 read-model entry so cached deployments and test fixtures
     # observe exactly the same reader evidence as the base projection.
     reader_payload = narrative_projection_v2.build_reader_manifest(project_root)
@@ -73,6 +72,7 @@ def build_narrative_projection_v3(
             "nodes": nodes,
             "edges": edges,
             "clusters": clusters,
+            "focus_scope": focus_scope.as_dict(),
             "source_revisions": source_revisions,
         }
     )
@@ -92,8 +92,9 @@ def build_narrative_projection_v3(
         "revision": revision,
         "sequence": 0,
         "source_revisions": source_revisions,
-        "level": base.get("level", "book"),
-        "focus": base.get("focus", ""),
+        "level": focus_scope.level.value,
+        "focus": focus_scope.focus_id,
+        "focus_scope": focus_scope.as_dict(),
         "spatial_grammar": selected_grammar,
         "available_grammars": sorted(SPATIAL_GRAMMARS),
         "layout_seed": _digest({"project": str(project_root.resolve()), "grammar": selected_grammar})[:16],
@@ -101,7 +102,7 @@ def build_narrative_projection_v3(
         "nodes": nodes,
         "edges": edges,
         "clusters": clusters,
-        "layout_hints": _layout_hints(selected_grammar, base.get("level", "book"), nodes),
+        "layout_hints": _layout_hints(selected_grammar, focus_scope.level.value, nodes),
         "lod_summary": _lod_summary(nodes),
         "timeline": base.get("timeline", []),
         "delta": projection_delta(None, {"nodes": nodes, "edges": edges}),
@@ -344,22 +345,6 @@ def _lod_summary(nodes: list[dict[str, Any]]) -> dict[str, int]:
         "mid": sum(1 for node in nodes if node["detail_level"] == "mid"),
         "near": sum(1 for node in nodes if node["detail_level"] == "near"),
     }
-
-
-def _resolve_grammar(value: str, base: dict[str, Any]) -> str:
-    if value in SPATIAL_GRAMMARS:
-        return value
-    nodes = [item for item in base.get("nodes", []) if isinstance(item, dict)]
-    if str(base.get("level")) == "scene":
-        return "stage"
-    branch_count = sum(1 for item in nodes if item.get("type") == "branch")
-    character_count = sum(1 for item in nodes if item.get("type") == "character")
-    question_count = sum(1 for item in nodes if item.get("type") in {"reader-question", "promise"})
-    if branch_count >= 3 or character_count >= 5:
-        return "braid"
-    if question_count >= 4:
-        return "constellation"
-    return "spine"
 
 
 def _parent_map(edges: list[dict[str, Any]]) -> dict[str, str]:

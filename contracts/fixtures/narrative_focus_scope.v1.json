@@ -1,0 +1,63 @@
+{
+  "levels": [
+    "book",
+    "chapter",
+    "scene",
+    "character"
+  ],
+  "cases": [
+    {
+      "name": "chapter-all-scenes",
+      "payload": {
+        "level": "chapter",
+        "focus_id": "chapter_0001",
+        "chapter_ids": [
+          "chapter_0001"
+        ],
+        "scene_ids": [
+          "scene_0001",
+          "scene_0002"
+        ],
+        "character_ids": [
+          "lin",
+          "wen"
+        ],
+        "anchor_node_ids": [
+          "scene:scene_0001",
+          "scene:scene_0002"
+        ],
+        "context_node_ids": [
+          "scene:scene_0003",
+          "character:lin",
+          "character:wen"
+        ]
+      }
+    },
+    {
+      "name": "scene-with-neighbours",
+      "payload": {
+        "level": "scene",
+        "focus_id": "scene_0002",
+        "chapter_ids": [
+          "chapter_0001"
+        ],
+        "scene_ids": [
+          "scene_0001",
+          "scene_0002"
+        ],
+        "character_ids": [
+          "lin"
+        ],
+        "anchor_node_ids": [
+          "scene:scene_0002"
+        ],
+        "context_node_ids": [
+          "scene:scene_0001",
+          "scene:scene_0003",
+          "character:lin",
+          "character:wen"
+        ]
+      }
+    }
+  ]
+}

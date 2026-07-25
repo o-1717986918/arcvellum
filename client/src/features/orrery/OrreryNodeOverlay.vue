@@ -2,6 +2,7 @@
 import { computed, type Component } from "vue";
 import { BadgeCheck, BookMarked, CircleHelp, Clapperboard, GitFork, Landmark, Orbit, Sparkles, UserRound } from "lucide-vue-next";
 import type { SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
+import type { NarrativeFocusLevel } from "@/features/orrery/model/focusScope";
 import { observationWeight } from "@/features/orrery/layout/observationWindow";
 
 const props = defineProps<{
@@ -9,7 +10,7 @@ const props = defineProps<{
   anchors: Record<string, { x: number; y: number; visible: boolean; scale: number }>;
   selectedNodeId?: string;
   focusNodeId?: string;
-  level?: "book" | "chapter" | "scene";
+  level?: NarrativeFocusLevel;
   motionEvents?: SpatialNarrativeProjection["motion_events"];
   timeCursor?: number;
   timeWindow?: number;

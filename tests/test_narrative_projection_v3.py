@@ -74,6 +74,11 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.assertEqual(projection["schema"], "arcvellum/narrative-projection/v3")
         self.assertEqual(projection["spatial_grammar"], "braid")
         self.assertIn("narrative_v2", projection["source_revisions"])
+        self.assertEqual(projection["focus_scope"]["scene_ids"], ["scene_0001", "scene_0002"])
+        self.assertEqual(
+            projection["focus_scope"]["anchor_node_ids"],
+            ["scene:scene_0001", "scene:scene_0002"],
+        )
         scene = next(node for node in projection["nodes"] if node["node_id"] == "scene:scene_0001")
         self.assertEqual(scene["world_hint"]["grammar"], "braid")
         self.assertIn(scene["detail_level"], {"near", "mid", "far"})
@@ -183,6 +188,15 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.assertLessEqual(len(projection["nodes"]), 112)
         self.assertEqual(projection["lod_summary"]["far"], 100)
         self.assertEqual(set(("dashboard", "library", "reader", "jobs")).issubset(projection["source_revisions"]), True)
+
+    def test_character_focus_is_additive_and_keeps_the_book_projection(self):
+        projection = self._projection(level="character", focus="character:lin", grammar="constellation")
+        self.assertEqual(projection["level"], "character")
+        self.assertEqual(projection["focus"], "lin")
+        self.assertEqual(projection["focus_scope"]["character_ids"], ["lin"])
+        self.assertEqual(projection["focus_scope"]["anchor_node_ids"], ["character:lin"])
+        self.assertIn("character:wen", projection["focus_scope"]["context_node_ids"])
+        self.assertTrue(any(node["type"] == "chapter" for node in projection["nodes"]))
 
     def test_v3_exposes_the_formal_rhythm_plan_as_a_spatial_hint(self):
         with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
