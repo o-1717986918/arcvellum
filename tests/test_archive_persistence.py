@@ -84,6 +84,42 @@ class ArchivePersistenceTests(unittest.TestCase):
                 }
             self.assertIn("archive_asset_transactions", tables)
             self.assertIn("archive_asset_revisions", tables)
+            self.assertIn("archive_recycle_entries", tables)
+
+    def test_recycle_entry_index_is_idempotent_and_tracks_restore_status(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            record = {
+                "entry_id": "recycle-entry-one",
+                "project_root": "C:/work",
+                "asset_id": "character:mei",
+                "asset_type": "character",
+                "revision": "sha256:" + ("c" * 64),
+                "status": "active",
+                "original_path": "characters/mei.yaml",
+                "snapshot_path": "workflow/archive/recycle-bin/recycle-entry-one/snapshot.yaml",
+                "entry_path": "workflow/archive/recycle-bin/recycle-entry-one/entry.json",
+                "archive_receipt_path": "workflow/archive/recycle-bin/recycle-entry-one/archive-receipt.json",
+                "restore_receipt_path": "",
+                "reason": "作者暂时归档人物。",
+                "archived_at": "2026-07-25T00:00:00+00:00",
+                "restored_at": "",
+            }
+
+            store.record_recycle_entry(record)
+            store.record_recycle_entry(record)
+            self.assertEqual(len(store.list_recycle_entries("C:/work")), 1)
+
+            restored = {
+                **record,
+                "status": "restored",
+                "restore_receipt_path": "workflow/archive/recycle-bin/recycle-entry-one/restore-receipt.json",
+                "restored_at": "2026-07-25T01:00:00+00:00",
+            }
+            store.record_recycle_entry(restored)
+            indexed = store.read_recycle_entry("C:/work", "recycle-entry-one")
+            self.assertEqual(indexed["status"], "restored")
+            self.assertEqual(indexed["restore_receipt_path"], restored["restore_receipt_path"])
 
 
 if __name__ == "__main__":

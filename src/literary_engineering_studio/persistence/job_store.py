@@ -15,6 +15,7 @@ from typing import Any
 from .asset_revisions import ASSET_REVISION_SCHEMA_SQL, AssetRevisionStoreMixin
 from .asset_transactions import ASSET_TRANSACTION_SCHEMA_SQL, AssetTransactionStoreMixin
 from .autopilot_runs import AutopilotStoreMixin
+from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
 from .sessions import SessionStoreMixin
 from .primitives import (
     ACTIVE_STATUSES,
@@ -34,6 +35,7 @@ from .primitives import (
 
 
 class JobStore(
+    RecycleBinStoreMixin,
     AssetTransactionStoreMixin,
     AssetRevisionStoreMixin,
     AutopilotStoreMixin,
@@ -500,7 +502,7 @@ class JobStore(
                 );
                 CREATE INDEX IF NOT EXISTS agent_sessions_project_idx
                     ON agent_sessions(project_root, updated_at);
-                """ + ASSET_TRANSACTION_SCHEMA_SQL + ASSET_REVISION_SCHEMA_SQL
+                """ + ASSET_TRANSACTION_SCHEMA_SQL + ASSET_REVISION_SCHEMA_SQL + RECYCLE_BIN_SCHEMA_SQL
             )
             preference_columns = {
                 str(row[1]) for row in connection.execute("PRAGMA table_info(advisor_pinned_preferences)").fetchall()
