@@ -587,11 +587,40 @@
   - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W3-3A：项目内正式文风工程会话
+
+- Status: complete
+- Commit: `daa0fd0`
+- Added:
+  - 新增 Engine 所有的 `style-engineering-session/v1`，把可复用文风资料库中的明确来源选择物化为作品项目内的受控正式会话；Worker 不再尝试把非工作项目的资料库根目录当成 route 根；
+  - 训练来源与保留来源必须分别显式选择且集合不相交；每一项都绑定 author/work/source 稳定身份、规范内容 SHA-256 和逐来源权利声明；
+  - 会话采用临时目录后原子重命名，重复相同请求按 request digest 幂等复用，已占用 profile 使用不同证据时稳定阻断；
+  - `workflow_state_style` 同时识别尚未产生 profile 的 `style_session.json`，不再要求先手写 `style-profile.md` 才能进入正式 route；
+  - 新会话的 `style-profile` 任务使用具体训练语料和输出目录，不再含 `<corpus>/<profile-dir>/<name>` 未决模板；保留集不会进入编译命令；
+  - 保留集优先成为正式评测 reference；旧项目内 profile 继续保留 corpus reference 兼容行为；
+  - `POST /style-lab/compile` 只准备会话并启动既有 Worker，返回 queued job，不在 HTTP 请求线程调用模型，也不返回 `pending_platform_agent`；
+  - 真实 Worker 测试在隔离 sandbox 完成 session -> deterministic profile compile -> Engine Gate -> writeback，并进入下一 `style-prompt-task-file` 状态。
+- Unified implementation boundary:
+  - Engine `literary/style/session.py` 拥有会话、来源证据、训练/保留集隔离和摘要验证；Studio `task_service.py` 只准备受控意图并启动既有 Worker；
+  - 仍只有一条 `style-engineering` route 和一套 task lifecycle；未新增 Studio 状态机、同步 LLM 路径或任意 Shell；
+  - route 会话投影与通用 helper 被拆出主 definition，现有 route 文件从架构债务预算中退出，没有以 W3 功能扩展换取新的大文件债务。
+- Adaptive orchestration boundary:
+  - Style session 是用户明确选择来源后产生的受控执行会话，不是 Planner 可伪造的来源或 rights；
+  - 将来 `CreativeExecutionPlan` 只能引用 session/request digest 并调度现有 style route，不能把训练文本、保留文本或权利判断写入计划事实；
+  - 保留集不进入 Prompt Agent 的训练证据，后续独立 review 也必须使用不同 reviewer 会话。
+- Exit evidence:
+  - Python full suite: 483 passed, 1 skipped；
+  - 真实 deterministic Worker style compile: passed；
+  - `python -m compileall -q src tests`: passed；
+  - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3 只把 compile、evaluate、independent review 和 build 接入既有 Worker 与 Engine route：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3B 只实现独立文风语义审查与完整 digest Gate：
 
-1. HTTP 写操作只返回 job/task ID，不能在请求线程内等待模型，也不能返回 `pending_platform_agent` 冒充完成。
-2. 扩展既有 `style-engineering` route，不新建 Studio 状态机；Prompt、评测候选和独立 review 均是 Agent 候选输出。
-3. 确定性 Gate 必须绑定 source、candidate、prompt、review 和 completion digest；review 失败不能 build。
-4. build 只能物化通过 Gate 的明确版本，本批仍不直接 mount 到作品；正式挂载与 stale 传播属于 W3-4。
+1. 在现有 accepted deterministic evaluation 之后增加独立 reviewer task，不让 prompt writer/evaluation writer 自审。
+2. review JSON/Markdown/completion 必须绑定 session、source set、profile、prompt、candidate 和 deterministic score digest。
+3. review 失败或任何上游摘要变化都必须回到修订/重审，不能进入 build。
+4. Prompt Asset、task package 和 Worker preflight 必须提供完整结构约束，但不泄露保留集正文或隐藏推理。
+5. 本批仍不物化 StyleProfileVersion、不 mount；确定性 build 属于 W3-3C。
