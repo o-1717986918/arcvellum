@@ -3,20 +3,35 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StyleAtelierWorkbench } from "../types";
 
 const apiMock = vi.fn();
+const streamCloseMock = vi.fn();
+let streamListener: ((event: string, data: Record<string, unknown>) => void) | null = null;
+const connectEventStreamMock = vi.fn(
+  (_path: string, listener: (event: string, data: Record<string, unknown>) => void) => {
+    streamListener = listener;
+    return { close: streamCloseMock };
+  },
+);
 
 vi.mock("@/services/api", () => ({
   api: apiMock,
+  connectEventStream: connectEventStreamMock,
   query: (values: Record<string, string>) => new URLSearchParams(values).toString(),
 }));
 
 vi.mock("@/stores/app", () => ({
-  useAppStore: () => ({ currentProjectPath: "C:\\ArcVellum\\潮线" }),
+  useAppStore: () => ({
+    currentProjectPath: "C:\\ArcVellum\\潮线",
+    loadAgentObservability: vi.fn(),
+  }),
 }));
 
 describe("style atelier store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     apiMock.mockReset();
+    connectEventStreamMock.mockClear();
+    streamCloseMock.mockClear();
+    streamListener = null;
   });
 
   it("loads the workbench and selects the mounted immutable version", async () => {
@@ -136,6 +151,77 @@ describe("style atelier store", () => {
       "/style-lab/sources",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("observes a formal style job through SSE and refreshes only at its real terminal state", async () => {
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/style-lab/compile" && init?.method === "POST") {
+        return {
+          schema: "arcvellum/style-compile-job/v1",
+          status: "queued",
+          task: {
+            task_id: "style-engineering-classic-author-new-profile-style-profile",
+            current_state: "style-profile",
+            status: "issued",
+          },
+          session: {
+            session_id: "classic-author-new-profile",
+            author_id: "classic-author",
+            profile_id: "new-profile",
+            status: "prepared",
+          },
+          job: {
+            job_id: "job-style-new",
+            status: "queued",
+            revision: 0,
+          },
+        };
+      }
+      if (path.startsWith("/style-lab/workbench")) return workbenchFixture();
+      if (path.startsWith("/style-lab/versions/classic-style/v1-stable")) {
+        return {
+          schema: "arcvellum/style-profile-version-detail/v1",
+          style_id: "classic-style",
+          version_id: "v1-stable",
+          content_hash: "sha256:style",
+          author_id: "classic-author",
+          profile_id: "restrained",
+          state: "mounted",
+        };
+      }
+      if (path.startsWith("/agent-observability")) {
+        return { schema: "arcvellum/agent-observability/v2", sessions: [], recent_events: [] };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const { useStyleAtelierStore } = await import("./styleAtelier");
+    const store = useStyleAtelierStore();
+    await store.load();
+
+    await store.compileProfile({
+      author_id: "classic-author",
+      profile_id: "new-profile",
+      display_name: "新文风",
+      training_sources: [{ work_id: "work-one", source_id: "source-one" }],
+      holdout_sources: [{ work_id: "work-one", source_id: "source-two" }],
+      runtime: "opencode",
+    });
+
+    expect(store.engineeringJob?.status).toBe("queued");
+    expect(connectEventStreamMock).toHaveBeenCalledWith(
+      "/worker/jobs/job-style-new/stream",
+      expect.any(Function),
+      expect.any(Function),
+    );
+    streamListener?.("worker", {
+      job_id: "job-style-new",
+      status: "complete",
+      revision: 2,
+      result: { message: "task complete" },
+    });
+    await vi.waitFor(() => expect(store.notice).toContain("当前文风步骤已通过"));
+    expect(store.engineeringJob?.status).toBe("complete");
+    expect(streamCloseMock).toHaveBeenCalled();
   });
 });
 

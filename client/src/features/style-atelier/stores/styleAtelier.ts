@@ -2,15 +2,22 @@ import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
 import { useAppStore } from "@/stores/app";
 import {
+  advanceStyleProfile,
+  buildStyleProfile,
+  compileStyleProfile,
   createStyleAuthor,
   createStyleWork,
   fetchStyleVersionDetail,
   fetchStyleWorkbench,
   importStyleSource,
 } from "../services/styleAtelierClient";
+import { useStyleEngineeringSession } from "./styleEngineeringSession";
 import type {
+  StyleAdvancePayload,
   StyleAuthor,
   StyleAuthorCreatePayload,
+  StyleBuildPayload,
+  StyleCompilePayload,
   StyleSourceCreatePayload,
   StyleTransactionReceipt,
   StyleVersion,
@@ -32,6 +39,18 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
   const authoringBusy = ref(false);
   const error = ref("");
   const notice = ref("");
+  const engineering = useStyleEngineeringSession({
+    refreshWorkbench,
+    refreshObservability: async () => {
+      await app.loadAgentObservability();
+    },
+    setError: (message) => {
+      error.value = message;
+    },
+    setNotice: (message) => {
+      notice.value = message;
+    },
+  });
 
   const projectRoot = computed(() => app.currentProjectPath);
   const authors = computed(() => workbench.value?.authors || []);
@@ -100,6 +119,48 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
       },
       "来源已经固化，正文不会在工作台中直接回显。",
     );
+  }
+
+  async function compileProfile(payload: Omit<StyleCompilePayload, "project_root">): Promise<void> {
+    if (!projectRoot.value) return;
+    engineering.authorId.value = payload.author_id;
+    engineering.profileId.value = payload.profile_id;
+    await engineering.launch(() => compileStyleProfile({
+      ...payload,
+      project_root: projectRoot.value,
+    }));
+  }
+
+  async function advanceProfile(
+    authorId = selectedVersion.value?.author_id || engineering.authorId.value,
+    profileId = selectedVersion.value?.profile_id || engineering.profileId.value,
+  ): Promise<void> {
+    if (!projectRoot.value || !authorId || !profileId) return;
+    engineering.authorId.value = authorId;
+    engineering.profileId.value = profileId;
+    const payload: StyleAdvancePayload = {
+      project_root: projectRoot.value,
+      author_id: authorId,
+      profile_id: profileId,
+      runtime: "opencode",
+    };
+    await engineering.launch(() => advanceStyleProfile(payload));
+  }
+
+  async function buildProfile(
+    authorId = selectedVersion.value?.author_id || engineering.authorId.value,
+    profileId = selectedVersion.value?.profile_id || engineering.profileId.value,
+  ): Promise<void> {
+    if (!projectRoot.value || !authorId || !profileId) return;
+    engineering.authorId.value = authorId;
+    engineering.profileId.value = profileId;
+    const payload: StyleBuildPayload = {
+      project_root: projectRoot.value,
+      author_id: authorId,
+      profile_id: profileId,
+      runtime: "opencode",
+    };
+    await engineering.launch(() => buildStyleProfile(payload));
   }
 
   async function runAuthoring(
@@ -194,6 +255,7 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
   }
 
   function reset(): void {
+    engineering.reset();
     workbench.value = null;
     loadedProjectRoot.value = "";
     error.value = "";
@@ -218,6 +280,13 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     busy,
     detailBusy,
     authoringBusy,
+    engineeringBusy: engineering.busy,
+    engineeringJob: engineering.job,
+    engineeringTask: engineering.task,
+    engineeringEvents: engineering.events,
+    engineeringStreamError: engineering.streamError,
+    engineeringAuthorId: engineering.authorId,
+    engineeringProfileId: engineering.profileId,
     error,
     notice,
     projectRoot,
@@ -235,6 +304,14 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     createAuthor,
     createWork,
     importSource,
+    compileProfile,
+    advanceProfile,
+    buildProfile,
+    approveWriteback: engineering.approveWriteback,
+    rejectWriteback: engineering.rejectWriteback,
+    retryEngineering: engineering.retry,
+    stopEngineering: engineering.stop,
+    disposeEngineeringStream: engineering.dispose,
     clearError,
     clearNotice,
   };

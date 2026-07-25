@@ -59,6 +59,7 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
     router = APIRouter()
     _register_authoring_routes(router, deps)
     _register_engineering_routes(router, deps)
+    _register_advance_route(router, deps)
 
     @router.get("/style-lab/library")
     def style_lab_library(style_library_root: str = ""):
@@ -188,6 +189,11 @@ def _register_engineering_routes(
         except StyleSessionError as exc:
             raise _style_session_error(exc) from exc
 
+
+def _register_advance_route(
+    router: APIRouter,
+    deps: StyleLabRouterDependencies,
+) -> None:
     @router.post("/style-lab/advance")
     def style_lab_advance(payload: StyleAdvanceRequest):
         try:

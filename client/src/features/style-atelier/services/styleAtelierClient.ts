@@ -1,10 +1,20 @@
-import { api, query } from "@/services/api";
+import {
+  api,
+  connectEventStream,
+  query,
+  type EventStreamConnection,
+} from "@/services/api";
 import type {
+  StyleAdvancePayload,
   StyleAuthorCreatePayload,
   StyleAtelierWorkbench,
+  StyleBuildPayload,
+  StyleCompilePayload,
   StyleSourceCreatePayload,
+  StyleTaskLaunch,
   StyleTransactionReceipt,
   StyleVersionDetail,
+  StyleWorkerJob,
   StyleWorkCreatePayload,
 } from "../types";
 
@@ -47,6 +57,71 @@ function postStyleTransaction(
   path: string,
   payload: StyleAuthorCreatePayload | StyleWorkCreatePayload | StyleSourceCreatePayload,
 ): Promise<StyleTransactionReceipt> {
+  return api(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function compileStyleProfile(
+  payload: StyleCompilePayload,
+): Promise<StyleTaskLaunch> {
+  return postStyleTask("/style-lab/compile", payload);
+}
+
+export function advanceStyleProfile(
+  payload: StyleAdvancePayload,
+): Promise<StyleTaskLaunch> {
+  return postStyleTask("/style-lab/advance", payload);
+}
+
+export function buildStyleProfile(
+  payload: StyleBuildPayload,
+): Promise<StyleTaskLaunch> {
+  return postStyleTask("/style-lab/build", payload);
+}
+
+export function approveStyleWriteback(jobId: string): Promise<StyleWorkerJob> {
+  return api(`/worker/jobs/${encodeURIComponent(jobId)}/writeback`, {
+    method: "POST",
+    body: JSON.stringify({ decision: "approve", reason: "" }),
+  });
+}
+
+export function rejectStyleWriteback(jobId: string, reason: string): Promise<StyleWorkerJob> {
+  return api(`/worker/jobs/${encodeURIComponent(jobId)}/writeback`, {
+    method: "POST",
+    body: JSON.stringify({ decision: "reject", reason }),
+  });
+}
+
+export function retryStyleWorker(jobId: string): Promise<StyleWorkerJob> {
+  return api(`/worker/jobs/${encodeURIComponent(jobId)}/retry`, {
+    method: "POST",
+    body: JSON.stringify({ runtime: "", resume: true }),
+  });
+}
+
+export function stopStyleWorker(jobId: string): Promise<StyleWorkerJob> {
+  return api(`/worker/jobs/${encodeURIComponent(jobId)}/stop`, { method: "POST" });
+}
+
+export function observeStyleWorker(
+  jobId: string,
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+  onError?: (cause: unknown) => void,
+): EventStreamConnection {
+  return connectEventStream(
+    `/worker/jobs/${encodeURIComponent(jobId)}/stream`,
+    onEvent,
+    onError,
+  );
+}
+
+function postStyleTask(
+  path: string,
+  payload: StyleCompilePayload | StyleAdvancePayload | StyleBuildPayload,
+): Promise<StyleTaskLaunch> {
   return api(path, {
     method: "POST",
     body: JSON.stringify(payload),

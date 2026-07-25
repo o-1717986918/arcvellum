@@ -171,3 +171,70 @@ export interface StyleSourceCreatePayload {
   rights_mode: StyleRightsMode;
   rights_declaration: string;
 }
+
+export interface StyleSourceSelection {
+  work_id: string;
+  source_id: string;
+}
+
+export interface StyleCompilePayload {
+  project_root: string;
+  author_id: string;
+  profile_id: string;
+  display_name: string;
+  training_sources: StyleSourceSelection[];
+  holdout_sources: StyleSourceSelection[];
+  runtime: string;
+}
+
+export interface StyleAdvancePayload {
+  project_root: string;
+  author_id: string;
+  profile_id: string;
+  runtime: string;
+}
+
+export type StyleBuildPayload = StyleAdvancePayload;
+
+export interface StyleTaskDescriptor extends StyleRecord {
+  task_id: string;
+  current_state: string;
+  status: string;
+}
+
+export interface StyleWorkerJob extends StyleRecord {
+  schema?: string;
+  job_id: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+  started_at?: string;
+  finished_at?: string;
+  request?: StyleRecord;
+  result?: StyleRecord;
+  error?: string;
+  revision?: number;
+}
+
+export interface StyleTaskLaunch extends StyleRecord {
+  schema: string;
+  status: string;
+  task?: StyleTaskDescriptor;
+  session?: {
+    session_id: string;
+    author_id: string;
+    profile_id: string;
+    status: string;
+  };
+  style_id?: string;
+  version_id?: string;
+  content_hash?: string;
+  job: StyleWorkerJob | null;
+}
+
+export interface StyleWorkerEvent extends StyleRecord {
+  sequence?: number;
+  event: string;
+  at?: string;
+  data: StyleRecord;
+}

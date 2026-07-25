@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   BookCopy,
   CircleAlert,
@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-vue-next";
 import StyleJourney from "./components/StyleJourney.vue";
+import StyleEngineeringConsole from "./components/StyleEngineeringConsole.vue";
 import StyleSourceRail from "./components/StyleSourceRail.vue";
 import StyleSourceWorkshop from "./components/StyleSourceWorkshop.vue";
 import StyleVersionRack from "./components/StyleVersionRack.vue";
@@ -35,6 +36,7 @@ const integrity = computed(() => String((style.versionDetail?.integrity as Recor
 const promptQuality = computed(() => style.versionDetail?.prompt_quality || style.selectedVersion?.prompt_quality || {});
 
 onMounted(() => void load());
+onBeforeUnmount(style.disposeEngineeringStream);
 watch(() => style.projectRoot, () => void load());
 
 async function load(): Promise<void> {
@@ -140,6 +142,23 @@ function verdictLabel(value: unknown): string {
       </header>
 
       <StyleJourney :stages="style.workbench.journey" />
+      <StyleEngineeringConsole
+        :authors="style.authors"
+        :selected-author-id="style.selectedAuthorId"
+        :selected-version="style.selectedVersion"
+        :job="style.engineeringJob"
+        :task="style.engineeringTask"
+        :events="style.engineeringEvents"
+        :busy="style.engineeringBusy"
+        :stream-error="style.engineeringStreamError"
+        @compile="style.compileProfile"
+        @advance="style.advanceProfile"
+        @build="style.buildProfile"
+        @approve-writeback="style.approveWriteback"
+        @reject-writeback="style.rejectWriteback"
+        @retry="style.retryEngineering"
+        @stop="style.stopEngineering"
+      />
 
       <div class="style-atelier-grid">
         <StyleSourceRail
