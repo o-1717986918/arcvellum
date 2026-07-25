@@ -142,7 +142,7 @@ def _narrative_dependencies(
     config: dict[str, Any],
     cached_read_model: Callable[..., dict[str, Any]],
     dashboard_snapshot: Callable[[Path], dict[str, Any]],
-    library_snapshot: Callable[[Path], dict[str, Any]],
+    narrative_evidence_snapshot: Callable[[Path], dict[str, Any]],
     v2_stream_state: dict[str, dict[str, Any]],
     v3_stream_state: dict[str, dict[str, Any]],
     stream_lock: threading.Lock,
@@ -151,7 +151,7 @@ def _narrative_dependencies(
         config=config,
         cached_read_model=cached_read_model,
         dashboard_snapshot=dashboard_snapshot,
-        library_snapshot=library_snapshot,
+        narrative_evidence_snapshot=narrative_evidence_snapshot,
         build_projection=build_narrative_projection,
         projection_delta=projection_delta,
         projection_motion_events=projection_motion_events,
@@ -227,6 +227,7 @@ def create_app(config_override: dict[str, Any] | None = None):
     cached_read_model = read_models.cached
     dashboard_snapshot = read_models.dashboard
     library_snapshot = read_models.library
+    narrative_evidence_snapshot = read_models.narrative_evidence
     reader_snapshot = read_models.reader
     progress_snapshot = read_models.progress
     delivery_snapshot = read_models.delivery
@@ -387,7 +388,7 @@ def create_app(config_override: dict[str, Any] | None = None):
                 config,
                 cached_read_model,
                 dashboard_snapshot,
-                library_snapshot,
+                narrative_evidence_snapshot,
                 narrative_stream_state,
                 narrative_v3_stream_state,
                 narrative_stream_lock,

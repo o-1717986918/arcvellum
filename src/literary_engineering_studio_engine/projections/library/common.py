@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+from typing import Iterable
 
 from ...display_cleaner import (
     list_from_yaml_text,
@@ -15,6 +16,11 @@ from ...display_cleaner import (
 )
 
 PROJECT_LIBRARY_SCHEMA = "literary-engineering-workbench/project-library/v0.1"
+
+
+def _bounded_paths(paths: Iterable[Path], limit: int | None) -> list[Path]:
+    ordered = sorted(paths)
+    return ordered if limit is None else ordered[:max(0, int(limit))]
 
 def _load_overrides(root: Path) -> dict[str, object]:
     payload = read_json_file(root / "workflow" / "ui_overrides.json")

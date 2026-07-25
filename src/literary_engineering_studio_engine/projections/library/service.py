@@ -18,6 +18,9 @@ from .continuity import _canon_patch_items, _context_health_items, _continuity_i
 from .drafts import _completed_prose_summary, _draft_items
 from .story import _rhythm_items, _story_architecture_items, _word_budget_items
 
+NARRATIVE_EVIDENCE_SCHEMA = "arcvellum/narrative-evidence/v1"
+
+
 def build_project_library(project_root: Path) -> dict[str, object]:
     """Build a human-facing, read-only project library snapshot."""
 
@@ -61,6 +64,29 @@ def build_project_library(project_root: Path) -> dict[str, object]:
             "Canon, character, prose, and release changes must still use candidate/review/approval or formal CLI routes.",
         ],
     }
+
+
+def build_narrative_evidence(project_root: Path) -> dict[str, object]:
+    """Project every graph-bearing fact without carrying the display archive."""
+
+    root = project_root.resolve()
+    if not root.exists():
+        raise FileNotFoundError(f"project root not found: {root}")
+    sections = {
+        "scenes": _scene_items(root, {}, limit=None),
+        "characters": _character_items(root, {}, limit=None),
+        "branches": _branch_items(root, {}, limit=None),
+        "reviews": _review_items(root, {}, limit=None),
+        "canon_patches": _canon_patch_items(root, {}, limit=None),
+    }
+    return {
+        "schema": NARRATIVE_EVIDENCE_SCHEMA,
+        "generated_at": _now(),
+        "project_root": str(root),
+        "counts": {key: len(value) for key, value in sections.items()},
+        "sections": sections,
+    }
+
 
 def find_project_library_item(project_root: Path, kind: str, item_id: str) -> dict[str, object]:
     library = build_project_library(project_root)

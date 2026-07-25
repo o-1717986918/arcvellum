@@ -16,6 +16,7 @@ from ...display_cleaner import (
 )
 from .common import (
     _apply_overrides,
+    _bounded_paths,
     _display_scene_name,
     _display_text_for_path,
     _first_heading,
@@ -28,12 +29,17 @@ from .common import (
 )
 from ...style_lab import active_project_style
 
-def _character_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
+def _character_items(
+    root: Path,
+    overrides: dict[str, object],
+    *,
+    limit: int | None = 200,
+) -> list[dict[str, object]]:
     folder = root / "characters"
     if not folder.exists():
         return []
     items = []
-    for path in sorted(folder.glob("*.yaml"))[:200]:
+    for path in _bounded_paths(folder.glob("*.yaml"), limit):
         if path.name.startswith("_"):
             continue
         text = _read_text(path)
@@ -97,12 +103,17 @@ def _world_items(root: Path, overrides: dict[str, object]) -> list[dict[str, obj
                 return items
     return items
 
-def _scene_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
+def _scene_items(
+    root: Path,
+    overrides: dict[str, object],
+    *,
+    limit: int | None = 250,
+) -> list[dict[str, object]]:
     folder = root / "scenes"
     if not folder.exists():
         return []
     items = []
-    for path in sorted(folder.glob("*.yaml"))[:250]:
+    for path in _bounded_paths(folder.glob("*.yaml"), limit):
         text = _read_text(path)
         scene_id = scalar_from_yaml_text(text, "scene_id") or path.stem
         chapter_id = scalar_from_yaml_text(text, "chapter_id") or "未分章"
@@ -132,12 +143,12 @@ def _scene_items(root: Path, overrides: dict[str, object]) -> list[dict[str, obj
         items.append(_apply_overrides(item, overrides))
     return items
 
-def _branch_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
+def _branch_items(root: Path, overrides: dict[str, object], *, limit: int | None = 250) -> list[dict[str, object]]:
     folder = root / "branches"
     if not folder.exists():
         return []
     items = []
-    for manifest in sorted(folder.glob("*/branch_manifest.json"))[:250]:
+    for manifest in _bounded_paths(folder.glob("*/branch_manifest.json"), limit):
         payload = read_json_file(manifest)
         scene_id = str(payload.get("scene_id") or manifest.parent.name)
         selection_path = manifest.parent / "branch_selection.md"
@@ -217,12 +228,19 @@ def _style_items(root: Path, overrides: dict[str, object]) -> list[dict[str, obj
         items.append(_apply_overrides(item, overrides))
     return items
 
-def _review_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
+def _review_items(
+    root: Path,
+    overrides: dict[str, object],
+    *,
+    limit: int | None = 80,
+) -> list[dict[str, object]]:
     folder = root / "reviews"
     if not folder.exists():
         return []
     paths = [path for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in {".md", ".json"}]
-    paths = sorted(paths, key=lambda path: path.stat().st_mtime, reverse=True)[:80]
+    paths = sorted(paths, key=lambda path: path.stat().st_mtime, reverse=True)
+    if limit is not None:
+        paths = paths[:max(0, int(limit))]
     items = []
     for path in paths:
         text = _display_text_for_path(path)

@@ -77,6 +77,11 @@ def build_library(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
     return {"ok": True, **payload}
 
 
+def build_narrative_evidence(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    payload = _function(config, "project_library", "build_narrative_evidence")(project_root)
+    return {"ok": True, **payload}
+
+
 def current_choices(
     config: dict[str, Any],
     project_root: Path,

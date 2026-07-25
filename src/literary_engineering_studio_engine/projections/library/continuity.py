@@ -8,6 +8,7 @@ from ...context_broker import context_trace_status
 from ...display_cleaner import read_json_file, summarize_text, truncate_text
 from .common import (
     _apply_overrides,
+    _bounded_paths,
     _display_list_value,
     _display_scene_name,
     _display_text_for_path,
@@ -120,12 +121,17 @@ def _context_health_items(root: Path, overrides: dict[str, object]) -> list[dict
         items.append(_apply_overrides(item, overrides))
     return items
 
-def _canon_patch_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
+def _canon_patch_items(
+    root: Path,
+    overrides: dict[str, object],
+    *,
+    limit: int | None = 250,
+) -> list[dict[str, object]]:
     folder = root / "canon" / "patches"
     if not folder.exists():
         return []
     items: list[dict[str, object]] = []
-    for path in sorted(folder.glob("*_canon_patch.json"))[:250]:
+    for path in _bounded_paths(folder.glob("*_canon_patch.json"), limit):
         payload = read_json_file(path)
         if not payload:
             continue

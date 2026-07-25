@@ -19,7 +19,7 @@ class NarrativeRouterDependencies:
     config: dict[str, Any]
     cached_read_model: Callable[..., dict[str, Any]]
     dashboard_snapshot: Callable[[Path], dict[str, Any]]
-    library_snapshot: Callable[[Path], dict[str, Any]]
+    narrative_evidence_snapshot: Callable[[Path], dict[str, Any]]
     build_projection: Callable[..., dict[str, Any]]
     projection_delta: Callable[[dict[str, Any] | None, dict[str, Any]], dict[str, Any]]
     projection_motion_events: Callable[..., list[dict[str, Any]]]
@@ -44,7 +44,7 @@ def _projection(deps: NarrativeRouterDependencies, root: Path, level: str, focus
             level=level,
             focus=focus,
             dashboard_payload=deps.dashboard_snapshot(root),
-            library_payload=deps.library_snapshot(root),
+            library_payload=deps.narrative_evidence_snapshot(root),
         ),
     )
 
@@ -60,7 +60,7 @@ def _projection_v3(deps: NarrativeRouterDependencies, root: Path, level: str, fo
             focus=focus,
             grammar=grammar,
             dashboard_payload=deps.dashboard_snapshot(root),
-            library_payload=deps.library_snapshot(root),
+            library_payload=deps.narrative_evidence_snapshot(root),
         ),
     )
 
@@ -200,7 +200,7 @@ def build_narrative_router(deps: NarrativeRouterDependencies) -> APIRouter:
                     focus=focus,
                     grammar=grammar,
                     dashboard_payload=deps.dashboard_snapshot(root),
-                    library_payload=deps.library_snapshot(root),
+                    library_payload=deps.narrative_evidence_snapshot(root),
                 )
             )
         except KeyError as exc:

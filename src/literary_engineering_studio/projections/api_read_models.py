@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..observability.agent_observability import build_agent_observability
-from .core_read_models import build_dashboard, build_library
+from .core_read_models import build_dashboard, build_library, build_narrative_evidence
 from .delivery import build_delivery
 from ..application.project_progress import build_project_progress
 from .reader import build_reader_manifest, public_reader_manifest
@@ -42,6 +42,13 @@ class ProjectReadModels:
 
     def library(self, root: Path) -> dict[str, Any]:
         return self.cached(f"library:{root}", root, lambda: build_library(self._config, root))
+
+    def narrative_evidence(self, root: Path) -> dict[str, Any]:
+        return self.cached(
+            f"narrative-evidence:{root}",
+            root,
+            lambda: build_narrative_evidence(self._config, root),
+        )
 
     def reader(self, root: Path) -> dict[str, Any]:
         return self.cached(f"reader:{root}", root, lambda: public_reader_manifest(build_reader_manifest(root)))
