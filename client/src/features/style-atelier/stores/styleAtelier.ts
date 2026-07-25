@@ -10,6 +10,8 @@ import {
   fetchStyleVersionDetail,
   fetchStyleWorkbench,
   importStyleSource,
+  mountStyleVersion,
+  previewStyleMount,
 } from "../services/styleAtelierClient";
 import { useStyleEngineeringSession } from "./styleEngineeringSession";
 import type {
@@ -18,6 +20,8 @@ import type {
   StyleAuthorCreatePayload,
   StyleBuildPayload,
   StyleCompilePayload,
+  StyleMountPayload,
+  StyleMountPreview,
   StyleSourceCreatePayload,
   StyleTransactionReceipt,
   StyleVersion,
@@ -37,6 +41,8 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
   const busy = ref(false);
   const detailBusy = ref(false);
   const authoringBusy = ref(false);
+  const mountBusy = ref(false);
+  const mountPreview = shallowRef<StyleMountPreview | null>(null);
   const error = ref("");
   const notice = ref("");
   const engineering = useStyleEngineeringSession({
@@ -119,6 +125,51 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
       },
       "来源已经固化，正文不会在工作台中直接回显。",
     );
+  }
+
+  async function previewMount(version = selectedVersion.value): Promise<void> {
+    if (!projectRoot.value || !isMountableVersion(version)) return;
+    mountBusy.value = true;
+    error.value = "";
+    notice.value = "";
+    try {
+      mountPreview.value = await previewStyleMount(
+        mountPayload(projectRoot.value, version),
+      );
+    } catch (cause) {
+      error.value = messageFor(cause, "当前文风版本的挂载影响没有读取成功。");
+      throw cause;
+    } finally {
+      mountBusy.value = false;
+    }
+  }
+
+  async function confirmMount(): Promise<void> {
+    const preview = mountPreview.value;
+    const version = selectedVersion.value;
+    if (!projectRoot.value || !preview || !isMountableVersion(version)) return;
+    mountBusy.value = true;
+    error.value = "";
+    try {
+      const transaction = await mountStyleVersion({
+        ...mountPayload(projectRoot.value, version),
+        preview_revision: preview.revision,
+      });
+      mountPreview.value = null;
+      await refreshWorkbench();
+      notice.value = transaction.status === "mounted"
+        ? "文风版本已经挂载；后续创作与审查将使用同一份不可变快照。"
+        : "当前作品已经在使用这个文风版本。";
+    } catch (cause) {
+      error.value = messageFor(cause, "文风版本没有成功挂载，请重新预览影响后再确认。");
+      throw cause;
+    } finally {
+      mountBusy.value = false;
+    }
+  }
+
+  function dismissMountPreview(): void {
+    mountPreview.value = null;
   }
 
   async function compileProfile(payload: Omit<StyleCompilePayload, "project_root">): Promise<void> {
@@ -207,6 +258,7 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
   }
 
   async function selectVersion(version: StyleVersion): Promise<void> {
+    mountPreview.value = null;
     selectedVersionKey.value = versionKey(version);
     if (version.author_id && authors.value.some((item) => item.author_id === version.author_id)) {
       selectedAuthorId.value = version.author_id;
@@ -260,6 +312,7 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     loadedProjectRoot.value = "";
     error.value = "";
     notice.value = "";
+    mountPreview.value = null;
     resetSelections();
   }
 
@@ -280,6 +333,8 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     busy,
     detailBusy,
     authoringBusy,
+    mountBusy,
+    mountPreview,
     engineeringBusy: engineering.busy,
     engineeringJob: engineering.job,
     engineeringTask: engineering.task,
@@ -304,6 +359,9 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     createAuthor,
     createWork,
     importSource,
+    previewMount,
+    confirmMount,
+    dismissMountPreview,
     compileProfile,
     advanceProfile,
     buildProfile,
@@ -336,4 +394,25 @@ function sourceCount(author: StyleAuthor): number {
 
 function messageFor(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback;
+}
+
+function isMountableVersion(version: StyleVersion | null): version is StyleVersion {
+  return Boolean(
+    version?.built
+    && version.style_id
+    && version.version_id
+    && version.content_hash
+    && version.state !== "conflict",
+  );
+}
+
+function mountPayload(projectRoot: string, version: StyleVersion): StyleMountPayload {
+  return {
+    project_root: projectRoot,
+    style_id: version.style_id,
+    version_id: version.version_id,
+    content_hash: version.content_hash,
+    scope: "project",
+    priority: "highest",
+  };
 }

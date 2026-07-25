@@ -12,6 +12,7 @@ import {
 } from "lucide-vue-next";
 import StyleJourney from "./components/StyleJourney.vue";
 import StyleEngineeringConsole from "./components/StyleEngineeringConsole.vue";
+import StyleMountManager from "./components/StyleMountManager.vue";
 import StyleSourceRail from "./components/StyleSourceRail.vue";
 import StyleSourceWorkshop from "./components/StyleSourceWorkshop.vue";
 import StyleVersionRack from "./components/StyleVersionRack.vue";
@@ -211,6 +212,15 @@ function verdictLabel(value: unknown): string {
               <article><BookCopy :size="17" /><span><small>提示词细节</small><strong>{{ promptQuality.detail_chars ? `${promptQuality.detail_chars} 字` : "待编译" }}</strong></span></article>
             </div>
             <p class="style-copy-boundary">{{ style.versionDetail?.copy_boundary || "版本只保存抽象后的写作约束，不向正文任务回传来源原文。" }}</p>
+            <StyleMountManager
+              :version="style.selectedVersion"
+              :active-mount="style.activeMount"
+              :preview="style.mountPreview"
+              :busy="style.mountBusy"
+              @preview="style.previewMount"
+              @confirm="style.confirmMount"
+              @close="style.dismissMountPreview"
+            />
           </section>
         </main>
 

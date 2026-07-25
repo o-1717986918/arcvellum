@@ -238,3 +238,76 @@ export interface StyleWorkerEvent extends StyleRecord {
   at?: string;
   data: StyleRecord;
 }
+
+export interface StyleMountIdentity extends StyleRecord {
+  style_id?: string;
+  version_id?: string;
+  content_hash?: string;
+  prompt_sha256?: string;
+  digest?: string;
+}
+
+export interface StyleVersionComparisonRow extends StyleRecord {
+  field: string;
+  label: string;
+  before: string | number;
+  after: string | number;
+  changed: boolean;
+}
+
+export interface StyleMountImpactEntry extends StyleRecord {
+  scene_id: string;
+  stages: string[];
+  artifact_count: number;
+  recorded_versions: string[];
+  reason: string;
+}
+
+export interface StyleMountImpact extends StyleRecord {
+  status: string;
+  mount_changes: boolean;
+  affected_scene_count: number;
+  affected_artifact_count: number;
+  historical_artifact_count: number;
+  inspected_artifact_count: number;
+  entries: StyleMountImpactEntry[];
+  invalidated_stages: string[];
+  historical_prose: "preserved";
+  revision: string;
+}
+
+export interface StyleMountPreview extends StyleRecord {
+  schema: "arcvellum/style-mount-preview/v1";
+  status: "already-mounted" | "confirmation-required";
+  revision: string;
+  current: StyleMountIdentity;
+  target: StyleMountIdentity;
+  comparison: {
+    status: string;
+    changes: StyleVersionComparisonRow[];
+    evidence: StyleVersionComparisonRow[];
+  };
+  impact: StyleMountImpact;
+  requires_confirmation: boolean;
+}
+
+export interface StyleMountTransaction extends StyleRecord {
+  schema: "arcvellum/style-mount-transaction/v1";
+  status: "mounted" | "already-mounted";
+  style_id: string;
+  version_id: string;
+  content_hash: string;
+  preview_revision: string;
+  active_mount: StyleMount;
+  impact: StyleMountImpact;
+}
+
+export interface StyleMountPayload {
+  project_root: string;
+  style_id: string;
+  version_id: string;
+  content_hash: string;
+  scope: "project";
+  priority: "highest";
+  preview_revision?: string;
+}

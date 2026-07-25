@@ -10,6 +10,9 @@ import type {
   StyleAtelierWorkbench,
   StyleBuildPayload,
   StyleCompilePayload,
+  StyleMountPayload,
+  StyleMountPreview,
+  StyleMountTransaction,
   StyleSourceCreatePayload,
   StyleTaskLaunch,
   StyleTransactionReceipt,
@@ -104,6 +107,24 @@ export function retryStyleWorker(jobId: string): Promise<StyleWorkerJob> {
 
 export function stopStyleWorker(jobId: string): Promise<StyleWorkerJob> {
   return api(`/worker/jobs/${encodeURIComponent(jobId)}/stop`, { method: "POST" });
+}
+
+export function previewStyleMount(
+  payload: StyleMountPayload,
+): Promise<StyleMountPreview> {
+  return api("/style-lab/mount-preview", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function mountStyleVersion(
+  payload: StyleMountPayload,
+): Promise<StyleMountTransaction> {
+  return api("/style-lab/mount", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function observeStyleWorker(

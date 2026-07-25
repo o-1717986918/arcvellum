@@ -153,6 +153,98 @@ describe("style atelier store", () => {
     );
   });
 
+  it("binds an exact mount confirmation to the latest impact preview", async () => {
+    const initial = workbenchFixture();
+    const target = {
+      ...initial.versions[0],
+      version_id: "v2-reviewed",
+      display_name: "克制叙事（二版）",
+      state: "built",
+      content_hash: "sha256:style-v2",
+      mounted: false,
+    };
+    initial.versions.push(target);
+    const mounted = structuredClone(initial);
+    mounted.versions = mounted.versions.map((version) => ({
+      ...version,
+      state: version.version_id === "v2-reviewed" ? "mounted" : "built",
+      mounted: version.version_id === "v2-reviewed",
+    }));
+    mounted.active_mount = {
+      style_id: "classic-style",
+      version_id: "v2-reviewed",
+      profile_id: "restrained",
+      content_hash: "sha256:style-v2",
+    };
+    let workbenchReads = 0;
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/style-lab/mount-preview" && init?.method === "POST") {
+        const payload = JSON.parse(String(init.body));
+        expect(payload).toMatchObject({
+          project_root: "C:\\ArcVellum\\潮线",
+          style_id: "classic-style",
+          version_id: "v2-reviewed",
+          content_hash: "sha256:style-v2",
+        });
+        expect(payload.preview_revision).toBeUndefined();
+        return mountPreviewFixture();
+      }
+      if (path === "/style-lab/mount" && init?.method === "POST") {
+        const payload = JSON.parse(String(init.body));
+        expect(payload).toMatchObject({
+          style_id: "classic-style",
+          version_id: "v2-reviewed",
+          content_hash: "sha256:style-v2",
+          preview_revision: "sha256:mount-preview-v2",
+        });
+        return {
+          schema: "arcvellum/style-mount-transaction/v1",
+          status: "mounted",
+          style_id: "classic-style",
+          version_id: "v2-reviewed",
+          content_hash: "sha256:style-v2",
+          preview_revision: "sha256:mount-preview-v2",
+          active_mount: mounted.active_mount,
+          impact: mountPreviewFixture().impact,
+        };
+      }
+      if (path.startsWith("/style-lab/workbench")) {
+        workbenchReads += 1;
+        return workbenchReads > 1 ? mounted : initial;
+      }
+      if (path.startsWith("/style-lab/versions/classic-style/")) {
+        const versionId = path.includes("v2-reviewed") ? "v2-reviewed" : "v1-stable";
+        return {
+          schema: "arcvellum/style-profile-version-detail/v1",
+          style_id: "classic-style",
+          version_id: versionId,
+          content_hash: versionId === "v2-reviewed" ? "sha256:style-v2" : "sha256:style",
+          author_id: "classic-author",
+          profile_id: "restrained",
+          state: versionId === "v2-reviewed" ? "built" : "mounted",
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const { useStyleAtelierStore } = await import("./styleAtelier");
+    const store = useStyleAtelierStore();
+    await store.load();
+    await store.selectVersion(target);
+
+    await store.previewMount();
+
+    expect(store.mountPreview?.revision).toBe("sha256:mount-preview-v2");
+    expect(store.mountPreview?.impact.affected_scene_count).toBe(1);
+    expect(store.selectedVersion?.mounted).toBe(false);
+
+    await store.confirmMount();
+
+    expect(store.mountPreview).toBeNull();
+    expect(store.activeMount.version_id).toBe("v2-reviewed");
+    expect(store.selectedVersion?.mounted).toBe(true);
+    expect(store.notice).toContain("同一份不可变快照");
+  });
+
   it("observes a formal style job through SSE and refreshes only at its real terminal state", async () => {
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path === "/style-lab/compile" && init?.method === "POST") {
@@ -284,5 +376,59 @@ function workbenchFixture(): StyleAtelierWorkbench {
       { id: "profiles", label: "文风抽象", status: "ready", count: 1 },
     ],
     issues: [],
+  };
+}
+
+function mountPreviewFixture() {
+  return {
+    schema: "arcvellum/style-mount-preview/v1",
+    status: "confirmation-required",
+    revision: "sha256:mount-preview-v2",
+    current: {
+      style_id: "classic-style",
+      version_id: "v1-stable",
+      content_hash: "sha256:style",
+    },
+    target: {
+      style_id: "classic-style",
+      version_id: "v2-reviewed",
+      content_hash: "sha256:style-v2",
+    },
+    comparison: {
+      status: "changed",
+      changes: [{
+        field: "content_hash",
+        label: "版本证据",
+        before: "sha256:style",
+        after: "sha256:style-v2",
+        changed: true,
+      }],
+      evidence: [{
+        field: "prompt_chars",
+        label: "提示词细节",
+        before: 980,
+        after: 1240,
+        changed: true,
+      }],
+    },
+    impact: {
+      status: "would-propagate",
+      mount_changes: true,
+      affected_scene_count: 1,
+      affected_artifact_count: 2,
+      historical_artifact_count: 1,
+      inspected_artifact_count: 3,
+      entries: [{
+        scene_id: "scene_0002",
+        stages: ["context", "composition"],
+        artifact_count: 2,
+        recorded_versions: ["v1-stable"],
+        reason: "unpromoted scene evidence uses the previous mounted style",
+      }],
+      invalidated_stages: ["context", "composition"],
+      historical_prose: "preserved",
+      revision: "sha256:mount-impact-v2",
+    },
+    requires_confirmation: true,
   };
 }
