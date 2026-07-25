@@ -1,0 +1,88 @@
+{
+  "schema": "arcvellum/narrative-performance-baseline/v1",
+  "generated_at": "2026-07-25T04:26:14.278026+00:00",
+  "runtime": {
+    "python": "3.14.5",
+    "implementation": "CPython",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "executable": "python.exe"
+  },
+  "method": {
+    "repetitions": 5,
+    "warmups_per_case": 1,
+    "source_scene_scales": [
+      100,
+      300,
+      1000
+    ]
+  },
+  "samples": [
+    {
+      "source_scene_count": 100,
+      "level": "book",
+      "focus": "",
+      "projected_node_count": 15,
+      "projected_edge_count": 59,
+      "payload_bytes": 43881,
+      "median_ms": 5.744,
+      "max_ms": 6.853,
+      "stable_revision": true
+    },
+    {
+      "source_scene_count": 100,
+      "level": "scene",
+      "focus": "scene_0050",
+      "projected_node_count": 130,
+      "projected_edge_count": 324,
+      "payload_bytes": 226419,
+      "median_ms": 12.018,
+      "max_ms": 13.939,
+      "stable_revision": true
+    },
+    {
+      "source_scene_count": 300,
+      "level": "book",
+      "focus": "",
+      "projected_node_count": 45,
+      "projected_edge_count": 419,
+      "payload_bytes": 227491,
+      "median_ms": 14.055,
+      "max_ms": 15.645,
+      "stable_revision": true
+    },
+    {
+      "source_scene_count": 300,
+      "level": "scene",
+      "focus": "scene_0150",
+      "projected_node_count": 340,
+      "projected_edge_count": 924,
+      "payload_bytes": 625700,
+      "median_ms": 27.658,
+      "max_ms": 30.627,
+      "stable_revision": true
+    },
+    {
+      "source_scene_count": 1000,
+      "level": "book",
+      "focus": "",
+      "projected_node_count": 124,
+      "projected_edge_count": 1399,
+      "payload_bytes": 727042,
+      "median_ms": 38.65,
+      "max_ms": 40.772,
+      "stable_revision": true
+    },
+    {
+      "source_scene_count": 1000,
+      "level": "scene",
+      "focus": "scene_0500",
+      "projected_node_count": 1049,
+      "projected_edge_count": 3024,
+      "payload_bytes": 1984579,
+      "median_ms": 84.683,
+      "max_ms": 94.773,
+      "stable_revision": true
+    }
+  ],
+  "violations": []
+}

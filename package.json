@@ -6,6 +6,7 @@
     "client:dev": "vite --config client/vite.config.ts",
     "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --configLoader runner --config client/vite.config.ts && node scripts/sync-desktop-frontend.mjs && node scripts/verify-v09-build.mjs",
     "client:verify-build": "node scripts/verify-v09-build.mjs",
+    "client:benchmark:narrative": "vitest run --config client/vitest.config.ts client/src/features/orrery/layout/largeScaleLayout.spec.ts --reporter verbose",
     "client:test": "vitest run --config client/vitest.config.ts",
     "client:test:watch": "vitest --config client/vitest.config.ts",
     "tauri": "tauri",
