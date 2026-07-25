@@ -6,6 +6,12 @@
 > 更新日期：2026-07-25  
 > 性质：目标架构、实施顺序、验收契约；不是“已经实现”声明
 
+## 专项实施文档
+
+- [v0.96 - v1.0 统一工程实施方案](arcvellum-v0.96-v1.0-integrated-engineering-implementation-plan.md)：本路线图的模块级、架构级、代码级落地总入口，统一各工作流依赖、代码归属、迁移和验收。
+- [自适应创作编排系统实施方案](arcvellum-adaptive-creative-orchestration-implementation-plan.md)：把固定路线升级为“Agent 提议策略、确定性编译、现有 Gate 执行”的受约束任务 DAG。
+- [Denova 与 ArcVellum 架构对比审阅](../research/denova-comparative-architecture-review.md)：评估 Context Ledger、工具门禁、Mutation Receipt、版本管理和写作 IDE 等可借鉴能力及边界。
+
 ## 1. 文档目的
 
 ArcVellum 已经拥有可运行的文学工程内核、受控 Agent Runtime、自动推进、叙事星仪、阅读器、档案投影、项目顾问、模型配置和桌面发布链路。下一阶段不应继续以零散热修方式增加功能，而应围绕三个问题进行系统收敛：
@@ -588,7 +594,7 @@ OpenCode Worker 目前允许 sandbox 内 read/glob/grep/list/edit/write，禁止
 
 ### 10.2 目标：依赖图并发
 
-建立 `TaskDependencyGraph`：
+以自适应编排的 `CompiledTaskGraph` 作为唯一依赖图，不再建立平行 `TaskDependencyGraph`。每个编译节点补齐资源字段：
 
 ```json
 {
@@ -641,22 +647,28 @@ Pi 官方提供 RPC 模式，`pi --mode rpc` 通过 stdin/stdout JSONL 接收命
 
 ### 11.2 实现方式
 
-先建立 Runtime SPI：
+复用并版本化当前 `runtimes/base.py::AgentRuntime`。Pi 的会话与 RPC 细节封装在 Adapter 内部，Worker 仍使用统一的单任务执行入口：
 
 ```python
-class AgentRuntime(Protocol):
-    def capabilities(self) -> RuntimeCapabilities: ...
-    def start_session(self, request: SessionRequest) -> SessionHandle: ...
-    def send_task(self, handle: SessionHandle, task: RuntimeTask) -> None: ...
-    def stream_events(self, handle: SessionHandle) -> Iterable[RuntimeEvent]: ...
-    def cancel(self, handle: SessionHandle) -> None: ...
-    def close(self, handle: SessionHandle) -> None: ...
+class AgentRuntime:
+    def availability(self) -> RuntimeAvailability: ...
+    def capabilities(self) -> AgentRunnerCapabilities: ...
+    def execute(
+        self,
+        workspace: Path,
+        prompt_path: Path,
+        run_root: Path,
+        *,
+        timeout: int,
+        event_sink: EventSink | None = None,
+        cancel_event: Event | None = None,
+    ) -> RuntimeResult: ...
 ```
 
 适配器：
 
-- `OpenCodeRuntimeAdapter`
-- `PiRpcRuntimeAdapter`
+- `OpenCodeRuntime`
+- `PiRpcRuntime`
 
 Pi 接入流程：
 
@@ -774,6 +786,21 @@ full_auto 已能委托分支、文风挂载、修订方向、扩纲、资产批�
 - 模拟 Provider 故障后能按策略恢复或明确停止。
 - 不出现重复提交、无限修订、空转和越权晋升。
 
+### 13.4 创作吞吐：减少往返，不减少正式步骤
+
+当前流程繁琐的主要成本来自：每个细粒度任务都重复领取、打开、暂存上下文、调用 Agent、预检和写回；同项目大部分工作串行；格式错误经常在模型完成后才被发现。OpenCode 服务复用只能减少进程成本，不能自动消除模型轮次和重复上下文。
+
+优化采用四项机制：
+
+1. `ExecutionBundle`：以白名单模板让同一角色在一个受控执行束中交付多份独立正式产物；Writer 与 Reviewer 永远分离。
+2. `RollingHorizonWindow`：章节全局规划后，只深度推演未来 2 - 4 个场景，每个场景写回后重新基准化。
+3. `SceneRiskProfile`：所有场景保留 RP、分支依据和正式 Review，只按 compact/standard/deep 调整推演与审查深度。
+4. Context cache 与局部 output repair：按 Canon、人物状态、文风、预算和场景契约 hash 缓存；格式错误只修复无效产物，语义失败仍走正式 revision。
+
+正式产物、Gate、promotion 和状态写回数量不因“快速模式”减少。Bundle 只能由确定性 Compiler 生成，遇到人类决策、角色变化、语义审查和正式写回边界必须切断。
+
+吞吐验收记录每个晋升场景的模型轮次、阶段耗时、上下文缓存命中、首次 preflight/review 通过率、repair/retry 和 stale 浪费。只有在正式产物与 Gate 等价的前提下，速度提升才有效。
+
 ## 14. Agent 会话观测台
 
 ### 14.1 当前能力
@@ -870,8 +897,11 @@ full_auto 已能委托分支、文风挂载、修订方向、扩纲、资产批�
 | `OwnerOverrideTransaction` | 用户权威与工程完整性冲突 |
 | `AssetViewDefinition` | 档案类型快速产品化 |
 | `CapabilityManifest` | Agent 权限扩展不退回任意 Shell |
-| `TaskDependencyGraph` | 同项目并发与读写冲突 |
-| `RuntimeCapabilities` | OpenCode、Pi、Ollama 能力差异 |
+| `CompiledTaskGraph` | 自适应编排与同项目并发共用的依赖图；不另建第二套 `TaskDependencyGraph` |
+| `ExecutionBundle` | 在不合并角色和 Gate 的前提下减少 Agent 会话往返 |
+| `RollingHorizonWindow` | 章节全局规划与近场深度推演的边界 |
+| `SceneRiskProfile` | 调整推演深度但不能删除 RP、分支依据或正式 Review |
+| `AgentRunnerCapabilities` | OpenCode、Pi、Ollama 能力差异；扩展现有 `runtimes/base.py` 契约 |
 | `AgentSessionProjection v3` | 上下文、工具和产物进度可视化 |
 | `StyleProfileVersion` | 文风编译、评测、挂载版本一致 |
 | `SourceEvidenceRef` | 整篇反推的证据和不确定性 |
@@ -895,6 +925,7 @@ full_auto 已能委托分支、文风挂载、修订方向、扩纲、资产批�
 6. 重做正文长卷三态窗口。
 7. 增加大规模投影性能夹具。
 8. 视觉回归覆盖四主题、全书/章节/场景/人物焦点。
+9. 建立每个晋升场景的模型轮次、阶段耗时、重试和首次通过率基线。
 
 退出条件：
 
@@ -947,6 +978,7 @@ full_auto 已能委托分支、文风挂载、修订方向、扩纲、资产批�
 5. 实体消歧、全书聚合、冲突审计和项目重建。
 6. Project Archaeology 前端。
 7. 反推候选与 Archive IDE 晋升联动。
+8. 依赖 hash 上下文缓存与 Rolling Horizon shadow。
 
 退出条件：
 
@@ -958,13 +990,14 @@ full_auto 已能委托分支、文风挂载、修订方向、扩纲、资产批�
 
 任务：
 
-1. 抽象 `AgentRuntime` SPI。
-2. 迁移 OpenCode 到 Adapter，不改变现有行为。
+1. 版本化并收敛现有 `runtimes/base.py::AgentRuntime` 契约，不新建第二套 SPI。
+2. 以现有 OpenCode Adapter 为基准补齐共享 contract test，不改变现有行为。
 3. Ollama 一等 Provider 和模型能力探测。
 4. Pi RPC 实验 Adapter。
 5. Capability Broker。
 6. Agent Session Projection v3。
 7. Agent Observatory 前端。
+8. Context cache、角色 session lease 和 Execution Bundle shadow。
 
 退出条件：
 
@@ -976,12 +1009,14 @@ full_auto 已能委托分支、文风挂载、修订方向、扩纲、资产批�
 
 任务：
 
-1. TaskDependencyGraph。
+1. 以 `CompiledTaskGraph` 补齐 base revision、读写集、barrier 和 parallel class。
 2. Snapshot revision 和读写集冲突检测。
 3. 审查、研究和文风分析的 fan-out/fan-in。
 4. Unattended Campaign Policy。
 5. 恢复阶梯、Provider 回退、章节 checkpoint。
 6. 空转检测、断电恢复和通知中心。
+7. chapter-planning/scene-analysis Bundle、Rolling Horizon 和 SceneRiskProfile。
+8. 局部格式 repair 与只读多维 Review 并发。
 
 退出条件：
 
@@ -1031,31 +1066,45 @@ src/literary_engineering_studio/
     assets/
     style/
     archaeology/
+  orchestration/
+    contracts.py
+    compiler.py
+    lint.py
+    simulator.py
+    scheduler.py
+    bundles.py
+    rolling_horizon.py
+    risk.py
   runtime/
-    contracts/
     capabilities/
-    scheduling/
+    resources/
+    bundle_executor.py
+    context_cache.py
+    output_repair.py
+  runtimes/
+    base.py
+    opencode.py
+    pi_rpc.py
   integrations/
     opencode/
     pi/
-    ollama/
+    providers/
   observability/
-    sessions/
-    context/
-    tools/
+    context_ledger.py
+    mutation_receipts.py
+    session_projection.py
+    throughput_metrics.py
   automation/
     campaign/
     recovery/
 
-protocol/
-  focus/
-  assets/
-  runtime/
-  style/
-  ingest/
+src/literary_engineering_studio_engine/
+  literary/
+    style/
+    ingest/
 ```
 
-不在一次提交中大规模移动所有现有文件。先建立边界和兼容 import，再按领域迁移，避免目录整理与行为修改互相掩盖。
+`runtime/` 负责执行、沙箱和资源边界，`runtimes/` 负责 Agent Runner Adapter，`orchestration/` 负责编译后的创作任务图；三者不得合并。领域契约放在所属模块，不建立巨型通用 `protocol` 包。不在一次提交中大规模移动所有现有文件。先建立边界和兼容 import，再按领域迁移，避免目录整理与行为修改互相掩盖。具体文件清单以统一工程实施方案为准。
 
 ## 19. 测试与验收矩阵
 
@@ -1083,6 +1132,7 @@ protocol/
 - Capability：未授权工具、路径和网络请求必定拒绝。
 - Scheduler：读写冲突、barrier、stale snapshot 和 fan-in。
 - Autopilot：授权、恢复、回退、空转和成本上限。
+- Throughput：固定路线与 Bundle 路线正式产物/Gate 等价；缓存失效、局部 repair 和滚动窗口重基准化。
 
 ### 19.3 真实项目验收
 
@@ -1111,6 +1161,9 @@ protocol/
 | 本地模型质量不足 | 正文和 JSON 失败 | 能力探测、任务适配等级、云回退 |
 | 同项目并发写冲突 | 数据损坏 | 不可变快照、读写集、fan-in Gate |
 | 全自动无限修订 | 成本和时间失控 | Progress Fingerprint、上限、恢复阶梯 |
+| Bundle 变成跳过流程的捷径 | 正式产物或审查缺失 | 白名单模板、单角色、边界切断、等价性测试 |
+| 上下文缓存过期 | 使用旧 Canon、人物状态或文风 | 依赖 hash、明确失效、Context Ledger |
+| 风险分级被用来降质 | 轻量场景缺少推演或 Review | 机器最低等级、Agent 只能上调、强制 Gate |
 | 会话面板泄露隐私 | 凭证或原文暴露 | 用户安全投影、路径清洗、不展示思维链 |
 | 文风学习过拟合或侵权 | 内容与发布风险 | 权利声明、保留集、抽象 craft、泄漏审计 |
 | 整篇反推强行确定事实 | 项目基础错误 | 证据、置信度、矛盾和候选晋升 |
@@ -1125,12 +1178,14 @@ protocol/
 - 节点 glyph/label 分层。
 - 正文长卷窗口。
 - 人物 ID 与人物栏。
+- 建立创作吞吐基线，不先凭感觉优化。
 
 ### 下一阶段做
 
 - Archive IDE 与 Owner Override。
 - 文风 Engine 迁入正式 Runtime。
 - Project Archaeology 产品化。
+- Context cache、局部 repair 和 Rolling Horizon shadow。
 
 ### 建立协议后做
 
@@ -1138,6 +1193,7 @@ protocol/
 - Capability Broker。
 - Ollama 一等 Provider。
 - Agent Observatory v3。
+- Execution Bundle 白名单、角色 session lease 和吞吐投影。
 
 ### 最后做
 
@@ -1166,5 +1222,6 @@ protocol/
 8. 用户能清晰看到每个 Agent 会话正在做什么、读了哪些资料、交付了什么，而不接触隐藏推理和敏感信息。
 9. 每个复杂模块都有可重播、与真实状态绑定的新手引导。
 10. Windows 用户仍能通过普通安装包使用产品，不需要配置开发环境。
+11. 创作吞吐相对基线提高，且正式产物、Gate、正文所有权和独立审查没有减少。
 
 这份路线图的核心不是让 ArcVellum 拥有更多按钮，而是让“作者权威、Agent 能力、文学工程约束和叙事可视化”成为同一个可靠系统。

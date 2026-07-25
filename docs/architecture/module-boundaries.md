@@ -2,6 +2,8 @@
 
 > 本文服务于 Studio 维护者。普通创作 Agent 不应把本文件当作操作入口；正式执行仍由 `task-next → task-open → task-submit → task-complete` 的任务包驱动。
 
+v0.96 - v1.0 的功能扩展必须同时遵守本文件与[统一工程实施方案](../roadmap/arcvellum-v0.96-v1.0-integrated-engineering-implementation-plan.md)。统一方案决定新增模块和施工顺序，本文件继续拥有依赖方向、compatibility facade 和目录归位纪律；任何产品路线不得以功能需要为由绕过这些边界。
+
 ## 原则
 
 模块拆分的目标不是压低文件行数，而是把可独立验证的职责放到明确边界中。每次拆分必须同时满足：
