@@ -17,9 +17,9 @@
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
 - W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态、工作区语义 revision、100/300/1000 规模基准、v3 增量传输、真实磁盘完整证据与浏览器大规模视觉验收。
 - W1 已满足当前路线定义的性能、导航、焦点、空间语法、主题、多窗口与 canvas 非空退出门禁。
-- W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、前端工作台和七类正式资产的受控创建。
-- W2 尚需补齐 Registry 驱动的结构化/Markdown/表格编辑深度、状态化模块引导和覆盖全部退出条件的最终真实项目验收；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 467 tests passed、1 skipped；Client 86 tests passed；Client production build、desktop frontend sync、Python compileall、Architecture Audit 与 `git diff --check` 全部通过。
+- W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、Registry 驱动的结构化编辑、状态化引导和隔离真实项目作者闭环。
+- W2 已满足统一实施方案当前定义的产品、Gate、Stable Knowledge 与架构出口；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
+- 最近一次全量证据：Python 473 tests passed、1 skipped；Client 90 tests passed；Client production build、desktop frontend sync、Python compileall、Architecture Audit 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
