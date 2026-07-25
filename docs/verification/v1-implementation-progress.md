@@ -147,6 +147,35 @@
   - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W1-4C1：真实磁盘项目完整叙事证据
+
+- Status: complete
+- Commit: `737fd51`
+- Added:
+  - 独立的 `arcvellum/narrative-evidence/v1` 只读证据投影；
+  - Narrative v2/v3 与节点详情不再复用面向人的截断 Library 摘要；
+  - Library 继续保持人物 200、场景 250、分支 250、审查 80、Canon patch 250 的展示上限；
+  - Narrative Read Model 使用独立缓存键，不污染档案视图；
+  - 可直接物化为真实工作项目的 100/300/1000 场景视觉 fixture；
+  - API 集成测试证明 300 场景项目即使 Library 只展示 250 场，Narrative 仍保留全部 300 场。
+- Materialized evidence:
+  - 100 场景：100 个叙事场景，475 nodes，1641 edges；
+  - 300 场景：Library 250 场、Narrative 300 场，1285 nodes，4841 edges；
+  - 1000 场景：Library 250 场、Narrative 1000 场，4095 nodes，16042 edges；
+  - 三组 fixture 均含章节、人物、分支、审查、Canon patch、节奏计划和部分晋升正文。
+- Exit evidence:
+  - Python full suite: 427 passed；
+  - Client full suite: 76 passed；
+  - Client production build: passed；
+  - `python -m compileall -q src benchmarks scripts`: passed；
+  - Architecture Audit: no new violation；
+  - `git diff --check`: passed。
+- Open performance gate:
+  - 当前真实 1000 场景项目首次完整证据读取约 11.8 秒；
+  - v3 scene 投影约 8.4 秒，JSON 首包约 12.6 MB；
+  - 正确性和可重复验收基础已完成，但浏览器交互性尚未达到 W1 退出标准；
+  - 下一批必须先压缩首次读取、投影和传输成本，再做四 focus、六语法、四主题浏览器视觉验收。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先建立可由浏览器直接加载的 100/300/1000 视觉验收项目，完成六种语法、四个 focus、窗口共存、主题切换、远中近 LOD 和 canvas 像素非空验证；在 W1 大规模视觉正确性未闭环前，不开始 Archive 写模型。
+下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先优化真实 1000 场景项目的完整证据读取、投影首包和客户端装载成本；随后完成六种语法、四个 focus、窗口共存、主题切换、远中近 LOD 和 canvas 像素非空验证。在 W1 大规模视觉性能与正确性未闭环前，不开始 Archive 写模型。
