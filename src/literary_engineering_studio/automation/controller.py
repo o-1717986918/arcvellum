@@ -33,7 +33,8 @@ from .support import (
     _run_steward_decision,
     _validate_autopilot_project,
 )
-from ..projections.core_read_models import current_choices, mount_style, record_choice
+from ..projections.core_read_models import current_choices, record_choice
+from ..application.style.mount_service import StyleMountApplicationService
 from ..advisor.creative_steward import CreativeSteward, CreativeStewardCancelled
 from ..persistence.job_store import JobStore
 from ..application.project_manager import record_direction
@@ -70,11 +71,13 @@ class AutopilotService:
         *,
         runtime_pool=None,
         execution_coordinator=None,
+        style_mount_service: StyleMountApplicationService | None = None,
     ):
         self.config = config
         self.store = store
         self.runtime_pool = runtime_pool
         self.execution_coordinator = execution_coordinator
+        self.style_mount_service = style_mount_service or StyleMountApplicationService()
         self.store.recover_autopilot_runs()
         self._lock = threading.RLock()
         self._threads: dict[str, threading.Thread] = {}
@@ -599,6 +602,7 @@ class AutopilotService:
 
         materialize = decision_type in {
             "branch_selection",
+            "style_mount",
             "asset_approval",
             "release_approval",
             "canon_patch_approval",
@@ -615,10 +619,18 @@ class AutopilotService:
                 "actor": "delegated-agent:creative-steward",
                 "materialize": materialize,
             },
+            style_mount_service=self.style_mount_service,
         )
         applied_evidence: list[str] = [str(recorded.get("choice_path") or "")]
         if recorded.get("materialized"):
             applied_evidence.append(str(recorded["materialized"]))
+        style_mount = (
+            recorded.get("style_mount")
+            if isinstance(recorded.get("style_mount"), dict)
+            else {}
+        )
+        if style_mount.get("receipt"):
+            applied_evidence.append(str(style_mount["receipt"]))
         if decision_type in {"revision_direction", "word_budget_direction"}:
             direction = record_direction(
                 project,
@@ -626,19 +638,6 @@ class AutopilotService:
                 actor="delegated-agent:creative-steward",
             )
             applied_evidence.append(str(direction.get("digest") or ""))
-        elif decision_type == "style_mount":
-            mounted = mount_style(
-                self.config,
-                project,
-                str((project / "style").resolve()),
-                str(decision["selected_option"]),
-            )
-            applied_evidence.extend(
-                str(mounted.get(key) or "")
-                for key in ("mount_manifest", "project_style")
-                if mounted.get(key)
-            )
-
         decision_record = {
             **decision,
             "project_root": str(project),

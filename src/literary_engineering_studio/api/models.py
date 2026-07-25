@@ -26,8 +26,14 @@ class WorkerRequest(BaseModel):
 
 class StyleMountRequest(BaseModel):
     project_root: str
-    style_library_root: str = ""
     style_id: str
+    version_id: str
+    content_hash: str
+    scope: str = "project"
+    priority: str = "highest"
+
+    class Config:
+        extra = "forbid"
 
 
 class StyleAuthorCreateRequest(BaseModel):

@@ -59,13 +59,20 @@ def _safe_options(options: list[object]) -> list[dict[str, str]]:
         option_id = truncate_text(str(item.get("id") or item.get("label") or ""), 120)
         if not option_id:
             continue
-        cleaned.append(
-            {
-                "id": option_id,
-                "label": truncate_text(str(item.get("label") or option_id), 120),
-                "summary": truncate_text(str(item.get("summary") or ""), 500),
-            }
-        )
+        projected = {
+            "id": option_id,
+            "label": truncate_text(str(item.get("label") or option_id), 120),
+            "summary": truncate_text(str(item.get("summary") or ""), 500),
+        }
+        for field, limit in (
+            ("style_id", 160),
+            ("version_id", 80),
+            ("content_hash", 80),
+        ):
+            value = truncate_text(str(item.get(field) or "").strip(), limit)
+            if value:
+                projected[field] = value
+        cleaned.append(projected)
     return cleaned
 
 def _safe_value(value: object) -> object:

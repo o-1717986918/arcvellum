@@ -18,6 +18,14 @@ from ...application.style.task_service import (
     StyleBuildIntentError,
     StyleTaskService,
 )
+from ...application.style.mount_service import (
+    StyleMountApplicationService,
+    StyleMountChoiceError,
+)
+from literary_engineering_studio_engine.literary.style.mount import (
+    StyleVersionMountConflictError,
+    StyleVersionMountError,
+)
 from literary_engineering_studio_engine.literary.style.session import (
     StyleSessionConflictError,
     StyleSessionError,
@@ -37,13 +45,12 @@ from ..models import (
 class StyleLabRouterDependencies:
     config: dict[str, Any]
     style_library: Callable[[dict[str, Any], str], dict[str, Any]]
-    style_mounts: Callable[[dict[str, Any], Path], dict[str, Any]]
-    mount_style: Callable[[dict[str, Any], Path, str, str], dict[str, Any]]
     style_authors: Callable[[Path | None], dict[str, object]]
     style_versions: Callable[[Path | None, Path | None], dict[str, object]]
     style_version_detail: Callable[[Path, str, str], dict[str, object]]
     authoring: StyleAuthoringService
     tasks: StyleTaskService
+    mounts: StyleMountApplicationService
 
 
 def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
@@ -84,18 +91,29 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
 
     @router.get("/style-lab/mounts")
     def style_lab_mounts(project_root: str):
-        return call_handler(lambda: deps.style_mounts(deps.config, resolve_project_root(project_root)))
+        return call_handler(
+            lambda: deps.mounts.status(resolve_project_root(project_root))
+        )
 
     @router.post("/style-lab/mount")
     def style_lab_mount(payload: StyleMountRequest):
-        return call_handler(
-            lambda: deps.mount_style(
-                deps.config,
+        try:
+            return deps.mounts.mount(
                 resolve_project_root(payload.project_root),
-                payload.style_library_root,
-                payload.style_id,
+                style_id=payload.style_id,
+                version_id=payload.version_id,
+                content_hash=payload.content_hash,
+                scope=payload.scope,
+                priority=payload.priority,
             )
-        )
+        except FileNotFoundError as exc:
+            raise _mount_error(404, "style_version_not_found", exc) from exc
+        except StyleVersionMountConflictError as exc:
+            raise _mount_error(409, exc.code, exc) from exc
+        except (StyleMountChoiceError, StyleVersionMountError) as exc:
+            raise _mount_error(422, exc.code, exc) from exc
+        except ValueError as exc:
+            raise _mount_error(400, "style_mount_project_invalid", exc) from exc
 
     return router
 
@@ -158,6 +176,17 @@ def _register_engineering_routes(
             ) from exc
         except StyleSessionError as exc:
             raise _style_session_error(exc) from exc
+
+
+def _mount_error(
+    status_code: int,
+    code: str,
+    exc: Exception,
+) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": str(exc)},
+    )
 
 def _register_authoring_routes(router: APIRouter, deps: StyleLabRouterDependencies) -> None:
     @router.post("/style-lab/authors")

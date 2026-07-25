@@ -179,15 +179,19 @@ def _safe_active_mount(payload: dict[str, object]) -> dict[str, object]:
     allowed = {
         "schema",
         "style_id",
+        "version_id",
         "author",
         "author_id",
         "profile_id",
+        "scope",
         "priority",
         "mounted_at",
         "readiness",
         "enforcement",
         "content_hash",
         "version_hash",
+        "review_status",
+        "integrity",
     }
     return {key: payload[key] for key in allowed if key in payload}
 

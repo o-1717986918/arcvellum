@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
-from .application.style import StyleApplicationService, StyleAuthoringService
+from .application.style import StyleApplicationService, StyleAuthoringService, StyleMountApplicationService
 from .application.style.task_service import StyleTaskService
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
 from .api.models import (
@@ -76,19 +76,8 @@ from .autopilot import AutopilotService
 from .bootstrap import ApplicationBootstrapService
 from .config import default_projects_root, load_config, save_config
 from .core_bridge import CoreBridge
-from .core_read_models import (
-    build_activity,
-    build_dashboard,
-    build_library,
-    build_task_summary,
-    current_choices,
-    mount_style,
-    record_choice,
-    record_ui_note,
-    save_display_field,
-    style_library,
-    style_mounts,
-)
+from .core_read_models import build_activity, build_dashboard, build_library, build_task_summary, current_choices
+from .core_read_models import record_choice, record_ui_note, save_display_field, style_library
 from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
 from .lifecycle import ApplicationLifecycleManager
 from .live_events import EPHEMERAL_WORKER_EVENTS, coalesce_live_events
@@ -130,6 +119,8 @@ from literary_engineering_studio_engine.creative_quality import (
 )
 from literary_engineering_studio_engine.punctuation_standard import lint_punctuation
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan, save_rhythm_plan
+
+_STYLE_MOUNTS = StyleMountApplicationService()
 
 try:
     from fastapi import FastAPI, HTTPException, Request
@@ -189,6 +180,10 @@ def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any) -> W
     )
 
 
+def _record_choice(config: dict[str, Any], root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    return record_choice(config, root, payload, style_mount_service=_STYLE_MOUNTS)
+
+
 def create_app(config_override: dict[str, Any] | None = None):
     if FastAPI is None:
         raise RuntimeError("Studio API requires pip install -e .[api]")
@@ -202,6 +197,7 @@ def create_app(config_override: dict[str, Any] | None = None):
         jobs,
         runtime_pool=lifecycle.opencode_pool,
         execution_coordinator=lifecycle.execution_coordinator,
+        style_mount_service=_STYLE_MOUNTS,
     )
     narrative_stream_state: dict[str, dict[str, Any]] = {}
     narrative_v3_stream_state: dict[str, dict[str, Any]] = {}
@@ -379,7 +375,7 @@ def create_app(config_override: dict[str, Any] | None = None):
                 build_activity=lambda *args, **kwargs: build_activity(*args, **kwargs),
                 build_task_summary=lambda *args, **kwargs: build_task_summary(*args, **kwargs),
                 current_choices=lambda *args, **kwargs: current_choices(*args, **kwargs),
-                record_choice=lambda *args, **kwargs: record_choice(*args, **kwargs),
+                record_choice=_record_choice,
                 stream_read_model=_stream_read_model,
             )
         )
@@ -446,6 +442,7 @@ def create_app(config_override: dict[str, Any] | None = None):
         build_style_lab_router(
             _style_lab_dependencies(
                 config,
+                mounts=_STYLE_MOUNTS,
                 launch_style_worker=lambda request: launch_worker(
                     worker_dependencies,
                     WorkerRequest(**request),
@@ -478,14 +475,13 @@ def create_app(config_override: dict[str, Any] | None = None):
 def _style_lab_dependencies(
     config: dict[str, Any],
     *,
+    mounts: StyleMountApplicationService,
     launch_style_worker: Callable[[dict[str, str]], dict[str, object]],
 ) -> StyleLabRouterDependencies:
     application = StyleApplicationService()
     return StyleLabRouterDependencies(
         config=config,
         style_library=lambda settings, root: style_library(settings, root),
-        style_mounts=lambda settings, root: style_mounts(settings, root),
-        mount_style=lambda *args, **kwargs: mount_style(*args, **kwargs),
         style_authors=application.authors,
         style_versions=lambda library, project: application.version_catalog(
             library,
@@ -496,4 +492,5 @@ def _style_lab_dependencies(
         ),
         authoring=StyleAuthoringService(),
         tasks=StyleTaskService(launch_style_worker),
+        mounts=mounts,
     )

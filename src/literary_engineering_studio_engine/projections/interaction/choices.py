@@ -17,6 +17,7 @@ from ...project_interaction_common import (
 from ...release_fingerprint import release_candidate_fingerprint
 from ...workflow_dashboard import build_workflow_dashboard
 from ...workflow_state import build_workflow_state, next_scene_workflow_state
+from .style_choices import build_style_mount_choice as _style_mount_choice
 
 def build_current_human_choices(
     project_root: Path,
@@ -477,47 +478,6 @@ def _state_patch_choices(root: Path) -> list[dict[str, object]]:
 
 def _state_patch_choice(root: Path, scene_id: str) -> dict[str, object] | None:
     return next((item for item in _state_patch_choices(root) if str((item.get("target") or {}).get("scene_id") or "") == _safe_target_id(scene_id or "")), None)
-
-def _style_mount_choice(root: Path) -> dict[str, object] | None:
-    if (root / "style" / "active_style_skill.json").exists():
-        return None
-    options = []
-    for path in sorted((root / "style").glob("**/style_skill.json"))[:20]:
-        payload = read_json_file(path)
-        style_id = str(payload.get("style_id") or path.parent.name).strip()
-        if not style_id:
-            continue
-        options.append(
-            {
-                "id": style_id,
-                "label": truncate_text(str(payload.get("author") or style_id), 80),
-                "summary": truncate_text(str(payload.get("mode") or "项目内发现的文风候选。"), 180),
-            }
-        )
-    for path in sorted((root / "style").glob("**/style_prompt.md"))[:20]:
-        style_id = path.parent.name
-        if any(option["id"] == style_id for option in options):
-            continue
-        options.append(
-            {
-                "id": style_id,
-                "label": truncate_text(style_id, 80),
-                "summary": "项目内发现的文风提示词，可作为挂载候选继续评审。",
-            }
-        )
-    if not options:
-        return None
-    return {
-        "choice_id": _make_id("choice", "style_mount", "project-style"),
-        "route": "style-engineering",
-        "decision_type": "style_mount",
-        "title": "需要选择创作使用的文风",
-        "summary": "文风会作为表达层最高优先级约束。选择只记录意图，正式挂载仍需文风页或 style-lab mount。 ",
-        "target": {"target_id": "project-style"},
-        "source_paths": ["style/"],
-        "options": options[:8],
-        "actions": ["记录文风选择"],
-    }
 
 def _materialize_branch_selection(root: Path, record: dict[str, object], choice_path: Path) -> str:
     target = record.get("target") if isinstance(record.get("target"), dict) else {}

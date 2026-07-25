@@ -32,6 +32,107 @@ class _Audit:
 
 
 class AutopilotTests(unittest.TestCase):
+    def test_steward_style_choice_uses_controlled_mount_once(self):
+        class MountService:
+            def __init__(self):
+                self.calls = []
+
+            def mount_choice(self, project, choice):
+                self.calls.append((project, choice))
+                return {
+                    "style_id": "classic-measured-prose",
+                    "version_id": "v1-1234567890abcdef1234",
+                    "content_hash": "a" * 64,
+                    "active_manifest": "style/active_style_skill.json",
+                    "receipt": "style/mount_receipts/receipt.json",
+                }
+
+        class Steward:
+            def decide(
+                self,
+                project,
+                choice,
+                *,
+                project_direction="",
+                timeout=180,
+                cancel_event=None,
+            ):
+                return {
+                    "selected_option": "v1-1234567890abcdef1234",
+                    "rationale": "该版本与本项目的叙事距离最匹配。",
+                    "evidence": [],
+                    "alternatives": [],
+                    "confidence": 0.9,
+                    "requires_human": False,
+                    "human_reason": "",
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text(
+                "title: Tide\n",
+                encoding="utf-8",
+            )
+            store = JobStore(root / "studio.sqlite3")
+            policy_payload = default_policy("full_auto")
+            run = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="full_auto",
+                runtime="opencode",
+                policy=policy_payload,
+            )
+            mounts = MountService()
+            service = AutopilotService(
+                {"application": {"data_root": str(root)}},
+                store,
+                style_mount_service=mounts,
+            )
+            choice = {
+                "choice_id": "choice.style.exact",
+                "route": "style-engineering",
+                "decision_type": "style_mount",
+                "target": {"target_id": "project-style"},
+                "source_paths": [],
+                "options": [
+                    {
+                        "id": "v1-1234567890abcdef1234",
+                        "style_id": "classic-measured-prose",
+                        "version_id": "v1-1234567890abcdef1234",
+                        "content_hash": "a" * 64,
+                        "label": "克制叙事",
+                    }
+                ],
+            }
+
+            handled = service._delegate_choice(
+                run["run_id"],
+                project,
+                "style-engineering",
+                DelegationPolicy(policy_payload),
+                Steward(),
+                choice,
+            )
+
+            self.assertTrue(handled)
+            self.assertEqual(len(mounts.calls), 1)
+            decisions = store.delegated_decisions(run["run_id"])
+            self.assertEqual(len(decisions), 1)
+            self.assertIn(
+                "style/mount_receipts/receipt.json",
+                decisions[0]["choice_evidence"],
+            )
+            recorded = json.loads(
+                (
+                    project
+                    / "workflow"
+                    / "human_choices"
+                    / "choice.style.exact.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertTrue(recorded["consumed"])
+
     def test_revision_counter_covers_semantic_revision_task_names(self):
         run = {"consecutive_revisions": 2}
         self.assertTrue(is_revision_task("character-and-world-assets-protagonist-asset-review-pass"))
