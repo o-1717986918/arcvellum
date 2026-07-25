@@ -11,9 +11,9 @@
 ## 当前结论
 
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
-- W1 Living Narrative Field 已完成关系可见性和人物引用两个批次。
-- 当前尚未完成 W1 的正文窗口三态、大规模投影验收与后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 411 tests、Client 62 tests、Client production build、Python compileall、Architecture Audit 全部通过。
+- W1 Living Narrative Field 已完成关系可见性和人物引用两个批次；正文窗口三态已经实现，但仍等待全页面集成退出门禁。
+- 当前尚未完成 W1 的流更新稳定性、大规模投影验收与后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
+- 最近一次全量证据：Python 411 tests、Client 65 tests、Client production build、Python compileall、Architecture Audit 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -66,6 +66,33 @@
   - Architecture Audit: 37 existing file debts, 230 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W1-3：正文长卷三态
+
+- Status: implementation complete; integration exit pending
+- Commit: `09c02c1`
+- Added:
+  - `peek / reading / immersive` 三态窗口契约；
+  - 作品级窗口状态持久化与旧布局升级；
+  - 进入沉浸态前保存返回位置、尺寸和非沉浸状态；
+  - 正文首段预览、完整阅览和沉浸阅读之间的显式转换；
+  - 窗口几何从 Pinia store 提取为纯模块，避免状态仓库继续膨胀；
+  - 受控阅读器组件测试和窗口状态/返回几何测试。
+- Boundary:
+  - 不改变正式正文、阅读清单或后端投影；
+  - 不把阅读器全屏状态保存在组件私有变量中；
+  - 不允许旧持久化数据注入未知阅读器状态。
+- Passed evidence:
+  - Python full suite: 411 passed；
+  - Client full suite: 65 passed；
+  - Client production build: passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: 37 existing file debts, 230 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+- Pending integration gate:
+  - 实际开发页面在 SSE/工作区刷新时反复触发 Vue `patchElement` 空节点异常，新仪表因此无法稳定挂载；
+  - 独立 `HEAD` 对照工作树在提交 `9751e08` 上稳定复现相同异常，已确认不是 W1-3 引入；
+  - 必须先修复该基线问题，再完成三态窗口的实际截图、拖动返回和多窗口共存验收，届时才能把本项改为 `complete`。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先在 W1 剩余项中选择一个可独立验收的闭环，不把正文窗口、布局提示、大规模 fixture 和 Archive 写模型混成一次提交。
+下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先修复 SSE/工作区刷新导致的 Vue DOM 补丁异常，恢复仪表窗口稳定挂载并完成 W1-3 产品级验收；该稳定性闭环完成前，不开始大规模 fixture 或 Archive 写模型。
