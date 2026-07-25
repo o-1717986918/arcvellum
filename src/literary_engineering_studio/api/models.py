@@ -30,6 +30,34 @@ class StyleMountRequest(BaseModel):
     style_id: str
 
 
+class StyleAuthorCreateRequest(BaseModel):
+    style_library_root: str = ""
+    author_id: str
+    name: str
+    rights_mode: str
+    rights_declaration: str
+
+
+class StyleWorkCreateRequest(BaseModel):
+    style_library_root: str = ""
+    author_id: str
+    work_id: str
+    title: str
+    year: str = ""
+    notes: str = ""
+
+
+class StyleSourceCreateRequest(BaseModel):
+    style_library_root: str = ""
+    author_id: str
+    work_id: str
+    filename: str
+    media_type: str = "text/plain"
+    content: str
+    rights_mode: str
+    rights_declaration: str
+
+
 class ProjectCreateRequest(BaseModel):
     parent_directory: str = ""
     title: str
@@ -275,6 +303,9 @@ __all__ = [
     "RhythmPlanRequest",
     "RunnerProbeRequest",
     "StyleMountRequest",
+    "StyleAuthorCreateRequest",
+    "StyleWorkCreateRequest",
+    "StyleSourceCreateRequest",
     "WorkerRequest",
     "WorkerRetryRequest",
     "WritebackDecisionRequest",

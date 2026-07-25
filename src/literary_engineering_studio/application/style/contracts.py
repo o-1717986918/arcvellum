@@ -11,6 +11,18 @@ class RightsStatus(str, Enum):
     MISSING = "missing"
 
 
+class RightsMode(str, Enum):
+    PUBLIC_DOMAIN = "public-domain"
+    AUTHORIZED = "authorized"
+    USER_OWNED = "user-owned"
+    CRAFT_ONLY = "craft-only"
+
+
+class SourceMediaType(str, Enum):
+    TEXT = "text/plain"
+    MARKDOWN = "text/markdown"
+
+
 class StyleVersionState(str, Enum):
     PROFILE = "profile"
     PROMPT_CANDIDATE = "prompt-candidate"
