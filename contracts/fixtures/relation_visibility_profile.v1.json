@@ -1,0 +1,38 @@
+{
+  "families": [
+    "narrative-spine",
+    "chapter-scene",
+    "scene-branch",
+    "scene-review",
+    "scene-reader-question",
+    "scene-promise-payoff",
+    "character-scene",
+    "evidence-claim",
+    "canon-state-impact",
+    "workflow-control",
+    "context-association"
+  ],
+  "lod_modes": [
+    "aggregate",
+    "individual",
+    "emphasized"
+  ],
+  "focus_states": [
+    "global",
+    "internal",
+    "attached",
+    "context"
+  ],
+  "sample": {
+    "family": "scene-promise-payoff",
+    "label": "承诺与兑现",
+    "edge_count": 3,
+    "focused_edge_count": 2,
+    "far_mode": "aggregate",
+    "mid_mode": "individual",
+    "near_mode": "emphasized",
+    "aggregate_anchor": "chapter-centroid",
+    "base_weight": 0.68,
+    "focus_weight": 1.0
+  }
+}

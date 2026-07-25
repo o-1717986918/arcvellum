@@ -44,10 +44,9 @@ const activeChapterKey = computed(() => chapterKey(props.activeChapterId));
 const hasChapterFocus = computed(() => Boolean(activeChapterKey.value));
 
 const characterRelations = computed(() => {
-  const chapterIds = new Set(props.projection.nodes.filter((node) => node.type === "chapter").map((node) => node.node_id));
   return props.projection.edges
-    .filter((edge) => edge.type === "participates")
-    .map((edge) => ({ edge, characterId: characterEndpoint(edge, chapterIds) }))
+    .filter((edge) => edge.relation_family === "character-scene")
+    .map((edge) => ({ edge, characterId: characterEndpoint(edge) }))
     .filter((item): item is { edge: SpatialNarrativeEdge; characterId: string } => Boolean(item.characterId));
 });
 
@@ -63,10 +62,11 @@ const localFlowPaths = computed(() => {
         id: edge.edge_id,
         path: relationshipPath(source, target, edge.edge_id),
         type: edge.type,
+        family: edge.relation_family,
         ...edgeChapterState(edge),
       } : null;
     })
-    .filter((item): item is { id: string; path: string; type: string; active: boolean; muted: boolean } => Boolean(item))
+    .filter((item) => item !== null)
     // Keep the chronological hand-off sparse. All non-sequence evidence is
     // drawn by `sceneEvidencePaths` below with its own visual grammar.
     .slice(0, 6);
@@ -90,11 +90,12 @@ const sceneEvidencePaths = computed(() => {
         id: edge.edge_id,
         path: relationshipPath(source, target, edge.edge_id),
         type: edge.type,
+        family: edge.relation_family,
         nodeType: evidenceNode.type,
         ...edgeChapterState(edge),
       };
     })
-    .filter((item): item is { id: string; path: string; type: string; nodeType: string; active: boolean; muted: boolean } => Boolean(item))
+    .filter((item) => item !== null)
     // Evidence is not a disposable decoration. Only in-view relationships are
     // rendered, but every such branch, promise, review, canon patch, task or
     // participant keeps its formal connection to the owning scene.
@@ -181,6 +182,10 @@ function nodeChapterKey(node: SpatialNarrativeNode | undefined, visited = new Se
 }
 
 function edgeChapterState(edge: SpatialNarrativeEdge): { active: boolean; muted: boolean } {
+  if (edge.focus_state && edge.focus_state !== "global") {
+    const active = edge.focus_state === "internal" || edge.focus_state === "attached";
+    return { active, muted: !active };
+  }
   if (!activeChapterKey.value) return { active: false, muted: false };
   const sourceChapter = nodeChapterKey(nodesById.value.get(edge.source));
   const targetChapter = nodeChapterKey(nodesById.value.get(edge.target));
@@ -287,9 +292,9 @@ function evidencePriority(nodeType: string, edgeType: string): number {
   return 5;
 }
 
-function characterEndpoint(edge: SpatialNarrativeEdge, chapterIds: Set<string>): string | null {
-  if (chapterIds.has(edge.source)) return edge.target;
-  if (chapterIds.has(edge.target)) return edge.source;
+function characterEndpoint(edge: SpatialNarrativeEdge): string | null {
+  if (nodesById.value.get(edge.source)?.type === "character") return edge.source;
+  if (nodesById.value.get(edge.target)?.type === "character") return edge.target;
   return null;
 }
 
@@ -335,6 +340,7 @@ function threadColor(value: string): string {
       :class="{ active: connection.active, muted: connection.muted }"
       :data-level="projection.level"
       :data-type="connection.type"
+      :data-family="connection.family"
       :d="connection.path"
     />
     <path
@@ -343,6 +349,7 @@ function threadColor(value: string): string {
       class="narrative-evidence-flow"
       :class="{ active: connection.active, muted: connection.muted }"
       :data-type="connection.type"
+      :data-family="connection.family"
       :data-node-type="connection.nodeType"
       :d="connection.path"
     />

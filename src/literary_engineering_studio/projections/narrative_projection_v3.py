@@ -10,9 +10,9 @@ from typing import Any
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan
 
 from . import narrative_projection as narrative_projection_v2
-from .narrative import resolve_narrative_focus_scope
 from .narrative.base_adapter import build_compatible_base, requested_focus
 from .narrative.grammar import SPATIAL_GRAMMARS, resolve_grammar
+from .narrative.relations import build_focused_relations
 from .narrative_projection import projection_delta, projection_motion_events
 
 
@@ -40,11 +40,9 @@ def build_narrative_projection_v3(
     selected_grammar = resolve_grammar(grammar, base)
     rhythm_hints = _rhythm_hints(project_root)
     nodes = _spatial_nodes(base.get("nodes", []), base.get("edges", []), selected_grammar, rhythm_hints)
-    edges = _spatial_edges(base.get("edges", []), nodes)
+    edges, focus_scope, relation_profiles = build_focused_relations(
+        base.get("edges", []), nodes, level, requested_focus(focus, base))
     clusters = _clusters(nodes)
-    focus_scope = resolve_narrative_focus_scope(
-        level, requested_focus(focus, base), nodes, edges
-    )
     # Reuse the v2 read-model entry so cached deployments and test fixtures
     # observe exactly the same reader evidence as the base projection.
     reader_payload = narrative_projection_v2.build_reader_manifest(project_root)
@@ -73,6 +71,7 @@ def build_narrative_projection_v3(
             "edges": edges,
             "clusters": clusters,
             "focus_scope": focus_scope.as_dict(),
+            "relation_profiles": relation_profiles,
             "source_revisions": source_revisions,
         }
     )
@@ -95,6 +94,7 @@ def build_narrative_projection_v3(
         "level": focus_scope.level.value,
         "focus": focus_scope.focus_id,
         "focus_scope": focus_scope.as_dict(),
+        "relation_profiles": relation_profiles,
         "spatial_grammar": selected_grammar,
         "available_grammars": sorted(SPATIAL_GRAMMARS),
         "layout_seed": _digest({"project": str(project_root.resolve()), "grammar": selected_grammar})[:16],
@@ -296,22 +296,6 @@ def _positive_float(value: object) -> float:
         return 0.0
 
 
-def _spatial_edges(items: Any, nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    node_ids = {node["node_id"] for node in nodes}
-    result: list[dict[str, Any]] = []
-    for item in items if isinstance(items, list) else []:
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("source")) not in node_ids or str(item.get("target")) not in node_ids:
-            continue
-        edge = dict(item)
-        edge["strength"] = _edge_strength(edge)
-        edge["direction"] = "forward" if edge.get("type") in {"sequence", "bridge", "raises", "promise", "workflow"} else "context"
-        edge["temporal_relation"] = "advances" if edge.get("type") in {"sequence", "bridge"} else "associates"
-        result.append(edge)
-    return result
-
-
 def _clusters(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, list[str]] = {}
     for node in nodes:
@@ -447,20 +431,6 @@ def _world_hint(node: dict[str, Any], grammar: str, index: int) -> dict[str, Any
         "elevation_band": "foreground" if node.get("status") in {"current", "blocked"} else "midground" if index % 3 else "background",
         "occlusion_priority": _importance(node),
     }
-
-
-def _edge_strength(edge: dict[str, Any]) -> float:
-    return {
-        "sequence": 1.0,
-        "bridge": 0.96,
-        "workflow": 0.92,
-        "branch": 0.86,
-        "participates": 0.62,
-        "canon": 0.7,
-        "review": 0.66,
-        "promise": 0.68,
-        "raises": 0.62,
-    }.get(str(edge.get("type") or ""), 0.48)
 
 
 def _cluster_label(cluster_id: str) -> str:

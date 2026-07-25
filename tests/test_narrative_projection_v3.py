@@ -79,6 +79,10 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
             projection["focus_scope"]["anchor_node_ids"],
             ["scene:scene_0001", "scene:scene_0002"],
         )
+        self.assertEqual(len(projection["relation_profiles"]), 11)
+        branch_edge = next(edge for edge in projection["edges"] if edge["type"] == "branch")
+        self.assertEqual(branch_edge["relation_family"], "scene-branch")
+        self.assertEqual(branch_edge["focus_state"], "attached")
         scene = next(node for node in projection["nodes"] if node["node_id"] == "scene:scene_0001")
         self.assertEqual(scene["world_hint"]["grammar"], "braid")
         self.assertIn(scene["detail_level"], {"near", "mid", "far"})
