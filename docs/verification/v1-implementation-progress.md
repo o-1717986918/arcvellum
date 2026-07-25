@@ -11,9 +11,10 @@
 ## 当前结论
 
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
-- W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态、工作区语义 revision、100/300/1000 规模基准和 v3 增量传输六个可回滚批次。
-- 当前尚未完成 W1 的真实浏览器大规模视觉与像素验收，以及后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 423 tests、Client 76 tests、Client production build、Python compileall、Architecture Audit 全部通过。
+- W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态、工作区语义 revision、100/300/1000 规模基准、v3 增量传输、真实磁盘完整证据与浏览器大规模视觉验收。
+- W1 已满足当前路线定义的性能、导航、焦点、空间语法、主题、多窗口与 canvas 非空退出门禁。
+- 当前尚未完成后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
+- 最近一次全量证据：Python 431 tests、Client 79 tests、Client production build、Python compileall、Architecture Audit 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -170,12 +171,49 @@
   - `python -m compileall -q src benchmarks scripts`: passed；
   - Architecture Audit: no new violation；
   - `git diff --check`: passed。
-- Open performance gate:
+- Performance gate at C1 completion, closed by W1-4C2:
   - 当前真实 1000 场景项目首次完整证据读取约 11.8 秒；
   - v3 scene 投影约 8.4 秒，JSON 首包约 12.6 MB；
   - 正确性和可重复验收基础已完成，但浏览器交互性尚未达到 W1 退出标准；
   - 下一批必须先压缩首次读取、投影和传输成本，再做四 focus、六语法、四主题浏览器视觉验收。
 
+## W1-4C2：大规模叙事性能与真实浏览器验收
+
+- Status: complete
+- Commits: `50834cf`, `8e77e17`
+- Added:
+  - 修复 YAML 列表解析跨区块吞并，1000 场景不再膨胀为 16042 条伪关系；
+  - 提取并复用节奏源读模型，避免每个场景重复解析同一章节节奏；
+  - 100/300/1000 真实项目物化基准与趋势门禁；
+  - Narrative 投影身份由单一 revision 扩展为 revision、焦点、层级和空间语法的组合身份；
+  - 扩大叙事工作平面，并以场景簇包围盒计算章节聚焦相机；
+  - 章节节点携带确定性入口场景，消除快速切换时使用旧投影的竞态；
+  - 项目切换菜单避开全局观测工具的独立堆叠上下文，不再出现首项可见但无法点击；
+  - 几何计算提取为纯函数，没有提高架构债务基线。
+- Materialized performance evidence:
+  - 100 场景：147 nodes、341 edges、约 270 KB，稳定证据读取约 33 ms，投影约 77 ms；
+  - 300 场景：357 nodes、941 edges、约 721 KB，稳定证据读取约 83 ms，投影约 245 ms；
+  - 1000 场景：1067 nodes、3042 edges、24 个人物节点、0 个未解析引用、约 2.26 MB；
+  - 1000 场景稳定证据读取约 367 ms，投影约 744 ms；
+  - 1000 场景冷启动证据读取约 8.36 s，冷投影约 1.70 s；
+  - 三个规模样本均满足当前趋势预算，未检测到性能违规。
+- Browser evidence:
+  - 100、300、1000 场景项目均可从项目菜单切换并显示完整规模摘要；
+  - 全书、章节、场景和人物焦点可切换，人物焦点保留全书图而只强调相关关系；
+  - 第 50 章聚焦一次显示 `scene_0491` 至 `scene_0500` 全部 10 个场景；
+  - braid、constellation、loop、spine、stage、strata 六种空间语法均完成实际画布验收；
+  - moss、iris、obsidian、bookcase、modern 五套主题均完成实际画布验收；
+  - 推进仪表与正文长卷可同时打开，叙事画布保持可见；
+  - 所有验收截图均为 804×898，抽样唯一色数为 983-2280，亮度标准差为 18.84-25.68，未出现空白 canvas；
+  - 验收截图保存在本地忽略目录 `.tmp-dev/w1-4c2-browser/screens/`，不作为运行时依赖。
+- Exit evidence:
+  - Python full suite: 431 passed；
+  - Client full suite: 79 passed；
+  - Client production build: passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W1、模块边界和本文件。优先优化真实 1000 场景项目的完整证据读取、投影首包和客户端装载成本；随后完成六种语法、四个 focus、窗口共存、主题切换、远中近 LOD 和 canvas 像素非空验证。在 W1 大规模视觉性能与正确性未闭环前，不开始 Archive 写模型。
+下一批开始前必须重新读取统一实施方案 W2、模块边界和本文件。W2 先建立 Archive 写模型、作者权威与乐观并发的最小闭环；不得直接把任意文件编辑器接到正式项目文件，也不得让 Archive 绕过现有状态机、审查、晋升或审计协议。
