@@ -11,6 +11,11 @@ from ...application.assets.contracts import OwnerOverrideTransaction, SemanticRe
 from ...application.assets.impact import build_asset_impact
 from ...application.assets.loader import AssetLoader
 from ...application.assets.owner_transactions import AssetVersionConflictError, OwnerTransactionService
+from ...application.assets.recycle_bin import (
+    ArchiveReferenceConflictError,
+    RecycleBinService,
+    RestoreConflictError,
+)
 from ...application.assets.registry import AssetViewRegistry
 from ...application.assets.revisions import AssetRevisionIndex, AssetRevisionService
 from ...application.assets.validation import validate_asset_content
@@ -19,6 +24,8 @@ from ..common import call_handler, project_root as resolve_project_root
 from ..models import (
     ArchiveAssetCommitRequest,
     ArchiveAssetContentRequest,
+    ArchiveAssetArchiveRequest,
+    ArchiveAssetRestoreRequest,
     ArchiveRestorePreviewRequest,
 )
 
@@ -30,18 +37,21 @@ class ArchiveRouterDependencies:
     projections: ArchiveProjectionService
     transactions: OwnerTransactionService
     revisions: AssetRevisionService
+    recycle_bin: RecycleBinService
 
 
 def default_archive_dependencies(index: AssetRevisionIndex) -> ArchiveRouterDependencies:
     registry = AssetViewRegistry.default()
     loader = AssetLoader(registry)
     revisions = AssetRevisionService(index)
+    recycle_bin = RecycleBinService(registry, loader, index)
     return ArchiveRouterDependencies(
         registry=registry,
         loader=loader,
-        projections=ArchiveProjectionService(registry, loader, revisions),
+        projections=ArchiveProjectionService(registry, loader, revisions, recycle_bin),
         transactions=OwnerTransactionService(registry, loader, revisions),
         revisions=revisions,
+        recycle_bin=recycle_bin,
     )
 
 
@@ -62,6 +72,12 @@ def build_archive_router(deps: ArchiveRouterDependencies) -> APIRouter:
             lambda: {"ok": True, **deps.projections.history(resolve_project_root(project_root), asset_id)}
         )
 
+    @router.get("/archive/recycle-bin")
+    def archive_recycle_bin(project_root: str):
+        return call_handler(
+            lambda: {"ok": True, **deps.projections.recycle_bin(resolve_project_root(project_root))}
+        )
+
     @router.post("/archive/assets/{asset_id}/validate")
     def archive_validate(asset_id: str, payload: ArchiveAssetContentRequest):
         return call_handler(lambda: _validate_asset(deps, asset_id, payload))
@@ -77,6 +93,14 @@ def build_archive_router(deps: ArchiveRouterDependencies) -> APIRouter:
     @router.post("/archive/assets/{asset_id}/restore/preview")
     def archive_restore_preview(asset_id: str, payload: ArchiveRestorePreviewRequest):
         return call_handler(lambda: _restore_preview(deps, asset_id, payload))
+
+    @router.post("/archive/assets/{asset_id}/archive")
+    def archive_asset_to_recycle_bin(asset_id: str, payload: ArchiveAssetArchiveRequest):
+        return _archive_asset(deps, asset_id, payload)
+
+    @router.post("/archive/assets/{asset_id}/restore")
+    def restore_asset_from_recycle_bin(asset_id: str, payload: ArchiveAssetRestoreRequest):
+        return _restore_asset(deps, asset_id, payload)
 
     return router
 
@@ -164,6 +188,61 @@ def _restore_preview(
         },
         "preview": deps.transactions.preview(root, transaction),
     }
+
+
+def _archive_asset(
+    deps: ArchiveRouterDependencies,
+    asset_id: str,
+    payload: ArchiveAssetArchiveRequest,
+) -> dict[str, Any]:
+    try:
+        receipt = deps.recycle_bin.archive(
+            resolve_project_root(payload.project_root),
+            asset_id,
+            base_revision=payload.base_revision,
+            reason=payload.reason,
+        )
+    except AssetVersionConflictError as exc:
+        raise _conflict("version_conflict", asset_id, exc) from exc
+    except ArchiveReferenceConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "archive_reference_conflict",
+                "message": str(exc),
+                "asset_id": asset_id,
+                "blockers": exc.blockers,
+            },
+        ) from exc
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return call_handler(lambda: _raise(exc))
+    return {"ok": True, "receipt": receipt}
+
+
+def _restore_asset(
+    deps: ArchiveRouterDependencies,
+    asset_id: str,
+    payload: ArchiveAssetRestoreRequest,
+) -> dict[str, Any]:
+    try:
+        receipt = deps.recycle_bin.restore(
+            resolve_project_root(payload.project_root),
+            asset_id,
+            entry_id=payload.entry_id,
+            reason=payload.reason,
+        )
+    except RestoreConflictError as exc:
+        raise _conflict("restore_conflict", asset_id, exc) from exc
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return call_handler(lambda: _raise(exc))
+    return {"ok": True, "receipt": receipt}
+
+
+def _conflict(code: str, asset_id: str, exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": code, "message": str(exc), "asset_id": asset_id},
+    )
 
 
 def _raise(exc: Exception):

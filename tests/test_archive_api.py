@@ -133,6 +133,46 @@ class ArchiveApiTests(unittest.TestCase):
         self.assertEqual(preview.json()["preview"]["transaction"]["patch"][0]["value"], original_content)
         self.assertEqual((self.root / "characters" / "lin.yaml").read_text(encoding="utf-8"), changed)
 
+    def test_recycle_bin_api_archives_and_restores_by_stable_ids(self):
+        (self.root / "characters" / "mei.yaml").write_text(
+            "character_id: mei\nname: 梅汐\nimportance: secondary\n",
+            encoding="utf-8",
+        )
+        detail = self.client.get(
+            "/archive/assets/character:mei",
+            params={"project_root": str(self.root)},
+        ).json()
+        archived = self.client.post(
+            "/archive/assets/character:mei/archive",
+            json={
+                "project_root": str(self.root),
+                "base_revision": detail["asset"]["revision"],
+                "reason": "作者暂时归档未使用人物。",
+            },
+        )
+        self.assertEqual(archived.status_code, 200)
+        entry_id = archived.json()["receipt"]["entry_id"]
+        self.assertFalse((self.root / "characters" / "mei.yaml").exists())
+
+        recycle = self.client.get(
+            "/archive/recycle-bin",
+            params={"project_root": str(self.root)},
+        )
+        self.assertEqual(recycle.status_code, 200)
+        self.assertEqual(recycle.json()["items"][0]["entry_id"], entry_id)
+        self.assertNotIn(str(self.root), recycle.text)
+
+        restored = self.client.post(
+            "/archive/assets/character:mei/restore",
+            json={
+                "project_root": str(self.root),
+                "entry_id": entry_id,
+                "reason": "作者恢复人物继续开发。",
+            },
+        )
+        self.assertEqual(restored.status_code, 200)
+        self.assertTrue((self.root / "characters" / "mei.yaml").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

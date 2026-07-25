@@ -16,8 +16,10 @@ from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
 from .api.models import (
+    ArchiveAssetArchiveRequest,
     ArchiveAssetCommitRequest,
     ArchiveAssetContentRequest,
+    ArchiveAssetRestoreRequest,
     ArchiveRestorePreviewRequest,
     AdvisorCustomPersonaRequest,
     AdvisorInboxReadRequest,

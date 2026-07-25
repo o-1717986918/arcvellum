@@ -201,9 +201,23 @@ class ArchiveRestorePreviewRequest(BaseModel):
     reason: str
 
 
+class ArchiveAssetArchiveRequest(BaseModel):
+    project_root: str
+    base_revision: str
+    reason: str
+
+
+class ArchiveAssetRestoreRequest(BaseModel):
+    project_root: str
+    entry_id: str
+    reason: str
+
+
 __all__ = [
+    "ArchiveAssetArchiveRequest",
     "ArchiveAssetCommitRequest",
     "ArchiveAssetContentRequest",
+    "ArchiveAssetRestoreRequest",
     "ArchiveRestorePreviewRequest",
     "AdvisorCustomPersonaRequest",
     "AdvisorInboxReadRequest",
