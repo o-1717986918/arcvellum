@@ -169,6 +169,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
                 library_payload=self.library, dashboard_payload=self.dashboard,
             )
         self.assertEqual(first["revision"], second["revision"])
+        self.assertEqual(first["projection_revision"], first["revision"])
         self.assertEqual(first["layout_seed"], second["layout_seed"])
 
     def test_book_projection_aggregates_a_thousand_scene_inventory(self):

@@ -406,6 +406,19 @@ class ApiServerTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             payload = response.json()
             self.assertTrue(payload["ok"])
+            self.assertTrue(payload["revision"])
+            self.assertEqual(
+                set(payload["source_revisions"]),
+                {
+                    "dashboard",
+                    "library",
+                    "delivery",
+                    "reader_manifest",
+                    "project_progress",
+                    "autopilot_status",
+                    "agent_observability",
+                },
+            )
             self.assertIn("dashboard", payload)
             self.assertIn("library", payload)
             self.assertIn("reader_manifest", payload)

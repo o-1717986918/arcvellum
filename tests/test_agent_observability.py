@@ -149,6 +149,38 @@ class AgentObservabilityTests(unittest.TestCase):
         )
         self.assertEqual(len({item["session_id"] for item in projection["sessions"]}), 3)
 
+    def test_revision_ignores_wall_clock_elapsed_seconds(self):
+        session = {
+            "session_id": "session-worker-123456789",
+            "role": "worker",
+            "runtime": "opencode",
+            "status": "running",
+            "started_at": "2026-07-22T00:00:00+00:00",
+            "updated_at": "2026-07-22T00:00:02+00:00",
+            "finished_at": "",
+        }
+        first = build_agent_observability(
+            "C:/projects/example",
+            {"run": {"run_id": "run-1", "status": "running", "runtime": "opencode"}},
+            [],
+            {"current_task": {}},
+            [session],
+            [],
+            now=datetime(2026, 7, 22, 0, 0, 5, tzinfo=timezone.utc),
+        )
+        second = build_agent_observability(
+            "C:/projects/example",
+            {"run": {"run_id": "run-1", "status": "running", "runtime": "opencode"}},
+            [],
+            {"current_task": {}},
+            [session],
+            [],
+            now=datetime(2026, 7, 22, 0, 0, 15, tzinfo=timezone.utc),
+        )
+
+        self.assertNotEqual(first["sessions"][0]["elapsed_seconds"], second["sessions"][0]["elapsed_seconds"])
+        self.assertEqual(first["revision"], second["revision"])
+
     def test_throughput_uses_full_event_ledger_not_visible_event_window(self):
         events = [
             {

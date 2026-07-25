@@ -27,5 +27,6 @@ src/literary_engineering_studio_engine/_engine/workflow/
 # Local developer and desktop smoke-test traces are never release artifacts.
 .tmp-*.log
 studio-*.log
+dev-*.log
 ignored
 .tmp-dev/

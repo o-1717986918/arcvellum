@@ -38,8 +38,7 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     try {
       const payload = await api<SpatialNarrativeProjection>(`/narrative/projection/v3?${params()}`);
       if (sequence === requestSequence) {
-        projection.value = payload;
-        initializeObservation(payload);
+        applyProjection(payload);
       }
     } catch (cause) {
       if (sequence === requestSequence) error.value = cause instanceof Error ? cause.message : "无法读取叙事场域。";
@@ -66,8 +65,7 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
       const payload = data as unknown as SpatialNarrativeProjection;
       const current = projection.value;
       if (current && payload.sequence < current.sequence) return;
-      projection.value = payload;
-      initializeObservation(payload);
+      applyProjection(payload);
     }, (cause) => {
       if (projectRoot.value === expectedRoot) error.value = cause instanceof Error ? cause.message : "叙事场域连接暂时中断。";
     });
@@ -92,6 +90,15 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     timeWindow.value = observation.window;
     cameraPreset.value = "recommended";
     observationProject = projectRoot.value;
+  }
+
+  function applyProjection(payload: SpatialNarrativeProjection): void {
+    const current = projection.value;
+    const currentRevision = current?.projection_revision || current?.revision || "";
+    const nextRevision = payload.projection_revision || payload.revision || "";
+    if (current && currentRevision && currentRevision === nextRevision) return;
+    projection.value = payload;
+    initializeObservation(payload);
   }
 
   function setObservation(next: { cursor?: number; window?: number }): void {

@@ -36,11 +36,7 @@ def build_agent_observability(
     visible_events = [_visible_event(item) for item in events[-18:] if isinstance(item, dict)]
     active = _active_task(run, current_task, visible_events)
     reference_time = now or datetime.now(timezone.utc)
-    visible_sessions = [
-        _visible_session(item, now=reference_time)
-        for item in (sessions or [])
-        if isinstance(item, dict)
-    ]
+    visible_sessions = _visible_sessions(sessions, now=reference_time)
     visible_services = [_visible_service(item) for item in (services or []) if isinstance(item, dict)]
     throughput = build_throughput_projection(events)
     last_activity_at = _last_activity_at(run, visible_events, visible_sessions)
@@ -50,7 +46,7 @@ def build_agent_observability(
         "run": run,
         "events": visible_events,
         "task": current_task,
-        "sessions": visible_sessions,
+        "sessions": [_revision_session(item) for item in visible_sessions],
         "services": visible_services,
         "throughput": throughput,
     }
@@ -73,6 +69,16 @@ def build_agent_observability(
         "throughput": throughput,
         "revision": _digest(source),
     }
+
+
+def _revision_session(item: dict[str, Any]) -> dict[str, Any]:
+    """Exclude wall-clock presentation counters from semantic stream identity."""
+
+    return {key: value for key, value in item.items() if key != "elapsed_seconds"}
+
+
+def _visible_sessions(items: list[dict[str, Any]] | None, *, now: datetime) -> list[dict[str, Any]]:
+    return [_visible_session(item, now=now) for item in (items or []) if isinstance(item, dict)]
 
 
 def _active_task(
@@ -178,7 +184,7 @@ def _visible_session(item: dict[str, Any], *, now: datetime | None = None) -> di
         "started_at": started_at,
         "updated_at": updated_at,
         "finished_at": finished_at,
-        "elapsed_seconds": _elapsed_seconds(started_at, finished_at),
+        "elapsed_seconds": _elapsed_seconds(started_at, finished_at, now=now),
     }
 
 
@@ -292,10 +298,10 @@ def _short_id(value: object) -> str:
     return f"{text[:4]}…{digest}"
 
 
-def _elapsed_seconds(started_at: str, finished_at: str) -> int:
+def _elapsed_seconds(started_at: str, finished_at: str, *, now: datetime | None = None) -> int:
     try:
         started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-        ended = datetime.fromisoformat(finished_at.replace("Z", "+00:00")) if finished_at else datetime.now(timezone.utc)
+        ended = datetime.fromisoformat(finished_at.replace("Z", "+00:00")) if finished_at else now or datetime.now(timezone.utc)
         if started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
         if ended.tzinfo is None:

@@ -128,6 +128,51 @@ describe("application store", () => {
     expect(store.dashboard?.current_task).toEqual({ title: "开始写第一场" });
   });
 
+  it("preserves unchanged read-model identities across observability-only workspace updates", async () => {
+    const { useAppStore } = await import("./app");
+    const store = useAppStore();
+    await store.initialize();
+    await store.refreshWorkspace();
+    const workspaceStream = streamConnections.find((item) => item.path.startsWith("/project/workspace/stream"));
+    const base = {
+      project_root: "C:\\ArcVellum\\潮汐之后",
+      revision: "workspace-1",
+      source_revisions: {
+        dashboard: "dashboard-1",
+        library: "library-1",
+        delivery: "delivery-1",
+        reader_manifest: "reader-1",
+        project_progress: "progress-1",
+        autopilot_status: "autopilot-1",
+        agent_observability: "agent-1",
+      },
+      dashboard: { ok: true, current_task: { title: "开始写第一场" } },
+      library: { ok: true, sections: { characters: [] } },
+      delivery: { ok: true, project_root: "C:\\ArcVellum\\潮汐之后", status: "draft", files: [] },
+      reader_manifest: { ok: true, units: [], delta: { added: [], removed: [], initial: true } },
+      project_progress: { ok: true, status: "waiting_calibration", overall_percent: null, parts: [] },
+      autopilot_status: { ok: true, run: null },
+      agent_observability: { ok: true, revision: "agent-1", status: "active", active_task: null, sessions: [], recent_events: [] },
+    };
+    workspaceStream?.callback("workspace.snapshot", base);
+    const dashboardIdentity = store.dashboard;
+    const libraryIdentity = store.library;
+
+    workspaceStream?.callback("workspace.snapshot", {
+      ...base,
+      revision: "workspace-2",
+      source_revisions: { ...base.source_revisions, agent_observability: "agent-2" },
+      dashboard: { ok: true, current_task: { title: "不应替换的副本" } },
+      library: { ok: true, sections: { characters: [{ id: "not-applied" }] } },
+      agent_observability: { ok: true, revision: "agent-2", status: "active", active_task: { stage: "主创正在工作" }, sessions: [], recent_events: [] },
+    });
+
+    expect(store.dashboard).toBe(dashboardIdentity);
+    expect(store.library).toBe(libraryIdentity);
+    expect(store.dashboard?.current_task).toEqual({ title: "开始写第一场" });
+    expect(store.agentObservability?.active_task?.stage).toBe("主创正在工作");
+  });
+
   it("explains a packaged desktop connection failure in user-facing language", async () => {
     const { friendlyError } = await import("./app");
 

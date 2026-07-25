@@ -87,6 +87,7 @@ def build_narrative_projection_v3(
         "project_root": str(project_root.resolve()),
         "generated_at": base.get("generated_at"),
         "revision": revision,
+        "projection_revision": revision,
         "sequence": 0,
         "source_revisions": source_revisions,
         "level": focus_scope.level.value,

@@ -77,6 +77,7 @@ export interface SpatialNarrativeProjection {
   project_root: string;
   generated_at: string;
   revision: string;
+  projection_revision?: string;
   sequence: number;
   source_revisions: Record<string, string>;
   level: NarrativeFocusLevel;

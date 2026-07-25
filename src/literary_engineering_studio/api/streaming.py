@@ -52,7 +52,7 @@ def stream_read_model(event: str, function: Callable[[], dict[str, Any]], interv
         while True:
             payload = function()
             serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-            digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+            digest = read_model_revision(payload, serialized=serialized)
             if digest != previous_digest:
                 yield f"event: {event}\n"
                 yield "data: " + serialized + "\n\n"
@@ -70,3 +70,13 @@ def stream_read_model(event: str, function: Callable[[], dict[str, Any]], interv
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def read_model_revision(payload: dict[str, Any], *, serialized: str | None = None) -> str:
+    """Prefer an explicit semantic revision over volatile presentation fields."""
+
+    explicit = str(payload.get("revision") or "").strip()
+    if explicit:
+        return f"revision:{explicit}"
+    text = serialized if serialized is not None else json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()

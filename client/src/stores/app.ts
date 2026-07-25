@@ -19,6 +19,8 @@ import type {
 
 interface ProjectWorkspaceSnapshot {
   project_root?: string;
+  revision?: string;
+  source_revisions?: Record<string, string>;
   dashboard: DashboardResponse;
   library: LibraryResponse;
   delivery: DeliveryResponse;
@@ -50,6 +52,7 @@ export const useAppStore = defineStore("app", () => {
   let workspaceStream: EventStreamConnection | null = null;
   let autopilotStream: EventStreamConnection | null = null;
   let agentObservabilityStream: EventStreamConnection | null = null;
+  let workspaceRevisions: Record<string, string> = {};
 
   const currentProject = computed(
     () => projects.value.find((item) => item.path === currentProjectPath.value) || bootstrap.value?.project || null,
@@ -94,6 +97,7 @@ export const useAppStore = defineStore("app", () => {
     projectProgress.value = null;
     agentObservability.value = null;
     readerBodies.value = {};
+    workspaceRevisions = {};
     if (refresh && path) void refreshWorkspace();
   }
 
@@ -137,15 +141,24 @@ export const useAppStore = defineStore("app", () => {
     if (expectedRoot !== currentProjectPath.value) return;
     if (snapshot.project_root && snapshot.project_root !== currentProjectPath.value) return;
     const manifest = snapshot.reader_manifest;
-    const added = manifest?.delta?.initial ? [] : manifest?.delta?.added || [];
-    dashboard.value = snapshot.dashboard;
-    library.value = snapshot.library;
-    delivery.value = snapshot.delivery;
-    readerManifest.value = manifest;
-    projectProgress.value = snapshot.project_progress;
-    autopilotStatus.value = snapshot.autopilot_status;
-    applyAgentObservability(snapshot.agent_observability);
-    if (added.length) notice.value = `有 ${added.length} 节新正文进入阅读长卷。`;
+    const revisions = snapshot.source_revisions || {};
+    if (sectionChanged("dashboard", revisions)) dashboard.value = snapshot.dashboard;
+    if (sectionChanged("library", revisions)) library.value = snapshot.library;
+    if (sectionChanged("delivery", revisions)) delivery.value = snapshot.delivery;
+    if (sectionChanged("reader_manifest", revisions)) {
+      const added = manifest?.delta?.initial ? [] : manifest?.delta?.added || [];
+      readerManifest.value = manifest;
+      if (added.length) notice.value = `有 ${added.length} 节新正文进入阅读长卷。`;
+    }
+    if (sectionChanged("project_progress", revisions)) projectProgress.value = snapshot.project_progress;
+    if (sectionChanged("autopilot_status", revisions)) autopilotStatus.value = snapshot.autopilot_status;
+    if (sectionChanged("agent_observability", revisions)) applyAgentObservability(snapshot.agent_observability);
+    workspaceRevisions = revisions;
+  }
+
+  function sectionChanged(name: string, revisions: Record<string, string>): boolean {
+    const next = revisions[name];
+    return !next || workspaceRevisions[name] !== next;
   }
 
   async function loadAutopilotStatus(): Promise<void> {

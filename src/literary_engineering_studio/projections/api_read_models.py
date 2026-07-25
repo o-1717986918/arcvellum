@@ -15,6 +15,7 @@ from .core_read_models import build_dashboard, build_library
 from .delivery import build_delivery
 from ..application.project_progress import build_project_progress
 from .reader import build_reader_manifest, public_reader_manifest
+from .workspace_revision import build_workspace_revisions
 
 
 class ProjectReadModels:
@@ -66,10 +67,7 @@ class ProjectReadModels:
         run = autopilot_status.get("run") if isinstance(autopilot_status.get("run"), dict) else {}
         events = self._lifecycle.store.autopilot_events_since(str(run.get("run_id") or ""), limit=80) if run.get("run_id") else []
         dashboard = self.dashboard(root)
-        return {
-            "ok": True,
-            "schema": "arcvellum/project-workspace-stream/v1",
-            "project_root": str(root),
+        sections = {
             "dashboard": dashboard,
             "library": self.library(root),
             "delivery": self.delivery(root),
@@ -84,4 +82,13 @@ class ProjectReadModels:
                 self._lifecycle.store.list_agent_sessions(str(root), limit=30),
                 self._lifecycle.opencode_pool.status(),
             ),
+        }
+        source_revisions, revision = build_workspace_revisions(sections)
+        return {
+            "ok": True,
+            "schema": "arcvellum/project-workspace-stream/v1",
+            "project_root": str(root),
+            "revision": revision,
+            "source_revisions": source_revisions,
+            **sections,
         }
