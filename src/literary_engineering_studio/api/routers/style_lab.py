@@ -14,7 +14,10 @@ from ...application.style.transactions import (
     StyleSourceDuplicateError,
     StyleTransactionError,
 )
-from ...application.style.task_service import StyleTaskService
+from ...application.style.task_service import (
+    StyleBuildIntentError,
+    StyleTaskService,
+)
 from literary_engineering_studio_engine.literary.style.session import (
     StyleSessionConflictError,
     StyleSessionError,
@@ -22,6 +25,7 @@ from literary_engineering_studio_engine.literary.style.session import (
 from ..common import call_handler, project_root as resolve_project_root
 from ..models import (
     StyleAuthorCreateRequest,
+    StyleBuildRequest,
     StyleCompileRequest,
     StyleMountRequest,
     StyleSourceCreateRequest,
@@ -45,6 +49,7 @@ class StyleLabRouterDependencies:
 def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
     router = APIRouter()
     _register_authoring_routes(router, deps)
+    _register_engineering_routes(router, deps)
 
     @router.get("/style-lab/library")
     def style_lab_library(style_library_root: str = ""):
@@ -92,6 +97,13 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
             )
         )
 
+    return router
+
+
+def _register_engineering_routes(
+    router: APIRouter,
+    deps: StyleLabRouterDependencies,
+) -> None:
     @router.post("/style-lab/compile")
     def style_lab_compile(payload: StyleCompileRequest):
         try:
@@ -115,8 +127,37 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
         except StyleSessionError as exc:
             raise _style_session_error(exc) from exc
 
-    return router
-
+    @router.post("/style-lab/build")
+    def style_lab_build(payload: StyleBuildRequest):
+        try:
+            return {
+                "ok": True,
+                **deps.tasks.build(
+                    resolve_project_root(payload.project_root),
+                    author_id=payload.author_id,
+                    profile_id=payload.profile_id,
+                    runtime=payload.runtime,
+                ),
+            }
+        except StyleBuildIntentError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": exc.code,
+                    "stage": exc.stage,
+                    "message": str(exc),
+                },
+            ) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "style_profile_not_found",
+                    "message": str(exc),
+                },
+            ) from exc
+        except StyleSessionError as exc:
+            raise _style_session_error(exc) from exc
 
 def _register_authoring_routes(router: APIRouter, deps: StyleLabRouterDependencies) -> None:
     @router.post("/style-lab/authors")

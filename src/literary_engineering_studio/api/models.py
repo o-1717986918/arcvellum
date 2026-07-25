@@ -74,6 +74,13 @@ class StyleCompileRequest(BaseModel):
     runtime: str = "opencode"
 
 
+class StyleBuildRequest(BaseModel):
+    project_root: str
+    author_id: str
+    profile_id: str
+    runtime: str = "opencode"
+
+
 class ProjectCreateRequest(BaseModel):
     parent_directory: str = ""
     title: str
@@ -320,6 +327,7 @@ __all__ = [
     "RunnerProbeRequest",
     "StyleMountRequest",
     "StyleAuthorCreateRequest",
+    "StyleBuildRequest",
     "StyleWorkCreateRequest",
     "StyleSourceCreateRequest",
     "StyleSourceSelectionRequest",

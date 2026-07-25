@@ -1,7 +1,9 @@
 from pathlib import Path
 import json
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -199,6 +201,75 @@ class StyleApplicationServiceTests(unittest.TestCase):
             self.assertEqual(detail["integrity"]["status"], "pass")
             self.assertNotIn(str(project), response.text)
 
+    def test_build_api_runs_current_deterministic_worker_and_projects_result(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            project, _, _ = _formal_reviewed_profile(base)
+            config = default_config()
+            config["application"]["data_root"] = str(base / "data")
+            config["application"]["database_path"] = str(
+                base / "data" / "studio.sqlite3"
+            )
+            config["worker"]["runs_root"] = str(base / "runs")
+            with TestClient(create_app(config)) as client, patch(
+                "literary_engineering_studio.worker.build_runtime",
+                side_effect=AssertionError(
+                    "deterministic style build must not start a model runtime"
+                ),
+            ):
+                started = client.post(
+                    "/style-lab/build",
+                    json={
+                        "project_root": str(project),
+                        "author_id": "classic-author",
+                        "profile_id": "measured-prose",
+                        "runtime": "opencode",
+                    },
+                )
+                self.assertEqual(started.status_code, 200)
+                job_id = started.json()["job"]["job_id"]
+                job = _wait_for_job(client, job_id)
+                self.assertEqual(job["status"], "complete")
+
+                catalog = client.get(
+                    "/style-lab/versions",
+                    params={
+                        "style_library_root": str(base / "missing-library"),
+                        "project_root": str(project),
+                    },
+                )
+                self.assertEqual(catalog.status_code, 200)
+                version = catalog.json()["versions"][0]
+                self.assertTrue(version["built"])
+                self.assertEqual(version["state"], "mountable")
+
+    def test_build_api_rejects_nonexistent_profile_with_stable_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            project, _, _ = _formal_reviewed_profile(base)
+            config = default_config()
+            config["application"]["data_root"] = str(base / "data")
+            config["application"]["database_path"] = str(
+                base / "data" / "studio.sqlite3"
+            )
+            config["worker"]["runs_root"] = str(base / "runs")
+            client = TestClient(create_app(config))
+
+            response = client.post(
+                "/style-lab/build",
+                json={
+                    "project_root": str(project),
+                    "author_id": "classic-author",
+                    "profile_id": "missing-profile",
+                },
+            )
+
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(
+                response.json()["detail"]["code"],
+                "style_profile_not_found",
+            )
+
     def test_undeclared_package_file_is_projected_as_integrity_conflict(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -246,6 +317,16 @@ def _seed_style_profile(root: Path) -> None:
         filename="work-one.txt",
     )
     run_author_style_learning_platform_task(root, author_id="public-author", profile_id="default")
+
+
+def _wait_for_job(client: TestClient, job_id: str) -> dict[str, object]:
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        payload = client.get(f"/worker/jobs/{job_id}").json()
+        if payload.get("status") not in {"queued", "running", "stopping"}:
+            return payload
+        time.sleep(0.05)
+    raise AssertionError(f"style build job did not finish: {job_id}")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,20 @@ from literary_engineering_studio_engine.literary.style.session import (
     StyleSessionResult,
     StyleSourceSelection,
     prepare_style_engineering_session,
+    resolve_formal_style_profile,
 )
+from literary_engineering_studio_engine.literary.style.version import (
+    inspect_style_profile_version,
+    plan_style_profile_version,
+)
+
+
+class StyleBuildIntentError(ValueError):
+    code = "style_version_not_build_ready"
+
+    def __init__(self, message: str, *, stage: str):
+        super().__init__(message)
+        self.stage = stage
 
 
 class StyleTaskService:
@@ -59,6 +72,55 @@ class StyleTaskService:
             "job": job,
         }
 
+    def build(
+        self,
+        project_root: Path,
+        *,
+        author_id: str,
+        profile_id: str,
+        runtime: str,
+    ) -> dict[str, object]:
+        project = project_root.expanduser().resolve()
+        profile = resolve_formal_style_profile(
+            project,
+            author_id=author_id,
+            profile_id=profile_id,
+        )
+        plan = plan_style_profile_version(project, profile)
+        stage, _ = inspect_style_profile_version(plan)
+        if stage == "ready":
+            return {
+                "schema": "arcvellum/style-build-job/v1",
+                "status": "ready",
+                "style_id": plan.style_id,
+                "version_id": plan.version_id,
+                "content_hash": plan.content_hash,
+                "job": None,
+            }
+        if stage != "build":
+            raise StyleBuildIntentError(
+                _build_block_message(stage),
+                stage=stage,
+            )
+        job = self._launch_worker(
+            {
+                "project_root": str(project),
+                "route": "style-engineering",
+                "runtime": runtime.strip() or "opencode",
+                "task_id": "",
+                "scene": profile.relative_to(project).as_posix(),
+                "idempotency_key": f"style-build:{plan.content_hash}",
+            }
+        )
+        return {
+            "schema": "arcvellum/style-build-job/v1",
+            "status": "queued",
+            "style_id": plan.style_id,
+            "version_id": plan.version_id,
+            "content_hash": plan.content_hash,
+            "job": job,
+        }
+
 
 def _selections(rows: list[dict[str, str]]) -> tuple[StyleSourceSelection, ...]:
     return tuple(
@@ -80,3 +142,9 @@ def _public_session(session: StyleSessionResult, project: Path) -> dict[str, obj
         "created": session.created,
         "status": "prepared",
     }
+
+
+def _build_block_message(stage: str) -> str:
+    if stage == "conflict":
+        return "immutable style version has an unresolved integrity conflict"
+    return "style profile has not passed every formal build gate"

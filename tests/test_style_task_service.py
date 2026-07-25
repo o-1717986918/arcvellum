@@ -6,7 +6,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.application.style.task_service import StyleTaskService
+from literary_engineering_studio.application.style.task_service import (
+    StyleBuildIntentError,
+    StyleTaskService,
+)
 from literary_engineering_studio.application.style.transactions import StyleAuthoringService
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_bridge import task_command_parameters
@@ -18,8 +21,12 @@ from literary_engineering_studio_engine.literary.style.session import (
     StyleSourceSelection,
     prepare_style_engineering_session,
 )
+from literary_engineering_studio_engine.literary.style.version import (
+    build_style_profile_version,
+)
 from literary_engineering_studio_engine.style_engineering_route import build_task_payload
 from literary_engineering_studio_engine.workflow_state import _style_engineering_state
+from tests.test_style_profile_version import _formal_reviewed_profile
 
 
 class StyleTaskServiceTests(unittest.TestCase):
@@ -144,6 +151,77 @@ class StyleTaskServiceTests(unittest.TestCase):
             self.assertEqual(requests[0]["route"], "style-engineering")
             self.assertEqual(requests[0]["scene"], "style/atelier/classic-author/studio-task")
             self.assertTrue(requests[0]["idempotency_key"].startswith("style-compile:"))
+
+    def test_build_intent_only_launches_exact_ready_version_task(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root, profile, _ = _formal_reviewed_profile(base)
+            requests: list[dict[str, str]] = []
+
+            service = StyleTaskService(
+                lambda request: requests.append(request)
+                or {"job_id": "style-build-1", "status": "queued"}
+            )
+            result = service.build(
+                root,
+                author_id="classic-author",
+                profile_id="measured-prose",
+                runtime="opencode",
+            )
+
+            self.assertEqual(result["status"], "queued")
+            self.assertEqual(result["job"]["job_id"], "style-build-1")
+            self.assertEqual(requests[0]["route"], "style-engineering")
+            self.assertEqual(
+                requests[0]["scene"],
+                "style/atelier/classic-author/measured-prose",
+            )
+            self.assertEqual(
+                requests[0]["idempotency_key"],
+                "style-build:" + result["content_hash"],
+            )
+
+            build_style_profile_version(root, profile)
+            repeated = service.build(
+                root,
+                author_id="classic-author",
+                profile_id="measured-prose",
+                runtime="opencode",
+            )
+            self.assertEqual(repeated["status"], "ready")
+            self.assertIsNone(repeated["job"])
+            self.assertEqual(len(requests), 1)
+
+    def test_build_intent_rejects_profile_before_formal_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, library, _, training, holdout = _fixture(Path(temporary))
+            session = prepare_style_engineering_session(
+                root,
+                library,
+                author_id="classic-author",
+                profile_id="not-reviewed",
+                display_name="Not reviewed",
+                training_sources=[StyleSourceSelection(**training)],
+                holdout_sources=[StyleSourceSelection(**holdout)],
+            )
+            requests: list[dict[str, str]] = []
+            service = StyleTaskService(
+                lambda request: requests.append(request) or {}
+            )
+
+            with self.assertRaisesRegex(
+                StyleBuildIntentError,
+                "has not passed every formal build gate",
+            ):
+                service.build(
+                    root,
+                    author_id="classic-author",
+                    profile_id="not-reviewed",
+                    runtime="opencode",
+                )
+
+            self.assertTrue(session.manifest_path.is_file())
+            self.assertEqual(requests, [])
 
 
 def _fixture(

@@ -112,7 +112,7 @@ def plan_style_profile_version(
     session = load_style_session(profile)
     author_id = str(session.get("author_id") or "")
     profile_id = str(session.get("profile_id") or target_id or profile.name)
-    review_target_id = target_id or profile_id
+    review_target_id = target_id or _review_target_id(profile) or profile_id
     style_id = "-".join(item for item in (author_id, profile_id) if item) or profile.name
     review_evidence, evidence_errors = style_review_evidence(root, profile)
     review_evidence.update(_semantic_review_digests(root, profile))
@@ -326,6 +326,11 @@ def _semantic_review_digests(root: Path, profile: Path) -> dict[str, str]:
         evidence[f"{name}_path"] = path.relative_to(root).as_posix()
         evidence[f"{name}_sha256"] = _sha256(path)
     return evidence
+
+
+def _review_target_id(profile: Path) -> str:
+    review = _read_object(style_review_paths(profile).review_json)
+    return str(review.get("profile_id") or "")
 
 
 def _version_paths(version_dir: Path) -> StyleVersionPaths:

@@ -131,6 +131,32 @@ def load_style_session(profile_dir: Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def resolve_formal_style_profile(
+    project_root: Path,
+    *,
+    author_id: str,
+    profile_id: str,
+) -> Path:
+    """Resolve a formal profile from stable IDs, never a caller-provided path."""
+
+    root = project_root.expanduser().resolve()
+    stable_author = _stable_id(author_id, "author_id")
+    stable_profile = _stable_id(profile_id, "profile_id")
+    profile = root / "style" / "atelier" / stable_author / stable_profile
+    _require_inside(root, profile)
+    session = load_style_session(profile)
+    if not session:
+        raise FileNotFoundError(
+            f"formal style profile not found: {stable_author}/{stable_profile}"
+        )
+    if (
+        str(session.get("author_id") or "") != stable_author
+        or str(session.get("profile_id") or "") != stable_profile
+    ):
+        raise StyleSessionError("formal style profile identity is inconsistent")
+    return profile
+
+
 def formal_style_profile_dirs(project_root: Path) -> tuple[Path, ...]:
     """Return project-local formal style profiles without exposing library layout."""
 
