@@ -12,8 +12,15 @@ from literary_engineering_studio.application.assets.owner_transactions import (
     OwnerTransactionService,
 )
 from literary_engineering_studio.application.assets.registry import AssetViewRegistry
+from literary_engineering_studio.application.assets.revisions import AssetRevisionService
 from literary_engineering_studio.application.assets.validation import validate_asset_content
+from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.projections.archive.service import ArchiveProjectionService
+from literary_engineering_studio_engine.context_broker import (
+    context_trace_status,
+    write_context_trace,
+)
+from literary_engineering_studio_engine.workflow_state import build_workflow_state
 
 
 class ArchiveAssetTests(unittest.TestCase):
@@ -123,6 +130,115 @@ class ArchiveAssetTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "semantic review"):
             service.commit(self.root, transaction)
+
+    def test_revision_index_rebuilds_from_project_receipts(self):
+        before = self.loader.load(self.root, "character:lin")
+        transaction = OwnerOverrideTransaction.create(
+            asset_id="character:lin",
+            asset_type="character",
+            base_revision=before.revision,
+            content="character_id: lin\nname: 林澈\nimportance: secondary\n",
+            semantic_review=SemanticReview.WAIVED,
+            reason="作者调整角色权重以验证历史重建。",
+        )
+        receipt = OwnerTransactionService(self.registry, self.loader).commit(self.root, transaction)
+        index = JobStore(Path(self.temporary.name) / "history.sqlite3")
+        revisions = AssetRevisionService(index)
+
+        history = revisions.history(self.root, "character:lin")
+
+        self.assertEqual(history["synchronization"]["indexed"], 1)
+        self.assertEqual(history["transactions"][0]["transaction_id"], receipt["transaction_id"])
+        restored, _ = revisions.snapshot_content(self.root, "character:lin", before.revision)
+        self.assertEqual(restored, before.content)
+
+    def test_index_failure_keeps_committed_project_truth_and_marks_rebuild(self):
+        class FailingRevisionService:
+            def index_receipt(self, _root, _receipt):
+                raise RuntimeError("index unavailable")
+
+        before = self.loader.load(self.root, "character:lin")
+        transaction = OwnerOverrideTransaction.create(
+            asset_id="character:lin",
+            asset_type="character",
+            base_revision=before.revision,
+            content="character_id: lin\nname: 林澈\nimportance: secondary\n",
+            semantic_review=SemanticReview.WAIVED,
+            reason="作者提交不能被派生索引故障伪装成失败。",
+        )
+        service = OwnerTransactionService(
+            self.registry,
+            self.loader,
+            FailingRevisionService(),
+        )
+
+        receipt = service.commit(self.root, transaction)
+
+        self.assertIn("importance: secondary", self.loader.load(self.root, "character:lin").content)
+        self.assertEqual(receipt["history_index"]["status"], "rebuild-required")
+        persisted = __import__("json").loads(
+            (self.root / receipt["receipt_path"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(persisted["history_index"]["status"], "rebuild-required")
+
+    def test_owner_override_uses_engine_context_trace_for_formal_stale_propagation(self):
+        context = self.root / "memory" / "context_packets" / "scene_0001.md"
+        context.parent.mkdir(parents=True)
+        context.write_text("已加载角色林澈。\n", encoding="utf-8")
+        character = self.root / "characters" / "lin.yaml"
+        write_context_trace(
+            context.with_suffix(".trace.json"),
+            {
+                "scene_id": "scene_0001",
+                "context_packet": "memory/context_packets/scene_0001.md",
+                "loaded_files": [
+                    "project.yaml",
+                    "scenes/scene_0001.yaml",
+                    "characters/lin.yaml",
+                ],
+                "loaded_sources": [
+                    {
+                        "relative_path": relative,
+                        "sha256": __import__("hashlib").sha256((self.root / relative).read_bytes()).hexdigest(),
+                    }
+                    for relative in (
+                        "project.yaml",
+                        "scenes/scene_0001.yaml",
+                        "characters/lin.yaml",
+                    )
+                ],
+                "missing_required_context": [],
+            },
+        )
+        self.assertTrue(context_trace_status(self.root, "scene_0001", context).passed)
+        service = OwnerTransactionService(self.registry, self.loader)
+        before = self.loader.load(self.root, "character:lin")
+        transaction = OwnerOverrideTransaction.create(
+            asset_id="character:lin",
+            asset_type="character",
+            base_revision=before.revision,
+            content="character_id: lin\nname: 林澈\nimportance: secondary\n",
+            semantic_review=SemanticReview.WAIVED,
+            reason="作者调整人物在本章中的叙事权重。",
+        )
+
+        receipt = service.commit(self.root, transaction)
+
+        self.assertEqual(context_trace_status(self.root, "scene_0001", context).status, "stale")
+        propagation = receipt["stale_propagation"]
+        self.assertEqual(propagation["status"], "propagated")
+        self.assertEqual(propagation["scene_ids"], ["scene_0001"])
+        self.assertEqual(propagation["mechanism"], "engine-context-trace-sha256")
+        state_path = self.root / "workflow" / "archive-stale-state.json"
+        build_workflow_state(
+            self.root,
+            route="scene-development",
+            scene="scenes/scene_0001.yaml",
+            output=self.root / "workflow" / "archive-stale-state.md",
+            json_output=state_path,
+        )
+        state = __import__("json").loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["scenes"][0]["current_step"], "context-trace")
 
 
 if __name__ == "__main__":

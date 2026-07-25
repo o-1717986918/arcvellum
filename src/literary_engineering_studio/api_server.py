@@ -18,6 +18,7 @@ from .api.common import call_handler as _call, friendly_error as _friendly_error
 from .api.models import (
     ArchiveAssetCommitRequest,
     ArchiveAssetContentRequest,
+    ArchiveRestorePreviewRequest,
     AdvisorCustomPersonaRequest,
     AdvisorInboxReadRequest,
     AdvisorInboxSettingsRequest,
@@ -366,7 +367,7 @@ def create_app(config_override: dict[str, Any] | None = None):
         )
     )
 
-    app.include_router(build_archive_router(default_archive_dependencies()))
+    app.include_router(build_archive_router(default_archive_dependencies(jobs)))
 
     app.include_router(
         build_library_router(

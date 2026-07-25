@@ -91,6 +91,48 @@ class ArchiveApiTests(unittest.TestCase):
         self.assertEqual(stale.status_code, 409)
         self.assertEqual(stale.json()["detail"]["code"], "version_conflict")
 
+    def test_history_rebuild_and_restore_preview_never_mutate_the_asset(self):
+        detail = self.client.get(
+            "/archive/assets/character:lin",
+            params={"project_root": str(self.root)},
+        ).json()
+        original_revision = detail["asset"]["revision"]
+        original_content = detail["asset"]["content"]
+        committed = self.client.post(
+            "/archive/assets/character:lin/commit",
+            json={
+                "project_root": str(self.root),
+                "base_revision": original_revision,
+                "content": "character_id: lin\nname: 林澈\nimportance: secondary\n",
+                "semantic_review": "waived",
+                "reason": "作者明确调整角色权重。",
+            },
+        )
+        self.assertEqual(committed.status_code, 200)
+        changed = (self.root / "characters" / "lin.yaml").read_text(encoding="utf-8")
+
+        history = self.client.get(
+            "/archive/assets/character:lin/history",
+            params={"project_root": str(self.root)},
+        )
+        self.assertEqual(history.status_code, 200)
+        revisions = {item["revision"] for item in history.json()["revisions"]}
+        self.assertIn(original_revision, revisions)
+        self.assertIn(committed.json()["receipt"]["new_revision"], revisions)
+
+        preview = self.client.post(
+            "/archive/assets/character:lin/restore/preview",
+            json={
+                "project_root": str(self.root),
+                "revision": original_revision,
+                "reason": "作者预览恢复最初人物设定。",
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.json()["restore"]["revision"], original_revision)
+        self.assertEqual(preview.json()["preview"]["transaction"]["patch"][0]["value"], original_content)
+        self.assertEqual((self.root / "characters" / "lin.yaml").read_text(encoding="utf-8"), changed)
+
 
 if __name__ == "__main__":
     unittest.main()

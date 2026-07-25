@@ -195,9 +195,16 @@ class ArchiveAssetCommitRequest(BaseModel):
     expected_impacts: list[str] = []
 
 
+class ArchiveRestorePreviewRequest(BaseModel):
+    project_root: str
+    revision: str
+    reason: str
+
+
 __all__ = [
     "ArchiveAssetCommitRequest",
     "ArchiveAssetContentRequest",
+    "ArchiveRestorePreviewRequest",
     "AdvisorCustomPersonaRequest",
     "AdvisorInboxReadRequest",
     "AdvisorInboxSettingsRequest",

@@ -12,7 +12,8 @@ from .contracts import OwnerOverrideTransaction, SemanticReview
 from .impact import build_asset_impact
 from .loader import AssetLoader
 from .registry import AssetViewRegistry
-from .revisions import content_revision
+from .revisions import AssetRevisionService, content_revision
+from .staleness import build_formal_stale_propagation
 from .validation import validate_asset_content
 
 
@@ -21,9 +22,15 @@ class AssetVersionConflictError(RuntimeError):
 
 
 class OwnerTransactionService:
-    def __init__(self, registry: AssetViewRegistry, loader: AssetLoader):
+    def __init__(
+        self,
+        registry: AssetViewRegistry,
+        loader: AssetLoader,
+        revisions: AssetRevisionService | None = None,
+    ):
         self.registry = registry
         self.loader = loader
+        self.revisions = revisions
         self._lock = threading.RLock()
 
     def preview(self, project_root: Path, transaction: OwnerOverrideTransaction) -> dict[str, object]:
@@ -71,6 +78,7 @@ class OwnerTransactionService:
         impact = build_asset_impact(root, asset, content)
         target = root / asset.relative_path
         receipt = self._write_transaction(root, target, asset.content, content, transaction, impact)
+        self._record_history_index(root, receipt)
         return receipt
 
     @staticmethod
@@ -117,7 +125,10 @@ class OwnerTransactionService:
             "new_revision": new_revision,
             "reason": transaction.reason,
             "impact": impact,
-            "stale_propagation": "recorded-for-follow-up",
+            "stale_propagation": {
+                "schema": "arcvellum/archive-stale-propagation/v1",
+                "status": "pending",
+            },
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         _write_json(receipt_path, receipt)
@@ -141,8 +152,28 @@ class OwnerTransactionService:
                 "after_snapshot": (final_dir / f"after{suffix}").relative_to(root).as_posix(),
             }
         )
+        receipt["stale_propagation"] = build_formal_stale_propagation(
+            root,
+            target.relative_to(root).as_posix(),
+        )
         _write_json(final_dir / "receipt.json", receipt)
         return receipt
+
+    def _record_history_index(self, root: Path, receipt: dict[str, object]) -> None:
+        if self.revisions is None:
+            receipt["history_index"] = {"status": "not-configured"}
+        else:
+            try:
+                self.revisions.index_receipt(root, receipt)
+            except (OSError, RuntimeError, ValueError) as exc:
+                receipt["history_index"] = {
+                    "status": "rebuild-required",
+                    "message": str(exc),
+                }
+            else:
+                receipt["history_index"] = {"status": "indexed"}
+        receipt_path = root / str(receipt["receipt_path"])
+        _write_json(receipt_path, receipt)
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
