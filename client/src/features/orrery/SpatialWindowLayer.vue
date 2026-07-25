@@ -273,7 +273,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
         </div>
       </template>
       <template v-else-if="item.kind === 'reader'">
-        <ManuscriptReader :items="props.prose" compact immersive />
+        <ManuscriptReader
+          :items="props.prose"
+          :mode="item.reader_mode || 'peek'"
+          :compact="item.reader_mode === 'reading'"
+          :immersive="item.reader_mode === 'immersive'"
+          @mode-change="windows.setReaderMode($event)"
+        />
       </template>
       <template v-else-if="item.kind === 'health'">
         <div class="spatial-instrument-content"><span class="instrument-overline">WORK HEALTH</span><strong class="instrument-title">正式路线检查</strong><p>健康仪表会把缺少的证据和阻塞项归还到可理解的创作语言中。</p><div class="spatial-health-list"><article v-for="audit in routeAudits.slice(0, 6)" :key="String(audit.route)"><i :class="Number(audit.blocking_count || 0) ? 'blocked' : 'ready'"></i><div><strong>{{ labelFor(audit.route) }}</strong><p v-if="Number(audit.blocking_count || 0)">{{ describeGate(asRecord(asList(audit.top_blocking_gates)[0]).message) }}</p><p v-else>已具备继续推进条件。</p></div></article><span v-if="!routeAudits.length"><CircleAlert :size="15" />等待项目健康数据。</span></div></div>

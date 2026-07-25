@@ -8,9 +8,21 @@ const emit = defineEmits<{ move: [position: SpatialWindowPosition]; resize: [siz
 
 const root = ref<HTMLElement | null>(null);
 const compactViewport = ref(false);
+const readerImmersive = computed(() => props.item.kind === "reader" && props.item.reader_mode === "immersive");
 let dragOffset = { x: 0, y: 0 };
 let resizeOrigin = { x: 0, y: 0, width: 0, height: 0 };
 const style = computed(() => {
+  if (compactViewport.value && readerImmersive.value) {
+    return {
+      left: "8px",
+      right: "8px",
+      top: "8px",
+      bottom: "8px",
+      width: "auto",
+      height: "auto",
+      zIndex: props.item.layer,
+    };
+  }
   if (compactViewport.value) {
     const maxHeight = props.item.kind === "reader" ? "min(72dvh, 620px)" : `min(58dvh, ${props.item.size.height}px)`;
     return {
@@ -53,7 +65,7 @@ function stopDrag(): void {
 }
 
 function startDrag(event: PointerEvent): void {
-  if (event.button !== 0 || compactViewport.value) return;
+  if (event.button !== 0 || compactViewport.value || readerImmersive.value) return;
   if ((event.target as HTMLElement).closest(".spatial-window-actions")) return;
   const rect = root.value?.getBoundingClientRect();
   if (!rect) return;
@@ -79,7 +91,7 @@ function stopResize(): void {
 }
 
 function startResize(event: PointerEvent): void {
-  if (event.button !== 0 || compactViewport.value || props.item.collapsed) return;
+  if (event.button !== 0 || compactViewport.value || props.item.collapsed || props.item.kind === "reader") return;
   resizeOrigin = { x: event.clientX, y: event.clientY, width: props.item.size.width, height: props.item.size.height };
   emit("activate");
   document.body.classList.add("resizing-spatial-window");
@@ -119,7 +131,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <article ref="root" class="spatial-window" :class="{ collapsed: item.collapsed, compact: compactViewport }" :data-kind="item.kind" :data-spatial-window-id="item.id" :style="style" tabindex="-1" @pointerdown.capture="emit('activate')">
+  <article ref="root" class="spatial-window" :class="{ collapsed: item.collapsed, compact: compactViewport }" :data-kind="item.kind" :data-reader-mode="item.reader_mode" :data-spatial-window-id="item.id" :style="style" tabindex="-1" @pointerdown.capture="emit('activate')">
     <header class="spatial-window-header">
       <button class="spatial-window-drag" title="拖动窗口；双击复位" @pointerdown="startDrag" @dblclick="emit('reset')">
         <GripHorizontal :size="15" />
@@ -128,12 +140,12 @@ onBeforeUnmount(() => {
       <div class="spatial-window-actions">
         <span v-if="item.anchor?.enabled" class="spatial-window-anchor" title="正跟随节点"><LocateFixed :size="13" /></span>
         <span v-else-if="item.anchor" class="spatial-window-anchor free" title="窗口已脱离节点"><PinOff :size="13" /></span>
-        <button class="orrery-v3-icon" :title="item.collapsed ? '展开窗口' : '折叠窗口'" @click="emit('toggle')"><ChevronDown v-if="item.collapsed" :size="15" /><ChevronUp v-else :size="15" /></button>
-        <button class="orrery-v3-icon" :title="item.anchor ? '回到节点旁' : '复位窗口'" @click="emit('reset')"><RotateCcw :size="14" /></button>
+        <button v-if="!readerImmersive" class="orrery-v3-icon" :title="item.collapsed ? '展开窗口' : '折叠窗口'" @click="emit('toggle')"><ChevronDown v-if="item.collapsed" :size="15" /><ChevronUp v-else :size="15" /></button>
+        <button v-if="!readerImmersive" class="orrery-v3-icon" :title="item.anchor ? '回到节点旁' : '复位窗口'" @click="emit('reset')"><RotateCcw :size="14" /></button>
         <button class="orrery-v3-icon" title="关闭窗口" @click="emit('close')"><X :size="16" /></button>
       </div>
     </header>
     <div v-show="!item.collapsed" class="spatial-window-scroll"><slot /></div>
-    <button v-if="!compactViewport && !item.collapsed" class="spatial-window-resize" title="调整窗口尺寸" aria-label="调整窗口尺寸" @pointerdown="startResize"><i></i></button>
+    <button v-if="!compactViewport && !item.collapsed && item.kind !== 'reader'" class="spatial-window-resize" title="调整窗口尺寸" aria-label="调整窗口尺寸" @pointerdown="startResize"><i></i></button>
   </article>
 </template>

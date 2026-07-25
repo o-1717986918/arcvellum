@@ -1,29 +1,30 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import type { SpatialNarrativeNode, SpatialNodeDetail } from "@/types/spatial";
-import type { SpatialWindow, SpatialWindowAnchor, SpatialWindowKind, SpatialWindowPosition, SpatialWindowSize } from "@/types/spatialWindows";
-
-const DEFAULT_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
-  node: { width: 294, height: 348 },
-  progress: { width: 342, height: 438 },
-  agent: { width: 368, height: 510 },
-  reader: { width: 332, height: 540 },
-  decisions: { width: 328, height: 340 },
-  rules: { width: 456, height: 600 },
-  health: { width: 258, height: 290 },
-  delivery: { width: 294, height: 282 },
-};
-
-const MIN_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
-  node: { width: 276, height: 270 },
-  progress: { width: 286, height: 316 },
-  agent: { width: 304, height: 336 },
-  reader: { width: 300, height: 370 },
-  decisions: { width: 300, height: 248 },
-  rules: { width: 360, height: 430 },
-  health: { width: 258, height: 240 },
-  delivery: { width: 260, height: 210 },
-};
+import type {
+  ReaderWindowMode,
+  SpatialWindow,
+  SpatialWindowAnchor,
+  SpatialWindowKind,
+  SpatialWindowPosition,
+  SpatialWindowSize,
+} from "@/types/spatialWindows";
+import {
+  DEFAULT_SIZES,
+  anchoredPosition,
+  anchoredPositionFor,
+  buildAnchor,
+  clampPosition,
+  clampSize,
+  instrumentPosition,
+  isReaderMode,
+  isWindowKind,
+  placeWithoutCollision,
+  readerModeSize,
+  validAnchor,
+  validReaderReturn,
+  validSize,
+} from "@/features/orrery/windows/windowGeometry";
 
 const INSTRUMENT_TITLES: Record<Exclude<SpatialWindowKind, "node">, string> = {
   progress: "推进仪表",
@@ -44,81 +45,13 @@ interface PersistedSpatialWindow {
   layer: number;
   node_id?: string;
   anchor?: SpatialWindowAnchor;
+  reader_mode?: ReaderWindowMode;
+  reader_return?: SpatialWindow["reader_return"];
 }
 
 const PERSISTENCE_PREFIX = "arcvellum.spatial-window-layout.v1.";
 const MAX_EXPANDED_WINDOWS = 12;
 
-function clampPosition(position: SpatialWindowPosition, size: SpatialWindowSize): SpatialWindowPosition {
-  const margin = 12;
-  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-  return {
-    left: Math.min(Math.max(margin, position.left), Math.max(margin, viewportWidth - size.width - margin)),
-    top: Math.min(Math.max(margin, position.top), Math.max(margin, viewportHeight - size.height - margin)),
-  };
-}
-
-function clampSize(kind: SpatialWindowKind, size: SpatialWindowSize): SpatialWindowSize {
-  const minimum = MIN_SIZES[kind];
-  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-  return {
-    width: Math.round(Math.min(Math.max(minimum.width, size.width), Math.max(minimum.width, viewportWidth - 24))),
-    height: Math.round(Math.min(Math.max(minimum.height, size.height), Math.max(minimum.height, viewportHeight - 24))),
-  };
-}
-
-function instrumentPosition(kind: Exclude<SpatialWindowKind, "node">, size: SpatialWindowSize, offset: number): SpatialWindowPosition {
-  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-  const positions: Record<Exclude<SpatialWindowKind, "node">, SpatialWindowPosition> = {
-    progress: { left: viewportWidth - size.width - 30, top: 148 },
-    agent: { left: viewportWidth - size.width - 42, top: 184 },
-    reader: { left: 82, top: 148 },
-    decisions: { left: viewportWidth - size.width - 42, top: 196 },
-    rules: { left: viewportWidth - size.width - 52, top: 150 },
-    health: { left: 26, top: viewportHeight - size.height - 34 },
-    delivery: { left: viewportWidth - size.width - 44, top: viewportHeight - size.height - 40 },
-  };
-  return clampPosition({ left: positions[kind].left - offset * 12, top: positions[kind].top + offset * 12 }, size);
-}
-
-function overlaps(
-  position: SpatialWindowPosition,
-  size: SpatialWindowSize,
-  other: SpatialWindow,
-): boolean {
-  const gap = 18;
-  return !(
-    position.left + size.width + gap <= other.position.left
-    || other.position.left + other.size.width + gap <= position.left
-    || position.top + size.height + gap <= other.position.top
-    || other.position.top + other.size.height + gap <= position.top
-  );
-}
-
-function placeWithoutCollision(
-  preferred: SpatialWindowPosition,
-  size: SpatialWindowSize,
-  existing: SpatialWindow[],
-): SpatialWindowPosition {
-  const base = clampPosition(preferred, size);
-  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-  const candidates = [
-    base,
-    { left: base.left - size.width - 28, top: base.top },
-    { left: base.left, top: base.top + size.height + 28 },
-    { left: base.left - size.width - 28, top: base.top + Math.round(size.height * 0.45) },
-    { left: 28, top: viewportHeight - size.height - 34 },
-    { left: viewportWidth - size.width - 28, top: 132 },
-  ].map((candidate) => clampPosition(candidate, size));
-
-  const active = existing.filter((item) => !item.collapsed);
-  return candidates.find((candidate) => active.every((item) => !overlaps(candidate, size, item)))
-    ?? clampPosition({ left: base.left - active.length * 26, top: base.top + active.length * 32 }, size);
-}
 
 export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
   const windows = ref<SpatialWindow[]>([]);
@@ -191,10 +124,12 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
     const id = `instrument:${kind}`;
     const existing = windows.value.find((item) => item.id === id);
     if (existing) {
+      if (kind === "reader" && !existing.reader_mode) existing.reader_mode = "peek";
       restore(id);
       return;
     }
-    const size = DEFAULT_SIZES[kind];
+    const readerMode = kind === "reader" ? "peek" : undefined;
+    const size = readerMode ? readerModeSize(readerMode) : DEFAULT_SIZES[kind];
     const preferred = instrumentPosition(kind, size, windows.value.filter((item) => item.kind === kind).length);
     collapseForCapacity(id);
     windows.value.push({
@@ -205,7 +140,37 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       size,
       layer: ++highestLayer,
       collapsed: false,
+      reader_mode: readerMode,
     });
+    persist();
+  }
+
+  function setReaderMode(mode: ReaderWindowMode): void {
+    const target = windows.value.find((item) => item.kind === "reader");
+    if (!target || target.reader_mode === mode) return;
+    const previous = target.reader_mode || "peek";
+    if (mode === "immersive") {
+      target.reader_return = {
+        position: { ...target.position },
+        size: { ...target.size },
+        mode: previous === "immersive" ? "reading" : previous,
+      };
+      target.position = { left: 16, top: 16 };
+      target.size = readerModeSize(mode);
+    } else if (previous === "immersive" && target.reader_return) {
+      const restoredSize = target.reader_return.mode === mode
+        ? clampSize("reader", target.reader_return.size)
+        : readerModeSize(mode);
+      target.position = clampPosition(target.reader_return.position, restoredSize);
+      target.size = restoredSize;
+      target.reader_return = undefined;
+    } else {
+      target.size = readerModeSize(mode);
+      target.position = clampPosition(target.position, target.size);
+    }
+    target.reader_mode = mode;
+    target.collapsed = false;
+    bringForward(target.id);
     persist();
   }
 
@@ -290,7 +255,12 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       const point = nodeAnchors.get(anchor.nodeId);
       target.position = point ? anchoredPosition(target, point) : clampPosition({ left: 92, top: 156 }, target.size);
     } else {
-      target.position = instrumentPosition(target.kind, target.size, 0);
+      if (target.kind === "reader") {
+        target.size = readerModeSize(target.reader_mode || "peek");
+      }
+      target.position = target.kind === "reader" && target.reader_mode === "immersive"
+        ? { left: 16, top: 16 }
+        : instrumentPosition(target.kind, target.size, 0);
     }
     persist();
   }
@@ -327,7 +297,7 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       const restored: SpatialWindow[] = [];
       saved.forEach((item) => {
         if (!isWindowKind(item.kind)) return [];
-        const size = item.size && validSize(item.size) ? clampSize(item.kind, item.size) : DEFAULT_SIZES[item.kind];
+        const size = persistedWindowSize(item);
         if (item.kind === "node") {
           const node = nodeById.get(String(item.node_id || ""));
           if (!node) return [];
@@ -353,6 +323,10 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
           size,
           layer: Math.max(51, Number(item.layer) || 51),
           collapsed: Boolean(item.collapsed),
+          reader_mode: item.kind === "reader"
+            ? (isReaderMode(item.reader_mode) ? item.reader_mode : "peek")
+            : undefined,
+          reader_return: item.kind === "reader" && validReaderReturn(item.reader_return) ? item.reader_return : undefined,
         });
       });
       windows.value = restored;
@@ -375,49 +349,20 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       layer: item.layer,
       node_id: item.node?.node_id,
       anchor: item.anchor,
+      reader_mode: item.reader_mode,
+      reader_return: item.reader_return,
     }));
     localStorage.setItem(persistenceKey, JSON.stringify(payload));
   }
 
-  return { windows: sortedWindows, expandedWindows, minimizedWindows, selectedNodeId, openNode, openInstrument, bringForward, updatePosition, updateSize, toggleCollapsed, restore, close, closeActive, toggleActive, resetPosition, resetActive, focusNext, syncNodeAnchors, clear, setScope };
+  return { windows: sortedWindows, expandedWindows, minimizedWindows, selectedNodeId, openNode, openInstrument, setReaderMode, bringForward, updatePosition, updateSize, toggleCollapsed, restore, close, closeActive, toggleActive, resetPosition, resetActive, focusNext, syncNodeAnchors, clear, setScope };
 });
 
-function buildAnchor(nodeId: string, stagger: number): SpatialWindowAnchor {
-  const parity = [...nodeId].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 4;
-  const offsets = [
-    { x: 26, y: -42 },
-    { x: -360, y: -42 },
-    { x: 26, y: 34 },
-    { x: -360, y: 34 },
-  ];
-  const offset = offsets[(parity + stagger) % offsets.length];
-  return { nodeId, offsetX: offset.x, offsetY: offset.y, enabled: Boolean(nodeId) };
-}
-
-function anchoredPositionFor(
-  point: { x: number; y: number },
-  anchor: SpatialWindowAnchor,
-  size: SpatialWindowSize,
-): SpatialWindowPosition {
-  return clampPosition({ left: point.x + anchor.offsetX, top: point.y + anchor.offsetY }, size);
-}
-
-function anchoredPosition(item: SpatialWindow, point: { x: number; y: number }): SpatialWindowPosition {
-  if (!item.anchor) return item.position;
-  return anchoredPositionFor(point, item.anchor, item.size);
-}
-
-function isWindowKind(value: unknown): value is SpatialWindowKind {
-  return ["node", "progress", "agent", "reader", "decisions", "rules", "health", "delivery"].includes(String(value));
-}
-
-function validSize(value: SpatialWindowSize): boolean {
-  return Number.isFinite(value.width) && Number.isFinite(value.height) && value.width >= 260 && value.height >= 180;
-}
-
-function validAnchor(value: SpatialWindowAnchor): boolean {
-  return Boolean(value.nodeId)
-    && Number.isFinite(value.offsetX)
-    && Number.isFinite(value.offsetY)
-    && typeof value.enabled === "boolean";
+function persistedWindowSize(item: PersistedSpatialWindow): SpatialWindowSize {
+  if (item.kind === "reader") {
+    const mode = isReaderMode(item.reader_mode) ? item.reader_mode : "peek";
+    if (mode !== "reading") return readerModeSize(mode);
+    return item.size && validSize(item.size) ? clampSize("reader", item.size) : readerModeSize(mode);
+  }
+  return item.size && validSize(item.size) ? clampSize(item.kind, item.size) : DEFAULT_SIZES[item.kind];
 }

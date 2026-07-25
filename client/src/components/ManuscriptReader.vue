@@ -19,14 +19,16 @@ import {
 import { api, query } from "@/services/api";
 import { displayValue } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
+import type { ReaderWindowMode } from "@/types/spatialWindows";
 
 const props = withDefaults(
-  defineProps<{ items?: Record<string, unknown>[]; compact?: boolean; immersive?: boolean }>(),
+  defineProps<{ items?: Record<string, unknown>[]; compact?: boolean; immersive?: boolean; mode?: ReaderWindowMode }>(),
   { items: () => [], compact: false, immersive: false },
 );
+const emit = defineEmits<{ modeChange: [mode: ReaderWindowMode] }>();
 const store = useAppStore();
 const index = ref(0);
-const expanded = ref(false);
+const localMode = ref<ReaderWindowMode>(props.mode || (props.immersive ? "immersive" : "reading"));
 const tocOpen = ref(props.immersive);
 const searchOpen = ref(false);
 const searchText = ref("");
@@ -53,8 +55,10 @@ const units = computed(() => (manifestUnits.value.length ? manifestUnits.value :
 const current = computed(() => units.value[index.value] || null);
 const currentId = computed(() => String(current.value?.unit_id || current.value?.id || ""));
 const paragraphs = computed(() => body.value.split(/\n+/).map((item) => item.trim()).filter(Boolean));
+const firstParagraph = computed(() => paragraphs.value[0] || String(current.value?.excerpt || ""));
 const isBookmarked = computed(() => bookmarks.value.includes(currentId.value));
 const continuousUnits = computed(() => units.value.slice(continuousStart.value, continuousStart.value + continuousCount.value));
+const readerMode = computed(() => props.mode || localMode.value);
 
 watch(
   () => units.value.length,
@@ -68,6 +72,12 @@ watch(
 );
 
 watch(currentId, () => void loadCurrent(), { immediate: true });
+watch(() => props.mode, (value) => {
+  if (value) localMode.value = value;
+});
+watch(readerMode, (value) => {
+  if (value === "immersive") tocOpen.value = true;
+});
 watch(fontSize, (value) => {
   fontSize.value = Math.min(24, Math.max(15, value));
   localStorage.setItem("arcvellum.reader.fontSize", String(fontSize.value));
@@ -142,6 +152,11 @@ function goTo(target: number): void {
       document.getElementById(`reader-unit-${currentId.value}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
     });
   }
+}
+
+function requestMode(mode: ReaderWindowMode): void {
+  if (props.mode === undefined) localMode.value = mode;
+  emit("modeChange", mode);
 }
 
 function rememberScroll(): void {
@@ -224,7 +239,7 @@ function chapterLabel(value: unknown): string {
 <template>
   <section
     class="manuscript-reader"
-    :class="[{ expanded, compact, immersive }, `reader-theme-${theme}`]"
+    :class="[{ compact, immersive: immersive || readerMode === 'immersive' }, `reader-state-${readerMode}`, `reader-theme-${theme}`]"
     @keydown.left="goTo(index - 1)"
     @keydown.right="goTo(index + 1)"
   >
@@ -238,21 +253,34 @@ function chapterLabel(value: unknown): string {
         </p>
       </div>
       <div class="reader-actions" v-if="current">
-        <button class="icon-button" title="目录" @click="tocOpen = !tocOpen"><ListTree :size="18" /></button>
-        <button class="icon-button" title="搜索正文" @click="searchOpen = !searchOpen"><Search :size="17" /></button>
-        <button class="icon-button" :title="isBookmarked ? '取消书签' : '添加书签'" @click="toggleBookmark">
+        <button v-if="readerMode !== 'peek'" class="icon-button" title="目录" @click="tocOpen = !tocOpen"><ListTree :size="18" /></button>
+        <button v-if="readerMode !== 'peek'" class="icon-button" title="搜索正文" @click="searchOpen = !searchOpen"><Search :size="17" /></button>
+        <button v-if="readerMode !== 'peek'" class="icon-button" :title="isBookmarked ? '取消书签' : '添加书签'" @click="toggleBookmark">
           <BookmarkCheck v-if="isBookmarked" :size="17" /><Bookmark v-else :size="17" />
         </button>
-        <span class="reader-position">{{ index + 1 }} / {{ units.length }}</span>
-        <button class="icon-button" title="上一节" :disabled="index === 0" @click="goTo(index - 1)"><ChevronLeft :size="18" /></button>
-        <button class="icon-button" title="下一节" :disabled="index >= units.length - 1" @click="goTo(index + 1)"><ChevronRight :size="18" /></button>
-        <button class="icon-button" :title="expanded ? '收回阅读器' : '全屏阅读'" @click="expanded = !expanded">
-          <Minimize2 v-if="expanded" :size="18" /><Maximize2 v-else :size="18" />
+        <span v-if="readerMode !== 'peek'" class="reader-position">{{ index + 1 }} / {{ units.length }}</span>
+        <button v-if="readerMode !== 'peek'" class="icon-button" title="上一节" :disabled="index === 0" @click="goTo(index - 1)"><ChevronLeft :size="18" /></button>
+        <button v-if="readerMode !== 'peek'" class="icon-button" title="下一节" :disabled="index >= units.length - 1" @click="goTo(index + 1)"><ChevronRight :size="18" /></button>
+        <button v-if="readerMode === 'peek'" class="icon-button" title="展开正文阅读器" @click="requestMode('reading')"><Maximize2 :size="18" /></button>
+        <button v-else-if="readerMode === 'reading'" class="icon-button" title="收为正文预览" @click="requestMode('peek')"><Minimize2 :size="18" /></button>
+        <button class="icon-button" :title="readerMode === 'immersive' ? '返回星仪阅读窗' : '进入沉浸阅读'" @click="requestMode(readerMode === 'immersive' ? 'reading' : 'immersive')">
+          <Minimize2 v-if="readerMode === 'immersive'" :size="18" /><Maximize2 v-else :size="18" />
         </button>
       </div>
     </header>
 
-    <div v-if="current" class="reader-toolbelt">
+    <div v-if="readerMode === 'peek'" class="reader-peek-body">
+      <template v-if="current">
+        <span>已晋升正文 · {{ index + 1 }} / {{ units.length }}</span>
+        <p>{{ loading ? "正在展开首段……" : firstParagraph || "这一节正文已经晋升，可以展开阅读。" }}</p>
+      </template>
+      <template v-else>
+        <span>正文待命</span>
+        <p>正文会在通过审查并晋升后出现在这里。</p>
+      </template>
+    </div>
+
+    <div v-if="current && readerMode !== 'peek'" class="reader-toolbelt">
       <div class="reader-typography">
         <button class="icon-button" title="减小字号" @click="fontSize--"><Minus :size="15" /></button>
         <span>{{ fontSize }} px</span>
@@ -272,7 +300,7 @@ function chapterLabel(value: unknown): string {
       <button v-if="newUnitCount" class="reader-new-units" @click="goTo(units.length - 1)">{{ newUnitCount }} 节新正文</button>
     </div>
 
-    <div class="reader-layout" :class="{ 'toc-open': tocOpen && current }">
+    <div v-if="readerMode !== 'peek'" class="reader-layout" :class="{ 'toc-open': tocOpen && current }">
       <aside v-if="tocOpen && current" class="reader-toc">
         <header><strong>阅读目录</strong><button class="icon-button" title="关闭目录" @click="tocOpen = false"><X :size="15" /></button></header>
         <nav>
@@ -317,7 +345,7 @@ function chapterLabel(value: unknown): string {
       </main>
     </div>
 
-    <div v-if="searchOpen" class="reader-search-panel">
+    <div v-if="searchOpen && readerMode !== 'peek'" class="reader-search-panel">
       <header><strong>在正式正文中搜索</strong><button class="icon-button" @click="searchOpen = false"><X :size="16" /></button></header>
       <form @submit.prevent="searchProse"><Search :size="17" /><input v-model="searchText" autofocus placeholder="输入人物、地点或一句话" /><button class="primary-button">{{ searching ? '搜索中' : '搜索' }}</button></form>
       <button v-for="result in searchResults" :key="String(result.unit_id)" class="reader-search-result" @click="openSearchResult(result)">

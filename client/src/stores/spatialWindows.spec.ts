@@ -53,6 +53,49 @@ describe("spatialWindows", () => {
     expect(reader?.position.top).toBeGreaterThanOrEqual(12);
   });
 
+  it("moves the manuscript through peek, reading and immersive states with return geometry", () => {
+    const store = useSpatialWindowsStore();
+    store.openInstrument("reader");
+    const id = "instrument:reader";
+    const peek = store.windows.find((item) => item.id === id);
+    expect(peek?.reader_mode).toBe("peek");
+    expect(peek?.size.height).toBe(224);
+
+    store.setReaderMode("reading");
+    store.updatePosition(id, { left: 126, top: 94 });
+    const reading = store.windows.find((item) => item.id === id);
+    expect(reading?.reader_mode).toBe("reading");
+    expect(reading?.size.width).toBe(388);
+
+    store.setReaderMode("immersive");
+    const immersive = store.windows.find((item) => item.id === id);
+    expect(immersive?.position).toEqual({ left: 16, top: 16 });
+    expect(immersive?.size).toEqual({ width: 1248, height: 828 });
+    expect(immersive?.reader_return?.position).toEqual({ left: 126, top: 94 });
+
+    store.setReaderMode("reading");
+    const restored = store.windows.find((item) => item.id === id);
+    expect(restored?.position).toEqual({ left: 126, top: 94 });
+    expect(restored?.size.width).toBe(388);
+    expect(restored?.reader_return).toBeUndefined();
+  });
+
+  it("upgrades a legacy persisted reader window to the explicit peek state", () => {
+    localStorage.setItem("arcvellum.spatial-window-layout.v1.project-a%3A%3Aspine", JSON.stringify([{
+      id: "instrument:reader",
+      kind: "reader",
+      position: { left: 82, top: 148 },
+      size: { width: 332, height: 540 },
+      collapsed: false,
+      layer: 51,
+    }]));
+    const store = useSpatialWindowsStore();
+    store.setScope("project-a::spine", [node]);
+    const reader = store.windows.find((item) => item.id === "instrument:reader");
+    expect(reader?.reader_mode).toBe("peek");
+    expect(reader?.size).toEqual({ width: 356, height: 224 });
+  });
+
   it("resizes a window without changing its drag-owned position or violating its compact bounds", () => {
     const store = useSpatialWindowsStore();
     store.openInstrument("decisions");

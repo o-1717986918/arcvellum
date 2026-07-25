@@ -210,6 +210,9 @@
 .reader-new-units { padding: 5px 9px; color: var(--brass-600); background: var(--brass-100); border: 0; border-radius: 5px; font-size: 10px; font-weight: 700; }
 .reader-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
 .reader-layout:not(.toc-open) { grid-template-columns: minmax(0, 1fr); }
+.reader-peek-body { display: grid; gap: 8px; min-height: 0; padding: 12px 18px 17px; overflow: hidden; border-top: 1px solid var(--mineral-200); }
+.reader-peek-body span { color: var(--ink-500); font-family: var(--font-utility); font-size: 9px; letter-spacing: .08em; }
+.reader-peek-body p { display: -webkit-box; margin: 0; overflow: hidden; color: var(--ink-800); font-family: var(--font-reading); font-size: 14px; line-height: 1.8; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .reader-toc { width: 260px; height: 480px; overflow: hidden; background: var(--mineral-100); border-right: 1px solid var(--mineral-300); }
 .reader-toc > header { display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 14px 0 17px; border-bottom: 1px solid var(--mineral-300); }
 .reader-toc nav { height: calc(100% - 52px); padding: 7px; overflow-y: auto; }
@@ -222,8 +225,8 @@
 .reader-toc nav small { margin-top: 3px; color: var(--ink-500); font-size: 9px; }
 .reader-scroll { height: 480px; overflow-y: auto; padding: 40px clamp(24px, 7vw, 110px); background: var(--mineral-50); scrollbar-gutter: stable; }
 .manuscript-reader.compact .reader-scroll { height: 360px; }
-.manuscript-reader.expanded { position: fixed; z-index: 60; inset: 20px; margin: 0; box-shadow: var(--shadow-lg); }
-.manuscript-reader.expanded .reader-scroll, .manuscript-reader.expanded .reader-toc { height: calc(100vh - 174px); }
+.manuscript-reader.reader-state-immersive { margin: 0; box-shadow: var(--shadow-lg); }
+.manuscript-reader.reader-state-immersive .reader-scroll, .manuscript-reader.reader-state-immersive .reader-toc { height: calc(100vh - 174px); }
 .reader-scroll article { max-width: 40em; margin: 0 auto; color: var(--ink-800); font-family: var(--font-display); }
 .reader-scroll article h1 { margin: 0 0 2.2em; font-size: 1.65em; text-align: center; }
 .reader-scroll article p { margin-bottom: 1.08em; color: inherit; text-indent: 2em; }
