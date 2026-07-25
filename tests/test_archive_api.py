@@ -228,6 +228,62 @@ class ArchiveApiTests(unittest.TestCase):
         self.assertEqual(restored.status_code, 200)
         self.assertTrue((self.root / "characters" / "mei.yaml").is_file())
 
+    def test_structured_editor_api_uses_registered_fields_and_stable_errors(self):
+        content = (self.root / "characters" / "lin.yaml").read_text(encoding="utf-8")
+        structured = self.client.post(
+            "/archive/assets/character:lin/structure",
+            json={"project_root": str(self.root), "content": content},
+        )
+        self.assertEqual(structured.status_code, 200)
+        source_revision = structured.json()["source_revision"]
+        self.assertIn(
+            "name",
+            {field["name"] for field in structured.json()["fields"]},
+        )
+
+        rendered = self.client.post(
+            "/archive/assets/character:lin/render-structured",
+            json={
+                "project_root": str(self.root),
+                "content": content,
+                "source_revision": source_revision,
+                "fields": {"name": "林汐"},
+            },
+        )
+        self.assertEqual(rendered.status_code, 200)
+        self.assertIn("name: 林汐", rendered.json()["content"])
+        self.assertEqual(
+            (self.root / "characters" / "lin.yaml").read_text(encoding="utf-8"),
+            content,
+        )
+
+        forbidden = self.client.post(
+            "/archive/assets/character:lin/render-structured",
+            json={
+                "project_root": str(self.root),
+                "content": content,
+                "source_revision": source_revision,
+                "fields": {"character_id": "other"},
+            },
+        )
+        self.assertEqual(forbidden.status_code, 400)
+        self.assertEqual(
+            forbidden.json()["detail"]["code"],
+            "structured_field_invalid",
+        )
+
+        stale = self.client.post(
+            "/archive/assets/character:lin/render-structured",
+            json={
+                "project_root": str(self.root),
+                "content": content + "\n",
+                "source_revision": source_revision,
+                "fields": {"name": "林汐"},
+            },
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "structured_draft_stale")
+
 
 if __name__ == "__main__":
     unittest.main()

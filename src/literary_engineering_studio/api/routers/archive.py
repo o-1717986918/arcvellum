@@ -30,6 +30,7 @@ from ...application.assets.recycle_bin import (
 )
 from ...application.assets.registry import AssetViewRegistry
 from ...application.assets.revisions import AssetRevisionIndex, AssetRevisionService
+from ...application.assets.structured_editor import StructuredAssetService
 from ...application.assets.validation import validate_asset_content
 from ...projections.archive.service import ArchiveProjectionService
 from ...projections.archive.candidates import project_candidate_detail, project_candidate_list
@@ -44,6 +45,7 @@ from ..models import (
     ArchiveCandidatePromotionRequest,
     ArchiveRestorePreviewRequest,
 )
+from .archive_editors import register_archive_editor_routes
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,7 @@ class ArchiveRouterDependencies:
     revisions: AssetRevisionService
     recycle_bin: RecycleBinService
     candidates: CandidatePromotionService
+    structured_editor: StructuredAssetService
     launch_worker: Callable[[dict[str, str]], dict[str, Any]] | None = None
 
 
@@ -78,6 +81,7 @@ def default_archive_dependencies(
         revisions=revisions,
         recycle_bin=recycle_bin,
         candidates=candidates,
+        structured_editor=StructuredAssetService(registry, loader),
         launch_worker=launch_worker,
     )
 
@@ -85,6 +89,7 @@ def default_archive_dependencies(
 def build_archive_router(deps: ArchiveRouterDependencies) -> APIRouter:
     router = APIRouter()
     _register_creation_routes(router, deps)
+    register_archive_editor_routes(router, deps)
 
     @router.get("/archive/tree")
     def archive_tree(project_root: str):

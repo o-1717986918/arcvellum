@@ -21,6 +21,9 @@ def project_asset_detail(record: AssetRecord, registry: AssetViewRegistry) -> di
             "schema_id": definition.schema_id,
             "editor_kind": definition.editor_kind.value,
             "writable_fields": list(definition.writable_fields),
+            "field_definitions": [
+                field.as_dict() for field in definition.field_definitions
+            ],
             "reference_fields": list(definition.reference_fields),
             "supports_create": definition.supports_create,
             "supports_promotion": definition.supports_promotion,

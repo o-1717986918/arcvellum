@@ -14,9 +14,41 @@ class EditorKind(str, Enum):
     YAML_ADVANCED = "yaml-advanced"
 
 
+class FieldKind(str, Enum):
+    TEXT = "text"
+    MARKDOWN = "markdown"
+    NUMBER = "number"
+    CHOICE = "choice"
+    STRING_LIST = "string-list"
+    OBJECT = "object"
+    TABLE = "table"
+
+
 class SemanticReview(str, Enum):
     REQUIRED = "required"
     WAIVED = "waived"
+
+
+@dataclass(frozen=True)
+class AssetFieldDefinition:
+    name: str
+    label: str
+    kind: FieldKind
+    section: str
+    required: bool = False
+    help_text: str = ""
+    options: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "label": self.label,
+            "kind": self.kind.value,
+            "section": self.section,
+            "required": self.required,
+            "help_text": self.help_text,
+            "options": list(self.options),
+        }
 
 
 @dataclass(frozen=True)
@@ -34,6 +66,16 @@ class AssetViewDefinition:
     supports_promotion: bool
     supports_archive: bool
     fixed_id: str = ""
+    field_definitions: tuple[AssetFieldDefinition, ...] = ()
+
+    def __post_init__(self) -> None:
+        field_names = tuple(field.name for field in self.field_definitions)
+        if len(field_names) != len(set(field_names)):
+            raise ValueError(f"{self.asset_type} field definitions must be unique")
+        if field_names and field_names != self.writable_fields:
+            raise ValueError(
+                f"{self.asset_type} field definitions must exactly match writable_fields"
+            )
 
 
 @dataclass(frozen=True)

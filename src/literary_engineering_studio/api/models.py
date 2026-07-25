@@ -186,6 +186,15 @@ class ArchiveAssetContentRequest(BaseModel):
     content: str
 
 
+class ArchiveStructuredContentRequest(ArchiveAssetContentRequest):
+    pass
+
+
+class ArchiveStructuredRenderRequest(ArchiveAssetContentRequest):
+    source_revision: str
+    fields: dict[str, Any]
+
+
 class ArchiveAssetCommitRequest(BaseModel):
     project_root: str
     base_revision: str
@@ -241,6 +250,8 @@ __all__ = [
     "ArchiveAssetRestoreRequest",
     "ArchiveCandidatePromotionRequest",
     "ArchiveRestorePreviewRequest",
+    "ArchiveStructuredContentRequest",
+    "ArchiveStructuredRenderRequest",
     "AdvisorCustomPersonaRequest",
     "AdvisorInboxReadRequest",
     "AdvisorInboxSettingsRequest",

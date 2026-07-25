@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-import re
-
-from literary_engineering_studio_engine.display_cleaner import list_from_yaml_text, scalar_from_yaml_text
+from typing import Any, Mapping
 
 from .contracts import AssetValidation, AssetViewDefinition, ValidationIssue
+from .document_codec import AssetDocumentError, parse_asset_document
 
 
 MAX_ASSET_BYTES = 4 * 1024 * 1024
@@ -44,16 +42,14 @@ def validate_asset_content(
     if len(encoded) > MAX_ASSET_BYTES:
         issues.append(ValidationIssue("asset_too_large", "error", "Asset exceeds the 4 MB editing limit."))
 
-    if definition.filename_template.endswith(".json"):
-        try:
-            payload = json.loads(content)
-            if not isinstance(payload, dict):
-                issues.append(ValidationIssue("json_root", "error", "JSON asset root must be an object."))
-        except json.JSONDecodeError as exc:
-            issues.append(ValidationIssue("invalid_json", "error", f"Invalid JSON at line {exc.lineno}."))
-    elif definition.filename_template.endswith((".yaml", ".yml")):
-        _validate_yaml_identity(definition, local_id, content, issues)
-        _validate_yaml_references(project_root, definition, content, issues)
+    try:
+        payload = parse_asset_document(definition, content).mapping
+    except AssetDocumentError as exc:
+        code = "invalid_json" if definition.filename_template.endswith(".json") else "invalid_yaml"
+        issues.append(ValidationIssue(code, "error", str(exc)))
+        return AssetValidation(False, tuple(issues))
+    _validate_identity(definition, local_id, payload, issues)
+    _validate_references(project_root, definition, payload, issues)
 
     return AssetValidation(not any(issue.severity == "error" for issue in issues), tuple(issues))
 
@@ -67,20 +63,11 @@ def validate_asset_creation(
     base = validate_asset_content(project_root, definition, local_id, content)
     issues = list(base.issues)
     required = _CREATION_REQUIRED_FIELDS.get(definition.asset_type, ())
-    if definition.filename_template.endswith(".json"):
-        try:
-            payload = json.loads(content)
-        except json.JSONDecodeError:
-            payload = {}
-        if not isinstance(payload, dict):
-            payload = {}
-        missing = [field for field in required if field not in payload]
-    else:
-        missing = [
-            field
-            for field in required
-            if not re.search(rf"(?m)^\s*{re.escape(field)}\s*:", content)
-        ]
+    try:
+        payload = parse_asset_document(definition, content).mapping
+    except AssetDocumentError:
+        payload = {}
+    missing = [field for field in required if field not in payload]
     for field in missing:
         issues.append(
             ValidationIssue(
@@ -90,30 +77,29 @@ def validate_asset_creation(
                 field,
             )
         )
-    if definition.filename_template.endswith((".yaml", ".yml")):
-        for field in _CREATION_NONEMPTY_FIELDS.get(definition.asset_type, ()):
-            if field not in missing and not scalar_from_yaml_text(content, field):
-                issues.append(
-                    ValidationIssue(
-                        "empty_creation_field",
-                        "error",
-                        f"New {definition.asset_type} asset must provide {field}.",
-                        field,
-                    )
+    for field in _CREATION_NONEMPTY_FIELDS.get(definition.asset_type, ()):
+        if field not in missing and not _has_value(payload.get(field)):
+            issues.append(
+                ValidationIssue(
+                    "empty_creation_field",
+                    "error",
+                    f"New {definition.asset_type} asset must provide {field}.",
+                    field,
                 )
+            )
     return AssetValidation(not any(issue.severity == "error" for issue in issues), tuple(issues))
 
 
-def _validate_yaml_identity(
+def _validate_identity(
     definition: AssetViewDefinition,
     local_id: str,
-    content: str,
+    payload: Mapping[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
     if not definition.id_field:
         return
-    declared = scalar_from_yaml_text(content, definition.id_field)
-    if not declared:
+    declared = payload.get(definition.id_field)
+    if not _has_value(declared):
         issues.append(
             ValidationIssue(
                 "missing_asset_id",
@@ -122,7 +108,7 @@ def _validate_yaml_identity(
                 definition.id_field,
             )
         )
-    elif declared != local_id:
+    elif not isinstance(declared, (str, int, float)) or str(declared) != local_id:
         issues.append(
             ValidationIssue(
                 "asset_id_mismatch",
@@ -133,15 +119,26 @@ def _validate_yaml_identity(
         )
 
 
-def _validate_yaml_references(
+def _validate_references(
     project_root: Path,
     definition: AssetViewDefinition,
-    content: str,
+    payload: Mapping[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
     if definition.asset_type != "scene":
         return
-    for character_id in list_from_yaml_text(content, "participant_refs", limit=80):
+    references = payload.get("participant_refs", [])
+    if not isinstance(references, list) or not all(isinstance(item, str) for item in references):
+        issues.append(
+            ValidationIssue(
+                "invalid_character_references",
+                "error",
+                "Scene participant_refs must be a list of character IDs.",
+                "participant_refs",
+            )
+        )
+        return
+    for character_id in references[:80]:
         if not (project_root / "characters" / f"{character_id}.yaml").is_file():
             issues.append(
                 ValidationIssue(
@@ -151,3 +148,11 @@ def _validate_yaml_references(
                     "participant_refs",
                 )
             )
+
+
+def _has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True

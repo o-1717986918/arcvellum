@@ -3,7 +3,9 @@ name = "literary-engineering-studio"
 version = "0.95.3"
 description = "Standalone long-form literary project studio with an embedded workflow engine and controlled Agent runtimes."
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "ruamel.yaml>=0.18,<0.19",
+]
 
 [project.optional-dependencies]
 api = [

@@ -63,6 +63,9 @@ class OwnerCreationService:
                     "id_field": definition.id_field,
                     "fixed_id": fixed_id,
                     "writable_fields": list(definition.writable_fields),
+                    "field_definitions": [
+                        field.as_dict() for field in definition.field_definitions
+                    ],
                     "template": creation_template(definition.asset_type),
                     "available": not existing,
                     "unavailable_reason": "正式资产已存在" if existing else "",
