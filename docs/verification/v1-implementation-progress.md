@@ -480,10 +480,64 @@
   - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W2-7C：状态化引导与隔离真实项目作者闭环
+
+- Status: complete
+- Commits: `d43e9e2`, `742a818`
+- Added:
+  - 新增可复用 `GuidedTour` 与独立 tour state service，模块引导不再依赖一次性的全局说明层；
+  - Archive 引导根据正式资产数、候选数、当前选中资产和草稿状态动态生成五步任务，不展示与当前项目无关的空步骤；
+  - 所有定位目标使用稳定 `data-tour-id`，引导状态按版本持久化，并提供显式重播入口；切换项目不会重复骚扰用户；
+  - Archive 首批引导覆盖工作模式、资产树、编辑器、作者事务和候选 Gate，具体写入规则仍由 Studio API 与 Engine 下发；
+  - 新增真实 Studio API 端到端测试，在完整临时工作项目中走通创建、结构化编辑、专家源文本往返、历史、影响失效、归档、恢复、候选审查、人工批准与 Worker 晋升；
+  - 候选晋升使用真实 `character-and-world-assets` Engine route，完成标记、审查 digest、人工批准和正式投影均来自既有单一 Gate。
+- Unified implementation boundary:
+  - 引导只解释当前可执行动作，不复制 Engine schema、候选 Gate、稳定知识写入规则或 CLI 内部项目地图；
+  - Archive 作者事务与 Agent 候选晋升在同一界面相邻呈现，但使用不同写入路径和不同审计证据；
+  - 真实项目闭环通过公开 Studio API 完成，没有在测试里直接拼接正式资产或伪造 promotion receipt。
+- Adaptive orchestration boundary:
+  - Agent 只能生成候选、审查产物和 task completion；正式晋升仍由 Worker 调用 Engine；
+  - Owner Override 不能伪装成 Agent 计划节点，也不能使未来 `CreativeExecutionPlan` 绕过 Stable Knowledge Gate；
+  - 引导状态属于客户端体验状态，不参与 task lifecycle、计划完成度或正式作品事实。
+- Verification evidence:
+  - Archive authoring lifecycle E2E: passed；
+  - Archive focused suite: 35 passed, 1 skipped；
+  - Client full suite: 90 passed；
+  - 真实项目 `1+1=2` 只读视觉验收通过，宽/窄视口的引导高亮、卡片定位和滚动均正常，浏览器无 error/warning；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
+## W2 Exit Audit：Narrative Archive 与 Stable Knowledge 写入边界
+
+- Status: complete
+- Product exit:
+  - 用户可以从 Archive 创建、结构化编辑或专家编辑主要资产，预览影响后以显式 Owner Override 提交；
+  - 用户可以查看修订历史、归档、恢复，并对 Agent 候选执行独立审查、批准和正式晋升；
+  - 多资产草稿、脏标签保护、冲突拒绝、窄屏布局和状态化引导均已进入生产前端资源。
+- Engineering exit:
+  - Registry、结构解析、引用检查和路径边界属于不可豁免的确定性约束；语义 waiver 不能跳过这些约束；
+  - 关键人物变更会准确使依赖该人物的 Context Trace 失效，端到端测试已验证 `scene_0001` 的具体传播；
+  - 候选晋升只经 Engine route；Archive UI、Studio API 和 Owner transaction 均未复制或弱化 promotion Gate；
+  - 前端不解析 sidecar、不直接写 Stable Knowledge，也不拥有任意项目路径、Shell 或 task command；
+  - Vue -> Studio API -> CoreBridge/Engine 的边界保持，Architecture Audit 未增加文件债务、函数债务或循环依赖。
+- Full exit evidence:
+  - Python full suite: 473 passed, 1 skipped；
+  - Client full suite: 90 passed；
+  - `python -m compileall -q src benchmarks scripts`: passed；
+  - Client production build、typecheck、desktop frontend sync 和 v0.9 build verification: passed；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+- Residual risks and deferred work:
+  - Windows 当前环境不能创建测试用符号链接，因此相关安全用例跳过；确定性路径越界、稳定 ID 和真实路径边界用例仍通过；
+  - 并发编辑当前采用 revision/digest 冲突阻断，不提供自动语义合并；自动合并在没有可靠三方合并和用户确认前不应进入正式写链；
+  - rename/move/clone 和批量文件管理属于长期 Archive 扩展，不是统一实施方案定义的 W2 退出 Gate；
+  - 状态化引导当前只在 Archive 首批落地，其他模块由 W7 的全产品引导批次处理。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、自适应创作编排方案、模块边界和本文件。W2-7C 只处理仍有证据的 Archive 退出缺口：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3 只建立一个 Style Atelier 与一条正式文风候选/挂载链：
 
-1. 增加模块级状态化引导，直接绑定真实 UI 状态和稳定 tour id，不写一篇悬空说明书。
-2. 使用隔离真实项目完成创建、结构化编辑、源文本往返、历史、归档、恢复和候选晋升；不可晋升候选只证明 Gate 有效，不能替代一条真正成功的候选晋升验收。
-3. W2 退出审计必须逐项对照四类权威文档；只有用户能从前端创建、编辑、晋升、归档、恢复主要资产，schema/引用不可被作者豁免，关键修改准确传播 stale，且架构债务不增长，才能进入 W3。
+1. 先审计现有 style learning、style profile、mount、generation/review 注入和 CLI/Engine ownership，复用已经可靠的契约，不建立第二套文风状态机。
+2. 把语料导入、证据片段、可挂载提示词、对照评测、版本、候选与正式挂载投影到独立 Studio API 和前端工作台。
+3. 文风生成与评测由 Agent 完成，长度、引用、digest、结构、版本和正式挂载由确定性 Gate 验收；Agent 不能直接修改正式 mount。
+4. W3 退出前必须用真实或隔离真实项目证明：语料进入、候选生成、评测、人工批准、正式挂载、正文生成约束注入和审查证据形成单一闭环。
