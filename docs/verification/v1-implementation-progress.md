@@ -273,6 +273,43 @@
   - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W2-3：可逆归档、实际恢复与回收站
+
+- Status: complete
+- Commits: `5b87009`, `7250b82`, `40e2e81`
+- Added:
+  - Studio SQLite schema 升级到 v10，在既有 `JobStore` 连接、写锁、迁移备份和事务协议下增加 `archive_recycle_entries`；
+  - 项目 `workflow/archive/recycle-bin/<entry_id>/` 中的 entry、不可变 snapshot 与 receipt 继续作为真相源，SQLite 只保存可重建索引；
+  - `character` 与 `scene` 第一批可归档资产继续使用 `<asset-type>:<stable-id>`，归档和恢复 API 不接收任意项目路径；
+  - 归档前检查 `supports_archive`、base revision 和正式引用；`scenes/`、`canon/`、`plot/` 中的引用形成硬阻断，作者权威不能制造断裂正式事实；
+  - 归档先把正式文件移动到同项目 staging snapshot，再激活回收条目；激活、目录提交或失效证据写入失败会恢复原正式路径；
+  - 恢复重新验证 entry identity、snapshot 边界、UTF-8 内容 digest、asset schema 和目标占位冲突；
+  - 恢复失败不会留下新的正式文件；恢复成功后 snapshot 保持不可变，entry 转为 `restored` 并写入独立恢复回执；
+  - 索引暂时不可用不会伪装项目事务失败，receipt 标记 `rebuild-required`，后续回收站读取可从项目 entry 重建；
+  - `/archive/recycle-bin`、`/archive/assets/{asset_id}/archive`、`/archive/assets/{asset_id}/restore`；
+  - 回收站投影只公开稳定身份、标题、状态、原相对位置、原因和时间，不公开绝对路径、snapshot 或内部事务目录；
+  - `version_conflict`、`archive_reference_conflict`、`restore_conflict` 分别使用稳定 `409` 语义。
+- Boundary:
+  - 本批不实现永久删除；已归档和已恢复的 snapshot 都作为历史证据保留；
+  - 本批不把移动文件当成候选晋升，不复制或旁路 Engine promotion Gate；
+  - 本批不开放任意文件归档，只允许 Registry 明确声明 `supports_archive=True` 的资产；
+  - 本批不自动修改正式引用、已晋升正文或发布物；Context Trace 仍是下游 stale 的唯一正式机制；
+  - 本批只提供后端事务和安全投影，尚未实现 Archive IDE 的编辑器、时间线和回收站界面。
+- Failure evidence:
+  - 正式引用仍存在时，归档拒绝且原文件不变；
+  - entry 激活失败时，已移动 snapshot 回滚到正式路径；
+  - restore receipt/entry 状态写入失败时，新正式文件被移除，entry 保持可重试；
+  - 同一稳定 ID 已存在新正式文件时，恢复拒绝覆盖；
+  - 新 `JobStore` 可从项目 entry 重建 active/restored 索引；
+  - 恢复后不可变 snapshot 继续存在，支持审计和后续历史能力。
+- Exit evidence:
+  - Python full suite: 450 passed, 1 skipped；
+  - Client full suite: 79 passed；
+  - Client production build and desktop frontend sync: passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-3 优先完成可逆归档与实际恢复事务、回收站索引和失败回滚；必须继续复用 OwnerOverride/Engine promotion 边界，禁止通过移动文件伪造候选晋升或删除正式历史。完成后再进入候选手动晋升与前端 Archive IDE。
+下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-4 先建立候选资产目录、稳定候选 ID、独立审查证据和对现有 Engine promotion 的单一受控适配，完成“候选预览 -> 影响确认 -> 人工批准 -> 正式晋升 -> receipt/stale”的后端闭环。不得通过复制候选文件、OwnerOverride 或 Archive restore 伪造晋升。候选晋升闭环通过完整门禁后，再开始 `features/archive/` 前端 IDE、Revision Timeline 和 RecycleBinPanel。
