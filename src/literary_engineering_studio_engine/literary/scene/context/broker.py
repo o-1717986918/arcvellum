@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ....atomic_io import atomic_write_text
+from ...style.snapshot import validate_style_mount_snapshot
 
 
 CONTEXT_TRACE_SCHEMA = "literary-engineering-workbench/context-trace/v2"
@@ -51,7 +52,6 @@ def write_context_trace(path: Path, payload: dict[str, Any]) -> Path:
 
 def context_trace_status(root: Path, scene_id: str, context_path: Path | None = None) -> ContextTraceValidation:
     """Validate the formal context trace expected for a scene."""
-
     context = context_path or root / "memory" / "context_packets" / f"{scene_id}.md"
     trace = default_context_trace_path(context)
     rel_trace = _rel(trace, root)
@@ -76,26 +76,46 @@ def context_trace_status(root: Path, scene_id: str, context_path: Path | None = 
     missing_required = payload.get("missing_required_context")
     if isinstance(missing_required, list) and missing_required:
         return ContextTraceValidation(trace, "incomplete", f"context trace has missing required context: {', '.join(str(item) for item in missing_required)}", payload)
+    style_error = _style_snapshot_error(root, payload)
+    if style_error:
+        return ContextTraceValidation(trace, *style_error, payload)
     loaded_files = payload.get("loaded_files")
     if not isinstance(loaded_files, list) or not loaded_files:
         return ContextTraceValidation(trace, "invalid", "context trace loaded_files is empty or missing", payload)
     sources = payload.get("loaded_sources")
     if not isinstance(sources, list) or not sources:
         return ContextTraceValidation(trace, "invalid", "context trace loaded_sources is empty or missing", payload)
+    source_error = _trace_source_error(root, sources)
+    if source_error:
+        return ContextTraceValidation(trace, *source_error, payload)
+    return ContextTraceValidation(trace, "pass", f"context trace valid and fresh: {rel_trace}", payload)
+
+
+def _style_snapshot_error(
+    root: Path,
+    payload: dict[str, Any],
+) -> tuple[str, str] | None:
+    validation = validate_style_mount_snapshot(root, payload.get("style_mount_snapshot"))
+    return None if validation.passed else (validation.status, validation.message)
+
+
+def _trace_source_error(
+    root: Path,
+    sources: list[object],
+) -> tuple[str, str] | None:
     for source in sources:
         if not isinstance(source, dict):
-            return ContextTraceValidation(trace, "invalid", "context trace contains an invalid source entry", payload)
+            return "invalid", "context trace contains an invalid source entry"
         relative = str(source.get("relative_path") or "").replace("\\", "/").lstrip("./")
         expected = str(source.get("sha256") or "")
         if not relative or not expected:
-            return ContextTraceValidation(trace, "invalid", "context trace source is missing relative_path or sha256", payload)
+            return "invalid", "context trace source is missing relative_path or sha256"
         path = root.resolve() / relative
         if not path.is_file():
-            return ContextTraceValidation(trace, "stale", f"context source disappeared: {relative}", payload)
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
-        if actual != expected:
-            return ContextTraceValidation(trace, "stale", f"context source changed after packet generation: {relative}", payload)
-    return ContextTraceValidation(trace, "pass", f"context trace valid and fresh: {rel_trace}", payload)
+            return "stale", f"context source disappeared: {relative}"
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            return "stale", f"context source changed after packet generation: {relative}"
+    return None
 
 
 def _rel(path: Path, root: Path) -> str:

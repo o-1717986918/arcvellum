@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..agent_tasks import agent_task_completion_status
+from ..literary.style.snapshot import validate_style_mount_snapshot
 from ..semantic_task_contracts import semantic_artifact_errors
 
 
@@ -120,7 +121,6 @@ def ensure_composition_ready_for_generation(
     allow_missing_composition: bool = False,
 ) -> dict[str, Any]:
     """Reject composition packets that have not crossed the branch-selection gate."""
-
     if composition_path is None:
         if allow_missing_composition:
             return {}
@@ -166,6 +166,7 @@ def ensure_composition_ready_for_generation(
             "Manual composition files are exploratory/debug-only and cannot satisfy the formal generation gate. "
             "Run compose-scene after context, simulate-scene --agent, branch-simulate --agent, and formal branch_selection.md."
         )
+    _ensure_composition_style_snapshot(root, payload)
     if provenance.get("semantic_review_required") is True:
         scene_id = str(payload.get("scene_id") or json_path.stem.replace("_composition", ""))
         semantic_errors = semantic_artifact_errors(root, "composition-agent-task", scene_id)
@@ -175,6 +176,15 @@ def ensure_composition_ready_for_generation(
                 + "; ".join(semantic_errors[:4])
             )
     return payload
+
+
+def _ensure_composition_style_snapshot(root: Path, payload: dict[str, Any]) -> None:
+    validation = validate_style_mount_snapshot(root, payload.get("style_mount_snapshot"))
+    if not validation.passed:
+        raise FlowGateError(
+            "composition style mount snapshot is stale: "
+            f"{validation.message}. Rebuild context and compose-scene."
+        )
 
 
 def _field(text: str, name: str) -> str:

@@ -36,6 +36,7 @@ from ..word_budget import (
     render_word_budget_generation_standard,
     scene_word_budget_contract,
 )
+from .style_context import resolve_style_prompt_context
 
 
 DEFAULT_CONTEXT_LIMIT = 18000
@@ -110,6 +111,7 @@ class PromptPack:
     context_trace_path: Path
     composition_path: Path | None
     style_profile_path: Path | None
+    style_mount_snapshot: dict[str, str]
     word_budget_path: Path | None
     review_notes_path: Path | None
     creative_quality_profile: dict[str, Any]
@@ -142,7 +144,6 @@ def build_scene_prompt_pack(
     materialization_scope: str = "full",
 ) -> PromptPack:
     """Render system/user prompts for a scene generation provider."""
-
     root = project_root.resolve()
     scene_path = _resolve(root, scene_path)
     context_path = _resolve(root, context_path)
@@ -176,7 +177,8 @@ def build_scene_prompt_pack(
     )
     reader_contract = ensure_reader_experience_ready(root, scene_path)
     rhythm_contract = narrative_rhythm_contract(root, scene_path, composition_path)
-    style_profile_path = _find_style_asset(root)
+    style_context = resolve_style_prompt_context(root, text_limit=DEFAULT_STYLE_LIMIT)
+    style_profile_path = style_context.path
     word_budget_path = _find_word_budget(root)
     review_notes_path = _find_scene_review_notes(root, scene_id)
     quality_profile = load_creative_quality_profile(root)
@@ -189,14 +191,13 @@ def build_scene_prompt_pack(
         revision_text=_read(review_notes_path) if review_notes_path else "",
     )
     compiled_constraints_text = render_compiled_constraints(compiled_constraints)
-
     values = {
         "scene_id": scene_id,
         "scene_text": _read(scene_path),
         "context_text": _limit(_read(context_path), DEFAULT_CONTEXT_LIMIT),
         "context_trace_text": _limit(_read(context_trace_path), DEFAULT_CONTEXT_LIMIT),
         "composition_text": _limit(_read(composition_path), DEFAULT_COMPOSITION_LIMIT) if composition_path else "内部实验模式：未加载场景创作编排包。正式生成必须先运行 simulate-scene --agent、branch-simulate --agent、记录 branch_selection.md，并重建 compose-scene。",
-        "style_profile": _render_style_constraint(root, style_profile_path),
+        "style_profile": style_context.constraint,
         "style_generation_standard": _render_style_generation_standard(root, style_profile_path),
         "word_budget_generation_standard": render_word_budget_generation_standard(root),
         "scene_word_budget_contract": render_scene_word_budget_contract(
@@ -248,6 +249,7 @@ def build_scene_prompt_pack(
         context_trace_path=context_trace_path,
         composition_path=composition_path,
         style_profile_path=style_profile_path,
+        style_mount_snapshot=style_context.snapshot,
         word_budget_path=word_budget_path,
         review_notes_path=review_notes_path,
         creative_quality_profile=quality_profile,
@@ -285,10 +287,12 @@ def write_prompt_manifest(pack: PromptPack, output: Path, provider: str, model: 
         "context_trace": _rel(pack.context_trace_path, pack.project_root),
         "composition": _rel(pack.composition_path, pack.project_root) if pack.composition_path else "",
         "style_profile": _rel(pack.style_profile_path, pack.project_root) if pack.style_profile_path else "",
+        "style_mount_snapshot": pack.style_mount_snapshot,
         "generation_standards": {
             "style": pack.style_generation_standard,
             "style_profile_loaded": pack.style_profile_path is not None,
             "style_profile": _rel(pack.style_profile_path, pack.project_root) if pack.style_profile_path else "",
+            "style_mount_snapshot": pack.style_mount_snapshot,
             "creative_quality_profile": pack.creative_quality_profile,
             "creative_quality_profile_path": _rel(pack.creative_quality_profile_path, pack.project_root) if pack.creative_quality_profile_path else "implicit-default",
             "creative_quality_profile_digest": str(pack.creative_quality_profile.get("digest") or ""),
@@ -456,23 +460,6 @@ def _reader_obligation_source_path(root: Path, scene_path: Path) -> Path | None:
     return path if path.exists() else None
 
 
-def _find_style_asset(root: Path) -> Path | None:
-    mounted = _find_mounted_style_skill(root)
-    if mounted:
-        return mounted
-    style_root = root / "style"
-    candidates = [style_root / "style_prompt.md"]
-    if style_root.exists():
-        candidates.extend(sorted(style_root.glob("*/style_prompt.md"), key=lambda path: path.stat().st_mtime, reverse=True))
-    candidates.append(style_root / "style-profile.md")
-    if style_root.exists():
-        candidates.extend(sorted(style_root.glob("*/style-profile.md"), key=lambda path: path.stat().st_mtime, reverse=True))
-    for path in candidates:
-        if path.exists():
-            return path
-    return None
-
-
 def _find_word_budget(root: Path) -> Path | None:
     path = root / "plot" / "word_budget" / "word_budget.json"
     return path if path.exists() else None
@@ -487,50 +474,6 @@ def _find_scene_review_notes(root: Path, scene_id: str) -> Path | None:
         if path.exists():
             return path
     return None
-
-
-def _find_mounted_style_skill(root: Path) -> Path | None:
-    active = root / "style" / "active_style_skill.json"
-    if not active.exists():
-        return None
-    try:
-        payload = json.loads(active.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    prompt = str(payload.get("prompt") or "").strip()
-    if not prompt:
-        return None
-    path = root / prompt
-    return path if path.exists() else None
-
-
-def _render_style_constraint(root: Path, style_path: Path | None) -> str:
-    if style_path is None:
-        return "未找到挂载的 style skill 或 style/style-profile.md。若项目要求文风门禁，应先在文风学习页挂载 active style skill。"
-    text = _limit(_read(style_path), DEFAULT_STYLE_LIMIT)
-    active = root / "style" / "active_style_skill.json"
-    if active.exists():
-        try:
-            payload = json.loads(active.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            payload = {}
-        return f"""# 已挂载文风 Style Skill（最高优先级）
-
-- Style ID: `{payload.get("style_id", "")}`
-- Priority: `{payload.get("priority", "highest")}`
-- Mount: `{payload.get("mount_path", "")}`
-
-硬规则：
-
-- 本 Style Skill 在表达层拥有最高优先级：叙述距离、句法节奏、意象系统、心理呈现、对白密度和段落推进必须先服从它。
-- 它不覆盖 canon、人物事实、剧情因果、用户明确约束和安全边界。
-- 如文风要求与 canon/人物逻辑冲突，保留 canon/人物逻辑，并在“需要人工确认”中说明文风冲突。
-
-## Style Skill Prompt
-
-{text}
-"""
-    return text
 
 
 def _render_style_generation_standard(root: Path, style_path: Path | None) -> str:

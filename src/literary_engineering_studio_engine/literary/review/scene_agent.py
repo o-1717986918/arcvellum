@@ -23,6 +23,7 @@ from ...narrative_rhythm import render_narrative_rhythm_contract
 from ...new_character_register import empty_new_character_register, render_new_character_register_contract
 from ...reader_experience import reader_experience_adherence_for_body, scene_chapter_obligation_id
 from ...word_budget import word_budget_adherence_for_body
+from .style_context import render_review_style_snapshot, scene_review_style_context
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,8 @@ def review_scene_with_agent(
     draft_path = _resolve_draft(root, scene_id, draft)
     context_path = root / "memory" / "context_packets" / f"{scene_id}.md"
     context_trace_path = default_context_trace_path(context_path)
-    style_prompt_path = _first_existing(_style_source_candidates(root))
+    style_context = scene_review_style_context(root)
+    style_prompt_path, style_mount_snapshot = style_context.prompt_path, style_context.snapshot
     quality_profile = load_creative_quality_profile(root)
     quality_path = creative_quality_profile_path(root)
     source_paths = [_rel_str(scene_path, root)]
@@ -63,8 +65,8 @@ def review_scene_with_agent(
         source_paths.append(_rel_str(context_path, root))
     if context_trace_path.exists():
         source_paths.append(_rel_str(context_trace_path, root))
-    if style_prompt_path and style_prompt_path.exists():
-        source_paths.append(_rel_str(style_prompt_path, root))
+    source_paths.extend(_rel_str(path, root) for path in style_context.evidence_paths)
+    source_paths = list(dict.fromkeys(source_paths))
     if creative_quality_profile_exists(root):
         source_paths.append(_rel_str(quality_path, root))
     composition_json = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
@@ -80,7 +82,7 @@ def review_scene_with_agent(
     draft_body = final_body_from_workbench_text(draft_text) or draft_text
     context_text = _read(context_path) if context_path.exists() else ""
     context_trace_text = _read(context_trace_path) if context_trace_path.exists() else ""
-    style_text = _read(style_prompt_path) if style_prompt_path else ""
+    style_text = render_review_style_snapshot(style_mount_snapshot) + "\n\n" + (_read(style_prompt_path) if style_prompt_path else "")
     word_budget_adherence = word_budget_adherence_for_body(root, scene_path, draft_body)
     reader_adherence = reader_experience_adherence_for_body(root, scene_path, draft_body)
     rhythm_contract_text = render_narrative_rhythm_contract(root, scene_path, composition_json if composition_json.exists() else None)
@@ -93,6 +95,7 @@ def review_scene_with_agent(
         quality_profile,
         candidate_sha256,
     )
+    dry_payload["style_mount_snapshot"] = style_mount_snapshot
     run_result = run_agent_task(
         root,
         agent_id="scene-reviewer",
@@ -118,15 +121,7 @@ def review_scene_with_agent(
     )
     validation = validate_agent_run(root, run_dir=run_result.run_dir, schema_name="scene_review.v1")
     parsed = json.loads(run_result.parsed_output_path.read_text(encoding="utf-8"))
-    parsed["agent_run_dir"] = _rel_str(run_result.run_dir, root)
-    parsed["candidate_sha256"] = candidate_sha256
-    parsed["schema_validation"] = _rel_str(validation.validation_path, root)
-    parsed["creative_quality_profile"] = {
-        "path": _rel_str(quality_path, root) if creative_quality_profile_exists(root) else "implicit-default",
-        "revision": quality_profile.get("revision"),
-        "digest": quality_profile.get("digest"),
-        "name": quality_profile.get("name"),
-    }
+    _bind_review_metadata(parsed, root, run_result.run_dir, validation.validation_path, candidate_sha256, quality_path, quality_profile, style_mount_snapshot)
 
     report_path = _resolve_output(root, output, "reviews", "agent", f"{scene_id}_scene_review.md")
     json_path = _resolve_output(root, json_output, "reviews", "agent", f"{scene_id}_scene_review.json")
@@ -142,6 +137,32 @@ def review_scene_with_agent(
         json_path=json_path,
         validation_path=validation.validation_path,
         conclusion=str(parsed.get("conclusion", "")),
+    )
+
+
+def _bind_review_metadata(
+    payload: dict[str, object],
+    root: Path,
+    run_dir: Path,
+    validation_path: Path,
+    candidate_sha256: str,
+    quality_path: Path,
+    quality_profile: dict[str, object],
+    style_mount_snapshot: dict[str, str],
+) -> None:
+    payload.update(
+        {
+            "agent_run_dir": _rel_str(run_dir, root),
+            "candidate_sha256": candidate_sha256,
+            "schema_validation": _rel_str(validation_path, root),
+            "creative_quality_profile": {
+                "path": _rel_str(quality_path, root) if creative_quality_profile_exists(root) else "implicit-default",
+                "revision": quality_profile.get("revision"),
+                "digest": quality_profile.get("digest"),
+                "name": quality_profile.get("name"),
+            },
+            "style_mount_snapshot": style_mount_snapshot,
+        }
     )
 
 
@@ -405,38 +426,6 @@ def _resolve_output(root: Path, value: Path | None, *default_parts: str) -> Path
     if value is None:
         return root.joinpath(*default_parts)
     return value if value.is_absolute() else root / value
-
-
-def _first_existing(paths: list[Path]) -> Path | None:
-    for path in paths:
-        if path.exists():
-            return path
-    return None
-
-
-def _style_source_candidates(root: Path) -> list[Path]:
-    candidates = [
-        root / "style" / "active_style_skill.json",
-        root / "style" / "style_prompt.md",
-        root / "style" / "demo-author" / "style_prompt.md",
-        root / "style" / "style-profile.md",
-    ]
-    active = root / "style" / "active_style_skill.json"
-    if active.exists():
-        try:
-            payload = json.loads(active.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            payload = {}
-        for key in ("prompt", "style_skill", "mount_path"):
-            value = str(payload.get(key) or "").strip()
-            if not value:
-                continue
-            path = root / value
-            if path.is_dir():
-                candidates.extend([path / "prompt.md", path / "style_skill.json", path / "style-profile.md"])
-            else:
-                candidates.append(path)
-    return candidates
 
 
 def _style_source_label(source_paths: list[str]) -> str:

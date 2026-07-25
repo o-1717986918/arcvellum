@@ -29,7 +29,10 @@ from ....reader_experience import reader_experience_contract
 from ....roleplay_lab import CharacterCard, _load_characters, _read
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
 from ....word_budget import scene_word_budget_contract
-
+from ...style.snapshot import (
+    active_style_mount_snapshot_bytes,
+    active_style_mount_snapshot_payload,
+)
 
 @dataclass(frozen=True)
 class SceneFacts:
@@ -141,12 +144,7 @@ def build_scene_composition(
             "semantic_review_required": bool(agent_tasks),
             "manual_file_creation_allowed": False,
             "input_contract_digest": input_contract_digest,
-            "required_predecessors": [
-                "context",
-                "simulate-scene --agent",
-                "branch-simulate --agent",
-                "branch_selection.md decision:selected",
-            ],
+            "required_predecessors": ["context", "simulate-scene --agent", "branch-simulate --agent", "branch_selection.md decision:selected"],
         },
         "scene_id": facts.scene_id,
         "scene_file": _rel(scene_path, root),
@@ -172,6 +170,7 @@ def build_scene_composition(
         "scene_bridge": rhythm_contract.get("scene_bridge", {}),
         "creative_quality_profile": quality_profile,
         "creative_quality_profile_digest": quality_profile.get("digest"),
+        "style_mount_snapshot": active_style_mount_snapshot_payload(root),
         "revision_targets": revision_targets,
         "writeback_candidates": branch.get("writeback_candidates", _fallback_writeback(facts)),
         "guardrails": guardrails,
@@ -236,6 +235,7 @@ def composition_input_digest(project_root: Path, scene_path: Path) -> str:
             digest.update(path.read_bytes())
         else:
             digest.update(b"<missing>")
+    digest.update(active_style_mount_snapshot_bytes(root))
     return digest.hexdigest()
 
 

@@ -33,6 +33,7 @@ from ..reader_experience import reader_experience_adherence_for_body, reader_exp
 from ..resources import engine_path
 from ..style_prompt import STYLE_PROMPT_LENGTH_RULE, STYLE_PROMPT_QUALITY_RULE
 from ..word_budget import scene_word_budget_contract, word_budget_adherence_for_body
+from .style_task_contract import render_scene_review_style_task, scene_review_style_materials
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ def write_platform_scene_review_task(
     json_output = json_path or root / "reviews" / "agent" / f"{scene_id}_scene_review.json"
     context_path = root / "memory" / "context_packets" / f"{scene_id}.md"
     context_trace_path = default_context_trace_path(context_path)
-    source_paths = [scene_path, draft_path]
+    source_paths, style_mount_snapshot = scene_review_style_materials(scene_path, draft_path)
     if context_path.exists():
         source_paths.append(context_path)
     if context_trace_path.exists():
@@ -76,9 +77,7 @@ def write_platform_scene_review_task(
     body = final_body_from_workbench_text(draft_text)
     style_lint_block = render_ai_style_lint_block(body or draft_text, profile=quality_profile, scope=scene_id)
     word_budget_adherence = word_budget_adherence_for_body(
-        root,
-        scene_path,
-        body,
+        root, scene_path, body,
         materialization_scope=materialization_scope,
     )
     reader_adherence = reader_experience_adherence_for_body(root, scene_path, body)
@@ -128,7 +127,7 @@ def write_platform_scene_review_task(
             ),
             (
                 "执行挂载文风门禁",
-                """若项目存在 `style/active_style_skill.json` 或已挂载 style prompt/profile，必须正式判断文风是否已经塑造正文表达，而不是只作为参考材料出现。对照挂载文风审查叙述距离、视角稳定性、句法和段落节奏、意象/感官路由、心理呈现、对白语气、标点停顿节奏、AI 腔规避和禁止倾向。`style_adherence.status` 只能取 `pass`、`pass_with_notes`、`revise_required` 或 `not_applicable`；有挂载文风时不得使用 `not_applicable`。若正文基本忽略挂载文风，必须用 `revise_required` 并给出可执行重写动作。""",
+                render_scene_review_style_task(style_mount_snapshot),
             ),
             (
                 "执行字数预算硬门禁",
@@ -157,6 +156,7 @@ def write_platform_scene_review_task(
   "schema": "literary-engineering-workbench/scene-review-agent/v1",
   "scene_id": "{scene_id}",
   "candidate_sha256": "{candidate_sha256}",
+  "style_mount_snapshot": {json.dumps(style_mount_snapshot, ensure_ascii=False)},
   "reviewer_session_id": "独立于 writer_session_id 的稳定审查会话/worker id",
   "conclusion": "pass | pass_with_notes | revise_required | reject",
   "summary": "...",
@@ -244,8 +244,6 @@ def write_platform_scene_review_task(
         ],
     )
     return PlatformAgentTaskResult(task_path, report, json_output)
-
-
 def write_platform_scene_generation_task(
     root: Path,
     *,
@@ -313,7 +311,7 @@ def write_platform_scene_generation_task(
             ),
             (
                 "执行生成前文风标准",
-                """在写候选正文前，先根据 prompt manifest 的 generation_standards.style 和已挂载 style prompt/profile，内部建立本场景的文风执行策略：叙述距离、句法/段落节奏、意象/感官系统、心理呈现、对白密度与语气、标点停顿节奏。该策略只用于指导写作，不得作为分析、自检表或工作流痕迹写入候选正文。""",
+                """在写候选正文前，先核对 prompt manifest 顶层与 generation_standards 中的 style_mount_snapshot 完全一致，再依据这个 exact style_id/version_id/content_hash/prompt_sha256/digest 对应的 style prompt 建立本场景文风执行策略：叙述距离、句法/段落节奏、意象/感官系统、心理呈现、对白密度与语气、标点停顿节奏。不得自行改读另一个文风版本。该策略只用于指导写作，不得作为分析、自检表或工作流痕迹写入候选正文。""",
             ),
             (
                 "执行生成前字数预算标准",
@@ -345,7 +343,7 @@ def write_platform_scene_generation_task(
             ),
             (
                 "生成候选 manifest",
-                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema、scene_id、candidate、prompt_manifest、source_paths、generated_by=`platform-agent`、formal_contract_revision=`2026-07-23.3`、writer_session_id（当前实际创作该正文的稳定会话/worker id，不能为空）、created_at、style_profile/context/composition 引用、creative_quality_profile_digest=`{quality_profile.get('digest', '')}`、style_generation_standard_applied=true、reader_experience_contract、reader_experience_standard_applied=true/false、word_budget_standard_applied=true/false、narrative_rhythm_contract、narrative_rhythm_standard_applied=true/false、hard_constraints_applied=true、anti_evasion_protocol_applied=true、pass_with_notes_actions_applied=true/false、word_budget_contract、clean_body_chinese_chars、clean_body_machine_chars、word_budget_adherence.status、new_character_register、canon_change、no_canon_change_reason 和待审查事项。
+                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema、scene_id、candidate、prompt_manifest、source_paths、generated_by=`platform-agent`、formal_contract_revision=`2026-07-23.3`、writer_session_id（当前实际创作该正文的稳定会话/worker id，不能为空）、created_at、style_profile/context/composition 引用、从 prompt manifest 精确复制的 style_mount_snapshot、creative_quality_profile_digest=`{quality_profile.get('digest', '')}`、style_generation_standard_applied=true、reader_experience_contract、reader_experience_standard_applied=true/false、word_budget_standard_applied=true/false、narrative_rhythm_contract、narrative_rhythm_standard_applied=true/false、hard_constraints_applied=true、anti_evasion_protocol_applied=true、pass_with_notes_actions_applied=true/false、word_budget_contract、clean_body_chinese_chars、clean_body_machine_chars、word_budget_adherence.status、new_character_register、canon_change、no_canon_change_reason 和待审查事项。
 
 本场叙事节奏契约：
 {json.dumps(rhythm_contract, ensure_ascii=False, indent=2)}

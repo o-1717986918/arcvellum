@@ -25,6 +25,11 @@ from ....new_character_register import render_new_character_register_contract
 from ....punctuation_standard import render_punctuation_standard_for_prompt
 from ....reader_experience import reader_experience_contract
 from ....word_budget import render_word_budget_generation_standard
+from ...style.snapshot import (
+    active_style_evidence_paths,
+    active_style_mount_snapshot_payload,
+    active_style_prompt_path,
+)
 
 
 @dataclass(frozen=True)
@@ -133,6 +138,7 @@ def _prompt_manifest(
     composition_path = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
     rhythm = narrative_rhythm_contract(root, scene_path, composition_path if composition_path.exists() else None)
     reader = reader_experience_contract(root, scene_path)
+    style_mount_snapshot = active_style_mount_snapshot_payload(root)
     return {
         "schema": "literary-engineering-workbench/scene-revision-prompt/v0.1",
         "generated_at": _now(),
@@ -142,6 +148,7 @@ def _prompt_manifest(
         "context": _rel(context_path, root) if context_path.exists() else "",
         "context_trace": _rel(context_trace_path, root) if context_trace_path.exists() else "",
         "review": _rel(review_path, root) if review_path else "",
+        "style_mount_snapshot": style_mount_snapshot,
         "draft_body_chars": count_delivery_chars(body),
         "expected_outputs": {
             "candidate": _rel(candidate, root),
@@ -157,6 +164,7 @@ def _prompt_manifest(
             "blocking_issues": _json_list(review_payload.get("blocking_issues")),
         },
         "generation_standards": {
+            "style_mount_snapshot": style_mount_snapshot,
             "word_budget": render_word_budget_generation_standard(root),
             "narrative_rhythm_contract": rhythm,
             "reader_experience_contract": reader,
@@ -222,7 +230,7 @@ def _write_revision_task(
             ),
             (
                 "写入修订 manifest",
-                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema=`literary-engineering-workbench/scene-revision/v0.1`、scene_id、candidate、report、source_paths、revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、creative_quality_profile_digest=`{load_creative_quality_profile(root).get('digest')}`、reader_experience_contract（从 prompt manifest 精确复制）、narrative_rhythm_contract（从 prompt manifest 精确复制）、anti_evasion_protocol_applied=true、anti_evasion_rows、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers、ready_for_review=false、generated_by=`platform-agent`。
+                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema=`literary-engineering-workbench/scene-revision/v0.1`、scene_id、candidate、report、source_paths、revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、style_mount_snapshot（从 prompt manifest 精确复制，不得切换版本）、creative_quality_profile_digest=`{load_creative_quality_profile(root).get('digest')}`、reader_experience_contract（从 prompt manifest 精确复制）、narrative_rhythm_contract（从 prompt manifest 精确复制）、anti_evasion_protocol_applied=true、anti_evasion_rows、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers、ready_for_review=false、generated_by=`platform-agent`。
 
 {render_new_character_register_contract()}""",
             ),
@@ -265,20 +273,9 @@ def _source_paths(
 
 
 def _style_source_paths(root: Path) -> list[Path]:
-    paths: list[Path] = []
-    active = root / "style" / "active_style_skill.json"
-    if active.exists():
-        paths.append(active)
-        payload = _read_json(active)
-        for key in ("prompt", "mount_path", "style_skill"):
-            value = str(payload.get(key) or "").strip()
-            if not value:
-                continue
-            path = root / value
-            if path.is_dir():
-                paths.extend(child for child in [path / "prompt.md", path / "style_skill.json"] if child.exists())
-            elif path.exists():
-                paths.append(path)
+    paths = active_style_evidence_paths(root)
+    if active_style_prompt_path(root) is not None:
+        return paths
     style_root = root / "style"
     for candidate in [style_root / "style_prompt.md", style_root / "style-profile.md"]:
         if candidate.exists():

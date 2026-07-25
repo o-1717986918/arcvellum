@@ -11,6 +11,7 @@ from typing import Any
 from ..contracts import TaskPackage
 from .asset_evidence import review_machine_fields
 from .common import REVIEW_CONCLUSION, REVIEW_CONCLUSION_VARIANT
+from .style_snapshot import candidate_style_snapshot, prompt_style_snapshot
 from .style_metadata import canonicalize_style_machine_metadata
 from ..sandbox import SandboxManifest
 from literary_engineering_studio_engine.agent_schema import load_schema_spec
@@ -662,7 +663,6 @@ def _canonicalize_scene_review_metadata(task: TaskPackage, sandbox: SandboxManif
     prose revision.  Replacing a stale digest here would make an old verdict
     appear to review newly written text.
     """
-
     if task.current_state not in {"candidate-review", "agent-review-task"}:
         return []
     review_rel = next(
@@ -707,6 +707,7 @@ def _canonicalize_scene_review_metadata(task: TaskPackage, sandbox: SandboxManif
         "source_paths": [str(item).replace("\\", "/") for item in task.source_paths],
         "reviewer_session_id": _session_identity(task, "reviewer"),
     }
+    expected["style_mount_snapshot"] = candidate_style_snapshot(candidate_path)
     changed: list[str] = []
     for field, value in expected.items():
         if payload.get(field) == value:
@@ -727,7 +728,6 @@ def _canonicalize_scene_candidate_manifest(task: TaskPackage, sandbox: SandboxMa
     character assets are deterministic task facts, so normalizing them prevents
     avoidable JSON-shape failures without weakening the downstream review gate.
     """
-
     if task.current_state not in {"candidate-generation-provenance", "generation-agent-task", "candidate-revision", "static-revision"}:
         return []
     candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
@@ -764,6 +764,7 @@ def _canonicalize_scene_candidate_manifest(task: TaskPackage, sandbox: SandboxMa
         "formal_contract_revision": str(task.payload.get("task_contract_revision") or "2026-07-24.8"),
         "writer_session_id": _session_identity(task, "writer"),
     }
+    machine_manifest_fields["style_mount_snapshot"] = prompt_style_snapshot(sandbox.workspace / Path(prompt_rel))
     if task.current_state in {"candidate-generation-provenance", "generation-agent-task"}:
         machine_manifest_fields.update(
             {

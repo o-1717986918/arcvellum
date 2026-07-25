@@ -116,6 +116,50 @@ def active_style_mount_snapshot_payload(project_root: Path) -> dict[str, str]:
     return snapshot.as_dict() if snapshot else {}
 
 
+def active_style_mount_snapshot_bytes(project_root: Path) -> bytes:
+    """Return a canonical byte representation for provenance digests."""
+
+    return json.dumps(
+        active_style_mount_snapshot_payload(project_root),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def artifact_style_mount_snapshot(*payloads: object) -> dict[str, Any]:
+    """Read the first direct or generation-standard snapshot from artifacts."""
+
+    for item in payloads:
+        if not isinstance(item, dict):
+            continue
+        direct = item.get("style_mount_snapshot")
+        if isinstance(direct, dict):
+            return dict(direct)
+        standards = item.get("generation_standards")
+        if isinstance(standards, dict):
+            nested = standards.get("style_mount_snapshot")
+            if isinstance(nested, dict):
+                return dict(nested)
+    return {}
+
+
+def read_artifact_style_mount_snapshot(*paths: Path) -> dict[str, Any]:
+    """Read a snapshot from the first valid JSON artifact path."""
+
+    payloads: list[dict[str, Any]] = []
+    for path in paths:
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            payloads.append(payload)
+    return artifact_style_mount_snapshot(*payloads)
+
+
 def active_style_prompt_path(project_root: Path) -> Path | None:
     """Resolve mounted prompt while refusing fallback for a broken version mount."""
 
@@ -211,6 +255,20 @@ def validate_style_mount_snapshot(
     )
 
 
+def style_mount_snapshot_errors(
+    project_root: Path,
+    artifacts: dict[str, object],
+) -> list[str]:
+    """Return stage-labelled errors when artifacts do not share the active snapshot."""
+
+    errors: list[str] = []
+    for label, recorded in artifacts.items():
+        validation = validate_style_mount_snapshot(project_root, recorded)
+        if not validation.passed:
+            errors.append(f"{label} style mount snapshot {validation.status}: {validation.message}")
+    return errors
+
+
 def _is_versioned(payload: dict[str, Any]) -> bool:
     return (
         str(payload.get("schema") or "") == STYLE_VERSION_MOUNT_SCHEMA
@@ -225,7 +283,11 @@ __all__ = [
     "StyleMountSnapshotValidation",
     "active_style_evidence_paths",
     "active_style_mount_snapshot",
+    "active_style_mount_snapshot_bytes",
     "active_style_mount_snapshot_payload",
     "active_style_prompt_path",
+    "artifact_style_mount_snapshot",
+    "read_artifact_style_mount_snapshot",
+    "style_mount_snapshot_errors",
     "validate_style_mount_snapshot",
 ]

@@ -19,6 +19,7 @@ from ....new_character_register import new_character_register_issues
 from ....narrative_rhythm import narrative_rhythm_contract
 from ....reader_experience import reader_experience_adherence_for_body
 from ....word_budget import word_budget_adherence_for_body
+from .style_gate import candidate_style_snapshot, generation_style_snapshot_errors, review_style_snapshot_projection, review_style_state
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,6 @@ def promote_scene_candidate(
     allow_review_notes: bool = False,
 ) -> CandidatePromotionResult:
     """Convert a provider candidate into a standard scene draft workspace."""
-
     root = project_root.resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"project root not found: {root}")
@@ -109,6 +109,7 @@ def promote_scene_candidate(
         "selection_note": selection_note,
         "candidate_review": review_gate,
         "candidate_generation": generation_gate,
+        "style_mount_snapshot": candidate_style_snapshot(candidate_path),
         "style_lint_gate": review_gate.get("style_lint", {}),
         "allow_unreviewed": allow_unreviewed,
         "allow_review_notes": allow_review_notes,
@@ -153,7 +154,6 @@ def _resolve_candidate(root: Path, scene_id: str, candidate: Path | None) -> Pat
 
 def candidate_generation_gate(root: Path, scene_id: str, candidate_path: Path) -> dict[str, object]:
     """Check that a prose candidate came from the formal CLI sidecar handoff."""
-
     rel_candidate = _rel(candidate_path, root)
     manifest_path = candidate_path.with_suffix(".json")
     prompt_manifest_path = candidate_path.with_suffix(".prompt.json")
@@ -228,6 +228,7 @@ def candidate_generation_gate(root: Path, scene_id: str, candidate_path: Path) -
         invalid.extend(new_character_register_issues(payload, root, mode="generation"))
         prompt_payload = _read_json(prompt_manifest_path)
         standards = prompt_payload.get("generation_standards") if isinstance(prompt_payload.get("generation_standards"), dict) else {}
+        invalid.extend(generation_style_snapshot_errors(root, scene_id, candidate=payload, prompt=prompt_payload))
         if creative_quality_profile_exists(root):
             current_digest = str(load_creative_quality_profile(root).get("digest") or "")
             prompt_digest = str(standards.get("creative_quality_profile_digest") or "") if isinstance(standards, dict) else ""
@@ -345,7 +346,7 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
     human_decision_notes = _human_decision_notes(payload)
     new_character_issues = new_character_register_issues(payload, root, mode="review") if payload else ["new_character_register is missing"]
     style_required = _mounted_style_exists(root)
-    style_passed = not style_required or style_status in {"pass", "pass_with_notes"}
+    style_snapshot_gate, style_snapshot_errors, style_failure, style_passed = review_style_state(root, candidate_path, payload, style_required=style_required, style_status=style_status)
     style_lint_passed = lint_gate.get("status") != "blocking"
     review_budget = payload.get("word_budget_adherence") if isinstance(payload.get("word_budget_adherence"), dict) else {}
     review_budget_status = str(review_budget.get("status") or "").strip().lower()
@@ -421,9 +422,8 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
     elif conclusion not in {"pass", "pass_with_notes"}:
         status = "failed"
         message = f"candidate review conclusion is {conclusion or 'missing'}"
-    elif not style_passed:
-        status = "style_failed"
-        message = f"mounted style review did not pass for this candidate: style_adherence.status={style_status or 'missing'}"
+    elif style_failure:
+        status, message = style_failure
     elif not style_lint_passed:
         status = "style_lint_failed"
         message = f"candidate failed Style Lint Gate: {style_lint_gate_message(lint_gate)}"
@@ -471,6 +471,7 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
             "status": status,
             "conclusion": conclusion,
             "style_adherence": style_status,
+            **review_style_snapshot_projection(style_snapshot_gate),
             "word_budget_status": budget_status,
             "reader_experience_status": reader_status,
             "narrative_rhythm_status": review_rhythm_status,
@@ -488,8 +489,6 @@ def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> di
         }
     )
     return gate
-
-
 def _review_session_independence(root: Path, candidate_path: Path, review: dict[str, object]) -> tuple[bool, str]:
     """Enforce a separate reviewer only for post-contract candidates.
 

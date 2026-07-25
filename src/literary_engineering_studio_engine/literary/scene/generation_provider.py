@@ -153,7 +153,6 @@ def generate_scene_candidate(
     if not root.is_dir():
         raise FileNotFoundError(f"project root not found: {root}")
     resolved_provider = resolve_model_provider(provider, purpose="scene generation")
-
     scene_path = root / "scenes" / "scene_0001.yaml" if scene is None else (scene if scene.is_absolute() else root / scene)
     if not scene_path.exists():
         raise FileNotFoundError(f"scene file not found: {scene_path}")
@@ -215,6 +214,7 @@ def generate_scene_candidate(
         "context": _rel_str(context_path, root),
         "composition": _rel_str(prompt_pack.composition_path, root) if prompt_pack.composition_path else "",
         "style_profile": _rel_str(prompt_pack.style_profile_path, root) if prompt_pack.style_profile_path else "",
+        "style_mount_snapshot": prompt_pack.style_mount_snapshot,
         "candidate": _rel_str(candidate_path, root),
         "prompt_manifest": _rel_str(prompt_manifest_path, root),
         "generated_at": _now(),

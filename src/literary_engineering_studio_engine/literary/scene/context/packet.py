@@ -11,6 +11,10 @@ from ....context_broker import default_context_trace_path, write_context_trace
 from ....memory_index import build_memory_index, search_memory, trust_tier_for_relative_path
 from ....scene_handoff import scene_handoff_status
 from ....word_budget import render_scene_word_budget_contract
+from ...style.snapshot import (
+    active_style_evidence_paths,
+    active_style_mount_snapshot_payload,
+)
 
 
 @dataclass(frozen=True)
@@ -416,8 +420,7 @@ def _context_trace_payload(
             "plot/promises/ledger.json",
         ],
     )
-    style_files = _existing_rel_paths(root, ["style/style-profile.md", "style/style_prompt.md", "style/active_style_skill.json"])
-    style_files.extend(_mounted_style_prompt_paths(root))
+    style_files, style_snapshot = _context_style_evidence(root)
     word_budget_files = _existing_rel_paths(root, ["plot/word_budget/word_budget.json", "plot/word_budget/word_budget.md"])
     character_files = _loaded_character_paths(root, loaded_character_ids)
     excluded_character_files = _excluded_character_paths(root, loaded_character_ids)
@@ -478,6 +481,7 @@ def _context_trace_payload(
         "summarized_files": summarized_files,
         "excluded_files": excluded_character_files,
         "style_mounts": style_files,
+        "style_mount_snapshot": style_snapshot,
         "word_budget_source": word_budget_files[0] if word_budget_files else "",
         "character_files": character_files,
         "canon_files": canon_files,
@@ -589,28 +593,13 @@ def _existing_rel_paths(root: Path, rels: list[str]) -> list[str]:
     return existing
 
 
-def _mounted_style_prompt_paths(root: Path) -> list[str]:
-    active = root / "style" / "active_style_skill.json"
-    if not active.exists():
-        return []
-    text = _read(active)
-    paths: list[str] = []
-    for key in ("prompt", "style_skill", "mount_path"):
-        match = re.search(rf'"?{re.escape(key)}"?\s*[:=]\s*["\']?([^"\'\n,}}]+)', text)
-        if not match:
-            continue
-        value = match.group(1).strip()
-        if not value:
-            continue
-        candidate = root / value
-        if candidate.is_dir():
-            for name in ("prompt.md", "STYLE.md", "style_skill.json"):
-                item = candidate / name
-                if item.exists():
-                    paths.append(_rel(item, root))
-        elif candidate.exists():
-            paths.append(_rel(candidate, root))
-    return sorted(dict.fromkeys(paths))
+def _context_style_evidence(root: Path) -> tuple[list[str], dict[str, str]]:
+    mounted = [_rel(path, root) for path in active_style_evidence_paths(root)]
+    files = mounted or _existing_rel_paths(
+        root,
+        ["style/style-profile.md", "style/style_prompt.md"],
+    )
+    return files, active_style_mount_snapshot_payload(root)
 
 
 def _loaded_character_paths(root: Path, loaded_character_ids: set[str]) -> list[str]:
