@@ -522,15 +522,9 @@ def mount_style_skill(
 
 
 def active_project_style(project_root: Path) -> dict[str, Any]:
-    root = project_root.resolve()
-    path = root / "style" / "active_style_skill.json"
-    if not path.exists():
-        return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    prompt_path = root / str(payload.get("prompt") or "")
-    payload["prompt_exists"] = prompt_path.is_file()
-    payload["prompt_path"] = _rel(prompt_path, root) if prompt_path.exists() else ""
-    return payload
+    from .mount import inspect_active_style_mount
+
+    return inspect_active_style_mount(project_root)
 
 
 def _write_profile_manifest(profile: Path, author: dict[str, Any], author_id: str, profile_id: str, source_count: int, provider: str) -> None:
