@@ -533,11 +533,37 @@
   - rename/move/clone 和批量文件管理属于长期 Archive 扩展，不是统一实施方案定义的 W2 退出 Gate；
   - 状态化引导当前只在 Archive 首批落地，其他模块由 W7 的全产品引导批次处理。
 
+## W3-1：Style Application 契约与安全版本投影
+
+- Status: complete
+- Commit: `5983462`
+- Added:
+  - 新增 `application/style/`，把 Style Atelier 的作者、作品、来源摘要、评测与版本读模型从 API router 和 legacy read model 中分离；
+  - `RightsProjection` 明确区分已声明与缺失权利，不能仅凭作者名称推断授权；
+  - 来源投影只公开稳定 ID、文件名、内容 SHA-256、字符数、分块数和导入时间，不公开语料正文、内部路径或训练上下文；
+  - 评测投影把风格质量与原文泄漏风险拆成独立信号，高风格得分不能覆盖 `high_copy_risk`；
+  - 当前 profile、Prompt 候选、确定性评测、built skill 和 active mount 被归一成只读版本状态与内容 hash；
+  - 新增 `GET /style-lab/authors` 和 `GET /style-lab/versions`，旧 library/mount API 保持兼容；
+  - Style 路由依赖装配移出 `create_app` 主体，未增加 app factory 或 service 复杂度债务。
+- Unified implementation boundary:
+  - Engine `literary/style` 继续拥有 Prompt 质量计量、评测算法、skill readiness 和正式 route；
+  - Studio 只投影 Engine 已有事实，没有复制评测阈值为新的写入 Gate，也没有增加同步模型调用；
+  - 新 API 不返回原文或评测候选全文，符合保留集隔离和必要短片段原则。
+- Adaptive orchestration boundary:
+  - 当前版本目录是只读证据，不是 `CreativeExecutionPlan` 的 Stable Knowledge 写入口；
+  - Planner 将来只能引用 version/content hash，不能由计划候选伪造 review、mount 或 rights；
+  - 本批未改变固定 `style-engineering` route、Worker、Runtime 或 task lifecycle。
+- Exit evidence:
+  - Python full suite: 476 passed, 1 skipped；
+  - `python -m compileall -q src tests`: passed；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3 只建立一个 Style Atelier 与一条正式文风候选/挂载链：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-2 只建立作者、作品、来源和权利声明的受控 Studio 事务：
 
-1. 先审计现有 style learning、style profile、mount、generation/review 注入和 CLI/Engine ownership，复用已经可靠的契约，不建立第二套文风状态机。
-2. 把语料导入、证据片段、可挂载提示词、对照评测、版本、候选与正式挂载投影到独立 Studio API 和前端工作台。
-3. 文风生成与评测由 Agent 完成，长度、引用、digest、结构、版本和正式挂载由确定性 Gate 验收；Agent 不能直接修改正式 mount。
-4. W3 退出前必须用真实或隔离真实项目证明：语料进入、候选生成、评测、人工批准、正式挂载、正文生成约束注入和审查证据形成单一闭环。
+1. 不沿用 legacy Engine API 的任意路径输入和同步长任务语义；事务只接受稳定 author/work identity、明确 rights 和受限文本/文件导入。
+2. 原文内容不进入 SQLite、API 列表或日志；source hash、rights、导入 receipt 和安全短摘要作为证据。
+3. 重复来源以内容 hash 识别，目标冲突、旧 revision、越界路径、无权利声明和无效 UTF-8 必须形成稳定错误。
+4. 本批不执行 Prompt Agent、评测、build 或 mount；这些由 W3-3 的 Worker 正式任务链承担。
