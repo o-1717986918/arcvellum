@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 import unittest
 
 from literary_engineering_studio.api_server import create_app
@@ -6,7 +8,15 @@ from literary_engineering_studio.config import default_config
 
 class ApiRouteSurfaceTests(unittest.TestCase):
     def test_public_route_families_remain_available_after_api_module_extraction(self):
-        app = create_app(default_config())
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = default_config()
+            config["application"]["data_root"] = str(root)
+            config["application"]["database_path"] = str(root / "studio.sqlite3")
+            config["application"]["projects_root"] = str(root / "projects")
+            config["worker"]["runs_root"] = str(root / "runs")
+            config["agent_runners"]["opencode"]["data_root"] = str(root)
+            app = create_app(config)
         def route_pairs(items, prefix: str = ""):
             for route in items:
                 nested = getattr(route, "original_router", None)
