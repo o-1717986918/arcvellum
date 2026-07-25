@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ...narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract, normalize_tension_curve
+from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract, normalize_tension_curve
 
 
 RHYTHM_PLAN_SCHEMA = "literary-engineering-workbench/rhythm-plan/v0.2"
@@ -62,15 +62,14 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
     stored = _read_json(rhythm_plan_path(root))
     stored_scenes = stored.get("scenes") if isinstance(stored.get("scenes"), dict) else {}
     book_profile = normalize_book_profile(stored.get("book_profile"))
+    scene_paths = _rhythm_scene_paths(root)
     entries: list[dict[str, Any]] = []
-    for path in sorted((root / "scenes").glob("*.yaml")) if (root / "scenes").is_dir() else []:
-        if path.name.startswith("_"):
-            continue
-        scene_id = _scalar(path.read_text(encoding="utf-8", errors="ignore"), "scene_id") or path.stem
+    for path in scene_paths:
         scene_text = path.read_text(encoding="utf-8", errors="ignore")
+        scene_id = _scalar(scene_text, "scene_id") or path.stem
         chapter_id = _scalar(scene_text, "chapter_id") or "unassigned"
         volume_id = _scalar(scene_text, "volume_id") or _scalar(scene_text, "volume") or "unassigned"
-        contract = narrative_rhythm_contract(root, path)
+        contract = narrative_rhythm_contract(root, path, plan_payload=stored, scene_text=scene_text)
         rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
         curve = normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
         stored_entry = stored_scenes.get(scene_id) if isinstance(stored_scenes.get(scene_id), dict) else {}
@@ -80,7 +79,7 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
             "scene_id": scene_id,
             "volume_id": volume_id,
             "chapter_id": chapter_id,
-            "title": _scalar(path.read_text(encoding="utf-8", errors="ignore"), "title") or scene_id,
+            "title": _scalar(scene_text, "title") or scene_id,
             "pace": str(rhythm.get("pace") or "balanced"),
             "rhythm_role": str(rhythm.get("rhythm_role") or "mixed"),
             "scene_function": _strings(rhythm.get("scene_function")),
@@ -119,6 +118,11 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
         "book_profile": book_profile,
         "stored": bool(stored),
     }
+
+
+def _rhythm_scene_paths(root: Path) -> list[Path]:
+    folder = root / "scenes"
+    return [path for path in sorted(folder.glob("*.yaml")) if not path.name.startswith("_")] if folder.is_dir() else []
 
 
 def save_rhythm_plan(

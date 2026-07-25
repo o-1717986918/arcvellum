@@ -1,8 +1,12 @@
+import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
+from literary_engineering_studio_engine.narrative_rhythm import (
+    narrative_rhythm_contract,
+    render_narrative_rhythm_contract,
+)
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 
 
@@ -31,8 +35,15 @@ class RhythmPlanTests(unittest.TestCase):
                 "spatial_time_gap_before": 2.1,
             }])
             contract = narrative_rhythm_contract(root, scene)
+            preloaded_contract = narrative_rhythm_contract(
+                root,
+                scene,
+                plan_payload=json.loads((root / "plot" / "rhythm_plan.json").read_text(encoding="utf-8")),
+                scene_text=scene.read_text(encoding="utf-8"),
+            )
             self.assertEqual(saved["revision"], 1)
             self.assertEqual(contract["source"], "rhythm-plan")
+            self.assertEqual(preloaded_contract, contract)
             self.assertEqual(contract["status"], "pass")
             self.assertEqual(contract["narrative_rhythm"]["tension_curve"]["peak"], 5)
             self.assertEqual(contract["narrative_rhythm"]["detail_level"], "set_piece")

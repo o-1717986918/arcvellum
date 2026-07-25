@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .rhythm_sources import plan_payload_source, scene_text_source
 
 RHYTHM_SCHEMA = "literary-engineering-workbench/narrative-rhythm-contract/v0.1"
 RHYTHM_CURVE_SCHEMA = "literary-engineering-workbench/narrative-rhythm-curve/v0.1"
@@ -64,9 +65,8 @@ GENERIC_PLACEHOLDER_FRAGMENTS = (
 
 
 def narrative_rhythm_contract(
-    root: Path,
-    scene_path: Path,
-    composition_path: Path | None = None,
+    root: Path, scene_path: Path, composition_path: Path | None = None, *,
+    plan_payload: dict[str, Any] | None = None, scene_text: str | None = None,
 ) -> dict[str, Any]:
     """Return the formal rhythm/bridge contract for one scene.
 
@@ -78,14 +78,14 @@ def narrative_rhythm_contract(
 
     root = root.resolve()
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
-    scene_text = _read(scene_path)
+    scene_text = scene_text_source(scene_path, scene_text)
     scene_id = _scene_id(scene_path, scene_text)
     composition_payload = _read_composition_payload(root, scene_id, composition_path)
+    plan_payload = plan_payload_source(root / "plot" / "rhythm_plan.json", plan_payload)
     composition_rhythm = _dict_value(composition_payload.get("narrative_rhythm"))
     composition_bridge = _dict_value(composition_payload.get("scene_bridge"))
     scene_rhythm = _block_mapping(scene_text, "narrative_rhythm")
     scene_bridge = _block_mapping(scene_text, "scene_bridge")
-    plan_payload = _read_json(root / "plot" / "rhythm_plan.json")
     plan_scenes = plan_payload.get("scenes") if isinstance(plan_payload.get("scenes"), dict) else {}
     plan_rhythm = plan_scenes.get(scene_id) if isinstance(plan_scenes.get(scene_id), dict) else {}
     book_profile = _book_profile(plan_payload.get("book_profile"))

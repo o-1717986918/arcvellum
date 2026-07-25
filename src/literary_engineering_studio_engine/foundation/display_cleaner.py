@@ -92,7 +92,7 @@ def truncate_text(text: str, limit: int) -> str:
 
 
 def scalar_from_yaml_text(text: str, key: str, default: str = "") -> str:
-    match = re.search(rf"(?m)^\s*{re.escape(key)}\s*:\s*(.*?)\s*(?:#.*)?$", text)
+    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}[ \t]*:[ \t]*(.*?)[ \t]*(?:#.*)?$", text)
     if not match:
         return default
     value = match.group(1).strip()
@@ -102,30 +102,47 @@ def scalar_from_yaml_text(text: str, key: str, default: str = "") -> str:
 
 
 def nested_scalar_from_yaml_text(text: str, parent: str, key: str, default: str = "") -> str:
-    match = re.search(
-        rf"(?ms)^\s*{re.escape(parent)}\s*:\s*\n(?P<body>(?:\s+.+\n?)*)",
-        text,
-    )
-    if not match:
+    body = "\n".join(_yaml_block_lines(text, parent))
+    if not body:
         return default
-    body = match.group("body")
     return scalar_from_yaml_text(body, key, default)
 
 
 def list_from_yaml_text(text: str, key: str, *, limit: int = 8) -> list[str]:
-    inline = re.search(rf"(?m)^\s*{re.escape(key)}\s*:\s*\[(.*?)\]\s*(?:#.*)?$", text)
+    inline = re.search(rf"(?m)^[ \t]*{re.escape(key)}[ \t]*:[ \t]*\[(.*?)\][ \t]*(?:#.*)?$", text)
     if inline:
         items = [item.strip().strip("\"'") for item in inline.group(1).split(",")]
         return [item for item in items if item][:limit]
-    block = re.search(rf"(?ms)^\s*{re.escape(key)}\s*:\s*\n(?P<body>(?:\s+-\s+.*\n?)*)", text)
-    if not block:
-        return []
     values = []
-    for line in block.group("body").splitlines():
-        item = re.sub(r"^\s*-\s*", "", line).strip().strip("\"'")
+    for line in _yaml_block_lines(text, key):
+        match = re.match(r"^[ \t]*-[ \t]+(.*)$", line)
+        if not match:
+            continue
+        item = match.group(1).strip().strip("\"'")
         if item:
             values.append(item)
     return values[:limit]
+
+
+def _yaml_block_lines(text: str, key: str) -> list[str]:
+    lines = text.splitlines()
+    header = re.compile(rf"^(?P<indent>[ \t]*){re.escape(key)}[ \t]*:[ \t]*(?:#.*)?$")
+    for index, line in enumerate(lines):
+        match = header.match(line)
+        if not match:
+            continue
+        parent_indent = len(match.group("indent").expandtabs(4))
+        body: list[str] = []
+        for candidate in lines[index + 1:]:
+            if not candidate.strip():
+                body.append(candidate)
+                continue
+            indent = len(candidate) - len(candidate.lstrip(" \t"))
+            if indent <= parent_indent:
+                break
+            body.append(candidate)
+        return body
+    return []
 
 
 def file_label(path: Path) -> str:

@@ -239,9 +239,12 @@ def _safe_item_id(path: Path, root: Path) -> str:
 
 def _rel(path: Path, root: Path) -> str:
     try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
+        return path.relative_to(root).as_posix()
     except ValueError:
-        return str(path)
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            return str(path)
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
