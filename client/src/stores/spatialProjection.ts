@@ -1,8 +1,9 @@
 import { ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
 import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
-import type { SpatialGrammar, SpatialNarrativeProjection } from "@/types/spatial";
+import type { SpatialGrammar, SpatialNarrativeProjection, SpatialNarrativeProjectionPatch } from "@/types/spatial";
 import { defaultObservation } from "@/features/orrery/layout/observationWindow";
+import { applySpatialProjectionPatch } from "@/features/orrery/model/projectionPatch";
 
 const DEFAULT_GRAMMAR: SpatialGrammar = "spine";
 
@@ -61,7 +62,12 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     const expectedRoot = projectRoot.value;
     const expectedKey = params();
     stream = connectEventStream(`/narrative/stream/v3?${expectedKey}&interval_seconds=2`, (event, data) => {
-      if (event !== "narrative.v3.projection" || projectRoot.value !== expectedRoot || params() !== expectedKey) return;
+      if (projectRoot.value !== expectedRoot || params() !== expectedKey) return;
+      if (event === "narrative.v3.patch") {
+        applyPatch(data as unknown as SpatialNarrativeProjectionPatch);
+        return;
+      }
+      if (event !== "narrative.v3.projection") return;
       const payload = data as unknown as SpatialNarrativeProjection;
       const current = projection.value;
       if (current && payload.sequence < current.sequence) return;
@@ -99,6 +105,22 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     if (current && currentRevision && currentRevision === nextRevision) return;
     projection.value = payload;
     initializeObservation(payload);
+  }
+
+  function applyPatch(patch: SpatialNarrativeProjectionPatch): void {
+    const current = projection.value;
+    if (!current) {
+      void refresh();
+      return;
+    }
+    if (patch.sequence < current.sequence) return;
+    const currentRevision = current.projection_revision || current.revision;
+    if (patch.target_revision === currentRevision) return;
+    try {
+      applyProjection(applySpatialProjectionPatch(current, patch));
+    } catch {
+      void refresh();
+    }
   }
 
   function setObservation(next: { cursor?: number; window?: number }): void {

@@ -109,6 +109,26 @@ export interface SpatialNarrativeProjection {
   accessibility_summary: string;
 }
 
+export interface SpatialProjectionCollectionPatch<T> {
+  upsert: T[];
+  remove: string[];
+  order: string[];
+}
+
+export interface SpatialNarrativeProjectionPatch {
+  ok: boolean;
+  schema: "arcvellum/narrative-projection-patch/v1";
+  base_revision: string;
+  target_revision: string;
+  sequence: number;
+  meta: Record<string, unknown>;
+  meta_remove: string[];
+  nodes: SpatialProjectionCollectionPatch<SpatialNarrativeNode>;
+  edges: SpatialProjectionCollectionPatch<SpatialNarrativeEdge>;
+  delta: SpatialNarrativeProjection["delta"];
+  motion_events: SpatialNarrativeProjection["motion_events"];
+}
+
 export interface SpatialNodeDetail {
   ok: boolean;
   schema: "arcvellum/narrative-node-detail/v1";

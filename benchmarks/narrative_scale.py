@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import platform
 import statistics
@@ -14,6 +15,14 @@ from typing import Any, Iterable
 
 from literary_engineering_studio.projections.narrative_projection_v3 import (
     build_narrative_projection_v3,
+)
+from literary_engineering_studio.projections.narrative.patches import (
+    apply_projection_patch,
+    build_projection_patch,
+)
+from literary_engineering_studio.projections.narrative_projection import (
+    projection_delta,
+    projection_motion_events,
 )
 
 
@@ -59,6 +68,9 @@ def benchmark_narrative_projection(
     """Measure book aggregation and detailed full-book projection."""
 
     repeat_count = max(1, int(repetitions))
+    scales = tuple(int(value) for value in scene_counts)
+    if not scales:
+        raise ValueError("scene_counts must not be empty")
     samples: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="arcvellum-narrative-benchmark-") as temporary:
         root = Path(temporary)
@@ -66,19 +78,22 @@ def benchmark_narrative_projection(
             "project:\n  title: Narrative Scale Benchmark\n",
             encoding="utf-8",
         )
-        for scene_count in scene_counts:
-            library = build_scale_library(int(scene_count))
-            samples.append(_measure_case(root, library, int(scene_count), "book", "", repeat_count))
+        for scene_count in scales:
+            library = build_scale_library(scene_count)
+            samples.append(_measure_case(root, library, scene_count, "book", "", repeat_count))
             samples.append(
                 _measure_case(
                     root,
                     library,
-                    int(scene_count),
+                    scene_count,
                     "scene",
-                    f"scene_{max(1, int(scene_count) // 2):04d}",
+                    f"scene_{max(1, scene_count // 2):04d}",
                     repeat_count,
                 )
             )
+        transition_sample = _measure_transition(root, max(scales))
+    violations = validate_benchmark(samples)
+    violations.extend(_validate_transition(transition_sample))
     return {
         "schema": "arcvellum/narrative-performance-baseline/v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -91,10 +106,11 @@ def benchmark_narrative_projection(
         "method": {
             "repetitions": repeat_count,
             "warmups_per_case": 1,
-            "source_scene_scales": [int(value) for value in scene_counts],
+            "source_scene_scales": list(scales),
         },
         "samples": samples,
-        "violations": validate_benchmark(samples),
+        "transition_sample": transition_sample,
+        "violations": violations,
     }
 
 
@@ -152,6 +168,60 @@ def _measure_case(
         "max_ms": round(max(durations), 3),
         "stable_revision": len(revisions) == 1 and bool(next(iter(revisions), "")),
     }
+
+
+def _measure_transition(root: Path, scene_count: int) -> dict[str, Any]:
+    library = build_scale_library(scene_count)
+    changed = copy.deepcopy(library)
+    changed_index = max(0, scene_count // 2 - 1)
+    changed_scene = changed["sections"]["scenes"][changed_index]
+    changed_scene["title"] = f"{changed_scene['title']}：语义更新"
+    focus = str(changed_scene["id"])
+    previous = _build_projection(root, library, "scene", focus)
+    current = _build_projection(root, changed, "scene", focus)
+    delta = projection_delta(previous, current)
+    motion_events = projection_motion_events(previous, current, delta)
+    patch = build_projection_patch(
+        previous,
+        current,
+        sequence=2,
+        delta=delta,
+        motion_events=motion_events,
+    )
+    rebuilt = apply_projection_patch(previous, patch)
+    full_bytes = _payload_size(current)
+    patch_bytes = _payload_size(patch)
+    return {
+        "source_scene_count": scene_count,
+        "level": "scene",
+        "changed_scene_id": focus,
+        "full_payload_bytes": full_bytes,
+        "patch_payload_bytes": patch_bytes,
+        "patch_ratio": round(patch_bytes / max(full_bytes, 1), 6),
+        "upsert_node_count": len(patch["nodes"]["upsert"]),
+        "upsert_edge_count": len(patch["edges"]["upsert"]),
+        "changed_meta_keys": sorted(patch["meta"]),
+        "exact_graph_rebuild": (
+            rebuilt["projection_revision"] == current["projection_revision"]
+            and rebuilt["nodes"] == current["nodes"]
+            and rebuilt["edges"] == current["edges"]
+        ),
+    }
+
+
+def _validate_transition(sample: dict[str, Any]) -> list[str]:
+    violations: list[str] = []
+    if float(sample.get("patch_ratio") or 1.0) >= 0.1:
+        violations.append("single-node projection patch exceeds 10% of full payload")
+    if int(sample.get("upsert_node_count") or 0) != 1:
+        violations.append("single-node projection transition changed an unexpected node count")
+    if not sample.get("exact_graph_rebuild"):
+        violations.append("single-node projection patch does not rebuild the exact graph")
+    return violations
+
+
+def _payload_size(payload: dict[str, Any]) -> int:
+    return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
 def _build_projection(

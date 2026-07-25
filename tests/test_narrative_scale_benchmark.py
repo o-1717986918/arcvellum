@@ -29,6 +29,10 @@ class NarrativeScaleBenchmarkTests(unittest.TestCase):
         self.assertGreaterEqual(detailed["projected_node_count"], 20)
         self.assertGreater(detailed["payload_bytes"], 0)
         self.assertTrue(detailed["stable_revision"])
+        transition = report["transition_sample"]
+        self.assertLess(transition["patch_ratio"], 0.1)
+        self.assertEqual(transition["upsert_node_count"], 1)
+        self.assertTrue(transition["exact_graph_rebuild"])
 
     def test_trend_gate_rejects_semantic_loss_and_extreme_growth(self):
         samples = [

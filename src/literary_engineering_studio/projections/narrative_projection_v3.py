@@ -13,6 +13,7 @@ from . import narrative_projection as narrative_projection_v2
 from .narrative.base_adapter import build_compatible_base, requested_focus
 from .narrative.characters import augment_character_graph, build_character_references
 from .narrative.grammar import SPATIAL_GRAMMARS, resolve_grammar
+from .narrative.patches import build_projection_patch as build_spatial_projection_patch
 from .narrative.relations import build_focused_relations
 from .narrative.revision import build_projection_revision, build_source_revisions
 from .narrative_projection import projection_delta, projection_motion_events

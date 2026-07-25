@@ -1,6 +1,6 @@
 {
   "schema": "arcvellum/narrative-performance-baseline/v1",
-  "generated_at": "2026-07-25T04:26:14.278026+00:00",
+  "generated_at": "2026-07-25T04:45:40.363705+00:00",
   "runtime": {
     "python": "3.14.5",
     "implementation": "CPython",
@@ -24,8 +24,8 @@
       "projected_node_count": 15,
       "projected_edge_count": 59,
       "payload_bytes": 43881,
-      "median_ms": 5.744,
-      "max_ms": 6.853,
+      "median_ms": 7.213,
+      "max_ms": 7.872,
       "stable_revision": true
     },
     {
@@ -35,8 +35,8 @@
       "projected_node_count": 130,
       "projected_edge_count": 324,
       "payload_bytes": 226419,
-      "median_ms": 12.018,
-      "max_ms": 13.939,
+      "median_ms": 12.623,
+      "max_ms": 13.639,
       "stable_revision": true
     },
     {
@@ -46,8 +46,8 @@
       "projected_node_count": 45,
       "projected_edge_count": 419,
       "payload_bytes": 227491,
-      "median_ms": 14.055,
-      "max_ms": 15.645,
+      "median_ms": 16.159,
+      "max_ms": 17.711,
       "stable_revision": true
     },
     {
@@ -57,8 +57,8 @@
       "projected_node_count": 340,
       "projected_edge_count": 924,
       "payload_bytes": 625700,
-      "median_ms": 27.658,
-      "max_ms": 30.627,
+      "median_ms": 27.316,
+      "max_ms": 29.392,
       "stable_revision": true
     },
     {
@@ -68,8 +68,8 @@
       "projected_node_count": 124,
       "projected_edge_count": 1399,
       "payload_bytes": 727042,
-      "median_ms": 38.65,
-      "max_ms": 40.772,
+      "median_ms": 43.501,
+      "max_ms": 51.369,
       "stable_revision": true
     },
     {
@@ -79,10 +79,26 @@
       "projected_node_count": 1049,
       "projected_edge_count": 3024,
       "payload_bytes": 1984579,
-      "median_ms": 84.683,
-      "max_ms": 94.773,
+      "median_ms": 109.602,
+      "max_ms": 134.575,
       "stable_revision": true
     }
   ],
+  "transition_sample": {
+    "source_scene_count": 1000,
+    "level": "scene",
+    "changed_scene_id": "scene_0500",
+    "full_payload_bytes": 1984609,
+    "patch_payload_bytes": 120119,
+    "patch_ratio": 0.060525,
+    "upsert_node_count": 1,
+    "upsert_edge_count": 0,
+    "changed_meta_keys": [
+      "generated_at",
+      "source_revisions",
+      "timeline"
+    ],
+    "exact_graph_rebuild": true
+  },
   "violations": []
 }

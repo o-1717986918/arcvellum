@@ -10,7 +10,7 @@ import queue
 import secrets
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
@@ -88,6 +88,7 @@ from .narrative_projection import build_narrative_projection, projection_delta, 
 from .narrative_projection_v3 import (
     build_narrative_node_detail_v3,
     build_narrative_projection_v3,
+    build_spatial_projection_patch,
     spatial_projection_delta,
     spatial_projection_motion_events,
 )
@@ -135,6 +136,37 @@ except ImportError:  # pragma: no cover
     StreamingResponse = None
     JSONResponse = None
     Request = None
+
+
+def _narrative_dependencies(
+    config: dict[str, Any],
+    cached_read_model: Callable[..., dict[str, Any]],
+    dashboard_snapshot: Callable[[Path], dict[str, Any]],
+    library_snapshot: Callable[[Path], dict[str, Any]],
+    v2_stream_state: dict[str, dict[str, Any]],
+    v3_stream_state: dict[str, dict[str, Any]],
+    stream_lock: threading.Lock,
+) -> NarrativeRouterDependencies:
+    return NarrativeRouterDependencies(
+        config=config,
+        cached_read_model=cached_read_model,
+        dashboard_snapshot=dashboard_snapshot,
+        library_snapshot=library_snapshot,
+        build_projection=build_narrative_projection,
+        projection_delta=projection_delta,
+        projection_motion_events=projection_motion_events,
+        build_projection_v3=build_narrative_projection_v3,
+        build_node_detail_v3=build_narrative_node_detail_v3,
+        spatial_projection_delta=spatial_projection_delta,
+        spatial_projection_motion_events=spatial_projection_motion_events,
+        spatial_projection_patch=build_spatial_projection_patch,
+        v2_stream_state=v2_stream_state,
+        v3_stream_state=v3_stream_state,
+        stream_lock=stream_lock,
+        sse=_sse,
+    )
+
+
 def create_app(config_override: dict[str, Any] | None = None):
     if FastAPI is None:
         raise RuntimeError("Studio API requires pip install -e .[api]")
@@ -351,22 +383,14 @@ def create_app(config_override: dict[str, Any] | None = None):
 
     app.include_router(
         build_narrative_router(
-            NarrativeRouterDependencies(
-                config=config,
-                cached_read_model=cached_read_model,
-                dashboard_snapshot=dashboard_snapshot,
-                library_snapshot=library_snapshot,
-                build_projection=lambda *args, **kwargs: build_narrative_projection(*args, **kwargs),
-                projection_delta=lambda *args, **kwargs: projection_delta(*args, **kwargs),
-                projection_motion_events=lambda *args, **kwargs: projection_motion_events(*args, **kwargs),
-                build_projection_v3=lambda *args, **kwargs: build_narrative_projection_v3(*args, **kwargs),
-                build_node_detail_v3=lambda *args, **kwargs: build_narrative_node_detail_v3(*args, **kwargs),
-                spatial_projection_delta=lambda *args, **kwargs: spatial_projection_delta(*args, **kwargs),
-                spatial_projection_motion_events=lambda *args, **kwargs: spatial_projection_motion_events(*args, **kwargs),
-                v2_stream_state=narrative_stream_state,
-                v3_stream_state=narrative_v3_stream_state,
-                stream_lock=narrative_stream_lock,
-                sse=_sse,
+            _narrative_dependencies(
+                config,
+                cached_read_model,
+                dashboard_snapshot,
+                library_snapshot,
+                narrative_stream_state,
+                narrative_v3_stream_state,
+                narrative_stream_lock,
             )
         )
     )
