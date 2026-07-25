@@ -27,6 +27,7 @@ from ...task_paths import (
 )
 from .session_contract import build_style_route_session_context
 from .review_contract import style_review_blueprints, validate_style_review_task
+from .version_contract import style_version_blueprints, validate_style_version_task
 from .support import (
     file_sha256 as _file_sha256,
     declared_repair_targets_changed,
@@ -273,7 +274,7 @@ def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_s
             "next_allowed_states": ["style-eval-score-file"],
         },
     }
-    table.update(style_review_blueprints(root, profile_id, profile_dir))
+    _add_terminal_blueprints(table, root, profile_id, profile_dir)
     default = {
         "task_type": "manual-route-repair",
         "prompt_asset_id": "route.style-engineering.repair.v1",
@@ -286,6 +287,16 @@ def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_s
         "next_allowed_states": [],
     }
     return table.get(current_state, default)
+
+
+def _add_terminal_blueprints(
+    table: dict[str, dict[str, object]],
+    root: Path,
+    profile_id: str,
+    profile_dir: str,
+) -> None:
+    table.update(style_review_blueprints(root, profile_id, profile_dir))
+    table.update(style_version_blueprints(root, profile_id, profile_dir))
 
 
 def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[str]]:
@@ -333,6 +344,9 @@ def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[
     review_errors, review_notes = validate_style_review_task(root, task, profile_dir)
     errors.extend(review_errors)
     notes.extend(review_notes)
+    version_errors, version_notes = validate_style_version_task(root, task, profile_dir)
+    errors.extend(version_errors)
+    notes.extend(version_notes)
     if not errors:
         notes.extend(_style_validation_notes(current_state))
     return errors, notes

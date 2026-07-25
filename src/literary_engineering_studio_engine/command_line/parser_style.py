@@ -44,6 +44,14 @@ def register_style_commands(sub) -> None:
     style_review.add_argument("--profile-dir", required=True, help="Project-relative formal style profile directory.")
     style_review.add_argument("--target-id", required=True, help="Stable style route target id.")
 
+    style_version = sub.add_parser(
+        "build-style-version",
+        help="Build an immutable content-addressed version from passing formal style evidence.",
+    )
+    style_version.add_argument("project", help="Work project directory.")
+    style_version.add_argument("--profile-dir", required=True, help="Project-relative formal style profile directory.")
+    style_version.add_argument("--target-id", required=True, help="Stable style route target id.")
+
     _register_style_library_commands(sub)
 
 

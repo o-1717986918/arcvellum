@@ -15,6 +15,10 @@ from ..literary.style.review import (
     style_eval_generation_digest_errors,
     style_review_paths,
 )
+from ..literary.style.version import (
+    inspect_style_profile_version,
+    plan_style_profile_version,
+)
 from ..style_prompt import style_prompt_quality_report
 from .state_common import _file_step, _read, _read_json, _rel, _slug_profile_id
 
@@ -63,6 +67,14 @@ def _style_engineering_state(root: Path, profile_dir: Path) -> dict[str, object]
         _style_eval_readiness_step(root, profile_dir, eval_candidate, eval_current),
     ]
     steps.extend(_style_review_steps(root, profile_dir, _slug_profile_id(profile_id)))
+    if load_style_session(profile_dir):
+        steps.append(
+            _style_version_step(
+                root,
+                profile_dir,
+                _slug_profile_id(profile_id),
+            )
+        )
     first_open = next((step for step in steps if step["status"] != "pass"), None)
     return {
         "target_id": _slug_profile_id(profile_id),
@@ -235,6 +247,35 @@ def _style_review_steps(
             ),
         },
     ]
+
+
+def _style_version_step(
+    root: Path,
+    profile_dir: Path,
+    target_id: str,
+) -> dict[str, object]:
+    plan = plan_style_profile_version(root, profile_dir, target_id=target_id)
+    stage, errors = inspect_style_profile_version(plan)
+    key = "style-version-conflict" if stage == "conflict" else "style-version-build"
+    messages = {
+        "ready": f"immutable style version {plan.version_id} is ready",
+        "build": f"reviewed evidence is ready to build {plan.version_id}",
+        "blocked": "; ".join(errors[:4]) or "style version evidence is incomplete",
+        "conflict": "; ".join(errors[:4]) or "immutable style version conflicts",
+    }
+    actions = {
+        "ready": "",
+        "build": "build the deterministic content-addressed StyleProfileVersion",
+        "blocked": "complete the preceding style evidence and review gates",
+        "conflict": "restore or quarantine the conflicting immutable style version",
+    }
+    return {
+        "key": key,
+        "status": "pass" if stage == "ready" else "missing" if stage == "build" else "blocked",
+        "path": _rel(plan.paths.manifest, root),
+        "message": messages[stage],
+        "next_action": actions[stage],
+    }
 
 
 def _style_eval_score_step(root: Path, candidate: Path, current: Path) -> dict[str, object]:

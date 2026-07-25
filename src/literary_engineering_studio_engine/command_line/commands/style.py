@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ...cli_support import print_agent_task_notice as _print_agent_task_notice
 from ...literary.style.review import prepare_style_semantic_review
+from ...literary.style.version import build_style_profile_version
 from ...platform_agent_tasks import (
     write_platform_style_prompt_eval_task,
     write_platform_style_prompt_task,
@@ -38,6 +39,8 @@ def handle(args, parser) -> int | None:
         return _prepare_evaluation(args)
     if command == "prepare-style-review":
         return _prepare_review(args, parser)
+    if command == "build-style-version":
+        return _build_version(args, parser)
     if command == "style-lab-list":
         return _list_library(args)
     if command == "style-lab-author":
@@ -137,6 +140,24 @@ def _prepare_review(args, parser) -> int:
     print(f"style_review_report: {result.review_markdown}")
     print(f"agent_tasks: {result.task}")
     _print_agent_task_notice(result.task, project=Path(args.project).resolve())
+    return 0
+
+
+def _build_version(args, parser) -> int:
+    try:
+        result = build_style_profile_version(
+            Path(args.project),
+            Path(args.profile_dir),
+            target_id=args.target_id,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        parser.error(str(exc))
+    print(f"style_id: {result.style_id}")
+    print(f"version_id: {result.version_id}")
+    print(f"content_hash: {result.content_hash}")
+    print(f"version_dir: {result.version_dir}")
+    print(f"manifest: {result.manifest_path}")
+    print(f"created: {str(result.created).lower()}")
     return 0
 
 
