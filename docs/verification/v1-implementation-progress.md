@@ -2,9 +2,13 @@
 
 > 权威路线：`docs/roadmap/arcvellum-v0.96-v1.0-integrated-engineering-implementation-plan.md`
 >
+> 长期产品路线：`docs/roadmap/arcvellum-post-v0.95.3-long-horizon-product-and-runtime-roadmap.md`
+>
+> 自适应编排规格：`docs/roadmap/arcvellum-adaptive-creative-orchestration-implementation-plan.md`
+>
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；实施分支：`feat/v096-f0-throughput-baseline`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-archive-foundation`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -13,9 +17,9 @@
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
 - W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态、工作区语义 revision、100/300/1000 规模基准、v3 增量传输、真实磁盘完整证据与浏览器大规模视觉验收。
 - W1 已满足当前路线定义的性能、导航、焦点、空间语法、主题、多窗口与 canvas 非空退出门禁。
-- W2 Narrative Archive IDE 已完成第一批受控资产身份、校验、影响预览和 Owner Override 原子事务基础。
-- 当前尚未完成 W2 的历史、正式 stale 传播、归档/恢复、候选晋升和前端 IDE，以及后续 W3-W8/AO 工作流；不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 437 tests、Client 79 tests、Client production build、Python compileall、Architecture Audit 全部通过。
+- W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、前端工作台和七类正式资产的受控创建。
+- W2 尚需补齐 Registry 驱动的结构化/Markdown/表格编辑深度、状态化模块引导和覆盖全部退出条件的最终真实项目验收；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
+- 最近一次全量证据：Python 467 tests passed、1 skipped；Client 86 tests passed；Client production build、desktop frontend sync、Python compileall、Architecture Audit 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -368,6 +372,54 @@
   - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W2-6：Registry 驱动的受控资产创建
+
+- Status: complete
+- Commit: `7a6a083`
+- Added:
+  - 七种已注册资产通过 `supports_create` 显式声明创建能力；客户端不能提交任意目录或文件路径；
+  - 创建选项由 Registry 投影类型、稳定 ID 规则、编辑器种类、受控模板和占用状态；
+  - 新建请求绑定资产类型、稳定 ID、内容、作者理由、语义审查策略、预期影响和 preview digest；
+  - 创建前执行路径边界、目标占用、UTF-8/结构/引用与类型必填字段校验，并生成影响预览；
+  - 创建使用独占文件创建、临时事务目录、before/after snapshot、Mutation Receipt 和失败回滚；正式目标或事务提交任一失败都不会留下半成品；
+  - SQLite schema 升级到 v11，历史索引显式记录 `create/replace` operation；旧数据库通过独立 additive migration 升级；
+  - 创建完成后进入既有历史索引和 Context Trace stale propagation，不建立第二套资产状态机；
+  - `/archive/creation/options`、`/archive/creation/preview`、`/archive/creation/commit` 使用稳定错误码区分校验、目标冲突和旧预览；
+  - Archive IDE 增加紧凑深色创建面板，包含类型选择、稳定身份、受控模板、完整源文本、作者理由、结构/影响检查和提交；
+  - 创建成功后刷新工作区并打开新资产，后续编辑、历史、归档和恢复继续复用既有单一事务链。
+- Adaptive orchestration boundary:
+  - 正式资产创建仍属于作者事务，不是 `CreativeExecutionPlan` 的事实写入捷径；
+  - 将来编排 Agent 只能提出资产候选或创建意图，不能直接调用本 Owner 创建事务绕过 Candidate/Promotion Gate；
+  - Archive 写模型没有导入 task lifecycle、Plan Compiler、Runtime 或 Engine route 实现；
+  - 本批没有赋予 Agent 任意路径、Shell、正式 Canon、人物状态或正式正文写入权。
+- Failure evidence:
+  - 旧 preview digest、目标已存在、非法稳定 ID、缺失必填字段和不满足结构契约均被拒绝；
+  - 事务目录最终化失败会删除刚创建的正式文件；
+  - Registry 固定单例资产已存在时，创建选项明确不可用；
+  - 历史索引暂时不可用时，项目 receipt 仍是可重建真相源。
+- Real project evidence:
+  - 原项目 `C:\Users\26532\Documents\ArcVellum\Works\1+1=2` 未被修改；
+  - 626 文件的隔离克隆投影出 79 个正式资产、7 个创建选项和 3 个候选；
+  - 克隆中完成 `character:archive_qa_character` 的创建、编辑、`create/replace` 历史核验、归档和恢复；
+  - 候选 `world-foundation` 的既有 Engine Gate 正确报告不可晋升和 1 个阻断，没有被 Archive 创建能力旁路。
+- Visual evidence:
+  - 当前开发客户端在 812×898 窄视口打开创建面板，dialog 完整位于视窗内，无横向溢出；
+  - 面板保持 Archive 暗色校勘台视觉，类型、编辑、审查三层在窄视口按响应式规则重排；
+  - 独立 API/真实项目链由 TestClient 验收；浏览器安全策略阻止打开独立 `127.0.0.1:8794` 页面，因此不把该次视觉检查伪装成完整浏览器 API 链验收。
+- Exit evidence:
+  - Python full suite: 467 passed, 1 skipped；
+  - Client full suite: 86 passed；
+  - Client production build、typecheck、desktop frontend sync 和 v0.9 build verification: passed；
+  - `python -m compileall -q src benchmarks scripts`: passed；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-6 只补齐当前真实退出缺口：Registry 驱动的受控资产创建。创建流程必须由资产类型声明能力、生成稳定 ID、预览目标、结构与引用校验、语义审查/作者权威策略、乐观冲突检查、原子提交、Mutation Receipt、历史索引和 stale 传播共同约束；不得退化成任意路径或任意文本文件创建。后端闭环和失败测试通过后，再给 Archive IDE 增加与七种已注册资产相符的创建入口，并评估哪些高频资产值得进一步提供结构化表单。W2 退出前必须以真实项目完成“创建 -> 编辑 -> 历史 -> 归档 -> 恢复 -> 候选晋升”的整链验收。
+下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、自适应创作编排方案、模块边界和本文件。W2-7 只处理仍有证据的 Archive 退出缺口：
+
+1. 以 Registry 的 `editor_kind`、字段契约和 schema metadata 建立共享的结构化编辑框架，优先覆盖人物、场景、JSON ledger 和列表型 catalog；不得为七类资产复制七套表单。
+2. Markdown/长文本字段提供安全渲染与编辑切换；表格型列表提供稳定增删改和排序；高级源文本模式继续保留，所有模式必须共享同一 draft、revision、validate、impact 和 commit。
+3. 增加模块级状态化引导，直接绑定真实 UI 状态和稳定 tour id，不写一篇悬空说明书。
+4. 使用隔离真实项目完成创建、结构化编辑、源文本往返、历史、归档、恢复和候选晋升；不可晋升候选只证明 Gate 有效，不能替代一条真正成功的候选晋升验收。
+5. W2 退出审计必须逐项对照统一实施方案和长期路线；只有用户能从前端创建、编辑、晋升、归档、恢复主要资产，schema/引用不可被作者豁免，关键修改准确传播 stale，且架构债务不增长，才能进入 W3。
