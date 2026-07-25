@@ -21,6 +21,7 @@ from ...application.style.task_service import (
 from ...application.style.mount_service import (
     StyleMountApplicationService,
     StyleMountChoiceError,
+    StyleMountPreviewError,
 )
 from literary_engineering_studio_engine.literary.style.mount import (
     StyleVersionMountConflictError,
@@ -60,6 +61,7 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
     _register_authoring_routes(router, deps)
     _register_engineering_routes(router, deps)
     _register_advance_route(router, deps)
+    _register_mount_routes(router, deps)
 
     @router.get("/style-lab/library")
     def style_lab_library(style_library_root: str = ""):
@@ -100,32 +102,6 @@ def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
                 version_id,
             )
         )
-
-    @router.get("/style-lab/mounts")
-    def style_lab_mounts(project_root: str):
-        return call_handler(
-            lambda: deps.mounts.status(resolve_project_root(project_root))
-        )
-
-    @router.post("/style-lab/mount")
-    def style_lab_mount(payload: StyleMountRequest):
-        try:
-            return deps.mounts.mount(
-                resolve_project_root(payload.project_root),
-                style_id=payload.style_id,
-                version_id=payload.version_id,
-                content_hash=payload.content_hash,
-                scope=payload.scope,
-                priority=payload.priority,
-            )
-        except FileNotFoundError as exc:
-            raise _mount_error(404, "style_version_not_found", exc) from exc
-        except StyleVersionMountConflictError as exc:
-            raise _mount_error(409, exc.code, exc) from exc
-        except (StyleMountChoiceError, StyleVersionMountError) as exc:
-            raise _mount_error(422, exc.code, exc) from exc
-        except ValueError as exc:
-            raise _mount_error(400, "style_mount_project_invalid", exc) from exc
 
     return router
 
@@ -218,6 +194,42 @@ def _register_advance_route(
             raise _style_session_error(exc) from exc
 
 
+def _register_mount_routes(
+    router: APIRouter,
+    deps: StyleLabRouterDependencies,
+) -> None:
+    @router.get("/style-lab/mounts")
+    def style_lab_mounts(project_root: str):
+        return call_handler(
+            lambda: deps.mounts.status(resolve_project_root(project_root))
+        )
+
+    @router.post("/style-lab/mount-preview")
+    def style_lab_mount_preview(payload: StyleMountRequest):
+        return _mount_call(
+            lambda: deps.mounts.preview(
+                resolve_project_root(payload.project_root),
+                style_id=payload.style_id,
+                version_id=payload.version_id,
+                content_hash=payload.content_hash,
+            )
+        )
+
+    @router.post("/style-lab/mount")
+    def style_lab_mount(payload: StyleMountRequest):
+        return _mount_call(
+            lambda: deps.mounts.mount_confirmed(
+                resolve_project_root(payload.project_root),
+                style_id=payload.style_id,
+                version_id=payload.version_id,
+                content_hash=payload.content_hash,
+                preview_revision=payload.preview_revision,
+                scope=payload.scope,
+                priority=payload.priority,
+            )
+        )
+
+
 def _mount_error(
     status_code: int,
     code: str,
@@ -227,6 +239,19 @@ def _mount_error(
         status_code=status_code,
         detail={"code": code, "message": str(exc)},
     )
+
+
+def _mount_call(operation: Callable[[], dict[str, object]]) -> dict[str, object]:
+    try:
+        return operation()
+    except FileNotFoundError as exc:
+        raise _mount_error(404, "style_version_not_found", exc) from exc
+    except (StyleVersionMountConflictError, StyleMountPreviewError) as exc:
+        raise _mount_error(409, exc.code, exc) from exc
+    except (StyleMountChoiceError, StyleVersionMountError) as exc:
+        raise _mount_error(422, exc.code, exc) from exc
+    except ValueError as exc:
+        raise _mount_error(400, "style_mount_project_invalid", exc) from exc
 
 def _register_authoring_routes(router: APIRouter, deps: StyleLabRouterDependencies) -> None:
     @router.post("/style-lab/authors")

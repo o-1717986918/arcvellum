@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,11 +11,15 @@ from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.application.style.mount_service import (
     StyleMountApplicationService,
     StyleMountChoiceError,
+    StyleMountPreviewError,
 )
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_read_models import record_choice
 from literary_engineering_studio_engine.literary.style.version import (
     build_style_profile_version,
+)
+from literary_engineering_studio_engine.literary.style.snapshot import (
+    active_style_mount_snapshot_payload,
 )
 from literary_engineering_studio_engine.project_interaction import (
     build_current_human_choices,
@@ -23,6 +28,86 @@ from tests.test_style_profile_version import _formal_reviewed_profile
 
 
 class StyleMountApplicationServiceTests(unittest.TestCase):
+    def test_preview_compares_exact_version_and_reports_unpromoted_stale_impact(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, profile, target_id = _formal_reviewed_profile(Path(temporary))
+            first = build_style_profile_version(root, profile, target_id=target_id)
+            review = (
+                profile
+                / "evaluation_results"
+                / "formal"
+                / "style_semantic_review.json"
+            )
+            review_payload = json.loads(review.read_text(encoding="utf-8"))
+            review_payload["summary"] = (
+                str(review_payload.get("summary") or "")
+                + " 新版本增加了对段落余波的约束。"
+            )
+            review.write_text(
+                json.dumps(review_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            second = build_style_profile_version(root, profile, target_id=target_id)
+            service = StyleMountApplicationService()
+            service.mount(
+                root,
+                style_id=first.style_id,
+                version_id=first.version_id,
+                content_hash=first.content_hash,
+            )
+            candidates = root / "drafts" / "candidates"
+            candidates.mkdir(parents=True, exist_ok=True)
+            (candidates / "scene_0007-platform-agent.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/scene-candidate-manifest/v1",
+                        "scene_id": "scene_0007",
+                        "style_mount_snapshot": active_style_mount_snapshot_payload(root),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            preview = service.preview(
+                root,
+                style_id=second.style_id,
+                version_id=second.version_id,
+                content_hash=second.content_hash,
+            )
+
+            self.assertEqual(preview["status"], "confirmation-required")
+            self.assertEqual(preview["current"]["version_id"], first.version_id)
+            self.assertEqual(preview["target"]["version_id"], second.version_id)
+            self.assertEqual(preview["impact"]["affected_scene_count"], 1)
+            self.assertEqual(
+                preview["impact"]["entries"][0]["scene_id"],
+                "scene_0007",
+            )
+            self.assertEqual(preview["impact"]["historical_prose"], "preserved")
+            with self.assertRaises(StyleMountPreviewError):
+                service.mount_confirmed(
+                    root,
+                    style_id=second.style_id,
+                    version_id=second.version_id,
+                    content_hash=second.content_hash,
+                    preview_revision="",
+                )
+
+            mounted = service.mount_confirmed(
+                root,
+                style_id=second.style_id,
+                version_id=second.version_id,
+                content_hash=second.content_hash,
+                preview_revision=preview["revision"],
+            )
+
+            self.assertEqual(mounted["status"], "mounted")
+            self.assertEqual(mounted["preview_revision"], preview["revision"])
+            self.assertEqual(mounted["impact"]["affected_scene_count"], 1)
+
     def test_exact_choice_materializes_one_versioned_mount(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, profile, target_id = _formal_reviewed_profile(
@@ -132,12 +217,40 @@ class StyleMountApplicationServiceTests(unittest.TestCase):
                 )
 
                 mounted = client.post(
+                    "/style-lab/mount-preview",
+                    json={
+                        "project_root": str(root),
+                        "style_id": version.style_id,
+                        "version_id": version.version_id,
+                        "content_hash": version.content_hash,
+                    },
+                )
+                self.assertEqual(mounted.status_code, 200)
+                preview_revision = mounted.json()["revision"]
+
+                unconfirmed = client.post(
                     "/style-lab/mount",
                     json={
                         "project_root": str(root),
                         "style_id": version.style_id,
                         "version_id": version.version_id,
                         "content_hash": version.content_hash,
+                    },
+                )
+                self.assertEqual(unconfirmed.status_code, 409)
+                self.assertEqual(
+                    unconfirmed.json()["detail"]["code"],
+                    "style_mount_preview_stale",
+                )
+
+                mounted = client.post(
+                    "/style-lab/mount",
+                    json={
+                        "project_root": str(root),
+                        "style_id": version.style_id,
+                        "version_id": version.version_id,
+                        "content_hash": version.content_hash,
+                        "preview_revision": preview_revision,
                     },
                 )
                 self.assertEqual(mounted.status_code, 200)

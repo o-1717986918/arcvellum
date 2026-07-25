@@ -31,6 +31,7 @@ class StyleMountRequest(BaseModel):
     content_hash: str
     scope: str = "project"
     priority: str = "highest"
+    preview_revision: str = ""
 
     class Config:
         extra = "forbid"

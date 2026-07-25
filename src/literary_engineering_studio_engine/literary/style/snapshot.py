@@ -15,6 +15,7 @@ from .mount_contracts import (
 from .mount_inspection import (
     inspect_active_style_mount,
     object_value,
+    resolve_style_profile_version,
     safe_project_path,
 )
 
@@ -87,27 +88,40 @@ def active_style_mount_snapshot(project_root: Path) -> StyleMountSnapshot | None
         raise StyleVersionMountConflictError(
             "active immutable style mount prompt is missing or unsafe"
         )
-    prompt_sha256 = hashlib.sha256(prompt.read_bytes()).hexdigest()
-    snapshot_body = {
-        "schema": STYLE_MOUNT_SNAPSHOT_SCHEMA,
-        **identity,
-        "prompt_sha256": prompt_sha256,
-    }
-    digest = hashlib.sha256(
-        json.dumps(
-            snapshot_body,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
-    return StyleMountSnapshot(
+    return _snapshot_from_prompt(
+        prompt,
         style_id=identity["style_id"],
         version_id=identity["version_id"],
         content_hash=identity["content_hash"],
-        prompt_sha256=prompt_sha256,
-        digest=digest,
-        prompt_path=prompt,
+    )
+
+
+def style_version_mount_snapshot(
+    project_root: Path,
+    *,
+    style_id: str,
+    version_id: str,
+    content_hash: str,
+) -> StyleMountSnapshot:
+    """Resolve one immutable version into the snapshot it will have when mounted."""
+
+    root = project_root.expanduser().resolve()
+    version_dir, _manifest = resolve_style_profile_version(
+        root,
+        style_id=style_id,
+        version_id=version_id,
+        content_hash=content_hash,
+    )
+    prompt = version_dir / "prompt.md"
+    if not prompt.is_file():
+        raise StyleVersionMountConflictError(
+            "immutable style version prompt is missing"
+        )
+    return _snapshot_from_prompt(
+        prompt,
+        style_id=style_id,
+        version_id=version_id,
+        content_hash=content_hash,
     )
 
 
@@ -277,6 +291,39 @@ def _is_versioned(payload: dict[str, Any]) -> bool:
     )
 
 
+def _snapshot_from_prompt(
+    prompt: Path,
+    *,
+    style_id: str,
+    version_id: str,
+    content_hash: str,
+) -> StyleMountSnapshot:
+    prompt_sha256 = hashlib.sha256(prompt.read_bytes()).hexdigest()
+    snapshot_body = {
+        "schema": STYLE_MOUNT_SNAPSHOT_SCHEMA,
+        "style_id": style_id,
+        "version_id": version_id,
+        "content_hash": content_hash,
+        "prompt_sha256": prompt_sha256,
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            snapshot_body,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return StyleMountSnapshot(
+        style_id=style_id,
+        version_id=version_id,
+        content_hash=content_hash,
+        prompt_sha256=prompt_sha256,
+        digest=digest,
+        prompt_path=prompt,
+    )
+
+
 __all__ = [
     "STYLE_MOUNT_SNAPSHOT_SCHEMA",
     "StyleMountSnapshot",
@@ -289,5 +336,6 @@ __all__ = [
     "artifact_style_mount_snapshot",
     "read_artifact_style_mount_snapshot",
     "style_mount_snapshot_errors",
+    "style_version_mount_snapshot",
     "validate_style_mount_snapshot",
 ]

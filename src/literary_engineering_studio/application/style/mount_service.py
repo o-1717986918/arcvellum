@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,13 +13,31 @@ from literary_engineering_studio_engine.literary.style.mount import (
     inspect_active_style_mount,
     mount_style_profile_version,
 )
+from literary_engineering_studio_engine.literary.style.snapshot import (
+    active_style_mount_snapshot_payload,
+    style_version_mount_snapshot,
+)
+
+from .comparison_projection import project_style_version_comparison
+from .impact_projection import project_style_mount_impact
+from .version_service import StyleVersionProjectionService
 
 
 class StyleMountChoiceError(ValueError):
     code = "style_mount_choice_invalid"
 
 
+class StyleMountPreviewError(RuntimeError):
+    code = "style_mount_preview_stale"
+
+
 class StyleMountApplicationService:
+    def __init__(
+        self,
+        versions: StyleVersionProjectionService | None = None,
+    ) -> None:
+        self.versions = versions or StyleVersionProjectionService()
+
     def status(self, project_root: Path) -> dict[str, object]:
         active = inspect_active_style_mount(project_root)
         integrity = _object(active.get("integrity"))
@@ -76,6 +96,94 @@ class StyleMountApplicationService:
             "active_mount": status["active_mount"],
         }
 
+    def preview(
+        self,
+        project_root: Path,
+        *,
+        style_id: str,
+        version_id: str,
+        content_hash: str,
+    ) -> dict[str, object]:
+        root = project_root.expanduser().resolve()
+        target_snapshot = style_version_mount_snapshot(
+            root,
+            style_id=style_id,
+            version_id=version_id,
+            content_hash=content_hash,
+        ).as_dict()
+        current_snapshot = active_style_mount_snapshot_payload(root)
+        target_detail = self.versions.version_detail(
+            root,
+            style_id=style_id,
+            version_id=version_id,
+        )
+        current_detail = self._active_version_detail(root, current_snapshot)
+        impact = project_style_mount_impact(
+            root,
+            current_snapshot=current_snapshot,
+            target_snapshot=target_snapshot,
+        )
+        payload: dict[str, object] = {
+            "schema": "arcvellum/style-mount-preview/v1",
+            "status": (
+                "already-mounted"
+                if _same_identity(current_snapshot, target_snapshot)
+                else "confirmation-required"
+            ),
+            "current": _safe_snapshot(current_snapshot),
+            "target": _safe_snapshot(target_snapshot),
+            "comparison": project_style_version_comparison(
+                current_detail,
+                target_detail,
+            ),
+            "impact": impact,
+            "requires_confirmation": not _same_identity(
+                current_snapshot,
+                target_snapshot,
+            ),
+        }
+        payload["revision"] = _payload_hash(payload)
+        return payload
+
+    def mount_confirmed(
+        self,
+        project_root: Path,
+        *,
+        style_id: str,
+        version_id: str,
+        content_hash: str,
+        preview_revision: str,
+        scope: str = StyleMountScope.PROJECT.value,
+        priority: str = StyleMountPriority.HIGHEST.value,
+    ) -> dict[str, object]:
+        preview = self.preview(
+            project_root,
+            style_id=style_id,
+            version_id=version_id,
+            content_hash=content_hash,
+        )
+        required_revision = str(preview.get("revision") or "")
+        if preview.get("requires_confirmation") and (
+            not preview_revision or preview_revision != required_revision
+        ):
+            raise StyleMountPreviewError(
+                "style mount preview is missing or stale; review the current impact before mounting"
+            )
+        result = self.mount(
+            project_root,
+            style_id=style_id,
+            version_id=version_id,
+            content_hash=content_hash,
+            scope=scope,
+            priority=priority,
+        )
+        return {
+            **result,
+            "preview_revision": required_revision,
+            "impact": preview["impact"],
+            "comparison": preview["comparison"],
+        }
+
     def mount_choice(
         self,
         project_root: Path,
@@ -115,6 +223,22 @@ class StyleMountApplicationService:
             content_hash=identity["content_hash"],
         )
 
+    def _active_version_detail(
+        self,
+        root: Path,
+        snapshot: dict[str, str],
+    ) -> dict[str, object]:
+        if not snapshot:
+            return {}
+        try:
+            return self.versions.version_detail(
+                root,
+                style_id=str(snapshot.get("style_id") or ""),
+                version_id=str(snapshot.get("version_id") or ""),
+            )
+        except FileNotFoundError:
+            return {}
+
 
 def _safe_active_mount(payload: dict[str, Any]) -> dict[str, object]:
     allowed = (
@@ -141,3 +265,37 @@ def _relative(path: Path, root: Path) -> str:
 
 def _object(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _safe_snapshot(payload: dict[str, object]) -> dict[str, str]:
+    return {
+        field: str(payload.get(field) or "")
+        for field in (
+            "style_id",
+            "version_id",
+            "content_hash",
+            "prompt_sha256",
+            "digest",
+        )
+        if payload.get(field)
+    }
+
+
+def _same_identity(
+    left: dict[str, object],
+    right: dict[str, object],
+) -> bool:
+    return bool(left) and all(
+        str(left.get(field) or "") == str(right.get(field) or "")
+        for field in ("style_id", "version_id", "content_hash")
+    )
+
+
+def _payload_hash(payload: object) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
