@@ -17,12 +17,11 @@ from ...reader_experience import reader_experience_contract
 from ...word_budget import scene_word_budget_contract
 from ...route_audit_common import _add_gate, _read_json, _read_text
 from ...route_audit_evidence import (
-    _agent_review_canon_writeback_ok,
-    _mounted_style_exists,
-    _review_needs_revision,
-    _style_adherence_status,
-    _word_budget_adherence_status,
+    _agent_review_canon_writeback_ok, _mounted_style_exists,
+    _review_needs_revision, _style_adherence_status, _word_budget_adherence_status,
 )
+from ..historical_truth import preserve_current_historical_style_gates
+from ..state_scene import current_scene_candidate
 
 
 _SCENE_GATE_PHASES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -167,7 +166,7 @@ def _add_scene_development_gates(gates: list[dict[str, str]], root: Path, scene_
         and composition_payload.get("selection_source") == "selection"
         and flow_gate.get("ready_for_generation") is True
     )
-    candidate_path = _promotion_candidate_path(root, scene_id) or _latest_scene_candidate(root, scene_id)
+    candidate_path = current_scene_candidate(root, scene_id)
     generation_task = candidate_path.with_suffix(".agent_tasks.md") if candidate_path is not None else None
     review_json = root / "reviews" / "agent" / f"{scene_id}_scene_review.json"
     review_task = review_json.with_suffix(".agent_tasks.md")
@@ -192,7 +191,6 @@ def _add_scene_development_gates(gates: list[dict[str, str]], root: Path, scene_
     budget_contract = scene_word_budget_contract(root, scene_path)
     reader_contract = reader_experience_contract(root, scene_path)
     rhythm_contract = narrative_rhythm_contract(root, scene_path, composition_json)
-
     _add_gate(
         gates,
         f"{scene_id}:context-packet",
@@ -559,6 +557,7 @@ def _add_scene_development_gates(gates: list[dict[str, str]], root: Path, scene_
             f"{scene_id} mounted style adherence reviewed",
             f"{scene_id} 已挂载文风，但 scene_review.v1 缺少 clean pass 的 style_adherence；当前状态：{style_status or 'missing'}。",
         )
+    preserve_current_historical_style_gates(root, scene_id, gates[first_scene_gate:])
     _mark_waiting_scene_gates(gates[first_scene_gate:])
 
 

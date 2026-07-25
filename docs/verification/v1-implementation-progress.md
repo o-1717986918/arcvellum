@@ -795,9 +795,9 @@
   - 版本切换尚未对依赖旧 mount hash 的 Context、Composition、Generation、Revision 和 Review 形成统一 stale 原因与重发链；
   - Style Atelier 的版本选择/切换界面属于 W3-5/W3-6，本批未提前建设。
 
-## 下一批
+## W3-4C：统一文风快照、失效传播与 Historical Truth
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-4C 只实现统一 mount snapshot 与版本切换失效传播：
+本批开始前重新读取了统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-4C 只实现统一 mount snapshot 与版本切换失效传播：
 
 1. 先审阅 Context Broker、Prompt Pack、Composition、Generation、Revision、AgentReview 当前文风读取点和各自正式 manifest，禁止给四阶段各造一套版本字段。
 2. 新增 Engine-owned `StyleMountSnapshot`，至少包含 `style_id/version_id/content_hash/prompt_sha256` 和 snapshot digest；只从通过完整性检查的 active mount 生成。
@@ -805,3 +805,35 @@
 4. 新挂载版本后，依赖旧 digest 的未晋升 Context/Composition/Generation/Revision/Review 统一进入 machine-owned stale；已晋升正文保持 Historical Truth，不自动重写。
 5. Prompt reader 遇到 versioned active mount integrity conflict 时必须 fail closed，不能退回旧 prompt 或项目散装 style 文件。
 6. 用真实 scene chain 覆盖同一 hash 消费、挂载切换、stale 重发和已晋升正文不变；本批仍不建设前端。
+
+### 完成证据
+
+- Engine 新增唯一的 `StyleMountSnapshot` 契约，Context trace、Composition、Generation prompt/candidate、Revision prompt 和 AgentReview 均保存同一 exact version/hash/digest，不再只传 display ID 或路径。
+- Context、Composition、Generation、Revision 与 Review 的正式 Gate 统一比较 machine-owned snapshot；挂载切换后，未晋升产物进入可解释的 stale，损坏的 versioned mount fail closed。
+- Promotion 现在封存 `historical_evidence`：候选正文、晋升正文、生成 Gate、独立 Review Gate 和 exact style snapshot 均有内容摘要；验证不与未来 active style 比较，但会拒绝路径逃逸、正文/候选篡改、Gate 证据篡改、debug bypass 和错误 scene identity。
+- Workflow state 与 route audit 只对通过防篡改验证且尚未被新候选替代的晋升记录投影 Historical Truth；RP、分支、状态、Canon、Continuity 等无关门禁不会被顺带豁免。
+- 新候选晚于 promotion manifest 时，旧 Historical Truth 不再充当当前候选，正式路线重新进入该候选的生成、Review 与晋升闭环。
+- 新增真实场景链与晋升证据回归，覆盖同一 snapshot 传播、挂载切换 stale、历史证据保留、候选/正文篡改阻断、新候选重开路线以及 legacy promotion 安全回退。
+- Verification:
+  - Python full suite: 511 passed, 1 skipped；
+  - focused style/promotion/workflow suite: 51 passed；
+  - Prompt Registry: 48 assets, 83 task prompt ids, passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: passed, no new violation；
+  - `git diff --check`: passed。
+
+### 边界
+
+- Historical Truth 只证明“该正文在当时通过正式生成与独立审查后被晋升”，不允许修改当前 Canon、人物状态或未来文风，也不替代晋升后的 static review/state/canon/continuity 链。
+- 旧版 promotion manifest 缺少 `historical_evidence` 时继续走原有当前 Gate 校验，不自动追认历史有效性。
+- 本批没有建设 Style Atelier 前端，也没有提前实现 W4 Project Archaeology 或自适应任务 DAG。
+
+## 下一批
+
+下一批开始前仍必须重新读取四份主指导文档和本账本。进入 W3-5/W3-6，但先核对现有 Style Lab API、Archive/IDE 交互模式与前端路由，避免重造：
+
+1. 建立 Style Atelier 的专用 read model/store，把作者项目、来源权利、编译、评测、独立审查、不可变版本、当前挂载与失效影响组织成一个用户可理解的工作台投影。
+2. 复用现有异步 task/run、SSE、Agent observability 与稳定 ID，不在 Vue 页面中执行领域判断，也不增加同步 HTTP LLM。
+3. 前端先完成来源/权利、评测/Review、版本历史/比较、项目挂载四个闭环；约束编辑只能生成受控候选，不直接覆盖已审查版本。
+4. 所有长任务显示真实运行状态、失败原因和下一动作；挂载必须提交 exact version option，切换前展示对未晋升场景的 stale 影响。
+5. 完成 API、store、组件、可访问性、响应式布局、前端测试与生产构建后，再做 W3 Exit Audit；未通过前不进入 W4。

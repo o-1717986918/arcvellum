@@ -9,6 +9,7 @@ from ...agent_tasks import agent_task_completion_status, default_agent_completio
 from ...anti_ai_style import style_lint_gate, style_lint_gate_message
 from ...canon_evolver import canon_writeback_status
 from ...candidate_promotion import candidate_generation_gate, candidate_review_gate
+from ...literary.scene.promotion.historical import validate_historical_promotion
 from ...context_broker import context_trace_status
 from ...creative_quality import load_creative_quality_profile
 from ...draft_text import final_body_from_draft_path
@@ -399,8 +400,21 @@ def _promotion_gate_errors(root: Path, task: dict[str, object]) -> list[str]:
         errors.append("promotion manifest does not record candidate path")
         return errors
     candidate = _resolve_project_path(root, candidate_value)
-    errors.extend(_candidate_generation_gate_errors(root, task, candidate))
-    errors.extend(_candidate_review_gate_errors(root, task, candidate))
+    governed_candidate = _candidate_path_for_task(root, task)
+    if governed_candidate.exists() and governed_candidate.resolve() != candidate.resolve():
+        errors.append(
+            "promotion manifest candidate does not match the candidate governed "
+            "by the current task package"
+        )
+    historical = validate_historical_promotion(root, scene_id, payload)
+    if historical.passed:
+        if not historical.current:
+            errors.append("historical promotion was superseded by a newer prose candidate")
+    else:
+        if historical.status != "legacy":
+            errors.extend(historical.errors)
+        errors.extend(_candidate_generation_gate_errors(root, task, candidate))
+        errors.extend(_candidate_review_gate_errors(root, task, candidate))
     draft = root / "drafts" / "scenes" / f"{scene_id}.md"
     if draft.exists() and not final_body_from_draft_path(draft):
         errors.append(f"promoted draft has no cleaned deliverable body: {_rel(draft, root)}")

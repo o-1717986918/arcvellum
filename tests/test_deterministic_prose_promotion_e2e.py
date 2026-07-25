@@ -19,6 +19,9 @@ from literary_engineering_studio_engine.literary.scene.promotion.candidate impor
     candidate_review_gate,
     promote_scene_candidate,
 )
+from literary_engineering_studio_engine.literary.scene.promotion.historical import (
+    validate_historical_promotion,
+)
 from literary_engineering_studio_engine.platform_agent_tasks import write_platform_scene_review_task
 from literary_engineering_studio_engine.projects.demo import build_demo_project
 
@@ -57,6 +60,13 @@ class DeterministicProsePromotionE2ETests(unittest.TestCase):
             self.assertFalse(manifest["allow_review_notes"])
             self.assertEqual(manifest["candidate_generation"]["status"], "pass")
             self.assertEqual(manifest["candidate_review"]["status"], "pass")
+            historical = validate_historical_promotion(
+                root,
+                "scene_0001",
+                manifest,
+            )
+            self.assertTrue(historical.passed, historical.errors)
+            self.assertTrue(historical.current)
 
     def test_tampering_or_style_lint_failure_blocks_repromotion(self):
         with tempfile.TemporaryDirectory() as temporary:

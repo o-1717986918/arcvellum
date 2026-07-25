@@ -19,6 +19,7 @@ from ....new_character_register import new_character_register_issues
 from ....narrative_rhythm import narrative_rhythm_contract
 from ....reader_experience import reader_experience_adherence_for_body
 from ....word_budget import word_budget_adherence_for_body
+from .historical import seal_historical_promotion
 from .style_gate import candidate_style_snapshot, generation_style_snapshot_errors, review_style_snapshot_projection, review_style_state
 
 
@@ -92,7 +93,6 @@ def promote_scene_candidate(
     draft_path.write_text(draft, encoding="utf-8")
     candidate_sha256 = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
     draft_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
-
     manifest_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
     report_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.md"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -125,6 +125,7 @@ def promote_scene_candidate(
             "人物、关系和 canon 写回仍必须走单独审批链路。",
         ],
     }
+    manifest = seal_historical_promotion(root, manifest, candidate_path, draft_path)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     report_path.write_text(_render_report(manifest), encoding="utf-8")
     return CandidatePromotionResult(

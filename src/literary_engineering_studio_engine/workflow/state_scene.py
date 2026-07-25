@@ -17,14 +17,10 @@ from ..reader_experience import reader_experience_contract
 from ..scene_composer import composition_input_digest
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..word_budget import scene_word_budget_contract
+from .historical_truth import preserve_current_historical_style_steps
 from .state_common import (
-    _file_step,
-    _read,
-    _read_json,
-    _rel,
-    _semantic_task_step,
-    _static_review_conclusion,
-    _task_step,
+    _file_step, _read, _read_json, _rel, _semantic_task_step,
+    _static_review_conclusion, _task_step,
 )
 def _scene_states(root: Path) -> list[dict[str, object]]:
     scenes = root / "scenes"
@@ -187,6 +183,7 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
         _continuity_ledger_step(root, scene_id, review=True),
         _file_step("continuity-ledger-apply", root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json", "run apply-continuity-ledger after independent review passes"),
     ]
+    steps = preserve_current_historical_style_steps(root, scene_id, steps)
     first_open = next((step for step in steps if step["status"] != "pass"), None)
     return {
         "scene_id": scene_id,
