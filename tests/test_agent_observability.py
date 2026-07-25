@@ -149,6 +149,29 @@ class AgentObservabilityTests(unittest.TestCase):
         )
         self.assertEqual(len({item["session_id"] for item in projection["sessions"]}), 3)
 
+    def test_throughput_uses_full_event_ledger_not_visible_event_window(self):
+        events = [
+            {
+                "sequence": index,
+                "event": "worker.task.opened",
+                "at": f"2026-07-22T00:00:{index:02d}Z",
+                "data": {"task_id": f"task-{index:02d}", "route": "scene-development"},
+            }
+            for index in range(1, 21)
+        ]
+        projection = build_agent_observability(
+            "C:/projects/example",
+            {"run": {}},
+            events,
+            {"current_task": {}},
+            [],
+            [],
+        )
+
+        self.assertEqual(len(projection["recent_events"]), 18)
+        self.assertEqual(projection["throughput"]["event_count"], 20)
+        self.assertEqual(projection["throughput"]["task_count"], 20)
+
 
 if __name__ == "__main__":
     unittest.main()

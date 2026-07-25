@@ -13,6 +13,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from .throughput_metrics import build_throughput_projection
+
 
 SCHEMA = "arcvellum/agent-observability/v2"
 STALE_AFTER_SECONDS = 300
@@ -40,6 +42,7 @@ def build_agent_observability(
         if isinstance(item, dict)
     ]
     visible_services = [_visible_service(item) for item in (services or []) if isinstance(item, dict)]
+    throughput = build_throughput_projection(events)
     last_activity_at = _last_activity_at(run, visible_events, visible_sessions)
     stalled = _is_stalled(run, last_activity_at, now=now)
     active = _active_task(run, current_task, visible_events, stalled=stalled)
@@ -49,6 +52,7 @@ def build_agent_observability(
         "task": current_task,
         "sessions": visible_sessions,
         "services": visible_services,
+        "throughput": throughput,
     }
     run_status = str(run.get("status") or "")
     has_live_session = any(item["status"] in _LIVE_SESSION_STATUSES for item in visible_sessions)
@@ -66,6 +70,7 @@ def build_agent_observability(
         "services": visible_services,
         "sessions": visible_sessions,
         "recent_events": visible_events,
+        "throughput": throughput,
         "revision": _digest(source),
     }
 
