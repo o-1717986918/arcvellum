@@ -13,8 +13,9 @@
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
 - W1 Living Narrative Field 已完成关系可见性、人物引用、正文窗口三态、工作区语义 revision、100/300/1000 规模基准、v3 增量传输、真实磁盘完整证据与浏览器大规模视觉验收。
 - W1 已满足当前路线定义的性能、导航、焦点、空间语法、主题、多窗口与 canvas 非空退出门禁。
-- 当前尚未完成后续 W2-W8/AO 工作流；不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 431 tests、Client 79 tests、Client production build、Python compileall、Architecture Audit 全部通过。
+- W2 Narrative Archive IDE 已完成第一批受控资产身份、校验、影响预览和 Owner Override 原子事务基础。
+- 当前尚未完成 W2 的历史、正式 stale 传播、归档/恢复、候选晋升和前端 IDE，以及后续 W3-W8/AO 工作流；不得据此声称 v1 已交付。
+- 最近一次全量证据：Python 437 tests、Client 79 tests、Client production build、Python compileall、Architecture Audit 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -214,6 +215,36 @@
   - Architecture Audit: no new violation；
   - `git diff --check`: passed。
 
+## W2-1：受控 Archive 资产与作者事务基础
+
+- Status: complete
+- Commits: `4923988`, `b64beea`, `1627fc0`
+- Added:
+  - `application/assets/` 领域包，集中管理资产契约、注册表、安全加载、revision、确定性校验、影响预览和作者事务；
+  - `projections/archive/` 只读树与详情投影，不复用面向人的截断 Library，也不把 Library 改造成巨型编辑器；
+  - character、scene、world-rule、location-catalog、organization-catalog、promise-ledger 和 reader-question-ledger 的第一批稳定资产定义；
+  - API 只接收 `<asset-type>:<stable-id>`，不接受客户端提供的任意项目内路径；
+  - UTF-8 文本、NUL、空内容、4 MB 上限、JSON 根、角色/场景 ID 一致性和场景人物引用校验；
+  - `sha256:` revision 与乐观锁，旧标签页提交返回稳定 `version_conflict`；
+  - Owner Override 只支持显式 `replace /content`，语义豁免不能豁免结构、路径、引用或版本检查；
+  - 原子目标替换、失败回滚、before/after snapshot、transaction 和 Mutation Receipt；
+  - 有界影响扫描，输出相对路径和 stale 类别，不暴露项目绝对路径；
+  - `/archive/tree`、详情、validate、impact 和 commit API；
+  - API 路由表测试改为临时数据目录，消除本机配置和受限环境对测试结果的影响。
+- Boundary:
+  - 本批不实现任意文件编辑、移动、删除、候选晋升或 Engine Gate 复制；
+  - `stale_propagation=recorded-for-follow-up` 只记录影响，尚未改变现有任务 Gate；
+  - 事务快照当前保存在项目 `workflow/archive/transactions/`，SQLite 索引、保留政策和历史投影留待 W2-2；
+  - 需要语义审查的事务不能直接提交；本批只开放作者明确给出理由的 owner waiver；
+  - 软链接越界测试在无 Windows 软链接权限时跳过，路径/ID 越级和运行时边界检查仍执行。
+- Exit evidence:
+  - Python full suite: 437 passed, 1 skipped；
+  - Client full suite: 79 passed；
+  - Client production build and desktop frontend sync: passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: 37 existing file debts, 229 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W2、模块边界和本文件。W2 先建立 Archive 写模型、作者权威与乐观并发的最小闭环；不得直接把任意文件编辑器接到正式项目文件，也不得让 Archive 绕过现有状态机、审查、晋升或审计协议。
+下一批开始前必须重新读取统一实施方案 W2、长期 Archive 路线、模块边界和本文件。W2-2 优先建立 revision/transaction 的 SQLite 索引、历史投影、正式 stale propagation 与恢复预览；必须先证明这些能力不复制 Engine promotion，也不静默改写已晋升正文，再决定是否进入归档/恢复或前端 Archive IDE。
