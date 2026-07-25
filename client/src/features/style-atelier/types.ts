@@ -127,3 +127,47 @@ export interface StyleVersionDetail extends StyleRecord {
   copy_boundary?: string;
   artifacts?: Array<{ name: string; sha256: string }>;
 }
+
+export type StyleRightsMode =
+  | "public-domain"
+  | "authorized"
+  | "user-owned"
+  | "craft-only";
+
+export interface StyleTransactionReceipt extends StyleRecord {
+  schema: "arcvellum/style-author-transaction/v1";
+  transaction_id: string;
+  operation: "create-author" | "create-work" | "import-source";
+  status: "committed";
+  subject: {
+    author_id: string;
+    work_id?: string;
+    source_id?: string;
+  };
+  evidence?: StyleRecord;
+}
+
+export interface StyleAuthorCreatePayload {
+  author_id: string;
+  name: string;
+  rights_mode: StyleRightsMode;
+  rights_declaration: string;
+}
+
+export interface StyleWorkCreatePayload {
+  author_id: string;
+  work_id: string;
+  title: string;
+  year?: string;
+  notes?: string;
+}
+
+export interface StyleSourceCreatePayload {
+  author_id: string;
+  work_id: string;
+  filename: string;
+  media_type: "text/plain" | "text/markdown";
+  content: string;
+  rights_mode: StyleRightsMode;
+  rights_declaration: string;
+}

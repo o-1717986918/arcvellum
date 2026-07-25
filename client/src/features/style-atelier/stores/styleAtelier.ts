@@ -2,14 +2,21 @@ import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
 import { useAppStore } from "@/stores/app";
 import {
+  createStyleAuthor,
+  createStyleWork,
   fetchStyleVersionDetail,
   fetchStyleWorkbench,
+  importStyleSource,
 } from "../services/styleAtelierClient";
 import type {
   StyleAuthor,
+  StyleAuthorCreatePayload,
+  StyleSourceCreatePayload,
+  StyleTransactionReceipt,
   StyleVersion,
   StyleVersionDetail,
   StyleWork,
+  StyleWorkCreatePayload,
 } from "../types";
 
 export const useStyleAtelierStore = defineStore("style-atelier", () => {
@@ -22,7 +29,9 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
   const loadedProjectRoot = ref("");
   const busy = ref(false);
   const detailBusy = ref(false);
+  const authoringBusy = ref(false);
   const error = ref("");
+  const notice = ref("");
 
   const projectRoot = computed(() => app.currentProjectPath);
   const authors = computed(() => workbench.value?.authors || []);
@@ -58,6 +67,68 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     } finally {
       busy.value = false;
     }
+  }
+
+  async function createAuthor(payload: StyleAuthorCreatePayload): Promise<StyleTransactionReceipt> {
+    return runAuthoring(
+      () => createStyleAuthor(payload),
+      (receipt) => {
+        selectedAuthorId.value = receipt.subject.author_id;
+        selectedWorkId.value = "";
+      },
+      "作者资料已经建立，可以继续登记作品。",
+    );
+  }
+
+  async function createWork(payload: StyleWorkCreatePayload): Promise<StyleTransactionReceipt> {
+    return runAuthoring(
+      () => createStyleWork(payload),
+      (receipt) => {
+        selectedAuthorId.value = receipt.subject.author_id;
+        selectedWorkId.value = receipt.subject.work_id || "";
+      },
+      "作品资料已经建立，可以继续导入来源。",
+    );
+  }
+
+  async function importSource(payload: StyleSourceCreatePayload): Promise<StyleTransactionReceipt> {
+    return runAuthoring(
+      () => importStyleSource(payload),
+      (receipt) => {
+        selectedAuthorId.value = receipt.subject.author_id;
+        selectedWorkId.value = receipt.subject.work_id || "";
+      },
+      "来源已经固化，正文不会在工作台中直接回显。",
+    );
+  }
+
+  async function runAuthoring(
+    operation: () => Promise<StyleTransactionReceipt>,
+    selectSubject: (receipt: StyleTransactionReceipt) => void,
+    successMessage: string,
+  ): Promise<StyleTransactionReceipt> {
+    authoringBusy.value = true;
+    error.value = "";
+    notice.value = "";
+    try {
+      const receipt = await operation();
+      selectSubject(receipt);
+      await refreshWorkbench();
+      notice.value = successMessage;
+      return receipt;
+    } catch (cause) {
+      error.value = messageFor(cause, "这项文风资料操作没有完成。");
+      throw cause;
+    } finally {
+      authoringBusy.value = false;
+    }
+  }
+
+  async function refreshWorkbench(): Promise<void> {
+    if (!projectRoot.value) return;
+    workbench.value = await fetchStyleWorkbench(projectRoot.value);
+    stabilizeSelections();
+    await loadSelectedVersionDetail();
   }
 
   function selectAuthor(authorId: string): void {
@@ -126,11 +197,16 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     workbench.value = null;
     loadedProjectRoot.value = "";
     error.value = "";
+    notice.value = "";
     resetSelections();
   }
 
   function clearError(): void {
     error.value = "";
+  }
+
+  function clearNotice(): void {
+    notice.value = "";
   }
 
   return {
@@ -141,7 +217,9 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     selectedVersionKey,
     busy,
     detailBusy,
+    authoringBusy,
     error,
+    notice,
     projectRoot,
     authors,
     versions,
@@ -154,7 +232,11 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     selectAuthor,
     selectWork,
     selectVersion,
+    createAuthor,
+    createWork,
+    importSource,
     clearError,
+    clearNotice,
   };
 });
 

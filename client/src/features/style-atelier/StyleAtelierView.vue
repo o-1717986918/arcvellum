@@ -1,21 +1,29 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   BookCopy,
   CircleAlert,
   Fingerprint,
   Gauge,
+  LibraryBig,
   RefreshCw,
   ShieldCheck,
   Sparkles,
 } from "lucide-vue-next";
 import StyleJourney from "./components/StyleJourney.vue";
 import StyleSourceRail from "./components/StyleSourceRail.vue";
+import StyleSourceWorkshop from "./components/StyleSourceWorkshop.vue";
 import StyleVersionRack from "./components/StyleVersionRack.vue";
 import { useStyleAtelierStore } from "./stores/styleAtelier";
+import type {
+  StyleAuthorCreatePayload,
+  StyleSourceCreatePayload,
+  StyleWorkCreatePayload,
+} from "./types";
 import "./styleAtelier.css";
 
 const style = useStyleAtelierStore();
+const sourceWorkshopOpen = ref(false);
 
 const summary = computed(() => style.workbench?.summary);
 const selectedSources = computed(() => style.selectedWork?.sources || []);
@@ -34,6 +42,33 @@ async function load(): Promise<void> {
     await style.load();
   } catch {
     // The store exposes an actionable error state.
+  }
+}
+
+async function createAuthor(payload: StyleAuthorCreatePayload): Promise<void> {
+  try {
+    await style.createAuthor(payload);
+    sourceWorkshopOpen.value = false;
+  } catch {
+    // The store keeps the transaction failure visible.
+  }
+}
+
+async function createWork(payload: StyleWorkCreatePayload): Promise<void> {
+  try {
+    await style.createWork(payload);
+    sourceWorkshopOpen.value = false;
+  } catch {
+    // The store keeps the transaction failure visible.
+  }
+}
+
+async function importSource(payload: StyleSourceCreatePayload): Promise<void> {
+  try {
+    await style.importSource(payload);
+    sourceWorkshopOpen.value = false;
+  } catch {
+    // The store keeps the transaction failure visible.
   }
 }
 
@@ -67,16 +102,27 @@ function verdictLabel(value: unknown): string {
         <h1>把作品语感变成可追溯的创作约束</h1>
         <p>从合法来源中抽象写作规律，经隔离评测与独立审查形成版本，再明确挂载到当前作品。</p>
       </div>
-      <button class="style-refresh" :disabled="style.busy" title="重新读取文风工坊" @click="load">
-        <RefreshCw :size="16" :class="{ spinning: style.busy }" />
-        <span>{{ style.busy ? "正在同步" : "同步状态" }}</span>
-      </button>
+      <div class="style-heading-actions">
+        <button class="style-refresh" :disabled="style.busy" title="重新读取文风工坊" @click="load">
+          <RefreshCw :size="16" :class="{ spinning: style.busy }" />
+          <span>{{ style.busy ? "正在同步" : "同步状态" }}</span>
+        </button>
+        <button class="style-primary-action" title="登记作者、作品或来源文本" @click="sourceWorkshopOpen = true">
+          <LibraryBig :size="16" />
+          <span>登记来源</span>
+        </button>
+      </div>
     </header>
 
     <div v-if="style.error" class="style-message danger" role="alert">
       <CircleAlert :size="16" />
       <span>{{ style.error }}</span>
       <button @click="style.clearError">关闭</button>
+    </div>
+    <div v-if="style.notice" class="style-message success" role="status">
+      <ShieldCheck :size="16" />
+      <span>{{ style.notice }}</span>
+      <button @click="style.clearNotice">关闭</button>
     </div>
 
     <section v-if="style.workbench" class="style-atelier-shell">
@@ -168,5 +214,17 @@ function verdictLabel(value: unknown): string {
       <strong>{{ style.busy ? "正在整理文风证据" : "文风工坊还没有准备好" }}</strong>
       <p>{{ style.busy ? "正在核对来源、评测、版本与当前挂载。" : "请先选择一部作品，再重新同步。" }}</p>
     </section>
+
+    <StyleSourceWorkshop
+      v-if="sourceWorkshopOpen"
+      :authors="style.authors"
+      :selected-author-id="style.selectedAuthorId"
+      :selected-work-id="style.selectedWorkId"
+      :busy="style.authoringBusy"
+      @close="sourceWorkshopOpen = false"
+      @create-author="createAuthor"
+      @create-work="createWork"
+      @import-source="importSource"
+    />
   </div>
 </template>

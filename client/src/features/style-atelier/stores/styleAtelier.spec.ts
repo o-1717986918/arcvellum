@@ -71,6 +71,72 @@ describe("style atelier store", () => {
     expect(store.versionDetail).toBeNull();
     expect(apiMock).toHaveBeenCalledTimes(1);
   });
+
+  it("commits source authoring through the API and refreshes the projection", async () => {
+    const fixture = workbenchFixture();
+    const expanded = workbenchFixture();
+    expanded.authors[0].works[0].sources.push({
+      source_id: "source-two",
+      filename: "work-two.txt",
+      content_sha256: "sha256:source-two",
+      character_count: 1500,
+      chunk_count: 1,
+    });
+    expanded.authors[0].works[0].source_count = 2;
+    let workbenchReads = 0;
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/style-lab/sources" && init?.method === "POST") {
+        return {
+          schema: "arcvellum/style-author-transaction/v1",
+          transaction_id: "style-tx",
+          operation: "import-source",
+          status: "committed",
+          subject: {
+            author_id: "classic-author",
+            work_id: "work-one",
+            source_id: "source-two",
+          },
+        };
+      }
+      if (path.startsWith("/style-lab/workbench")) {
+        workbenchReads += 1;
+        return workbenchReads > 1 ? expanded : fixture;
+      }
+      if (path.startsWith("/style-lab/versions/classic-style/v1-stable")) {
+        return {
+          schema: "arcvellum/style-profile-version-detail/v1",
+          style_id: "classic-style",
+          version_id: "v1-stable",
+          content_hash: "sha256:style",
+          author_id: "classic-author",
+          profile_id: "restrained",
+          state: "mounted",
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const { useStyleAtelierStore } = await import("./styleAtelier");
+    const store = useStyleAtelierStore();
+    await store.load();
+
+    const receipt = await store.importSource({
+      author_id: "classic-author",
+      work_id: "work-one",
+      filename: "work-two.txt",
+      media_type: "text/plain",
+      content: "这是一份新的合法来源。",
+      rights_mode: "public-domain",
+      rights_declaration: "这份文本已进入公有领域，可以用于文风分析。",
+    });
+
+    expect(receipt.subject.source_id).toBe("source-two");
+    expect(store.selectedWork?.sources).toHaveLength(2);
+    expect(store.notice).toContain("来源已经固化");
+    expect(apiMock).toHaveBeenCalledWith(
+      "/style-lab/sources",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });
 
 function workbenchFixture(): StyleAtelierWorkbench {

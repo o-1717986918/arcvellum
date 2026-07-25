@@ -41,6 +41,9 @@
   border-radius: 6px;
 }
 
+.style-heading-actions { display: flex; align-items: center; gap: 8px; }
+.style-primary-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; color: var(--instrument-deep); background: var(--instrument-accent); border: 1px solid color-mix(in srgb, var(--instrument-accent) 70%, white); border-radius: 6px; font-size: 9px; font-weight: 800; }
+.style-primary-action:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .style-refresh .spinning { animation: style-spin .9s linear infinite; }
 
 .style-message {
@@ -54,6 +57,7 @@
 }
 
 .style-message.danger { color: #f1b4a8; background: #4e211c; border: 1px solid #7d382e; }
+.style-message.success { color: var(--instrument-accent); background: color-mix(in srgb, var(--instrument-accent) 8%, var(--style-panel)); border: 1px solid color-mix(in srgb, var(--instrument-accent) 25%, transparent); }
 .style-message span { flex: 1; }
 .style-message button { color: inherit; background: transparent; border: 0; text-decoration: underline; }
 
@@ -267,6 +271,47 @@
 
 .style-atelier-issues { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 14px; color: var(--instrument-warning); background: color-mix(in srgb, var(--instrument-warning) 7%, var(--style-panel)); border-top: 1px solid color-mix(in srgb, var(--instrument-warning) 20%, transparent); font-size: 9px; }
 
+.style-source-workshop-backdrop { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 28px; background: color-mix(in srgb, var(--instrument-deep) 72%, transparent); backdrop-filter: blur(9px); }
+.style-source-workshop { width: min(820px, 100%); max-height: min(760px, calc(100vh - 56px)); overflow: hidden; color: var(--style-ink); background: color-mix(in srgb, var(--style-panel) 94%, transparent); border: 1px solid color-mix(in srgb, var(--instrument-accent) 30%, var(--style-line)); border-top-color: var(--instrument-accent); border-radius: 7px; box-shadow: 0 28px 80px color-mix(in srgb, var(--instrument-deep) 72%, transparent); }
+.style-source-workshop > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: 78px; padding: 15px 17px 13px; background: linear-gradient(105deg, color-mix(in srgb, var(--instrument-accent) 10%, transparent), transparent 46%); border-bottom: 1px solid var(--style-line); }
+.style-source-workshop > header span { color: var(--instrument-accent); font-family: var(--font-utility); font-size: 8px; text-transform: uppercase; }
+.style-source-workshop > header h2 { display: flex; align-items: center; gap: 7px; margin: 4px 0 2px; font-size: 17px; }
+.style-source-workshop > header p { margin: 0; color: var(--style-muted); font-size: 9px; }
+.style-source-workshop > header > button { display: grid; place-items: center; width: 30px; height: 30px; color: var(--style-muted); background: color-mix(in srgb, var(--style-raised) 78%, transparent); border: 1px solid var(--style-line); border-radius: 4px; }
+.style-source-workshop-tabs { display: grid; grid-template-columns: repeat(3, 1fr); min-height: 48px; background: color-mix(in srgb, var(--style-raised) 74%, transparent); border-bottom: 1px solid var(--style-line); }
+.style-source-workshop-tabs button { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--style-muted); background: transparent; border: 0; border-right: 1px solid var(--style-line); border-radius: 0; }
+.style-source-workshop-tabs button:last-child { border-right: 0; }
+.style-source-workshop-tabs button.active { color: var(--style-ink); background: color-mix(in srgb, var(--instrument-accent) 8%, transparent); box-shadow: inset 0 -2px 0 var(--instrument-accent); }
+.style-source-workshop-tabs button:disabled { opacity: .35; }
+.style-source-workshop-tabs span,
+.style-source-workshop-tabs small { display: block; }
+.style-source-workshop-tabs span { font-size: 9px; font-weight: 750; }
+.style-source-workshop-tabs small { color: var(--instrument-accent); font-size: 7px; }
+.style-source-workshop-form { display: grid; gap: 12px; max-height: calc(min(760px, 100vh - 56px) - 127px); overflow: auto; padding: 16px 18px 18px; scrollbar-color: var(--instrument-accent) transparent; }
+.style-source-workshop-intro { display: flex; align-items: center; gap: 10px; padding: 10px 11px; color: var(--instrument-accent); background: color-mix(in srgb, var(--instrument-accent) 6%, transparent); border-left: 2px solid var(--instrument-accent); }
+.style-source-workshop-intro strong,
+.style-source-workshop-intro small { display: block; }
+.style-source-workshop-intro strong { color: var(--style-ink); font-size: 10px; }
+.style-source-workshop-intro small { margin-top: 2px; color: var(--style-muted); font-size: 8px; }
+.style-source-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.style-source-workshop-form label { display: grid; gap: 5px; min-width: 0; color: var(--style-muted); font-size: 8px; }
+.style-source-workshop-form label > span { color: var(--style-ink); font-size: 9px; font-weight: 700; }
+.style-source-workshop-form input,
+.style-source-workshop-form select,
+.style-source-workshop-form textarea { width: 100%; min-width: 0; color: var(--style-ink); background: color-mix(in srgb, var(--instrument-deep) 42%, var(--style-raised)); border: 1px solid var(--style-line); border-radius: 4px; outline: none; }
+.style-source-workshop-form input,
+.style-source-workshop-form select { min-height: 34px; padding: 0 9px; }
+.style-source-workshop-form textarea { resize: vertical; padding: 8px 9px; line-height: 1.55; }
+.style-source-workshop-form input:focus,
+.style-source-workshop-form select:focus,
+.style-source-workshop-form textarea:focus { border-color: var(--instrument-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--instrument-accent) 12%, transparent); }
+.style-source-workshop-form footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 11px; border-top: 1px solid var(--style-line); }
+.style-source-workshop-form footer > span { display: inline-flex; align-items: center; gap: 6px; color: var(--style-muted); font-size: 8px; }
+.style-source-workshop-form footer button { min-height: 34px; padding: 0 14px; border-radius: 4px; font-size: 9px; font-weight: 800; }
+.style-source-workshop-form footer button.primary { color: var(--instrument-deep); background: var(--instrument-accent); }
+.style-source-workshop-form footer button:disabled { opacity: .35; }
+.style-source-body textarea { min-height: 190px; font-family: var(--font-body); }
+
 @keyframes style-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 1180px) {
@@ -279,6 +324,7 @@
 @media (max-width: 760px) {
   .style-atelier-heading { align-items: flex-start; }
   .style-refresh span,
+  .style-primary-action span,
   .style-summary-strip > span:nth-child(2),
   .style-summary-strip > span:nth-child(3) { display: none; }
   .style-summary-strip > span { min-width: 72px; }
@@ -290,6 +336,11 @@
   .style-evidence-metrics { grid-template-columns: 1fr; }
   .style-source-table article { grid-template-columns: 28px minmax(0, 1fr) 54px; }
   .style-source-table article > i { display: none; }
+  .style-source-workshop-backdrop { padding: 10px; }
+  .style-source-workshop { max-height: calc(100vh - 20px); }
+  .style-source-workshop-form { max-height: calc(100vh - 147px); }
+  .style-source-form-grid { grid-template-columns: 1fr; }
+  .style-source-workshop-form footer { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {
