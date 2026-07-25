@@ -66,6 +66,8 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             ("POST", "/archive/assets/{asset_id}/restore"),
             ("POST", "/archive/assets/{asset_id}/restore/preview"),
             ("GET", "/reader/manifest"),
+            ("GET", "/style-lab/authors"),
+            ("GET", "/style-lab/versions"),
             ("GET", "/project/rhythm-plan"),
             ("PUT", "/project/rhythm-plan"),
             ("GET", "/narrative/projection/v3"),

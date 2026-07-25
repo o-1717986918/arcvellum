@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
+from .application.style import StyleApplicationService
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
 from .api.models import (
     ArchiveAssetArchiveRequest,
@@ -441,14 +442,7 @@ def create_app(config_override: dict[str, Any] | None = None):
     )
 
     app.include_router(
-        build_style_lab_router(
-            StyleLabRouterDependencies(
-                config=config,
-                style_library=lambda settings, root: style_library(settings, root),
-                style_mounts=lambda settings, root: style_mounts(settings, root),
-                mount_style=lambda *args, **kwargs: mount_style(*args, **kwargs),
-            )
-        )
+        build_style_lab_router(_style_lab_dependencies(config))
     )
 
     app.include_router(
@@ -470,3 +464,18 @@ def create_app(config_override: dict[str, Any] | None = None):
     )
 
     return app
+
+
+def _style_lab_dependencies(config: dict[str, Any]) -> StyleLabRouterDependencies:
+    application = StyleApplicationService()
+    return StyleLabRouterDependencies(
+        config=config,
+        style_library=lambda settings, root: style_library(settings, root),
+        style_mounts=lambda settings, root: style_mounts(settings, root),
+        mount_style=lambda *args, **kwargs: mount_style(*args, **kwargs),
+        style_authors=application.authors,
+        style_versions=lambda library, project: application.version_catalog(
+            library,
+            project_root=project,
+        ),
+    )
