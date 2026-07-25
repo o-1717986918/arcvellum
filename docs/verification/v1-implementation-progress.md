@@ -679,12 +679,63 @@
   - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W3-3D：正式版本应用边界与受控构建
+
+- Status: complete
+- Commits: `57065a9`, `5ccc62a`
+- Added:
+  - Engine 新增对任意历史版本目录的自包含完整性检查；检查不依赖当前 profile 状态，会重算内容寻址身份、逐产物摘要、未声明文件、兼容清单、Prompt 质量、来源权利和正式审查证据；
+  - Studio 新增安全版本目录与详情投影；即使文风外部资料库不存在，项目内已构建版本仍可作为历史证据展示，新一轮 profile 计划也不会覆盖旧版本；
+  - 版本投影只公开稳定 ID、内容 hash、来源 hash/rights 状态、质量指标、评测摘要、审查状态、优先级和产物摘要，不公开训练/保留集正文、权利声明原文或内部绝对路径；
+  - `GET /style-lab/versions/{style_id}/{version_id}` 提供受稳定身份约束的详情查询；包内出现未声明文件时投影为 integrity conflict，不把受污染版本标记为可挂载；
+  - `POST /style-lab/build` 只接受项目、作者和 profile 稳定 ID，通过 Engine 解析正式会话并计算 exact current version；调用方不能提交目标路径、版本号或自报 Gate 结果；
+  - exact version 已存在时幂等返回 ready；尚未通过全部 Gate 或存在不可变冲突时返回稳定错误且不启动 Worker；
+  - 可构建版本只通过既有 `style-engineering` Worker 运行确定性 Engine 任务；HTTP 请求不直接 build，构建任务不启动 Agent Runtime 或模型。
+- Unified implementation boundary:
+  - Engine `literary/style/version*.py` 继续唯一拥有版本身份、完整性和构建 Gate；Studio 只拥有受控意图、Job 启动和安全投影；
+  - Engine 不导入 Studio，Studio 未复制版本算法、评测阈值或挂载规则；API route 拆分后没有突破文件/函数债务基线；
+  - W3-3D 没有修改项目挂载、激活状态或正文生成链，避免把 Derived Knowledge 构建与 Stable Knowledge 写入合并为一个动作。
+- Adaptive orchestration boundary:
+  - 未来 Planner 只能引用安全投影中的 `style_id/version_id/content_hash`，不能制造版本、声明 ready、修复 integrity conflict 或调用任意路径；
+  - build 是确定性正式任务，不是 Planner 的创意输出；未通过独立审查的 profile 不能因计划要求而被构建；
+  - 历史版本保持不可变和可审计，当前 profile 的新计划不会让旧版本从项目事实中消失。
+- Failure and verification evidence:
+  - 回归测试覆盖历史版本保留、未声明包文件冲突、安全投影无正文/路径泄漏、缺失 profile 稳定错误、not-ready 不启动 Worker和重复构建不重复排队；
+  - 真实 API -> Job Supervisor -> AgentWorker -> deterministic Engine -> version catalog E2E 通过，并断言确定性 build 不会创建模型 Runtime；
+  - 从来源事务、正式会话、Prompt/评测、独立审查到版本构建由跨阶段测试矩阵覆盖；当前没有把这些 Agent 阶段伪装成一个单体模型 E2E；
+  - Python full suite: 496 passed, 1 skipped；
+  - Prompt Registry: 48 assets, 83 task prompt ids, passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
+## W3-3 Exit Audit：不可变文风版本
+
+- Status: complete
+- Rights and corpus isolation:
+  - 每份来源必须有明确 rights mode、basis 和内容 hash；版本只保留身份、摘要与权利证据，不复制训练文本或 holdout 正文；
+  - 训练集与保留集在会话创建时强制不相交，Prompt Writer 不读取 holdout，Reviewer 也只读取精简证据摘要。
+- Independent judgment:
+  - Prompt Writer、Evaluation Writer 与 Reviewer 使用不同会话身份；
+  - `pass_with_notes` 不可冒充通过，required changes 必须进入 revise/block，Prompt 或证据变化会使旧 review 失效。
+- Immutability and compatibility:
+  - 版本身份由正式证据内容寻址，原子物化、幂等复用、冲突拒绝和包内文件重算均已验证；
+  - 旧 `style_skill.json`、`STYLE.md` 和既有 mount 读取形状仍兼容；历史版本可在新 profile 计划出现后继续独立检查和展示。
+- Architecture and operation:
+  - 只有一条 `style-engineering` route、一套 task lifecycle 和一个确定性版本实现；Studio 没有第二套文风状态机；
+  - 长任务经 Job/Worker/Observability，HTTP 不同步调用模型或执行构建；
+  - W3-3 正式退出不包含 mount、activation、正文消费和 Style Atelier 前端，这些属于 W3-4 至 W3-6。
+- Exit gate:
+  - W3-3A 至 W3-3D 的功能、失败反例、全量测试、Prompt Registry、架构审计和差异检查全部通过；
+  - 当前残余风险是尚未证明 compose/generate/revise/review 消费同一 mounted hash，也没有对版本升级导致的 stale propagation 做正式验收。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3D 只封闭正式版本的 Studio 应用边界与端到端验收：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-4 只实现“明确版本的项目挂载与激活事务”：
 
-1. 为不可变版本增加安全列表、详情和构建状态投影，不公开语料正文、holdout 或内部绝对路径。
-2. Studio API 只能通过受控意图启动现有 `style-engineering` Worker，不在请求线程直接 build 或复制版本 Gate。
-3. 增加从资料来源选择、正式会话、Prompt/评测/独立审查、确定性版本构建到 API 可见版本的完整端到端测试。
-4. 明确 mount/activation 是否属于 W3-4；若 W3-3D 只展示版本，就不得提前修改项目正式挂载状态。
-5. 完成 W3-3 exit audit，核对 rights、holdout 隔离、独立 Reviewer、版本不可变性、旧读取兼容和架构质量。
+1. 先审阅 Engine 现有 `mount_style_skill()`、项目 mount 文件格式、compose/generate/revise/review 的读取点和 stale propagation，禁止另建第二套挂载格式。
+2. 新增受控 mount application service；调用方只能提交 `style_id/version_id/content_hash`、作用域和优先级，不能提交源路径或任意项目文件。
+3. mount 前重新执行历史版本完整性、rights、review 和可挂载状态检查；未构建、被篡改、hash 不匹配或 review 失败的版本不得激活。
+4. 挂载写入必须原子、幂等、可审计，并保留旧项目 mount 兼容读取；版本升级必须使依赖旧 hash 的可重建上下文与正式下游任务 stale。
+5. compose、generate、revise、review 必须从同一 machine-owned mount snapshot 读取完全相同的 version/content hash；Agent、前端和 Planner 均不能覆盖。
+6. 本批先完成 Engine/Studio/API 和真实 Worker/route 验收，不提前横向建设完整 Style Atelier 前端。
