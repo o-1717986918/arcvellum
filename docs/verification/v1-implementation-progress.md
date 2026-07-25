@@ -615,12 +615,44 @@
   - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W3-3B：独立文风语义审查与完整摘要门禁
+
+- Status: complete
+- Commit: `7c1b357`
+- Added:
+  - accepted deterministic evaluation 不再直接令文风路线 ready；Engine 新增 `style-review-task-file -> style-review-agent-task -> style-review-readiness/revision` 正式闭环；
+  - 独立审查 JSON、Markdown、sidecar 与 completion 绑定当前 style session、source set、profile、metrics、prompt、prompt manifest、candidate、evaluation manifest、deterministic score 和 score report 摘要；
+  - Reviewer session 必须与 Prompt Writer、Evaluation Writer 均不同；Agent 提供的伪身份、错误 schema、报告路径和摘要由 Studio Worker 预检绑定为当前任务与沙箱真实值；
+  - 正式会话的 evaluation manifest 必须持有 prompt、reference、input、candidate 摘要和 Writer 身份；上游文件变化会使评测或语义审查失效；
+  - `pass_with_notes` 不在合法 verdict 中；存在 required changes 时只能 `revise` 或 `block`，修订必须改变声明的上游目标并重新完成确定性评测和独立审查；
+  - Reviewer task 使用精简安全资料集，不包含原始 holdout 正文；任务约束明确禁止输出隐藏思维链，只保留结论、发现、必要修改和证据限制；
+  - 新增三个 exact Prompt Assets，并令 Prompt Registry 递归检查拆分后的 route 模块；
+  - Style CLI parser、handler、review contract 和 Studio preflight metadata 分别拆到专属模块，新增门禁未扩张已有巨型 parser、project handler、route definition 或 canonicalization 文件。
+- Unified implementation boundary:
+  - Engine `literary/style/review.py` 拥有正式审查契约、证据摘要和 readiness 判定；route 只声明状态蓝图与活动 Gate；
+  - Studio Worker 只规范化机器拥有的 schema、摘要、路径和会话身份，不改变 Reviewer 的文学判断、findings 或 required changes；
+  - 未新增同步 HTTP LLM、任意 Shell、第二套状态机或 Studio 自有文风 Gate；所有执行仍通过既有 task lifecycle。
+- Adaptive orchestration boundary:
+  - 将来 Planner 只能调度此独立审查节点，不能删除 Gate、指定与 Writer 相同的 Reviewer 或将自己的计划摘要当作正式审查证据；
+  - 文风审查结论属于 Derived Knowledge；只有通过后续 W3-3C 确定性 build 才能形成可引用版本；
+  - holdout 正文、隐藏审查推理和未绑定模型输出均不能进入 Creative Execution Plan 或 Stable Knowledge。
+- Failure and verification evidence:
+  - 专项 64 tests 覆盖正式评测、任务服务、预检、任务运输与 Prompt 质量；
+  - 回归测试证明上游 Prompt 变化会把 ready 路线退回过期审查准备态；
+  - 回归测试证明 Worker 会覆盖伪造 Writer/Reviewer 身份、报告摘要和 evidence，并保持三会话独立；
+  - 回归测试证明 Reviewer task 不包含 holdout 正文，且只暴露声明的安全资料；
+  - Python full suite: 484 passed, 1 skipped；
+  - Prompt Registry: 46 assets, 81 task prompt ids, passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3B 只实现独立文风语义审查与完整 digest Gate：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3C 只实现已通过独立审查证据的确定性版本构建与物化：
 
-1. 在现有 accepted deterministic evaluation 之后增加独立 reviewer task，不让 prompt writer/evaluation writer 自审。
-2. review JSON/Markdown/completion 必须绑定 session、source set、profile、prompt、candidate 和 deterministic score digest。
-3. review 失败或任何上游摘要变化都必须回到修订/重审，不能进入 build。
-4. Prompt Asset、task package 和 Worker preflight 必须提供完整结构约束，但不泄露保留集正文或隐藏推理。
-5. 本批仍不物化 StyleProfileVersion、不 mount；确定性 build 属于 W3-3C。
+1. 定义不可变 `StyleProfileVersion` 身份、内容摘要、来源 session、评测与审查证据链。
+2. 只有 exact accepted score + exact passing semantic review 才能 build；任何摘要漂移都阻断。
+3. build 是确定性 CLI/Worker 任务，不调用模型，不接受 Agent 自报版本号或正式路径。
+4. 版本目录必须原子创建、幂等复用、拒绝身份冲突，并保持旧 Style Skill 读取兼容。
+5. 本批不做项目 mount、前端完整管理或自适应编排；这些分别属于后续 W3-3D/W3-4 与 AO 阶段。
