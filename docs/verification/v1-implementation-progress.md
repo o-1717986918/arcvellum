@@ -559,11 +559,39 @@
   - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
   - `git diff --check`: passed。
 
+## W3-2：受控作者、作品与来源事务
+
+- Status: complete
+- Commit: `8b1379b`
+- Added:
+  - 新增集中枚举的 `RightsMode` 与 `SourceMediaType`，Router、事务和测试不再各写一套权利/媒体字符串；
+  - `POST /style-lab/authors`、`/works`、`/sources` 只接受稳定身份和受控字段，不接收目标目录或任意源文件路径；
+  - 作者与作品采用不可覆盖创建；已占用身份返回稳定 `style_identity_conflict`；
+  - 每份来源必须声明 public-domain、authorized、user-owned 或 craft-only 及具体权利依据，缺失声明被确定性拒绝；
+  - TXT/Markdown 内容统一换行并拒绝 NUL、替换字符、异常尺寸和路径化文件名；
+  - 来源使用规范内容 SHA-256 全库去重；重复语料返回已有稳定身份，不重复保存；
+  - source manifest 升级记录 media type、content hash、原始显示文件名和逐来源 rights，不把正文写入收据；
+  - 作者事务在 Engine 公共写入前先写 `prepared` 收据，成功转为 `committed`，异常转为 `failed` 并保留错误类型；
+  - API 错误使用稳定 code/status，前端不需要解析任意异常文本。
+- Unified implementation boundary:
+  - Studio 复用 Engine 现有作者/作品/来源格式与公开函数，没有复制文风编译、Prompt、评测或挂载算法；
+  - 本批不接受 DOCX 二进制；DOCX 需要正式读取器和结构证据，不能用临时文本猜测冒充支持；
+  - 来源正文不进入 SQLite、列表投影、事务收据或模型日志。
+- Adaptive orchestration boundary:
+  - 这些接口是显式用户作者事务，不是 Planner 可自由调用的 Stable Knowledge 写入能力；
+  - 将来 Agent 只能通过受控候选或 task package 提议来源处理，不能伪造 rights；
+  - 本批没有改变 `style-engineering` route、Runtime、task lifecycle 或自动推进顺序。
+- Exit evidence:
+  - Python full suite: 480 passed, 1 skipped；
+  - `python -m compileall -q src tests`: passed；
+  - Architecture Audit: 37 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-2 只建立作者、作品、来源和权利声明的受控 Studio 事务：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-3 只把 compile、evaluate、independent review 和 build 接入既有 Worker 与 Engine route：
 
-1. 不沿用 legacy Engine API 的任意路径输入和同步长任务语义；事务只接受稳定 author/work identity、明确 rights 和受限文本/文件导入。
-2. 原文内容不进入 SQLite、API 列表或日志；source hash、rights、导入 receipt 和安全短摘要作为证据。
-3. 重复来源以内容 hash 识别，目标冲突、旧 revision、越界路径、无权利声明和无效 UTF-8 必须形成稳定错误。
-4. 本批不执行 Prompt Agent、评测、build 或 mount；这些由 W3-3 的 Worker 正式任务链承担。
+1. HTTP 写操作只返回 job/task ID，不能在请求线程内等待模型，也不能返回 `pending_platform_agent` 冒充完成。
+2. 扩展既有 `style-engineering` route，不新建 Studio 状态机；Prompt、评测候选和独立 review 均是 Agent 候选输出。
+3. 确定性 Gate 必须绑定 source、candidate、prompt、review 和 completion digest；review 失败不能 build。
+4. build 只能物化通过 Gate 的明确版本，本批仍不直接 mount 到作品；正式挂载与 stale 传播属于 W3-4。
