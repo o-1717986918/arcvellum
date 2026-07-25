@@ -729,13 +729,44 @@
   - W3-3A 至 W3-3D 的功能、失败反例、全量测试、Prompt Registry、架构审计和差异检查全部通过；
   - 当前残余风险是尚未证明 compose/generate/revise/review 消费同一 mounted hash，也没有对版本升级导致的 stale propagation 做正式验收。
 
+## W3-4A：不可变文风版本项目挂载
+
+- Status: complete
+- Commit: `37aa828`
+- Added:
+  - Engine 新增 `mount_style_profile_version()`；正式挂载只接受 `style_id/version_id/content_hash`、项目作用域和固定最高优先级，不接受调用方源路径、目标路径或 `allow_unreviewed`；
+  - 挂载前从项目内正式 profile 版本目录解析唯一版本，并重算包内完整性、内容 hash 和稳定身份；版本缺失、被篡改、hash 不匹配或身份重复时拒绝激活；
+  - 版本先复制到同目录临时 staging，完整性复验后再原子重命名到 `style/mounted/{style_id}/{version_id}`；
+  - `active_style_skill.json`、挂载审计回执和 `project.yaml` style block 通过同一原子写入批次提交；元数据提交失败时清除本次新复制的 mount，不留下半完成激活；
+  - active manifest 和 receipt 保存 exact `style_id/version_id/content_hash`、scope、priority、mount path、review/readiness 摘要和前后版本身份，不保存语料、holdout 正文或外部绝对路径；
+  - 同一有效版本重复挂载幂等返回，不重复写回执；已挂载副本被篡改时 active projection 进入 integrity conflict 并禁用 prompt；
+  - 旧式无 version/hash 的 active manifest 保持可读，但明确标记为 `legacy-unverified`，不会被误判为不可变版本挂载。
+- Unified implementation boundary:
+  - `literary/style/mount*.py` 分离意图契约、历史版本解析、项目物化和用例编排；Engine 不导入 Studio，也不调用 Agent、模型或 HTTP；
+  - 挂载复用 W3-3 的唯一版本完整性检查与既有原子 IO，没有复制版本算法、评测阈值或项目状态机；
+  - 本批没有提前修改 Studio 决策面、正文 Prompt 或前端，避免一次提交同时跨越激活、消费和产品交互边界。
+- Adaptive orchestration boundary:
+  - Planner 只能提出稳定版本身份；Engine 重新验证后才可执行挂载，Planner 不能提供文件路径、降低优先级、开放未审查版本或伪造成功状态；
+  - 挂载属于确定性 Stable Knowledge 写入事务，不由创作 Agent 自由生成；
+  - 版本升级留下 previous/current 审计身份，为后续 plan stale 与下游任务失效提供机器证据。
+- Failure and verification evidence:
+  - 回归覆盖 exact mount、幂等复用、错误 hash、源版本篡改、已挂载副本篡改、元数据写入失败回滚和旧读取兼容；
+  - Python full suite: 500 passed, 1 skipped；
+  - Prompt Registry: 48 assets, 83 task prompt ids, passed；
+  - `python -m compileall -q src`: passed；
+  - Architecture Audit: 36 existing file debts, 228 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+- Not yet complete:
+  - Studio 尚未提供只接受稳定版本身份的受控挂载 API，旧决策/自动推进仍需迁移；
+  - compose/generate/revise/review 尚未绑定同一 machine-owned mount snapshot；
+  - 版本切换后的上下文与正式下游任务 stale propagation 尚未完成端到端验收。
+
 ## 下一批
 
-下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-4 只实现“明确版本的项目挂载与激活事务”：
+下一批开始前必须重新读取统一实施方案 W3、长期文风路线、自适应创作编排方案、模块边界和本文件。W3-4B 只实现 Studio 受控挂载入口与既有决策链迁移：
 
-1. 先审阅 Engine 现有 `mount_style_skill()`、项目 mount 文件格式、compose/generate/revise/review 的读取点和 stale propagation，禁止另建第二套挂载格式。
-2. 新增受控 mount application service；调用方只能提交 `style_id/version_id/content_hash`、作用域和优先级，不能提交源路径或任意项目文件。
-3. mount 前重新执行历史版本完整性、rights、review 和可挂载状态检查；未构建、被篡改、hash 不匹配或 review 失败的版本不得激活。
-4. 挂载写入必须原子、幂等、可审计，并保留旧项目 mount 兼容读取；版本升级必须使依赖旧 hash 的可重建上下文与正式下游任务 stale。
-5. compose、generate、revise、review 必须从同一 machine-owned mount snapshot 读取完全相同的 version/content hash；Agent、前端和 Planner 均不能覆盖。
-6. 本批先完成 Engine/Studio/API 和真实 Worker/route 验收，不提前横向建设完整 Style Atelier 前端。
+1. 新增独立 application service 调用 Engine 唯一挂载用例；Studio 不复制版本解析、完整性或原子事务。
+2. 正式 API 只接受 `style_id/version_id/content_hash`、scope 和 priority；拒绝 caller path、`allow_unreviewed` 和任意项目文件字段。
+3. 将文风挂载的人类决策、自动推进和 interaction choice 从旧 `style_id + library path` 迁移到 exact version identity。
+4. API 对 not found、integrity conflict、invalid intent 和已幂等激活提供稳定状态码与亲用户错误，不让 HTTP handler 直接写文件。
+5. 增加 API -> application service -> Engine mount 的成功与失败测试；本批仍不进入 Prompt 消费和 Style Atelier UI。
