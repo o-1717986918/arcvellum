@@ -14,9 +14,13 @@ from literary_engineering_studio.preflight.archaeology import (
 )
 from literary_engineering_studio.sandbox import SandboxManifest
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
+from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.asset_workshop import _dry_payload
 from literary_engineering_studio_engine.literary.assets.promotion import (
     promotion_eligibility_errors,
+)
+from literary_engineering_studio_engine.literary.assets.workshop import (
+    promote_candidate_asset,
 )
 from literary_engineering_studio_engine.literary.ingest import (
     CHUNK_EXTRACTION_SCHEMA,
@@ -29,13 +33,74 @@ from literary_engineering_studio_engine.literary.ingest import (
     reconstruction_paths,
 )
 from literary_engineering_studio_engine.literary.ingest.evidence import canonical_digest
+from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 from literary_engineering_studio_engine.projects.source_ingest import ingest_existing_work
 from literary_engineering_studio_engine.source_ingest_route import build_task_payload
+from literary_engineering_studio_engine.task_registry import issue_next_task
 from literary_engineering_studio_engine.workflow.state_assets import asset_candidate_states
 from literary_engineering_studio_engine.workflow_state import build_workflow_state
 
 
 class ProjectArchaeologyReconstructionTests(unittest.TestCase):
+    def test_exit_gate_promotes_reconstructed_asset_and_enters_longform_planning(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, manifest, aggregate = _ready_import(
+                Path(temporary),
+                mode="continuation",
+                initialized=True,
+            )
+            paths = reconstruction_paths("sources/imports/source-work")
+            source_document = manifest["source_documents"][0]
+            original_path = root / str(source_document["original_path"])
+            original_digest = hashlib.sha256(original_path.read_bytes()).hexdigest()
+
+            resolution = _write_resolution(root, manifest, aggregate, paths)
+            candidate = _write_candidate(
+                root,
+                manifest,
+                aggregate,
+                resolution,
+                paths,
+                recommendation="promote",
+            )
+            _write_domain_review(
+                root,
+                manifest,
+                candidate,
+                paths,
+                decision="promote",
+            )
+            _output, errors = materialize_archaeology_candidates(root, "source-work")
+            self.assertEqual(errors, [])
+
+            candidate_path = root / "canon/candidates/world_rules/source-world.json"
+            _write_asset_review_and_approval(root, candidate_path)
+            promotion = promote_candidate_asset(
+                root,
+                candidate_path,
+                approval_run_id=candidate_path.stem,
+            )
+
+            self.assertEqual(promotion.status, "promoted")
+            self.assertTrue(promotion.manifest_path.is_file())
+            self.assertTrue((root / "canon" / "world_rules.yaml").is_file())
+            self.assertEqual(_source_state(root)["status"], "ready")
+            self.assertEqual(
+                hashlib.sha256(original_path.read_bytes()).hexdigest(),
+                original_digest,
+            )
+
+            next_task = issue_next_task(root, route="longform-planning")
+            self.assertEqual(next_task.status, "issued")
+            self.assertEqual(next_task.route, "longform-planning")
+            self.assertEqual(next_task.current_state, "story-architecture-prepare")
+            self.assertIsNotNone(next_task.task_json_path)
+            task_payload = _json(next_task.task_json_path)
+            self.assertIn(
+                "plot/story_architecture.agent_tasks.md",
+                task_payload["expected_outputs"],
+            )
+
     def test_reviewed_reconstruction_materializes_into_existing_archive_lifecycle(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, manifest, aggregate = _ready_import(Path(temporary), mode="continuation")
@@ -200,13 +265,25 @@ def _ready_import(
     temporary: Path,
     *,
     mode: str,
+    initialized: bool = False,
 ) -> tuple[Path, dict[str, object], dict[str, object]]:
     root = temporary / "work"
-    root.mkdir()
-    (root / "project.yaml").write_text(
-        "schema: test-project\ntitle: Source Work\n",
-        encoding="utf-8",
-    )
+    if initialized:
+        init_work_project(
+            InitOptions(
+                target=root,
+                title="Source Work",
+                target_length=120_000,
+                premise="林昭调查白塔中被删改的档案。",
+                genre="现实幻想",
+            )
+        )
+    else:
+        root.mkdir()
+        (root / "project.yaml").write_text(
+            "schema: test-project\ntitle: Source Work\n",
+            encoding="utf-8",
+        )
     result = ingest_existing_work(
         root,
         text="# 第一章\n林昭抵达白塔。白塔保存被删改的旧档案。\n",
@@ -406,6 +483,46 @@ def _write_domain_review(
     _write_report(root / paths["review_report"])
     write_agent_completion_marker(root / paths["review_task"], root=root, handled_by="test-reviewer")
     return payload
+
+
+def _write_asset_review_and_approval(root: Path, candidate: Path) -> None:
+    review_dir = root / "reviews" / "assets"
+    review_dir.mkdir(parents=True, exist_ok=True)
+    review_json = review_dir / f"{candidate.stem}_review.json"
+    review_report = review_json.with_suffix(".md")
+    review_task = review_json.with_suffix(".agent_tasks.md")
+    candidate_digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    review_task.write_text("# Independent archaeology asset review\n", encoding="utf-8")
+    _write_json(
+        review_json,
+        {
+            "schema": "literary-engineering-workbench/candidate-asset-review/v0.1",
+            "candidate": candidate.relative_to(root).as_posix(),
+            "candidate_id": candidate.stem,
+            "candidate_sha256": candidate_digest,
+            "asset_type": "world",
+            "status": "pass",
+            "blocking_issues": [],
+            "warnings": [],
+            "revision_actions": [],
+            "promotion_risks": [],
+        },
+    )
+    review_report.write_text(
+        "# Independent archaeology asset review\n\nConclusion: pass.\n",
+        encoding="utf-8",
+    )
+    write_agent_completion_marker(
+        review_task,
+        root=root,
+        handled_by="independent-reviewer",
+    )
+    record_workflow_approval(
+        root,
+        candidate.stem,
+        "approve",
+        subject_sha256=candidate_digest,
+    )
 
 
 def _source_state(root: Path) -> dict[str, object]:
