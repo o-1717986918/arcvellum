@@ -195,8 +195,51 @@ W1-Fix A 与 W1-Fix B 已完成：
 - 固定关系裁剪已移除，人物列表不再隐藏后续条目；
 - v3 焦点摘要已从旧全书文案改为实际焦点可读描述。
 
-3.1、3.2 已关闭，3.3 的正式人物焦点与返回历史已关闭。3.4、3.5、3.6、3.7
-仍保持开放，不因本次界面已有“关系镜头”而提前宣告 W1 完成。
+3.1、3.2 已关闭，3.3 的正式人物焦点与返回历史已关闭。本段是 A/B 子批回执；
+后续 C 子批状态见 5.2。
+
+## 5.2 2026-07-27 实施回执
+
+W1-Fix C 已完成：
+
+- `OrreryNavigationLayer.vue` 提供搜索、搜索结果强制显标、显示全部标签、小地图、
+  离屏 beacon 和方向键空间导航；该组件只消费投影、布局点和屏幕锚点，不读取或写入
+  项目资产；
+- 搜索、方向导航、小地图投影和 beacon 几何从 Vue 迁入
+  `model/spatialNavigation.ts`，`OrreryWorkbench.vue` 只负责状态协调；
+- `OrreryNodeOverlay.vue` 允许搜索结果、键盘焦点和临时全显绕过碰撞隐藏，但没有改变
+  投影节点、LOD 或正式关系；
+- `readerNavigation` Store 建立正文阅读请求与当前阅读单元的单一前端状态；
+- `model/readerLink.ts` 统一处理 `scenes/scene_0002.yaml`、`scene_0002` 和
+  `chapter_0001.scene_0002` 三类身份，星仪正式节点可打开精确正文单元，正文当前位置
+  也能反向进入对应 scene focus；
+- 小地图只显示章节和场景主节点，离屏 beacon 只提示章节、场景和当前/阻断任务，
+  避免把未解析人物等次级节点变成持续视觉噪声。
+
+真实项目 `1+1=2` 验收证明：
+
+- 搜索“母亲”能定位并打开对应节点；
+- 从 `scene_0002` 节点打开正文后，阅读器标题为“光的重量”，不是默认首场；
+- 阅读器当前位置反向把星仪摘要切换为
+  `场景焦点“scene 0002”，仍保留全书上下文`；
+- 1440x900 下搜索、小地图、正文入口和章节目录互不遮挡；
+- 整页重载后没有新增 Vue error；早期日志中的错误来自组件热更新前的旧实例。
+
+退出证据：
+
+- Client：37 files、118 tests passed；
+- Python：628 tests passed、1 skipped；
+- `vue-tsc`、生产 `client:build`、Prompt Registry、`compileall` 和
+  `git diff --check`：passed；
+- Architecture Audit：35 个既有 file debt、224 个既有 function debt、0 cycle，
+  无新增债务。
+
+3.5 和 3.6 已关闭；3.4 中的搜索、小地图、显示全部标签和键盘导航已关闭。仍开放：
+
+- 套索比较、路径回放、高级热力层和视图书签；
+- 可重复的四主题、四焦点、大规模节点视觉回归与 canvas pixel check。
+
+因此 W1-Fix C 已退出，但 W1-Fix D 和 W1-Exit 尚未退出，W1 仍不能整体标记完成。
 
 ## 6. 架构约束
 

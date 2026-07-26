@@ -1554,7 +1554,7 @@ context 失败只能留下 fallback 证据，不得改变 fixed route。
 
 ### W6-4E：星仪 W1 文档差距补缺
 
-**状态：进行中，W1-Fix A/B 已完成，W1-Fix C/D 与自动化视觉退出验收待实施。**
+**状态：进行中，W1-Fix A/B/C 已完成，W1-Fix D 与自动化视觉退出验收待实施。**
 
 实际代码与 W1 文档复核确认星仪基础完整，但存在不能等到 W6-9 的产品缺口：
 
@@ -1587,8 +1587,28 @@ W1-Fix A/B 实现结果：
 - 真实项目 `1+1=2` 浏览器验收通过：关系镜头无窗口遮挡，character focus 可回退，
   scene level 点击第 2 章得到 `章节焦点“第 2 章”`。
 
-剩余 W1-Fix C/D 不得省略：空间搜索、显示全部标签、小地图/beacon、键盘导航、节点与
-阅读器双向定位，以及高级透镜/书签/回放和可重复视觉回归仍需后续独立提交。
+W1-Fix C 实现结果：
+
+- 新增独立 `OrreryNavigationLayer` 与纯模型 `spatialNavigation`，交付搜索、搜索结果
+  强制显标、显示全部标签、小地图、离屏 beacon 和完整方向键导航；
+- 新增 `readerNavigation` Store 与 `readerLink` 身份适配，星仪正式节点可打开精确
+  chapter/scene 正文单元，阅读器当前位置可反向进入同一 scene focus；
+- 路径型 scene source ID、manifest unit ID 与 scene ID 由纯模型统一，不在组件内散落
+  路径字符串启发式；
+- 1440x900 真实项目验收通过，搜索、小地图、正文入口和章节目录无重叠。
+
+本子批证据：
+
+- Client：37 files、118 tests passed；
+- Python：628 tests passed、1 skipped；
+- `vue-tsc`、生产 `client:build`、Prompt Registry、`compileall` 与
+  `git diff --check`：passed；
+- Architecture Audit：35 个既有 file debt、224 个既有 function debt、0 cycle；
+- 评审见
+  `docs/architecture/reviews/orrery-w1-navigation-reader-link-review.md`。
+
+剩余 W1-Fix D 和 W1-Exit 不得省略：套索比较、路径回放、高级热力层、视图书签、
+LayoutHint 边界，以及四主题/四焦点/100-1000 节点可重复视觉回归仍需后续独立提交。
 
 ### W6 后续完整阶段映射
 

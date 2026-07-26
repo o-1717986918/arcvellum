@@ -14,7 +14,7 @@ import { asList, asRecord, describeGate, labelFor } from "@/services/presentatio
 import { api, authorizedFetch, query } from "@/services/api";
 
 const props = defineProps<{ projection: SpatialNarrativeProjection | null; dashboard: Record<string, unknown> | null; choices: Record<string, unknown>[]; delivery: Record<string, unknown> | null; progress: ProjectProgress | null; prose: Record<string, unknown>[] }>();
-const emit = defineEmits<{ advance: []; inspectTask: []; openReader: []; focusNode: [nodeId: string]; choose: [choice: Record<string, unknown>] }>();
+const emit = defineEmits<{ advance: []; inspectTask: []; openReader: []; readNode: [node: SpatialNarrativeProjection["nodes"][number]]; focusNode: [nodeId: string]; choose: [choice: Record<string, unknown>] }>();
 const windows = useSpatialWindowsStore();
 const app = useAppStore();
 const formalChars = computed(() => Number(props.projection?.summary.formal_prose_chars || 0));
@@ -190,7 +190,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
           </dl>
           <section v-if="archiveFor(item.node)" class="spatial-archive-preview"><header><BookOpenText :size="14" /><strong>{{ archiveFor(item.node)?.subtitle || '作品档案摘录' }}</strong></header><SafeMarkdown :source="archiveFor(item.node)?.excerpt || archiveFor(item.node)?.body || ''" /><ul v-if="asList(archiveFor(item.node)?.key_points).length"><li v-for="point in asList(archiveFor(item.node)?.key_points).slice(0, 3)" :key="String(point)">{{ point }}</li></ul></section>
           <section class="spatial-node-relations"><header><Route :size="14" /><strong>它正在影响什么</strong></header><p v-if="!item.detail">正在读取这段作品关系……</p><ul v-else-if="item.detail.relationships.length"><li v-for="edge in item.detail.relationships.slice(0, 5)" :key="`${edge.source}-${edge.target}-${edge.type}`"><span>{{ edge.type }}</span><p>{{ edge.source }} <ArrowUpRight :size="12" /> {{ edge.target }}</p></li></ul><p v-else>暂时还没有可见的关联记录。</p></section>
-            <div class="spatial-window-commands"><button class="primary-button wide" @click="emit('focusNode', item.node!.node_id)"><Focus :size="15" />聚焦这一段</button><button v-if="item.node.type === 'task'" class="text-button" @click="windows.openInstrument('progress')"><ScanSearch :size="15" />查看推进任务</button><button v-else-if="item.node.status === 'formal'" class="text-button" @click="windows.openInstrument('reader')"><BookOpenText :size="15" />阅读正式正文</button></div>
+            <div class="spatial-window-commands"><button class="primary-button wide" @click="emit('focusNode', item.node!.node_id)"><Focus :size="15" />聚焦这一段</button><button v-if="item.node.type === 'task'" class="text-button" @click="windows.openInstrument('progress')"><ScanSearch :size="15" />查看推进任务</button><button v-else-if="item.node.status === 'formal'" class="text-button" @click="emit('readNode', item.node)"><BookOpenText :size="15" />阅读正式正文</button></div>
         </div>
       </template>
       <template v-else-if="item.kind === 'progress'">

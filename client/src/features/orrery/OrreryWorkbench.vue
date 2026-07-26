@@ -8,17 +8,20 @@ import NarrativeSpineLayer from "@/features/orrery/NarrativeSpineLayer.vue";
 import OrreryAccessibleView from "@/features/orrery/OrreryAccessibleView.vue";
 import NarrativeParallaxStage from "@/features/orrery/NarrativeParallaxStage.vue";
 import NarrativeHealthRail from "@/features/orrery/NarrativeHealthRail.vue";
+import OrreryNavigationLayer from "@/features/orrery/OrreryNavigationLayer.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
 import RelationLensBar from "@/features/orrery/RelationLensBar.vue";
 import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import { applyRelationLens } from "@/features/orrery/model/relationLens";
+import { nodeForReaderUnit, readerUnitForNode } from "@/features/orrery/model/readerLink";
 import type { RelationFamily } from "@/features/orrery/model/relations";
 import { api, query } from "@/services/api";
 import { manuscriptItems } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
+import { useReaderNavigationStore } from "@/stores/readerNavigation";
 import { useSpatialProjectionStore } from "@/stores/spatialProjection";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
 import type { SpatialGrammar, SpatialNarrativeNode, SpatialNarrativeProjection, SpatialNodeDetail } from "@/types/spatial";
@@ -31,6 +34,7 @@ const router = useRouter();
 const spatial = useSpatialProjectionStore();
 const windows = useSpatialWindowsStore();
 const humanChoices = useHumanChoicesStore();
+const readerNavigation = useReaderNavigationStore();
 const stage = ref<InstanceType<typeof NarrativeParallaxStage> | null>(null);
 const listMode = ref(false);
 const anchors = ref<Record<string, { x: number; y: number; visible: boolean; scale: number }>>({});
@@ -42,7 +46,11 @@ const hiddenRelationFamilies = ref<RelationFamily[]>([]);
 const soloRelationFamily = ref<RelationFamily | "">("");
 const staticStage = ref(false);
 const bookChapterNodes = ref<SpatialNarrativeNode[]>([]);
+const forcedNodeIds = ref<string[]>([]);
+const showAllLabels = ref(false);
+const navigationNodeId = ref("");
 let chapterRailRequest = 0;
+let appliedReaderUnitId = "";
 
 const projection = computed(() => spatial.projection);
 const displayProjection = computed(() => projection.value
@@ -93,6 +101,11 @@ watch(() => app.currentProjectPath, (root) => {
   activeCharacterId.value = "";
   hiddenRelationFamilies.value = [];
   soloRelationFamily.value = "";
+  forcedNodeIds.value = [];
+  showAllLabels.value = false;
+  navigationNodeId.value = "";
+  appliedReaderUnitId = "";
+  readerNavigation.reset();
   if (root) {
     void spatial.open(root, { level: "book", focus: "" });
     void loadChoices();
@@ -131,6 +144,14 @@ watch(projection, (next) => {
   }
 });
 watch(anchors, (value) => windows.syncNodeAnchors(value), { deep: false });
+watch(() => readerNavigation.activeUnitId, (unitId) => {
+  if (!unitId || unitId === appliedReaderUnitId || !windows.windows.some((item) => item.kind === "reader")) return;
+  const unit = app.readerManifest?.units.find((item) => item.unit_id === unitId);
+  const sceneId = String(unit?.scene_id || "");
+  if (!sceneId) return;
+  appliedReaderUnitId = unitId;
+  void focusReaderScene(sceneId);
+});
 onBeforeUnmount(() => {
   windows.clear();
   spatial.close();
@@ -183,9 +204,36 @@ function focusNode(nodeId: string): void {
 }
 
 function focusNodeObject(node: SpatialNarrativeNode): void {
+  navigationNodeId.value = node.node_id;
   const point = layout.value?.points.get(node.node_id);
   if (point) stage.value?.focus(point, node.node_id);
   void selectNode(node);
+}
+
+function navigateNode(node: SpatialNarrativeNode): void {
+  navigationNodeId.value = node.node_id;
+  const point = layout.value?.points.get(node.node_id);
+  if (point) stage.value?.focus(point, node.node_id);
+}
+
+async function focusReaderScene(sceneId: string): Promise<void> {
+  if (spatial.level !== "scene" || spatial.focus !== sceneId) {
+    await spatial.setView({ level: "scene", focus: sceneId });
+  }
+  await nextTick();
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  const unit = app.readerManifest?.units.find((item) => item.scene_id === sceneId);
+  const node = unit && projection.value ? nodeForReaderUnit(projection.value.nodes, unit) : undefined;
+  if (node) navigateNode(node);
+}
+
+function openReaderForNode(node: SpatialNarrativeNode): void {
+  const units = app.readerManifest?.units || [];
+  const unit = readerUnitForNode(node, units);
+  windows.openInstrument("reader");
+  if (!unit) return;
+  readerNavigation.request(unit.unit_id);
+  windows.setReaderMode("reading");
 }
 
 function resetView(): void {
@@ -313,7 +361,31 @@ async function loadChapterRail(root: string): Promise<void> {
     <div v-else-if="displayProjection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
       <NarrativeParallaxStage ref="stage" :projection="displayProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
       <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
-      <OrreryNodeOverlay :nodes="displayProjection.nodes" :anchors="anchors" :level="displayProjection.level" :motion-events="displayProjection.motion_events" :time-cursor="spatial.timeCursor" :time-window="spatial.timeWindow" :selected-node-id="windows.selectedNodeId" :focus-node-id="windows.selectedNodeId" @select="selectNode" @focus="focusNodeObject" />
+      <OrreryNodeOverlay
+        :nodes="displayProjection.nodes"
+        :anchors="anchors"
+        :level="displayProjection.level"
+        :motion-events="displayProjection.motion_events"
+        :time-cursor="spatial.timeCursor"
+        :time-window="spatial.timeWindow"
+        :selected-node-id="windows.selectedNodeId"
+        :focus-node-id="windows.selectedNodeId"
+        :navigation-node-id="navigationNodeId"
+        :forced-node-ids="forcedNodeIds"
+        :show-all-labels="showAllLabels"
+        @select="selectNode"
+        @focus="focusNodeObject"
+      />
+      <OrreryNavigationLayer
+        :nodes="displayProjection.nodes"
+        :points="layout.points"
+        :anchors="anchors"
+        :active-node-id="navigationNodeId || windows.selectedNodeId"
+        @navigate="navigateNode"
+        @inspect="focusNodeObject"
+        @forced-labels="forcedNodeIds = $event"
+        @show-all-labels="showAllLabels = $event"
+      />
       <RelationLensBar
         :profiles="projection?.relation_profiles || []"
         :hidden="hiddenRelationFamilies"
@@ -348,6 +420,6 @@ async function loadChapterRail(root: string): Promise<void> {
     <button class="orrery-v3-reader-entry" title="打开正文长卷" @click="windows.openInstrument('reader')"><BookOpenText :size="16" /><span><small>MANUSCRIPT</small><strong>正文长卷</strong></span></button>
     <button class="orrery-v3-delivery-beacon" :class="{ ready: deliveryReady }" :disabled="!deliveryReady" :title="deliveryReady ? '作品已具备交付条件' : '交付条件尚未满足'" @click="windows.openInstrument('delivery')"><PackageCheck :size="17" /><span>{{ deliveryReady ? '可以交付' : '交付待命' }}</span></button>
     <ChapterRail :chapters="chapterNodes" :selected-node-id="activeChapterRailNodeId" @select="openChapterFromRail" />
-    <SpatialWindowLayer :projection="projection" :dashboard="props.dashboard" :choices="choices" :delivery="app.delivery" :progress="progress" :prose="prose" @advance="emit('advance')" @inspect-task="emit('inspectTask')" @open-reader="emit('openReader')" @choose="emit('choose', $event)" @focus-node="focusNode" />
+    <SpatialWindowLayer :projection="projection" :dashboard="props.dashboard" :choices="choices" :delivery="app.delivery" :progress="progress" :prose="prose" @advance="emit('advance')" @inspect-task="emit('inspectTask')" @open-reader="emit('openReader')" @read-node="openReaderForNode" @choose="emit('choose', $event)" @focus-node="focusNode" />
   </section>
 </template>

@@ -19,6 +19,7 @@ import {
 import { api, query } from "@/services/api";
 import { displayValue } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
+import { useReaderNavigationStore } from "@/stores/readerNavigation";
 import type { ReaderWindowMode } from "@/types/spatialWindows";
 
 const props = withDefaults(
@@ -27,6 +28,7 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ modeChange: [mode: ReaderWindowMode] }>();
 const store = useAppStore();
+const readerNavigation = useReaderNavigationStore();
 const index = ref(0);
 const localMode = ref<ReaderWindowMode>(props.mode || (props.immersive ? "immersive" : "reading"));
 const tocOpen = ref(props.immersive);
@@ -71,7 +73,16 @@ watch(
   },
 );
 
-watch(currentId, () => void loadCurrent(), { immediate: true });
+watch(currentId, (unitId) => {
+  readerNavigation.activate(unitId);
+  void loadCurrent();
+}, { immediate: true });
+watch([() => readerNavigation.requestSequence, () => units.value.length], () => {
+  const requested = readerNavigation.requestedUnitId;
+  if (!requested) return;
+  const target = units.value.findIndex((unit) => String(unit.unit_id || unit.id || "") === requested);
+  if (target >= 0) goTo(target);
+}, { immediate: true });
 watch(() => props.mode, (value) => {
   if (value) localMode.value = value;
 });
@@ -109,7 +120,8 @@ onMounted(async () => {
       // Local preferences remain a recovery fallback when the sidecar is unavailable.
     }
   }
-  const restored = units.value.findIndex((unit) => String(unit.unit_id || unit.id || "") === remembered);
+  const requested = readerNavigation.requestedUnitId;
+  const restored = units.value.findIndex((unit) => String(unit.unit_id || unit.id || "") === (requested || remembered));
   if (restored >= 0) index.value = restored;
   if (readingMode.value === "continuous") {
     continuousStart.value = Math.max(0, index.value - 1);

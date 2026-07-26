@@ -10,6 +10,9 @@ const props = defineProps<{
   anchors: Record<string, { x: number; y: number; visible: boolean; scale: number }>;
   selectedNodeId?: string;
   focusNodeId?: string;
+  navigationNodeId?: string;
+  forcedNodeIds?: string[];
+  showAllLabels?: boolean;
   level?: NarrativeFocusLevel;
   motionEvents?: SpatialNarrativeProjection["motion_events"];
   timeCursor?: number;
@@ -24,7 +27,7 @@ const visible = computed(() => {
       // Primary narrative beats never disappear from a full-book projection.
       // At distant camera scales they become compact glyphs; their text returns
       // only once the reader enters a sufficiently roomy local segment.
-      return Boolean(anchor?.visible) && (isPrimary(node) || node.detail_level !== "far" || isPinned(node));
+      return Boolean(anchor?.visible) && (isPrimary(node) || node.detail_level !== "far" || isPinned(node) || props.showAllLabels);
     })
     .sort((left, right) => nodePriority(right) - nodePriority(left));
   const accepted: SpatialNarrativeNode[] = [];
@@ -40,10 +43,10 @@ const visible = computed(() => {
     }
     // Current work and the selected node are never suppressed. Other labels
     // must earn a place in the viewport instead of overlapping into noise.
-    if (!isPinned(node) && occupied.some((item) => rectanglesOverlap(item, rectangle))) continue;
+    if (!props.showAllLabels && !isPinned(node) && occupied.some((item) => rectanglesOverlap(item, rectangle))) continue;
     accepted.push(node);
     occupied.push(rectangle);
-    if (accepted.length >= 56 && !isPinned(node)) break;
+    if (!props.showAllLabels && accepted.length >= 56 && !isPinned(node)) break;
   }
   return accepted;
 });
@@ -58,6 +61,8 @@ function nodePriority(node: SpatialNarrativeNode): number {
 function isPinned(node: SpatialNarrativeNode): boolean {
   return node.node_id === props.selectedNodeId
     || node.node_id === props.focusNodeId
+    || node.node_id === props.navigationNodeId
+    || Boolean(props.forcedNodeIds?.includes(node.node_id))
     || node.status === "current"
     || node.status === "blocked"
     || node.type === "chapter";
@@ -121,7 +126,8 @@ function overviewClass(node: SpatialNarrativeNode): Record<string, boolean> {
   // Nodes remain rendered and keyboard-accessible in the global overview.
   // Only text below the legibility threshold is suppressed; it returns as the
   // camera enters a readable local segment.
-  return { overview: isOverview(node) };
+  const forced = Boolean(props.showAllLabels || props.forcedNodeIds?.includes(node.node_id) || node.node_id === props.navigationNodeId);
+  return { overview: isOverview(node) && !forced, "forced-label": forced };
 }
 
 function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
@@ -140,7 +146,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       v-for="node in visible"
       :key="node.node_id"
       class="orrery-v3-node"
-      :class="[{ selected: selectedNodeId === node.node_id }, focusClass(node), motionClass(node), overviewClass(node)]"
+      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id }, focusClass(node), motionClass(node), overviewClass(node)]"
       :data-status="node.status"
       :data-completion="node.completion_state"
       :data-type="node.type"

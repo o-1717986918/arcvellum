@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises, mount } from "@vue/test-utils";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
+import { useReaderNavigationStore } from "@/stores/readerNavigation";
 
 describe("ManuscriptReader", () => {
   beforeEach(() => {
@@ -36,5 +37,23 @@ describe("ManuscriptReader", () => {
     expect(wrapper.classes()).toContain("reader-state-immersive");
     await wrapper.get('button[title="返回星仪阅读窗"]').trigger("click");
     expect(wrapper.emitted("modeChange")?.at(-1)).toEqual(["reading"]);
+  });
+
+  it("opens the exact unit requested by the Orrery and publishes the visible unit", async () => {
+    const navigation = useReaderNavigationStore();
+    navigation.request("scene_0002");
+    const wrapper = mount(ManuscriptReader, {
+      props: {
+        mode: "reading",
+        items: [
+          { id: "scene_0001", title: "第一场", body: "第一场正文。" },
+          { id: "scene_0002", title: "第二场", body: "第二场正文。" },
+        ],
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.get(".reader-title-block h2").text()).toBe("第二场");
+    expect(navigation.activeUnitId).toBe("scene_0002");
   });
 });
