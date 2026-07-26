@@ -12,6 +12,13 @@
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
+## 实施顺序决策（2026-07-26）
+
+- W4 Project Archaeology 完成全部 Exit Gate 后，只实施 W5 中作为 W6 安全前置的 Capability Broker、能力策略/审计和必要 `ResourceClaim` 契约。
+- Pi RPC、Ollama 与新增模型供应商接入暂缓，不作为进入 W6 的前置；现有 `AgentRuntime`、Worker、任务包、Gate、JobStore 和当前 Provider 通道保持不变。
+- W6 不复制 W5 的 Runtime、Provider 或 Capability Broker。未获 Broker 授权的能力必须确定性拒绝；尚未具备资源声明的工作保持串行，不得伪报并发完成。
+- W5 的新增 Runtime 与 Provider 子项状态记为 `deferred_by_owner`；后续只有用户显式恢复时再实施。该顺序调整不降低 W4 退出标准，也不允许 W6 绕过 mandatory gates。
+
 ## 当前结论
 
 - F0 契约与架构基线已完成三个可回滚批次：吞吐测量、架构质量审计、叙事焦点契约。
@@ -19,7 +26,7 @@
 - W1 已满足当前路线定义的性能、导航、焦点、空间语法、主题、多窗口与 canvas 非空退出门禁。
 - W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、Registry 驱动的结构化编辑、状态化引导和隔离真实项目作者闭环。
 - W2 已满足统一实施方案当前定义的产品、Gate、Stable Knowledge 与架构出口；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 488 tests passed、1 skipped；Client 90 tests passed；Client production build、desktop frontend sync、Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
+- 最近一次全量证据：Python 524 tests passed、1 skipped；最近一次 Client 97 tests passed；Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -924,12 +931,48 @@
   - 事件时间约束、因果冲突、多解释保留和领域级候选复核尚未进入正式 route；
   - 候选项目重建、Archive 批量晋升、四种产品模式和 Archaeology 前端仍属于后续 W4 批次。
 
+## W4-2A：实体、事件、别名与冲突机器合同
+
+- Status: complete
+- Commit: `de86887`
+- Added:
+  - `arcvellum/project-archaeology-chunk-extraction/v1` 统一块级实体、事件、关系和主张合同；候选、属性与时间约束都必须绑定当前 chunk 的 evidence refs、confidence、unknowns 和 contradiction notes；
+  - 同名只形成 unresolved alias hypothesis，不自动合并身份；跨 chunk occurrence 使用 namespaced reference，避免局部 candidate ID 相撞；
+  - 确定性冲突发现覆盖同名身份歧义、同一主张的多值替代、Agent 声明矛盾和 before/after 时间环；所有替代保留，不按多数表述选真值；
+  - fan-in aggregate 明确区分 expected、received、missing、invalid chunk，并在不丢失有效局部工作的前提下 fail closed。
+- Boundary:
+  - schema、别名归一、时间约束和冲突检测归 `literary/ingest/`；不创建第二套 Archive 资产身份，不写 Canon；
+  - 本批只建立可验证聚合合同，不把确定性词法相似误称为共指决议。
+
+## W4-2B：Chunk Agent Task、Worker Preflight 与正式 Fan-In
+
+- Status: complete
+- Commit: `2f88888`
+- Added:
+  - 每个稳定 source chunk 获得独立 `.agent_tasks.md`、语义 JSON 和 completion receipt；workflow state 一次暴露一个未完成 chunk，为后续安全 fan-out 保留独立工作单元；
+  - Studio 任务包只向 Agent 暴露 `project.yaml`、manifest、evidence index 和当前 chunk；sidecar、完整控制读集与 completion receipt 留在 Worker 控制面；
+  - schema、work/chunk identity、source path/hash、evidence revision 和 status 收归 Worker canonicalization；Agent 只提交实体、事件、关系、主张与证据判断；
+  - 新增 `archaeology-aggregate` 确定性命令和精确 Prompt Asset；所有 chunk 与 receipt 通过后才进入 fan-in，aggregate 必须与当前 chunk 输出逐字可重建；
+  - source-ingest route 拆为 `blueprints.py`、`gates.py`、`support.py`，事务位置准备归 ingest importer，未增加大文件、复杂函数、依赖环或第二套状态机；
+  - 真实 deterministic Worker 测试证明控制沙箱会携带 source chunks、提取结果和 receipts，命令无需 Agent Runtime 即可生成并写回 ready aggregate。
+- Verification:
+  - Python full suite: 524 passed, 1 skipped；
+  - focused archaeology/route/preflight/Worker suite: passed；
+  - Prompt Registry: 50 assets, 85 task prompt ids, passed；
+  - `python -m compileall -q src tests`: passed；
+  - Architecture Audit: 36 existing file debts, 226 existing function debts, 0 cycles, no new violation；
+  - `git diff --check`: passed。
+- Not yet complete:
+  - aggregate 仍是证据 occurrence 与冲突集合，不是可晋升的候选项目；
+  - 全书 alias/coreference 的语义复核、分领域重建 review、四种产品模式和 Archive 候选晋升尚未完成；
+  - Project Archaeology 前端、恢复/中断矩阵和 W4 Exit Audit 尚未完成。
+
 ## 下一批
 
-W4-1 已通过。下一批开始前仍重新读取四份主指导文档和本账本，进入 W4-2“实体、别名与冲突候选”：
+W4-2B 已通过。下一批进入 W4-3“候选项目重建与 Archive 晋升边界”：
 
-1. 先审阅 source-ingest 当前候选 Markdown、Archive candidate identity、Agent preflight/schema 和 fan-in 能力，避免平行资产协议。
-2. 建立 `EntityMentionCandidate`、`EntityCandidate`、`AliasHypothesis`、`EventCandidate`、`TemporalConstraint` 和 `ConflictSet` 的 Engine-owned schema；所有结论绑定 W4-1 evidence refs。
-3. 为 chunk extraction、全书 alias/coreference aggregation 和 conflict review 分离任务与 barrier；同名不同人、一人多名、未知指代和矛盾时间不得静默合并。
-4. 先完成机器契约、确定性合并边界、Agent task/preflight 与 route Gate，再接 Archive 候选晋升；本批仍不提前建设 Archaeology 前端。
-5. 用跨 chunk 别名、同名冲突、时间循环、低置信度和中断重跑验证幂等、可恢复及无直接 Canon 写回。
+1. 审阅现有 Archive candidate registry、promotion route、stable asset identity 和 revision receipt，只复用正式写入路径。
+2. 以 ready aggregate 为唯一全书证据输入，新增 reconstruction candidate schema；人物、世界、时间线、情节、承诺和文风观察按领域分离。
+3. 把 alias/coreference resolution 与 conflict review 设计为显式 Agent task，任何未决集合继续保留，不能为了生成项目文件而强行闭合。
+4. 将已通过分领域 review 的 reconstruction materialize 为现有 Archive 候选，不直接写正式资产；用户或正式审批仍通过原 promotion Gate。
+5. 验证 candidate identity、重复运行幂等、源/aggregate 变化 stale、部分晋升、拒绝和回滚。
