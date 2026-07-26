@@ -1,18 +1,22 @@
-import { ref, shallowRef } from "vue";
+import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
 import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
+import type { NarrativeFocusLevel } from "@/features/orrery/model/focusScope";
 import type { SpatialGrammar, SpatialNarrativeProjection, SpatialNarrativeProjectionPatch } from "@/types/spatial";
 import { defaultObservation } from "@/features/orrery/layout/observationWindow";
 import { applySpatialProjectionPatch } from "@/features/orrery/model/projectionPatch";
 
 const DEFAULT_GRAMMAR: SpatialGrammar = "spine";
+type NarrativeViewTarget = { level: NarrativeFocusLevel; focus: string };
 
 export const useSpatialProjectionStore = defineStore("spatialProjection", () => {
   const projection = shallowRef<SpatialNarrativeProjection | null>(null);
   const loading = ref(false);
   const error = ref("");
-  const level = ref<"book" | "chapter" | "scene">("book");
+  const level = ref<NarrativeFocusLevel>("book");
   const focus = ref("");
+  const focusHistory = ref<NarrativeViewTarget[]>([]);
+  const canGoBack = computed(() => focusHistory.value.length > 0);
   const grammar = ref<SpatialGrammar>(DEFAULT_GRAMMAR);
   const projectRoot = ref("");
   const timeCursor = ref(0);
@@ -22,7 +26,8 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
   let stream: EventStreamConnection | null = null;
   let requestSequence = 0;
 
-  async function open(root: string, next: Partial<{ level: "book" | "chapter" | "scene"; focus: string; grammar: SpatialGrammar }> = {}): Promise<void> {
+  async function open(root: string, next: Partial<{ level: NarrativeFocusLevel; focus: string; grammar: SpatialGrammar }> = {}): Promise<void> {
+    if (projectRoot.value !== root) focusHistory.value = [];
     projectRoot.value = root;
     level.value = next.level || level.value;
     focus.value = next.focus ?? focus.value;
@@ -48,10 +53,26 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     }
   }
 
-  async function setView(next: { level?: "book" | "chapter" | "scene"; focus?: string; grammar?: SpatialGrammar }): Promise<void> {
+  async function setView(next: { level?: NarrativeFocusLevel; focus?: string; grammar?: SpatialGrammar }): Promise<void> {
+    const previous = { level: level.value, focus: focus.value };
+    const nextLevel = next.level || level.value;
+    const nextFocus = next.focus !== undefined ? next.focus : focus.value;
+    if (previous.level !== nextLevel || previous.focus !== nextFocus) {
+      focusHistory.value = [...focusHistory.value.slice(-31), previous];
+    }
     if (next.level) level.value = next.level;
     if (next.focus !== undefined) focus.value = next.focus;
     if (next.grammar) grammar.value = next.grammar;
+    await refresh();
+    startStream();
+  }
+
+  async function goBack(): Promise<void> {
+    const previous = focusHistory.value.at(-1);
+    if (!previous) return;
+    focusHistory.value = focusHistory.value.slice(0, -1);
+    level.value = previous.level;
+    focus.value = previous.focus;
     await refresh();
     startStream();
   }
@@ -83,6 +104,7 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     projection.value = null;
     error.value = "";
     observationProject = "";
+    focusHistory.value = [];
   }
 
   function params(): string {
@@ -138,7 +160,7 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
 
   return {
     projection, loading, error, level, focus, grammar, projectRoot,
-    timeCursor, timeWindow, cameraPreset,
-    open, refresh, setView, setObservation, setCameraPreset, close,
+    focusHistory, canGoBack, timeCursor, timeWindow, cameraPreset,
+    open, refresh, setView, goBack, setObservation, setCameraPreset, close,
   };
 });

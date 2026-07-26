@@ -28,7 +28,7 @@ const groups = computed(() => buildCharacterThreadGroups(
     <section v-for="group in groups" :key="group.id" :data-group="group.id">
       <small>{{ group.label }}</small>
       <button
-        v-for="thread in group.items.slice(0, group.id === 'book' ? 6 : 4)"
+        v-for="thread in group.items"
         :key="thread.node.node_id"
         :class="{ active: activeCharacterId === thread.node.node_id, unresolved: group.id === 'unresolved' }"
         :title="thread.reference.resolution === 'resolved'

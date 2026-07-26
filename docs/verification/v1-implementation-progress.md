@@ -1554,7 +1554,7 @@ context 失败只能留下 fallback 证据，不得改变 fixed route。
 
 ### W6-4E：星仪 W1 文档差距补缺
 
-**状态：待实施，必须先于 W6-5。**
+**状态：进行中，W1-Fix A/B 已完成，W1-Fix C/D 与自动化视觉退出验收待实施。**
 
 实际代码与 W1 文档复核确认星仪基础完整，但存在不能等到 W6-9 的产品缺口：
 
@@ -1565,6 +1565,30 @@ context 失败只能留下 fallback 证据，不得改变 fixed route。
 其中前两项为 W1 P1，先完成焦点一致性与关系可见性；其余按 W1-UX 分批实现。AO-8 只
 增加计划、Gate、Patch 和 Agent Observatory 投影，不得拿未来编排 UI 掩盖现有星仪缺口。
 完整审计见 `docs/architecture/reviews/orrery-w1-document-gap-audit.md`。
+
+W1-Fix A/B 实现结果：
+
+- 章节目录统一提交 `chapter` focus；即使当前在 scene level，也不再用首场景冒充整章；
+- Focus Store 正式支持 `character` level、焦点历史和返回上一焦点，人物轨道不再只是
+  局部 CSS 高亮；
+- v3 无障碍摘要由实际 focus scope 生成，人物、章节与场景焦点不再复用 v2 全书摘要；
+- 新增紧凑 Relation Lens，使用后端 11 类 `relation_profiles` 提供计数、显隐、独看与复位；
+- Pixi 与 SVG 渲染共同消费 far/mid/near relation mode，独看会把选中关系族提升为
+  emphasized；固定 `6` 条 local flow、`5` 条人物线和 book 级证据省略已移除；
+- 人物栏不再按组截断，关系降噪改为可解释 LOD，而不是静默丢边。
+
+本子批证据：
+
+- Client：106 tests passed；
+- v3 Narrative Projection：9 tests passed；
+- `python -m unittest discover -s tests -v`：628 passed，1 skipped；
+- `vue-tsc`、生产 `client:build`、`git diff --check`：passed；
+- Architecture Audit：35 个既有 file debt、224 个既有 function debt、0 cycle，无新增债务；
+- 真实项目 `1+1=2` 浏览器验收通过：关系镜头无窗口遮挡，character focus 可回退，
+  scene level 点击第 2 章得到 `章节焦点“第 2 章”`。
+
+剩余 W1-Fix C/D 不得省略：空间搜索、显示全部标签、小地图/beacon、键盘导航、节点与
+阅读器双向定位，以及高级透镜/书签/回放和可重复视觉回归仍需后续独立提交。
 
 ### W6 后续完整阶段映射
 

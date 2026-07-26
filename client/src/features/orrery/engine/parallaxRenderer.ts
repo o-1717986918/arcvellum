@@ -4,6 +4,7 @@ import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/ty
 import type { OrreryDepth, OrreryMotion, OrreryRenderQuality } from "@/services/orreryPreferences";
 import { DEFAULT_PARALLAX_VIEW, NARRATIVE_STAGE, depthScale, fittedCameraFrame, isSameParallaxView, parallaxViewFromDrag, planeBounds, scenePoint, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import { constellationClusterSize, stageActSize } from "@/features/orrery/layout/curveProfiles";
+import { relationModeForLevel } from "@/features/orrery/model/relationLens";
 
 // Book-scale work surface. The world is intentionally generous so a 300+ scene
 // projection can still fit without the camera clamping the last chapters.
@@ -618,6 +619,7 @@ export class NarrativeParallaxRenderer {
     if (!this.projection || !this.layout) return;
     const primary = new Graphics();
     const secondary = new Graphics();
+    const profiles = new Map(this.projection.relation_profiles.map((profile) => [profile.family, profile]));
     const detailProjection = this.projection.level !== "book";
     const globalBackboneGrammar = this.layout.grammar !== "loop" && this.layout.grammar !== "constellation";
     for (const edge of this.projection.edges) {
@@ -642,10 +644,9 @@ export class NarrativeParallaxRenderer {
         edge.source === this.focusedNodeId || edge.target === this.focusedNodeId
       );
       const localEvidence = detailProjection && focusedEvidence && !backbone;
-      // In a linear grammar the full sequence is the scenery. In a radial
-      // grammar that same all-book sequence becomes a bright tangled mesh, so
-      // only the foreground SVG's currently visible spine speaks clearly.
-      const connection = (backbone && globalBackboneGrammar) || localEvidence ? primary : secondary;
+      const relationMode = relationModeForLevel(profiles.get(edge.relation_family), this.projection.level);
+      const emphasized = relationMode === "emphasized";
+      const connection = (backbone && globalBackboneGrammar) || localEvidence || emphasized ? primary : secondary;
       // A narrative relationship is a route through the field, not a diagram
       // wire. Its stable bend keeps the graph legible across live refreshes.
       const dx = end.x - start.x;
@@ -656,11 +657,10 @@ export class NarrativeParallaxRenderer {
       const bend = Math.min(220, Math.max(26, distance * (backbone ? 0.11 : 0.18))) * curvePolarity(edge.edge_id);
       const controlA = { x: start.x + dx * 0.34 + normalX * bend, y: start.y + dy * 0.34 + normalY * bend };
       const controlB = { x: end.x - dx * 0.34 + normalX * bend, y: end.y - dy * 0.34 + normalY * bend };
-      // The SVG foreground layer redraws nearby detail relations when both
-      // endpoints are in view. Keep this GPU layer quiet so distant evidence
-      // reads as atmosphere rather than a thicket of wires across the book.
-      const width = edge.type === "branch" ? 2.3 : backbone ? 2.8 : localEvidence ? 1.15 : 1.1;
-      const alpha = backbone ? (detailProjection ? 0.64 : 0.48) : localEvidence ? 0.38 : edge.strength > 0.7 ? 0.16 : 0.065;
+      const modeWidth = relationMode === "emphasized" ? 1.55 : relationMode === "individual" ? 1.15 : 0.82;
+      const modeAlpha = relationMode === "emphasized" ? 1.6 : relationMode === "individual" ? 1.08 : 0.72;
+      const width = (edge.type === "branch" ? 2.3 : backbone ? 2.8 : localEvidence ? 1.15 : 1.1) * modeWidth;
+      const alpha = Math.min(0.78, (backbone ? (detailProjection ? 0.64 : 0.48) : localEvidence ? 0.38 : edge.strength > 0.7 ? 0.2 : 0.11) * modeAlpha);
       connection.moveTo(start.x, start.y).bezierCurveTo(controlA.x, controlA.y, controlB.x, controlB.y, end.x, end.y).stroke({ color, width, alpha });
     }
     this.primaryRelations = primary;
@@ -730,7 +730,7 @@ export class NarrativeParallaxRenderer {
     const scale = this.viewport.scale.x;
     const focused = Boolean(this.focusedNodeId);
     this.primaryRelations.alpha = scale >= 0.42 ? 1 : scale >= 0.22 ? 0.62 : 0.38;
-    this.secondaryRelations.alpha = focused ? 0.26 : scale >= 0.82 ? 0.15 : scale >= 0.58 ? 0.06 : scale >= 0.3 ? 0.025 : 0.01;
+    this.secondaryRelations.alpha = focused ? 0.46 : scale >= 0.82 ? 0.32 : scale >= 0.58 ? 0.22 : scale >= 0.3 ? 0.14 : 0.09;
   }
 
   private tideOffset(node: SpatialNarrativeProjection["nodes"][number], base: { x: number; y: number }): { x: number; y: number } {

@@ -94,6 +94,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.assertNotIn("x", scene)
         self.assertNotIn("y", scene)
         self.assertGreaterEqual(projection["summary"]["cluster_count"], 1)
+        self.assertIn("章节焦点“第 1 章”", projection["accessibility_summary"])
 
     def test_book_completion_state_comes_from_formal_scene_coverage_and_active_target(self):
         active = self._projection(level="book", grammar="spine")
@@ -206,6 +207,8 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.assertEqual(projection["focus_scope"]["anchor_node_ids"], ["character:lin"])
         self.assertIn("character:wen", projection["focus_scope"]["context_node_ids"])
         self.assertTrue(any(node["type"] == "chapter" for node in projection["nodes"]))
+        self.assertIn("人物焦点", projection["accessibility_summary"])
+        self.assertIn("仍保留全书上下文", projection["accessibility_summary"])
 
     def test_alias_and_unresolved_character_mentions_survive_detail_projection(self):
         library = {

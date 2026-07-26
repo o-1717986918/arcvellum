@@ -141,6 +141,37 @@ describe("spatial projection store", () => {
     expect(store.projection?.focus).toBe("chapter_0050");
   });
 
+  it("enters a formal character focus and returns through focus history", async () => {
+    const initial = projection("projection-1");
+    const characterFocused = {
+      ...projection("projection-2", 1),
+      level: "character" as const,
+      focus: "character:lin",
+      focus_scope: {
+        level: "character" as const,
+        focus_id: "lin",
+        anchor_node_ids: ["character:lin"],
+        context_node_ids: [],
+        chapter_ids: ["chapter_0001"],
+        scene_ids: ["scene_0001"],
+        character_ids: ["lin"],
+      },
+    };
+    apiMock.mockResolvedValueOnce(initial).mockResolvedValueOnce(characterFocused).mockResolvedValueOnce(initial);
+    const { useSpatialProjectionStore } = await import("./spatialProjection");
+    const store = useSpatialProjectionStore();
+    await store.open(initial.project_root);
+
+    await store.setView({ level: "character", focus: "character:lin" });
+
+    expect(store.level).toBe("character");
+    expect(store.canGoBack).toBe(true);
+    await store.goBack();
+    expect(store.level).toBe("book");
+    expect(store.focus).toBe("");
+    expect(store.canGoBack).toBe(false);
+  });
+
   it("replaces projection identity when narrative evidence changes", async () => {
     const initial = projection("projection-1");
     apiMock.mockResolvedValue(initial);

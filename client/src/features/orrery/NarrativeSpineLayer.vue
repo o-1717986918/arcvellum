@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { relationModeForLevel } from "@/features/orrery/model/relationLens";
 import type { SpatialCompletionState, SpatialNarrativeEdge, SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
 
 type Anchor = { x: number; y: number; visible: boolean; scale: number };
@@ -40,6 +41,7 @@ const chapterSpokes = computed(() => spineClusters.value.flatMap((cluster) => cl
     completion: chapterCompletion(cluster),
   }))));
 const nodesById = computed(() => new Map(props.projection.nodes.map((node) => [node.node_id, node])));
+const relationProfiles = computed(() => new Map(props.projection.relation_profiles.map((profile) => [profile.family, profile])));
 const activeChapterKey = computed(() => chapterKey(props.activeChapterId));
 const hasChapterFocus = computed(() => Boolean(activeChapterKey.value));
 
@@ -63,17 +65,14 @@ const localFlowPaths = computed(() => {
         path: relationshipPath(source, target, edge.edge_id),
         type: edge.type,
         family: edge.relation_family,
+        mode: edgeRelationMode(edge),
         ...edgeChapterState(edge),
       } : null;
     })
-    .filter((item) => item !== null)
-    // Keep the chronological hand-off sparse. All non-sequence evidence is
-    // drawn by `sceneEvidencePaths` below with its own visual grammar.
-    .slice(0, 6);
+    .filter((item) => item !== null);
 });
 
 const sceneEvidencePaths = computed(() => {
-  if (props.projection.level === "book") return [];
   const evidenceTypes = new Set(["branch", "promise", "reader-question", "review", "canon", "task", "character"]);
   return props.projection.edges
     .map((edge) => {
@@ -85,12 +84,13 @@ const sceneEvidencePaths = computed(() => {
       if (!evidenceNode || !evidenceTypes.has(evidenceNode.type)) return null;
       const source = props.anchors[edge.source];
       const target = props.anchors[edge.target];
-      if (!source || !target || !source.visible || !target.visible || source.scale < 0.56 || target.scale < 0.56) return null;
+      if (!source || !target || !source.visible || !target.visible) return null;
       return {
         id: edge.edge_id,
         path: relationshipPath(source, target, edge.edge_id),
         type: edge.type,
         family: edge.relation_family,
+        mode: edgeRelationMode(edge),
         nodeType: evidenceNode.type,
         ...edgeChapterState(edge),
       };
@@ -115,13 +115,11 @@ const characterPaths = computed(() => characterRelations.value
       muted: !characterActive && ((Boolean(props.activeCharacterId)) || chapter.muted),
       path: relationshipPath(source, target, edge.edge_id),
       color: threadColor(characterId),
+      mode: edgeRelationMode(edge),
     };
   })
-  .filter((item): item is { id: string; active: boolean; muted: boolean; path: string; color: string } => Boolean(item))
-  .filter((item) => !props.activeCharacterId || item.active)
-  .filter((item) => !activeChapterKey.value || item.active || !item.muted)
-  .sort((left, right) => Number(right.active) - Number(left.active))
-  .slice(0, props.activeCharacterId || activeChapterKey.value ? undefined : 5));
+  .filter((item): item is { id: string; active: boolean; muted: boolean; path: string; color: string; mode: string } => Boolean(item))
+  .sort((left, right) => Number(right.active) - Number(left.active)));
 
 onMounted(() => {
   if (!host.value) return;
@@ -298,6 +296,10 @@ function characterEndpoint(edge: SpatialNarrativeEdge): string | null {
   return null;
 }
 
+function edgeRelationMode(edge: SpatialNarrativeEdge): string {
+  return relationModeForLevel(relationProfiles.value.get(edge.relation_family), props.projection.level);
+}
+
 function threadColor(value: string): string {
   let hash = 0;
   for (const character of value) hash = ((hash << 5) - hash) + character.charCodeAt(0);
@@ -341,6 +343,7 @@ function threadColor(value: string): string {
       :data-level="projection.level"
       :data-type="connection.type"
       :data-family="connection.family"
+      :data-lod="connection.mode"
       :d="connection.path"
     />
     <path
@@ -350,6 +353,7 @@ function threadColor(value: string): string {
       :class="{ active: connection.active, muted: connection.muted }"
       :data-type="connection.type"
       :data-family="connection.family"
+      :data-lod="connection.mode"
       :data-node-type="connection.nodeType"
       :d="connection.path"
     />
@@ -358,6 +362,8 @@ function threadColor(value: string): string {
       :key="relation.id"
       class="narrative-character-thread"
       :class="{ active: relation.active, muted: relation.muted }"
+      data-family="character-scene"
+      :data-lod="relation.mode"
       :stroke="relation.color"
       :d="relation.path"
     />

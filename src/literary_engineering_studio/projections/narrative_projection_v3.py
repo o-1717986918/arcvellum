@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan
@@ -109,8 +110,41 @@ def build_narrative_projection_v3(
         "delta": projection_delta(None, {"nodes": nodes, "edges": edges}),
         "motion_events": [],
         "legend": base.get("legend", []),
-        "accessibility_summary": base.get("accessibility_summary", ""),
+        "accessibility_summary": _accessibility_summary(focus_scope.as_dict(), nodes, edges),
     }
+
+
+def _accessibility_summary(
+    focus_scope: dict[str, Any],
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> str:
+    level = str(focus_scope.get("level") or "book")
+    node_by_id = {str(item.get("node_id") or ""): item for item in nodes}
+    focus_id = str(focus_scope.get("focus_id") or "").strip()
+    focus_node = node_by_id.get(f"{level}:{focus_id}", {})
+    focus_label = str(focus_node.get("label") or "").strip() or _human_focus_label(level, focus_id)
+    labels = {
+        "book": "全书视图",
+        "chapter": "章节焦点",
+        "scene": "场景焦点",
+        "character": "人物焦点",
+    }
+    prefix = labels.get(level, "叙事焦点")
+    if focus_label and level != "book":
+        prefix = f"{prefix}“{focus_label}”"
+    context = "，仍保留全书上下文" if level != "book" else ""
+    return f"{prefix}{context}；共 {len(nodes)} 个节点、{len(edges)} 条关系。"
+
+
+def _human_focus_label(level: str, focus_id: str) -> str:
+    match = re.fullmatch(r"chapter[_-]?0*(\d+)", focus_id, flags=re.IGNORECASE)
+    if level == "chapter" and match:
+        return f"第 {int(match.group(1))} 章"
+    match = re.fullmatch(r"scene[_-]?0*(\d+)", focus_id, flags=re.IGNORECASE)
+    if level == "scene" and match:
+        return f"场景 {int(match.group(1))}"
+    return focus_id.replace("_", " ").strip()
 
 
 def build_narrative_node_detail_v3(

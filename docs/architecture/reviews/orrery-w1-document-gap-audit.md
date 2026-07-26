@@ -184,6 +184,20 @@ pixel check 套件。
    - Playwright 截图、canvas pixel check、SSE 后焦点与窗口稳定性；
    - 低性能模式和 reduced-motion 功能等价。
 
+## 5.1 2026-07-26 实施回执
+
+W1-Fix A 与 W1-Fix B 已完成：
+
+- `chapterRailFocusTarget()` 把底部目录锁为 chapter scope；
+- `spatialProjection` Store 已支持 character focus、history 和 back；
+- `RelationLensBar` 已提供 11 类真实关系的计数、显隐、独看与复位；
+- `relationModeForLevel()` 和 `applyRelationLens()` 成为 Vue、SVG、Pixi 共用的纯模型边界；
+- 固定关系裁剪已移除，人物列表不再隐藏后续条目；
+- v3 焦点摘要已从旧全书文案改为实际焦点可读描述。
+
+3.1、3.2 已关闭，3.3 的正式人物焦点与返回历史已关闭。3.4、3.5、3.6、3.7
+仍保持开放，不因本次界面已有“关系镜头”而提前宣告 W1 完成。
+
 ## 6. 架构约束
 
 - 不在 `OrreryWorkbench.vue` 中实现布局、关系裁剪、搜索索引或窗口正文；

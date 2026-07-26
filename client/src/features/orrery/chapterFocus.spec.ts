@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chapterClusterFocusPoint } from "@/features/orrery/chapterFocus";
+import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import type { SpatialNarrativeNode } from "@/types/spatial";
 
 function scene(id: string, chapterId: string): SpatialNarrativeNode {
@@ -26,6 +26,10 @@ function scene(id: string, chapterId: string): SpatialNarrativeNode {
 }
 
 describe("chapterClusterFocusPoint", () => {
+  it("always requests a chapter focus from the global chapter rail", () => {
+    expect(chapterRailFocusTarget("chapter:chapter_0007")).toEqual({ level: "chapter", focus: "chapter_0007" });
+  });
+
   it("centres the whole chapter cluster instead of landing on its first scene", () => {
     const nodes = [scene("scene:one", "chapter_0001"), scene("scene:two", "chapter_0001"), scene("scene:three", "chapter_0002")];
     const points = new Map([

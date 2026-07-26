@@ -1,4 +1,9 @@
+import type { NarrativeFocusLevel } from "@/features/orrery/model/focusScope";
 import type { SpatialNarrativeNode, WorldPoint } from "@/types/spatial";
+
+export function chapterRailFocusTarget(chapterId: string): { level: NarrativeFocusLevel; focus: string } {
+  return { level: "chapter", focus: String(chapterId || "").replace(/^chapter:/, "") };
+}
 
 /**
  * Finds the visual centre of one chapter's scene cluster. The chapter rail is

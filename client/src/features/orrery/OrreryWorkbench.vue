@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Activity, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
+import { Activity, ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
@@ -9,9 +9,12 @@ import OrreryAccessibleView from "@/features/orrery/OrreryAccessibleView.vue";
 import NarrativeParallaxStage from "@/features/orrery/NarrativeParallaxStage.vue";
 import NarrativeHealthRail from "@/features/orrery/NarrativeHealthRail.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
+import RelationLensBar from "@/features/orrery/RelationLensBar.vue";
 import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
-import { chapterClusterFocusPoint } from "@/features/orrery/chapterFocus";
+import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
+import { applyRelationLens } from "@/features/orrery/model/relationLens";
+import type { RelationFamily } from "@/features/orrery/model/relations";
 import { api, query } from "@/services/api";
 import { manuscriptItems } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
@@ -35,12 +38,19 @@ const choices = computed(() => humanChoices.choices);
 const healthExpanded = ref(false);
 const projectBandOpen = ref(false);
 const activeCharacterId = ref("");
+const hiddenRelationFamilies = ref<RelationFamily[]>([]);
+const soloRelationFamily = ref<RelationFamily | "">("");
 const staticStage = ref(false);
 const bookChapterNodes = ref<SpatialNarrativeNode[]>([]);
 let chapterRailRequest = 0;
 
 const projection = computed(() => spatial.projection);
-const layout = computed(() => projection.value ? buildSpatialLayout(projection.value.spatial_grammar, projection.value.revision, projection.value.nodes, projection.value.layout_seed) : null);
+const displayProjection = computed(() => projection.value
+  ? applyRelationLens(projection.value, { hidden: hiddenRelationFamilies.value, solo: soloRelationFamily.value })
+  : null);
+const layout = computed(() => displayProjection.value
+  ? buildSpatialLayout(displayProjection.value.spatial_grammar, displayProjection.value.revision, displayProjection.value.nodes, displayProjection.value.layout_seed)
+  : null);
 const deliveryReady = computed(() => String(app.delivery?.status || "") === "ready");
 const prose = computed(() => manuscriptItems((app.library || null) as Record<string, unknown> | null));
 const progress = computed(() => app.projectProgress);
@@ -80,6 +90,9 @@ const timeBounds = computed(() => {
 watch(() => app.currentProjectPath, (root) => {
   windows.clear();
   staticStage.value = false;
+  activeCharacterId.value = "";
+  hiddenRelationFamilies.value = [];
+  soloRelationFamily.value = "";
   if (root) {
     void spatial.open(root, { level: "book", focus: "" });
     void loadChoices();
@@ -107,6 +120,12 @@ watch(() => projection.value?.source_revisions?.dashboard, () => {
   void loadChoices();
 });
 watch(projection, (next) => {
+  if (next?.level === "character") {
+    const focusId = String(next.focus || "").replace(/^character:/, "");
+    activeCharacterId.value = next.nodes.find((node) => node.type === "character"
+      && (node.node_id === next.focus || node.source_id === focusId || node.node_id === `character:${focusId}`))?.node_id || "";
+    return;
+  }
   if (activeCharacterId.value && !next?.nodes.some((node) => node.node_id === activeCharacterId.value && node.type === "character")) {
     activeCharacterId.value = "";
   }
@@ -132,7 +151,13 @@ async function selectNode(node: SpatialNarrativeNode): Promise<void> {
 }
 
 function setLevel(level: "book" | "chapter" | "scene"): void {
+  activeCharacterId.value = "";
   void spatial.setView({ level, focus: "" });
+}
+
+async function goBack(): Promise<void> {
+  activeCharacterId.value = "";
+  await spatial.goBack();
 }
 
 async function setGrammar(event: Event): Promise<void> {
@@ -170,17 +195,8 @@ function resetView(): void {
 async function openChapterFromRail(nodeId: string): Promise<void> {
   const chapter = chapterNodes.value.find((item) => item.node_id === nodeId);
   if (!chapter) return;
-  // The rail is a global table of contents. It never replaces the full-book
-  // canvas: scene mode still needs one entry scene for its detail contract,
-  // but the camera lands at the centre of the whole chapter cluster.
-  const entryScene = String(chapter.metrics.entry_scene_id || "") || projection.value?.nodes
-    .filter((node) => node.type === "scene" && String(node.metrics.chapter_id || "") === chapter.source_id)
-    .sort((left, right) => left.order - right.order)[0]?.node_id.replace(/^scene:/, "") || "";
-  if (spatial.level === "scene") {
-    await spatial.setView({ level: "scene", focus: entryScene });
-  } else {
-    await spatial.setView({ level: "chapter", focus: chapter.source_id });
-  }
+  activeCharacterId.value = "";
+  await spatial.setView(chapterRailFocusTarget(chapter.source_id));
   await focusChapterCluster(chapter.source_id, chapter.node_id);
 }
 
@@ -207,8 +223,30 @@ async function focusChapterCluster(chapterId: string, chapterNodeId: string): Pr
   if (point) stage.value?.focus(point, chapterNodeId);
 }
 
-function selectCharacter(nodeId: string): void {
+async function selectCharacter(nodeId: string): Promise<void> {
+  if (!nodeId) {
+    activeCharacterId.value = "";
+    if (spatial.level === "character") await spatial.goBack();
+    return;
+  }
   activeCharacterId.value = nodeId;
+  await spatial.setView({ level: "character", focus: nodeId });
+}
+
+function toggleRelationFamily(family: RelationFamily): void {
+  if (soloRelationFamily.value) soloRelationFamily.value = "";
+  hiddenRelationFamilies.value = hiddenRelationFamilies.value.includes(family)
+    ? hiddenRelationFamilies.value.filter((item) => item !== family)
+    : [...hiddenRelationFamilies.value, family];
+}
+
+function soloRelation(family: RelationFamily | ""): void {
+  soloRelationFamily.value = family;
+}
+
+function resetRelationLens(): void {
+  hiddenRelationFamilies.value = [];
+  soloRelationFamily.value = "";
 }
 
 function grammarLabel(grammar: SpatialGrammar): string {
@@ -259,6 +297,7 @@ async function loadChapterRail(root: string): Promise<void> {
     </div>
 
     <nav class="orrery-v3-controls" aria-label="叙事场域控制">
+      <button v-if="spatial.canGoBack" class="orrery-v3-icon" title="返回上一个叙事焦点" aria-label="返回上一个叙事焦点" @click="goBack"><ArrowLeft :size="15" /></button>
       <div class="orrery-v3-levels" role="tablist"><button :class="{ active: spatial.level === 'book' }" @click="setLevel('book')">全书</button><button :class="{ active: spatial.level === 'chapter' }" @click="setLevel('chapter')">章节</button><button :class="{ active: spatial.level === 'scene' }" @click="setLevel('scene')">场景</button></div>
       <label><Layers3 :size="14" /><select :value="spatial.grammar" aria-label="叙事空间构型" @change="setGrammar"><option v-for="grammar in projection?.available_grammars || []" :key="grammar" :value="grammar">{{ grammarLabel(grammar) }}</option></select></label>
       <label class="orrery-time-observer" title="调整观测时点；全书节点不会被删除"><Clock3 :size="14" /><input type="range" :min="timeBounds.min" :max="timeBounds.max" step="1" :value="spatial.timeCursor" aria-label="叙事观测时点" @input="spatial.setObservation({ cursor: Number(($event.target as HTMLInputElement).value) })" /><output>{{ Math.round(spatial.timeCursor) }}</output></label>
@@ -270,15 +309,23 @@ async function loadChapterRail(root: string): Promise<void> {
 
     <div v-if="spatial.loading && !projection" class="orrery-v3-empty"><i></i><strong>正在建立叙事场域</strong><p>只会读取已经进入正式项目的作品事实。</p></div>
     <div v-else-if="spatial.error && !projection" class="orrery-v3-empty error"><strong>暂时无法读取叙事场域</strong><p>{{ spatial.error }}</p><button class="secondary-button" @click="spatial.refresh()">重新连接</button></div>
-    <OrreryAccessibleView v-else-if="projection && listMode" :nodes="projection.nodes" :selected-node-id="windows.selectedNodeId" @select="selectNode" />
-    <div v-else-if="projection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
-      <NarrativeParallaxStage ref="stage" :projection="projection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
-      <NarrativeSpineLayer :projection="projection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
-      <OrreryNodeOverlay :nodes="projection.nodes" :anchors="anchors" :level="projection.level" :motion-events="projection.motion_events" :time-cursor="spatial.timeCursor" :time-window="spatial.timeWindow" :selected-node-id="windows.selectedNodeId" :focus-node-id="windows.selectedNodeId" @select="selectNode" @focus="focusNodeObject" />
+    <OrreryAccessibleView v-else-if="displayProjection && listMode" :nodes="displayProjection.nodes" :selected-node-id="windows.selectedNodeId" @select="selectNode" />
+    <div v-else-if="displayProjection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
+      <NarrativeParallaxStage ref="stage" :projection="displayProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
+      <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
+      <OrreryNodeOverlay :nodes="displayProjection.nodes" :anchors="anchors" :level="displayProjection.level" :motion-events="displayProjection.motion_events" :time-cursor="spatial.timeCursor" :time-window="spatial.timeWindow" :selected-node-id="windows.selectedNodeId" :focus-node-id="windows.selectedNodeId" @select="selectNode" @focus="focusNodeObject" />
+      <RelationLensBar
+        :profiles="projection?.relation_profiles || []"
+        :hidden="hiddenRelationFamilies"
+        :solo="soloRelationFamily"
+        @toggle="toggleRelationFamily"
+        @solo="soloRelation"
+        @reset="resetRelationLens"
+      />
       <NarrativeHealthRail :dashboard="props.dashboard" :expanded="healthExpanded" @toggle="healthExpanded = !healthExpanded" />
       <CharacterThreadRail
-        :nodes="projection.nodes"
-        :references="projection.character_references"
+        :nodes="displayProjection.nodes"
+        :references="displayProjection.character_references"
         :active-character-id="activeCharacterId"
         :active-chapter-id="activeChapterId"
         @select="selectCharacter"
@@ -289,7 +336,7 @@ async function loadChapterRail(root: string): Promise<void> {
         <i><b :style="{ height: `${Math.min(100, Math.max(0, overallProgress || 0))}%` }"></b></i>
         <small>{{ progress?.status === 'calibrated' ? '准备 / 正文 / 交付' : '先设置可靠字数目标' }}</small>
       </button>
-      <div class="orrery-v3-caption"><Maximize2 :size="14" /><span>{{ projection.summary.node_count }} 个真实节点</span><i></i><span>{{ projection.summary.cluster_count }} 个叙事构件</span></div>
+      <div class="orrery-v3-caption"><Maximize2 :size="14" /><span>{{ displayProjection.summary.node_count }} 个真实节点</span><i></i><span>{{ displayProjection.summary.cluster_count }} 个叙事构件</span></div>
     </div>
     <div v-else class="orrery-v3-empty"><i></i><strong>等待作品长出第一段脉络</strong><p>场景、人物或正文出现后，这里会形成可以进入的叙事场域。</p></div>
     <nav class="orrery-v3-instrument-dock" aria-label="创作控制仪表">
