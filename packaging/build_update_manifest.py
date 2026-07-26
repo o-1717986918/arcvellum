@@ -47,9 +47,7 @@ def build_manifest(
             if version in path.name
         ]
     output_dir.mkdir(parents=True, exist_ok=True)
-    for stale in output_dir.iterdir():
-        if stale.is_file() and _is_release_output(stale):
-            stale.unlink()
+    retained_stale = _remove_stale_outputs(output_dir)
     copied = []
     for source in dict.fromkeys([artifact, signature, *installers]):
         target = output_dir / source.name
@@ -78,6 +76,7 @@ def build_manifest(
         "manifest": str(manifest),
         "checksums": str(checksums),
         "files": [path.name for path in copied] + [checksums.name],
+        "retained_stale": retained_stale,
     }
 
 
@@ -119,6 +118,20 @@ def _is_release_output(path: Path) -> bool:
         or name.endswith(".msi")
         or name.endswith(".msi.sig")
     )
+
+
+def _remove_stale_outputs(output_dir: Path) -> list[str]:
+    retained: list[str] = []
+    for stale in output_dir.iterdir():
+        if not stale.is_file() or not _is_release_output(stale):
+            continue
+        try:
+            stale.unlink()
+        except PermissionError:
+            # A browser, Explorer preview, or virus scanner may hold an old
+            # installer open. It is excluded from the new manifest/checksums.
+            retained.append(stale.name)
+    return retained
 
 
 if __name__ == "__main__":
