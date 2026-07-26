@@ -111,6 +111,13 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     archaeology_aggregate.add_argument("project", help="Work project directory.")
     archaeology_aggregate.add_argument("--work-id", required=True, help="Stable source import id.")
 
+    archaeology_materialize = sub.add_parser(
+        "archaeology-materialize",
+        help="Materialize passed archaeology reconstruction assets into the Archive candidate queue.",
+    )
+    archaeology_materialize.add_argument("project", help="Work project directory.")
+    archaeology_materialize.add_argument("--work-id", required=True, help="Stable source import id.")
+
     register_style_commands(sub)
 
     agent_run = sub.add_parser("agent-run", help="Run a generic auditable agent task.")

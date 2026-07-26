@@ -238,7 +238,7 @@ class ProjectArchaeologyExtractionTests(unittest.TestCase):
             self.assertEqual(aggregate["fan_in"]["status"], "ready")
             self.assertEqual(
                 _source_state(root)["current_step"],
-                "extraction-agent-task",
+                "archaeology-resolution-agent-task",
             )
 
 

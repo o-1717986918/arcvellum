@@ -86,9 +86,15 @@ Project Archaeology 的确定性源文本层位于 `src/literary_engineering_stu
 - `segmentation.py` 只把可靠边界投影为卷、章、节、段落、脚注和语义 chunk；
 - `evidence.py` 建立并验证 source/range/hash/extractor/confidence 证据图；
 - `importer.py` 负责不可变原文保全、staging/backup 事务和中断恢复；
+- `reconstruction.py` 只聚合 chunk 产物并建立 fan-in revision，不执行别名语义合并；
+- `reconstruction_contracts.py`、`domain_review.py` 约束全书身份解析、候选项目和五领域审查，保留未决身份、冲突和模式差异；
+- `materialization_records.py` 只从通过审查的重建结果构造 Archive 候选记录，`materialization_storage.py` 只负责可回滚磁盘事务，`materialization.py` 负责编排二者；
+- `provenance.py` 在共享 Archive promotion Gate 前重新验证来源、aggregate、identity、reconstruction 与 review revision；来源变化后的旧候选不得晋升；
 - `projects/source_ingest.py` 继续作为兼容 facade，组装候选输出与平台 Agent sidecar，但不复制 reader、分段或证据算法。
 
 `source-ingest/v1` 继续可读；新导入写 `source-ingest/v2`。v2 正式 Gate 必须验证原始文件与提取文本 hash、range/segment/evidence 对应关系、chunk 引用、导入 revision 和项目相对路径。Agent 只读取 task package 明确列出的项目身份、manifest、evidence index 和 chunks；所有反推结论仍只写候选区。
+
+v2 的正式顺序为 chunk extraction → deterministic fan-in → identity resolution → candidate reconstruction → five-domain review → deterministic materialization。`analysis` 模式在通过 analysis-only review 后结束，不物化可晋升资产；其余模式也只能进入已注册的 Archive candidate 目录，继续复用独立 review、当前内容批准和原子 promotion。
 
 ### Longform-Planning Route
 

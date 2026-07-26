@@ -20,6 +20,13 @@ from .support import (
     file_sha256,
     unique,
 )
+from .reconstruction_blueprints import (
+    aggregate_path as _aggregate_path,
+    domain_review_blueprint as _domain_review_blueprint,
+    materialization_blueprint as _materialization_blueprint,
+    reconstruction_blueprint as _reconstruction_blueprint,
+    resolution_blueprint as _resolution_blueprint,
+)
 
 
 def build_task_payload(
@@ -150,6 +157,26 @@ def blueprint_for_state(
             state or {},
         ),
         "archaeology-fan-in": _fan_in_blueprint(work_id, import_dir, manifest),
+        "archaeology-resolution-agent-task": _resolution_blueprint(
+            work_id,
+            import_dir,
+            manifest,
+        ),
+        "archaeology-reconstruction-agent-task": _reconstruction_blueprint(
+            work_id,
+            import_dir,
+            manifest,
+        ),
+        "archaeology-domain-review-agent-task": _domain_review_blueprint(
+            work_id,
+            import_dir,
+            manifest,
+        ),
+        "archaeology-materialize": _materialization_blueprint(
+            work_id,
+            import_dir,
+            manifest,
+        ),
         "extraction-agent-task": _whole_book_extraction_blueprint(context),
         "extraction-review": _extraction_review_blueprint(context),
     }
@@ -409,7 +436,7 @@ def _fan_in_blueprint(
             "archaeology aggregate exactly matches current chunk outputs",
             "fan-in status is ready",
         ],
-        "next_allowed_states": ["extraction-agent-task"],
+        "next_allowed_states": ["archaeology-resolution-agent-task"],
     }
 
 

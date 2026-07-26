@@ -11,7 +11,7 @@ from ...init_project import InitOptions, init_work_project
 from ...knowledge_store import build_knowledge_store, search_knowledge_store
 from ...memory_index import build_memory_index, search_memory
 from ...source_ingest import ingest_existing_work
-from ...literary.ingest import aggregate_source_import
+from ...literary.ingest import aggregate_source_import, materialize_archaeology_candidates
 from ...cli_support import print_agent_task_notice as _print_agent_task_notice
 from .style import handle as handle_style
 
@@ -166,6 +166,21 @@ def handle(args, parser) -> int | None:
             parser.error(str(exc))
         print(f"archaeology_aggregate: {output}")
         print(f"status: {'blocked' if errors else 'ready'}")
+        print(f"errors: {len(errors)}")
+        if errors:
+            parser.error("; ".join(errors[:8]))
+        return 0
+
+    if args.command == "archaeology-materialize":
+        try:
+            output, errors = materialize_archaeology_candidates(
+                Path(args.project),
+                args.work_id,
+            )
+        except (FileNotFoundError, OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(f"archaeology_materialization: {output}")
+        print(f"status: {'blocked' if errors else 'complete'}")
         print(f"errors: {len(errors)}")
         if errors:
             parser.error("; ".join(errors[:8]))

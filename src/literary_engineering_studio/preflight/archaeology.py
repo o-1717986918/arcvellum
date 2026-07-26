@@ -9,9 +9,16 @@ from ..contracts import TaskPackage
 from ..sandbox import SandboxManifest
 from .common import PreflightIssue
 from literary_engineering_studio_engine.literary.ingest import (
+    DOMAIN_REVIEW_SCHEMA,
+    IDENTITY_RESOLUTION_SCHEMA,
+    RECONSTRUCTION_CANDIDATE_SCHEMA,
     read_chunk_extraction,
+    validate_domain_review,
+    validate_identity_resolution,
+    validate_reconstruction_candidate,
     validate_chunk_extraction,
 )
+from literary_engineering_studio_engine.literary.ingest.evidence import canonical_digest
 
 
 def validate_archaeology_chunk_output(
@@ -37,6 +44,175 @@ def validate_archaeology_chunk_output(
             )
         )
     _append_contract_issues(issues, output_rel, errors)
+
+
+def canonicalize_archaeology_metadata(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+) -> list[dict[str, str]]:
+    state = task.current_state
+    if task.route != "source-ingest" or state not in {
+        "archaeology-resolution-agent-task",
+        "archaeology-reconstruction-agent-task",
+        "archaeology-domain-review-agent-task",
+    }:
+        return []
+    relative = _semantic_output(task)
+    path = sandbox.workspace / relative
+    payload = _read_object(path)
+    if not payload:
+        return []
+    manifest = _source_manifest(task, sandbox)
+    aggregate = _source_object(task, sandbox, "aggregate.json")
+    field, expected = _archaeology_expected_metadata(
+        task,
+        sandbox,
+        manifest=manifest,
+        aggregate=aggregate,
+    )
+    changed = _apply_owned_metadata(payload, expected)
+    changed = _apply_revision(payload) or changed
+    if not changed:
+        return []
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return [{"path": relative, "kind": field}]
+
+
+def _archaeology_expected_metadata(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    *,
+    manifest: dict[str, object],
+    aggregate: dict[str, object],
+) -> tuple[str, dict[str, object]]:
+    state = task.current_state
+    field = {
+        "archaeology-resolution-agent-task": "archaeology_resolution",
+        "archaeology-reconstruction-agent-task": "archaeology_reconstruction",
+        "archaeology-domain-review-agent-task": "archaeology_domain_review",
+    }[state]
+    owned = task.payload.get("system_owned_fields")
+    owned = owned if isinstance(owned, dict) else {}
+    expected = owned.get(field)
+    expected = dict(expected) if isinstance(expected, dict) else {}
+    expected.update(
+        _state_machine_metadata(
+            task,
+            sandbox,
+            manifest=manifest,
+            aggregate=aggregate,
+        )
+    )
+    return field, expected
+
+
+def _state_machine_metadata(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    *,
+    manifest: dict[str, object],
+    aggregate: dict[str, object],
+) -> dict[str, object]:
+    if task.current_state == "archaeology-resolution-agent-task":
+        return {
+            "schema": IDENTITY_RESOLUTION_SCHEMA,
+            "aggregate_revision": str(aggregate.get("revision") or ""),
+            "evidence_revision": _evidence_revision(manifest),
+            "status": "complete",
+        }
+    if task.current_state == "archaeology-reconstruction-agent-task":
+        resolution = _source_object(task, sandbox, "identity_resolution.json")
+        return {
+            "schema": RECONSTRUCTION_CANDIDATE_SCHEMA,
+            "aggregate_revision": str(aggregate.get("revision") or ""),
+            "resolution_revision": str(resolution.get("revision") or ""),
+            "status": "candidate",
+        }
+    candidate = _source_object(task, sandbox, "candidate_project.json")
+    return {
+        "schema": DOMAIN_REVIEW_SCHEMA,
+        "candidate_revision": str(candidate.get("revision") or ""),
+    }
+
+
+def _apply_owned_metadata(
+    payload: dict[str, object],
+    expected: dict[str, object],
+) -> bool:
+    changed = False
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            payload[key] = value
+            changed = True
+    return changed
+
+
+def _apply_revision(payload: dict[str, object]) -> bool:
+    revision = canonical_digest(payload)
+    if payload.get("revision") == revision:
+        return False
+    payload["revision"] = revision
+    return True
+
+
+def validate_archaeology_reconstruction_output(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    issues: list[PreflightIssue],
+) -> None:
+    state = task.current_state
+    if task.route != "source-ingest" or state not in {
+        "archaeology-resolution-agent-task",
+        "archaeology-reconstruction-agent-task",
+        "archaeology-domain-review-agent-task",
+    }:
+        return
+    manifest = _source_manifest(task, sandbox)
+    aggregate = _source_object(task, sandbox, "aggregate.json")
+    output_rel = _semantic_output(task)
+    payload = _read_object(sandbox.workspace / output_rel)
+    if not manifest or not payload:
+        return
+    if state == "archaeology-resolution-agent-task":
+        errors = validate_identity_resolution(
+            payload,
+            manifest=manifest,
+            aggregate=aggregate,
+        )
+    elif state == "archaeology-reconstruction-agent-task":
+        resolution = _source_object(task, sandbox, "identity_resolution.json")
+        errors = validate_reconstruction_candidate(
+            payload,
+            manifest=manifest,
+            aggregate=aggregate,
+            resolution=resolution,
+        )
+    else:
+        candidate = _source_object(task, sandbox, "candidate_project.json")
+        errors = validate_domain_review(
+            payload,
+            manifest=manifest,
+            candidate=candidate,
+        )
+        if str(payload.get("status") or "") != "pass":
+            errors.append(
+                "archaeology domain review must pass before materialization"
+            )
+    for message in errors:
+        issues.append(
+            PreflightIssue(
+                "archaeology-reconstruction-contract",
+                output_rel,
+                message,
+                (
+                    "按当前 task package 修复证据引用、覆盖集合、模式策略和审查结论；"
+                    "保留未决项，不要修改机器拥有的 schema、revision 或来源身份。"
+                ),
+            )
+        )
 
 
 def _chunk_context(
@@ -155,6 +331,30 @@ def _source_manifest_path(
         "",
     )
     return sandbox.workspace / relative if relative else None
+
+
+def _source_manifest(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+) -> dict[str, object]:
+    path = _source_manifest_path(task, sandbox)
+    return _read_object(path) if path is not None else {}
+
+
+def _source_object(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    filename: str,
+) -> dict[str, object]:
+    relative = next(
+        (
+            item
+            for item in task.source_paths
+            if item.replace("\\", "/").endswith(f"/{filename}")
+        ),
+        "",
+    )
+    return _read_object(sandbox.workspace / relative) if relative else {}
 
 
 def _evidence_revision(manifest: dict[str, object]) -> str:

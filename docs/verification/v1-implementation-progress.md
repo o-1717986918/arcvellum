@@ -975,4 +975,49 @@ W4-2B 已通过。下一批进入 W4-3“候选项目重建与 Archive 晋升边
 2. 以 ready aggregate 为唯一全书证据输入，新增 reconstruction candidate schema；人物、世界、时间线、情节、承诺和文风观察按领域分离。
 3. 把 alias/coreference resolution 与 conflict review 设计为显式 Agent task，任何未决集合继续保留，不能为了生成项目文件而强行闭合。
 4. 将已通过分领域 review 的 reconstruction materialize 为现有 Archive 候选，不直接写正式资产；用户或正式审批仍通过原 promotion Gate。
+
+## W4-3：候选项目重建、领域审查与 Archive 候选边界
+
+**状态：完成。**
+
+- `source-ingest/v2` 在 deterministic fan-in 之后新增三项正式平台 Agent 任务：
+  - 全书 alias/coreference 与冲突逐项解析；
+  - 面向 `continuation`、`rewrite`、`adaptation`、`analysis` 模式的候选项目重建；
+  - character、world、plot、style、promise 五领域独立审查和逐资产决策。
+- 三类任务都拥有独立 Prompt Asset、显式 `agent_source_paths`、系统拥有的 schema/revision 字段、Worker canonicalization 和 deterministic preflight；Agent 不负责猜测来源 revision 或物化路径。
+- identity resolution 必须覆盖每个 entity occurrence 与 aggregate conflict 恰好一次；`unresolved`、`partial` 和 `keep_distinct` 是正式结果，不会被多数表述静默合并。
+- reconstruction 中的每个候选资产必须：
+  - 使用现有 Archive 注册类型与 schema；
+  - 提供稳定 `candidate_id`、evidence refs、confidence 和 unresolved refs；
+  - 与当前 aggregate 和 identity revision 精确绑定；
+  - 在 `analysis` 模式保持 `analysis_only`。
+- domain review 必须完整覆盖五个领域与每个候选资产；`pass` 不能保留 blocker，带 blocker 的资产不能获得 `promote`。
+- `archaeology-materialize` 是 deterministic CLI 步骤：
+  - 只物化 reconstruction recommendation 与 domain decision 均为 `promote` 的资产；
+  - 只写既有 Archive candidate registry 声明的目录；
+  - 不直接写 Canon、人物正式档案、大纲、场景、正文或发布产物；
+  - 重复执行在输入不变时保持字节级幂等；
+  - 既有同 ID 候选内容不同时拒绝覆盖，要求新 candidate ID。
+- materialized candidate 继续进入既有 Archive 生命周期：exact-content independent review → 当前内容批准 → shared promotion transaction。共享 Gate 会重验 archaeology provenance；源证据、aggregate、identity、reconstruction 或 domain review revision 改变后，旧候选自动 stale。
+- `analysis` 模式通过完整的 analysis-only domain review 后直接 route-ready，不创建 promotable Archive candidate。
+- 工程边界：
+  - 资产注册常量独立于 `workshop` 与 promotion 副作用；
+  - 候选记录构造、来源新鲜度、磁盘事务和 route orchestration 分层；
+  - source-ingest reconstruction blueprints 从主蓝图表拆出；
+  - 未引入第二套 Archive、Provider、Runtime、写回协议或正式资产身份。
+
+验证：
+
+- `python -m unittest discover -s tests`：`528` tests passed，`1` skipped；
+- Project Archaeology / Worker preflight / Archive promotion / task transport focused suite：通过；
+- `python scripts/architecture_audit.py`：通过，`0` 新增 file/function debt，`0` import cycle；
+- `python -m literary_engineering_studio_engine prompt-registry-validate --json`：通过，`54` assets、`89` task prompt IDs；
+- `python -m literary_engineering_studio_engine archaeology-materialize --help`：通过；
+- `python -m compileall -q src tests`：通过。
+
+尚未越界宣称：
+
+- W4 的四模式差异化恢复策略、Studio Archaeology 前端、长任务中断/恢复矩阵与 W4 Exit Audit 仍未完成；
+- 候选项目进入 longform planning 的真实用户路径将在 W4 Exit Audit 中做隔离项目验收；
+- 本批没有提前实现 W5 Capability Broker、Pi/Ollama/新增 Provider 或 W6 自适应 DAG。
 5. 验证 candidate identity、重复运行幂等、源/aggregate 变化 stale、部分晋升、拒绝和回滚。

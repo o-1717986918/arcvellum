@@ -6,7 +6,12 @@ from pathlib import Path
 
 from ...agent_tasks import agent_task_completion_status
 from ...literary.ingest import (
+    archaeology_materialization_errors,
     read_chunk_extraction,
+    reconstruction_paths,
+    validate_domain_review,
+    validate_identity_resolution,
+    validate_reconstruction_candidate,
     validate_chunk_extraction,
     verify_archaeology_aggregate,
     verify_archaeology_plan,
@@ -113,10 +118,97 @@ def _review_state_gate(
     ]
 
 
+def _resolution_state_gate(
+    root: Path,
+    import_dir: Path,
+    _work_id: str,
+    _task: dict[str, object],
+) -> list[str]:
+    manifest, aggregate, paths = _archaeology_inputs(root, import_dir)
+    payload = read_json(root / paths["resolution"])
+    return [
+        *manifest_gate_errors(root, import_dir),
+        *archaeology_fan_in_gate_errors(root, import_dir),
+        *_completion_errors(root, root / paths["resolution_task"], "archaeology identity resolution"),
+        *validate_identity_resolution(payload, manifest=manifest, aggregate=aggregate),
+        *_required_paths(root, paths["resolution_report"]),
+    ]
+
+
+def _reconstruction_state_gate(
+    root: Path,
+    import_dir: Path,
+    _work_id: str,
+    _task: dict[str, object],
+) -> list[str]:
+    manifest, aggregate, paths = _archaeology_inputs(root, import_dir)
+    resolution = read_json(root / paths["resolution"])
+    payload = read_json(root / paths["candidate"])
+    return [
+        *manifest_gate_errors(root, import_dir),
+        *archaeology_fan_in_gate_errors(root, import_dir),
+        *validate_identity_resolution(resolution, manifest=manifest, aggregate=aggregate),
+        *_completion_errors(root, root / paths["candidate_task"], "archaeology reconstruction"),
+        *validate_reconstruction_candidate(
+            payload,
+            manifest=manifest,
+            aggregate=aggregate,
+            resolution=resolution,
+        ),
+        *_required_paths(root, paths["candidate_report"]),
+    ]
+
+
+def _domain_review_state_gate(
+    root: Path,
+    import_dir: Path,
+    _work_id: str,
+    _task: dict[str, object],
+) -> list[str]:
+    manifest, aggregate, paths = _archaeology_inputs(root, import_dir)
+    resolution = read_json(root / paths["resolution"])
+    candidate = read_json(root / paths["candidate"])
+    review = read_json(root / paths["review"])
+    errors = [
+        *manifest_gate_errors(root, import_dir),
+        *archaeology_fan_in_gate_errors(root, import_dir),
+        *validate_identity_resolution(resolution, manifest=manifest, aggregate=aggregate),
+        *validate_reconstruction_candidate(
+            candidate,
+            manifest=manifest,
+            aggregate=aggregate,
+            resolution=resolution,
+        ),
+        *_completion_errors(root, root / paths["review_task"], "archaeology domain review"),
+        *validate_domain_review(review, manifest=manifest, candidate=candidate),
+        *_required_paths(root, paths["review_report"]),
+    ]
+    if str(review.get("status") or "") != "pass":
+        errors.append("archaeology domain review must pass before materialization")
+    return errors
+
+
+def _materialization_state_gate(
+    root: Path,
+    import_dir: Path,
+    _work_id: str,
+    _task: dict[str, object],
+) -> list[str]:
+    return [
+        *manifest_gate_errors(root, import_dir),
+        *archaeology_fan_in_gate_errors(root, import_dir),
+        *archaeology_materialization_errors(root, import_dir),
+    ]
+
+
 _STATE_GATES = {
     "source-manifest": _manifest_state_gate,
     "chunk-extraction-agent-task": _chunk_state_gate,
     "archaeology-fan-in": _fan_in_state_gate,
+    "archaeology-resolution-agent-task": _resolution_state_gate,
+    "archaeology-reconstruction-agent-task": _reconstruction_state_gate,
+    "archaeology-domain-review-agent-task": _domain_review_state_gate,
+    "archaeology-materialize": _materialization_state_gate,
     "extraction-agent-task": _extraction_state_gate,
     "extraction-review": _review_state_gate,
 }
@@ -124,6 +216,10 @@ _STATE_GATES = {
 _PASS_NOTES = {
     "chunk-extraction-agent-task": "evidence-bound source chunk extraction passed",
     "archaeology-fan-in": "source extraction fan-in passed",
+    "archaeology-resolution-agent-task": "archaeology identity and conflict resolution passed",
+    "archaeology-reconstruction-agent-task": "evidence-bound candidate project passed",
+    "archaeology-domain-review-agent-task": "archaeology domain review passed",
+    "archaeology-materialize": "reviewed reconstruction entered the Archive candidate queue",
     "extraction-agent-task": "source extraction candidates and sidecar completion marker exist",
     "extraction-review": "source extraction review passed",
 }
@@ -313,4 +409,30 @@ def extraction_revision_gate_errors(
     )
     return [] if changed else [
         "source extraction candidates did not change; rewriting only the review cannot complete revision"
+    ]
+
+
+def _archaeology_inputs(
+    root: Path,
+    import_dir: Path,
+) -> tuple[dict[str, object], dict[str, object], dict[str, str]]:
+    manifest = read_json(import_dir / "source_manifest.json")
+    archaeology = manifest.get("archaeology")
+    aggregate_rel = (
+        str(archaeology.get("aggregate_path") or "")
+        if isinstance(archaeology, dict)
+        else ""
+    )
+    return (
+        manifest,
+        read_json(root / aggregate_rel),
+        reconstruction_paths(import_dir.relative_to(root)),
+    )
+
+
+def _required_paths(root: Path, *relative_paths: str) -> list[str]:
+    return [
+        f"archaeology output missing: {relative}"
+        for relative in relative_paths
+        if not (root / relative).is_file()
     ]

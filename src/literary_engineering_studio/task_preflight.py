@@ -19,6 +19,7 @@ from .preflight.review import (
     _validate_project_review_contract,
     _validate_source_extraction_revision,
     validate_archaeology_chunk_output,
+    validate_archaeology_reconstruction_output,
 )
 from .preflight.scene import (
     _validate_scene_candidate_generation_contract,
@@ -72,6 +73,7 @@ def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Prefli
     _validate_scene_candidate_generation_contract(task, sandbox, issues)
     _validate_scene_revision_contract(task, sandbox, issues)
     validate_archaeology_chunk_output(task, sandbox, issues)
+    validate_archaeology_reconstruction_output(task, sandbox, issues)
     _validate_source_extraction_revision(task, sandbox, issues)
     _validate_semantic_task_contract(task, sandbox, issues)
     _validate_continuity_ledger_contract(task, sandbox, issues)

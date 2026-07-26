@@ -36,13 +36,35 @@ from .reconstruction import (
     verify_archaeology_aggregate,
     write_archaeology_aggregate,
 )
+from .reconstruction_contracts import (
+    ARCHAEOLOGY_DOMAINS,
+    DOMAIN_REVIEW_SCHEMA,
+    IDENTITY_RESOLUTION_SCHEMA,
+    MATERIALIZATION_SCHEMA,
+    RECONSTRUCTION_CANDIDATE_SCHEMA,
+    read_json_object,
+    reconstruction_paths,
+    validate_identity_resolution,
+    validate_reconstruction_candidate,
+)
+from .domain_review import validate_domain_review
+from .materialization import (
+    archaeology_materialization_errors,
+    materialize_archaeology_candidates,
+)
+from .provenance import archaeology_candidate_provenance_errors
 from .segmentation import build_source_chunks, segment_documents
 
 __all__ = [
     "EXTRACTOR_VERSION",
     "ARCHAEOLOGY_AGGREGATE_SCHEMA",
     "ARCHAEOLOGY_PLAN_SCHEMA",
+    "ARCHAEOLOGY_DOMAINS",
     "CHUNK_EXTRACTION_SCHEMA",
+    "DOMAIN_REVIEW_SCHEMA",
+    "IDENTITY_RESOLUTION_SCHEMA",
+    "MATERIALIZATION_SCHEMA",
+    "RECONSTRUCTION_CANDIDATE_SCHEMA",
     "SOURCE_INGEST_SCHEMA_V2",
     "SUPPORTED_SOURCE_EXTENSIONS",
     "SourceChunk",
@@ -66,8 +88,16 @@ __all__ = [
     "stage_source_import",
     "aggregate_chunk_extractions",
     "aggregate_source_import",
+    "archaeology_candidate_provenance_errors",
+    "archaeology_materialization_errors",
     "chunk_extraction_path",
+    "materialize_archaeology_candidates",
+    "read_json_object",
+    "reconstruction_paths",
     "validate_chunk_extraction",
+    "validate_domain_review",
+    "validate_identity_resolution",
+    "validate_reconstruction_candidate",
     "verify_archaeology_plan",
     "verify_archaeology_aggregate",
     "verify_ingest_manifest",

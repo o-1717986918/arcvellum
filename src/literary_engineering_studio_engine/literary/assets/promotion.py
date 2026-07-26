@@ -77,6 +77,13 @@ def promotion_eligibility_errors(
         asset_type=asset_type,
         require_pass=True,
     )
+    payload, payload_error = _read_object(candidate)
+    if payload_error:
+        errors.append(payload_error)
+    elif isinstance(payload.get("archaeology_provenance"), dict):
+        from ..ingest.provenance import archaeology_candidate_provenance_errors
+
+        errors.extend(archaeology_candidate_provenance_errors(root, payload))
     if not allow_unapproved:
         errors.extend(approval_gate_errors(root, approval_run_id, candidate))
     return errors

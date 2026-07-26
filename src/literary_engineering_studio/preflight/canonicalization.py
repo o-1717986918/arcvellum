@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..contracts import TaskPackage
+from .archaeology import canonicalize_archaeology_metadata
 from .asset_evidence import review_machine_fields
 from .common import REVIEW_CONCLUSION, REVIEW_CONCLUSION_VARIANT
 from .style_snapshot import candidate_style_snapshot, prompt_style_snapshot
@@ -25,6 +26,7 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     """Normalize semantically identical machine markers without changing a review verdict."""
 
     changes = _canonicalize_archaeology_chunk_metadata(task, sandbox)
+    changes.extend(canonicalize_archaeology_metadata(task, sandbox))
     changes.extend(_canonicalize_asset_machine_metadata(task, sandbox))
     changes.extend(_canonicalize_semantic_artifact_metadata(task, sandbox))
     changes.extend(_canonicalize_story_architecture_metadata(task, sandbox))

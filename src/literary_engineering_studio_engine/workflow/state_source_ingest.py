@@ -6,7 +6,12 @@ from pathlib import Path
 from ..agent_tasks import agent_task_completion_status
 from ..literary.ingest import (
     SOURCE_INGEST_SCHEMA_V2,
+    archaeology_materialization_errors,
     read_chunk_extraction,
+    reconstruction_paths,
+    validate_domain_review,
+    validate_identity_resolution,
+    validate_reconstruction_candidate,
     validate_chunk_extraction,
     verify_archaeology_aggregate,
     verify_archaeology_plan,
@@ -44,18 +49,23 @@ def _source_ingest_state(root: Path, import_dir: Path) -> dict[str, object]:
             [
                 _source_chunk_extraction_step(root, import_dir, manifest),
                 _source_fan_in_step(root, import_dir, manifest),
+                _source_resolution_step(root, import_dir, manifest),
+                _source_reconstruction_step(root, import_dir, manifest),
+                _source_domain_review_step(root, import_dir, manifest),
+                _source_materialization_step(root, import_dir, manifest),
             ]
         )
-    steps.extend(
-        [
-            _source_extraction_step(root, task_path, candidate_paths, review_path),
-            _longform_review_step(
-                "extraction-review",
-                review_path,
-                "write source-ingest extraction review with conclusion: pass",
-            ),
-        ]
-    )
+    else:
+        steps.extend(
+            [
+                _source_extraction_step(root, task_path, candidate_paths, review_path),
+                _longform_review_step(
+                    "extraction-review",
+                    review_path,
+                    "write source-ingest extraction review with conclusion: pass",
+                ),
+            ]
+        )
     first_open = next((step for step in steps if step["status"] != "pass"), None)
     state = {
         "target_id": work_id,
@@ -239,6 +249,159 @@ def _source_fan_in_step(
     }
 
 
+def _source_resolution_step(
+    root: Path,
+    import_dir: Path,
+    manifest: dict[str, object],
+) -> dict[str, object]:
+    paths = reconstruction_paths(import_dir.relative_to(root))
+    aggregate = _read_json(root / _aggregate_rel(manifest))
+    payload = _read_json(root / paths["resolution"])
+    errors = validate_identity_resolution(
+        payload,
+        manifest=manifest,
+        aggregate=aggregate,
+    ) if payload and aggregate else ["identity resolution output is missing"]
+    return _archaeology_agent_step(
+        root,
+        key="archaeology-resolution-agent-task",
+        task=root / paths["resolution_task"],
+        outputs=[root / paths["resolution"], root / paths["resolution_report"]],
+        errors=errors,
+        next_action="resolve every entity occurrence and aggregate conflict from current evidence",
+    )
+
+
+def _source_reconstruction_step(
+    root: Path,
+    import_dir: Path,
+    manifest: dict[str, object],
+) -> dict[str, object]:
+    paths = reconstruction_paths(import_dir.relative_to(root))
+    aggregate = _read_json(root / _aggregate_rel(manifest))
+    resolution = _read_json(root / paths["resolution"])
+    payload = _read_json(root / paths["candidate"])
+    errors = validate_reconstruction_candidate(
+        payload,
+        manifest=manifest,
+        aggregate=aggregate,
+        resolution=resolution,
+    ) if payload and aggregate and resolution else ["reconstruction candidate output is missing"]
+    return _archaeology_agent_step(
+        root,
+        key="archaeology-reconstruction-agent-task",
+        task=root / paths["candidate_task"],
+        outputs=[root / paths["candidate"], root / paths["candidate_report"]],
+        errors=errors,
+        next_action="build an evidence-bound candidate project for the declared archaeology mode",
+    )
+
+
+def _source_domain_review_step(
+    root: Path,
+    import_dir: Path,
+    manifest: dict[str, object],
+) -> dict[str, object]:
+    paths = reconstruction_paths(import_dir.relative_to(root))
+    candidate = _read_json(root / paths["candidate"])
+    payload = _read_json(root / paths["review"])
+    errors = validate_domain_review(
+        payload,
+        manifest=manifest,
+        candidate=candidate,
+    ) if payload and candidate else ["archaeology domain review output is missing"]
+    if payload and str(payload.get("status") or "") != "pass":
+        errors.append(
+            "archaeology domain review must pass before deterministic materialization"
+        )
+    return _archaeology_agent_step(
+        root,
+        key="archaeology-domain-review-agent-task",
+        task=root / paths["review_task"],
+        outputs=[root / paths["review"], root / paths["review_report"]],
+        errors=errors,
+        next_action="review character, world, plot, style, promise, and every proposed Archive candidate",
+    )
+
+
+def _source_materialization_step(
+    root: Path,
+    import_dir: Path,
+    manifest: dict[str, object],
+) -> dict[str, object]:
+    mode = str(manifest.get("mode") or "")
+    paths = reconstruction_paths(import_dir.relative_to(root))
+    if mode == "analysis":
+        return _source_analysis_completion_step(root, paths)
+    errors = archaeology_materialization_errors(root, import_dir)
+    return {
+        "key": "archaeology-materialize",
+        "status": "pass" if not errors else "missing" if not (root / paths["materialization"]).exists() else "invalid",
+        "path": paths["materialization"],
+        "message": "reviewed archaeology candidates entered the Archive queue" if not errors else "; ".join(errors[:8]),
+        "next_action": "" if not errors else f"run archaeology-materialize for {import_dir.name}",
+    }
+
+
+def _source_analysis_completion_step(
+    root: Path,
+    paths: dict[str, str],
+) -> dict[str, object]:
+    review = _read_json(root / paths["review"])
+    raw_decisions = review.get("asset_decisions")
+    decisions = raw_decisions if isinstance(raw_decisions, list) else []
+    valid = (
+        bool(review)
+        and str(review.get("status") or "") == "pass"
+        and all(_analysis_only_decision(item) for item in decisions)
+    )
+    return {
+        "key": "archaeology-analysis-complete",
+        "status": "pass" if valid else "blocked",
+        "path": paths["review"],
+        "message": (
+            "analysis-only reconstruction is complete"
+            if valid
+            else "analysis mode still contains promotable or incomplete decisions"
+        ),
+        "next_action": (
+            ""
+            if valid
+            else "finish the analysis-only domain review without promotable assets"
+        ),
+    }
+
+
+def _analysis_only_decision(item: object) -> bool:
+    return isinstance(item, dict) and str(item.get("decision") or "") == "analysis_only"
+
+
+def _archaeology_agent_step(
+    root: Path,
+    *,
+    key: str,
+    task: Path,
+    outputs: list[Path],
+    errors: list[str],
+    next_action: str,
+) -> dict[str, object]:
+    completion = agent_task_completion_status(task, root=root)
+    missing = [_rel(path, root) for path in outputs if not path.is_file()]
+    combined = [*missing, *errors]
+    complete = completion.get("complete") is True and not combined
+    message = str(completion.get("message") or "")
+    if combined:
+        message = (message + "; " if message else "") + "; ".join(combined[:8])
+    return {
+        "key": key,
+        "status": "pass" if complete else "invalid" if errors else str(completion.get("status") or "pending"),
+        "path": _rel(task, root),
+        "completion": completion.get("completion", ""),
+        "message": message,
+        "next_action": "" if complete else next_action,
+    }
+
+
 def _source_extraction_step(root: Path, task_path: Path, candidate_paths: list[Path], review_path: Path) -> dict[str, object]:
     state = agent_task_completion_status(task_path, root=root)
     required = [*candidate_paths, review_path]
@@ -260,3 +423,8 @@ def _source_extraction_step(root: Path, task_path: Path, candidate_paths: list[P
 def _source_candidate_outputs(manifest: dict[str, object]) -> dict[str, str]:
     outputs = manifest.get("candidate_outputs") if isinstance(manifest.get("candidate_outputs"), dict) else {}
     return {str(key): str(value) for key, value in outputs.items() if str(value).strip()}
+
+
+def _aggregate_rel(manifest: dict[str, object]) -> str:
+    archaeology = manifest.get("archaeology")
+    return str(archaeology.get("aggregate_path") or "") if isinstance(archaeology, dict) else ""

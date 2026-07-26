@@ -5,17 +5,13 @@ only the cross-route envelope, prompt projection, output policy, and readable
 task rendering.  That separation lets routes evolve independently without
 duplicating the formal Agent/Worker contract.
 """
-
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
-
 from ..prompt_registry import resolve_prompt_asset
-
-
-TASK_CONTRACT_REVISION = "2026-07-26.25"
+TASK_CONTRACT_REVISION = "2026-07-26.26"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 _OPERATING_REFERENCE_PATHS = {
     "SKILL.md",
@@ -43,6 +39,9 @@ TASK_TYPE_EXECUTION = {
     "main-platform-agent-prose-revision": ("agent-required", "main-creative-agent"),
     "platform-agent-asset-creation": ("agent-required", "main-creative-agent"),
     "platform-agent-extraction": ("agent-required", "main-creative-agent"),
+    "platform-agent-archaeology-resolution": ("agent-required", "main-review-agent"),
+    "platform-agent-archaeology-reconstruction": ("agent-required", "main-creative-agent"),
+    "platform-agent-archaeology-domain-review": ("agent-required", "main-review-agent"),
     "platform-agent-revision": ("agent-required", "main-creative-agent"),
     "platform-agent-style-prompt": ("agent-required", "main-creative-agent"),
     "platform-agent-asset-review": ("agent-required", "main-review-agent"),

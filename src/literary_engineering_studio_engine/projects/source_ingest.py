@@ -21,6 +21,7 @@ from ..literary.ingest import (
     stage_source_import,
 )
 from ..literary.ingest.tasks import write_chunk_extraction_tasks
+from ..literary.ingest.reconstruction_tasks import write_reconstruction_tasks
 
 
 TEXT_EXTENSIONS = SUPPORTED_SOURCE_EXTENSIONS
@@ -172,6 +173,12 @@ def _stage_import(
     chunk_tasks = write_chunk_extraction_tasks(
         root=root,
         staging_dir=staging_dir,
+        manifest=manifest,
+    )
+    write_reconstruction_tasks(
+        root=root,
+        import_dir=staging_dir,
+        logical_import_dir=root / logical_import,
         manifest=manifest,
     )
     _write_staged_guidance(
