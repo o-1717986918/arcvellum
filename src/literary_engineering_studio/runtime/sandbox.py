@@ -14,10 +14,9 @@ import shutil
 from typing import Iterable
 
 from literary_engineering_studio_engine.resources import engine_root
-
 from ..contracts import TaskPackage
+from .execution_boundaries import materialize_execution_boundaries, prepare_execution_boundaries
 from ..task_program import compact_task_references, render_worker_program, write_task_context
-
 
 MANIFEST_SCHEMA = "literary-engineering-studio/task-sandbox/v0.1"
 IGNORED_RUNTIME_PATHS = {"AGENT_TASK.md", "_task", ".claude", ".codex", ".git"}
@@ -63,8 +62,7 @@ def stage_task(
     run_id: str | None = None,
 ) -> SandboxManifest:
     identifier = run_id or _run_id(task.task_id)
-    project_key = _project_key(task.project_root)
-    run_root = runs_root.expanduser().resolve() / project_key / identifier
+    run_root = runs_root.expanduser().resolve() / _project_key(task.project_root) / identifier
     if run_root.exists():
         raise FileExistsError(f"Studio run already exists: {run_root}")
     workspace = run_root / "workspace"
@@ -142,6 +140,7 @@ def stage_task(
         "expected_outputs": list(task.expected_outputs),
         "human_gate_reasons": list(task.human_gate_reasons),
         "execution_contract": task.execution_contract.as_dict(),
+        **prepare_execution_boundaries(task, run_root, runtime=runtime).run_manifest_fields(),
     }
     manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     sandbox = SandboxManifest(
@@ -203,7 +202,8 @@ def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> 
         encoding="utf-8",
     )
     sandbox.prompt_path.write_text(_render_agent_prompt(task, reference_paths=reference_paths), encoding="utf-8")
-    write_task_context(task, workspace / "TASK_CONTEXT.json", reference_paths=reference_paths)
+    context_path = workspace / "TASK_CONTEXT.json"
+    materialize_execution_boundaries(sandbox.run_root, task_dir, task_context_path=write_task_context(task, context_path, reference_paths=reference_paths))
     refresh_sandbox_baseline(sandbox)
     update_run_manifest(
         sandbox.manifest_path,

@@ -15,10 +15,12 @@ from literary_engineering_studio.sandbox import (
     rollback_expected_outputs,
     sandbox_change_issues,
     restore_core_managed_outputs,
+    sandbox_from_run,
     stage_task,
 )
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload
 from literary_engineering_studio.runtime.task_program import build_task_context, render_worker_program
+from literary_engineering_studio.runtime.execution_boundaries import execution_boundary_paths
 from literary_engineering_studio.task_preflight import validate_task_outputs
 
 
@@ -222,6 +224,38 @@ class SandboxTests(unittest.TestCase):
 
             self.assertTrue((sandbox.workspace / "scenes" / "scene_0001.yaml").is_file())
             self.assertFalse((sandbox.workspace / "canon").exists())
+
+    def test_sandbox_persists_controlled_capability_and_resource_contracts(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            sandbox = stage_task(task, Path(runs), runtime="opencode", run_id="run-capability-contract")
+            capability_path, claim_path = execution_boundary_paths(sandbox.run_root)
+
+            run_manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            capability = json.loads(capability_path.read_text(encoding="utf-8"))
+            claim = json.loads(claim_path.read_text(encoding="utf-8"))
+            task_capability = json.loads(
+                (sandbox.workspace / "_task" / "capability_manifest.json").read_text(encoding="utf-8")
+            )
+            task_claim = json.loads((sandbox.workspace / "_task" / "resource_claim.json").read_text(encoding="utf-8"))
+            context = json.loads((sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8"))
+            program = sandbox.prompt_path.read_text(encoding="utf-8")
+
+            self.assertEqual(run_manifest["capability_manifest"]["path"], "capabilities/manifest.json")
+            self.assertEqual(run_manifest["resource_claim"]["path"], "capabilities/resource-claim.json")
+            self.assertEqual(task_capability["digest"], capability["digest"])
+            self.assertEqual(task_claim["project_id"], claim["project_id"])
+            self.assertEqual(context["controlled_capabilities"]["digest"], capability["digest"])
+            self.assertEqual(context["resource_claim"]["task_node_id"], task.task_id)
+            self.assertIn("project.query", capability["allowed_capability_ids"])
+            self.assertIn("Studio Capability Broker", program)
+            self.assertNotIn(str(root.resolve()), capability_path.read_text(encoding="utf-8"))
+            self.assertNotIn(str(root.resolve()), claim_path.read_text(encoding="utf-8"))
+
+            restored = sandbox_from_run(sandbox.run_root)
+            self.assertEqual(restored.run_root, sandbox.run_root)
+            self.assertEqual(execution_boundary_paths(restored.run_root), (capability_path, claim_path))
 
     def test_control_workspace_keeps_cli_dependencies_outside_agent_boundary(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
