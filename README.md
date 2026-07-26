@@ -151,7 +151,7 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### 自动更新
 
-ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.96.0**。
+ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.96.1**。
 
 ## 开发者入口
 
@@ -224,6 +224,7 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本�
 - [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
+- [v0.96.1 发行说明](docs/releases/v0.96.1.md)
 - [v0.96.0 发行说明](docs/releases/v0.96.0.md)
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
