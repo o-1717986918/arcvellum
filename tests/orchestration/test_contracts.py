@@ -10,11 +10,15 @@ from literary_engineering_studio.automation.controller import ROUTE_ORDER
 from literary_engineering_studio.orchestration import (
     CANDIDATE_SCHEMA,
     COMPILED_GRAPH_SCHEMA,
+    CREATIVE_PLAN_EVENT_SCHEMA,
     PLAN_SCHEMA,
     DefaultPlanFactory,
     constitution_v1,
     parse_plan_candidate,
     to_primitive,
+)
+from literary_engineering_studio.observability.mutation_receipts import (
+    MUTATION_RECEIPT_SCHEMA,
 )
 from literary_engineering_studio_engine.orchestration import (
     check_default_plan_compatibility,
@@ -110,6 +114,16 @@ class OrchestrationContractTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        plan_event_schema = json.loads(
+            (ROOT / "protocol/orchestration/creative-plan-event.v1.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        mutation_receipt_schema = json.loads(
+            (ROOT / "protocol/orchestration/worker-mutation-receipt.v1.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
         constitution_payload = YAML(typ="safe").load(
             (ROOT / "protocol/orchestration/constitution.v1.yaml").read_text(encoding="utf-8")
         )
@@ -117,6 +131,8 @@ class OrchestrationContractTests(unittest.TestCase):
         self.assertEqual(candidate_schema["$id"], CANDIDATE_SCHEMA)
         self.assertEqual(plan_schema["$id"], PLAN_SCHEMA)
         self.assertEqual(compiled_graph_schema["$id"], COMPILED_GRAPH_SCHEMA)
+        self.assertEqual(plan_event_schema["$id"], CREATIVE_PLAN_EVENT_SCHEMA)
+        self.assertEqual(mutation_receipt_schema["$id"], MUTATION_RECEIPT_SCHEMA)
         self.assertEqual(str(constitution_payload["version"]), constitution_v1().version)
         self.assertEqual(
             {item["id"] for item in constitution_payload["rules"]},

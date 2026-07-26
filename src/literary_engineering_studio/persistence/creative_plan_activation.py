@@ -11,6 +11,7 @@ from literary_engineering_studio_engine.foundation.atomic_io import atomic_write
 from .creative_plan_events import append_creative_plan_event_tx
 from .creative_plan_primitives import project_key
 from .primitives import _now
+from ..orchestration.plan_events import CreativePlanEventType
 
 
 def apply_creative_plan_activation(
@@ -79,7 +80,7 @@ def _activate_index_rows(
         connection,
         str(plan["plan_id"]),
         requested_revision,
-        "plan.activated",
+        CreativePlanEventType.ACTIVATED,
         {"previous_revision": int(expected_active_revision)},
     )
 

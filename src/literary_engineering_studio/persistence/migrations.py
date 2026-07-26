@@ -36,6 +36,12 @@ def ensure_additive_columns(connection: sqlite3.Connection) -> None:
     for name, declaration in agent_session_additions.items():
         if name not in agent_session_columns:
             connection.execute(f"ALTER TABLE agent_sessions ADD COLUMN {name} {declaration}")
+    plan_event_columns = _columns(connection, "creative_plan_events")
+    if "session_id" not in plan_event_columns:
+        connection.execute(
+            "ALTER TABLE creative_plan_events "
+            "ADD COLUMN session_id TEXT NOT NULL DEFAULT 'studio-store'"
+        )
 
 
 def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
@@ -44,6 +50,7 @@ def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
         "autopilot_runs",
         "archive_asset_transactions",
         "agent_sessions",
+        "creative_plan_events",
     }:
         raise ValueError(f"unsupported migration table: {table}")
     return {

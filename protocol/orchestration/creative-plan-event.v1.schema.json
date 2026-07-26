@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/creative-plan-event/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "event",
+    "plan_id",
+    "revision",
+    "session_id",
+    "sequence",
+    "display_only",
+    "data"
+  ],
+  "properties": {
+    "schema": {"const": "arcvellum/creative-plan-event/v1"},
+    "event": {
+      "enum": [
+        "plan.candidate.delta",
+        "plan.candidate.completed",
+        "plan.revision.reserved",
+        "plan.revision.ready",
+        "plan.review.completed",
+        "plan.activated",
+        "plan.rejected",
+        "plan.stale",
+        "plan.fallback"
+      ]
+    },
+    "plan_id": {"type": "string", "minLength": 1},
+    "revision": {"type": "integer", "minimum": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 0},
+    "display_only": {"type": "boolean"},
+    "data": {"type": "object"}
+  }
+}

@@ -50,7 +50,19 @@ from .profiles import (
     OrchestrationAgentRole,
     orchestration_profile,
 )
-from .shadow import ShadowPlanEvaluation, ShadowStageTiming, evaluate_shadow_candidate
+from .plan_events import (
+    CREATIVE_PLAN_EVENT_SCHEMA,
+    CreativePlanEvent,
+    CreativePlanEventType,
+    completed_candidate_from_event,
+    parse_creative_plan_event,
+)
+from .shadow import (
+    ShadowPlanEvaluation,
+    ShadowStageTiming,
+    evaluate_completed_shadow_candidate,
+    evaluate_shadow_candidate,
+)
 from .truth_partition import (
     AssertionKind,
     ProvenanceRef,
@@ -69,6 +81,9 @@ __all__ = [
     "CompilerRegistry",
     "CreativeExecutionPlan",
     "CreativeExecutionPlanCandidate",
+    "CreativePlanEvent",
+    "CreativePlanEventType",
+    "CREATIVE_PLAN_EVENT_SCHEMA",
     "DefaultPlanFactory",
     "FreedomBudget",
     "NormalizationContext",
@@ -105,12 +120,15 @@ __all__ = [
     "candidate_digest",
     "constitution_v1",
     "evaluate_shadow_candidate",
+    "evaluate_completed_shadow_candidate",
     "activate_persisted_revision",
     "lint_plan",
     "normalize_plan_candidate",
     "orchestration_settings",
     "orchestration_profile",
     "parse_plan_candidate",
+    "parse_creative_plan_event",
+    "completed_candidate_from_event",
     "partition_can_satisfy_formal_gate",
     "persist_shadow_revision",
     "simulate_plan",

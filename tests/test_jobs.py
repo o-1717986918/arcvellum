@@ -215,7 +215,7 @@ class DurableJobTests(unittest.TestCase):
                 ["ses_worker_001"],
             )
 
-    def test_schema_twelve_adds_context_ledgers_and_session_binding(self):
+    def test_schema_fourteen_preserves_context_ledgers_and_adds_mutation_receipts(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "studio.sqlite3"
             first = JobStore(database)
@@ -238,7 +238,7 @@ class DurableJobTests(unittest.TestCase):
 
             restarted = JobStore(database)
             self.assertIsNotNone(restarted.migration_backup)
-            self.assertEqual(restarted.health()["schema_version"], 13)
+            self.assertEqual(restarted.health()["schema_version"], 14)
             session = restarted.read_agent_session("session-before-ledger")
             self.assertEqual(session["context_ledger_id"], "")
             self.assertEqual(session["context_ledger_digest"], "")
@@ -251,6 +251,7 @@ class DurableJobTests(unittest.TestCase):
                 }
             self.assertIn("context_ledgers", tables)
             self.assertIn("context_ledger_entries", tables)
+            self.assertIn("mutation_receipts", tables)
 
     def test_supervisor_persists_completion(self):
         with tempfile.TemporaryDirectory() as temporary:

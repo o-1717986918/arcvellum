@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import json
 from pathlib import Path
 import threading
 from typing import Any
@@ -15,55 +13,24 @@ from ..core_bridge import CoreBridge, task_command_parameters
 from ..runtimes import build_runtime
 from .sandbox import (
     SandboxManifest,
-    apply_expected_outputs,
     capture_core_managed_outputs,
     changed_agent_outputs,
-    control_sandbox_view,
-    inspect_expected_outputs,
-    load_writeback_preview,
     materialize_agent_workspace,
-    rollback_expected_outputs,
-    restore_core_managed_outputs,
     sandbox_from_run,
     stage_task,
-    sync_agent_outputs_to_control,
     update_run_manifest,
 )
-from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
+from .run_manifest import load_run
 from .worker_observability import WorkerObservabilityMixin
+from .worker_paths import (
+    resolve_task_json_path as _resolve_task_json_path,
+    validate_project as _validate_project,
+)
+from .worker_results import WorkerRunResult
+from .worker_writeback import WorkerWritebackMixin
 
 
-@dataclass(frozen=True)
-class WorkerRunResult:
-    status: str
-    project_root: Path
-    route: str
-    task_id: str
-    runtime: str
-    run_root: Path | None
-    workspace: Path | None
-    message: str
-    imported_outputs: tuple[str, ...] = ()
-    audit_fields: dict[str, str] | None = None
-    writeback_preview: dict[str, object] | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "status": self.status,
-            "project_root": str(self.project_root),
-            "route": self.route,
-            "task_id": self.task_id,
-            "runtime": self.runtime,
-            "run_root": str(self.run_root) if self.run_root else "",
-            "workspace": str(self.workspace) if self.workspace else "",
-            "message": self.message,
-            "imported_outputs": list(self.imported_outputs),
-            "audit": self.audit_fields or {},
-            "writeback_preview": self.writeback_preview or {},
-        }
-
-
-class AgentWorker(WorkerObservabilityMixin):
+class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
     def __init__(
         self,
         config: dict[str, Any] | None = None,
@@ -250,16 +217,11 @@ class AgentWorker(WorkerObservabilityMixin):
         }
         if runtime_id == "opencode":
             def validate_outputs():
-                restored = restore_core_managed_outputs(sandbox)
-                if restored:
-                    self._emit("core.outputs_restored", {"task_id": task.task_id, "paths": list(restored)})
-                normalized = canonicalize_task_outputs(task, sandbox)
-                if normalized:
-                    self._emit("validation.canonicalized", {"changes": normalized})
-                synced = sync_agent_outputs_to_control(task, sandbox)
-                if synced:
-                    self._emit("agent.outputs_staged", {"task_id": task.task_id, "paths": list(synced)})
-                return validate_task_outputs(task, control_sandbox_view(sandbox))
+                return self._validate_outputs(
+                    task,
+                    sandbox,
+                    runtime_id=runtime_id,
+                )
 
             runtime_kwargs.update(
                 {
@@ -327,74 +289,6 @@ class AgentWorker(WorkerObservabilityMixin):
 
         return self._complete_outputs(task, sandbox, runtime_id)
 
-    def _complete_outputs(
-        self,
-        task: TaskPackage,
-        sandbox: SandboxManifest,
-        runtime_id: str,
-    ) -> WorkerRunResult:
-        if not task.expected_outputs:
-            update_run_manifest(
-                sandbox.manifest_path,
-                status="blocked_empty_submission",
-                message="task has no expected_outputs; human evidence selection is required",
-            )
-            return WorkerRunResult(
-                "waiting_human",
-                task.project_root,
-                task.route,
-                task.task_id,
-                runtime_id,
-                sandbox.run_root,
-                sandbox.workspace,
-                "task has no expected_outputs; choose formal submission evidence manually",
-            )
-
-        self._emit("validation.started", {"kind": "expected-output-preview"})
-        preview = inspect_expected_outputs(task, sandbox)
-        self._emit("writeback.preview_ready", preview.as_dict())
-        if preview.policy != "automatic":
-            update_run_manifest(
-                sandbox.manifest_path,
-                status="awaiting_writeback_approval",
-                writeback_preview=preview.as_dict(),
-            )
-            return WorkerRunResult(
-                "waiting_writeback",
-                task.project_root,
-                task.route,
-                task.task_id,
-                runtime_id,
-                sandbox.run_root,
-                sandbox.workspace,
-                "Agent output is ready; review the writeback diff before importing it",
-                writeback_preview=preview.as_dict(),
-            )
-        return self._finalize(task, sandbox, preview, approved_by="policy:automatic")
-
-    def approve_writeback(self, run_root: Path, *, approved_by: str) -> WorkerRunResult:
-        run = load_run(run_root)
-        if str(run.get("status") or "") != "awaiting_writeback_approval":
-            raise ValueError("run is not awaiting writeback approval")
-        project = _validate_project(Path(str(run.get("project_root") or "")))
-        task_json = Path(str(run.get("task_json") or ""))
-        if not task_json.is_file():
-            task_json = _resolve_task_json_path(project, str(run.get("task_id") or ""), str(task_json))
-        task = load_task_package(project, task_json)
-        sandbox = sandbox_from_run(run_root)
-        preview = load_writeback_preview(run_root)
-        if preview.policy not in {"preview-required", "approval-required"}:
-            raise ValueError(f"writeback does not require approval: {preview.policy}")
-        update_run_manifest(
-            sandbox.manifest_path,
-            writeback_decision={
-                "decision": "approve",
-                "approved_by": approved_by.strip() or "studio-user",
-            },
-        )
-        self._emit("writeback.approved", {"approved_by": approved_by.strip() or "studio-user"})
-        return self._finalize(task, sandbox, preview, approved_by=approved_by)
-
     def resume_from_run(self, run_root: Path) -> WorkerRunResult:
         """Resume a timed-out run only when it contains fresh valid Agent output."""
         run = load_run(run_root)
@@ -418,16 +312,11 @@ class AgentWorker(WorkerObservabilityMixin):
             )
             self._emit("run.resume_rejected", {"reason": "no-fresh-agent-output", "task_id": task.task_id})
             raise ValueError(message)
-        restored = restore_core_managed_outputs(sandbox)
-        if restored:
-            self._emit("core.outputs_restored", {"task_id": task.task_id, "paths": list(restored), "recovery": True})
-        normalized = canonicalize_task_outputs(task, sandbox)
-        if normalized:
-            self._emit("validation.canonicalized", {"changes": normalized, "recovery": True})
-        synced = sync_agent_outputs_to_control(task, sandbox)
-        if synced:
-            self._emit("agent.outputs_staged", {"task_id": task.task_id, "paths": list(synced), "recovery": True})
-        preflight = validate_task_outputs(task, control_sandbox_view(sandbox))
+        preflight = self._validate_outputs(
+            task,
+            sandbox,
+            runtime_id=str(run.get("runtime") or "opencode"),
+        )
         if not preflight.passed:
             update_run_manifest(
                 sandbox.manifest_path,
@@ -443,148 +332,3 @@ class AgentWorker(WorkerObservabilityMixin):
         )
         self._emit("validation.passed", {"kind": "recovery-preflight", **preflight.as_dict()})
         return self._complete_outputs(task, sandbox, str(run.get("runtime") or "opencode"))
-
-    def reject_writeback(self, run_root: Path, *, rejected_by: str, reason: str = "") -> WorkerRunResult:
-        run = load_run(run_root)
-        if str(run.get("status") or "") != "awaiting_writeback_approval":
-            raise ValueError("run is not awaiting writeback approval")
-        sandbox = sandbox_from_run(run_root)
-        update_run_manifest(
-            sandbox.manifest_path,
-            status="writeback_rejected",
-            writeback_decision={
-                "decision": "reject",
-                "rejected_by": rejected_by.strip() or "studio-user",
-                "reason": reason.strip(),
-            },
-        )
-        self._emit("writeback.rejected", {"reason": reason.strip()})
-        return WorkerRunResult(
-            "writeback_rejected",
-            Path(str(run["project_root"])),
-            str(run.get("route") or ""),
-            str(run.get("task_id") or ""),
-            str(run.get("runtime") or ""),
-            sandbox.run_root,
-            sandbox.workspace,
-            reason.strip() or "writeback rejected by user",
-            writeback_preview=load_writeback_preview(run_root).as_dict(),
-        )
-
-    def _finalize(
-        self,
-        task: TaskPackage,
-        sandbox: SandboxManifest,
-        preview,
-        *,
-        approved_by: str,
-    ) -> WorkerRunResult:
-        runtime_id = str(load_run(sandbox.run_root).get("runtime") or "opencode")
-        imported = apply_expected_outputs(task, sandbox, preview)
-        self._emit("file.imported", {"paths": list(imported), "approved_by": approved_by})
-        try:
-            self.bridge.task_submit(
-                task.project_root,
-                task.task_id,
-                imported,
-                note=f"executed by literary-engineering-studio runtime={runtime_id}",
-            )
-            self.bridge.task_complete(
-                task.project_root,
-                task.task_id,
-                handled_by=f"studio:{runtime_id}",
-            )
-        except (RuntimeError, ValueError, FileNotFoundError) as exc:
-            self._emit("validation.blocked", {"kind": "core-task-gate", "error": str(exc)})
-            rollback_expected_outputs(task, sandbox, imported)
-            rollback_error = ""
-            try:
-                self.bridge.task_revert_submission(
-                    task.project_root,
-                    task.task_id,
-                    reason=f"Studio worker rolled back imported outputs after core gate failure: {exc}",
-                )
-            except (RuntimeError, ValueError, FileNotFoundError) as rollback_exc:
-                rollback_error = str(rollback_exc)
-            update_run_manifest(
-                sandbox.manifest_path,
-                status="blocked_by_core_gate",
-                core_gate_error=str(exc),
-                imported_outputs=[],
-                core_submission_rollback="pass" if not rollback_error else rollback_error,
-            )
-            return WorkerRunResult(
-                "blocked_by_core_gate",
-                task.project_root,
-                task.route,
-                task.task_id,
-                runtime_id,
-                sandbox.run_root,
-                sandbox.workspace,
-                str(exc),
-                (),
-                writeback_preview=preview.as_dict(),
-            )
-
-        audit_fields = {
-            "status": "pass",
-            "scope": "exact-task-gate",
-            "route": task.route,
-            "task_id": task.task_id,
-        }
-        self._emit("validation.passed", {"kind": "exact-task-gate", "audit": audit_fields})
-        update_run_manifest(
-            sandbox.manifest_path,
-            status="complete",
-            imported_outputs=list(imported),
-            route_audit=audit_fields,
-        )
-        return WorkerRunResult(
-            "complete",
-            task.project_root,
-            task.route,
-            task.task_id,
-            runtime_id,
-            sandbox.run_root,
-            sandbox.workspace,
-            "Agent output imported and accepted by the core task gate",
-            imported,
-            audit_fields,
-            preview.as_dict(),
-        )
-
-def load_run(run_root: Path) -> dict[str, Any]:
-    path = run_root.resolve() / "run.json"
-    if not path.exists():
-        raise FileNotFoundError(f"Studio run not found: {run_root}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"invalid Studio run manifest: {path}")
-    return payload
-
-
-def _validate_project(value: Path) -> Path:
-    project = value.expanduser().resolve()
-    if not project.is_dir():
-        raise FileNotFoundError(f"work project not found: {project}")
-    if not (project / "project.yaml").exists():
-        raise ValueError(f"not a Literary Engineering work project: {project}")
-    return project
-
-
-def _resolve_task_json_path(project: Path, task_id: str, reported_path: str = "") -> Path:
-    """Resolve a formal task without trusting locale-sensitive CLI path text."""
-
-    normalized_id = str(task_id or "").strip()
-    if not normalized_id or any(char in normalized_id for char in ("/", "\\", ":")):
-        raise ValueError(f"invalid task id: {task_id}")
-    canonical = (project / "workflow" / "tasks" / f"{normalized_id}.task.json").resolve()
-    if canonical.is_file():
-        return canonical
-
-    raw = str(reported_path or "").strip()
-    if raw:
-        candidate = Path(raw).resolve()
-        if candidate.is_relative_to(project.resolve()) and candidate.is_file():
-            return candidate
-    raise FileNotFoundError(f"formal task package not found for task: {normalized_id}")

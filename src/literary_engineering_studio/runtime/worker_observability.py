@@ -10,9 +10,11 @@ from typing import Any
 class WorkerObservabilityMixin:
     event_sink: Any
     _context_ledger_fields: dict[str, str]
+    _agent_session_id: str
 
     def _reset_context_ledger(self) -> None:
         self._context_ledger_fields = {}
+        self._agent_session_id = ""
 
     def _bind_context_ledger(self, run: dict[str, Any]) -> None:
         ledger_id = str(run.get("context_ledger_id") or "")
@@ -47,5 +49,13 @@ class WorkerObservabilityMixin:
         )
 
     def _emit(self, event: str, data: dict[str, Any]) -> None:
+        if event in {
+            "runner.session.started",
+            "runner.session.finished",
+            "runner.session.status",
+        }:
+            session_id = str(data.get("session_id") or "").strip()
+            if session_id:
+                self._agent_session_id = session_id
         if self.event_sink is not None:
             self.event_sink(event, {**data, **self._context_ledger_fields})

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .context_ledger_tracking import persist_context_ledger_event
+from .mutation_receipt_tracking import persist_mutation_receipt_event
 
 
 _TERMINAL_STATUS = {
@@ -33,6 +34,12 @@ def track_agent_session_event(
     """Project one runtime event into the durable, user-safe session ledger."""
 
     persist_context_ledger_event(
+        store,
+        project_root=project_root,
+        event=event,
+        data=data,
+    )
+    persist_mutation_receipt_event(
         store,
         project_root=project_root,
         event=event,

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/worker-mutation-receipt/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "receipt_id",
+    "change_group_id",
+    "authority",
+    "project_key",
+    "plan_id",
+    "plan_revision",
+    "node_id",
+    "task_id",
+    "run_id",
+    "session_id",
+    "context_ledger_id",
+    "action",
+    "target",
+    "base_sha256",
+    "result_sha256",
+    "preflight_status",
+    "writeback_status",
+    "formal_effect",
+    "created_at",
+    "digest"
+  ],
+  "properties": {
+    "schema": {"const": "arcvellum/worker-mutation-receipt/v1"},
+    "receipt_id": {"type": "string", "pattern": "^receipt-[0-9a-f]{24}$"},
+    "change_group_id": {"type": "string", "pattern": "^change-[0-9a-f]{24}$"},
+    "authority": {"const": "studio-machine"},
+    "project_key": {"type": "string", "minLength": 1},
+    "plan_id": {"type": "string", "minLength": 1},
+    "plan_revision": {"type": "integer", "minimum": 0},
+    "node_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "context_ledger_id": {"type": "string"},
+    "action": {
+      "enum": [
+        "candidate_created",
+        "candidate_modified",
+        "preflight_rejected",
+        "writeback_previewed",
+        "writeback_applied",
+        "writeback_rolled_back",
+        "formal_promoted"
+      ]
+    },
+    "target": {"type": "string", "minLength": 1},
+    "base_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
+    "result_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
+    "preflight_status": {"enum": ["pending", "pass", "rejected"]},
+    "writeback_status": {
+      "enum": ["pending", "previewed", "applied", "rolled_back", "rejected", "not_applicable"]
+    },
+    "formal_effect": {"enum": ["none", "candidate", "formal"]},
+    "created_at": {"type": "string", "minLength": 1},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

@@ -15,6 +15,7 @@ from .creative_plan_artifacts import verify_indexed_plan_artifacts
 from .creative_plan_events import append_creative_plan_event_tx
 from .creative_plan_primitives import positive_revision, project_key, validate_plan_id
 from .primitives import _json, _now
+from ..orchestration.plan_events import CreativePlanEventType
 
 
 CREATIVE_PLAN_SCHEMA_SQL = """
@@ -84,7 +85,7 @@ class CreativePlanStoreMixin:
                 connection,
                 normalized["plan_id"],
                 normalized["revision"],
-                "plan.revision.reserved",
+                CreativePlanEventType.REVISION_RESERVED,
                 {"digest": normalized["digest"], "status": normalized["status"]},
             )
         return self.read_creative_plan_revision(
@@ -131,7 +132,7 @@ class CreativePlanStoreMixin:
                     connection,
                     plan_id,
                     revision,
-                    "plan.revision.ready",
+                    CreativePlanEventType.REVISION_READY,
                     {"digest": digest},
                 )
         return self.read_creative_plan_revision(plan_id, revision)

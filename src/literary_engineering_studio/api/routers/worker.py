@@ -12,6 +12,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from ...observability.context_ledger_tracking import persist_prepared_context
+from ...observability.mutation_receipt_tracking import (
+    persist_mutation_receipt_event,
+)
 from ..common import project_root as resolve_project_root
 from ..models import WorkerRequest, WorkerRetryRequest, WritebackDecisionRequest
 
@@ -172,6 +175,12 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
                 raise RuntimeError("another active task owns this project route")
             try:
                 def emit(event: str, data: dict[str, Any]) -> None:
+                    persist_mutation_receipt_event(
+                        deps.jobs,
+                        project_root=str(resolve_project_root(project_root)),
+                        event=event,
+                        data=data,
+                    )
                     deps.jobs.append_event(job_id, event, data)
 
                 worker = deps.worker_factory(deps.config, event_sink=emit, runtime_pool=deps.lifecycle.opencode_pool)

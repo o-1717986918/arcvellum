@@ -27,7 +27,7 @@
 - W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、Registry 驱动的结构化编辑、状态化引导和隔离真实项目作者闭环。
 - W2 已满足统一实施方案当前定义的产品、Gate、Stable Knowledge 与架构出口；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
 - W4 Project Archaeology 已完成不可变源证据、分块提取、全书聚合、实体解析、候选重建、领域审查、Archive 晋升边界、四模式工作台和真实纵向 Exit Audit。
-- 最近一次全量证据：Python 534 tests passed、1 skipped；Client 101 tests passed；生产前端构建、Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
+- 最近一次 Python 全量证据：618 tests passed、1 skipped，耗时约 137 秒；Client 最近一次基线为 101 tests passed；Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -1472,10 +1472,46 @@ Autopilot，也不建立第二套 task lifecycle。按以下四个可回滚子�
 
 ### W6-4C：Mutation Receipt 与 Typed Plan Events
 
+**状态：完成。**
+
 1. 复用现有 Worker 的 candidate、preflight、preview、apply、rollback、promotion 事件点；
 2. receipt 由机器生成并绑定 task/run/session/plan，不允许 Agent 写入；
 3. 计划事件采用固定 enum/schema，delta 仅用于显示，completed candidate 才能进入 Lint；
 4. rollback 的 formal effect 必须为 `none`，正式写回继续由既有 Engine/Worker Gate 拥有。
+
+实现结果：
+
+- 新增 `arcvellum/worker-mutation-receipt/v1` 合同、JSON Schema、SQLite metadata 索引和
+  run-root JSONL 审计；receipt 绑定 task、run、真实 session、plan、context ledger、
+  action、change group、artifact digest 和 formal effect；
+- fixed route 使用机器保留的 `fixed-route` 计划身份；自适应任务从 machine-owned task
+  payload 读取 plan ID/revision，Agent workspace 和 expected outputs 均不能生成 receipt；
+- Worker 的 candidate、preflight rejection、preview、human rejection、apply、rollback 和
+  promotion 统一经过 `WorkerMutationTracker`；同一事实按确定性 receipt ID 幂等，候选内容
+  变化会产生新 receipt；
+- rollback receipt 强制 `formal_effect=none`；apply 后 Core Gate 失败时，时间线保留瞬时
+  apply 证据并追加 rollback，正式项目仍由既有 Sandbox、Worker 和 Engine Gate 恢复；
+- 新增固定 `CreativePlanEventType` 与 `arcvellum/creative-plan-event/v1` Schema；
+  `plan.candidate.delta` 只用于实时显示，不能进入 durable event ledger，也不能作为 Lint
+  输入；只有机器封装的 `plan.candidate.completed` 能穿越 Planner/Lint 边界；
+- SQLite schema 升级到 14，增加 Mutation Receipt 索引和 plan event `session_id`；
+  migration 继续使用既有 backup/additive 协议；
+- Worker 写回生命周期从 677 行的 `worker.py` 拆分到职责明确的 runtime/observability/
+  persistence 模块，`worker.py` 降至 334 行，没有改变正式任务写回所有权。
+
+退出证据：
+
+- `python -m unittest discover -s tests -v`：618 passed，1 skipped，约 137 秒；
+- `python -m compileall -q src tests`：passed；
+- Prompt Registry：54 assets、89 task prompt IDs，0 error、0 warning；
+- Architecture Audit：35 个既有 file debt、224 个既有 function debt、0 cycle；
+- `git diff --check`：passed；
+- 架构评审见
+  `docs/architecture/reviews/ao-3c-mutation-receipt-and-plan-events-review.md`。
+
+下一子批进入 W6-4D。Planner/Reviewer 必须使用独立真实 session，Planner delta 仍仅作为
+显示事件，完整候选必须先形成 typed completion event；任何 Planner、Review 或 stale
+context 失败只能留下 fallback 证据，不得改变 fixed route。
 
 ### W6-4D：Planner/Reviewer Shadow Service 与退出审计
 

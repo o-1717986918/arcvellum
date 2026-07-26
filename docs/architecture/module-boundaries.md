@@ -235,8 +235,11 @@ AO-2 持久化边界：
 
 - `persistence/creative_plans.py` 只拥有计划身份、不可变 revision 索引和 activation 的
   optimistic concurrency；
-- `persistence/creative_plan_events.py` 只拥有 append-only plan event；计划节点不建立第二套
-  可写运行状态，未来执行态必须投影 Engine 正式 task receipt；
+- `orchestration/plan_events.py` 拥有固定 plan event enum/schema。Planner 流式 delta
+  永远是 display-only，只有 `plan.candidate.completed` 才能成为 Lint 输入；
+- `persistence/creative_plan_events.py` 只拥有 enum 验证后的 append-only plan event；
+  display-only delta 拒绝持久化，计划节点不建立第二套可写运行状态，未来执行态必须投影
+  Engine 正式 task receipt；
 - `persistence/creative_plan_activation.py` 只协调已验证 revision 的 SQLite activation 与
   `active_plan.json` 投影；单项目通过唯一索引只允许一个 active plan；
 - `persistence/creative_plan_artifacts.py` 在 revision 进入 ready 前验证全部索引文件真实
@@ -251,9 +254,10 @@ AO-2 持久化边界：
   compiled graph digest、simulation fingerprint 与 provenance 语义链；
 - `shadow.py` 只量测 Normalize/Lint/Compile/Simulate，Lint 失败即停止。它不持久化、
   不执行、不激活，也没有 Autopilot 调用入口；
-- AO-2 在 schema 12 建立计划索引；当前 schema 13 继续沿用 JobStore 的 migration
-  backup 并增加 Context Ledger 元数据。删除 Studio 编排/可观测索引不得删除或改变正式
-  作品与项目审计文件。
+- AO-2 在 schema 12 建立计划索引；schema 13 增加 Context Ledger 元数据；当前
+  schema 14 增加 Worker Mutation Receipt 索引与 plan event session binding，继续沿用
+  JobStore migration backup。删除 Studio 编排/可观测索引不得删除或改变正式作品与项目
+  审计文件。
 - plan `status` 是机器字段，初始值固定为 `shadow`；只有通过完整审计协调器验证的 revision
   才能激活。激活使用显式 transaction，普通 SQL/event/commit 失败均恢复文件投影。
 
@@ -280,6 +284,19 @@ AO-3 Agent 协议边界：
   上下文，同一 run 重装配后的资料变化产生新 identity；
 - Planner 与 Reviewer session 必须分离。模型 judgment 只有经过 digest 绑定和机器
   sealing 后才是 orchestration review evidence，仍不能自行激活计划。
+- `observability/mutation_receipts.py` 与 `change_groups.py` 只拥有机器回执和聚合合同；
+  Worker 回执使用独立 `arcvellum/worker-mutation-receipt/v1`，不覆盖 Archive 已存在的
+  owner mutation receipt 协议；
+- `runtime/mutation_tracking.py` 只在 run control 根记录 candidate/preflight/preview/
+  apply/rollback/promotion 事实；回执不进入 Agent workspace、expected outputs 或正式
+  项目写回清单；
+- `runtime/worker_writeback.py` 复用 Sandbox backup/atomic replace 和 Engine
+  submit/complete/revert Gate，不取得第二套正式写回所有权；rollback 回执的
+  `formal_effect` 固定为 `none`；
+- `persistence/mutation_receipts.py` 只保存可追踪回执及 digest 索引。API Worker 与
+  Autopilot 经现有 event/session 汇聚入口持久化，CLI 直跑仍保留 run-root 便携回执；
+- `runtime/worker.py` 继续负责领取、准备、Runner 执行和恢复编排；结果 DTO、路径验证、
+  run manifest 读取与写回生命周期分别归入小模块，禁止重新堆回单文件。
 
 ## 当前大文件的正确处理方式
 

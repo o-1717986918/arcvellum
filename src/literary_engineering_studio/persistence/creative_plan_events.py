@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ..orchestration.plan_events import (
+    CREATIVE_PLAN_EVENT_SCHEMA,
+    CreativePlanEvent,
+    CreativePlanEventType,
+)
 from .creative_plan_primitives import validate_plan_id
 from .primitives import _json, _now
 
@@ -15,6 +20,7 @@ CREATE TABLE IF NOT EXISTS creative_plan_events (
     plan_id TEXT NOT NULL,
     revision INTEGER NOT NULL,
     event_type TEXT NOT NULL,
+    session_id TEXT NOT NULL DEFAULT 'studio-store',
     at TEXT NOT NULL,
     data_json TEXT NOT NULL,
     FOREIGN KEY(plan_id) REFERENCES creative_plans(plan_id)
@@ -49,16 +55,40 @@ def append_creative_plan_event_tx(
     connection,
     plan_id: str,
     revision: int,
-    event_type: str,
+    event_type: CreativePlanEventType | str,
     data: dict[str, Any],
+    *,
+    session_id: str = "studio-store",
 ) -> None:
+    normalized_type = (
+        event_type
+        if isinstance(event_type, CreativePlanEventType)
+        else CreativePlanEventType(str(event_type))
+    )
+    typed = CreativePlanEvent(
+        event_type=normalized_type,
+        plan_id=plan_id,
+        revision=revision,
+        session_id=session_id,
+        sequence=0,
+        data=data,
+    )
+    if typed.display_only:
+        raise ValueError("display-only creative plan deltas cannot be persisted")
     connection.execute(
         """
         INSERT INTO creative_plan_events (
-            plan_id, revision, event_type, at, data_json
-        ) VALUES (?, ?, ?, ?, ?)
+            plan_id, revision, event_type, session_id, at, data_json
+        ) VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (plan_id, revision, event_type, _now(), _json(data)),
+        (
+            plan_id,
+            revision,
+            typed.event_type.value,
+            typed.session_id,
+            _now(),
+            _json(data),
+        ),
     )
 
 
@@ -66,4 +96,6 @@ def _event_row(row) -> dict[str, Any]:
     payload = dict(row)
     payload["data"] = json.loads(str(payload.pop("data_json") or "{}"))
     payload["event"] = payload.pop("event_type")
+    payload["schema"] = CREATIVE_PLAN_EVENT_SCHEMA
+    payload["display_only"] = False
     return payload

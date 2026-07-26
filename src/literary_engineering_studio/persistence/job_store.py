@@ -22,6 +22,7 @@ from .creative_plan_events import (
 )
 from .context_ledgers import CONTEXT_LEDGER_SCHEMA_SQL, ContextLedgerStoreMixin
 from .migrations import ensure_additive_columns
+from .mutation_receipts import MUTATION_RECEIPT_SCHEMA_SQL, MutationReceiptStoreMixin
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
 from .sessions import SessionStoreMixin
 from .primitives import (
@@ -42,6 +43,7 @@ from .primitives import (
 
 
 class JobStore(
+    MutationReceiptStoreMixin,
     ContextLedgerStoreMixin,
     CreativePlanEventStoreMixin,
     CreativePlanStoreMixin,
@@ -521,6 +523,7 @@ class JobStore(
                 + CREATIVE_PLAN_SCHEMA_SQL
                 + CREATIVE_PLAN_EVENT_SCHEMA_SQL
                 + CONTEXT_LEDGER_SCHEMA_SQL
+                + MUTATION_RECEIPT_SCHEMA_SQL
             )
             ensure_additive_columns(connection)
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")

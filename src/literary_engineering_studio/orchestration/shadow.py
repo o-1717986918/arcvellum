@@ -11,6 +11,7 @@ from .compiler import compile_plan
 from .contracts import CompiledTaskGraph, CreativeExecutionPlan
 from .lint import PlanLintContext, PlanLintResult, lint_plan
 from .normalizer import NormalizationContext, normalize_plan_candidate
+from .plan_events import CreativePlanEvent, completed_candidate_from_event
 from .simulator import PlanSimulationContext, PlanSimulationResult, simulate_plan
 
 
@@ -91,6 +92,23 @@ def evaluate_shadow_candidate(
             simulate_ms=simulate_ms,
             total_ms=_elapsed_ms(started),
         ),
+    )
+
+
+def evaluate_completed_shadow_candidate(
+    event: CreativePlanEvent,
+    *,
+    normalization_context: NormalizationContext,
+    lint_context: PlanLintContext,
+    simulation_context_factory: Callable[[CompiledTaskGraph], PlanSimulationContext],
+) -> ShadowPlanEvaluation:
+    """Cross the Planner/Lint boundary only after a typed completion event."""
+
+    return evaluate_shadow_candidate(
+        completed_candidate_from_event(event),
+        normalization_context=normalization_context,
+        lint_context=lint_context,
+        simulation_context_factory=simulation_context_factory,
     )
 
 
