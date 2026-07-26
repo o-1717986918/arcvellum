@@ -1396,3 +1396,79 @@ AO-2 退出结论：
 1. 两轮独立 reviewer findings 全部关闭，无剩余 P0/P1；
 2. Bundle Compiler 按统一实施方案延后至 AO-6/v0.99，不在 AO-2 提前建立第二执行单元；
 3. 提交 W6-3C 后进入 AO-3 Planner/Reviewer，仍不直接接入生产 Autopilot。
+
+## W6-4：AO-3 Planner、Reviewer 与可审计运行基础
+
+**状态：进行中。**
+
+本阶段继续保持 `orchestration.enabled=false` 的默认路径，不把 Planner 接入生产
+Autopilot，也不建立第二套 task lifecycle。按以下四个可回滚子批执行：
+
+### W6-4A：协议、Profile 与规划上下文合同
+
+**状态：完成。**
+
+1. 建立 Historical / Current State / Stable Knowledge / Future Intent / Evidence 真相分区；
+2. 建立独立 Planner 与 Orchestration Reviewer profile，固定能力、网络和写入边界；
+3. 建立只读 planning context package 与 Context Ledger 纯合同；
+4. Planner 只能产出 plan candidate，Reviewer 只能产出绑定精确 candidate/plan/graph/
+   simulation digest 的 review；
+5. Planner 与 Reviewer session ID 必须不同，模型字段不能满足机器 Gate。
+
+实现结果：
+
+- `truth_partition.py` 明确 Future Intent 与 Evidence/Opinion 不能满足正式 Gate；
+- Planner/Reviewer profile 为 machine-owned、network deny、formal-write deny；Reviewer
+  额外禁止 subagent 并要求独立 session；
+- Context Builder 优先装配 mandatory source，按字符预算记录 included/truncated，并对
+  metadata preview 做凭证脱敏；
+- 模型只提交 judgment candidate；plan/session/digest/independent reviewer 字段由机器
+  sealing，未知或伪造机器字段直接拒绝；
+- 新增三份跨语言 Schema，保持 Context Ledger、Agent request 和 Review receipt 与
+  Python 合同一致。
+
+退出证据：
+
+- `tests/orchestration`：56 passed；
+- `python -m unittest discover -s tests -v`：605 passed，1 skipped；
+- Architecture Audit：36 个既有 file debt、226 个既有 function debt、0 cycle；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+### W6-4B：Context Ledger 运行与持久化
+
+1. Agent workspace materialize 后依据实际复制结果生成 `context-ledger.json`；
+2. task prompt、Agent 可读路径和 ledger 共享同一 source selection；
+3. SQLite 只保存 metadata、hash、截断状态和脱敏短预览；
+4. Agent session 关联 ledger ID，重试且上下文变化时产生新 digest；
+5. 明确缺失、截断和未包含资料，复现并关闭“prompt 要求读取但 sandbox 拒绝”的历史故障。
+
+### W6-4C：Mutation Receipt 与 Typed Plan Events
+
+1. 复用现有 Worker 的 candidate、preflight、preview、apply、rollback、promotion 事件点；
+2. receipt 由机器生成并绑定 task/run/session/plan，不允许 Agent 写入；
+3. 计划事件采用固定 enum/schema，delta 仅用于显示，completed candidate 才能进入 Lint；
+4. rollback 的 formal effect 必须为 `none`，正式写回继续由既有 Engine/Worker Gate 拥有。
+
+### W6-4D：Planner/Reviewer Shadow Service 与退出审计
+
+1. Planner 和 Reviewer 通过独立协议会话运行，只在 orchestration audit 目录写候选和证据；
+2. Reviewer 不能复用 Planner session，不能修改候选，也不能直接激活计划；
+3. 对照 fixed route 记录计划质量、额外开销、Gate 注入和 fallback 原因；
+4. 证明 feature-off、Planner 失败、Review 失败和 stale context 均回退固定路线；
+5. 完成 AO-3 Architecture Review、独立 reviewer、全量 Python 测试、架构审计和 Git 封口。
+
+### W6 后续完整阶段映射
+
+W6 不以一个模糊“长周期验收”跳过剩余路线。AO-3 退出后继续：
+
+| 实施批次 | 自适应阶段 | 统一实施方案覆盖 |
+| --- | --- | --- |
+| W6-5 | AO-4 场景级自适应 | RP 深度、分支数、修订策略、scene Plan Patch、完整场景闭环 |
+| W6-6 | AO-5 章节级编排 | Rolling Horizon、SceneRiskProfile、事件库存、字数/节奏/承诺义务 |
+| W6-7 | AO-6 资源锁与有限并发 | Resource Gate、Execution Bundle、上下文缓存、局部修复、session lease、只读并发 |
+| W6-8 | AO-7 全书重规划与 Campaign | Progress Fingerprint、checkpoint、恢复阶梯、bounded replan、无人值守 |
+| W6-9 | AO-8 前端产品化 | 策略页、typed SSE、计划 diff/模拟/审批、Agent Observatory 与星仪投影 |
+| W6-10 | v1 最终验收 | 固定路线回退、真实项目长跑、吞吐基线、桌面生产构建和交付审计 |
+
+各批次必须分别留下 Architecture Review、确定性测试、集成测试和 Git 提交；前一批
+退出门槛未满足时不得只为“推进进度”提前开启后一批。

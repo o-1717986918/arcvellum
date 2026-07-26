@@ -256,6 +256,22 @@ AO-2 持久化边界：
 - plan `status` 是机器字段，初始值固定为 `shadow`；只有通过完整审计协调器验证的 revision
   才能激活。激活使用显式 transaction，普通 SQL/event/commit 失败均恢复文件投影。
 
+AO-3 Agent 协议边界：
+
+- `orchestration/truth_partition.py` 拥有计划资料的事实分区；Future Intent 与
+  Evidence/Opinion 永远不能单独满足正式 Gate；
+- `orchestration/profiles.py` 拥有 Planner/Reviewer 的机器 profile。Profile 只能引用
+  Runtime Capability ID，不拥有 Capability Handler、sandbox 或 writeback；
+- `orchestration/agent_protocol.py` 只拥有结构化请求、模型 judgment candidate 和机器
+  seal 后的 review receipt；Planner/Reviewer 不能通过输出声明正式路径、激活状态或
+  reviewer 身份；
+- `orchestration/context_builder.py` 负责规划资料选择、顺序、字符预算和精确 context
+  装配；它不做持久化和会话追踪；
+- `observability/context_ledger.py` 只拥有可观测 metadata 合同，不反向依赖
+  `orchestration/`。运行时持久化、session 关联和安全投影属于后续 AO-3 子批；
+- Planner 与 Reviewer session 必须分离。模型 judgment 只有经过 digest 绑定和机器
+  sealing 后才是 orchestration review evidence，仍不能自行激活计划。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/orchestration-review/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "plan_id",
+    "plan_revision",
+    "planner_session_id",
+    "reviewer_session_id",
+    "independent_reviewer",
+    "context_ledger_digest",
+    "candidate_digest",
+    "plan_digest",
+    "graph_digest",
+    "simulation_digest",
+    "summary",
+    "findings"
+  ],
+  "properties": {
+    "schema": {"const": "arcvellum/orchestration-review/v1"},
+    "status": {"enum": ["pass", "pass_with_notes", "fail"]},
+    "plan_id": {"type": "string", "minLength": 1},
+    "plan_revision": {"type": "integer", "minimum": 1},
+    "planner_session_id": {"type": "string", "minLength": 1},
+    "reviewer_session_id": {"type": "string", "minLength": 1},
+    "independent_reviewer": {"const": true},
+    "context_ledger_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidate_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "graph_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "simulation_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "summary": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "rule_id", "message", "required_change"],
+        "properties": {
+          "severity": {"enum": ["note", "warning", "error"]},
+          "rule_id": {"type": "string", "minLength": 1},
+          "message": {"type": "string", "minLength": 1},
+          "required_change": {"type": "string"}
+        }
+      }
+    }
+  }
+}

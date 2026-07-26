@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/orchestration-agent-request/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "request_id",
+    "session_id",
+    "role",
+    "profile",
+    "objective",
+    "context_ledger_id",
+    "context_ledger_digest",
+    "subject_digests",
+    "output_schema",
+    "emission_mode"
+  ],
+  "properties": {
+    "schema": {"const": "arcvellum/orchestration-agent-request/v1"},
+    "request_id": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "role": {"enum": ["orchestration-planner", "orchestration-reviewer"]},
+    "profile": {"type": "object"},
+    "objective": {"type": "string", "minLength": 1},
+    "context_ledger_id": {"type": "string", "minLength": 1},
+    "context_ledger_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "subject_digests": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    },
+    "output_schema": {"type": "string", "minLength": 1},
+    "emission_mode": {"const": "structured_response"}
+  }
+}

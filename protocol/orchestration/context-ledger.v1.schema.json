@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/context-ledger/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "ledger_id",
+    "project_root_hash",
+    "session_id",
+    "operation_id",
+    "plan_id",
+    "entries",
+    "assembled_sha256",
+    "digest"
+  ],
+  "properties": {
+    "schema": {"const": "arcvellum/context-ledger/v1"},
+    "ledger_id": {"type": "string", "minLength": 1},
+    "project_root_hash": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "operation_id": {"type": "string", "minLength": 1},
+    "plan_id": {"type": "string"},
+    "assembled_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_ref",
+          "title",
+          "purpose",
+          "partition",
+          "byte_count",
+          "character_count",
+          "sha256",
+          "included",
+          "truncated",
+          "limit",
+          "unit",
+          "preview",
+          "note"
+        ],
+        "properties": {
+          "source_ref": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1},
+          "partition": {
+            "enum": [
+              "historical_truth",
+              "current_state",
+              "stable_knowledge",
+              "future_intent",
+              "evidence_and_opinion"
+            ]
+          },
+          "byte_count": {"type": "integer", "minimum": 0},
+          "character_count": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "included": {"type": "boolean"},
+          "truncated": {"type": "boolean"},
+          "limit": {"type": ["integer", "null"], "minimum": 0},
+          "unit": {"enum": ["bytes", "characters", "tokens"]},
+          "preview": {"type": "string", "maxLength": 320},
+          "note": {"type": "string"}
+        }
+      }
+    }
+  }
+}

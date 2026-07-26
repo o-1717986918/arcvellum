@@ -45,9 +45,21 @@ from .settings import (
     StrategyPreset,
     orchestration_settings,
 )
+from .profiles import (
+    OrchestrationAgentProfile,
+    OrchestrationAgentRole,
+    orchestration_profile,
+)
 from .shadow import ShadowPlanEvaluation, ShadowStageTiming, evaluate_shadow_candidate
+from .truth_partition import (
+    AssertionKind,
+    ProvenanceRef,
+    TruthPartition,
+    partition_can_satisfy_formal_gate,
+)
 
 __all__ = [
+    "AssertionKind",
     "CANDIDATE_SCHEMA",
     "COMPILED_GRAPH_SCHEMA",
     "MACHINE_OWNED_FIELDS",
@@ -61,6 +73,8 @@ __all__ = [
     "FreedomBudget",
     "NormalizationContext",
     "OrchestrationMode",
+    "OrchestrationAgentProfile",
+    "OrchestrationAgentRole",
     "OrchestrationConstitution",
     "OrchestrationAuditArtifacts",
     "OrchestrationSettings",
@@ -73,6 +87,7 @@ __all__ = [
     "PlanSimulationContext",
     "PlanSimulationResult",
     "PlanScopeKind",
+    "ProvenanceRef",
     "ReplanTrigger",
     "RevisionPolicy",
     "RoleplayDepth",
@@ -84,6 +99,7 @@ __all__ = [
     "ShadowStageTiming",
     "StrategyPreset",
     "TaskBinding",
+    "TruthPartition",
     "compile_plan",
     "compiled_graph_digest",
     "candidate_digest",
@@ -93,7 +109,9 @@ __all__ = [
     "lint_plan",
     "normalize_plan_candidate",
     "orchestration_settings",
+    "orchestration_profile",
     "parse_plan_candidate",
+    "partition_can_satisfy_formal_gate",
     "persist_shadow_revision",
     "simulate_plan",
     "to_primitive",
