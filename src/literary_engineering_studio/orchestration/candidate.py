@@ -25,6 +25,7 @@ from .contracts import (
     ReplanTrigger,
     RevisionPolicy,
     RoleplayDepth,
+    SceneFallbackLevel,
     SceneStrategy,
 )
 
@@ -94,6 +95,12 @@ def parse_plan_candidate(payload: Mapping[str, Any]) -> CandidateParseResult:
     return CandidateParseResult(candidate=candidate, warnings=tuple(warnings))
 
 
+def parse_task_node_candidate(payload: Mapping[str, Any]) -> PlanTaskNode:
+    """Parse one bounded plan node for a machine-validated Plan Patch."""
+
+    return _task_node(payload)
+
+
 def _scope(payload: Mapping[str, Any]) -> PlanScope:
     return PlanScope(
         kind=PlanScopeKind(_required_text(payload, "kind")),
@@ -137,6 +144,9 @@ def _strategy(payload: Mapping[str, Any]) -> CreativeStrategy:
         branch_count=int(payload.get("branch_count") or 3),
         revision_policy=RevisionPolicy(
             str(payload.get("revision_policy") or RevisionPolicy.TARGETED_THEN_REWRITE.value)
+        ),
+        fallback_level=SceneFallbackLevel(
+            str(payload.get("fallback_level") or SceneFallbackLevel.REVISE_PROSE.value)
         ),
         narrative_distance=str(payload.get("narrative_distance") or "adaptive").strip(),
         promise_policy=PromisePolicy(

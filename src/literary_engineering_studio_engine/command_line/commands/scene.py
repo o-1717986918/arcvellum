@@ -265,7 +265,7 @@ def handle(args, parser) -> int | None:
             query=args.query,
             rebuild_context=args.rebuild_context,
             output=out,
-            agent_mode=args.agent_tasks,
+            agent_mode=args.agent_tasks, roleplay_depth=args.roleplay_depth,
         )
         print(f"simulation: {result.output_path}")
         print(f"context: {result.context_path}")

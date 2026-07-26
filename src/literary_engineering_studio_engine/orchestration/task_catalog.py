@@ -126,7 +126,11 @@ _CAPABILITIES = (
     _capability(
         PlanNodeKind.SCENE_COMPOSITION,
         "scene-development",
-        ("deterministic-cli", "platform-agent-judgment"),
+        (
+            "deterministic-cli",
+            "platform-agent-judgment",
+            "deterministic-cli-plus-platform-review",
+        ),
         ("scene",),
         ("scene:read", "composition:candidate-write"),
         "composition",

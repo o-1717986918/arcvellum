@@ -21,7 +21,9 @@ _ALLOWED_PARAMETERS = {
     "builtin:formal-prose/v1": frozenset(
         {"narrative_distance", "style_version", "target_hanzi"}
     ),
-    "builtin:revision-policy/v1": frozenset({"base_revision", "revision_policy"}),
+    "builtin:revision-policy/v1": frozenset(
+        {"base_revision", "revision_policy", "fallback_level"}
+    ),
 }
 
 

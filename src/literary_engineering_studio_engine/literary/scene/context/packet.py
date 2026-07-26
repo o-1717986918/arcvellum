@@ -101,6 +101,12 @@ def _scene_character_refs(scene_text: str) -> set[str]:
     return {item for item in refs if item}
 
 
+def scene_character_refs(scene_text: str) -> set[str]:
+    """Return the character references declared by one scene contract."""
+
+    return _scene_character_refs(scene_text)
+
+
 def _field_value(text: str, key: str) -> str:
     match = re.search(rf"(?m)^\s*{re.escape(key)}:\s*(.+?)\s*$", text)
     if not match:

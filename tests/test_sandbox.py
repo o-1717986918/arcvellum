@@ -208,6 +208,51 @@ class SandboxTests(unittest.TestCase):
             self.assertNotIn("`canon`", source_section)
             self.assertIn("workspace_dependency_paths", program)
 
+    def test_task_context_exposes_machine_bound_scene_plan_policy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = self._task(root)
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload.update(
+                {
+                    "creative_plan_id": "plan-scene-0001",
+                    "creative_plan_revision": 2,
+                    "creative_plan_node_id": "prose",
+                    "creative_plan_node_kind": "formal-prose",
+                    "creative_plan_binding_status": "bound",
+                    "creative_scene_policy": {
+                        "roleplay_depth": "full",
+                        "branch_count": 4,
+                        "revision_policy": "targeted_then_rewrite",
+                        "fallback_level": "return_to_branch",
+                    },
+                    "creative_plan_required_gates": [
+                        "prose-single-writer",
+                        "word-budget",
+                    ],
+                }
+            )
+            task.task_json_path.write_text(
+                json.dumps(_enrich_task_payload(payload), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            context = build_task_context(
+                load_task_package(root, task.task_json_path)
+            )
+
+            self.assertEqual(context["creative_plan"]["plan_id"], "plan-scene-0001")
+            self.assertEqual(context["creative_plan"]["revision"], 2)
+            self.assertEqual(context["creative_plan"]["node_id"], "prose")
+            self.assertEqual(
+                context["creative_plan"]["scene_policy"]["fallback_level"],
+                "return_to_branch",
+            )
+            self.assertEqual(
+                context["creative_plan"]["required_gates"],
+                ["prose-single-writer", "word-budget"],
+            )
+
     def test_agent_sandbox_stages_only_curated_sources(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
             root = Path(temporary)

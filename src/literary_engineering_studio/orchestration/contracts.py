@@ -12,6 +12,7 @@ from literary_engineering_studio_engine.orchestration import PlanNodeKind
 CANDIDATE_SCHEMA = "arcvellum/creative-execution-plan-candidate/v1"
 PLAN_SCHEMA = "arcvellum/creative-execution-plan/v1"
 COMPILED_GRAPH_SCHEMA = "arcvellum/compiled-task-graph/v1"
+PLAN_PATCH_SCHEMA = "arcvellum/creative-execution-plan-patch/v1"
 
 
 class PlanScopeKind(str, Enum):
@@ -31,6 +32,21 @@ class RevisionPolicy(str, Enum):
     TARGETED_THEN_REWRITE = "targeted_then_rewrite"
     REWRITE = "rewrite"
     RETURN_TO_BRANCH = "return_to_branch"
+
+
+class SceneFallbackLevel(str, Enum):
+    REVISE_PROSE = "revise_prose"
+    REWRITE_PROSE = "rewrite_prose"
+    RETURN_TO_COMPOSITION = "return_to_composition"
+    RETURN_TO_BRANCH = "return_to_branch"
+    REBUILD_ROLEPLAY = "rebuild_roleplay"
+    PAUSE_FOR_ASSET = "pause_for_asset"
+
+
+class PlanPatchOperationKind(str, Enum):
+    REPLACE_STRATEGY = "replace_strategy"
+    ADD_NODE = "add_node"
+    REPLACE_DEPENDENCY = "replace_dependency"
 
 
 class PlanLifecycleStatus(str, Enum):
@@ -99,6 +115,7 @@ class CreativeStrategy:
     scene_inventory: tuple[SceneStrategy, ...] = ()
     branch_count: int = 3
     revision_policy: RevisionPolicy = RevisionPolicy.TARGETED_THEN_REWRITE
+    fallback_level: SceneFallbackLevel = SceneFallbackLevel.REVISE_PROSE
     narrative_distance: str = "adaptive"
     promise_policy: PromisePolicy = PromisePolicy()
 
@@ -239,6 +256,29 @@ class CreativeExecutionPlan:
     compiled_graph_digest: str = ""
     approved_by: str = ""
     candidate_warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PlanPatchOperation:
+    kind: PlanPatchOperationKind
+    path: str = ""
+    value: str | int | float | bool | None = None
+    node: PlanTaskNode | None = None
+    node_id: str = ""
+    depends_on: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CreativeExecutionPlanPatch:
+    schema: str
+    plan_id: str
+    base_revision: int
+    base_plan_digest: str
+    scope: PlanScope
+    trigger: ReplanTrigger
+    reason: str
+    operations: tuple[PlanPatchOperation, ...]
+    affected_outputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

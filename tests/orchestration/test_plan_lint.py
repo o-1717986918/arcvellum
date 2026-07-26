@@ -201,6 +201,34 @@ class PlanNormalizerAndLintTests(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("parallel-creative-writers", {item.code for item in result.issues})
 
+    def test_lint_rejects_scene_strategy_parameter_tampering(self):
+        plan = self._plan()
+        tampered_nodes = tuple(
+            replace(
+                node,
+                parameters=tuple(
+                    replace(parameter, value=5)
+                    if parameter.name == "branch_count"
+                    else parameter
+                    for parameter in node.parameters
+                ),
+            )
+            if node.kind == PlanNodeKind.BRANCH_SIMULATION
+            else node
+            for node in plan.task_nodes
+        )
+
+        result = lint_plan(
+            replace(plan, task_nodes=tampered_nodes),
+            context=self.lint_context,
+        )
+
+        self.assertFalse(result.passed)
+        self.assertIn(
+            "branch-strategy-binding",
+            {item.code for item in result.issues},
+        )
+
     def test_analysis_ratio_is_an_authorized_hard_limit(self):
         plan = self._plan()
         strict = replace(

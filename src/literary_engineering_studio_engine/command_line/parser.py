@@ -441,6 +441,12 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     simulate.add_argument("--rebuild-context", action="store_true")
     simulate.add_argument("--out", default="", help="Output simulation path.")
     simulate.add_argument("--agent", "--agent-tasks", dest="agent_tasks", action="store_true", help="Generate platform-agent executable task directives instead of empty placeholders.")
+    simulate.add_argument(
+        "--roleplay-depth",
+        choices=("light", "targeted", "full"),
+        default="targeted",
+        help="Bounded causal-analysis depth; every level still emits formal RP evidence.",
+    )
 
     branch = sub.add_parser("branch-simulate", help="Create scored multi-branch plot candidates for a scene.")
     branch.add_argument("project", help="Work project directory.")

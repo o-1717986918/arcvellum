@@ -1673,3 +1673,59 @@ W6 不以一个模糊“长周期验收”跳过剩余路线。AO-3 退出后继
 
 各批次必须分别留下 Architecture Review、确定性测试、集成测试和 Git 提交；前一批
 退出门槛未满足时不得只为“推进进度”提前开启后一批。
+
+### W6-5A：场景自适应契约与正式任务绑定
+
+**状态：确定性契约层完成；正式 Worker 激活接入转入 W6-5B。**
+
+本批只建立 AO-4 的确定性底座，不提前开放章节 Rolling Horizon、SceneRiskProfile、
+Execution Bundle、并发或 Campaign：
+
+1. 把 scene strategy 中的 RP 深度、分支数量、叙事距离和修订策略确定性投影到对应
+   compiled node，禁止 Planner 只写展示字段而正式任务继续使用默认值。
+2. 新增 scene execution binding：只给现有 Engine `task-next/task-open` 产生的正式
+   task package 附加机器校验后的策略约束，不创造第二套 task、Review、promotion 或
+   state lifecycle。
+3. 新增 scene-scope Plan Patch 契约与纯确定性 apply/evaluate 管线；Patch 必须校验
+   plan ID、base revision、scope、允许操作和 optimistic concurrency，并产生新 revision。
+4. Patch 后必须重新 Normalize、Plan Lint、Compile 和 Simulate；失败 Patch 不得激活，
+   不得修改历史 revision。
+5. fixed/shadow 路线保持行为等价；没有有效 active scene plan 时 Worker 使用原 task
+   package，不猜测、不隐式降级。
+
+本批退出门槛：
+
+- RP/branch/prose/revision 正式任务能获得与计划一致且可审计的 strategy binding；
+- 错误 scene、过期 fingerprint/revision、非法 Patch path/op、正式 task 不匹配均被拒绝；
+- Plan Patch 保留 base/new digest、revision 和 diff，并通过单元与集成测试；
+- Python 全量测试、客户端测试、Architecture Audit 和 `git diff --check` 无新增债务。
+
+W6-5A 实现结果：
+
+- `CreativeStrategy` 新增机器枚举的 fallback level，RP 深度、分支数、叙事距离、
+  目标汉字数、修订策略与回退层级会被投影到 compiled node，不再停留在展示字段；
+- `SceneExecutionPolicy` 将已验证计划绑定到现有正式 scene task package，沿用
+  Engine 的单一 task/review/promotion/state lifecycle；无对应节点的正式状态明确标记
+  为 lifecycle passthrough，不伪造计划节点；
+- `simulate-scene` 正式支持 `light/targeted/full` RP 深度。深度只改变人物读取范围，
+  不豁免 character action、world consequence、branch pressure、canon risk 或
+  writeback candidate 语义证据；
+- scene Plan Patch 支持受限策略替换与依赖替换，校验 plan/revision/digest/fingerprint、
+  scene scope、输出路径与 Freedom Budget，并在新 revision 上完整重跑
+  Normalize、Plan Lint、Compile、Simulate；
+- AO-4 暂不允许动态 `add_node`：在正式 Scheduler 能绑定动态节点前明确 fail closed，
+  防止形成第二套未受控生命周期；
+- 拆分 scene strategy policy、RP depth、RP task sidecar、roleplay models 和 task plan
+  context，Architecture Audit 不新增文件、函数或循环依赖债务。
+
+本子批证据：
+
+- scene adaptation、Plan Lint、semantic task、sandbox、task transport 与 preflight：
+  94 tests passed；
+- RP 深度定向回归：4 tests passed；
+- Python 全量：642 tests passed，1 skipped；Client：44 files、135 tests passed；
+- `compileall`、Architecture Audit 与 `git diff --check`：passed；
+- Architecture Audit：34 个既有 file debt、223 个既有 function debt、0 cycle；
+- 修正 v0.96.1 发布后遗留的版本同步测试常量，所有公共版本声明仍保持一致；
+- W6-5B 必须通过已验证 active-plan loader 把绑定接入 Worker；W6-5A 不声称
+  shadow plan 已经影响真实创作。

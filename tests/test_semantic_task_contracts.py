@@ -69,6 +69,36 @@ class SemanticTaskContractTests(unittest.TestCase):
             self.assertEqual(manifest["roleplay_evidence"]["status"], "complete")
             self.assertIn("RP 角色行动依据", "\n".join(manifest["branches"][0]["action_chain"]))
 
+    def test_roleplay_depth_changes_scope_without_waiving_semantic_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self._project(Path(temporary))
+            (root / "characters" / "outsider.yaml").write_text(
+                "character_id: outsider\nname: Outsider\nrole: minor\n",
+                encoding="utf-8",
+            )
+
+            light = build_roleplay_simulation(
+                root,
+                scene=Path("scenes/scene_0001.yaml"),
+                agent_mode=True,
+                roleplay_depth="light",
+                output=Path("branches/scene_0001/light_roleplay.md"),
+            )
+            full = build_roleplay_simulation(
+                root,
+                scene=Path("scenes/scene_0001.yaml"),
+                agent_mode=True,
+                roleplay_depth="full",
+                output=Path("branches/scene_0001/full_roleplay.md"),
+            )
+
+            self.assertEqual(light.character_count, 1)
+            self.assertEqual(full.character_count, 2)
+            light_text = light.output_path.read_text(encoding="utf-8")
+            self.assertIn("RP 深度：`light`", light_text)
+            self.assertIn("不得把 light 理解为跳过 RP", light_text)
+            self.assertIn("roleplay_result.json", light.agent_tasks_path.read_text(encoding="utf-8"))
+
     def test_composition_semantic_evidence_binds_to_exact_source_digest(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

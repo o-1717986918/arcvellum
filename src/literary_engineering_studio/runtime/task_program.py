@@ -8,6 +8,7 @@ from typing import Any
 
 from ..contracts import TaskPackage
 from literary_engineering_studio_engine.agent_schema import load_schema_spec
+from .creative_plan_context import creative_plan_task_context
 from .prompt_context import PreparedPromptContext, render_prepared_context_section
 from .worker_program_template import WORKER_PROGRAM_TEMPLATE
 
@@ -66,6 +67,7 @@ def build_task_context(
         "output_contracts": [item.as_dict() for item in task.execution_contract.outputs],
         "semantic_artifact": task.semantic_artifact,
         "semantic_output_contract": _semantic_output_contract(task),
+        "creative_plan": creative_plan_task_context(task.payload),
         "command": task.command,
         "word_count": {
             "target": int(task.payload.get("word_count_target") or 0),

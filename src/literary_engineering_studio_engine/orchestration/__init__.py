@@ -9,6 +9,7 @@ from .task_catalog import (
     formal_task_capabilities,
     formal_task_capability,
 )
+from .scene_states import scene_plan_node_kind
 
 __all__ = [
     "DEFAULT_ROUTE_ORDER",
@@ -21,5 +22,6 @@ __all__ = [
     "default_route_macro",
     "formal_task_capabilities",
     "formal_task_capability",
+    "scene_plan_node_kind",
     "mandatory_gates_for",
 ]

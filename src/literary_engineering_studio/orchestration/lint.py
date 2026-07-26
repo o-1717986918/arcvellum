@@ -17,6 +17,7 @@ from .budget_policy import budget_range_errors
 from .constitution import constitution_v1
 from .contracts import CreativeExecutionPlan, FreedomBudget, PlanTaskNode, to_primitive
 from .literary_policy import literary_policy_violations
+from .scene_strategy_policy import scene_strategy_violations
 from .writer_policy import writer_policy_violations
 
 
@@ -61,6 +62,8 @@ def lint_plan(plan: CreativeExecutionPlan, *, context: PlanLintContext) -> PlanL
     dependencies = _lint_graph(plan.task_nodes, node_map, issues)
     _lint_budget(plan, context, issues)
     _lint_nodes(plan, context, node_map, dependencies, issues)
+    for violation in scene_strategy_violations(plan):
+        _error(issues, violation.code, violation.message, violation.node_ids)
     for violation in literary_policy_violations(plan.task_nodes, dependencies):
         _error(issues, violation.code, violation.message, violation.related)
     ordered = tuple(

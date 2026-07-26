@@ -24,6 +24,7 @@ from .contracts import (
     PlanTaskNode,
     to_primitive,
 )
+from .scene_strategy_policy import project_scene_strategy_parameters
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,12 @@ def normalize_plan_candidate(
         parsed.candidate.strategy,
         approved_budget,
     )
+    risk_by_node = context.risk_features_by_node or {}
+    nodes, parameter_warnings = project_scene_strategy_parameters(
+        nodes,
+        strategy=strategy,
+        risk_features_by_node=risk_by_node,
+    )
     source_digest = candidate_digest(parsed.candidate)
     identity_digest = _digest(
         {"candidate_digest": source_digest, "project_fingerprint": fingerprint}
@@ -62,7 +69,6 @@ def normalize_plan_candidate(
     plan_id = context.plan_id.strip() or f"plan-{identity_digest[:16]}"
     if not re.fullmatch(r"plan-[a-z0-9-]+", plan_id):
         raise ValueError("plan_id must use the machine plan slug format")
-    risk_by_node = context.risk_features_by_node or {}
     gate_bindings = tuple(
         PlanGateBinding(
             node_id=node.node_id,
@@ -99,6 +105,7 @@ def normalize_plan_candidate(
                     *node_warnings,
                     *budget_warnings,
                     *strategy_warnings,
+                    *parameter_warnings,
                 ]
             )
         ),
@@ -163,7 +170,7 @@ def _normalize_strategy(
     strategy: CreativeStrategy,
     budget: FreedomBudget,
 ) -> tuple[CreativeStrategy, tuple[str, ...]]:
-    branch_count = max(1, min(strategy.branch_count, budget.max_branch_count))
+    branch_count = max(1, min(strategy.branch_count, budget.max_branch_count, 5))
     warnings = (
         ("strategy branch_count clamped by approved Freedom Budget",)
         if branch_count != strategy.branch_count
