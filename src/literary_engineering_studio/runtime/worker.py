@@ -30,6 +30,7 @@ from .sandbox import (
     update_run_manifest,
 )
 from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
+from .worker_observability import WorkerObservabilityMixin
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,7 @@ class WorkerRunResult:
         }
 
 
-class AgentWorker:
+class AgentWorker(WorkerObservabilityMixin):
     def __init__(
         self,
         config: dict[str, Any] | None = None,
@@ -76,16 +77,13 @@ class AgentWorker:
         self.event_sink = event_sink
         self.cancel_event = cancel_event or threading.Event()
         self.runtime_pool = runtime_pool
+        self._reset_context_ledger()
 
     def prepare(
-        self,
-        project_root: Path,
-        *,
-        route: str,
-        runtime_id: str,
-        task_id: str = "",
-        scene: str = "",
+        self, project_root: Path, *, route: str, runtime_id: str,
+        task_id: str = "", scene: str = "",
     ) -> tuple[TaskPackage | None, SandboxManifest | None, WorkerRunResult | None]:
+        self._reset_context_ledger()
         project = _validate_project(project_root)
         self._emit("task.selecting", {"project_root": str(project), "route": route})
         selected_task_id = task_id.strip()
@@ -195,6 +193,7 @@ class AgentWorker:
                 visible = materialize_agent_workspace(task, sandbox)
                 self._emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
             self._emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
+        self._publish_context_ready(task, sandbox, active_runtime)
         return task, sandbox, None
 
     def run_once(
@@ -399,6 +398,7 @@ class AgentWorker:
     def resume_from_run(self, run_root: Path) -> WorkerRunResult:
         """Resume a timed-out run only when it contains fresh valid Agent output."""
         run = load_run(run_root)
+        self._bind_context_ledger(run)
         project = _validate_project(Path(str(run.get("project_root") or "")))
         task_json = Path(str(run.get("task_json") or ""))
         if not task_json.is_file():
@@ -552,11 +552,6 @@ class AgentWorker:
             audit_fields,
             preview.as_dict(),
         )
-
-    def _emit(self, event: str, data: dict[str, Any]) -> None:
-        if self.event_sink is not None:
-            self.event_sink(event, data)
-
 
 def load_run(run_root: Path) -> dict[str, Any]:
     path = run_root.resolve() / "run.json"

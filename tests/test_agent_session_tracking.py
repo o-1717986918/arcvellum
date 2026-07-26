@@ -59,6 +59,38 @@ class AgentSessionTrackingTests(unittest.TestCase):
             self.assertEqual(final["retry_count"], 1)
             self.assertNotIn("private stream", final["last_message"])
 
+    def test_preserves_context_ledger_binding_across_later_events(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            common = {
+                "project_root": "C:/work",
+                "role": "worker",
+                "runtime": "opencode",
+                "controller_id": "run-ledger",
+                "task_id": "task-ledger",
+                "route": "scene-development",
+            }
+            track_agent_session_event(
+                store,
+                **common,
+                event="runner.session.created",
+                data={
+                    "session_id": "session-ledger-binding",
+                    "context_ledger_id": "context-1234567890abcdef",
+                    "context_ledger_digest": "a" * 64,
+                },
+            )
+            track_agent_session_event(
+                store,
+                **common,
+                event="runner.session.started",
+                data={"session_id": "session-ledger-binding"},
+            )
+
+            session = store.read_agent_session("session-ledger-binding")
+            self.assertEqual(session["context_ledger_id"], "context-1234567890abcdef")
+            self.assertEqual(session["context_ledger_digest"], "a" * 64)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -251,8 +251,9 @@ AO-2 持久化边界：
   compiled graph digest、simulation fingerprint 与 provenance 语义链；
 - `shadow.py` 只量测 Normalize/Lint/Compile/Simulate，Lint 失败即停止。它不持久化、
   不执行、不激活，也没有 Autopilot 调用入口；
-- schema 12 沿用 JobStore 的 migration backup；删除 Studio 编排索引不得删除或改变
-  正式作品与项目审计文件。
+- AO-2 在 schema 12 建立计划索引；当前 schema 13 继续沿用 JobStore 的 migration
+  backup 并增加 Context Ledger 元数据。删除 Studio 编排/可观测索引不得删除或改变正式
+  作品与项目审计文件。
 - plan `status` 是机器字段，初始值固定为 `shadow`；只有通过完整审计协调器验证的 revision
   才能激活。激活使用显式 transaction，普通 SQL/event/commit 失败均恢复文件投影。
 
@@ -268,7 +269,15 @@ AO-3 Agent 协议边界：
 - `orchestration/context_builder.py` 负责规划资料选择、顺序、字符预算和精确 context
   装配；它不做持久化和会话追踪；
 - `observability/context_ledger.py` 只拥有可观测 metadata 合同，不反向依赖
-  `orchestration/`。运行时持久化、session 关联和安全投影属于后续 AO-3 子批；
+  `orchestration/`；`redaction.py` 统一生成有界安全预览；
+- `runtime/context_selection.py` 是 prompt 与 Agent workspace 的唯一资料选择合同；
+  `context_materialization.py` 把 prompt、task context、Capability/Resource 控制和 Ledger
+  作为同一装配操作；`runtime/context_ledger.py` 只从装配后的可读视图生成证据；
+- `persistence/context_ledgers.py` 只保存 metadata/hash/preview，完整来源文本不进入
+  SQLite；schema 13 给 Agent session 增加精确 ledger ID/digest 关联；
+- `worker_observability.py` 与 `observability/context_ledger_tracking.py` 以
+  `sandbox.context_ready` 作为真实持久化边界。核心命令前的临时上下文不冒充模型已见
+  上下文，同一 run 重装配后的资料变化产生新 identity；
 - Planner 与 Reviewer session 必须分离。模型 judgment 只有经过 digest 绑定和机器
   sealing 后才是 orchestration review evidence，仍不能自行激活计划。
 

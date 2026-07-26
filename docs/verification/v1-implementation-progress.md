@@ -1436,11 +1436,39 @@ Autopilot，也不建立第二套 task lifecycle。按以下四个可回滚子�
 
 ### W6-4B：Context Ledger 运行与持久化
 
+**状态：完成。**
+
 1. Agent workspace materialize 后依据实际复制结果生成 `context-ledger.json`；
 2. task prompt、Agent 可读路径和 ledger 共享同一 source selection；
 3. SQLite 只保存 metadata、hash、截断状态和脱敏短预览；
 4. Agent session 关联 ledger ID，重试且上下文变化时产生新 digest；
 5. 明确缺失、截断和未包含资料，复现并关闭“prompt 要求读取但 sandbox 拒绝”的历史故障。
+
+实现结果：
+
+- `runtime/context_selection.py` 统一 required reference、Agent source 和 operational path；
+  prompt 的 source/reference 只使用实际复制成功的交集；
+- `context_materialization.py` 在 Agent workspace 最终装配后一次性生成 prompt、
+  `TASK_CONTEXT.json`、Capability/Resource 控制副本和 Context Ledger；
+- Ledger 覆盖 source/reference、既有 output baseline、CLI protected output、
+  `project.yaml`、用户方向和 `_task` machine controls；缺失输入以 excluded entry
+  留证，不再让 prompt 指挥模型读取沙箱拒绝的路径；
+- `assembled_sha256` 精确绑定 Agent prompt；ledger identity 额外绑定全部可见元数据，
+  同一 run 的核心命令若改变资料内容也会生成新 ID/digest；
+- SQLite schema 13 新增 metadata-only ledger/entry 表和 Agent session ledger
+  关联；跨项目 replay、digest 冲突和 run-root 外路径均 fail closed；
+- API Worker、Autopilot 和直接 prepare 复用同一持久化服务；正式持久化事件为
+  `sandbox.context_ready`，不记录模型尚未真正收到的 pre-command 临时上下文；
+- 凭证样式内容在 run ledger 和 SQLite preview 写入前统一脱敏，数据库不复制全文。
+
+退出证据：
+
+- AO-3B focused/regression：40 passed；
+- `python -m unittest discover -s tests -v`：611 passed，1 skipped；
+- Architecture Audit：36 个既有 file debt、225 个既有 function debt、0 cycle；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed；
+- 架构评审见
+  `docs/architecture/reviews/ao-3b-context-ledger-runtime-review.md`。
 
 ### W6-4C：Mutation Receipt 与 Typed Plan Events
 

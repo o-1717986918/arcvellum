@@ -11,6 +11,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from ...observability.context_ledger_tracking import persist_prepared_context
 from ..common import project_root as resolve_project_root
 from ..models import WorkerRequest, WorkerRetryRequest, WritebackDecisionRequest
 
@@ -124,18 +125,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if terminal:
             return {"ok": True, **terminal.as_dict()}
-        assert task is not None and sandbox is not None
-        return {
-            "ok": True,
-            "status": "prepared",
-            "task_id": task.task_id,
-            "route": task.route,
-            "runtime": payload.runtime,
-            "execution_contract": task.execution_contract.as_dict(),
-            "run_root": str(sandbox.run_root),
-            "workspace": str(sandbox.workspace),
-            "prompt": str(sandbox.prompt_path),
-        }
+        return _prepared_worker_response(deps, payload, task, sandbox)
 
     @router.post("/worker/run")
     def worker_run(payload: WorkerRequest):
@@ -274,3 +264,20 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
         return StreamingResponse(stream(), media_type="text/event-stream")
 
     return router
+
+
+def _prepared_worker_response(deps, payload, task, sandbox) -> dict[str, Any]:
+    if task is None or sandbox is None:
+        raise RuntimeError("worker preparation returned no task sandbox")
+    persist_prepared_context(deps.jobs, task, sandbox)
+    return {
+        "ok": True,
+        "status": "prepared",
+        "task_id": task.task_id,
+        "route": task.route,
+        "runtime": payload.runtime,
+        "execution_contract": task.execution_contract.as_dict(),
+        "run_root": str(sandbox.run_root),
+        "workspace": str(sandbox.workspace),
+        "prompt": str(sandbox.prompt_path),
+    }

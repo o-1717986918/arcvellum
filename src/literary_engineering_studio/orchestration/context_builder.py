@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import re
 
 from ..observability.context_ledger import (
     ContextLedger,
     ContextLedgerEntry,
     context_ledger_id,
 )
+from ..observability.redaction import redact_preview
 from .truth_partition import TruthPartition
 
 
@@ -158,21 +158,8 @@ def _ledger_entry(
         truncated=truncated,
         limit=source_limit,
         unit="characters",
-        preview=_safe_preview(selected),
+        preview=redact_preview(selected),
         note="mandatory" if source.mandatory else "",
     )
-
-
-def _safe_preview(value: str) -> str:
-    compact = " ".join(value.replace("\x00", "").split())
-    compact = re.sub(
-        r"(?i)\b(api[_-]?key|access[_-]?key|password|secret|token)\b\s*[:=]\s*[^\s,;]+",
-        r"\1=[REDACTED]",
-        compact,
-    )
-    compact = re.sub(r"\bsk-[A-Za-z0-9_-]{12,}\b", "[REDACTED]", compact)
-    return compact[:320]
-
-
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()

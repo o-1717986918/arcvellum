@@ -96,6 +96,8 @@ class SessionStoreMixin:
         last_event: str = "",
         last_message: str = "",
         retry_count: int = 0,
+        context_ledger_id: str = "",
+        context_ledger_digest: str = "",
     ) -> dict[str, Any]:
         """Create or refresh the public lifecycle record for one real Agent session."""
 
@@ -115,59 +117,30 @@ class SessionStoreMixin:
             ).fetchone()
             started_at = str(existing["started_at"]) if existing is not None else now
             event_count = int(existing["event_count"] or 0) + (1 if last_event else 0) if existing is not None else (1 if last_event else 0)
-            project_value = str(project_root or (existing["project_root"] if existing is not None else ""))
-            role_value = str(role or (existing["role"] if existing is not None else "worker"))[:40]
-            runtime_value = str(runtime or (existing["runtime"] if existing is not None else ""))[:80]
-            model_value = str(model or (existing["model"] if existing is not None else ""))[:160]
-            task_value = str(task_id or (existing["task_id"] if existing is not None else ""))[:180]
-            route_value = str(route or (existing["route"] if existing is not None else ""))[:80]
-            controller_value = str(controller_id or (existing["controller_id"] if existing is not None else ""))[:180]
-            message_value = str(last_message or (existing["last_message"] if existing is not None else ""))[:600]
-            retry_value = max(
-                max(0, int(existing["retry_count"] or 0)) if existing is not None else 0,
-                max(0, int(retry_count or 0)),
+            values = _merged_session_values(
+                existing,
+                project_root=project_root,
+                role=role,
+                runtime=runtime,
+                model=model,
+                task_id=task_id,
+                route=route,
+                controller_id=controller_id,
+                last_message=last_message,
+                retry_count=retry_count,
+                context_ledger_id=context_ledger_id,
+                context_ledger_digest=context_ledger_digest,
             )
-            connection.execute(
-                """
-                INSERT INTO agent_sessions (
-                    session_id, project_root, role, runtime, model, status,
-                    task_id, route, controller_id, started_at, updated_at,
-                    finished_at, event_count, last_event, last_message, retry_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(session_id) DO UPDATE SET
-                    project_root = excluded.project_root,
-                    role = excluded.role,
-                    runtime = excluded.runtime,
-                    model = excluded.model,
-                    status = excluded.status,
-                    task_id = excluded.task_id,
-                    route = excluded.route,
-                    controller_id = excluded.controller_id,
-                    updated_at = excluded.updated_at,
-                    finished_at = excluded.finished_at,
-                    event_count = excluded.event_count,
-                    last_event = excluded.last_event,
-                    last_message = excluded.last_message,
-                    retry_count = excluded.retry_count
-                """,
-                (
-                    session,
-                    project_value,
-                    role_value,
-                    runtime_value,
-                    model_value,
-                    normalized_status,
-                    task_value,
-                    route_value,
-                    controller_value,
-                    started_at,
-                    now,
-                    now if terminal else "",
-                    event_count,
-                    str(last_event or "")[:120],
-                    message_value,
-                    retry_value,
-                ),
+            _write_agent_session(
+                connection,
+                session=session,
+                status=normalized_status,
+                started_at=started_at,
+                now=now,
+                terminal=terminal,
+                event_count=event_count,
+                last_event=str(last_event or "")[:120],
+                values=values,
             )
         return self.read_agent_session(session)
 
@@ -398,3 +371,100 @@ class SessionStoreMixin:
         payload["event_count"] = int(payload.get("event_count") or 0)
         payload["retry_count"] = int(payload.get("retry_count") or 0)
         return payload
+
+
+def _merged_session_values(existing, **values: Any) -> dict[str, Any]:
+    limits = {
+        "project_root": None,
+        "role": 40,
+        "runtime": 80,
+        "model": 160,
+        "task_id": 180,
+        "route": 80,
+        "controller_id": 180,
+        "last_message": 600,
+        "context_ledger_id": 96,
+        "context_ledger_digest": 64,
+    }
+    result = {
+        key: _preserved_text(existing, key, values.get(key), limit)
+        for key, limit in limits.items()
+    }
+    result["retry_count"] = max(
+        _existing_int(existing, "retry_count"),
+        max(0, int(values.get("retry_count") or 0)),
+    )
+    return result
+
+
+def _preserved_text(existing, key: str, value: Any, limit: int | None) -> str:
+    selected = value
+    if not selected and existing is not None:
+        selected = existing[key]
+    text = str(selected or "")
+    return text[:limit] if limit is not None else text
+
+
+def _existing_int(existing, key: str) -> int:
+    return max(0, int(existing[key] or 0)) if existing is not None else 0
+
+
+def _write_agent_session(
+    connection,
+    *,
+    session: str,
+    status: str,
+    started_at: str,
+    now: str,
+    terminal: bool,
+    event_count: int,
+    last_event: str,
+    values: dict[str, Any],
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO agent_sessions (
+            session_id, project_root, role, runtime, model, status,
+            task_id, route, controller_id, started_at, updated_at,
+            finished_at, event_count, last_event, last_message, retry_count,
+            context_ledger_id, context_ledger_digest
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+            project_root = excluded.project_root,
+            role = excluded.role,
+            runtime = excluded.runtime,
+            model = excluded.model,
+            status = excluded.status,
+            task_id = excluded.task_id,
+            route = excluded.route,
+            controller_id = excluded.controller_id,
+            updated_at = excluded.updated_at,
+            finished_at = excluded.finished_at,
+            event_count = excluded.event_count,
+            last_event = excluded.last_event,
+            last_message = excluded.last_message,
+            retry_count = excluded.retry_count,
+            context_ledger_id = excluded.context_ledger_id,
+            context_ledger_digest = excluded.context_ledger_digest
+        """,
+        (
+            session,
+            values["project_root"],
+            values["role"],
+            values["runtime"],
+            values["model"],
+            status,
+            values["task_id"],
+            values["route"],
+            values["controller_id"],
+            started_at,
+            now,
+            now if terminal else "",
+            event_count,
+            last_event,
+            values["last_message"],
+            values["retry_count"],
+            values["context_ledger_id"],
+            values["context_ledger_digest"],
+        ),
+    )

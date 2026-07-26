@@ -215,6 +215,43 @@ class DurableJobTests(unittest.TestCase):
                 ["ses_worker_001"],
             )
 
+    def test_schema_twelve_adds_context_ledgers_and_session_binding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "studio.sqlite3"
+            first = JobStore(database)
+            first.upsert_agent_session(
+                "session-before-ledger",
+                project_root="C:/work",
+                role="worker",
+                runtime="opencode",
+            )
+            connection = sqlite3.connect(database)
+            try:
+                connection.execute("ALTER TABLE agent_sessions DROP COLUMN context_ledger_id")
+                connection.execute("ALTER TABLE agent_sessions DROP COLUMN context_ledger_digest")
+                connection.execute("DROP TABLE context_ledger_entries")
+                connection.execute("DROP TABLE context_ledgers")
+                connection.execute("PRAGMA user_version = 12")
+                connection.commit()
+            finally:
+                connection.close()
+
+            restarted = JobStore(database)
+            self.assertIsNotNone(restarted.migration_backup)
+            self.assertEqual(restarted.health()["schema_version"], 13)
+            session = restarted.read_agent_session("session-before-ledger")
+            self.assertEqual(session["context_ledger_id"], "")
+            self.assertEqual(session["context_ledger_digest"], "")
+            with restarted._connection() as connection:
+                tables = {
+                    row["name"]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    ).fetchall()
+                }
+            self.assertIn("context_ledgers", tables)
+            self.assertIn("context_ledger_entries", tables)
+
     def test_supervisor_persists_completion(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")

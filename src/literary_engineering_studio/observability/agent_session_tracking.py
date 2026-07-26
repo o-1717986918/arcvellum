@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .context_ledger_tracking import persist_context_ledger_event
+
 
 _TERMINAL_STATUS = {
     "completed": "complete",
@@ -30,6 +32,12 @@ def track_agent_session_event(
 ) -> dict[str, Any] | None:
     """Project one runtime event into the durable, user-safe session ledger."""
 
+    persist_context_ledger_event(
+        store,
+        project_root=project_root,
+        event=event,
+        data=data,
+    )
     session_id = str(data.get("session_id") or "").strip()
     if not session_id:
         return None
@@ -54,6 +62,8 @@ def track_agent_session_event(
         last_event=event,
         last_message=_public_message(event, data),
         retry_count=retry_count,
+        context_ledger_id=_event_text(data, "context_ledger_id"),
+        context_ledger_digest=_event_text(data, "context_ledger_digest"),
     )
 
 
@@ -62,6 +72,11 @@ def _read_existing(store, session_id: str) -> dict[str, Any]:
         return store.read_agent_session(session_id)
     except FileNotFoundError:
         return {}
+
+
+def _event_text(data: dict[str, Any], key: str) -> str:
+    value = data.get(key)
+    return "" if value is None else str(value)
 
 
 def _status_for(event: str, raw_status: str, current: dict[str, Any]) -> str:

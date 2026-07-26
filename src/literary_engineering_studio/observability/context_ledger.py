@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
-from typing import Literal
+from typing import Any, Literal
 
 
 CONTEXT_LEDGER_SCHEMA = "arcvellum/context-ledger/v1"
@@ -120,16 +120,62 @@ def context_ledger_id(
     session_id: str,
     operation_id: str,
     assembled_sha256: str,
+    identity_sha256: str = "",
 ) -> str:
+    if identity_sha256 and not _SHA256.fullmatch(identity_sha256):
+        raise ValueError("context ledger identity sha256 is invalid")
     suffix = _digest(
         {
             "project_root_hash": project_root_hash,
             "session_id": session_id,
             "operation_id": operation_id,
-            "assembled_sha256": assembled_sha256,
+            "assembled_sha256": identity_sha256 or assembled_sha256,
         }
     )[:24]
     return f"context-{suffix}"
+
+
+def parse_context_ledger(payload: dict[str, Any]) -> ContextLedger:
+    if str(payload.get("schema") or "") != CONTEXT_LEDGER_SCHEMA:
+        raise ValueError("unsupported context ledger schema")
+    raw_entries = payload.get("entries")
+    if not isinstance(raw_entries, list):
+        raise ValueError("context ledger entries must be a list")
+    entries = tuple(_parse_entry(item) for item in raw_entries)
+    ledger = ContextLedger(
+        ledger_id=str(payload.get("ledger_id") or ""),
+        project_root_hash=str(payload.get("project_root_hash") or ""),
+        session_id=str(payload.get("session_id") or ""),
+        operation_id=str(payload.get("operation_id") or ""),
+        plan_id=str(payload.get("plan_id") or ""),
+        entries=entries,
+        assembled_sha256=str(payload.get("assembled_sha256") or ""),
+    )
+    supplied_digest = str(payload.get("digest") or "")
+    if supplied_digest and supplied_digest != ledger.digest:
+        raise ValueError("context ledger digest does not match its metadata")
+    return ledger
+
+
+def _parse_entry(item: Any) -> ContextLedgerEntry:
+    if not isinstance(item, dict):
+        raise ValueError("context ledger entries contain a non-object item")
+    source_limit = item.get("limit")
+    return ContextLedgerEntry(
+        source_ref=str(item.get("source_ref") or ""),
+        title=str(item.get("title") or ""),
+        purpose=str(item.get("purpose") or ""),
+        partition=str(item.get("partition") or ""),
+        byte_count=int(item.get("byte_count") or 0),
+        character_count=int(item.get("character_count") or 0),
+        sha256=str(item.get("sha256") or ""),
+        included=bool(item.get("included")),
+        truncated=bool(item.get("truncated")),
+        limit=int(source_limit) if source_limit is not None else None,
+        unit=str(item.get("unit") or "characters"),
+        preview=str(item.get("preview") or ""),
+        note=str(item.get("note") or ""),
+    )
 
 
 def _digest(value: object) -> str:

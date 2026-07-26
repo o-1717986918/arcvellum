@@ -28,6 +28,14 @@ def ensure_additive_columns(connection: sqlite3.Connection) -> None:
             "ALTER TABLE archive_asset_transactions "
             "ADD COLUMN operation TEXT NOT NULL DEFAULT 'replace'"
         )
+    agent_session_columns = _columns(connection, "agent_sessions")
+    agent_session_additions = {
+        "context_ledger_id": "TEXT NOT NULL DEFAULT ''",
+        "context_ledger_digest": "TEXT NOT NULL DEFAULT ''",
+    }
+    for name, declaration in agent_session_additions.items():
+        if name not in agent_session_columns:
+            connection.execute(f"ALTER TABLE agent_sessions ADD COLUMN {name} {declaration}")
 
 
 def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
@@ -35,6 +43,7 @@ def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
         "advisor_pinned_preferences",
         "autopilot_runs",
         "archive_asset_transactions",
+        "agent_sessions",
     }:
         raise ValueError(f"unsupported migration table: {table}")
     return {

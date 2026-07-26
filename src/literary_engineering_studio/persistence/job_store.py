@@ -20,6 +20,7 @@ from .creative_plan_events import (
     CREATIVE_PLAN_EVENT_SCHEMA_SQL,
     CreativePlanEventStoreMixin,
 )
+from .context_ledgers import CONTEXT_LEDGER_SCHEMA_SQL, ContextLedgerStoreMixin
 from .migrations import ensure_additive_columns
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
 from .sessions import SessionStoreMixin
@@ -41,6 +42,7 @@ from .primitives import (
 
 
 class JobStore(
+    ContextLedgerStoreMixin,
     CreativePlanEventStoreMixin,
     CreativePlanStoreMixin,
     RecycleBinStoreMixin,
@@ -506,7 +508,9 @@ class JobStore(
                     event_count INTEGER NOT NULL DEFAULT 0,
                     last_event TEXT NOT NULL DEFAULT '',
                     last_message TEXT NOT NULL DEFAULT '',
-                    retry_count INTEGER NOT NULL DEFAULT 0
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    context_ledger_id TEXT NOT NULL DEFAULT '',
+                    context_ledger_digest TEXT NOT NULL DEFAULT ''
                 );
                 CREATE INDEX IF NOT EXISTS agent_sessions_project_idx
                     ON agent_sessions(project_root, updated_at);
@@ -516,6 +520,7 @@ class JobStore(
                 + RECYCLE_BIN_SCHEMA_SQL
                 + CREATIVE_PLAN_SCHEMA_SQL
                 + CREATIVE_PLAN_EVENT_SCHEMA_SQL
+                + CONTEXT_LEDGER_SCHEMA_SQL
             )
             ensure_additive_columns(connection)
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")

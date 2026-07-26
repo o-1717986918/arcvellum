@@ -15,8 +15,9 @@ from typing import Iterable
 
 from literary_engineering_studio_engine.resources import engine_root
 from ..contracts import TaskPackage
-from .execution_boundaries import materialize_execution_boundaries, prepare_execution_boundaries
-from ..task_program import compact_task_references, render_worker_program, write_task_context
+from .context_materialization import materialize_agent_context_contract
+from .context_selection import select_agent_context
+from .execution_boundaries import prepare_execution_boundaries
 
 MANIFEST_SCHEMA = "literary-engineering-studio/task-sandbox/v0.1"
 IGNORED_RUNTIME_PATHS = {"AGENT_TASK.md", "_task", ".claude", ".codex", ".git"}
@@ -71,14 +72,12 @@ def stage_task(
 
     copied_sources: list[str] = []
     missing_sources: list[str] = []
-    reference_paths = compact_task_references(task)
-    agent_sources = task.payload.get("agent_source_paths")
-    agent_sources = [str(item) for item in agent_sources] if isinstance(agent_sources, list) else []
+    selection = select_agent_context(task)
     # The control workspace must be able to run the exact CLI command and the
     # exact deterministic preflight.  It intentionally receives the full task
     # dependency set.  The Agent sees a separately materialized workspace
     # below, containing only its explicit reading contract.
-    staged_sources = [*reference_paths, *task.source_paths, *agent_sources]
+    staged_sources = (*selection.reference_paths, *task.source_paths, *selection.source_paths)
     for relative in _unique(staged_sources):
         source = task.resolve_project_path(relative)
         if not source.exists():
@@ -134,8 +133,8 @@ def stage_task(
         "control_workspace": str(control_workspace),
         "prompt": str(prompt_path),
         "copied_sources": copied_sources,
-        "reference_paths": list(reference_paths),
-        "omitted_reference_paths": [path for path in task.required_reading if path not in reference_paths],
+        "reference_paths": list(selection.reference_paths),
+        "omitted_reference_paths": [path for path in task.required_reading if path not in selection.reference_paths],
         "missing_sources": missing_sources,
         "expected_outputs": list(task.expected_outputs),
         "human_gate_reasons": list(task.human_gate_reasons),
@@ -164,19 +163,8 @@ def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> 
     workspace = _agent_workspace(sandbox)
     _remove_path(workspace)
     workspace.mkdir(parents=True, exist_ok=False)
-    reference_paths = compact_task_references(task)
-    agent_sources = task.payload.get("agent_source_paths")
-    agent_sources = [str(item) for item in agent_sources] if isinstance(agent_sources, list) else list(task.source_paths)
-    visible_paths = _unique(
-        [
-            *reference_paths,
-            *agent_sources,
-            *task.expected_outputs,
-            *task.core_managed_outputs,
-            "project.yaml",
-            "workflow/studio/user_directions.md",
-        ]
-    )
+    selection = select_agent_context(task)
+    visible_paths = list(selection.visible_paths)
     copied: list[str] = []
     missing: list[str] = []
     for relative in visible_paths:
@@ -201,15 +189,28 @@ def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> 
         json.dumps(task.execution_contract.as_dict(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    sandbox.prompt_path.write_text(_render_agent_prompt(task, reference_paths=reference_paths), encoding="utf-8")
-    context_path = workspace / "TASK_CONTEXT.json"
-    materialize_execution_boundaries(sandbox.run_root, task_dir, task_context_path=write_task_context(task, context_path, reference_paths=reference_paths))
+    context = materialize_agent_context_contract(
+        task,
+        run_root=sandbox.run_root,
+        run_id=sandbox.run_id,
+        workspace=workspace,
+        prompt_path=sandbox.prompt_path,
+        task_dir=task_dir,
+        selection=selection,
+        copied_paths=copied,
+    )
     refresh_sandbox_baseline(sandbox)
     update_run_manifest(
         sandbox.manifest_path,
         agent_visible_paths=visible_paths,
         agent_copied_sources=copied,
         agent_missing_sources=missing,
+        agent_prompt_source_paths=list(context.source_paths),
+        agent_prompt_reference_paths=list(context.reference_paths),
+        context_ledger=str(sandbox.run_root / "context-ledger.json"),
+        context_ledger_id=context.ledger.ledger_id,
+        context_ledger_digest=context.ledger.digest,
+        context_assembled_sha256=context.ledger.assembled_sha256,
     )
     return tuple(copied)
 
@@ -499,12 +500,6 @@ def update_run_manifest(path: Path, **updates: object) -> None:
     payload.update(updates)
     payload["updated_at"] = _now()
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _render_agent_prompt(task: TaskPackage, *, reference_paths: tuple[str, ...]) -> str:
-    direction_path = task.project_root / "workflow" / "studio" / "user_directions.md"
-    direction = direction_path.read_text(encoding="utf-8", errors="ignore").strip() if direction_path.is_file() else ""
-    return render_worker_program(task, user_direction=direction, reference_paths=reference_paths)
 
 
 def sandbox_change_issues(sandbox: SandboxManifest) -> list[str]:

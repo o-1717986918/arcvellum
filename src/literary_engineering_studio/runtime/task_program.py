@@ -38,10 +38,15 @@ def compact_task_references(task: TaskPackage) -> tuple[str, ...]:
     return tuple(path for path in task.required_reading if path not in OPERATING_REFERENCE_PATHS)
 
 
-def build_task_context(task: TaskPackage, *, reference_paths: tuple[str, ...] | None = None) -> dict[str, Any]:
+def build_task_context(
+    task: TaskPackage,
+    *,
+    reference_paths: tuple[str, ...] | None = None,
+    source_paths: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
     prompt_asset = task.payload.get("prompt_asset") if isinstance(task.payload.get("prompt_asset"), dict) else {}
     agent_sources = task.payload.get("agent_source_paths")
-    agent_sources = _strings(agent_sources) if isinstance(agent_sources, list) else list(task.source_paths)
+    default_sources = _strings(agent_sources) if isinstance(agent_sources, list) else list(task.source_paths)
     return {
         "schema": "literary-engineering-studio/task-context/v0.1",
         "task_id": task.task_id,
@@ -51,7 +56,7 @@ def build_task_context(task: TaskPackage, *, reference_paths: tuple[str, ...] | 
         "agent_role": task.execution_contract.agent_role,
         "execution_policy": task.execution_contract.execution_policy,
         "writeback_policy": task.execution_contract.writeback_policy,
-        "source_paths": agent_sources,
+        "source_paths": list(source_paths) if source_paths is not None else default_sources,
         "workspace_dependency_paths": list(task.source_paths),
         "reference_paths": list(reference_paths if reference_paths is not None else compact_task_references(task)),
         "expected_outputs": list(task.expected_outputs),
@@ -93,22 +98,35 @@ def build_task_context(task: TaskPackage, *, reference_paths: tuple[str, ...] | 
     }
 
 
-def write_task_context(task: TaskPackage, path: Path, *, reference_paths: tuple[str, ...] | None = None) -> Path:
+def write_task_context(
+    task: TaskPackage,
+    path: Path,
+    *,
+    reference_paths: tuple[str, ...] | None = None,
+    source_paths: tuple[str, ...] | None = None,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(build_task_context(task, reference_paths=reference_paths), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(
+            build_task_context(
+                task,
+                reference_paths=reference_paths,
+                source_paths=source_paths,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return path
 
 
 def render_worker_program(
-    task: TaskPackage,
-    *,
-    user_direction: str = "",
-    reference_paths: tuple[str, ...] | None = None,
+    task: TaskPackage, *, user_direction: str = "",
+    reference_paths: tuple[str, ...] | None = None, source_paths: tuple[str, ...] | None = None,
 ) -> str:
-    context = build_task_context(task, reference_paths=reference_paths)
+    context = build_task_context(task, reference_paths=reference_paths, source_paths=source_paths)
     asset = context["prompt_asset"]
     source_lines = "\n".join(f"- `{item}`" for item in context["source_paths"]) or "- 无"
     reference_lines = "\n".join(f"- `{item}`" for item in context["reference_paths"]) or "- 无"
