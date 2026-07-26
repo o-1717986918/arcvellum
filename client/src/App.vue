@@ -14,6 +14,7 @@ import {
   Info,
   Orbit,
   RefreshCw,
+  ScanSearch,
   Settings2,
   SlidersHorizontal,
 } from "lucide-vue-next";
@@ -37,6 +38,7 @@ const nav = [
   { to: "/overview", label: "创作总控", icon: Boxes, needsProject: true },
   { to: "/reader", label: "阅读", icon: BookOpenText, needsProject: true },
   { to: "/archive", label: "档案管理", icon: LibraryBig, needsProject: true },
+  { to: "/archaeology", label: "作品考古", icon: ScanSearch, needsProject: true },
   { to: "/style", label: "文风工坊", icon: Fingerprint, needsProject: true },
   { to: "/quality", label: "创作规则", icon: SlidersHorizontal, needsProject: true },
   { to: "/delivery", label: "交付", icon: PackageCheck, needsProject: true },
@@ -96,7 +98,7 @@ watch(showStartup, (visible) => {
 watch(
   () => store.currentProjectPath,
   (path) => {
-    if (!path && ["overview", "reader", "library", "archive", "style", "quality", "delivery"].includes(String(route.name))) void router.push("/projects");
+    if (!path && ["overview", "reader", "library", "archive", "archaeology", "style", "quality", "delivery"].includes(String(route.name))) void router.push("/projects");
   },
 );
 
