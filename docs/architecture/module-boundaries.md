@@ -131,6 +131,36 @@ Route Catalog 已指向该模块，Registry 中原有长篇 blueprint 与 Gate �
 
 `project_library.py` 的只读资料投影位于 `project_library_{drafts,assets,story,continuity,common,service}`；`project_interaction.py` 则把低风险展示编辑、人工决定物化与原子存储分离到 `project_interaction_{editing,choices,common}`。这些模块不直接晋升正文或覆盖 Canon，仍由正式 CLI Gate 决定。
 
+### Runtime Capability 与 Resource Boundary
+
+`src/literary_engineering_studio/runtime/capabilities/` 是受控能力的唯一实现边界：
+
+- `contracts.py` 定义稳定能力 ID、Capability Manifest、请求与结果协议；
+- `policy.py` 只根据当前 `TaskPackage`、Agent role、route 和显式 policy 派生权限；
+- `registry.py` 使用显式 handler 注册，不允许动态 import 任意工具；
+- `broker.py` 负责授权、参数/路径/网络边界、结果限额、artifact 与摘要事件；
+- `audit.py` 只保存参数摘要、结果 hash、耗时和错误码，不保存正文、密钥或完整工具结果；
+- `handlers/` 只实现声明式能力，不得出现通用 Shell、任意文件读写或不受控网络。
+
+`runtime/execution_boundaries.py` 只负责把 Capability Manifest 与 `ResourceClaim`
+装配到每次 Worker run、`_task/` 控制副本和 `TASK_CONTEXT.json`。它不选择任务，
+不调用 Agent，不解释文学 route，也不把运行合同写进正式作品项目。
+
+`src/literary_engineering_studio/runtime/resources/` 只拥有：
+
+- `ResourceClaim` 合同；
+- 项目内读写集、全局 barrier 与网络等级的确定性冲突判断；
+- 从正式任务包派生资源声明的兼容投影。
+
+任务依赖与动态顺序继续归 `orchestration/`；持久化锁、lease 和恢复继续复用
+`JobStore`。不同场景的不同正文路径不会仅因同属 `drafts/scenes/` 被强制互斥；
+是否可以并发必须同时满足 DAG 依赖、读写冲突和文学阶段 barrier。
+
+`runtimes/base.py::AgentRunnerCapabilities` 保留所有旧字段，并增加版本、上下文窗口、
+tool call、取消、本地执行和能力 ID 投影。Adapter 仍只执行任务，不理解文学 route。
+Capability Broker 的结构化调用通道由 W6 编排/Runtime 接入；未提供通道的外部 Runner
+不得用 Shell、网络或目录遍历模拟受控能力。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

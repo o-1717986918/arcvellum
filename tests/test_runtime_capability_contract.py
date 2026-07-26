@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 
+from literary_engineering_studio.runtimes import RUNTIME_TYPES
 from literary_engineering_studio.runtimes.base import AgentRunnerCapabilities
+from literary_engineering_studio.runtimes.base import RuntimeAvailability
 
 
 class RuntimeCapabilityContractTests(unittest.TestCase):
@@ -70,6 +72,20 @@ class RuntimeCapabilityContractTests(unittest.TestCase):
         self.assertFalse(payload["tool_calls"])
         self.assertFalse(payload["cancellation"])
         self.assertFalse(payload["local_execution"])
+
+    def test_every_registered_runner_projects_the_same_versioned_contract(self):
+        for runtime_id, runtime_type in RUNTIME_TYPES.items():
+            with self.subTest(runtime_id=runtime_id):
+                runtime = runtime_type({})
+                payload = runtime.capabilities(
+                    RuntimeAvailability(runtime_id, False, "", "contract-only probe")
+                ).as_dict()
+                self.assertEqual(payload["protocol_version"], "arcvellum/agent-runner-capabilities/v1")
+                self.assertIsInstance(payload["capability_ids"], list)
+                self.assertIn("tool_calls", payload)
+                self.assertIn("cancellation", payload)
+                self.assertIn("local_execution", payload)
+                self.assertIn("read_control", payload)
 
 
 if __name__ == "__main__":

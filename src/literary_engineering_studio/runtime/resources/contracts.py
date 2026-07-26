@@ -133,8 +133,6 @@ def _barriers(writes: list[object]) -> list[str]:
             barrier = "canon-write"
         elif path.startswith("characters/"):
             barrier = "character-state-write"
-        elif path.startswith("drafts/scenes/"):
-            barrier = "formal-prose-write"
         elif path.startswith("workflow/approvals/"):
             barrier = "approval-ledger-write"
         elif path.startswith("releases/"):

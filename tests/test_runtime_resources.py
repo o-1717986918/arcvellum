@@ -122,7 +122,7 @@ class RuntimeResourceTests(unittest.TestCase):
             self.assertEqual(claim.reads, ("memory/context_packets/scene_0001.md",))
             self.assertEqual(claim.writes, ("drafts/scenes/scene_0001.md",))
             self.assertEqual(claim.network, "none")
-            self.assertIn("formal-prose-write", claim.exclusive_barriers)
+            self.assertNotIn("formal-prose-write", claim.exclusive_barriers)
             self.assertTrue(claim.project_id.startswith("project-"))
 
 

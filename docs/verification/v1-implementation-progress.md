@@ -1108,10 +1108,79 @@ W4-2B 已通过。下一批进入 W4-3“候选项目重建与 Archive 晋升边
 
 ## 下一批
 
-W4 已完成全部退出门禁。下一批按照“实施顺序决策（2026-07-26）”进入受限 W5：
+W4 已完成全部退出门禁，并已按“实施顺序决策（2026-07-26）”完成受限 W5。
 
-1. 先版本化能力契约并建立 `runtime/capabilities/` 边界；
-2. 实现 Capability Broker、task/role/policy allow-list、参数校验、边界检查、结果限额和审计；
-3. 只补 W6 所需的 `ResourceClaim` 契约与确定性冲突判断；
-4. Pi RPC、Ollama 与新增 Provider 继续记录为 `deferred_by_owner`，不得顺手接入；
-5. 受限 W5 Exit Gate 通过后再进入 W6 自适应编排、并发与无人值守。
+## 受限 W5：Capability Broker、能力契约与 ResourceClaim
+
+**状态：完成。**
+
+- Commits:
+  - `1a6b0bb`：版本化 Runtime 能力投影、Capability Broker、七项能力 Handler、
+    policy/audit 和 `ResourceClaim`；
+  - `1e5c384`：把能力清单与资源声明接入现有 Worker 沙箱和任务上下文。
+- `AgentRunnerCapabilities` 保持旧设置页/observability 字段兼容，并增加
+  `protocol_version`、`context_window`、`tool_calls`、`cancellation`、
+  `local_execution` 和 `capability_ids`。
+- 首批稳定能力 ID：
+  - `project.query`；
+  - `schema.inspect`；
+  - `text.statistics`；
+  - `citation.lookup`；
+  - `reference.search`；
+  - `research.web`；
+  - `asset.diff`。
+- Capability Broker 已实际实现：
+  - task、route、role 与显式 policy 联合 allow-list；
+  - project-relative 路径规范化与声明读写集边界；
+  - HTTPS 域名白名单、禁止自动重定向、`research.web` 默认关闭；
+  - UTF-8 文本、搜索数量和 Web 响应上限；
+  - 超限结果写入 run-scoped artifact，只返回摘要和 hash；
+  - completed、denied、failed 全状态 append-only 审计；
+  - 审计与事件只含参数摘要、结果 digest、耗时、artifact 和错误码，不保存密钥或正文；
+  - event sink 为 W6 Context Ledger 留出稳定接点。
+- 内置 Handler 都是窄能力：
+  - 项目查询只投影允许字段和当前任务状态；
+  - schema 检查只读取 Embedded Engine 注册 schema；
+  - 统计、引用与搜索只访问 manifest 声明的资料；
+  - asset diff 只比较声明 source/output；
+  - Web 结果永远标记为未核验 research candidate，不能直接成为 Canon。
+- 每次 `stage_task()` 都生成：
+  - `capabilities/manifest.json`；
+  - `capabilities/resource-claim.json`；
+  - run manifest 摘要；
+  - Agent `_task/` 只读副本；
+  - `TASK_CONTEXT.json` 控制面投影。
+- 这些合同都位于 Worker run，不写入正式作品目录，也不改变现有
+  command → Agent → preflight → preview/writeback → task-submit/task-complete 顺序。
+- `ResourceClaim` 已覆盖 reads、writes、runtime/model slot、network 与独占 barrier；
+  冲突判断区分 read/read、write/read、write/write、目录前缀和跨项目隔离。
+  不同场景的不同正文路径允许进入 W6 并发候选集，最终仍由 DAG 与文学 barrier 判断。
+
+### 受限 W5 Exit Audit
+
+- `python -m unittest discover -s tests -v`：549 passed，1 skipped；
+- `npm.cmd run client:test`：32 files、101 tests passed；
+- `npm.cmd run client:build`：2,551 modules、desktop sync 和 v0.9 build verification passed；
+- Prompt Registry：54 assets、89 task prompt IDs，passed；
+- Architecture Audit：36 existing file debts、226 existing function debts、0 cycles、无新增债务；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+### 明确延期
+
+以下项目按业主决定保持 `deferred_by_owner`，不计入本次受限 W5 完成范围：
+
+- Pi RPC Runtime；
+- Ollama；
+- 新增模型供应商；
+- 外部 CLI Runner 的 Capability Broker tool-call transport。
+
+Broker Python API、policy、Handler、artifact、audit、event sink 和 Worker manifest 已可用；
+W6 只接入已有合同，不得重写 Broker、再造 Runtime 或第二套任务状态机。
+
+## W6 下一批
+
+1. 复读自适应编排方案与统一实施方案，建立 W6 批次计划和退出门禁；
+2. 以现有固定 route 编译为默认 `CreativeExecutionPlan`，保证行为不变；
+3. 引入 Plan Lint、Plan Compiler、任务 DAG、Context Ledger 与 Mutation Receipt；
+4. 用本批 `ResourceClaim` 做并发 admission，不让并发越过文学依赖或正式写回边界；
+5. 再逐步开放推演深度、修订策略、场景库存与无人值守 campaign。

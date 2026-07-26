@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import time
 from typing import Any
+from collections.abc import Callable
 
 from .audit import CapabilityAuditWriter
 from .context import CapabilityContext
@@ -28,9 +29,11 @@ class CapabilityBroker:
         *,
         registry: CapabilityRegistry | None = None,
         policy: CapabilityPolicy | None = None,
+        event_sink: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> None:
         self.registry = registry or build_default_registry()
         self.policy = policy or CapabilityPolicy()
+        self.event_sink = event_sink
 
     def invoke(self, context: CapabilityContext, request: CapabilityRequest) -> CapabilityResult:
         started = time.monotonic()
@@ -57,7 +60,16 @@ class CapabilityBroker:
                 code=_error_code(exc),
                 message=str(exc),
             )
+        except Exception as exc:
+            result = self._error_result(
+                request,
+                started,
+                status=CapabilityStatus.FAILED,
+                code="capability-handler-error",
+                message=f"{type(exc).__name__}: capability handler failed",
+            )
         CapabilityAuditWriter(context.run_root).record(request, result)
+        self._emit(result)
         return result
 
     def _completed(
@@ -120,6 +132,23 @@ class CapabilityBroker:
             duration_ms=_duration_ms(started),
             error_code=code,
             error_message=safe_message,
+        )
+
+    def _emit(self, result: CapabilityResult) -> None:
+        if self.event_sink is None:
+            return
+        self.event_sink(
+            f"capability.{result.status}",
+            {
+                "request_id": result.request_id,
+                "task_id": result.task_id,
+                "capability_id": result.capability_id,
+                "result_digest": result.result_digest,
+                "duration_ms": result.duration_ms,
+                "artifact": result.artifact,
+                "truncated": result.truncated,
+                "error_code": result.error_code,
+            },
         )
 
 

@@ -328,6 +328,30 @@ class CapabilityBrokerTests(unittest.TestCase):
             )
             self.assertEqual(redirected.status, "failed")
 
+    def test_events_and_audit_expose_status_but_not_sensitive_arguments(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as run:
+            root = Path(temporary)
+            (root / "SKILL.md").write_text("host manual", encoding="utf-8")
+            task = self._task(root)
+            events: list[tuple[str, dict[str, object]]] = []
+            broker = CapabilityBroker(event_sink=lambda event, data: events.append((event, data)))
+            result = broker.invoke(
+                self._context(task, Path(run)),
+                CapabilityRequest(
+                    "req-event-denied",
+                    task.task_id,
+                    CapabilityId.RESEARCH_WEB.value,
+                    {"url": "https://private.example/", "api_key": "never-persist-this"},
+                ),
+            )
+            self.assertEqual(result.status, "denied")
+            self.assertEqual(events[0][0], "capability.denied")
+            serialized_event = json.dumps(events, ensure_ascii=False)
+            serialized_audit = (Path(run) / "capabilities" / "audit.jsonl").read_text(encoding="utf-8")
+            self.assertNotIn("never-persist-this", serialized_event)
+            self.assertNotIn("never-persist-this", serialized_audit)
+            self.assertIn("api_key", serialized_audit)
+
 
 if __name__ == "__main__":
     unittest.main()
