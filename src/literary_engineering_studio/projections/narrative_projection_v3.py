@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan
+from literary_engineering_studio.projections.narrative.layout_hints import build_layout_hints
 
 from . import narrative_projection as narrative_projection_v2
 from .narrative.base_adapter import build_compatible_base, requested_focus
@@ -104,7 +105,7 @@ def build_narrative_projection_v3(
         "nodes": nodes,
         "edges": edges,
         "clusters": clusters,
-        "layout_hints": _layout_hints(selected_grammar, focus_scope.level.value, nodes),
+        "layout_hints": build_layout_hints(selected_grammar, focus_scope.level.value, nodes),
         "lod_summary": _lod_summary(nodes),
         "timeline": base.get("timeline", []),
         "delta": projection_delta(None, {"nodes": nodes, "edges": edges}),
@@ -344,18 +345,6 @@ def _clusters(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for cluster_id, node_ids in sorted(grouped.items())
     ]
-
-
-def _layout_hints(grammar: str, level: str, nodes: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
-        "grammar": grammar,
-        "level": level,
-        "primary_axis": "depth" if grammar in {"spine", "strata", "stage"} else "braid",
-        "focus_bias": "lower-right" if grammar == "braid" else "center",
-        "node_count": len(nodes),
-        "allow_user_locked_positions": True,
-        "agent_layout_intent": {"status": "planned", "enabled": False},
-    }
 
 
 def _lod_summary(nodes: list[dict[str, Any]]) -> dict[str, int]:

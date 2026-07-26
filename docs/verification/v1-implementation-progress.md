@@ -1554,7 +1554,7 @@ context 失败只能留下 fallback 证据，不得改变 fixed route。
 
 ### W6-4E：星仪 W1 文档差距补缺
 
-**状态：进行中，W1-Fix A/B/C 已完成，W1-Fix D 与自动化视觉退出验收待实施。**
+**状态：进行中，W1-Fix A/B/C/D 已完成，自动化视觉退出验收待实施。**
 
 实际代码与 W1 文档复核确认星仪基础完整，但存在不能等到 W6-9 的产品缺口：
 
@@ -1607,8 +1607,27 @@ W1-Fix C 实现结果：
 - 评审见
   `docs/architecture/reviews/orrery-w1-navigation-reader-link-review.md`。
 
-剩余 W1-Fix D 和 W1-Exit 不得省略：套索比较、路径回放、高级热力层、视图书签、
-LayoutHint 边界，以及四主题/四焦点/100-1000 节点可重复视觉回归仍需后续独立提交。
+W1-Fix D 实现结果：
+
+- 新增套索比较、语义路径回放、节奏/张力/承诺/审查热力层和按作品隔离的视图书签；
+- 搜索、套索、回放、热力与书签均为只读探索，不写项目资产；
+- Layout Hint 建立后端单一合同与前端确定性边界，只接受 validated intent、受限偏移和
+  无碰撞结果；当前默认 disabled，不提前放开 Agent 自由布局；
+- 真实项目验证热力、回放、书签恢复和中文文案，书签/关系镜头/章节目录/小地图无重叠。
+
+本子批证据：
+
+- Client：41 files、128 tests passed；
+- Python：629 tests passed、1 skipped；
+- 生产前端构建：2,565 modules；
+- Prompt Registry：54 assets、89 task prompt IDs，0 error、0 warning；
+- Architecture Audit：35 个既有 file debt、224 个既有 function debt、0 cycle；
+- `compileall` 与 `git diff --check`：passed；
+- 评审见
+  `docs/architecture/reviews/orrery-w1-advanced-exploration-review.md`。
+
+剩余 W1-Exit 不得省略：四主题/四焦点/100-1000 节点可重复视觉回归、canvas pixel
+check、SSE 后焦点与窗口稳定性、低性能模式和 reduced-motion 功能等价仍需独立提交。
 
 ### W6 后续完整阶段映射
 

@@ -241,6 +241,39 @@ W1-Fix C 已完成：
 
 因此 W1-Fix C 已退出，但 W1-Fix D 和 W1-Exit 尚未退出，W1 仍不能整体标记完成。
 
+## 5.3 2026-07-27 W1-Fix D 实施回执
+
+W1-Fix D 已完成：
+
+- `OrreryExplorationLayer.vue` 提供套索比较、语义路径回放、节奏/张力/承诺/审查热力层
+  和项目级视图书签；
+- 套索几何、热力计算、路径排序和书签可读标签位于 `model/exploration.ts`，组件不实现
+  空间算法；
+- `orreryExploration` Store 只持久化视图状态，并按作品隔离、限制每个作品最多 12 项；
+- `layoutHints.ts` 只接受通过 schema、intent、偏移和碰撞检查的提示；
+- 后端 `projections/narrative/layout_hints.py` 成为 Layout Hint 单一合同所有者，当前默认
+  disabled，不允许未来 Agent 直接改写 Canon 或布局坐标；
+- `OrreryWorkbench.vue` 只协调 Store、Stage、Projection 与子组件事件。
+
+真实项目 `1+1=2` 验收证明：
+
+- 热力层、路径回放、书签保存/恢复正常；
+- 书签、关系镜头、章节目录和小地图互不遮挡；
+- 书签文案不暴露英文枚举；
+- 测试状态在验收后已清理。
+
+退出证据：
+
+- Client：41 files、128 tests passed；
+- Python：629 tests passed、1 skipped；
+- 生产前端构建、Prompt Registry、`compileall`、Architecture Audit 与
+  `git diff --check`：passed；
+- 评审见
+  `docs/architecture/reviews/orrery-w1-advanced-exploration-review.md`。
+
+3.4 中的套索、路径回放、高级热力层和视图书签已关闭。当前 W1 唯一开放项为 3.7
+自动化视觉验收，即 W1-Exit；在它通过前仍不得把 W1 整体标记完成。
+
 ## 6. 架构约束
 
 - 不在 `OrreryWorkbench.vue` 中实现布局、关系裁剪、搜索索引或窗口正文；

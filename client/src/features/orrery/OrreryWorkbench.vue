@@ -8,6 +8,7 @@ import NarrativeSpineLayer from "@/features/orrery/NarrativeSpineLayer.vue";
 import OrreryAccessibleView from "@/features/orrery/OrreryAccessibleView.vue";
 import NarrativeParallaxStage from "@/features/orrery/NarrativeParallaxStage.vue";
 import NarrativeHealthRail from "@/features/orrery/NarrativeHealthRail.vue";
+import OrreryExplorationLayer from "@/features/orrery/OrreryExplorationLayer.vue";
 import OrreryNavigationLayer from "@/features/orrery/OrreryNavigationLayer.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
 import RelationLensBar from "@/features/orrery/RelationLensBar.vue";
@@ -15,12 +16,14 @@ import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import { applyRelationLens } from "@/features/orrery/model/relationLens";
+import { viewBookmarkLabel, type OrreryHeatLens } from "@/features/orrery/model/exploration";
 import { nodeForReaderUnit, readerUnitForNode } from "@/features/orrery/model/readerLink";
 import type { RelationFamily } from "@/features/orrery/model/relations";
 import { api, query } from "@/services/api";
 import { manuscriptItems } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
+import { useOrreryExplorationStore, type OrreryViewBookmark } from "@/stores/orreryExploration";
 import { useReaderNavigationStore } from "@/stores/readerNavigation";
 import { useSpatialProjectionStore } from "@/stores/spatialProjection";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
@@ -34,6 +37,7 @@ const router = useRouter();
 const spatial = useSpatialProjectionStore();
 const windows = useSpatialWindowsStore();
 const humanChoices = useHumanChoicesStore();
+const exploration = useOrreryExplorationStore();
 const readerNavigation = useReaderNavigationStore();
 const stage = ref<InstanceType<typeof NarrativeParallaxStage> | null>(null);
 const listMode = ref(false);
@@ -49,6 +53,8 @@ const bookChapterNodes = ref<SpatialNarrativeNode[]>([]);
 const forcedNodeIds = ref<string[]>([]);
 const showAllLabels = ref(false);
 const navigationNodeId = ref("");
+const heatLens = ref<OrreryHeatLens>("");
+const comparedNodeIds = ref<string[]>([]);
 let chapterRailRequest = 0;
 let appliedReaderUnitId = "";
 
@@ -57,8 +63,9 @@ const displayProjection = computed(() => projection.value
   ? applyRelationLens(projection.value, { hidden: hiddenRelationFamilies.value, solo: soloRelationFamily.value })
   : null);
 const layout = computed(() => displayProjection.value
-  ? buildSpatialLayout(displayProjection.value.spatial_grammar, displayProjection.value.revision, displayProjection.value.nodes, displayProjection.value.layout_seed)
+  ? buildSpatialLayout(displayProjection.value.spatial_grammar, displayProjection.value.revision, displayProjection.value.nodes, displayProjection.value.layout_seed, displayProjection.value.layout_hints)
   : null);
+const viewBookmarks = computed(() => exploration.forProject(app.currentProjectPath));
 const deliveryReady = computed(() => String(app.delivery?.status || "") === "ready");
 const prose = computed(() => manuscriptItems((app.library || null) as Record<string, unknown> | null));
 const progress = computed(() => app.projectProgress);
@@ -104,6 +111,8 @@ watch(() => app.currentProjectPath, (root) => {
   forcedNodeIds.value = [];
   showAllLabels.value = false;
   navigationNodeId.value = "";
+  heatLens.value = "";
+  comparedNodeIds.value = [];
   appliedReaderUnitId = "";
   readerNavigation.reset();
   if (root) {
@@ -214,6 +223,41 @@ function navigateNode(node: SpatialNarrativeNode): void {
   navigationNodeId.value = node.node_id;
   const point = layout.value?.points.get(node.node_id);
   if (point) stage.value?.focus(point, node.node_id);
+}
+
+function replayNode(node: SpatialNarrativeNode): void {
+  navigationNodeId.value = node.node_id;
+  const point = layout.value?.points.get(node.node_id);
+  if (point) stage.value?.focus(point, node.node_id);
+}
+
+function saveViewBookmark(): void {
+  if (!app.currentProjectPath || !projection.value) return;
+  exploration.save({
+    projectRoot: app.currentProjectPath,
+    label: viewBookmarkLabel(
+      projection.value.nodes,
+      projection.value.level,
+      projection.value.focus,
+      grammarLabel(spatial.grammar),
+    ),
+    level: spatial.level,
+    focus: spatial.focus,
+    grammar: spatial.grammar,
+    timeCursor: spatial.timeCursor,
+    timeWindow: spatial.timeWindow,
+    heatLens: heatLens.value,
+    nodeId: navigationNodeId.value || windows.selectedNodeId,
+  });
+}
+
+async function restoreViewBookmark(bookmark: OrreryViewBookmark): Promise<void> {
+  heatLens.value = bookmark.heatLens;
+  spatial.setObservation({ cursor: bookmark.timeCursor, window: bookmark.timeWindow });
+  await spatial.setView({ level: bookmark.level, focus: bookmark.focus, grammar: bookmark.grammar });
+  await nextTick();
+  const node = projection.value?.nodes.find((item) => item.node_id === bookmark.nodeId);
+  if (node) replayNode(node);
 }
 
 async function focusReaderScene(sceneId: string): Promise<void> {
@@ -373,6 +417,8 @@ async function loadChapterRail(root: string): Promise<void> {
         :navigation-node-id="navigationNodeId"
         :forced-node-ids="forcedNodeIds"
         :show-all-labels="showAllLabels"
+        :heat-lens="heatLens"
+        :compared-node-ids="comparedNodeIds"
         @select="selectNode"
         @focus="focusNodeObject"
       />
@@ -385,6 +431,20 @@ async function loadChapterRail(root: string): Promise<void> {
         @inspect="focusNodeObject"
         @forced-labels="forcedNodeIds = $event"
         @show-all-labels="showAllLabels = $event"
+      />
+      <OrreryExplorationLayer
+        :nodes="displayProjection.nodes"
+        :anchors="anchors"
+        :level="displayProjection.level"
+        :heat-lens="heatLens"
+        :compared-node-ids="comparedNodeIds"
+        :bookmarks="viewBookmarks"
+        @heat-lens="heatLens = $event"
+        @compare="comparedNodeIds = $event"
+        @replay="replayNode"
+        @save-bookmark="saveViewBookmark"
+        @restore-bookmark="restoreViewBookmark"
+        @remove-bookmark="exploration.remove"
       />
       <RelationLensBar
         :profiles="projection?.relation_profiles || []"

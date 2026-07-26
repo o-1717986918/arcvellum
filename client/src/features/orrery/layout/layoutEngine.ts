@@ -1,5 +1,6 @@
 import type { SpatialGrammar, SpatialLayout, SpatialNarrativeNode, WorldPoint } from "@/types/spatial";
 import { curveProfilePoint } from "@/features/orrery/layout/curveProfiles";
+import { applyValidatedLayoutHints } from "@/features/orrery/layout/layoutHints";
 
 const PRIMARY = new Set(["chapter", "scene"]);
 const NARRATIVE_TYPES = new Set(["chapter", "scene"]);
@@ -47,7 +48,13 @@ interface NarrativeBeat {
  * portion retains its spatial memory. Small deterministic offsets create depth
  * and relieve local collisions without making a revision reshuffle the stage.
  */
-export function buildSpatialLayout(grammar: SpatialGrammar, revision: string, nodes: SpatialNarrativeNode[], layoutSeed = revision): SpatialLayout {
+export function buildSpatialLayout(
+  grammar: SpatialGrammar,
+  revision: string,
+  nodes: SpatialNarrativeNode[],
+  layoutSeed = revision,
+  layoutHints: Record<string, unknown> = {},
+): SpatialLayout {
   const primary = nodes.filter((node) => PRIMARY.has(node.type)).sort(compareNarrativeNodes);
   const context = buildContext(primary);
   const points = new Map<string, WorldPoint>();
@@ -60,6 +67,7 @@ export function buildSpatialLayout(grammar: SpatialGrammar, revision: string, no
   });
 
   relaxLocalCollisions(points, nodes, seeded);
+  applyValidatedLayoutHints(points, nodes, layoutHints);
   const coordinates = [...points.values()];
   const min = {
     x: Math.min(...coordinates.map((point) => point.x), -4),

@@ -4,6 +4,7 @@ import { BadgeCheck, BookMarked, CircleHelp, Clapperboard, GitFork, Landmark, Or
 import type { SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
 import type { NarrativeFocusLevel } from "@/features/orrery/model/focusScope";
 import { observationWeight } from "@/features/orrery/layout/observationWindow";
+import { heatScore, type OrreryHeatLens } from "@/features/orrery/model/exploration";
 
 const props = defineProps<{
   nodes: SpatialNarrativeNode[];
@@ -13,6 +14,8 @@ const props = defineProps<{
   navigationNodeId?: string;
   forcedNodeIds?: string[];
   showAllLabels?: boolean;
+  heatLens?: OrreryHeatLens;
+  comparedNodeIds?: string[];
   level?: NarrativeFocusLevel;
   motionEvents?: SpatialNarrativeProjection["motion_events"];
   timeCursor?: number;
@@ -89,10 +92,17 @@ function rectanglesOverlap(left: { left: number; right: number; top: number; bot
 
 function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
   const anchor = props.anchors[node.node_id] || { x: -2000, y: -2000, scale: 1 };
+  const heat = heatScore(node, props.heatLens || "");
   return {
     transform: `translate3d(${anchor.x}px, ${anchor.y}px, 0) translate(-50%, -50%) scale(${anchor.scale})`,
     zIndex: Math.round(100 + anchor.scale * 160 + node.importance * 100),
     "--observation-weight": observationWeight(node, props.timeCursor || 0, props.timeWindow || 3).toFixed(3),
+    "--heat-opacity": (0.3 + heat * 0.7).toFixed(3),
+    "--heat-saturation": (0.52 + heat * 0.8).toFixed(3),
+    "--heat-brightness": (0.72 + heat * 0.48).toFixed(3),
+    "--heat-glow": `${Math.round(5 + heat * 24)}px`,
+    "--heat-mix": `${Math.round(24 + heat * 66)}%`,
+    "--heat-shadow": `${Math.round(heat * 58)}%`,
   };
 }
 
@@ -146,7 +156,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       v-for="node in visible"
       :key="node.node_id"
       class="orrery-v3-node"
-      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id }, focusClass(node), motionClass(node), overviewClass(node)]"
+      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens) }, focusClass(node), motionClass(node), overviewClass(node)]"
       :data-status="node.status"
       :data-completion="node.completion_state"
       :data-type="node.type"
