@@ -26,7 +26,8 @@
 - W1 已满足当前路线定义的性能、导航、焦点、空间语法、主题、多窗口与 canvas 非空退出门禁。
 - W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、Registry 驱动的结构化编辑、状态化引导和隔离真实项目作者闭环。
 - W2 已满足统一实施方案当前定义的产品、Gate、Stable Knowledge 与架构出口；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
-- 最近一次全量证据：Python 524 tests passed、1 skipped；最近一次 Client 97 tests passed；Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
+- W4 Project Archaeology 已完成不可变源证据、分块提取、全书聚合、实体解析、候选重建、领域审查、Archive 晋升边界、四模式工作台和真实纵向 Exit Audit。
+- 最近一次全量证据：Python 534 tests passed、1 skipped；Client 101 tests passed；生产前端构建、Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -1060,3 +1061,57 @@ W4-2B 已通过。下一批进入 W4-3“候选项目重建与 Archive 晋升边
 2. 复用现有 Worker/Autopilot 领取 source-ingest 任务，不在前端另造“解析”状态；
 3. 完成四模式 UX、冲突与证据视图、候选进入 Archive 的用户路径；
 4. 做中断恢复与真实隔离项目 W4 Exit Audit。
+
+## W4-5：Project Archaeology 用户工作台
+
+**状态：完成。**
+
+- Commit: `33be1fc`
+- 新增独立 `features/archaeology/` 前端边界，包含 typed contract、API client、Pinia store、来源导入、七阶段证据旅程、分段时间线、人物与别名、冲突工作台、重建预览和候选入档队列。
+- continuation、rewrite、adaptation、analysis 四种模式在导入面板中以用户意图而非内部 route 名称呈现；权利声明、文件类型、chunk size 和覆盖行为在提交前显式确认。
+- 长任务只调用正式 `/worker/run` 的 `source-ingest` route，并通过现有 Worker SSE、批准、拒绝、停止、重试和继续机制观察；前端不生成第二套提取状态，也不直接调用模型。
+- 工作台不展示绝对路径、原始 JSON、sidecar Markdown 或来源正文；证据、冲突、置信度、未决项和候选晋升状态都使用紧凑用户界面呈现。
+- “前往档案管理”把可晋升候选交回既有 Narrative Archive 生命周期；analysis 模式保持只分析、不产生可晋升资产。
+- 一级导航、项目切换和无项目 route guard 已覆盖作品考古；首次使用继续复用全局引导，不另造 onboarding 状态。
+- 响应式验收：
+  - 1536×960 桌面端为来源、证据工作区、入档/完整性三栏结构，无纵向或横向页面溢出；
+  - 390×844 窄屏按来源、证据、入档顺序重排，无横向溢出；
+  - 移动端取消桌面证据舞台固定高度后，页面高度从 1478px 收敛到 1220px，未保留突兀空白。
+
+## W4 Exit Audit：Project Archaeology 纵向闭环
+
+**状态：完成。**
+
+- Commit: `13dd33c`
+- 新增真实初始化项目纵向测试：
+  1. 导入授权源文本并记录不可变原文 hash；
+  2. 完成 chunk extraction、deterministic fan-in、identity resolution、candidate reconstruction 和五领域 review；
+  3. `archaeology-materialize` 只生成现有 Archive world candidate；
+  4. 候选经过 exact-content independent review 与当前内容 approval；
+  5. 共享 `promote_candidate_asset()` 事务写入正式 `canon/world_rules.yaml`；
+  6. source-ingest route 达到 ready，原始 source digest 保持不变；
+  7. 正式 Task Registry 成功领取 longform-planning 的 `story-architecture-prepare` 任务。
+- W4 验收矩阵：
+  - DOCX 标题、正文、表格与脚注稳定顺序：既有 ingest 回归通过；
+  - 同名不同人、一人多名与 unresolved identity：实体/冲突合同回归通过；
+  - 候选事实 evidence range 与 hash：evidence/fan-in 回归通过；
+  - 冲突不静默覆盖：alias、claim 和 timeline cycle 回归通过；
+  - 中断与恢复：覆盖导入回滚、`.importing`/`.backup` 恢复投影、Worker fresh-output recovery 回归通过；
+  - 候选进入 Archive 和 longform planning：新增纵向 Exit Audit 通过。
+- 最终退出证据：
+  - `python -m unittest discover -s tests -v`：534 passed，1 skipped；
+  - `npm run client:test`：32 files、101 tests passed；
+  - `npm run client:build`：TypeScript、Vite production build、desktop sync 和 v0.9 build verification passed；
+  - Prompt Registry：54 assets、89 task prompt IDs，passed；
+  - Architecture Audit：36 existing file debts、226 existing function debts、0 cycles、无新增债务；
+  - `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+## 下一批
+
+W4 已完成全部退出门禁。下一批按照“实施顺序决策（2026-07-26）”进入受限 W5：
+
+1. 先版本化能力契约并建立 `runtime/capabilities/` 边界；
+2. 实现 Capability Broker、task/role/policy allow-list、参数校验、边界检查、结果限额和审计；
+3. 只补 W6 所需的 `ResourceClaim` 契约与确定性冲突判断；
+4. Pi RPC、Ollama 与新增 Provider 继续记录为 `deferred_by_owner`，不得顺手接入；
+5. 受限 W5 Exit Gate 通过后再进入 W6 自适应编排、并发与无人值守。
