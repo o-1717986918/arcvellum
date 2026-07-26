@@ -11,6 +11,7 @@ from ..observability.context_ledger import ContextLedger
 from .context_ledger import materialize_runtime_context_ledger
 from .context_selection import AgentContextSelection
 from .execution_boundaries import materialize_execution_boundaries
+from .prompt_context import PreparedPromptContext, build_prepared_prompt_context
 from .task_program import render_worker_program, write_task_context
 
 
@@ -19,6 +20,7 @@ class MaterializedContextContract:
     source_paths: tuple[str, ...]
     reference_paths: tuple[str, ...]
     ledger: ContextLedger
+    prepared_context: PreparedPromptContext
 
 
 def materialize_agent_context_contract(
@@ -39,12 +41,23 @@ def materialize_agent_context_contract(
         if direction_path.is_file()
         else ""
     )
+    prepared_context = build_prepared_prompt_context(
+        workspace,
+        (
+            *task.core_managed_outputs,
+            *sources,
+            *references,
+        ),
+    )
     prompt_path.write_text(
         render_worker_program(
             task,
             user_direction=direction,
             reference_paths=references,
             source_paths=sources,
+            prepared_context=prepared_context.rendered,
+            prepared_context_paths=prepared_context.included_paths,
+            omitted_context_paths=prepared_context.omitted_paths,
         ),
         encoding="utf-8",
     )
@@ -65,4 +78,4 @@ def materialize_agent_context_contract(
         prompt_reference_paths=references,
         prompt_path=prompt_path,
     )
-    return MaterializedContextContract(sources, references, ledger)
+    return MaterializedContextContract(sources, references, ledger, prepared_context)

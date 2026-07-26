@@ -185,11 +185,10 @@ class WorkerIntegrationTests(unittest.TestCase):
             self.assertIsNone(terminal)
             self.assertIsNotNone(task)
             self.assertIsNotNone(sandbox)
-            self.assertTrue(sandbox.prompt_path.is_file())
-            self.assertTrue((sandbox.workspace / "_task" / "task.json").is_file())
-            self.assertTrue((sandbox.workspace / "_task" / "execution_contract.json").is_file())
-            self.assertTrue((sandbox.workspace / "TASK_CONTEXT.json").is_file())
-            self.assertTrue((sandbox.workspace / "workflow" / "studio" / "user_directions.md").is_file())
+            self.assertFalse(sandbox.prompt_path.exists())
+            self.assertFalse((sandbox.workspace / "_task").exists())
+            self.assertFalse((sandbox.workspace / "TASK_CONTEXT.json").exists())
+            self.assertFalse((sandbox.workspace / "workflow" / "studio" / "user_directions.md").exists())
             # This first longform task is CLI-owned.  Its scaffold belongs to
             # the control workspace until the state machine issues the
             # following Agent task; exposing it early would blur the
@@ -202,18 +201,11 @@ class WorkerIntegrationTests(unittest.TestCase):
             self.assertFalse((project / "plot" / "word_budget" / "word_budget.json").exists())
             manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(manifest["missing_sources"], [])
+            self.assertTrue(manifest["agent_workspace_deferred"])
             self.assertIn("execution_policy", manifest["execution_contract"])
             self.assertFalse(manifest["execution_contract"]["compatibility_derived"])
             self.assertEqual(task.route, "longform-planning")
             self.assertIn("prompt_asset", task.payload)
-            prompt_text = sandbox.prompt_path.read_text(encoding="utf-8")
-            self.assertIn("# ArcVellum Studio Worker Program", prompt_text)
-            self.assertIn("## Hard Constraints", prompt_text)
-            self.assertIn("## Review Requirements", prompt_text)
-            self.assertIn("## Forbidden Shortcuts", prompt_text)
-            self.assertIn("## Allowed Outputs", prompt_text)
-            self.assertNotIn("## Agent Execution", prompt_text)
-            self.assertNotIn("推荐提交命令", prompt_text)
 
 
 if __name__ == "__main__":

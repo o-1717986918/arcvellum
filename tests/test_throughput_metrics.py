@@ -192,6 +192,33 @@ class ThroughputMetricsTests(unittest.TestCase):
         self.assertEqual(projection["usage"]["total_tokens"], 0)
         self.assertEqual(projection["usage"]["cost_usd"], 0.0)
 
+    def test_repeated_usage_snapshots_count_only_the_increment(self):
+        projection = build_throughput_projection(
+            [
+                _event(1, "worker.task.opened", "2026-07-25T00:00:00Z", task_id="task-a"),
+                _event(
+                    2,
+                    "worker.usage.updated",
+                    "2026-07-25T00:00:01Z",
+                    task_id="task-a",
+                    usage_id="message-1",
+                    usage={"input": 100, "output": 10},
+                ),
+                _event(
+                    3,
+                    "worker.usage.updated",
+                    "2026-07-25T00:00:02Z",
+                    task_id="task-a",
+                    usage_id="message-1",
+                    usage={"input": 120, "output": 15},
+                ),
+            ]
+        )
+
+        self.assertEqual(projection["usage"]["input_tokens"], 120)
+        self.assertEqual(projection["usage"]["output_tokens"], 15)
+        self.assertEqual(projection["usage"]["total_tokens"], 135)
+
     def test_projection_does_not_expose_event_payload_text_paths_or_credentials(self):
         projection = build_throughput_projection(
             [

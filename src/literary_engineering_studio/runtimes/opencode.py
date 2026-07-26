@@ -16,7 +16,7 @@ from ..config import default_data_root
 from ..opencode_binary import bundle_manifest, ensure_opencode_integrity, locate_opencode
 from ..opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
-from ..runtime_events import normalize_opencode_event
+from ..runtime_events import merge_usage_summary, normalize_opencode_event
 from ..subprocess_utils import run_hidden
 from .base import AgentRunnerCapabilities, AgentRuntime, RuntimeAvailability, RuntimeResult
 from .opencode_session import execution_identity, open_role_client, selected_model
@@ -212,7 +212,7 @@ class OpenCodeRuntime(AgentRuntime):
                                 first_tool_ms = round((time.monotonic() - execution_started) * 1000)
                                 emit("runner.first_tool", {"session_id": session_id, "elapsed_ms": first_tool_ms})
                             if name == "usage.updated":
-                                usage_summary.update(data)
+                                merge_usage_summary(usage_summary, data)
                             if name == "runner.warning" and data.get("kind") == "session.error":
                                 raw_error = json.dumps(data.get("detail") or {}, ensure_ascii=False)
                                 errors.append(raw_error)

@@ -48,19 +48,7 @@ def normalize_opencode_event(
                 return ((name, {"tool": tool, "tool_use_id": call_id, "status": status}),)
     if kind == "message.updated":
         info = properties.get("info") if isinstance(properties.get("info"), dict) else {}
-        if info.get("role") == "assistant" and isinstance(info.get("tokens"), dict):
-            return (
-                (
-                    "usage.updated",
-                    {
-                        "session_id": event_session,
-                        "provider": str(info.get("providerID") or ""),
-                        "model": str(info.get("modelID") or ""),
-                        "usage": info.get("tokens") or {},
-                        "cost_usd": info.get("cost"),
-                    },
-                ),
-            )
+        return _usage_event(info, event_session)
     if kind == "session.status":
         status = properties.get("status") if isinstance(properties.get("status"), dict) else {}
         return (("runner.session.status", {"session_id": event_session, "status": str(status.get("type") or "")}),)
@@ -71,6 +59,30 @@ def normalize_opencode_event(
     if kind == "server.connected":
         return (("runner.ready", {"runner_id": "opencode"}),)
     return ()
+
+
+def _usage_event(info: dict[str, Any], session_id: str) -> tuple[tuple[str, dict[str, Any]], ...]:
+    if info.get("role") != "assistant" or not isinstance(info.get("tokens"), dict):
+        return ()
+    return (
+        (
+            "usage.updated",
+            {
+                "session_id": session_id,
+                "usage_id": str(info.get("id") or info.get("messageID") or ""),
+                "provider": str(info.get("providerID") or ""),
+                "model": str(info.get("modelID") or ""),
+                "usage": info.get("tokens") or {},
+                "cost_usd": info.get("cost"),
+            },
+        ),
+    )
+
+
+def merge_usage_summary(summary: dict[str, Any], data: dict[str, Any]) -> None:
+    usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    summary.update(usage)
+    summary["cost_usd"] = data.get("cost_usd")
 
 
 def _session_id(properties: dict[str, Any]) -> str:

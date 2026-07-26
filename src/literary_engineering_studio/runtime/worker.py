@@ -30,6 +30,10 @@ from .worker_results import WorkerRunResult
 from .worker_writeback import WorkerWritebackMixin
 
 
+def _materialize_agent_view_immediately(task: TaskPackage) -> bool:
+    return task.execution_contract.execution_policy == "agent-required" and not task.command
+
+
 class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
     def __init__(
         self,
@@ -97,7 +101,10 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
 
         runs_root = Path(str(self.config.get("worker", {}).get("runs_root") or ""))
         active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
-        sandbox = stage_task(task, runs_root, runtime=active_runtime)
+        sandbox = stage_task(
+            task, runs_root, runtime=active_runtime,
+            materialize_agent_view=_materialize_agent_view_immediately(task),
+        )
         self._emit(
             "sandbox.prepared",
             {

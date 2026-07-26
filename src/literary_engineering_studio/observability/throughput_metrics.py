@@ -38,6 +38,7 @@ def build_throughput_projection(events: list[dict[str, Any]]) -> dict[str, Any]:
     pending_selection: datetime | None = None
     active_task_id = ""
     bundles_seen: set[str] = set()
+    usage_snapshots: dict[tuple[str, str], dict[str, float]] = {}
     totals = {
         "model_turns": 0,
         "repairs": 0,
@@ -111,7 +112,7 @@ def build_throughput_projection(events: list[dict[str, Any]]) -> dict[str, Any]:
             if task is not None:
                 task["retries"] += 1
         elif event == "worker.usage.updated":
-            delta = _usage_from_event(data)
+            delta = _usage_event_delta(data, task_id, usage_snapshots)
             _merge_usage(usage, delta)
             if task is not None:
                 _merge_usage(task["usage"], delta)
@@ -193,8 +194,27 @@ def build_throughput_projection(events: list[dict[str, Any]]) -> dict[str, Any]:
         "tasks": public_tasks[-MAX_VISIBLE_TASKS:],
         "tasks_truncated": len(public_tasks) > MAX_VISIBLE_TASKS,
     }
+    return _with_revision(projection)
+
+
+def _with_revision(projection: dict[str, Any]) -> dict[str, Any]:
     projection["revision"] = _digest(projection)
     return projection
+
+
+def _usage_event_delta(
+    data: dict[str, Any],
+    task_id: str,
+    snapshots: dict[tuple[str, str], dict[str, float]],
+) -> dict[str, float]:
+    current = _usage_from_event(data)
+    usage_id = str(data.get("usage_id") or "")
+    if not usage_id:
+        return current
+    snapshot_key = (task_id, usage_id)
+    delta = _usage_delta(snapshots.get(snapshot_key), current)
+    snapshots[snapshot_key] = current
+    return delta
 
 
 def _ordered_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -320,6 +340,22 @@ def _empty_usage() -> dict[str, float]:
 def _merge_usage(target: dict[str, float], delta: dict[str, float]) -> None:
     for key in target:
         target[key] += delta[key]
+
+
+def _usage_delta(
+    previous: dict[str, float] | None,
+    current: dict[str, float],
+) -> dict[str, float]:
+    if previous is None:
+        return dict(current)
+    return {
+        key: (
+            current[key] - previous[key]
+            if current[key] >= previous[key]
+            else current[key]
+        )
+        for key in current
+    }
 
 
 def _rounded_usage(usage: dict[str, float]) -> dict[str, int | float]:

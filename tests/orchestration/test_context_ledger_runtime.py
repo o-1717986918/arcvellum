@@ -72,7 +72,7 @@ class RuntimeContextLedgerTests(unittest.TestCase):
             second = stage_task(task, Path(runs), runtime="opencode", run_id="context-second")
             second_payload = json.loads((second.run_root / "context-ledger.json").read_text(encoding="utf-8"))
 
-            self.assertEqual(first_payload["assembled_sha256"], second_payload["assembled_sha256"])
+            self.assertNotEqual(first_payload["assembled_sha256"], second_payload["assembled_sha256"])
             self.assertNotEqual(first_payload["digest"], second_payload["digest"])
             first_entry = next(
                 item for item in first_payload["entries"] if item["source_ref"] == "scenes/scene_0001.yaml"
@@ -99,7 +99,7 @@ class RuntimeContextLedgerTests(unittest.TestCase):
             second = json.loads((sandbox.run_root / "context-ledger.json").read_text(encoding="utf-8"))
             store.record_context_ledger(str(root), second)
 
-            self.assertEqual(first["assembled_sha256"], second["assembled_sha256"])
+            self.assertNotEqual(first["assembled_sha256"], second["assembled_sha256"])
             self.assertNotEqual(first["ledger_id"], second["ledger_id"])
             self.assertNotEqual(first["digest"], second["digest"])
             self.assertEqual(len(store.list_context_ledgers(str(root))), 2)

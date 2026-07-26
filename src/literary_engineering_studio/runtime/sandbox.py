@@ -61,6 +61,7 @@ def stage_task(
     *,
     runtime: str,
     run_id: str | None = None,
+    materialize_agent_view: bool = True,
 ) -> SandboxManifest:
     identifier = run_id or _run_id(task.task_id)
     run_root = runs_root.expanduser().resolve() / _project_key(task.project_root) / identifier
@@ -73,10 +74,8 @@ def stage_task(
     copied_sources: list[str] = []
     missing_sources: list[str] = []
     selection = select_agent_context(task)
-    # The control workspace must be able to run the exact CLI command and the
-    # exact deterministic preflight.  It intentionally receives the full task
-    # dependency set.  The Agent sees a separately materialized workspace
-    # below, containing only its explicit reading contract.
+    # Control receives exact CLI/preflight dependencies; the Agent receives a
+    # separately bounded view.
     staged_sources = (*selection.reference_paths, *task.source_paths, *selection.source_paths)
     for relative in _unique(staged_sources):
         source = task.resolve_project_path(relative)
@@ -97,11 +96,7 @@ def stage_task(
         if source.exists():
             _copy_path(source, destination)
 
-    # Engine commands validate their positional project argument before they
-    # inspect task-specific inputs.  Every sandbox is therefore a minimal,
-    # runnable work-project rather than a bag of detached source files.  This
-    # descriptor remains outside expected outputs, so an Agent cannot alter it
-    # or write changes back through the task boundary.
+    # Keep control runnable while excluding this descriptor from Agent writeback.
     project_descriptor = task.project_root / "project.yaml"
     if project_descriptor.is_file():
         _copy_path(project_descriptor, control_workspace / "project.yaml")
@@ -153,7 +148,12 @@ def stage_task(
         control_workspace=control_workspace,
         agent_workspace=workspace,
     )
-    materialize_agent_workspace(task, sandbox)
+    if materialize_agent_view:
+        materialize_agent_workspace(task, sandbox)
+    else:
+        workspace.mkdir(parents=True, exist_ok=False)
+        baseline_path.write_text("{}\n", encoding="utf-8")
+        update_run_manifest(manifest_path, agent_workspace_deferred=True, agent_baseline_file_count=0)
     return sandbox
 
 
@@ -211,6 +211,10 @@ def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> 
         context_ledger_id=context.ledger.ledger_id,
         context_ledger_digest=context.ledger.digest,
         context_assembled_sha256=context.ledger.assembled_sha256,
+        prepared_context_paths=list(context.prepared_context.included_paths),
+        omitted_context_paths=list(context.prepared_context.omitted_paths),
+        prepared_context_characters=context.prepared_context.character_count,
+        prepared_context_sha256=context.prepared_context.sha256,
     )
     return tuple(copied)
 
