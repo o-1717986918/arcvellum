@@ -153,6 +153,28 @@ def _task_node(payload: Mapping[str, Any]) -> PlanTaskNode:
     contribution = _mapping(payload, "contribution")
     progress = _mapping(payload, "progress_contract", required=False)
     parameters = _mapping(payload, "parameters", required=False)
+    forbidden_parameters = sorted(
+        str(key)
+        for key in parameters
+        if str(key).strip().lower()
+        in {
+            "command",
+            "cwd",
+            "directory",
+            "executable",
+            "file_path",
+            "output_path",
+            "path",
+            "script",
+            "shell",
+            "source_path",
+        }
+    )
+    if forbidden_parameters:
+        raise ValueError(
+            "task parameters cannot declare commands or arbitrary paths: "
+            + ", ".join(forbidden_parameters)
+        )
     return PlanTaskNode(
         node_id=_required_text(payload, "node_id"),
         kind=PlanNodeKind(_required_text(payload, "kind")),

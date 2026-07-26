@@ -201,6 +201,22 @@
         },
         "parameters": {
           "type": "object",
+          "propertyNames": {
+            "not": {
+              "enum": [
+                "command",
+                "cwd",
+                "directory",
+                "executable",
+                "file_path",
+                "output_path",
+                "path",
+                "script",
+                "shell",
+                "source_path"
+              ]
+            }
+          },
           "additionalProperties": {
             "type": ["string", "number", "boolean"]
           }

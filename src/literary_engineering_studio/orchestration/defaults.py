@@ -52,7 +52,7 @@ class DefaultPlanFactory:
                 reader_effect="由现有章节和场景契约决定。",
                 chapter_function="保持当前固定路线行为，不引入自适应判断。",
             ),
-            strategy=CreativeStrategy(),
+            strategy=CreativeStrategy(branch_count=1),
             task_nodes=(),
             replan_rules=(),
             freedom_budget=FreedomBudget(

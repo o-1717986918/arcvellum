@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 from literary_engineering_studio.automation.controller import ROUTE_ORDER
 from literary_engineering_studio.orchestration import (
     CANDIDATE_SCHEMA,
+    COMPILED_GRAPH_SCHEMA,
     PLAN_SCHEMA,
     DefaultPlanFactory,
     constitution_v1,
@@ -50,6 +51,11 @@ class OrchestrationContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_plan_candidate(unknown_kind)
 
+        hidden_command = _candidate_payload()
+        hidden_command["task_nodes"][0]["parameters"] = {"command": "python arbitrary.py"}
+        with self.assertRaisesRegex(ValueError, "commands or arbitrary paths"):
+            parse_plan_candidate(hidden_command)
+
     def test_default_plan_is_deterministic_and_fixed_route_equivalent(self):
         factory = DefaultPlanFactory()
         plan = factory.create(
@@ -66,6 +72,7 @@ class OrchestrationContractTests(unittest.TestCase):
         self.assertEqual(plan.route_sequence, ROUTE_ORDER)
         self.assertEqual(plan.task_nodes, ())
         self.assertEqual(plan.freedom_budget.max_added_tasks, 0)
+        self.assertEqual(plan.strategy.branch_count, 1)
         compatibility = check_default_plan_compatibility(
             route_macro_id=plan.route_macro_id,
             route_sequence=plan.route_sequence,
@@ -98,12 +105,18 @@ class OrchestrationContractTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        compiled_graph_schema = json.loads(
+            (ROOT / "protocol/orchestration/compiled-task-graph.v1.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
         constitution_payload = YAML(typ="safe").load(
             (ROOT / "protocol/orchestration/constitution.v1.yaml").read_text(encoding="utf-8")
         )
 
         self.assertEqual(candidate_schema["$id"], CANDIDATE_SCHEMA)
         self.assertEqual(plan_schema["$id"], PLAN_SCHEMA)
+        self.assertEqual(compiled_graph_schema["$id"], COMPILED_GRAPH_SCHEMA)
         self.assertEqual(str(constitution_payload["version"]), constitution_v1().version)
         self.assertEqual(
             {item["id"] for item in constitution_payload["rules"]},

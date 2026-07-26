@@ -11,6 +11,7 @@ from literary_engineering_studio_engine.orchestration import PlanNodeKind
 
 CANDIDATE_SCHEMA = "arcvellum/creative-execution-plan-candidate/v1"
 PLAN_SCHEMA = "arcvellum/creative-execution-plan/v1"
+COMPILED_GRAPH_SCHEMA = "arcvellum/compiled-task-graph/v1"
 
 
 class PlanScopeKind(str, Enum):
@@ -173,6 +174,46 @@ class CreativeExecutionPlanCandidate:
 class PlanGateBinding:
     node_id: str
     gate_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TaskBinding:
+    capability_id: str
+    node_kind: PlanNodeKind
+    route: str
+    allowed_task_types: tuple[str, ...]
+    supported_scopes: tuple[str, ...]
+    agent_role: str
+    parameter_schema: str
+    required_gate_ids: tuple[str, ...]
+    resource_templates: tuple[str, ...]
+    progress_kind: str
+
+
+@dataclass(frozen=True)
+class CompiledTaskNode:
+    node_id: str
+    kind: PlanNodeKind
+    scope_refs: tuple[str, ...]
+    declared_dependencies: tuple[str, ...]
+    dependencies: tuple[str, ...]
+    binding: TaskBinding
+    requested_capabilities: tuple[str, ...]
+    parameters: tuple[PlanParameter, ...]
+    contribution: PlanContribution
+    progress_contract: ProgressContract
+
+
+@dataclass(frozen=True)
+class CompiledTaskGraph:
+    schema: str
+    plan_id: str
+    plan_revision: int
+    base_project_fingerprint: str
+    route_macro_id: str
+    route_sequence: tuple[str, ...]
+    nodes: tuple[CompiledTaskNode, ...]
+    graph_digest: str
 
 
 @dataclass(frozen=True)

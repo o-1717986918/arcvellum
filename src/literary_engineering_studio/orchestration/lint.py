@@ -45,6 +45,7 @@ class PlanLintResult:
     status: str
     issues: tuple[PlanIssue, ...]
     digest: str
+    plan_digest: str
 
     @property
     def passed(self) -> bool:
@@ -73,7 +74,12 @@ def lint_plan(plan: CreativeExecutionPlan, *, context: PlanLintContext) -> PlanL
     status = "fail" if any(item.severity == PlanIssueSeverity.ERROR for item in ordered) else (
         "warn" if ordered else "pass"
     )
-    return PlanLintResult(status=status, issues=ordered, digest=_digest(ordered))
+    return PlanLintResult(
+        status=status,
+        issues=ordered,
+        digest=_digest(ordered),
+        plan_digest=_digest(plan),
+    )
 
 
 def _lint_identity(
@@ -380,7 +386,7 @@ def _severity_order(value: PlanIssueSeverity) -> int:
     }[value]
 
 
-def _digest(issues: tuple[PlanIssue, ...]) -> str:
-    payload = to_primitive(issues)
+def _digest(value: object) -> str:
+    payload = to_primitive(value)
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()

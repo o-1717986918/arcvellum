@@ -214,6 +214,23 @@ AO-2 的确定性前置层进一步固定：
 - Normalizer 与 Plan Lint 通过后仍不代表计划已执行或产物已晋升；Compiler、Simulator、
   审批和现有 task lifecycle 都是后续独立阶段。
 
+AO-2 编译与模拟边界：
+
+- `compiler_registry.py` 只把 Engine `FormalTaskCapability` 投影为 command-free
+  `TaskBinding`，并按版本化 parameter schema 拒绝未知参数；
+- `compiler.py` 只接受与当前 plan digest 精确匹配的 passing Lint receipt；输出 sealed
+  `CompiledTaskGraph`，保留动态风险 Gate，并为 state/canon/release mutation 增加确定性
+  串行边；
+- fixed macro 编译结果保持空节点与原 route sequence。它不是静态复制 task-next，也不会
+  在 Studio 中形成第二套任务状态；
+- `simulator.py` 只消费显式 `FormalTaskObservation` 和 Runtime 拥有的 `ResourceClaim`，
+  不自行搜索项目或推断路径；它预演 binding、scope、revision、资源冲突、产物消费和
+  no-progress；
+- graph digest、Plan Lint plan digest 和项目 fingerprint 是三道独立完整性检查；
+- Compiler/Simulator 不创建 task、不调用 Worker、不改变 lifecycle、不批准 Gate、不写
+  SQLite 或项目文件。未来 Scheduler 只能把 compiled binding 与 Engine 当前签发的正式
+  task package 做匹配。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

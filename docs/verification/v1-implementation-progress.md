@@ -1296,3 +1296,46 @@ W6 只接入已有合同，不得重写 Broker、再造 Runtime 或第二套任�
 2. 编译稳定 task binding、DAG、资源意图和 graph digest，不签发任务；
 3. 建立无模型、无写回的 Plan Simulator，预演 blocker、冲突、Gate 和 no-progress；
 4. 用默认 macro 等价测试证明 fixed route 仍由现有 Task Registry 动态领取。
+
+## W6-3B：AO-2 Plan Compiler 与 Plan Simulator
+
+**状态：完成。**
+
+- 新增 command-free `TaskBinding`、`CompiledTaskNode` 与 `CompiledTaskGraph`：
+  - binding 只包含 capability、route、允许 task type、scope、角色、parameter schema、
+    Gate、资源模板和 progress kind；
+  - graph 绑定 plan ID/revision、项目 fingerprint、macro、依赖和 SHA-256 digest；
+  - 新增 `compiled-task-graph.v1.schema.json` 作为跨语言协议。
+- `CompilerRegistry` 只消费 Engine `FormalTaskCapability`：
+  - 不保存或生成命令；
+  - 每种 parameter schema 使用明确 allow-list；
+  - command/path 类参数在 Candidate 入口已拒绝，未知业务参数在 binding 时再次拒绝。
+- `compile_plan()` 的确定性编译纪律：
+  - 只接受 passing 且 `plan_digest` 精确匹配当前 plan 的 Lint receipt；
+  - stable topological order；
+  - 保留 Normalizer 注入的高风险 `full-roleplay` 等动态 Gate；
+  - 对无依赖关系的 state/canon/release mutation 增加机器串行边；
+  - fixed macro 仍输出空 nodes 与原 route sequence，不复制 task lifecycle；
+  - sealed graph 被修改后 digest 校验失败。
+- `simulate_plan()` 只接受调用方显式提供的正式状态观察和 Runtime `ResourceClaim`：
+  - 校验 route、task type、scope、项目 revision 与 resource project；
+  - 区分 ready、waiting、completed 和 blocked；
+  - 只在 DAG 上可并发的节点间计算 read/write/barrier 冲突；
+  - 汇总 expected artifacts、stale invalidation 和 machine-injected dependency；
+  - 检查未消费输出和只分析不形成正式产物的 no-progress 路径；
+  - 给出模型调用、费用和运行时间的 measure-only 区间，不运行模型。
+- AO-2B 仍未接入 Autopilot、Worker、API 或 persistence，当前 fixed 执行行为保持不变。
+
+本子批聚焦验证：
+
+- Compiler/Simulator、AO0-AO2 合同测试：29 passed；
+- `python -m unittest discover -s tests`：578 passed，1 skipped；
+- Architecture Audit：36 个既有 file debt、226 个既有 function debt、0 cycle，无新增债务；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+下一子批进入 W6-3C：
+
+1. 建立计划/编译图/模拟报告的 SQLite 元数据与项目审计文件持久化；
+2. 使用 optimistic revision 与 fingerprint 阻止 stale activation；
+3. 增加 shadow pipeline 量测，不影响正式 Autopilot 任务顺序；
+4. 完成 AO-2 架构复核和退出审计后，再进入 Planner/Reviewer。

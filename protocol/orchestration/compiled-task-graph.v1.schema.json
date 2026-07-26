@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/compiled-task-graph/v1",
+  "title": "ArcVellum Compiled Task Graph",
+  "type": "object",
+  "required": [
+    "schema",
+    "plan_id",
+    "plan_revision",
+    "base_project_fingerprint",
+    "route_macro_id",
+    "route_sequence",
+    "nodes",
+    "graph_digest"
+  ],
+  "properties": {
+    "schema": {
+      "const": "arcvellum/compiled-task-graph/v1"
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^plan-[a-z0-9-]+$"
+    },
+    "plan_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "base_project_fingerprint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "route_macro_id": {
+      "enum": ["fixed-formal-route.v1", "explicit-task-graph.v1"]
+    },
+    "route_sequence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/compiledNode"
+      }
+    },
+    "graph_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "compiledNode": {
+      "type": "object",
+      "required": [
+        "node_id",
+        "kind",
+        "scope_refs",
+        "declared_dependencies",
+        "dependencies",
+        "binding",
+        "requested_capabilities",
+        "parameters",
+        "contribution",
+        "progress_contract"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "scope_refs": {
+          "$ref": "#/$defs/stringList"
+        },
+        "declared_dependencies": {
+          "$ref": "#/$defs/stringList"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/stringList"
+        },
+        "binding": {
+          "$ref": "#/$defs/taskBinding"
+        },
+        "requested_capabilities": {
+          "$ref": "#/$defs/stringList"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": ["string", "number", "boolean"]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "contribution": {
+          "type": "object"
+        },
+        "progress_contract": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "taskBinding": {
+      "type": "object",
+      "required": [
+        "capability_id",
+        "node_kind",
+        "route",
+        "allowed_task_types",
+        "supported_scopes",
+        "agent_role",
+        "parameter_schema",
+        "required_gate_ids",
+        "resource_templates",
+        "progress_kind"
+      ],
+      "properties": {
+        "capability_id": {
+          "type": "string",
+          "pattern": "^formal-task\\."
+        },
+        "node_kind": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowed_task_types": {
+          "$ref": "#/$defs/stringList"
+        },
+        "supported_scopes": {
+          "$ref": "#/$defs/stringList"
+        },
+        "agent_role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parameter_schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_gate_ids": {
+          "$ref": "#/$defs/stringList"
+        },
+        "resource_templates": {
+          "$ref": "#/$defs/stringList"
+        },
+        "progress_kind": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
