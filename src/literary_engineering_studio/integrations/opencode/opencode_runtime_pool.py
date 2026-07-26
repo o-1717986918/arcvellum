@@ -11,12 +11,13 @@ from typing import Any
 
 from .opencode_binary import ensure_opencode_integrity, locate_opencode
 from .opencode_client import OpenCodeClient, OpenCodeEndpoint
+from .opencode_profiles import OpenCodeRole
 from .provider_definitions import opencode_provider_overrides
 from .opencode_server import OpenCodeServer, OpenCodeServerHandle
 from ...process_manager import ProcessManager
 
 
-VALID_ROLES = {"worker", "advisor", "steward"}
+VALID_ROLES = frozenset(role.value for role in OpenCodeRole)
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,19 @@ class OpenCodeRuntimePool:
     def model_for(self, role: str) -> str:
         normalized = _role(role)
         models = self.settings.get("models") if isinstance(self.settings.get("models"), dict) else {}
-        value = str(models.get(normalized) or self.settings.get(f"{normalized}_model") or self.settings.get("model") or "").strip()
+        orchestration_fallback = (
+            models.get(OpenCodeRole.WORKER.value)
+            or self.settings.get("worker_model")
+            if normalized in {OpenCodeRole.PLANNER.value, OpenCodeRole.REVIEWER.value}
+            else ""
+        )
+        value = str(
+            models.get(normalized)
+            or self.settings.get(f"{normalized}_model")
+            or orchestration_fallback
+            or self.settings.get("model")
+            or ""
+        ).strip()
         if "/" not in value:
             raise RuntimeError(f"select an OpenCode provider/model for the {normalized} role")
         return value

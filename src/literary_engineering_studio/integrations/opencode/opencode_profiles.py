@@ -3,8 +3,26 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Any
+
+
+class OpenCodeRole(str, Enum):
+    WORKER = "worker"
+    ADVISOR = "advisor"
+    STEWARD = "steward"
+    PLANNER = "planner"
+    REVIEWER = "reviewer"
+
+
+ROLE_AGENT_IDS: dict[OpenCodeRole, str] = {
+    OpenCodeRole.WORKER: "literary-worker",
+    OpenCodeRole.ADVISOR: "project-advisor",
+    OpenCodeRole.STEWARD: "creative-steward",
+    OpenCodeRole.PLANNER: "orchestration-planner",
+    OpenCodeRole.REVIEWER: "orchestration-reviewer",
+}
 
 
 def worker_profile(model: str) -> dict[str, Any]:
@@ -106,19 +124,50 @@ def steward_profile(model: str) -> dict[str, Any]:
     return _base_profile("creative-steward", agent, model)
 
 
+def planner_profile(model: str) -> dict[str, Any]:
+    return _orchestration_profile(
+        OpenCodeRole.PLANNER,
+        model,
+        description="Proposes one bounded creative execution plan from a machine-curated planning snapshot.",
+        prompt=(
+            "Treat the supplied planning snapshot as the complete readable context. Return exactly one JSON object "
+            "matching the declared CreativeExecutionPlanCandidate schema. You may interpret literary strategy, but "
+            "you may not invent commands, paths, machine fields, completed facts, or formal project writes."
+        ),
+    )
+
+
+def reviewer_profile(model: str) -> dict[str, Any]:
+    return _orchestration_profile(
+        OpenCodeRole.REVIEWER,
+        model,
+        description="Critically reviews one exact creative plan and its deterministic evidence.",
+        prompt=(
+            "Review only the exact candidate, normalized plan, lint, graph, simulation, and planning ledger supplied "
+            "in this independent session. Return exactly one JSON judgment object. Do not edit the candidate, activate "
+            "a plan, inspect external files, or accept missing literary obligations merely to speed execution."
+        ),
+    )
+
+
 def write_profile(
     directory: Path,
     *,
-    role: str,
+    role: OpenCodeRole | str,
     model: str,
     provider_overrides: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     root = directory.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
-    if role == "advisor":
+    normalized = OpenCodeRole(role)
+    if normalized is OpenCodeRole.ADVISOR:
         payload = advisor_profile(model)
-    elif role == "steward":
+    elif normalized is OpenCodeRole.STEWARD:
         payload = steward_profile(model)
+    elif normalized is OpenCodeRole.PLANNER:
+        payload = planner_profile(model)
+    elif normalized is OpenCodeRole.REVIEWER:
+        payload = reviewer_profile(model)
     else:
         payload = worker_profile(model)
     if provider_overrides:
@@ -126,6 +175,46 @@ def write_profile(
     path = root / "opencode.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def agent_id_for_role(role: OpenCodeRole | str) -> str:
+    return ROLE_AGENT_IDS[OpenCodeRole(role)]
+
+
+def _orchestration_profile(
+    role: OpenCodeRole,
+    model: str,
+    *,
+    description: str,
+    prompt: str,
+) -> dict[str, Any]:
+    agent: dict[str, Any] = {
+        "description": description,
+        "mode": "primary",
+        "prompt": prompt,
+        "permission": {
+            "*": "deny",
+            "read": "allow",
+            "glob": "allow",
+            "grep": "allow",
+            "list": "allow",
+            "edit": "deny",
+            "write": "deny",
+            "bash": "deny",
+            "task": "deny",
+            "external_directory": "deny",
+            "todowrite": "deny",
+            "webfetch": "deny",
+            "websearch": "deny",
+            "lsp": "deny",
+            "skill": "deny",
+            "question": "deny",
+            "doom_loop": "deny",
+        },
+    }
+    if model:
+        agent["model"] = model
+    return _base_profile(ROLE_AGENT_IDS[role], agent, model)
 
 
 def _base_profile(agent_id: str, agent: dict[str, Any], model: str) -> dict[str, Any]:

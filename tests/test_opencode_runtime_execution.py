@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from literary_engineering_studio.config import default_config
+from literary_engineering_studio.runtimes import build_runtime
 from literary_engineering_studio.runtimes.opencode import OpenCodeRuntime
 from literary_engineering_studio.task_preflight import PreflightIssue, PreflightResult
 
@@ -45,10 +47,12 @@ class _Pool:
     def __init__(self, client):
         self.client = client
         self.acquires = 0
+        self.roles = []
         self.releases = 0
 
     def acquire(self, role, workspace, *, model):
         self.acquires += 1
+        self.roles.append(role)
         return SimpleNamespace(
             role=role,
             client=self.client,
@@ -89,6 +93,13 @@ class _StreamingFailureClient(_Client):
 
 
 class OpenCodeRuntimeExecutionTests(unittest.TestCase):
+    def test_runtime_builder_applies_role_without_mutating_persisted_settings(self):
+        config = default_config()
+        runtime = build_runtime("opencode", config, role="reviewer")
+        self.assertIsInstance(runtime, OpenCodeRuntime)
+        self.assertEqual(runtime.settings["role"], "reviewer")
+        self.assertNotIn("role", config["agent_runners"]["opencode"])
+
     def test_failed_preflight_is_repaired_in_the_same_session(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -165,6 +176,38 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
             self.assertIn("自动重试", result.message)
             finished = [data for event, data in events if event == "runner.session.finished"]
             self.assertEqual(finished[-1]["reason"], "streaming_interrupted")
+
+    def test_planner_role_uses_an_isolated_profile_and_worker_model_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = root / "prompt.md"
+            prompt.write_text("生成计划候选 JSON", encoding="utf-8")
+            client = _Client()
+            pool = _Pool(client)
+            runtime = OpenCodeRuntime(
+                {
+                    "role": "planner",
+                    "model": "fixture/default",
+                    "models": {"worker": "fixture/worker"},
+                }
+            )
+            runtime.runtime_pool = pool
+
+            with patch(
+                "literary_engineering_studio.runtimes.opencode.locate_opencode",
+                return_value=Path("opencode.exe"),
+            ):
+                result = runtime.execute(workspace, prompt, run_root, timeout=10)
+
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(client.prompts[0]["agent"], "orchestration-planner")
+            self.assertEqual(client.prompts[0]["model"], "fixture/worker")
+            self.assertEqual(pool.roles, ["planner"])
+            self.assertEqual(result.metadata["role"], "planner")
 
 
 if __name__ == "__main__":

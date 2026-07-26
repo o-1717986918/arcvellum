@@ -17,7 +17,15 @@ from literary_engineering_studio.opencode_binary import (
 )
 from literary_engineering_studio.opencode_client import OpenCodeClient, OpenCodeEndpoint, split_model
 from literary_engineering_studio.opencode_control import disconnect_provider, select_model
-from literary_engineering_studio.opencode_profiles import advisor_profile, steward_profile, worker_profile, write_profile
+from literary_engineering_studio.opencode_profiles import (
+    OpenCodeRole,
+    advisor_profile,
+    planner_profile,
+    reviewer_profile,
+    steward_profile,
+    worker_profile,
+    write_profile,
+)
 from literary_engineering_studio.integrations.opencode.provider_definitions import (
     opencode_provider_overrides,
     register_custom_provider,
@@ -120,6 +128,27 @@ class OpenCodeFoundationTests(unittest.TestCase):
         self.assertEqual(steward_permissions["glob"], "deny")
         self.assertEqual(steward_permissions["edit"], "deny")
         self.assertEqual(steward_permissions["bash"], "deny")
+
+    def test_orchestration_profiles_are_read_only_and_role_names_are_strict(self):
+        planner = planner_profile("fixture/model")
+        reviewer = reviewer_profile("fixture/model")
+        planner_permissions = planner["agent"]["orchestration-planner"]["permission"]
+        reviewer_permissions = reviewer["agent"]["orchestration-reviewer"]["permission"]
+        self.assertEqual(planner_permissions["read"], "allow")
+        self.assertEqual(planner_permissions["edit"], "deny")
+        self.assertEqual(planner_permissions["write"], "deny")
+        self.assertEqual(reviewer_permissions["read"], "allow")
+        self.assertEqual(reviewer_permissions["edit"], "deny")
+        self.assertNotEqual(planner["default_agent"], reviewer["default_agent"])
+        with tempfile.TemporaryDirectory() as temporary:
+            path = write_profile(
+                Path(temporary),
+                role=OpenCodeRole.PLANNER,
+                model="fixture/model",
+            )
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["default_agent"], "orchestration-planner")
+            with self.assertRaises(ValueError):
+                write_profile(Path(temporary), role="unknown", model="fixture/model")
 
     def test_profile_is_valid_json_and_model_is_explicit(self):
         with tempfile.TemporaryDirectory() as temporary:

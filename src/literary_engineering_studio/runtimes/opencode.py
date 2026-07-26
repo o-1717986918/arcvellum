@@ -14,6 +14,7 @@ from collections.abc import Callable, Sequence
 
 from ..config import default_data_root
 from ..opencode_binary import bundle_manifest, ensure_opencode_integrity, locate_opencode
+from ..opencode_profiles import OpenCodeRole, agent_id_for_role
 from ..opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
 from ..runtime_events import normalize_opencode_event
@@ -62,7 +63,7 @@ class OpenCodeRuntime(AgentRuntime):
 
     def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
         availability = availability or self.availability()
-        model = str(self.settings.get("model") or "").strip()
+        model = self._selected_model()
         if not availability.available:
             readiness = "unavailable"
         elif not model:
@@ -109,8 +110,9 @@ class OpenCodeRuntime(AgentRuntime):
         if executable is None:
             raise RuntimeError("pinned OpenCode binary is not installed")
         ensure_opencode_integrity(executable)
-        models = self.settings.get("models") if isinstance(self.settings.get("models"), dict) else {}
-        model = str(models.get("worker") or self.settings.get("worker_model") or self.settings.get("model") or "").strip()
+        role = self._role()
+        model = self._selected_model(role)
+        agent_id = agent_id_for_role(role)
         if "/" not in model:
             raise RuntimeError("OpenCode requires an explicit provider/model-id connection")
         cancellation = cancel_event or threading.Event()
@@ -149,13 +151,14 @@ class OpenCodeRuntime(AgentRuntime):
                 return last_activity_at
 
         def emit(name: str, data: dict[str, Any]) -> None:
-            _append_event(events_path, name, data)
+            event_data = {"role": role.value, **data}
+            _append_event(events_path, name, event_data)
             if event_sink:
-                event_sink(name, data)
+                event_sink(name, event_data)
 
         try:
             if self.runtime_pool is not None:
-                lease = self.runtime_pool.acquire("worker", workspace, model=model)
+                lease = self.runtime_pool.acquire(role.value, workspace, model=model)
                 client = lease.client
                 component_id = lease.component_id
             else:
@@ -164,7 +167,7 @@ class OpenCodeRuntime(AgentRuntime):
                     component_id=component_id,
                     workspace=workspace,
                     run_root=run_root,
-                    role="worker",
+                    role=role.value,
                     model=model,
                 )
                 client = handle.client
@@ -180,7 +183,7 @@ class OpenCodeRuntime(AgentRuntime):
                     "elapsed_ms": round((time.monotonic() - execution_started) * 1000),
                 },
             )
-            session = client.create_session(f"Studio task {run_root.name}")
+            session = client.create_session(f"Studio {role.value} {run_root.name}")
             session_id = str(session.get("id") or "")
             if not session_id:
                 raise RuntimeError("OpenCode did not return a session id")
@@ -230,9 +233,17 @@ class OpenCodeRuntime(AgentRuntime):
             event_thread = threading.Thread(target=consume_events, name=f"les-opencode-events-{session_id}", daemon=True)
             event_thread.start()
             prompt = self.load_execution_prompt(prompt_path)
-            client.prompt_async(session_id, text=prompt, model=model, agent="literary-worker")
+            client.prompt_async(session_id, text=prompt, model=model, agent=agent_id)
             mark_activity()
-            emit("runner.session.started", {"runner_id": self.runtime_id, "session_id": session_id, "model": model})
+            emit(
+                "runner.session.started",
+                {
+                    "runner_id": self.runtime_id,
+                    "session_id": session_id,
+                    "model": model,
+                    "role": role.value,
+                },
+            )
             deadline = time.monotonic() + max(1, int(timeout))
             session_idle_timeout = max(30, int(self.settings.get("session_idle_timeout_seconds") or 120))
             wait_status = _wait_for_session(
@@ -308,7 +319,7 @@ class OpenCodeRuntime(AgentRuntime):
                     repairs += 1
                     repair_prompt = final_preflight.repair_prompt(repairs, max(1, int(max_repairs)))
                     emit("repair.started", {"attempt": repairs, "issue_count": payload.get("issue_count", 0), "session_id": session_id})
-                    client.prompt_async(session_id, text=repair_prompt, model=model, agent="literary-worker")
+                    client.prompt_async(session_id, text=repair_prompt, model=model, agent=agent_id)
                     repair_deadline = time.monotonic() + min(300, max(60, int(timeout) // 3))
                     mark_activity()
                     repair_idle_timeout = max(30, int(self.settings.get("repair_idle_timeout_seconds") or 75))
@@ -395,6 +406,7 @@ class OpenCodeRuntime(AgentRuntime):
                 "runtime completed",
                 {
                     "session_id": session_id,
+                    "role": role.value,
                     "component_id": component_id,
                     "service_reused": bool(lease.reused) if lease is not None else False,
                     "generation": lease.generation if lease is not None else 1,
@@ -425,6 +437,25 @@ class OpenCodeRuntime(AgentRuntime):
                 event_thread.join(timeout=3)
             if manager is not None:
                 manager.shutdown()
+
+    def _role(self) -> OpenCodeRole:
+        return OpenCodeRole(str(self.settings.get("role") or OpenCodeRole.WORKER.value).strip().lower())
+
+    def _selected_model(self, role: OpenCodeRole | None = None) -> str:
+        selected_role = role or self._role()
+        models = self.settings.get("models") if isinstance(self.settings.get("models"), dict) else {}
+        orchestration_fallback = (
+            models.get(OpenCodeRole.WORKER.value) or self.settings.get("worker_model")
+            if selected_role in {OpenCodeRole.PLANNER, OpenCodeRole.REVIEWER}
+            else ""
+        )
+        return str(
+            models.get(selected_role.value)
+            or self.settings.get(f"{selected_role.value}_model")
+            or orchestration_fallback
+            or self.settings.get("model")
+            or ""
+        ).strip()
 
 
 def _assistant_result(messages: list[dict[str, Any]]) -> tuple[str, str]:

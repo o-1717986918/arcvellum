@@ -26,7 +26,13 @@ _STATUS_LOCK = threading.RLock()
 _STATUS_TTL_SECONDS = 30.0
 
 
-def build_runtime(runtime_id: str, config: dict[str, object], *, runtime_pool=None) -> AgentRuntime:
+def build_runtime(
+    runtime_id: str,
+    config: dict[str, object],
+    *,
+    runtime_pool=None,
+    role: str | None = None,
+) -> AgentRuntime:
     normalized = str(runtime_id or "").strip().lower()
     runtime_type = RUNTIME_TYPES.get(normalized)
     if runtime_type is None:
@@ -34,9 +40,11 @@ def build_runtime(runtime_id: str, config: dict[str, object], *, runtime_pool=No
     runners = config.get("agent_runners", {}) if isinstance(config.get("agent_runners"), dict) else {}
     if not runners and isinstance(config.get("runtimes"), dict):
         runners = config["runtimes"]
-    settings = runners.get(normalized, {}) if isinstance(runners.get(normalized), dict) else {}
+    settings = dict(runners.get(normalized, {})) if isinstance(runners.get(normalized), dict) else {}
     if settings.get("enabled") is False:
         raise RuntimeError(f"Agent runtime is disabled: {normalized}")
+    if role is not None:
+        settings["role"] = role
     runtime = runtime_type(settings)
     if isinstance(runtime, OpenCodeRuntime):
         runtime.runtime_pool = runtime_pool

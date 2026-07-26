@@ -65,18 +65,28 @@ class OpenCodeRuntimePoolTests(unittest.TestCase):
                 pool.release(second)
                 advisor = pool.acquire("advisor", workspace)
                 pool.release(advisor)
+                planner = pool.acquire("planner", workspace)
+                pool.release(planner)
+                reviewer = pool.acquire("reviewer", workspace)
+                pool.release(reviewer)
 
                 self.assertFalse(first.reused)
                 self.assertTrue(second.reused)
                 self.assertEqual(first.component_id, second.component_id)
                 self.assertNotEqual(first.profile_path, advisor.profile_path)
-                self.assertEqual(len(factory.starts), 2)
+                self.assertNotEqual(planner.profile_path, reviewer.profile_path)
+                self.assertEqual(planner.model, first.model)
+                self.assertEqual(reviewer.model, first.model)
+                self.assertEqual(len(factory.starts), 4)
                 self.assertNotEqual(Path(factory.starts[0]["workspace"]), workspace)
                 self.assertEqual(Path(factory.starts[0]["workspace"]).name, "service-workspace")
                 self.assertEqual(first.client.endpoint.directory, workspace.resolve())
                 pool.shutdown()
 
-            self.assertEqual({item[0] for item in manager.stopped}, {"opencode-worker", "opencode-advisor"})
+            self.assertEqual(
+                {item[0] for item in manager.stopped},
+                {"opencode-worker", "opencode-advisor", "opencode-planner", "opencode-reviewer"},
+            )
 
     def test_model_change_restarts_only_idle_role(self):
         with tempfile.TemporaryDirectory() as temporary:
