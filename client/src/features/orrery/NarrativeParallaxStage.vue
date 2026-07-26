@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NarrativeParallaxRenderer, type StageAnchor } from "@/features/orrery/engine/parallaxRenderer";
 import { copyParallaxView, DEFAULT_PARALLAX_VIEW, fittedCameraFrame, isSameParallaxView, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
+import { resolveOrreryMotion } from "@/services/orreryPreferences";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
 
 const props = defineProps<{
@@ -117,8 +118,12 @@ watch(() => [props.projection.revision, props.layout.revision] as const, () => {
     resetStaticCamera();
     emitStaticAnchors();
   }
-  const motion = document.documentElement.dataset.arcvellumMotion || "full";
-  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && motion !== "still") {
+  const preference = document.documentElement.dataset.arcvellumMotion || "system";
+  const motion = resolveOrreryMotion(
+    preference === "full" || preference === "reduced" || preference === "still" ? preference : "system",
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  if (motion !== "still") {
     host.value?.animate(
       [{ opacity: 0.52, filter: "saturate(.78) blur(.8px)" }, { opacity: 1, filter: "saturate(1) blur(0)" }],
       { duration: motion === "reduced" ? 170 : 420, easing: "cubic-bezier(.2,.8,.2,1)" },

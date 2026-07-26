@@ -107,5 +107,7 @@ p { color: var(--ink-500); line-height: 1.72; }
   .field-row, .field-row.three, .connection-limits { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  html:not([data-arcvellum-motion="full"]) *,
+  html:not([data-arcvellum-motion="full"]) *::before,
+  html:not([data-arcvellum-motion="full"]) *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }

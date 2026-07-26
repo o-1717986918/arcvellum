@@ -1,7 +1,8 @@
 import { Application, Container, Graphics } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
-import type { OrreryDepth, OrreryMotion, OrreryRenderQuality } from "@/services/orreryPreferences";
+import { resolveOrreryMotion, type OrreryDepth, type OrreryMotion, type OrreryRenderQuality } from "@/services/orreryPreferences";
+import { ambientNodeOffset, hasAmbientNodeMotion } from "@/features/orrery/engine/ambientMotion";
 import { DEFAULT_PARALLAX_VIEW, NARRATIVE_STAGE, depthScale, fittedCameraFrame, isSameParallaxView, parallaxViewFromDrag, planeBounds, scenePoint, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import { constellationClusterSize, stageActSize } from "@/features/orrery/layout/curveProfiles";
 import { relationModeForLevel } from "@/features/orrery/model/relationLens";
@@ -327,7 +328,9 @@ export class NarrativeParallaxRenderer {
     this.syncParallax();
     this.syncRelationLod();
     const revision = `${this.viewport.x.toFixed(1)}:${this.viewport.y.toFixed(1)}:${this.viewport.scale.x.toFixed(3)}`;
-    if (revision !== this.lastViewport) {
+    const ambientMotion = this.effectiveMotion() === "full"
+      && Boolean(this.projection && hasAmbientNodeMotion(this.projection.nodes));
+    if (revision !== this.lastViewport || ambientMotion) {
       this.lastViewport = revision;
       this.emitAnchors();
     }
@@ -764,7 +767,9 @@ export class NarrativeParallaxRenderer {
     for (const [nodeId, point] of this.layout.points) {
       const scene = this.projectPoint(point);
       const node = nodes.get(nodeId);
-      const drift = node && this.effectiveMotion() === "full" ? nodeDrift(node, this.elapsed / 1000) : { x: 0, y: 0 };
+      const drift = node && this.effectiveMotion() === "full"
+        ? ambientNodeOffset(node, this.elapsed / 1000)
+        : { x: 0, y: 0 };
       const tide = node ? this.tideOffset(node, scene) : { x: 0, y: 0 };
       const screen = this.viewport.toScreen(scene.x + drift.x + tide.x, scene.y + drift.y + tide.y);
       anchors[nodeId] = {
@@ -825,20 +830,11 @@ export class NarrativeParallaxRenderer {
   }
 
   private effectiveMotion(): OrreryMotion {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "reduced";
-    return this.experience.motion;
+    return resolveOrreryMotion(
+      this.experience.motion,
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    );
   }
-}
-
-function nodeDrift(node: SpatialNarrativeProjection["nodes"][number], time: number): { x: number; y: number } {
-  if (!(["current", "blocked", "alternative", "queued"].includes(node.status))) return { x: 0, y: 0 };
-  const phase = (hashNode(node.node_id, 71) % 360) * (Math.PI / 180);
-  const amplitude = node.status === "current" ? 3.4 : node.status === "blocked" ? 2.5 : node.status === "queued" ? 2.1 : 1.45;
-  const speed = node.status === "current" ? 1.25 : 0.74;
-  return {
-    x: Math.sin(time * speed + phase) * amplitude,
-    y: Math.cos(time * speed * 0.82 + phase) * amplitude * 0.58,
-  };
 }
 
 function spinePath(frame: NarrativeFrame): number[] {
@@ -893,7 +889,11 @@ function lerp(start: number, end: number, ratio: number): number {
 function readStageExperience(): StageExperience {
   const root = document.documentElement.dataset;
   return {
-    motion: root.arcvellumMotion === "still" || root.arcvellumMotion === "reduced" ? root.arcvellumMotion : "full",
+    motion: root.arcvellumMotion === "system"
+      || root.arcvellumMotion === "still"
+      || root.arcvellumMotion === "reduced"
+      ? root.arcvellumMotion
+      : "full",
     depth: root.arcvellumDepth === "deep" || root.arcvellumDepth === "flat" ? root.arcvellumDepth : "balanced",
     quality: root.arcvellumQuality === "high" || root.arcvellumQuality === "efficient" ? root.arcvellumQuality : "auto",
   };

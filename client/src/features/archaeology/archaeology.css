@@ -663,6 +663,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .archaeology-view *,
-  .archaeology-import-backdrop * { animation: none !important; transition-duration: .01ms !important; }
+  html:not([data-arcvellum-motion="full"]) .archaeology-view *,
+  html:not([data-arcvellum-motion="full"]) .archaeology-import-backdrop * { animation: none !important; transition-duration: .01ms !important; }
 }

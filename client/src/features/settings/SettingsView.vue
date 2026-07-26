@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
+import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, LoaderCircle, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
 import { api, authorizedFetch } from "@/services/api";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
@@ -19,6 +19,8 @@ const customProvider = reactive({
   output: "",
 });
 const selectedModels = reactive({ worker: "", advisor: "", steward: "" });
+const roleSaving = reactive({ worker: false, advisor: false, steward: false });
+const roleSaved = reactive({ worker: false, advisor: false, steward: false });
 const busy = ref(false);
 const feedback = ref("");
 const section = ref<"connections" | "appearance" | "about">("connections");
@@ -28,7 +30,7 @@ const updateProgress = ref({ downloaded: 0, total: 0 });
 const projectsRoot = ref("");
 const experience = reactive({
   theme: "moss" as OrreryTheme,
-  motion: "full" as OrreryMotion,
+  motion: "system" as OrreryMotion,
   depth: "balanced" as OrreryDepth,
   quality: "auto" as OrreryRenderQuality,
 });
@@ -118,18 +120,35 @@ async function connectProvider(): Promise<void> {
 }
 
 async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> {
-  if (!selectedModels[role]) return;
-  const result = await api<any>("/model-connections/opencode/model", {
-    method: "PUT",
-    body: JSON.stringify({ model: selectedModels[role], role }),
-  });
+  const expectedModel = selectedModels[role];
+  if (!expectedModel || roleSaving[role]) return;
   const labels = { worker: "正文与审查", advisor: "创作顾问", steward: "自动审批" };
-  store.applyModelCatalog(result.catalog || result);
-  const pendingRoles = Array.isArray(result.runtime?.pending_roles) ? result.runtime.pending_roles : [];
-  feedback.value = pendingRoles.includes(role)
-    ? `${labels[role]}模型已保存；当前任务结束后会自动切换。`
-    : `${labels[role]}模型已经更新。`;
-  syncSelectedModels();
+  roleSaving[role] = true;
+  roleSaved[role] = false;
+  feedback.value = "";
+  try {
+    const result = await api<any>("/model-connections/opencode/model", {
+      method: "PUT",
+      body: JSON.stringify({ model: expectedModel, role }),
+    });
+    const catalog = result.catalog || result;
+    const confirmedModel = catalog.selected_models?.[role] || catalog.selected_model || "";
+    if (confirmedModel !== expectedModel) {
+      throw new Error(`${labels[role]}模型没有被配置服务确认，请刷新连接后重试。`);
+    }
+    store.applyModelCatalog(catalog);
+    const pendingRoles = Array.isArray(result.runtime?.pending_roles) ? result.runtime.pending_roles : [];
+    feedback.value = pendingRoles.includes(role)
+      ? `${labels[role]}模型已保存；当前任务结束后会自动切换。`
+      : `${labels[role]}模型已经更新并会在重启后保持。`;
+    roleSaved[role] = true;
+    syncSelectedModels();
+  } catch (cause) {
+    feedback.value = cause instanceof Error ? cause.message : `${labels[role]}模型没有保存成功。`;
+    syncSelectedModels();
+  } finally {
+    roleSaving[role] = false;
+  }
 }
 
 function parseCustomModels(): Array<{ id: string; name: string; context: number; output: number }> {
@@ -279,8 +298,11 @@ function pathValue(key: string): string {
             { id: 'steward', title: '自动审批', text: '在授权范围内比较候选方向。' },
           ] as const)" :key="role.id">
             <div><strong>{{ role.title }}</strong><p>{{ role.text }}</p></div>
-            <select v-model="selectedModels[role.id]"><option value="">先连接一个模型服务</option><option v-for="model in models" :key="model.qualified_id" :value="model.qualified_id">{{ model.name }} · {{ model.qualified_id }}</option></select>
-            <button class="icon-button" :disabled="!selectedModels[role.id]" title="保存这个角色的模型" @click="saveModel(role.id)"><Check :size="15" /></button>
+            <select v-model="selectedModels[role.id]" :disabled="roleSaving[role.id]" @change="saveModel(role.id)"><option value="">先连接一个模型服务</option><option v-for="model in models" :key="model.qualified_id" :value="model.qualified_id">{{ model.name }} · {{ model.qualified_id }}</option></select>
+            <span class="role-model-save-state" :class="{ saved: roleSaved[role.id] }" :title="roleSaving[role.id] ? '正在保存模型选择' : roleSaved[role.id] ? '模型选择已保存' : '选择后自动保存'">
+              <LoaderCircle v-if="roleSaving[role.id]" :size="15" class="spin" />
+              <Check v-else :size="15" />
+            </span>
           </article>
         </div>
 
@@ -343,11 +365,12 @@ function pathValue(key: string): string {
           <label class="appearance-control">
             <span><Gauge :size="16" />场景动效</span>
             <select v-model="experience.motion" @change="saveExperience">
+              <option value="system">跟随系统</option>
               <option value="full">完整呼吸</option>
               <option value="reduced">克制动效</option>
               <option value="still">静止阅读</option>
             </select>
-            <small>静止阅读会关闭节点漂移与镜头过渡。</small>
+            <small>完整呼吸会明确覆盖系统的减弱动态设置；静止阅读关闭节点漂移与镜头过渡。</small>
           </label>
           <label class="appearance-control">
             <span><Layers3 :size="16" />空间纵深</span>

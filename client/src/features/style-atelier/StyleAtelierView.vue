@@ -66,9 +66,9 @@ async function createWork(payload: StyleWorkCreatePayload): Promise<void> {
   }
 }
 
-async function importSource(payload: StyleSourceCreatePayload): Promise<void> {
+async function importSources(payloads: StyleSourceCreatePayload[]): Promise<void> {
   try {
-    await style.importSource(payload);
+    await style.importSources(payloads);
     sourceWorkshopOpen.value = false;
   } catch {
     // The store keeps the transaction failure visible.
@@ -253,7 +253,7 @@ function verdictLabel(value: unknown): string {
       @close="sourceWorkshopOpen = false"
       @create-author="createAuthor"
       @create-work="createWork"
-      @import-source="importSource"
+      @import-sources="importSources"
     />
   </div>
 </template>

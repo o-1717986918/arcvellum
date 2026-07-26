@@ -98,6 +98,35 @@ describe("application store", () => {
     expect(streamConnections).toHaveLength(1);
   });
 
+  it("does not let a stale startup stream replace a model selected in settings", async () => {
+    const { useAppStore } = await import("./app");
+    const store = useAppStore();
+    await store.initialize();
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === "/model-connections/opencode/catalog") {
+        return {
+          selected_model: "deepseek/deepseek-chat",
+          selected_models: { worker: "deepseek/deepseek-chat" },
+          providers: [],
+        };
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+
+    await store.loadModelCatalog();
+    const stream = streamConnections.find((item) => item.path.startsWith("/application/bootstrap/stream"));
+    stream?.callback("application.bootstrap", {
+      ...bootstrap,
+      model_catalog: {
+        selected_model: "opencode/deepseek-v4-flash-free",
+        providers: [],
+      },
+    });
+
+    expect(store.modelCatalog?.selected_model).toBe("deepseek/deepseek-chat");
+    expect(store.bootstrap?.model_catalog?.selected_model).toBe("deepseek/deepseek-chat");
+  });
+
   it("uses one workspace stream for the active project's live read models", async () => {
     const { useAppStore } = await import("./app");
     const store = useAppStore();

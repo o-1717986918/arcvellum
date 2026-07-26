@@ -40,6 +40,7 @@ class ApplicationBootstrapService:
         self._catalog_error = ""
         self._catalog_attempted_at = ""
         self._catalog_loaded_at = ""
+        self._catalog_generation = 0
         self._engine_state: dict[str, Any] | None = None
         self._closed = False
         self._engine_future: Future = self._executor.submit(self._load_engine_state)
@@ -56,7 +57,8 @@ class ApplicationBootstrapService:
             if force:
                 self._catalog_error = ""
             self._catalog_attempted_at = _now()
-            self._catalog_future = self._executor.submit(self._load_catalog)
+            generation = self._catalog_generation
+            self._catalog_future = self._executor.submit(self._load_catalog, generation)
             return True
 
     def record_model_catalog(self, catalog: dict[str, Any]) -> None:
@@ -65,6 +67,7 @@ class ApplicationBootstrapService:
         if not isinstance(catalog, dict):
             return
         with self._lock:
+            self._catalog_generation += 1
             self._catalog = dict(catalog)
             self._catalog_error = ""
             self._catalog_loaded_at = _now()
@@ -198,16 +201,19 @@ class ApplicationBootstrapService:
             self._closed = True
         self._executor.shutdown(wait=False, cancel_futures=True)
 
-    def _load_catalog(self) -> None:
+    def _load_catalog(self, generation: int) -> None:
         try:
             catalog = self._catalog_loader(self.config)
             if not isinstance(catalog, dict):
                 raise RuntimeError("模型目录返回了无法识别的数据。")
         except Exception as exc:
             with self._lock:
-                self._catalog_error = str(exc)
+                if generation == self._catalog_generation:
+                    self._catalog_error = str(exc)
             return
         with self._lock:
+            if generation != self._catalog_generation:
+                return
             self._catalog = catalog
             self._catalog_error = ""
             self._catalog_loaded_at = _now()

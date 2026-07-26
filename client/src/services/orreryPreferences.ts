@@ -1,7 +1,7 @@
 export type OrreryMode = "workbench" | "immersive";
 export type OrreryBackground = "plain" | "mineral" | "archive" | "ink" | "iris" | "obsidian" | "bookcase" | "modern";
 export type OrreryTheme = "moss" | "iris" | "obsidian" | "bookcase" | "modern";
-export type OrreryMotion = "full" | "reduced" | "still";
+export type OrreryMotion = "system" | "full" | "reduced" | "still";
 export type OrreryDepth = "deep" | "balanced" | "flat";
 export type OrreryRenderQuality = "auto" | "high" | "efficient";
 
@@ -33,7 +33,15 @@ export function normalizeOrreryTheme(value: unknown): OrreryTheme {
 }
 
 export function normalizeOrreryMotion(value: unknown): OrreryMotion {
-  return ["full", "reduced", "still"].includes(String(value)) ? value as OrreryMotion : "full";
+  return ["system", "full", "reduced", "still"].includes(String(value)) ? value as OrreryMotion : "system";
+}
+
+export function resolveOrreryMotion(
+  value: OrreryMotion,
+  systemPrefersReduced: boolean,
+): Exclude<OrreryMotion, "system"> {
+  if (value === "system") return systemPrefersReduced ? "reduced" : "full";
+  return value;
 }
 
 export function normalizeOrreryDepth(value: unknown): OrreryDepth {

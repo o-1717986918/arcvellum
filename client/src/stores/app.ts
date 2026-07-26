@@ -53,6 +53,7 @@ export const useAppStore = defineStore("app", () => {
   let autopilotStream: EventStreamConnection | null = null;
   let agentObservabilityStream: EventStreamConnection | null = null;
   let workspaceRevisions: Record<string, string> = {};
+  let modelCatalogAuthoritative = false;
 
   const currentProject = computed(
     () => projects.value.find((item) => item.path === currentProjectPath.value) || bootstrap.value?.project || null,
@@ -66,7 +67,9 @@ export const useAppStore = defineStore("app", () => {
     try {
       await bootstrapDesktopSession();
       bootstrap.value = await api<BootstrapSnapshot>("/application/bootstrap");
-      if (bootstrap.value.model_catalog) modelCatalog.value = bootstrap.value.model_catalog;
+      if (bootstrap.value.model_catalog && !modelCatalogAuthoritative) {
+        modelCatalog.value = bootstrap.value.model_catalog;
+      }
       await loadProjects();
       startBootstrapStream();
       initialized.value = true;
@@ -239,11 +242,19 @@ export const useAppStore = defineStore("app", () => {
   async function loadModelCatalog(force = false): Promise<void> {
     void force;
     const catalog = await api<ModelCatalog & { ok: boolean }>("/model-connections/opencode/catalog");
-    modelCatalog.value = catalog;
+    applyModelCatalog(catalog);
   }
 
   function applyModelCatalog(catalog: ModelCatalog | null): void {
-    if (catalog) modelCatalog.value = catalog;
+    if (!catalog) return;
+    modelCatalogAuthoritative = true;
+    modelCatalog.value = catalog;
+    if (bootstrap.value) {
+      bootstrap.value = {
+        ...bootstrap.value,
+        model_catalog: catalog,
+      };
+    }
   }
 
   function startBootstrapStream(): void {
@@ -251,8 +262,13 @@ export const useAppStore = defineStore("app", () => {
     bootstrapStream = connectEventStream("/application/bootstrap/stream?interval_seconds=1", (event, data) => {
       if (event !== "application.bootstrap") return;
       const payload = data as unknown as BootstrapSnapshot;
-      bootstrap.value = payload;
-      if (payload.model_catalog) modelCatalog.value = payload.model_catalog;
+      const nextPayload = modelCatalogAuthoritative && modelCatalog.value
+        ? { ...payload, model_catalog: modelCatalog.value }
+        : payload;
+      bootstrap.value = nextPayload;
+      if (payload.model_catalog && !modelCatalogAuthoritative) {
+        modelCatalog.value = payload.model_catalog;
+      }
       if (payload.can_enter_workspace && payload.model_warmup.status !== "loading") {
         bootstrapStream?.close();
         bootstrapStream = null;

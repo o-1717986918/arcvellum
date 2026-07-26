@@ -2,12 +2,20 @@
 import { computed, reactive, ref, watch } from "vue";
 import {
   BookOpenCheck,
+  ClipboardPaste,
   FileInput,
+  FileText,
+  FileUp,
   LibraryBig,
   ShieldCheck,
+  Trash2,
   UserRoundPlus,
   X,
 } from "lucide-vue-next";
+import {
+  decodeStyleSourceFile,
+  type PreparedStyleSource,
+} from "../services/styleSourceFiles";
 import type {
   StyleAuthor,
   StyleAuthorCreatePayload,
@@ -17,6 +25,7 @@ import type {
 } from "../types";
 
 type WorkshopMode = "author" | "work" | "source";
+type SourceInputMode = "file" | "paste";
 
 const props = defineProps<{
   authors: StyleAuthor[];
@@ -28,10 +37,14 @@ const emit = defineEmits<{
   close: [];
   createAuthor: [payload: StyleAuthorCreatePayload];
   createWork: [payload: StyleWorkCreatePayload];
-  importSource: [payload: StyleSourceCreatePayload];
+  importSources: [payloads: StyleSourceCreatePayload[]];
 }>();
 
 const mode = ref<WorkshopMode>(props.authors.length ? "source" : "author");
+const sourceInputMode = ref<SourceInputMode>("file");
+const fileInput = ref<HTMLInputElement | null>(null);
+const preparedFiles = ref<PreparedStyleSource[]>([]);
+const fileError = ref("");
 const rightsModes: Array<{ value: StyleRightsMode; label: string; hint: string }> = [
   { value: "public-domain", label: "公版作品", hint: "版权保护期已结束或依法属于公有领域" },
   { value: "authorized", label: "已获授权", hint: "权利人明确允许用于本项目的文风分析" },
@@ -79,8 +92,11 @@ const workReady = computed(() =>
 );
 const sourceReady = computed(() =>
   Boolean(sourceForm.author_id && sourceForm.work_id)
-  && /\.(txt|md|markdown)$/i.test(sourceForm.filename)
-  && sourceForm.content.trim().length > 0
+  && (
+    sourceInputMode.value === "file"
+      ? preparedFiles.value.length > 0
+      : /\.(txt|md|markdown)$/i.test(sourceForm.filename) && sourceForm.content.trim().length > 0
+  )
   && sourceForm.rights_declaration.trim().length >= 12,
 );
 
@@ -116,6 +132,56 @@ function alignSourceWork(): void {
 function rightsHint(value: StyleRightsMode): string {
   return rightsModes.find((item) => item.value === value)?.hint || "";
 }
+
+async function chooseSourceFiles(event: Event): Promise<void> {
+  fileError.value = "";
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  if (preparedFiles.value.length + files.length > 20) {
+    fileError.value = "一次最多登记 20 份文本，请分批导入。";
+    input.value = "";
+    return;
+  }
+  const additions: PreparedStyleSource[] = [];
+  for (const file of files) {
+    try {
+      const prepared = await decodeStyleSourceFile(file);
+      if (!preparedFiles.value.some((item) => item.file_key === prepared.file_key)
+        && !additions.some((item) => item.file_key === prepared.file_key)) {
+        additions.push(prepared);
+      }
+    } catch (cause) {
+      fileError.value = cause instanceof Error ? cause.message : "文件没有成功读取。";
+      break;
+    }
+  }
+  preparedFiles.value = [...preparedFiles.value, ...additions];
+  input.value = "";
+}
+
+function removePreparedFile(fileKey: string): void {
+  preparedFiles.value = preparedFiles.value.filter((item) => item.file_key !== fileKey);
+}
+
+function submitSources(): void {
+  const shared = {
+    author_id: sourceForm.author_id,
+    work_id: sourceForm.work_id,
+    rights_mode: sourceForm.rights_mode,
+    rights_declaration: sourceForm.rights_declaration,
+  };
+  const payloads: StyleSourceCreatePayload[] = sourceInputMode.value === "file"
+    ? preparedFiles.value.map((item) => ({
+        ...shared,
+        filename: item.filename,
+        media_type: item.media_type,
+        content: item.content,
+      }))
+    : [{ ...sourceForm }];
+  emit("importSources", payloads);
+}
+
 </script>
 
 <template>
@@ -178,20 +244,43 @@ function rightsHint(value: StyleRightsMode): string {
         <footer><span>下一步可以为这部作品导入一份或多份文本。</span><button class="primary" :disabled="!workReady || busy">登记作品</button></footer>
       </form>
 
-      <form v-else class="style-source-workshop-form style-source-text-form" @submit.prevent="emit('importSource', { ...sourceForm })">
+      <form v-else class="style-source-workshop-form style-source-text-form" @submit.prevent="submitSources">
         <div class="style-source-workshop-intro">
           <FileInput :size="19" /><span><strong>固化来源文本</strong><small>原文只进入受控资料库；工作台仅显示摘要与指纹。</small></span>
         </div>
         <div class="style-source-form-grid">
           <label><span>作者</span><select v-model="sourceForm.author_id"><option v-for="author in authors" :key="author.author_id" :value="author.author_id">{{ author.name }}</option></select></label>
           <label><span>作品</span><select v-model="sourceForm.work_id"><option v-for="work in availableWorks" :key="work.work_id" :value="work.work_id">{{ work.title }}</option></select></label>
-          <label><span>文件名</span><input v-model="sourceForm.filename" autocomplete="off" placeholder="source.txt" /></label>
-          <label><span>文本格式</span><select v-model="sourceForm.media_type"><option value="text/plain">纯文本</option><option value="text/markdown">Markdown</option></select></label>
           <label><span>权利依据</span><select v-model="sourceForm.rights_mode"><option v-for="item in rightsModes" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
           <label><span>权利说明</span><input v-model="sourceForm.rights_declaration" autocomplete="off" placeholder="说明这份文本的权利依据" /></label>
         </div>
-        <label class="style-source-body"><span>来源正文</span><textarea v-model="sourceForm.content" rows="10" spellcheck="false" placeholder="粘贴用于分析的完整文本。导入后不会在工作台中回显。"></textarea></label>
-        <footer><span><ShieldCheck :size="14" />系统会拒绝重复文本、路径文件名与无效编码</span><button class="primary" :disabled="!sourceReady || busy">导入并固化</button></footer>
+        <div class="style-source-input-switch" role="tablist" aria-label="语料输入方式">
+          <button type="button" :class="{ active: sourceInputMode === 'file' }" @click="sourceInputMode = 'file'"><FileUp :size="14" />选择文件</button>
+          <button type="button" :class="{ active: sourceInputMode === 'paste' }" @click="sourceInputMode = 'paste'"><ClipboardPaste :size="14" />粘贴文本</button>
+        </div>
+        <section v-if="sourceInputMode === 'file'" class="style-source-file-import">
+          <input ref="fileInput" class="style-source-file-input" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" multiple @change="chooseSourceFiles" />
+          <button type="button" class="style-source-file-picker" @click="fileInput?.click()">
+            <FileUp :size="21" />
+            <span><strong>从电脑选择语料文件</strong><small>支持 TXT、Markdown、UTF-8；一次最多 20 份</small></span>
+          </button>
+          <p v-if="fileError" class="style-source-file-error" role="alert">{{ fileError }}</p>
+          <div v-if="preparedFiles.length" class="style-source-file-queue" aria-label="待导入语料">
+            <article v-for="file in preparedFiles" :key="file.file_key">
+              <FileText :size="15" />
+              <span><strong>{{ file.filename }}</strong><small>{{ file.character_count.toLocaleString('zh-CN') }} 字符 · {{ file.media_type === 'text/markdown' ? 'Markdown' : '纯文本' }}</small></span>
+              <button type="button" :title="`移除 ${file.filename}`" @click="removePreparedFile(file.file_key)"><Trash2 :size="14" /></button>
+            </article>
+          </div>
+        </section>
+        <template v-else>
+          <div class="style-source-form-grid">
+            <label><span>文件名</span><input v-model="sourceForm.filename" autocomplete="off" placeholder="source.txt" /></label>
+            <label><span>文本格式</span><select v-model="sourceForm.media_type"><option value="text/plain">纯文本</option><option value="text/markdown">Markdown</option></select></label>
+          </div>
+          <label class="style-source-body"><span>来源正文</span><textarea v-model="sourceForm.content" rows="10" spellcheck="false" placeholder="粘贴用于分析的完整文本。导入后不会在工作台中回显。"></textarea></label>
+        </template>
+        <footer><span><ShieldCheck :size="14" />系统会拒绝重复文本、路径文件名与无效编码</span><button class="primary" :disabled="!sourceReady || busy">导入并固化{{ sourceInputMode === 'file' && preparedFiles.length > 1 ? `（${preparedFiles.length} 份）` : '' }}</button></footer>
       </form>
     </section>
   </div>

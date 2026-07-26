@@ -126,6 +126,39 @@ class ApplicationBootstrapTests(unittest.TestCase):
         self.assertEqual(snapshot["model_warmup"]["status"], "ready")
         self.assertEqual(snapshot["model_catalog"]["selected_model"], "provider/model")
 
+    def test_user_model_selection_cannot_be_overwritten_by_stale_warmup(self):
+        entered = threading.Event()
+        release = threading.Event()
+
+        def stale_catalog(_config):
+            entered.set()
+            release.wait(timeout=2)
+            return {
+                "selected_model": "opencode/deepseek-v4-flash-free",
+                "available_model_count": 1,
+                "providers": [],
+            }
+
+        service = self._service(
+            catalog_loader=stale_catalog,
+            project_loader=lambda: {"current_project": "", "projects": []},
+            engine_probe=lambda: SimpleNamespace(returncode=0, stderr=""),
+        )
+        self.assertTrue(service.start_warmup())
+        self.assertTrue(entered.wait(timeout=1))
+        service.record_model_catalog({
+            "selected_model": "deepseek/deepseek-chat",
+            "selected_models": {"worker": "deepseek/deepseek-chat"},
+            "available_model_count": 2,
+            "providers": [],
+        })
+        release.set()
+        service._catalog_future.result(timeout=2)
+
+        snapshot = service.snapshot()
+        self.assertEqual(snapshot["model_catalog"]["selected_model"], "deepseek/deepseek-chat")
+        self.assertEqual(snapshot["model_catalog"]["selected_models"]["worker"], "deepseek/deepseek-chat")
+
     def test_current_project_is_exposed_without_raw_project_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = str(Path(temporary).resolve())

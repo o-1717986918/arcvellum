@@ -153,6 +153,72 @@ describe("style atelier store", () => {
     );
   });
 
+  it("imports a file queue as one visible batch and refreshes after all commits", async () => {
+    const fixture = workbenchFixture();
+    let workbenchReads = 0;
+    let sourceWrites = 0;
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/style-lab/sources" && init?.method === "POST") {
+        sourceWrites += 1;
+        return {
+          schema: "arcvellum/style-author-transaction/v1",
+          transaction_id: `style-tx-${sourceWrites}`,
+          operation: "import-source",
+          status: "committed",
+          subject: {
+            author_id: "classic-author",
+            work_id: "work-one",
+            source_id: `source-${sourceWrites + 1}`,
+          },
+        };
+      }
+      if (path.startsWith("/style-lab/workbench")) {
+        workbenchReads += 1;
+        return fixture;
+      }
+      if (path.startsWith("/style-lab/versions/classic-style/v1-stable")) {
+        return {
+          schema: "arcvellum/style-profile-version-detail/v1",
+          style_id: "classic-style",
+          version_id: "v1-stable",
+          content_hash: "sha256:style",
+          author_id: "classic-author",
+          profile_id: "restrained",
+          state: "mounted",
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const { useStyleAtelierStore } = await import("./styleAtelier");
+    const store = useStyleAtelierStore();
+    await store.load();
+    const receipts = await store.importSources([
+      {
+        author_id: "classic-author",
+        work_id: "work-one",
+        filename: "卷一.txt",
+        media_type: "text/plain",
+        content: "第一份来源。",
+        rights_mode: "public-domain",
+        rights_declaration: "该文本已经进入公有领域，可用于文风分析。",
+      },
+      {
+        author_id: "classic-author",
+        work_id: "work-one",
+        filename: "卷二.md",
+        media_type: "text/markdown",
+        content: "第二份来源。",
+        rights_mode: "public-domain",
+        rights_declaration: "该文本已经进入公有领域，可用于文风分析。",
+      },
+    ]);
+
+    expect(receipts).toHaveLength(2);
+    expect(sourceWrites).toBe(2);
+    expect(workbenchReads).toBe(2);
+    expect(store.notice).toContain("2 份来源");
+  });
+
   it("binds an exact mount confirmation to the latest impact preview", async () => {
     const initial = workbenchFixture();
     const target = {

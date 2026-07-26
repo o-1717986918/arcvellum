@@ -651,6 +651,9 @@ body.dragging-immersive-console .immersive-console-panel { transition: none; }
 .role-model-list strong { font-size: 10px; }
 .role-model-list p { margin: 3px 0 0; color: var(--ink-500); font-size: 8px; line-height: 1.45; }
 .role-model-list select { width: 100%; min-width: 0; }
+.role-model-save-state { display: grid; place-items: center; width: 28px; height: 28px; color: var(--ink-500); border: 1px solid var(--mineral-200); border-radius: 4px; transition: color .18s ease, border-color .18s ease, background .18s ease; }
+.role-model-save-state.saved { color: var(--jade-600); background: color-mix(in srgb, var(--jade-500) 10%, transparent); border-color: color-mix(in srgb, var(--jade-500) 42%, var(--mineral-200)); }
+.role-model-save-state .spin { animation: spin .8s linear infinite; }
 .provider-list { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 
 .onboarding-tour { position: fixed; z-index: 300; inset: 0; pointer-events: none; }
@@ -886,11 +889,11 @@ html[data-arcvellum-theme="modern"] .startup-paper { background-image: linear-gr
   .choice-options { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .task-wave { display: none; }
-  .orrery-node.recent .node-orbit { animation: none; }
-  .immersive-console-panel::before { animation: none; }
-  .sidebar-orrery-entry::before { animation: none; }
-  .onboarding-highlight::after { animation: none; }
+  html:not([data-arcvellum-motion="full"]) .task-wave { display: none; }
+  html:not([data-arcvellum-motion="full"]) .orrery-node.recent .node-orbit { animation: none; }
+  html:not([data-arcvellum-motion="full"]) .immersive-console-panel::before { animation: none; }
+  html:not([data-arcvellum-motion="full"]) .sidebar-orrery-entry::before { animation: none; }
+  html:not([data-arcvellum-motion="full"]) .onboarding-highlight::after { animation: none; }
 }
 
 @media (max-width: 620px) {

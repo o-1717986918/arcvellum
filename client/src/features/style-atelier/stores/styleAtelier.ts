@@ -117,14 +117,38 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
   }
 
   async function importSource(payload: StyleSourceCreatePayload): Promise<StyleTransactionReceipt> {
-    return runAuthoring(
-      () => importStyleSource(payload),
-      (receipt) => {
+    const receipts = await importSources([payload]);
+    return receipts[0];
+  }
+
+  async function importSources(payloads: StyleSourceCreatePayload[]): Promise<StyleTransactionReceipt[]> {
+    if (!payloads.length) return [];
+    authoringBusy.value = true;
+    error.value = "";
+    notice.value = "";
+    const receipts: StyleTransactionReceipt[] = [];
+    try {
+      for (const payload of payloads) {
+        const receipt = await importStyleSource(payload);
+        receipts.push(receipt);
         selectedAuthorId.value = receipt.subject.author_id;
         selectedWorkId.value = receipt.subject.work_id || "";
-      },
-      "来源已经固化，正文不会在工作台中直接回显。",
-    );
+      }
+      await refreshWorkbench();
+      notice.value = receipts.length === 1
+        ? "来源已经固化，正文不会在工作台中直接回显。"
+        : `${receipts.length} 份来源已经固化，可以继续构建文风档案。`;
+      return receipts;
+    } catch (cause) {
+      if (receipts.length) await refreshWorkbench();
+      const reason = messageFor(cause, "这项文风资料操作没有完成。");
+      error.value = receipts.length
+        ? `已固化 ${receipts.length} 份来源，其余文件未完成：${reason}`
+        : reason;
+      throw cause;
+    } finally {
+      authoringBusy.value = false;
+    }
   }
 
   async function previewMount(version = selectedVersion.value): Promise<void> {
@@ -359,6 +383,7 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
     createAuthor,
     createWork,
     importSource,
+    importSources,
     previewMount,
     confirmMount,
     dismissMountPreview,

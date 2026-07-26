@@ -8,6 +8,7 @@ import {
   normalizeOrreryMotion,
   normalizeOrreryRenderQuality,
   normalizeOrreryTheme,
+  resolveOrreryMotion,
 } from "./orreryPreferences";
 
 describe("orrery preferences", () => {
@@ -33,7 +34,9 @@ describe("orrery preferences", () => {
 
   it("normalizes visual comfort and quality preferences", () => {
     expect(normalizeOrreryMotion("still")).toBe("still");
-    expect(normalizeOrreryMotion("unknown")).toBe("full");
+    expect(normalizeOrreryMotion("unknown")).toBe("system");
+    expect(resolveOrreryMotion("system", true)).toBe("reduced");
+    expect(resolveOrreryMotion("full", true)).toBe("full");
     expect(normalizeOrreryDepth("flat")).toBe("flat");
     expect(normalizeOrreryDepth("unknown")).toBe("balanced");
     expect(normalizeOrreryRenderQuality("efficient")).toBe("efficient");
