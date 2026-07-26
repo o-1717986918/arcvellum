@@ -1184,3 +1184,35 @@ W6 只接入已有合同，不得重写 Broker、再造 Runtime 或第二套任�
 3. 引入 Plan Lint、Plan Compiler、任务 DAG、Context Ledger 与 Mutation Receipt；
 4. 用本批 `ResourceClaim` 做并发 admission，不让并发越过文学依赖或正式写回边界；
 5. 再逐步开放推演深度、修订策略、场景库存与无人值守 campaign。
+
+## W6-1：AO-0 编排边界与正式能力目录
+
+**状态：完成。**
+
+- 新增 ADR-001，固定五类事实分区和“计划属于 Future Intent”的所有权原则；
+- 旧 `tasking/orchestration.py` 的外部平台静态蓝图实现已迁移至
+  `platforms/orchestration_blueprint.py`，根模块和旧 tasking 路径保留兼容 facade；
+- 新增 Engine `orchestration/` 只读协议：
+  - `PlanNodeKind` 枚举覆盖 15 类首版正式计划节点；
+  - `FormalTaskCapability` 绑定 route、允许 task type、scope、角色、资源模板和可验证贡献；
+  - `GateId` 提供稳定机器 Gate ID，高风险场景可确定性注入 `full-roleplay`；
+  - `DEFAULT_ROUTE_ORDER` 与当前 Autopilot `ROUTE_ORDER` 由测试锁定等价；
+- 新增 Studio `orchestration/settings.py`，定义 fixed、shadow、assisted、
+  supervised_adaptive 和 full_adaptive 模式；feature 默认关闭，关闭时 effective mode
+  无条件为 fixed；
+- 尚未接入 Autopilot、Worker 或 API，当前运行行为没有变化；Engine catalog 不包含命令，
+  Planner 未来只能通过 Compiler 解析正式 task package。
+
+本批 focused verification：
+
+- 编排基础、配置、Autopilot 与架构审计测试：38 passed；
+- `python -m unittest discover -s tests -v`：556 passed，1 skipped；
+- Architecture Audit：无新增 file/function debt、dependency violation 或 import cycle；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+下一批进入 W6-2 / AO-1：
+
+1. 建立 `CreativeExecutionPlanCandidate`、机器字段隔离、Freedom Budget 和 Progress Contract；
+2. 建立不可被候选覆盖的编排宪法；
+3. 用 `DefaultPlanFactory` 把固定 route 表达为正式计划；
+4. 以 route 顺序、节点角色、Gate 集和 task-next 投影证明默认计划等价。

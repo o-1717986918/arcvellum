@@ -161,6 +161,33 @@ tool call、取消、本地执行和能力 ID 投影。Adapter 仍只执行任�
 Capability Broker 的结构化调用通道由 W6 编排/Runtime 接入；未提供通道的外部 Runner
 不得用 Shell、网络或目录遍历模拟受控能力。
 
+### Adaptive Orchestration Boundary
+
+自适应编排遵守 [ADR-001](adr-001-adaptive-plans-are-future-intent.md)：计划属于
+`Future Intent`，不得成为 Canon、当前人物状态、历史正文或任务完成事实。
+
+`src/literary_engineering_studio_engine/orchestration/` 是只读协议边界：
+
+- `task_catalog.py` 拥有可编排节点枚举、正式 route/task type 绑定和角色/资源模板；
+- `gate_catalog.py` 拥有稳定 Gate ID 与基于风险的机器注入规则；
+- `route_macros.py` 投影现有固定 route 顺序；
+- Engine 不调用 Planner、Runtime 或 Studio persistence。
+
+`src/literary_engineering_studio/orchestration/` 是 Studio 计划域：
+
+- 只消费 Engine catalog 和正式 workflow state；
+- 生成候选计划、Lint、CompiledTaskGraph、Simulation 与安全投影；
+- 不直接调用 route 实现，不拥有 task lifecycle，不直接写正式项目事实；
+- Scheduler 只能通过既有 `AgentWorker` 运行 Engine 已签发的 task package。
+
+旧 `tasking/orchestration.py` 已迁往
+`platforms/orchestration_blueprint.py`；旧路径只是兼容 facade。静态 LangGraph/Dify
+蓝图不是运行时计划，新的 Studio 编排实现不得依赖该 facade。
+
+配置中的自适应 feature 默认关闭。关闭时 `effective_mode` 必须为 `fixed`，即使配置里
+残留其他 mode，也不能改变当前 Autopilot 行为。AO-0 至 AO-2 期间禁止直接开放
+`assisted`、`supervised_adaptive` 或 `full_adaptive`。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

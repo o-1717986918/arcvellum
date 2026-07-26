@@ -81,6 +81,7 @@ def default_config() -> dict[str, Any]:
             "auto_run_task_command": True,
             "pause_on_human_gate": True,
         },
+        "orchestration": _default_orchestration_config(),
         "agent_runners": {
             "opencode": {
                 "enabled": True,
@@ -137,14 +138,20 @@ def default_config() -> dict[str, Any]:
                 }
             ],
         },
-        "server": {
-            "host": "127.0.0.1",
-            "port": 8791,
-        },
+        "server": {"host": "127.0.0.1", "port": 8791},
         "updates": {
             "channel": "stable",
             "last_checked_at": "",
         },
+    }
+
+
+def _default_orchestration_config() -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "mode": "fixed",
+        "strategy_preset": "balanced",
+        "constitution_version": "1",
     }
 
 
