@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 
 from .gate_catalog import mandatory_gates_for
 
 
-class PlanNodeKind(StrEnum):
+class PlanNodeKind(str, Enum):
     CREATIVE_ANALYSIS = "creative_analysis"
     CONTEXT_PREPARATION = "context_preparation"
     ASSET_CANDIDATE = "asset_candidate"

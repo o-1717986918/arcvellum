@@ -1,0 +1,30 @@
+schema: arcvellum/orchestration-constitution/v1
+version: "1"
+truth_partition:
+  plan: future-intent
+  formal_prose: historical-truth-after-promotion
+  canon: stable-knowledge-after-promotion
+  character_state: current-state-after-apply
+rules:
+  - id: prose-single-writer
+    severity: error
+  - id: prose-requires-contracts
+    severity: error
+  - id: no-gate-deletion
+    severity: error
+  - id: revision-requires-fresh-review
+    severity: error
+  - id: formal-mutation-requires-patch
+    severity: error
+  - id: no-arbitrary-command
+    severity: error
+  - id: context-broker-mandatory-sources
+    severity: error
+  - id: resource-conflict-check
+    severity: error
+  - id: longform-inventory-consistency
+    severity: error
+  - id: subagent-cannot-author-prose
+    severity: error
+  - id: planning-is-not-formal-progress
+    severity: error

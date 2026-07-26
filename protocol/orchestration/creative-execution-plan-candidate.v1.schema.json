@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/creative-execution-plan-candidate/v1",
+  "title": "ArcVellum Creative Execution Plan Candidate",
+  "type": "object",
+  "required": [
+    "schema",
+    "scope",
+    "objective",
+    "interpretation",
+    "strategy",
+    "task_nodes",
+    "replan_rules",
+    "freedom_request"
+  ],
+  "properties": {
+    "schema": {
+      "const": "arcvellum/creative-execution-plan-candidate/v1"
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interpretation": {
+      "$ref": "#/$defs/interpretation"
+    },
+    "strategy": {
+      "$ref": "#/$defs/strategy"
+    },
+    "task_nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/taskNode"
+      }
+    },
+    "replan_rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/replanRule"
+      }
+    },
+    "freedom_request": {
+      "$ref": "#/$defs/freedomBudget"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "required": ["kind", "key"],
+      "properties": {
+        "kind": {
+          "enum": ["book", "volume", "chapter", "scene"]
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "volume_id": {
+          "type": "string"
+        },
+        "chapter_ids": {
+          "$ref": "#/$defs/stringList"
+        },
+        "scene_ids": {
+          "$ref": "#/$defs/stringList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "interpretation": {
+      "type": "object",
+      "required": ["dramatic_problem", "reader_effect", "chapter_function"],
+      "properties": {
+        "dramatic_problem": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reader_effect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chapter_function": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["statement", "evidence_refs"],
+            "properties": {
+              "statement": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/stringList"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "uncertainties": {
+          "$ref": "#/$defs/stringList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "strategy": {
+      "type": "object",
+      "properties": {
+        "scene_inventory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["scene_ref", "function", "pace", "roleplay_depth"],
+            "properties": {
+              "scene_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "function": {
+                "type": "string",
+                "minLength": 1
+              },
+              "pace": {
+                "type": "string",
+                "minLength": 1
+              },
+              "roleplay_depth": {
+                "enum": ["light", "targeted", "full"]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "branch_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "revision_policy": {
+          "enum": ["targeted_then_rewrite", "rewrite", "return_to_branch"]
+        },
+        "narrative_distance": {
+          "type": "string"
+        },
+        "promise_policy": {
+          "type": "object",
+          "properties": {
+            "resolve": {
+              "$ref": "#/$defs/stringList"
+            },
+            "defer": {
+              "$ref": "#/$defs/stringList"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "taskNode": {
+      "type": "object",
+      "required": ["node_id", "kind", "scope_refs", "contribution"],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "kind": {
+          "enum": [
+            "creative_analysis",
+            "context_preparation",
+            "asset_candidate",
+            "roleplay_simulation",
+            "scene_branch_simulation",
+            "branch_selection",
+            "scene_composition",
+            "formal_scene_prose",
+            "formal_scene_review",
+            "scene_revision",
+            "state_evolution",
+            "canon_evolution",
+            "chapter_audit",
+            "longform_audit",
+            "formal_export"
+          ]
+        },
+        "scope_refs": {
+          "$ref": "#/$defs/stringList"
+        },
+        "depends_on": {
+          "$ref": "#/$defs/stringList"
+        },
+        "requested_capabilities": {
+          "$ref": "#/$defs/stringList"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean"]
+          }
+        },
+        "contribution": {
+          "type": "object",
+          "required": ["kind", "description"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "progress_contract": {
+          "$ref": "#/$defs/progressContract"
+        }
+      },
+      "additionalProperties": false
+    },
+    "progressContract": {
+      "type": "object",
+      "properties": {
+        "formal_artifact_delta": {
+          "$ref": "#/$defs/stringList"
+        },
+        "obligations_fulfilled": {
+          "$ref": "#/$defs/stringList"
+        },
+        "obligations_deferred": {
+          "$ref": "#/$defs/stringList"
+        },
+        "target_hanzi": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "word_tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "maximum_open_review_notes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expected_state_patch": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "replanRule": {
+      "type": "object",
+      "required": ["trigger", "action"],
+      "properties": {
+        "trigger": {
+          "enum": [
+            "review_failed",
+            "prose_failed_twice",
+            "new_character_detected",
+            "canon_conflict",
+            "branch_scores_are_close",
+            "word_budget_drift",
+            "scene_inventory_insufficient",
+            "provider_unavailable",
+            "formal_state_changed",
+            "user_direction_changed"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "freedomBudget": {
+      "type": "object",
+      "required": [
+        "max_added_tasks",
+        "max_replans_per_scope",
+        "max_parallel_read_tasks",
+        "max_branch_count",
+        "max_research_tasks",
+        "max_research_cost",
+        "max_analysis_to_production_ratio",
+        "max_plan_depth",
+        "max_plan_stall_cycles"
+      ],
+      "properties": {
+        "max_added_tasks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_replans_per_scope": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_parallel_read_tasks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_branch_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_research_tasks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_research_cost": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_analysis_to_production_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_plan_depth": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_plan_stall_cycles": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  }
+}

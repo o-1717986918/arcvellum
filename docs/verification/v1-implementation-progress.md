@@ -1216,3 +1216,46 @@ W6 只接入已有合同，不得重写 Broker、再造 Runtime 或第二套任�
 2. 建立不可被候选覆盖的编排宪法；
 3. 用 `DefaultPlanFactory` 把固定 route 表达为正式计划；
 4. 以 route 顺序、节点角色、Gate 集和 task-next 投影证明默认计划等价。
+
+## W6-2：AO-1 计划契约、编排宪法与默认计划
+
+**状态：完成。**
+
+- `CreativeExecutionPlanCandidate` 与正式 `CreativeExecutionPlan` 已分离：
+  - Candidate 只包含 scope、目标、作品理解、策略、节点、重规划规则和 Freedom Budget；
+  - plan ID、revision、项目指纹、宪法版本、创建时间、Gate 绑定、route macro、编译 digest、
+    审批者和生命周期状态全部由机器拥有；
+  - Candidate 伪造机器字段时字段被删除并留下 warning，不能进入正式 DTO；
+  - task node 出现 `command`、任意 path 或其他未声明字段时直接拒绝。
+- 首版枚举与不可变合同覆盖：
+  - book/volume/chapter/scene scope；
+  - light/targeted/full RP 深度；
+  - 三种修订策略；
+  - 十种结构化重规划触发器；
+  - scene inventory、Promise policy、Progress Contract、Freedom Budget 和任务贡献。
+- `constitution_v1()` 固定 11 条 error 级规则，包括单一正文 Writer、正文前置契约、禁止删
+  Gate、修订后 fresh review、正式变化必须 patch、禁止任意命令、Context Broker、资源冲突、
+  长篇库存、subagent 禁写正文和 planning 不算正式进度。
+- `DefaultPlanFactory` 用 `fixed-formal-route.v1` 包装当前七条 route：
+  - 不创建第二套 task 节点；
+  - Freedom Budget 为零扩展、零重规划、单执行槽；
+  - plan ID 绑定项目 fingerprint；
+  - Engine 等价检查拒绝 route 重排、未知 route 或 macro 篡改。
+- 新增 candidate/formal plan JSON schema 与 constitution YAML；测试锁定运行枚举、schema ID
+  和规则 ID 一致。
+- 修正新枚举实现为 `str, Enum`，继续满足项目声明的 Python 3.10+，不依赖 3.11
+  `StrEnum`。
+
+本批退出证据：
+
+- `python -m unittest discover -s tests -v`：561 passed，1 skipped；
+- Architecture Audit：36 个既有 file debt、226 个既有 function debt、0 cycle，无新增债务；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+下一批进入 W6-3 / AO-2：
+
+1. Candidate Normalizer 绑定机器 ID、revision、项目 fingerprint、宪法和 Gate；
+2. Plan Lint 阻止 DAG 环、孤点、漏前置契约、双 Writer、超 Freedom Budget 和任意能力；
+3. Plan Compiler 只生成对现有正式任务的 binding，不签发或完成 task；
+4. Plan Simulator 以当前正式状态预演可执行性、资源冲突和空转风险；
+5. measure-only 记录编译/模拟开销，但不改变 fixed route。

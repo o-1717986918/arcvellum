@@ -188,6 +188,20 @@ Capability Broker 的结构化调用通道由 W6 编排/Runtime 接入；未提�
 残留其他 mode，也不能改变当前 Autopilot 行为。AO-0 至 AO-2 期间禁止直接开放
 `assisted`、`supervised_adaptive` 或 `full_adaptive`。
 
+AO-1 合同进一步固定：
+
+- `contracts.py` 只拥有不可变计划 DTO、枚举与 JSON-safe 投影；
+- `candidate.py` 是模型候选输入边界，机器字段只会被删除并形成 warning，节点中的任意
+  command/path 字段直接拒绝；
+- `constitution.py` 是不可被模型候选覆盖的规则源；
+- `defaults.py` 只把现有 route 顺序包成 `fixed-formal-route.v1`，不自行创建任务节点；
+- `protocol/orchestration/` 保存跨语言 schema 和宪法投影；运行时真相仍由版本化 Python
+  contract 与 Engine catalog 验证。
+
+默认计划使用空 `task_nodes` 加 machine-owned route macro 表达兼容行为。这是有意设计：
+它把每一步继续交给现有 Task Registry 动态领取，避免把当前 route 内部状态复制成静态
+DAG。AO-2 Compiler 只会把显式自适应节点编译为绑定；默认 macro 仍沿用正式 lifecycle。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

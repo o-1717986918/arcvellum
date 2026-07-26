@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 
-class OrchestrationMode(StrEnum):
+class OrchestrationMode(str, Enum):
     FIXED = "fixed"
     SHADOW = "shadow"
     ASSISTED = "assisted"
@@ -15,7 +15,7 @@ class OrchestrationMode(StrEnum):
     FULL_ADAPTIVE = "full_adaptive"
 
 
-class StrategyPreset(StrEnum):
+class StrategyPreset(str, Enum):
     CONSERVATIVE = "conservative"
     BALANCED = "balanced"
     EXPLORATORY = "exploratory"

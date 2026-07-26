@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from typing import Mapping
 
 
-class GateId(StrEnum):
+class GateId(str, Enum):
     CONTEXT = "context"
     CANON_CONTEXT = "canon-context"
     CHARACTER_STATE = "character-state"

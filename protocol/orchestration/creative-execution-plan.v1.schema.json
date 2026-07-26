@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/creative-execution-plan/v1",
+  "title": "ArcVellum Creative Execution Plan",
+  "type": "object",
+  "required": [
+    "schema",
+    "plan_id",
+    "revision",
+    "base_project_fingerprint",
+    "constitution_version",
+    "created_at",
+    "lifecycle_status",
+    "scope",
+    "objective",
+    "interpretation",
+    "strategy",
+    "task_nodes",
+    "replan_rules",
+    "freedom_budget",
+    "route_macro_id",
+    "route_sequence",
+    "mandatory_gate_nodes",
+    "compiled_graph_digest",
+    "approved_by",
+    "candidate_warnings"
+  ],
+  "properties": {
+    "schema": {
+      "const": "arcvellum/creative-execution-plan/v1"
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^plan-[a-z0-9-]+$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "base_project_fingerprint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "constitution_version": {
+      "const": "1"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "lifecycle_status": {
+      "enum": ["normalized", "reviewed", "active", "paused", "stale", "complete", "rejected"]
+    },
+    "route_macro_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "route_sequence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "mandatory_gate_nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node_id", "gate_ids"],
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "gate_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "compiled_graph_digest": {
+      "type": "string"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "candidate_warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scope": {
+      "type": "object"
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interpretation": {
+      "type": "object"
+    },
+    "strategy": {
+      "type": "object"
+    },
+    "task_nodes": {
+      "type": "array"
+    },
+    "replan_rules": {
+      "type": "array"
+    },
+    "freedom_budget": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
