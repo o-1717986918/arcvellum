@@ -12,7 +12,12 @@ from literary_engineering_studio_engine.foundation.atomic_io import (
     atomic_write_batch,
 )
 
-from .audit_integrity import validate_revision_chain, verify_semantic_chain
+from .agent_protocol import OrchestrationReviewReceipt
+from .audit_integrity import (
+    validate_review_chain,
+    validate_revision_chain,
+    verify_semantic_chain,
+)
 from .contracts import CompiledTaskGraph, CreativeExecutionPlan, to_primitive
 from .lint import PlanLintResult
 from .plan_index import CreativePlanIndex
@@ -46,6 +51,8 @@ def persist_shadow_revision(
     graph: CompiledTaskGraph,
     lint_result: PlanLintResult,
     simulation: PlanSimulationResult,
+    review_receipt: OrchestrationReviewReceipt | None = None,
+    review_context_digest: str | None = None,
 ) -> OrchestrationAuditArtifacts:
     root = project_root.expanduser().resolve()
     validate_revision_chain(
@@ -55,12 +62,24 @@ def persist_shadow_revision(
         lint_result,
         simulation,
     )
+    if review_receipt is not None:
+        validate_review_chain(
+            review_receipt,
+            plan=plan,
+            graph=graph,
+            lint_result=lint_result,
+            simulation=simulation,
+            context_ledger_digest=str(review_context_digest or ""),
+        )
+    elif review_context_digest is not None:
+        raise ValueError("review context digest requires an orchestration review receipt")
     prepared = _prepare_shadow_revision(
         candidate_payload,
         plan=plan,
         graph=graph,
         lint_result=lint_result,
         simulation=simulation,
+        review_payload=review_receipt.as_dict() if review_receipt is not None else None,
     )
     record = _index_record(
         root,
@@ -68,6 +87,7 @@ def persist_shadow_revision(
         graph=graph,
         lint_result=lint_result,
         simulation=simulation,
+        review_payload=review_receipt.as_dict() if review_receipt is not None else None,
         revision_digest=prepared.revision_digest,
         files=dict(prepared.relative_files),
         revision_name=prepared.revision_name,
@@ -157,6 +177,7 @@ def _prepare_shadow_revision(
     graph: CompiledTaskGraph,
     lint_result: PlanLintResult,
     simulation: PlanSimulationResult,
+    review_payload: dict[str, Any] | None,
 ) -> _PreparedShadowRevision:
     revision_name = f"revision_{plan.revision:04d}"
     relative_root = Path("workflow") / "orchestration" / "plans" / plan.plan_id
@@ -167,6 +188,7 @@ def _prepare_shadow_revision(
         graph=graph,
         lint_result=lint_result,
         simulation=simulation,
+        review_payload=review_payload,
     )
     rendered = _render_payloads(payloads)
     content_digests = {name: _sha256(text) for name, text in rendered.items()}
@@ -200,18 +222,20 @@ def _audit_payloads(
     graph: CompiledTaskGraph,
     lint_result: PlanLintResult,
     simulation: PlanSimulationResult,
+    review_payload: dict[str, Any] | None,
 ) -> dict[str, dict[str, Any]]:
+    review = review_payload or {
+        "schema": "arcvellum/orchestration-review/v1",
+        "status": "not_required_shadow",
+        "message": "Shadow compilation does not authorize activation.",
+    }
     return {
         f"{revision_name}.candidate.json": candidate_payload,
         f"{revision_name}.plan.json": to_primitive(plan),
         f"{revision_name}.compiled_graph.json": to_primitive(graph),
         f"{revision_name}.lint.json": _lint_payload(lint_result),
         f"{revision_name}.simulation.json": to_primitive(simulation),
-        f"{revision_name}.review.json": {
-            "schema": "arcvellum/orchestration-review/v1",
-            "status": "not_required_shadow",
-            "message": "Shadow compilation does not authorize activation.",
-        },
+        f"{revision_name}.review.json": review,
     }
 
 
@@ -321,13 +345,14 @@ def _index_record(
     graph: CompiledTaskGraph,
     lint_result: PlanLintResult,
     simulation: PlanSimulationResult,
+    review_payload: dict[str, Any] | None,
     revision_digest: str,
     files: dict[str, str],
     revision_name: str,
 ) -> dict[str, Any]:
     prefix = f"workflow/orchestration/plans/{plan.plan_id}"
 
-    def reference(suffix: str, status: str = "") -> dict[str, str]:
+    def reference(suffix: str, status: str = "") -> dict[str, Any]:
         path = f"{prefix}/{revision_name}.{suffix}.json"
         value = {"path": path, "sha256": files[path]}
         if status:
@@ -348,7 +373,14 @@ def _index_record(
         "compiled": reference("compiled_graph", graph.graph_digest),
         "lint": reference("lint", lint_result.status),
         "simulation": reference("simulation", simulation.status),
-        "review": reference("review", "not_required_shadow"),
+        "review": {
+            **reference(
+                "review",
+                str((review_payload or {}).get("status") or "not_required_shadow"),
+            ),
+            "activation_eligible": False,
+            "lifecycle": "shadow_observation",
+        },
         "digest": revision_digest,
         "created_at": plan.created_at,
     }

@@ -1,5 +1,10 @@
 """Studio-owned adaptive planning above the formal Engine lifecycle."""
 
+from .agent_transport import (
+    OrchestrationAgentResponse,
+    OrchestrationAgentTransport,
+    RuntimeOrchestrationAgentTransport,
+)
 from .candidate import MACHINE_OWNED_FIELDS, parse_plan_candidate
 from .compiler import PlanCompilationError, compile_plan, compiled_graph_digest
 from .compiler_registry import CompilerRegistry
@@ -45,6 +50,12 @@ from .settings import (
     StrategyPreset,
     orchestration_settings,
 )
+from .service import ShadowOrchestrationService
+from .shadow_run import (
+    FixedRouteComparison,
+    ShadowOrchestrationResult,
+    ShadowPlanningInput,
+)
 from .profiles import (
     OrchestrationAgentProfile,
     OrchestrationAgentRole,
@@ -85,11 +96,14 @@ __all__ = [
     "CreativePlanEventType",
     "CREATIVE_PLAN_EVENT_SCHEMA",
     "DefaultPlanFactory",
+    "FixedRouteComparison",
     "FreedomBudget",
     "NormalizationContext",
     "OrchestrationMode",
     "OrchestrationAgentProfile",
+    "OrchestrationAgentResponse",
     "OrchestrationAgentRole",
+    "OrchestrationAgentTransport",
     "OrchestrationConstitution",
     "OrchestrationAuditArtifacts",
     "OrchestrationSettings",
@@ -106,11 +120,15 @@ __all__ = [
     "ReplanTrigger",
     "RevisionPolicy",
     "RoleplayDepth",
+    "RuntimeOrchestrationAgentTransport",
     "FormalTaskObservation",
     "FormalTaskStatus",
     "SimulatedNode",
     "SimulatedResourceConflict",
     "ShadowPlanEvaluation",
+    "ShadowOrchestrationResult",
+    "ShadowOrchestrationService",
+    "ShadowPlanningInput",
     "ShadowStageTiming",
     "StrategyPreset",
     "TaskBinding",

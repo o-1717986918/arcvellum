@@ -210,7 +210,7 @@ class PlannerProtocolTests(unittest.TestCase):
         kwargs["reviewer_session_id"] = "session-b"
         receipt = seal_orchestration_review(judgment, **kwargs)
         self.assertEqual(receipt.verdict, OrchestrationReviewVerdict.PASS_WITH_NOTES)
-        self.assertTrue(receipt.activation_eligible)
+        self.assertFalse(receipt.activation_eligible)
         self.assertEqual(receipt.as_dict()["schema"], REVIEW_RECEIPT_SCHEMA)
         empty_notes = parse_review_judgment(
             {

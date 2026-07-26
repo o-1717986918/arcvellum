@@ -1515,11 +1515,56 @@ context 失败只能留下 fallback 证据，不得改变 fixed route。
 
 ### W6-4D：Planner/Reviewer Shadow Service 与退出审计
 
+**状态：完成。**
+
 1. Planner 和 Reviewer 通过独立协议会话运行，只在 orchestration audit 目录写候选和证据；
 2. Reviewer 不能复用 Planner session，不能修改候选，也不能直接激活计划；
 3. 对照 fixed route 记录计划质量、额外开销、Gate 注入和 fallback 原因；
 4. 证明 feature-off、Planner 失败、Review 失败和 stale context 均回退固定路线；
 5. 完成 AO-3 Architecture Review、独立 reviewer、全量 Python 测试、架构审计和 Git 封口。
+
+实现结果：
+
+- 新增只读 `RuntimeOrchestrationAgentTransport`，当前只允许具有角色隔离能力的
+  OpenCode；Planner 和 Reviewer 使用不同真实 session 及独立 audit workspace；
+- Planner 的流式 delta 只作为瞬时展示数据，durable ledger 从机器封装的 typed
+  completed candidate 开始；
+- Reviewer 必须读取未截断的精确候选、normalized plan、Lint、Compiled Graph 和
+  Simulation；证据超过边界时 fail closed；
+- Review Receipt 绑定 plan/revision、Reviewer context、candidate、plan、graph、
+  simulation digest 和独立 session，跨计划或串线 Receipt 在持久化前被拒绝；
+- Shadow revision 固定为 `activation_eligible=false`，既有公共 activation API 对其
+  fail closed；`pass_with_notes` 不作为 clean pass；
+- 普通 Runtime、连接、fingerprint 和审计写盘异常均回退 fixed route；stale context 在
+  Planner 后、Reviewer 后和紧贴持久化前重复检查；
+- 每次 Shadow run 记录 fixed route 对照、Gate 数、阶段状态、耗时和 fallback 原因，
+  但不接入 Autopilot、不改变正式项目状态。
+
+退出证据：
+
+- AO-3D 聚焦及攻击型测试：30 passed；
+- `python -m unittest discover -s tests -v`：628 passed，1 skipped；
+- Prompt Registry：54 assets、89 task prompt IDs，0 error、0 warning；
+- Architecture Audit：35 个既有 file debt、224 个既有 function debt、0 cycle；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed；
+- 独立审阅首轮 4 P1/3 P2，修复复核后零 P0、零 P1；最后一个 stale P2 已通过
+  持久化前二次检查收口；
+- 架构评审见
+  `docs/architecture/reviews/ao-3d-planner-reviewer-shadow-service-review.md`。
+
+### W6-4E：星仪 W1 文档差距补缺
+
+**状态：待实施，必须先于 W6-5。**
+
+实际代码与 W1 文档复核确认星仪基础完整，但存在不能等到 W6-9 的产品缺口：
+
+1. scene 粒度下点击章节仍以首场景提交 focus，镜头簇重心与语义作用域不一致；
+2. 后端 `relation_profiles` 尚未进入前端 Semantic Lens、Legend 和渲染 LOD；
+3. character focus、焦点历史、节点与正文双向定位、小地图/beacon、搜索和视觉回归仍缺。
+
+其中前两项为 W1 P1，先完成焦点一致性与关系可见性；其余按 W1-UX 分批实现。AO-8 只
+增加计划、Gate、Patch 和 Agent Observatory 投影，不得拿未来编排 UI 掩盖现有星仪缺口。
+完整审计见 `docs/architecture/reviews/orrery-w1-document-gap-audit.md`。
 
 ### W6 后续完整阶段映射
 

@@ -136,7 +136,11 @@ def index_record(
         "compiled": references["compiled"],
         "lint": {**references["lint"], "status": "pass"},
         "simulation": {**references["simulation"], "status": "pass"},
-        "review": {**references["review"], "status": review_status},
+        "review": {
+            **references["review"],
+            "status": review_status,
+            "activation_eligible": True,
+        },
         "digest": record_digest(plan_id),
         "created_at": "2026-07-26T00:00:00+00:00",
     }

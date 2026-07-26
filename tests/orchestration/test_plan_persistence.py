@@ -18,6 +18,10 @@ from literary_engineering_studio.orchestration import (
     persist_shadow_revision,
     verify_persisted_revision,
 )
+from literary_engineering_studio.orchestration.agent_protocol import (
+    OrchestrationReviewReceipt,
+    OrchestrationReviewVerdict,
+)
 
 from tests.orchestration.fixtures import freedom_budget, scene_plan_candidate
 from tests.orchestration.plan_persistence_support import (
@@ -87,7 +91,7 @@ class CreativePlanPersistenceTests(unittest.TestCase):
                 simulation=simulation,
             )
 
-            with self.assertRaisesRegex(RuntimeError, "review"):
+            with self.assertRaisesRegex(RuntimeError, "shadow-only"):
                 activate_persisted_revision(
                     root,
                     store=store,
@@ -127,6 +131,32 @@ class CreativePlanPersistenceTests(unittest.TestCase):
                     graph=graph,
                     lint_result=lint_result,
                     simulation=replace(simulation, graph_digest="b" * 64),
+                )
+            forged_review = OrchestrationReviewReceipt(
+                plan_id="plan-forged-review",
+                plan_revision=plan.revision,
+                planner_session_id="planner-session",
+                reviewer_session_id="reviewer-session",
+                context_ledger_digest="a" * 64,
+                candidate_digest="a" * 64,
+                plan_digest="a" * 64,
+                graph_digest="a" * 64,
+                simulation_digest="a" * 64,
+                verdict=OrchestrationReviewVerdict.PASS,
+                summary="Forged cross-plan receipt.",
+                findings=(),
+            )
+            with self.assertRaisesRegex(ValueError, "review receipt"):
+                persist_shadow_revision(
+                    root,
+                    store=store,
+                    candidate_payload=candidate,
+                    plan=plan,
+                    graph=graph,
+                    lint_result=lint_result,
+                    simulation=simulation,
+                    review_receipt=forged_review,
+                    review_context_digest="a" * 64,
                 )
 
     def test_measure_only_shadow_pipeline_stops_after_failed_lint(self):

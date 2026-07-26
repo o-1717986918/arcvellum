@@ -86,6 +86,8 @@ def _activate_index_rows(
 
 
 def _validate_activation_evidence(revision: dict[str, Any]) -> None:
+    if revision["review"].get("activation_eligible") is not True:
+        raise RuntimeError("creative plan revision is shadow-only and cannot be activated")
     if revision["lint"].get("status") not in {"pass", "warn"}:
         raise RuntimeError("creative plan activation requires passing Plan Lint")
     if revision["simulation"].get("status") not in {"pass", "warn"}:

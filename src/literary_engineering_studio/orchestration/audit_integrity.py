@@ -6,6 +6,7 @@ import hashlib
 import json
 from typing import Any
 
+from .agent_protocol import OrchestrationReviewReceipt
 from .candidate import parse_plan_candidate
 from .compiler import compiled_graph_digest
 from .contracts import CompiledTaskGraph, CreativeExecutionPlan, to_primitive
@@ -35,6 +36,37 @@ def validate_revision_chain(
     _validate_simulation(plan, graph, simulation)
 
 
+def validate_review_chain(
+    receipt: OrchestrationReviewReceipt,
+    *,
+    plan: CreativeExecutionPlan,
+    graph: CompiledTaskGraph,
+    lint_result: PlanLintResult,
+    simulation: PlanSimulationResult,
+    context_ledger_digest: str,
+) -> None:
+    expected = (
+        plan.plan_id,
+        plan.revision,
+        context_ledger_digest,
+        plan.candidate_digest,
+        lint_result.plan_digest,
+        graph.graph_digest,
+        canonical_json_digest(to_primitive(simulation)),
+    )
+    observed = (
+        receipt.plan_id,
+        receipt.plan_revision,
+        receipt.context_ledger_digest,
+        receipt.candidate_digest,
+        receipt.plan_digest,
+        receipt.graph_digest,
+        receipt.simulation_digest,
+    )
+    if observed != expected:
+        raise ValueError("orchestration review receipt does not match the reviewed evidence chain")
+
+
 def verify_semantic_chain(
     payloads: dict[str, dict[str, Any]],
     provenance: dict[str, Any],
@@ -44,10 +76,19 @@ def verify_semantic_chain(
     graph = payloads["compiled"]
     lint = payloads["lint"]
     simulation = payloads["simulation"]
+    review = payloads["review"]
     _verify_candidate_plan(candidate, plan)
     plan_digest = _verify_plan_lint(plan, lint)
     graph_digest, identity = _verify_graph(plan, graph)
     _verify_simulation_payload(simulation, graph_digest, identity[2])
+    _verify_review_payload(
+        review,
+        plan=plan,
+        simulation=simulation,
+        identity=identity,
+        plan_digest=plan_digest,
+        graph_digest=graph_digest,
+    )
     _verify_provenance(provenance, identity, plan_digest, graph_digest)
 
 
@@ -124,6 +165,55 @@ def _verify_simulation_payload(
         raise RuntimeError("creative plan simulation belongs to another graph")
     if project_fingerprint != str(simulation.get("base_project_fingerprint") or ""):
         raise RuntimeError("creative plan simulation belongs to another project revision")
+
+
+def _verify_review_payload(
+    review: dict[str, Any],
+    *,
+    plan: dict[str, Any],
+    simulation: dict[str, Any],
+    identity: tuple[str, int, str],
+    plan_digest: str,
+    graph_digest: str,
+) -> None:
+    if _text(review, "status") == "not_required_shadow":
+        return
+    expected = (
+        identity[0],
+        identity[1],
+        _text(plan, "candidate_digest"),
+        plan_digest,
+        graph_digest,
+        canonical_json_digest(simulation),
+    )
+    observed = (
+        _text(review, "plan_id"),
+        _integer(review, "plan_revision"),
+        _text(review, "candidate_digest"),
+        _text(review, "plan_digest"),
+        _text(review, "graph_digest"),
+        _text(review, "simulation_digest"),
+    )
+    if observed != expected:
+        raise RuntimeError("creative plan review belongs to another evidence chain")
+    _verify_review_sessions(review)
+
+
+def _verify_review_sessions(review: dict[str, Any]) -> None:
+    planner = _text(review, "planner_session_id")
+    reviewer = _text(review, "reviewer_session_id")
+    if not planner or not reviewer or planner == reviewer:
+        raise RuntimeError("creative plan review lacks an independent reviewer session")
+
+
+def _text(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _integer(payload: dict[str, Any], key: str) -> int:
+    value = payload.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _verify_provenance(

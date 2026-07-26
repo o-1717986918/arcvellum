@@ -118,10 +118,7 @@ class OrchestrationReviewReceipt:
 
     @property
     def activation_eligible(self) -> bool:
-        return self.verdict in {
-            OrchestrationReviewVerdict.PASS,
-            OrchestrationReviewVerdict.PASS_WITH_NOTES,
-        }
+        return self.verdict is OrchestrationReviewVerdict.PASS
 
     def as_dict(self) -> dict[str, object]:
         return {
