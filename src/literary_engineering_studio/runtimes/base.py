@@ -61,10 +61,28 @@ class AgentRunnerCapabilities:
     retry: bool
     resume: bool
     detail: str
+    protocol_version: str = "arcvellum/agent-runner-capabilities/v1"
+    context_window: int | None = None
+    tool_calls: bool | None = None
+    cancellation: bool | None = None
+    local_execution: bool | None = None
+    capability_ids: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload["execution_modes"] = list(self.execution_modes)
+        payload["capability_ids"] = list(self.capability_ids)
+        payload["tool_calls"] = (
+            self.tool_calls
+            if self.tool_calls is not None
+            else any((self.read_control, self.edit_control, self.shell_control, self.web_control))
+        )
+        payload["cancellation"] = self.cancellation if self.cancellation is not None else self.stop
+        payload["local_execution"] = (
+            self.local_execution
+            if self.local_execution is not None
+            else self.runner_id not in {"host-agent"}
+        )
         return payload
 
 
