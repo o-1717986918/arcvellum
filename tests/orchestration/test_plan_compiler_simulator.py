@@ -151,18 +151,18 @@ class PlanCompilerAndSimulatorTests(unittest.TestCase):
 
     def test_simulator_blocks_parallel_resource_conflict(self):
         payload = scene_plan_candidate()
-        analysis = deepcopy(payload["task_nodes"][0])
-        analysis["kind"] = "creative_analysis"
-        analysis["node_id"] = "analysis-a"
-        analysis_b = deepcopy(analysis)
-        analysis_b["node_id"] = "analysis-b"
-        payload["task_nodes"][0]["depends_on"] = ["analysis-a", "analysis-b"]
-        payload["task_nodes"] = [analysis, analysis_b, *payload["task_nodes"]]
+        asset = deepcopy(payload["task_nodes"][0])
+        asset["kind"] = "asset_candidate"
+        asset["node_id"] = "asset-a"
+        asset_b = deepcopy(asset)
+        asset_b["node_id"] = "asset-b"
+        payload["task_nodes"][0]["depends_on"] = ["asset-a", "asset-b"]
+        payload["task_nodes"] = [asset, asset_b, *payload["task_nodes"]]
         plan, lint_result = _normalized_and_linted(payload)
         graph = compile_plan(plan, lint_result=lint_result)
         observations, claims = _observations_and_claims(
             graph,
-            shared_writes={"analysis-a", "analysis-b"},
+            shared_writes={"asset-a", "asset-b"},
         )
 
         result = simulate_plan(

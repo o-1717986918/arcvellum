@@ -15,6 +15,11 @@ from typing import Any
 from .asset_revisions import ASSET_REVISION_SCHEMA_SQL, AssetRevisionStoreMixin
 from .asset_transactions import ASSET_TRANSACTION_SCHEMA_SQL, AssetTransactionStoreMixin
 from .autopilot_runs import AutopilotStoreMixin
+from .creative_plans import CREATIVE_PLAN_SCHEMA_SQL, CreativePlanStoreMixin
+from .creative_plan_events import (
+    CREATIVE_PLAN_EVENT_SCHEMA_SQL,
+    CreativePlanEventStoreMixin,
+)
 from .migrations import ensure_additive_columns
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
 from .sessions import SessionStoreMixin
@@ -36,6 +41,8 @@ from .primitives import (
 
 
 class JobStore(
+    CreativePlanEventStoreMixin,
+    CreativePlanStoreMixin,
     RecycleBinStoreMixin,
     AssetTransactionStoreMixin,
     AssetRevisionStoreMixin,
@@ -503,7 +510,12 @@ class JobStore(
                 );
                 CREATE INDEX IF NOT EXISTS agent_sessions_project_idx
                     ON agent_sessions(project_root, updated_at);
-                """ + ASSET_TRANSACTION_SCHEMA_SQL + ASSET_REVISION_SCHEMA_SQL + RECYCLE_BIN_SCHEMA_SQL
+                """
+                + ASSET_TRANSACTION_SCHEMA_SQL
+                + ASSET_REVISION_SCHEMA_SQL
+                + RECYCLE_BIN_SCHEMA_SQL
+                + CREATIVE_PLAN_SCHEMA_SQL
+                + CREATIVE_PLAN_EVENT_SCHEMA_SQL
             )
             ensure_additive_columns(connection)
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")

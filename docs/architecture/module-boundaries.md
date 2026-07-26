@@ -231,6 +231,31 @@ AO-2 编译与模拟边界：
   SQLite 或项目文件。未来 Scheduler 只能把 compiled binding 与 Engine 当前签发的正式
   task package 做匹配。
 
+AO-2 持久化边界：
+
+- `persistence/creative_plans.py` 只拥有计划身份、不可变 revision 索引和 activation 的
+  optimistic concurrency；
+- `persistence/creative_plan_events.py` 只拥有 append-only plan event；计划节点不建立第二套
+  可写运行状态，未来执行态必须投影 Engine 正式 task receipt；
+- `persistence/creative_plan_activation.py` 只协调已验证 revision 的 SQLite activation 与
+  `active_plan.json` 投影；单项目通过唯一索引只允许一个 active plan；
+- `persistence/creative_plan_artifacts.py` 在 revision 进入 ready 前验证全部索引文件真实
+  存在且 hash 匹配；低层调用方不能凭空伪造 ready；
+- SQLite 中的 candidate/plan/graph/lint/simulation/review 字段保存 path、hash、status
+  摘要，不复制完整规划上下文；
+- `orchestration/persistence.py` 协调便携项目审计文件与 SQLite 索引。完整 JSON 位于
+  `workflow/orchestration/plans/{plan_id}/`，使用 Engine atomic metadata writer；
+- revision 先以 digest 预留，再原子写文件，最后标记 ready；相同 revision/digest 可从
+  reserved 状态恢复，不同 digest 在任何文件写入前冲突；
+- 验证不只比较文件 hash，还绑定 candidate digest、normalized plan、Plan Lint receipt、
+  compiled graph digest、simulation fingerprint 与 provenance 语义链；
+- `shadow.py` 只量测 Normalize/Lint/Compile/Simulate，Lint 失败即停止。它不持久化、
+  不执行、不激活，也没有 Autopilot 调用入口；
+- schema 12 沿用 JobStore 的 migration backup；删除 Studio 编排索引不得删除或改变
+  正式作品与项目审计文件。
+- plan `status` 是机器字段，初始值固定为 `shadow`；只有通过完整审计协调器验证的 revision
+  才能激活。激活使用显式 transaction，普通 SQL/event/commit 失败均恢复文件投影。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

@@ -31,6 +31,13 @@ class OrchestrationFoundationTests(unittest.TestCase):
         self.assertEqual(settings.configured_mode, OrchestrationMode.FIXED)
         self.assertEqual(settings.effective_mode, OrchestrationMode.FIXED)
 
+    def test_partial_or_empty_config_safely_defaults_to_fixed(self):
+        settings = orchestration_settings({})
+
+        self.assertFalse(settings.enabled)
+        self.assertEqual(settings.configured_mode, OrchestrationMode.FIXED)
+        self.assertEqual(settings.effective_mode, OrchestrationMode.FIXED)
+
     def test_disabled_feature_forces_fixed_effective_mode(self):
         config = default_config()
         config["orchestration"]["mode"] = "full_adaptive"

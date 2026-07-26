@@ -81,6 +81,28 @@ class PlanNormalizerAndLintTests(unittest.TestCase):
 
         self.assertIn(GateId.FULL_ROLEPLAY.value, gates)
 
+    def test_default_plan_identity_is_scoped_to_project_fingerprint(self):
+        parsed = parse_plan_candidate(scene_plan_candidate())
+        first = normalize_plan_candidate(
+            parsed,
+            context=NormalizationContext(
+                base_project_fingerprint="project-revision-1",
+                approved_budget=self.approved,
+                created_at="2026-07-26T00:00:00+00:00",
+            ),
+        )
+        second = normalize_plan_candidate(
+            parsed,
+            context=NormalizationContext(
+                base_project_fingerprint="another-project-revision-1",
+                approved_budget=self.approved,
+                created_at="2026-07-26T00:00:00+00:00",
+            ),
+        )
+
+        self.assertNotEqual(first.plan_id, second.plan_id)
+        self.assertEqual(first.candidate_digest, second.candidate_digest)
+
     def test_lint_rejects_cycle_stale_revision_and_unknown_capability(self):
         plan = self._plan()
         nodes = list(plan.task_nodes)
@@ -144,6 +166,55 @@ class PlanNormalizerAndLintTests(unittest.TestCase):
 
         self.assertFalse(result.passed)
         self.assertEqual(len(range_issues), 3)
+
+    def test_lint_rejects_parallel_prose_and_revision_for_one_scene(self):
+        plan = self._plan()
+        prose = next(node for node in plan.task_nodes if node.kind == PlanNodeKind.FORMAL_PROSE)
+        review = next(node for node in plan.task_nodes if node.kind == PlanNodeKind.SEMANTIC_REVIEW)
+        revision = replace(
+            prose,
+            node_id="revision",
+            kind=PlanNodeKind.REVISION,
+            depends_on=("composition",),
+        )
+        fresh_review = replace(
+            review,
+            node_id="revision-review",
+            depends_on=("revision",),
+        )
+        nodes = (*plan.task_nodes, revision, fresh_review)
+        prose_binding = next(
+            item for item in plan.mandatory_gate_nodes if item.node_id == "prose"
+        )
+        review_binding = next(
+            item for item in plan.mandatory_gate_nodes if item.node_id == "review"
+        )
+        bindings = (
+            *plan.mandatory_gate_nodes,
+            replace(prose_binding, node_id="revision"),
+            replace(review_binding, node_id="revision-review"),
+        )
+        broken = replace(plan, task_nodes=nodes, mandatory_gate_nodes=bindings)
+
+        result = lint_plan(broken, context=self.lint_context)
+
+        self.assertFalse(result.passed)
+        self.assertIn("parallel-creative-writers", {item.code for item in result.issues})
+
+    def test_analysis_ratio_is_an_authorized_hard_limit(self):
+        plan = self._plan()
+        strict = replace(
+            plan,
+            freedom_budget=replace(
+                plan.freedom_budget,
+                max_analysis_to_production_ratio=0.1,
+            ),
+        )
+
+        result = lint_plan(strict, context=self.lint_context)
+
+        self.assertFalse(result.passed)
+        self.assertIn("analysis-ratio", {item.code for item in result.issues})
 
 
 if __name__ == "__main__":

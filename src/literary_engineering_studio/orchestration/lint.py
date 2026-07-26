@@ -16,6 +16,8 @@ from literary_engineering_studio_engine.orchestration import (
 from .budget_policy import budget_range_errors
 from .constitution import constitution_v1
 from .contracts import CreativeExecutionPlan, FreedomBudget, PlanTaskNode, to_primitive
+from .literary_policy import literary_policy_violations
+from .writer_policy import writer_policy_violations
 
 
 class PlanIssueSeverity(str, Enum):
@@ -59,7 +61,8 @@ def lint_plan(plan: CreativeExecutionPlan, *, context: PlanLintContext) -> PlanL
     dependencies = _lint_graph(plan.task_nodes, node_map, issues)
     _lint_budget(plan, context, issues)
     _lint_nodes(plan, context, node_map, dependencies, issues)
-    _lint_literary_chain(plan, node_map, dependencies, issues)
+    for violation in literary_policy_violations(plan.task_nodes, dependencies):
+        _error(issues, violation.code, violation.message, violation.related)
     ordered = tuple(
         sorted(
             issues,
@@ -169,7 +172,7 @@ def _lint_budget(
         for node in plan.task_nodes
     )
     if production and analysis / production > budget.max_analysis_to_production_ratio:
-        _warning(issues, "analysis-ratio", "analysis task ratio approaches or exceeds the plan budget")
+        _error(issues, "analysis-ratio", "analysis task ratio exceeds the authorized plan budget")
 
 
 def _lint_nodes(
@@ -188,7 +191,8 @@ def _lint_nodes(
         _error(issues, "gate-orphan", "mandatory Gate binding references an unknown node")
     if set(node_map).difference(gate_map):
         _error(issues, "gate-binding", "every plan node requires a machine Gate binding")
-    _lint_single_writer(plan.task_nodes, dependencies, issues)
+    for violation in writer_policy_violations(plan.task_nodes, dependencies):
+        _error(issues, violation.code, violation.message, violation.related)
 
 
 def _lint_node_scope(
@@ -244,73 +248,6 @@ def _lint_node_progress(node: PlanTaskNode, issues: list[PlanIssue]) -> None:
         _error(issues, "state-progress", "state evolution requires an expected patch", (node.node_id,))
 
 
-def _lint_literary_chain(
-    plan: CreativeExecutionPlan,
-    node_map: dict[str, PlanTaskNode],
-    dependencies: dict[str, tuple[str, ...]],
-    issues: list[PlanIssue],
-) -> None:
-    ancestors = {node_id: _ancestors(node_id, dependencies) for node_id in node_map}
-    descendants = _descendants(dependencies)
-    prose_prerequisites = {
-        PlanNodeKind.CONTEXT_PREPARATION,
-        PlanNodeKind.ROLEPLAY_SIMULATION,
-        PlanNodeKind.BRANCH_SIMULATION,
-        PlanNodeKind.BRANCH_SELECTION,
-        PlanNodeKind.SCENE_COMPOSITION,
-    }
-    for node in plan.task_nodes:
-        ancestor_kinds = {node_map[item].kind for item in ancestors[node.node_id] if item in node_map}
-        descendant_kinds = {node_map[item].kind for item in descendants[node.node_id] if item in node_map}
-        if node.kind == PlanNodeKind.FORMAL_PROSE:
-            missing = prose_prerequisites.difference(ancestor_kinds)
-            if missing:
-                _error(
-                    issues,
-                    "prose-prerequisites",
-                    "formal prose is missing context, RP, branch, selection, or composition ancestors",
-                    (node.node_id, *sorted(item.value for item in missing)),
-                )
-            if PlanNodeKind.SEMANTIC_REVIEW not in descendant_kinds:
-                _error(issues, "prose-review", "formal prose has no independent review descendant", (node.node_id,))
-        if node.kind == PlanNodeKind.REVISION and PlanNodeKind.SEMANTIC_REVIEW not in descendant_kinds:
-            _error(issues, "revision-review", "revision has no fresh review descendant", (node.node_id,))
-        if node.kind == PlanNodeKind.EXPORT and PlanNodeKind.LONGFORM_AUDIT not in ancestor_kinds:
-            _error(issues, "export-audit", "formal export requires a longform audit ancestor", (node.node_id,))
-
-
-def _lint_single_writer(
-    nodes: tuple[PlanTaskNode, ...],
-    dependencies: dict[str, tuple[str, ...]],
-    issues: list[PlanIssue],
-) -> None:
-    prose_by_scope: dict[str, list[str]] = {}
-    for node in nodes:
-        if node.kind == PlanNodeKind.FORMAL_PROSE:
-            for scope in node.scope_refs:
-                prose_by_scope.setdefault(scope, []).append(node.node_id)
-    for scope, node_ids in prose_by_scope.items():
-        if len(node_ids) > 1:
-            _error(
-                issues,
-                "multiple-prose-writers",
-                f"scope {scope} has multiple formal prose writers",
-                tuple(node_ids),
-            )
-    revision_ids = [node.node_id for node in nodes if node.kind == PlanNodeKind.REVISION]
-    for index, left in enumerate(revision_ids):
-        for right in revision_ids[index + 1 :]:
-            left_ancestors = _ancestors(left, dependencies)
-            right_ancestors = _ancestors(right, dependencies)
-            if left not in right_ancestors and right not in left_ancestors:
-                _error(
-                    issues,
-                    "parallel-revision-writers",
-                    "revisions of one plan must be explicitly serialized",
-                    (left, right),
-                )
-
-
 def _cycle_path(dependencies: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -338,26 +275,6 @@ def _cycle_path(dependencies: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
         if cycle:
             return cycle
     return ()
-
-
-def _ancestors(node_id: str, dependencies: dict[str, tuple[str, ...]]) -> set[str]:
-    found: set[str] = set()
-    pending = list(dependencies.get(node_id, ()))
-    while pending:
-        current = pending.pop()
-        if current in found:
-            continue
-        found.add(current)
-        pending.extend(dependencies.get(current, ()))
-    return found
-
-
-def _descendants(dependencies: dict[str, tuple[str, ...]]) -> dict[str, set[str]]:
-    result = {node_id: set() for node_id in dependencies}
-    for node_id in dependencies:
-        for ancestor in _ancestors(node_id, dependencies):
-            result.setdefault(ancestor, set()).add(node_id)
-    return result
 
 
 def _error(

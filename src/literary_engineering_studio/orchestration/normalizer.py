@@ -16,6 +16,7 @@ from .contracts import (
     PLAN_SCHEMA,
     CandidateParseResult,
     CreativeExecutionPlan,
+    CreativeExecutionPlanCandidate,
     CreativeStrategy,
     FreedomBudget,
     PlanGateBinding,
@@ -54,8 +55,11 @@ def normalize_plan_candidate(
         parsed.candidate.strategy,
         approved_budget,
     )
-    candidate_digest = _digest(to_primitive(parsed.candidate))
-    plan_id = context.plan_id.strip() or f"plan-{candidate_digest[:16]}"
+    source_digest = candidate_digest(parsed.candidate)
+    identity_digest = _digest(
+        {"candidate_digest": source_digest, "project_fingerprint": fingerprint}
+    )
+    plan_id = context.plan_id.strip() or f"plan-{identity_digest[:16]}"
     if not re.fullmatch(r"plan-[a-z0-9-]+", plan_id):
         raise ValueError("plan_id must use the machine plan slug format")
     risk_by_node = context.risk_features_by_node or {}
@@ -74,6 +78,7 @@ def normalize_plan_candidate(
         plan_id=plan_id,
         revision=context.revision,
         base_project_fingerprint=fingerprint,
+        candidate_digest=source_digest,
         constitution_version=constitution_v1().version,
         created_at=context.created_at or datetime.now(timezone.utc).isoformat(),
         lifecycle_status=PlanLifecycleStatus.NORMALIZED,
@@ -182,3 +187,7 @@ def _digest(payload: object) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def candidate_digest(candidate: CreativeExecutionPlanCandidate) -> str:
+    return _digest(to_primitive(candidate))

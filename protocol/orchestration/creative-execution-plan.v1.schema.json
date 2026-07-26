@@ -8,6 +8,7 @@
     "plan_id",
     "revision",
     "base_project_fingerprint",
+    "candidate_digest",
     "constitution_version",
     "created_at",
     "lifecycle_status",
@@ -40,6 +41,10 @@
     "base_project_fingerprint": {
       "type": "string",
       "minLength": 1
+    },
+    "candidate_digest": {
+      "type": "string",
+      "pattern": "^$|^[a-f0-9]{64}$"
     },
     "constitution_version": {
       "const": "1"

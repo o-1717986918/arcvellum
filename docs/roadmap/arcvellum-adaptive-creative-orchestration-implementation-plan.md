@@ -1109,7 +1109,10 @@ client/src/features/strategy/
 - 实现完整编译管线。
 - 先只支持固定计划和 Agent 修改少量策略字段。
 - Scheduler 仍串行。
-- 启用吞吐 measure-only 和 Bundle Compiler shadow，不改变实际任务执行。
+- 启用吞吐与资源冲突 measure-only，不改变实际任务执行。
+- `ExecutionBundle` 与 Bundle Compiler shadow 依统一实施方案延后至 AO-6/v0.99；
+  在 Context Ledger、session lease、Mutation Receipt 和 Worker 接线完成前不提前建立
+  第二执行单元。
 
 验收：漏 Gate、任意命令、循环、双写者、虚假并发均被阻止。
 
@@ -2334,11 +2337,11 @@ docs/architecture/reviews/
 | --- | --- |
 | AO-0 | 旧 platform blueprint 与新 runtime orchestration 命名清晰；无重复包 |
 | AO-1 | Contract 所有权唯一；DefaultPlanFactory 不复制 route logic |
-| AO-2 | Compiler/Lint/Simulator 与 Bundle Compiler 纯确定性、无 I/O 副作用；shadow 不改变正式执行 |
+| AO-2 | Compiler/Lint/Simulator 纯确定性、无 I/O 副作用；shadow 不改变正式执行 |
 | AO-3 | Planner 与 Reviewer 通过 Protocol 接入；Prompt、Context、Persistence 分离 |
 | AO-4 | 场景链只绑定现有 task lifecycle；没有第二套晋升 |
 | AO-5 | 章节编排复用现有预算/节奏/义务模块；Rolling Horizon 不复制文学算法或预先冻结全部场景 |
-| AO-6 | ResourceLockManager 独立于具体 Agent Runner，并由 `runtime/resources/` 统一实施；Bundle 保持单角色和 Gate 边界；无并发正式写回 |
+| AO-6 | ResourceLockManager 独立于具体 Agent Runner，并由 `runtime/resources/` 统一实施；Bundle Compiler 保持单角色和 Gate 边界；无并发正式写回 |
 | AO-7 | Campaign/Compaction 不污染正式 task snapshot |
 | AO-8 | 前端 strategy feature 独立；Store、API、Projection、组件职责分离 |
 

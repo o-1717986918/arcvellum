@@ -23,7 +23,13 @@ from .contracts import (
 )
 from .defaults import DefaultPlanFactory
 from .lint import PlanIssue, PlanIssueSeverity, PlanLintContext, PlanLintResult, lint_plan
-from .normalizer import NormalizationContext, normalize_plan_candidate
+from .normalizer import NormalizationContext, candidate_digest, normalize_plan_candidate
+from .persistence import (
+    OrchestrationAuditArtifacts,
+    activate_persisted_revision,
+    persist_shadow_revision,
+    verify_persisted_revision,
+)
 from .simulator import (
     FormalTaskObservation,
     FormalTaskStatus,
@@ -39,6 +45,7 @@ from .settings import (
     StrategyPreset,
     orchestration_settings,
 )
+from .shadow import ShadowPlanEvaluation, ShadowStageTiming, evaluate_shadow_candidate
 
 __all__ = [
     "CANDIDATE_SCHEMA",
@@ -55,6 +62,7 @@ __all__ = [
     "NormalizationContext",
     "OrchestrationMode",
     "OrchestrationConstitution",
+    "OrchestrationAuditArtifacts",
     "OrchestrationSettings",
     "PlanIssue",
     "PlanIssueSeverity",
@@ -72,15 +80,22 @@ __all__ = [
     "FormalTaskStatus",
     "SimulatedNode",
     "SimulatedResourceConflict",
+    "ShadowPlanEvaluation",
+    "ShadowStageTiming",
     "StrategyPreset",
     "TaskBinding",
     "compile_plan",
     "compiled_graph_digest",
+    "candidate_digest",
     "constitution_v1",
+    "evaluate_shadow_candidate",
+    "activate_persisted_revision",
     "lint_plan",
     "normalize_plan_candidate",
     "orchestration_settings",
     "parse_plan_candidate",
+    "persist_shadow_revision",
     "simulate_plan",
     "to_primitive",
+    "verify_persisted_revision",
 ]

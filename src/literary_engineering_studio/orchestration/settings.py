@@ -35,11 +35,15 @@ def orchestration_settings(config: dict[str, Any]) -> OrchestrationSettings:
     payload = raw if isinstance(raw, dict) else {}
     enabled = bool(payload.get("enabled", False))
     try:
-        configured_mode = OrchestrationMode(str(payload.get("mode") or OrchestrationMode.FIXED))
+        configured_mode = OrchestrationMode(
+            str(payload.get("mode") or OrchestrationMode.FIXED.value)
+        )
     except ValueError as exc:
         raise ValueError("unsupported orchestration mode") from exc
     try:
-        preset = StrategyPreset(str(payload.get("strategy_preset") or StrategyPreset.BALANCED))
+        preset = StrategyPreset(
+            str(payload.get("strategy_preset") or StrategyPreset.BALANCED.value)
+        )
     except ValueError as exc:
         raise ValueError("unsupported orchestration strategy preset") from exc
     constitution_version = str(payload.get("constitution_version") or "1").strip()

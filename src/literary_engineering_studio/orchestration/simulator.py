@@ -64,6 +64,8 @@ class SimulatedResourceConflict:
 @dataclass(frozen=True)
 class PlanSimulationResult:
     status: str
+    graph_digest: str
+    base_project_fingerprint: str
     resolved_nodes: tuple[SimulatedNode, ...]
     injected_nodes: tuple[str, ...]
     blocking_issues: tuple[PlanIssue, ...]
@@ -108,6 +110,8 @@ def simulate_plan(
     status = "fail" if issues else ("warn" if warnings else "pass")
     return PlanSimulationResult(
         status=status,
+        graph_digest=graph.graph_digest,
+        base_project_fingerprint=graph.base_project_fingerprint,
         resolved_nodes=resolved,
         injected_nodes=tuple(
             node.node_id
@@ -132,6 +136,8 @@ def _fixed_result(
 ) -> PlanSimulationResult:
     return PlanSimulationResult(
         status="fail" if issues else "pass",
+        graph_digest=graph.graph_digest,
+        base_project_fingerprint=graph.base_project_fingerprint,
         resolved_nodes=(),
         injected_nodes=(),
         blocking_issues=tuple(issues),

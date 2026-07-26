@@ -222,6 +222,7 @@ class CreativeExecutionPlan:
     plan_id: str
     revision: int
     base_project_fingerprint: str
+    candidate_digest: str
     constitution_version: str
     created_at: str
     lifecycle_status: PlanLifecycleStatus

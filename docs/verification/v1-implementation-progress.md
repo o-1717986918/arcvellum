@@ -1339,3 +1339,60 @@ W6 只接入已有合同，不得重写 Broker、再造 Runtime 或第二套任�
 2. 使用 optimistic revision 与 fingerprint 阻止 stale activation；
 3. 增加 shadow pipeline 量测，不影响正式 Autopilot 任务顺序；
 4. 完成 AO-2 架构复核和退出审计后，再进入 Planner/Reviewer。
+
+## W6-3C：AO-2 持久化、Shadow 量测与恢复基础
+
+**状态：完成。独立 reviewer 已确认 AO-2 close = Yes。**
+
+- SQLite schema 从 11 升至 12，沿用迁移前自动备份：
+  - `creative_plans` 保存 plan 身份、scope、状态、active revision、fingerprint 和 policy；
+  - `creative_plan_revisions` 保存各审计文件的 path/hash/status 摘要、revision digest 和
+    `reserved/ready` 产物状态；
+  - `creative_plan_events` 保存 append-only revision/activation 事件；
+  - 明确删除 `creative_plan_nodes` 设计，避免形成第二套可写 task lifecycle。
+- 持久化按职责拆分：
+  - `creative_plans.py`：不可变 revision、查询、列表和 optimistic activation；
+  - `creative_plan_events.py`：append-only 事件；
+  - `creative_plan_activation.py`：SQLite 与 `active_plan.json` 的补偿式一致写入；
+  - `creative_plan_primitives.py`：无循环依赖的共享身份校验；
+  - `orchestration/persistence.py`：项目审计文件与 SQLite 索引协调；
+  - `orchestration/audit_integrity.py`：跨审计产物语义链；
+  - `shadow.py`：无执行能力的 measure-only 流水线。
+- 项目审计文件已实现：
+  - candidate、normalized plan、compiled graph、lint、simulation、shadow review；
+  - provenance 保存各文件 hash、plan digest、graph digest、fingerprint 和 revision digest；
+  - 先在 SQLite 预留 revision digest，再原子 batch 写入
+    `workflow/orchestration/plans/{plan_id}/`，成功后标记 ready；
+  - SQLite 不保存完整大 JSON，只保存文件引用和摘要；
+  - 相同 plan/revision/digest 重复写入幂等，写入失败可从 reserved 状态重试；
+  - 不同 digest 在文件写入前冲突，不会覆盖已存在的审计链；
+  - 文件 hash 之外，还校验 candidate -> normalized plan -> lint -> compiled graph ->
+    simulation -> provenance 的语义归属。
+- activation 已建立确定性门禁：
+  - expected active revision；
+  - current project fingerprint；
+  - passing/warn Lint；
+  - passing/warn Simulation；
+  - passing independent orchestration review；
+  - 单项目唯一 active plan；
+  - plan 初始状态由 Store 固定为 `shadow`，调用方不能直接写 `active`；
+  - revision 进入 ready 前由 Store 核验六类审计文件的存在性与 hash；
+  - 显式 SQLite transaction 协调 active projection，SQL/event/commit 失败时恢复原文件。
+- Shadow evaluation 记录 Normalize、Lint、Compile、Simulate 和总耗时；Lint 失败不编译，
+  不产生 graph 或 simulation；模块尚未接入 Autopilot，因此正式路线与任务顺序不变。
+- Plan Lint 额外将 analysis/production ratio 设为硬限制，并禁止同一 scope 的正式正文与
+  revision 并行写作；默认 plan ID 同时绑定 candidate digest 和项目 fingerprint。
+- 持久化、文学链规则和 activation 已按单职责拆分，架构门禁保持 0 cycle。
+
+本子批验证：
+
+- AO0-AO2 与 persistence 聚焦测试：44 passed；
+- `python -m unittest discover -s tests -v`：598 passed，1 skipped；
+- Architecture Audit：36 个既有 file debt、226 个既有 function debt、0 cycle，无新增债务；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+AO-2 退出结论：
+
+1. 两轮独立 reviewer findings 全部关闭，无剩余 P0/P1；
+2. Bundle Compiler 按统一实施方案延后至 AO-6/v0.99，不在 AO-2 提前建立第二执行单元；
+3. 提交 W6-3C 后进入 AO-3 Planner/Reviewer，仍不直接接入生产 Autopilot。

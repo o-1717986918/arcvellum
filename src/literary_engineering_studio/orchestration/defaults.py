@@ -42,6 +42,7 @@ class DefaultPlanFactory:
             plan_id=plan_id,
             revision=1,
             base_project_fingerprint=fingerprint,
+            candidate_digest="",
             constitution_version=constitution.version,
             created_at=created_at or datetime.now(timezone.utc).isoformat(),
             lifecycle_status=PlanLifecycleStatus.NORMALIZED,
