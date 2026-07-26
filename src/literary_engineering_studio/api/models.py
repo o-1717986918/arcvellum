@@ -306,7 +306,21 @@ class ArchiveCandidatePromotionRequest(BaseModel):
     preview_digest: str
 
 
+class ArchaeologyImportRequest(BaseModel):
+    project_root: str
+    filename: str
+    text: str = ""
+    content_base64: str = ""
+    title: str = ""
+    work_id: str = ""
+    mode: str = "continuation"
+    rights_declaration: str
+    chunk_size: int = 6000
+    overwrite: bool = False
+
+
 __all__ = [
+    "ArchaeologyImportRequest",
     "ArchiveAssetArchiveRequest",
     "ArchiveAssetCommitRequest",
     "ArchiveAssetContentRequest",

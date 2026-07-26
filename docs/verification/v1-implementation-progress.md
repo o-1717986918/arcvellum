@@ -1020,4 +1020,43 @@ W4-2B 已通过。下一批进入 W4-3“候选项目重建与 Archive 晋升边
 - W4 的四模式差异化恢复策略、Studio Archaeology 前端、长任务中断/恢复矩阵与 W4 Exit Audit 仍未完成；
 - 候选项目进入 longform planning 的真实用户路径将在 W4 Exit Audit 中做隔离项目验收；
 - 本批没有提前实现 W5 Capability Broker、Pi/Ollama/新增 Provider 或 W6 自适应 DAG。
-5. 验证 candidate identity、重复运行幂等、源/aggregate 变化 stale、部分晋升、拒绝和回滚。
+
+## W4-4：Project Archaeology 应用服务与安全读模型
+
+**状态：后端完成，等待 W4-5 前端与 Exit Audit。**
+
+- 新增独立的 Archaeology 应用层：
+  - 支持 TXT、Markdown、DOCX 上传，要求显式权利声明、单一内容载体、受控扩展名、1,000-20,000 chunk size 和 25 MB 单源上限；
+  - 上传内容只进入临时文件，再委托 Engine `ingest_existing_work()` 原子事务；Studio 不复制分块、证据或 route 逻辑；
+  - continuation、rewrite、adaptation、analysis 四种模式拥有面向普通用户的中文意图说明。
+- 新增路径安全的工作台读模型：
+  - 显示源文本保全、结构分割、分块理解、身份解析、项目重建、领域审查和候选入档旅程；
+  - 投影来源、分段、实体别名、冲突、重建资产、晋升队列、证据数量和中断恢复信号；
+  - 不返回项目绝对路径、原始 sidecar Markdown 或裸 workflow JSON；
+  - `.importing` / `.backup` 事务残留只作为可恢复状态展示，稳定源资料保持不可变。
+- 新增 `/archaeology/options`、`/archaeology/imports` 与
+  `/archaeology/workbench/{work_id}` API；导入后立即由正式 `source-ingest`
+  状态机报告 `chunk-extraction-agent-task`，没有建立第二套任务状态。
+- API 组装通过 `api/dependencies.py` 注入，`api_server.create_app()` 保持既有架构预算。
+- 新增应用/API 回归覆盖：
+  - 四种模式；
+  - 权利声明、扩展名、DOCX 二进制载体、Base64 和输入互斥；
+  - 中断事务恢复投影；
+  - v2 `source_documents` schema 映射与绝对路径脱敏；
+  - API 导入到 Engine 正式任务状态的连续性。
+
+本批 focused verification：
+
+- `tests.test_archaeology_application`：5 passed；
+- Project Archaeology ingest/extraction/reconstruction + Archive API：18 passed；
+- `python -m unittest discover -s tests`：533 passed，1 skipped；
+- `python scripts/architecture_audit.py`：通过，未增加 file/function debt 或 import cycle；
+- `python -m compileall -q src/literary_engineering_studio src/literary_engineering_studio_engine`：通过；
+- `git diff --check`：通过。
+
+下一步：
+
+1. W4-5 建立 Project Archaeology 用户工作台，不展示路径、JSON 或 sidecar；
+2. 复用现有 Worker/Autopilot 领取 source-ingest 任务，不在前端另造“解析”状态；
+3. 完成四模式 UX、冲突与证据视图、候选进入 Archive 的用户路径；
+4. 做中断恢复与真实隔离项目 W4 Exit Audit。

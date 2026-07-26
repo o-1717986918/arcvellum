@@ -196,6 +196,18 @@ Client
 
 任何 Router 提取前必须扩展 `tests/test_api_route_surface.py`，并保留身份认证 middleware 只在应用根注册一次。
 
+Project Archaeology 的 Studio 边界位于：
+
+- `application/archaeology/contracts.py`：传输无关的上传、模式、权利声明和大小限制；
+- `application/archaeology/import_service.py`：只负责把上传内容交给 Engine 的原子 source-ingest 事务；
+- `application/archaeology/projection.py`：把 Engine workflow、证据、冲突、重建和候选物化结果投影为不泄露绝对路径的用户读模型；
+- `application/archaeology/service.py`：面向 API 的用例组合，不复制 Engine route 或 Archive Gate；
+- `api/routers/archaeology.py`：只处理 HTTP DTO、错误码和项目根解析；
+- `api/dependencies.py`：组装 Archaeology/Style 应用依赖，避免 `create_app()` 膨胀。
+
+Archaeology API 不得直接写重建 JSON、完成回执或正式资产。导入后的全部语义工作继续由
+`source-ingest` 状态机与受控 Worker 领取；候选晋升继续进入共享 Archive 生命周期。
+
 ### Engine `api_server.py`
 
 Engine 的 legacy HTTP adapter 也已经完成同样的端点族拆分。顶层

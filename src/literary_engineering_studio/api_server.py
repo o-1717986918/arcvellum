@@ -14,8 +14,8 @@ from typing import Any, Callable
 
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
-from .application.style import StyleApplicationService, StyleAuthoringService, StyleMountApplicationService
-from .application.style.task_service import StyleTaskService
+from .application.style import StyleMountApplicationService
+from .api.dependencies import archaeology_router_dependencies, style_lab_dependencies
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
 from .api.models import (
     ArchiveAssetArchiveRequest,
@@ -54,6 +54,7 @@ from .api.models import (
 from .api.streaming import sse as _sse, stream_read_model as _stream_read_model, visible_delta_chunks as _visible_delta_chunks
 from .api.routers.application import ApplicationRouterDependencies, build_application_router
 from .api.routers.archive import build_archive_router, default_archive_dependencies
+from .api.routers.archaeology import build_archaeology_router
 from .api.routers.runners import RunnerRouterDependencies, build_runner_router
 from .api.routers.projects import ProjectRouterDependencies, build_project_router
 from .api.routers.quality import QualityRouterDependencies, build_quality_router
@@ -63,7 +64,7 @@ from .api.routers.workflow import WorkflowRouterDependencies, build_workflow_rou
 from .api.routers.library import LibraryRouterDependencies, build_library_router
 from .api.routers.narrative import NarrativeRouterDependencies, build_narrative_router
 from .api.routers.delivery import DeliveryRouterDependencies, build_delivery_router
-from .api.routers.style_lab import StyleLabRouterDependencies, build_style_lab_router
+from .api.routers.style_lab import build_style_lab_router
 from .api.routers.project_details import ProjectDetailRouterDependencies, build_project_detail_router
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
 from .advisor import ProjectAdvisor
@@ -77,7 +78,7 @@ from .bootstrap import ApplicationBootstrapService
 from .config import default_projects_root, load_config, save_config
 from .core_bridge import CoreBridge
 from .core_read_models import build_activity, build_dashboard, build_library, build_task_summary, current_choices
-from .core_read_models import record_choice, record_ui_note, save_display_field, style_library
+from .core_read_models import record_choice, record_ui_note, save_display_field
 from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
 from .lifecycle import ApplicationLifecycleManager
 from .live_events import EPHEMERAL_WORKER_EVENTS, coalesce_live_events
@@ -394,6 +395,8 @@ def create_app(config_override: dict[str, Any] | None = None):
         )
     )
 
+    app.include_router(build_archaeology_router(archaeology_router_dependencies()))
+
     app.include_router(
         build_library_router(
             LibraryRouterDependencies(
@@ -440,7 +443,7 @@ def create_app(config_override: dict[str, Any] | None = None):
 
     app.include_router(
         build_style_lab_router(
-            _style_lab_dependencies(
+            style_lab_dependencies(
                 config,
                 mounts=_STYLE_MOUNTS,
                 launch_style_worker=lambda request: launch_worker(
@@ -470,31 +473,3 @@ def create_app(config_override: dict[str, Any] | None = None):
     )
 
     return app
-
-
-def _style_lab_dependencies(
-    config: dict[str, Any],
-    *,
-    mounts: StyleMountApplicationService,
-    launch_style_worker: Callable[[dict[str, str]], dict[str, object]],
-) -> StyleLabRouterDependencies:
-    application = StyleApplicationService()
-    return StyleLabRouterDependencies(
-        config=config,
-        style_library=lambda settings, root: style_library(settings, root),
-        style_authors=application.authors,
-        style_versions=lambda library, project: application.version_catalog(
-            library,
-            project_root=project,
-        ),
-        style_workbench=lambda project, library: application.workbench(
-            project,
-            library,
-        ),
-        style_version_detail=lambda project, style_id, version_id: application.version_detail(
-            project, style_id=style_id, version_id=version_id
-        ),
-        authoring=StyleAuthoringService(),
-        tasks=StyleTaskService(launch_style_worker),
-        mounts=mounts,
-    )
