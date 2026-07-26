@@ -202,6 +202,18 @@ AO-1 合同进一步固定：
 它把每一步继续交给现有 Task Registry 动态领取，避免把当前 route 内部状态复制成静态
 DAG。AO-2 Compiler 只会把显式自适应节点编译为绑定；默认 macro 仍沿用正式 lifecycle。
 
+AO-2 的确定性前置层进一步固定：
+
+- `normalizer.py` 只把候选转换为机器拥有的正式计划：归一 ID/枚举、绑定 revision 与项目
+  fingerprint、压缩 Freedom Budget，并重新注入 Gate；它不读写项目、不调用模型；
+- `budget_policy.py` 单独拥有 Freedom Budget 数值域，避免设置、Lint 和未来 Compiler
+  形成三份边界规则；
+- `lint.py` 只做纯确定性验证，覆盖 DAG、scope、capability、Gate、文学前置链、
+  Progress Contract、单 Writer 和 Freedom Budget；它不修复计划，也不签发任务；
+- `gate_catalog.py` 是 Gate 的唯一机器来源。Candidate 中的 Gate 解释不能覆盖目录结果；
+- Normalizer 与 Plan Lint 通过后仍不代表计划已执行或产物已晋升；Compiler、Simulator、
+  审批和现有 task lifecycle 都是后续独立阶段。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

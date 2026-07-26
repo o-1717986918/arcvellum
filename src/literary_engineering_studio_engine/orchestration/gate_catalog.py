@@ -85,10 +85,12 @@ _NODE_GATES: dict[str, tuple[GateId, ...]] = {
         GateId.FRESH_REVISION_REVIEW,
     ),
     "state_evolution": (
+        GateId.PROMOTION,
         GateId.STATE_PATCH,
         GateId.STATE_SEMANTIC_REVIEW,
     ),
     "canon_evolution": (
+        GateId.PROMOTION,
         GateId.CANON_PATCH,
         GateId.INDEPENDENT_SEMANTIC_REVIEW,
         GateId.HUMAN_APPROVAL,

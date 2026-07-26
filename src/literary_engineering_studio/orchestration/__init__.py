@@ -16,6 +16,8 @@ from .contracts import (
     to_primitive,
 )
 from .defaults import DefaultPlanFactory
+from .lint import PlanIssue, PlanIssueSeverity, PlanLintContext, PlanLintResult, lint_plan
+from .normalizer import NormalizationContext, normalize_plan_candidate
 from .settings import (
     OrchestrationMode,
     OrchestrationSettings,
@@ -31,16 +33,23 @@ __all__ = [
     "CreativeExecutionPlanCandidate",
     "DefaultPlanFactory",
     "FreedomBudget",
+    "NormalizationContext",
     "OrchestrationMode",
     "OrchestrationConstitution",
     "OrchestrationSettings",
+    "PlanIssue",
+    "PlanIssueSeverity",
     "PlanLifecycleStatus",
+    "PlanLintContext",
+    "PlanLintResult",
     "PlanScopeKind",
     "ReplanTrigger",
     "RevisionPolicy",
     "RoleplayDepth",
     "StrategyPreset",
     "constitution_v1",
+    "lint_plan",
+    "normalize_plan_candidate",
     "orchestration_settings",
     "parse_plan_candidate",
     "to_primitive",

@@ -1259,3 +1259,40 @@ W6 只接入已有合同，不得重写 Broker、再造 Runtime 或第二套任�
 3. Plan Compiler 只生成对现有正式任务的 binding，不签发或完成 task；
 4. Plan Simulator 以当前正式状态预演可执行性、资源冲突和空转风险；
 5. measure-only 记录编译/模拟开销，但不改变 fixed route。
+
+## W6-3A：AO-2 Candidate Normalizer 与 Plan Lint
+
+**状态：完成。**
+
+- `normalize_plan_candidate()` 已实现纯确定性候选归一：
+  - 机器生成 plan ID、revision、项目 fingerprint、宪法版本和创建时间；
+  - 归一 node ID、依赖、scope 和 capability ID，并保留可审计 warning；
+  - Freedom Budget 与分支数只能向授权上限收缩；
+  - Gate 只从 Engine catalog 重新注入，候选无法自报或删除；
+  - 高风险节点会获得机器 `full-roleplay` Gate；
+  - 显式节点使用 `explicit-task-graph.v1`，不会伪装成默认 fixed macro。
+- `lint_plan()` 已实现纯确定性文学工程宪法检查：
+  - 重复节点、缺依赖、自依赖、DAG 环和孤点；
+  - stale fingerprint、未知 scope、越权 capability 和 Gate 缺失；
+  - Freedom Budget 数值域、授权上限、计划深度、附加任务、重规划、分支数和分析比例；
+  - 正文前必须具备 context、RP、分支推演、正式选支和 composition 祖先；
+  - 正文/修订必须有 fresh semantic review，export 必须有 longform audit；
+  - 正文必须声明正汉字目标和正式产物变化，state evolution 必须声明 patch；
+  - 同 scope 双正文 Writer 与未串行 revision 会被阻断。
+- `budget_policy.py` 独立拥有预算数值域，避免后续设置、Compiler 和 Lint 复制边界。
+- state/canon evolution 的机器 Gate 已补入 promotion 前置，避免把未晋升正文作为正式变化来源。
+- 所有实现仍为无 I/O、无模型、无 task lifecycle 的纯域逻辑；当前 fixed route 行为不变。
+
+本子批验证：
+
+- Normalizer、Plan Lint、AO0/AO1 聚焦测试：19 passed；
+- `python -m unittest discover -s tests`：568 passed，1 skipped；
+- Architecture Audit：36 个既有 file debt、226 个既有 function debt、0 cycle，无新增债务；
+- `python -m compileall -q src tests` 与 `git diff --check`：passed。
+
+下一子批进入 W6-3B：
+
+1. 建立只消费 Engine catalog 的 Compiler Registry；
+2. 编译稳定 task binding、DAG、资源意图和 graph digest，不签发任务；
+3. 建立无模型、无写回的 Plan Simulator，预演 blocker、冲突、Gate 和 no-progress；
+4. 用默认 macro 等价测试证明 fixed route 仍由现有 Task Registry 动态领取。
