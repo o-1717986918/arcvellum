@@ -24,7 +24,8 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
 def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
     """Normalize semantically identical machine markers without changing a review verdict."""
 
-    changes = _canonicalize_asset_machine_metadata(task, sandbox)
+    changes = _canonicalize_archaeology_chunk_metadata(task, sandbox)
+    changes.extend(_canonicalize_asset_machine_metadata(task, sandbox))
     changes.extend(_canonicalize_semantic_artifact_metadata(task, sandbox))
     changes.extend(_canonicalize_story_architecture_metadata(task, sandbox))
     changes.extend(_canonicalize_continuity_ledger_metadata(task, sandbox))
@@ -53,6 +54,41 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
         path.write_text(normalized, encoding="utf-8")
         changes.append({"path": relative, "verdict": verdict})
     return changes
+
+
+def _canonicalize_archaeology_chunk_metadata(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+) -> list[dict[str, str]]:
+    if task.route != "source-ingest" or task.current_state != "chunk-extraction-agent-task":
+        return []
+    owned = (
+        task.payload.get("system_owned_fields")
+        if isinstance(task.payload.get("system_owned_fields"), dict)
+        else {}
+    )
+    expected = owned.get("archaeology") if isinstance(owned.get("archaeology"), dict) else {}
+    if not expected:
+        return []
+    relative = next(
+        (
+            item
+            for item in task.expected_outputs
+            if item.endswith(".json") and not item.endswith(".agent_completion.json")
+        ),
+        "",
+    )
+    path = sandbox.workspace / relative
+    payload = _read_object(path)
+    if payload is None:
+        return []
+    return _write_machine_fields(
+        path,
+        relative,
+        payload,
+        expected,
+        "archaeology-chunk",
+    )
 
 
 def _canonicalize_semantic_artifact_metadata(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:

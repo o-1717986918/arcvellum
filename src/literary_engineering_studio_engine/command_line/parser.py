@@ -104,6 +104,13 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
         )
         source_ingest.add_argument("--overwrite", action="store_true", help="Overwrite an existing import directory.")
 
+    archaeology_aggregate = sub.add_parser(
+        "archaeology-aggregate",
+        help="Deterministically aggregate completed source chunk extractions.",
+    )
+    archaeology_aggregate.add_argument("project", help="Work project directory.")
+    archaeology_aggregate.add_argument("--work-id", required=True, help="Stable source import id.")
+
     register_style_commands(sub)
 
     agent_run = sub.add_parser("agent-run", help="Run a generic auditable agent task.")

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from ..contracts import TaskPackage
+from .archaeology import validate_archaeology_chunk_output
 from .common import PreflightIssue
 from ..sandbox import SandboxManifest
 

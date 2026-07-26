@@ -6,11 +6,15 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 from shutil import rmtree
+from typing import Callable, TypeVar
 
 from .contracts import SourceChunk
 from .evidence import build_evidence_index
 from .readers import read_source_documents
 from .segmentation import build_source_chunks, segment_documents
+
+
+_T = TypeVar("_T")
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,40 @@ def commit_import(staging_dir: Path, import_dir: Path, *, overwrite: bool) -> No
         raise
     if backup_dir.exists():
         rmtree(backup_dir)
+
+
+def prepare_import_location(
+    root: Path,
+    work_id: str,
+    *,
+    overwrite: bool,
+) -> tuple[Path, Path]:
+    imports_dir = root / "sources" / "imports"
+    import_dir = imports_dir / work_id
+    recover_interrupted_import(import_dir)
+    if import_dir.exists() and any(import_dir.iterdir()) and not overwrite:
+        raise FileExistsError(f"source import already exists: {import_dir}")
+    staging_dir = imports_dir / f".{work_id}.importing"
+    if staging_dir.exists():
+        rmtree(staging_dir)
+    return import_dir, staging_dir
+
+
+def run_import_transaction(
+    *,
+    staging_dir: Path,
+    import_dir: Path,
+    overwrite: bool,
+    stage: Callable[[], _T],
+) -> _T:
+    try:
+        artifacts = stage()
+        commit_import(staging_dir, import_dir, overwrite=overwrite)
+        return artifacts
+    except Exception:
+        if staging_dir.exists():
+            rmtree(staging_dir)
+        raise
 
 
 def _prepare_staging(staging_dir: Path) -> tuple[Path, Path, Path]:

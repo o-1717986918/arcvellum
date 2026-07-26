@@ -8,10 +8,18 @@ import unittest
 
 from literary_engineering_studio_engine.literary.ingest import (
     CHUNK_EXTRACTION_SCHEMA,
+    aggregate_source_import,
     aggregate_chunk_extractions,
     build_chunk_extraction_plan,
     validate_chunk_extraction,
 )
+from literary_engineering_studio_engine.agent_tasks import (
+    write_agent_completion_marker,
+)
+from literary_engineering_studio_engine.projects.source_ingest import (
+    ingest_existing_work,
+)
+from literary_engineering_studio_engine.workflow_state import build_workflow_state
 
 
 class ProjectArchaeologyExtractionTests(unittest.TestCase):
@@ -170,6 +178,69 @@ class ProjectArchaeologyExtractionTests(unittest.TestCase):
             self.assertEqual(temporal["severity"], "blocking")
             self.assertEqual(temporal["resolution"], "unresolved")
 
+    def test_workflow_requires_each_chunk_before_deterministic_fan_in(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "schema: test-project\n",
+                encoding="utf-8",
+            )
+            source = root / "source.md"
+            source.write_text(
+                "# 第一章\n\n林舟抵达城门。\n\n# 第二章\n\n林舟离开城门。\n",
+                encoding="utf-8",
+            )
+            result = ingest_existing_work(
+                root,
+                source=source,
+                work_id="source-work",
+                rights_declaration="Authorized test source.",
+            )
+            manifest = _read_json(result.manifest_path)
+            plan = manifest["archaeology"]["chunk_tasks"]
+            self.assertGreaterEqual(len(plan), 2)
+
+            state = _source_state(root)
+            self.assertEqual(state["current_step"], "chunk-extraction-agent-task")
+            self.assertEqual(state["chunk_id"], plan[0]["chunk_id"])
+
+            for index, item in enumerate(plan):
+                chunk = next(
+                    chunk
+                    for chunk in manifest["chunks"]
+                    if chunk["chunk_id"] == item["chunk_id"]
+                )
+                _write_json(
+                    root / item["expected_output"],
+                    _chunk_payload(root, manifest, chunk),
+                )
+                write_agent_completion_marker(
+                    root / item["task_path"],
+                    root=root,
+                    handled_by="test-worker",
+                )
+                state = _source_state(root)
+                if index + 1 < len(plan):
+                    self.assertEqual(
+                        state["current_step"],
+                        "chunk-extraction-agent-task",
+                    )
+                    self.assertEqual(state["chunk_id"], plan[index + 1]["chunk_id"])
+
+            self.assertEqual(state["current_step"], "archaeology-fan-in")
+            aggregate_path, errors = aggregate_source_import(root, "source-work")
+            self.assertEqual(errors, [])
+            self.assertEqual(
+                aggregate_path.relative_to(root).as_posix(),
+                manifest["archaeology"]["aggregate_path"],
+            )
+            aggregate = _read_json(aggregate_path)
+            self.assertEqual(aggregate["fan_in"]["status"], "ready")
+            self.assertEqual(
+                _source_state(root)["current_step"],
+                "extraction-agent-task",
+            )
+
 
 def _source_graph(root: Path, *, chunk_count: int) -> tuple[Path, dict[str, object]]:
     root.mkdir(parents=True, exist_ok=True)
@@ -275,6 +346,15 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def _source_state(root: Path) -> dict[str, object]:
+    result = build_workflow_state(root, route="source-ingest")
+    return _read_json(result.json_path)["source_ingests"][0]
+
+
+def _read_json(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

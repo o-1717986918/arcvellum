@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import json
 import tempfile
 import unittest
@@ -11,6 +12,90 @@ from literary_engineering_studio.worker import AgentWorker, _resolve_task_json_p
 
 
 class WorkerIntegrationTests(unittest.TestCase):
+    def test_archaeology_fan_in_runs_in_deterministic_control_workspace(self):
+        config = default_config()
+        install_core_import_path(config)
+        from literary_engineering_studio_engine.agent_tasks import (
+            write_agent_completion_marker,
+        )
+        from literary_engineering_studio_engine.literary.ingest import (
+            CHUNK_EXTRACTION_SCHEMA,
+        )
+        from literary_engineering_studio_engine.projects.source_ingest import (
+            ingest_existing_work,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            project = temporary_root / "work"
+            project.mkdir()
+            (project / "project.yaml").write_text(
+                "schema: test-project\n",
+                encoding="utf-8",
+            )
+            result = ingest_existing_work(
+                project,
+                text="# 第一章\n甲抵达城门。\n\n# 第二章\n甲离开城门。\n",
+                work_id="source-work",
+                rights_declaration="Authorized test source.",
+            )
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            chunks = {
+                item["chunk_id"]: item
+                for item in manifest["chunks"]
+            }
+            for item in manifest["archaeology"]["chunk_tasks"]:
+                chunk = chunks[item["chunk_id"]]
+                source = project / item["source_chunk_path"]
+                output = project / item["expected_output"]
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(
+                    json.dumps(
+                        {
+                            "schema": CHUNK_EXTRACTION_SCHEMA,
+                            "work_id": "source-work",
+                            "chunk_id": item["chunk_id"],
+                            "source_chunk_path": item["source_chunk_path"],
+                            "source_chunk_sha256": hashlib.sha256(
+                                source.read_bytes()
+                            ).hexdigest(),
+                            "evidence_revision": manifest["evidence_index"]["revision"],
+                            "status": "complete",
+                            "entities": [],
+                            "events": [],
+                            "relations": [],
+                            "claims": [],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+                write_agent_completion_marker(
+                    project / item["task_path"],
+                    root=project,
+                    handled_by="test-worker",
+                )
+            config["worker"]["runs_root"] = str(temporary_root / "runs")
+
+            with patch(
+                "literary_engineering_studio.worker.build_runtime",
+                side_effect=AssertionError("runtime must not run"),
+            ):
+                worker_result = AgentWorker(config).run_once(
+                    project,
+                    route="source-ingest",
+                    runtime_id="opencode",
+                )
+
+            self.assertEqual(worker_result.status, "complete")
+            self.assertEqual(worker_result.runtime, "deterministic-engine")
+            aggregate = json.loads(
+                (project / manifest["archaeology"]["aggregate_path"]).read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(aggregate["fan_in"]["status"], "ready")
+
     def test_resolves_canonical_task_when_reported_chinese_path_is_mojibake(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / "你好，新世界"

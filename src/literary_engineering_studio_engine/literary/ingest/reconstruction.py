@@ -18,6 +18,7 @@ from .evidence import canonical_digest
 
 
 ARCHAEOLOGY_AGGREGATE_SCHEMA = "arcvellum/project-archaeology-aggregate/v1"
+ARCHAEOLOGY_PLAN_SCHEMA = "arcvellum/project-archaeology-extraction-plan/v1"
 
 
 def build_chunk_extraction_plan(
@@ -45,9 +46,46 @@ def build_chunk_extraction_plan(
                 ],
                 "evidence_revision": evidence_revision,
                 "expected_output": chunk_extraction_path(import_dir, chunk_id),
+                "task_path": _chunk_task_path(import_dir, chunk_id),
+                "completion_path": _chunk_completion_path(import_dir, chunk_id),
             }
         )
     return plan
+
+
+def build_archaeology_plan(
+    manifest: dict[str, Any],
+    *,
+    import_dir: str | Path,
+) -> dict[str, Any]:
+    base = Path(import_dir).as_posix().rstrip("/")
+    return {
+        "schema": ARCHAEOLOGY_PLAN_SCHEMA,
+        "chunk_tasks": build_chunk_extraction_plan(
+            manifest,
+            import_dir=import_dir,
+        ),
+        "aggregate_path": f"{base}/extractions/aggregate.json",
+    }
+
+
+def verify_archaeology_plan(
+    manifest: dict[str, Any],
+    *,
+    import_dir: str | Path,
+) -> list[str]:
+    plan = manifest.get("archaeology")
+    if plan is None:
+        return []
+    if not isinstance(plan, dict):
+        return ["source manifest archaeology plan must be an object"]
+    errors: list[str] = []
+    if plan.get("schema") != ARCHAEOLOGY_PLAN_SCHEMA:
+        errors.append("source manifest archaeology plan has wrong schema")
+    expected = build_archaeology_plan(manifest, import_dir=import_dir)
+    if plan != expected:
+        errors.append("source manifest archaeology plan does not match source chunks")
+    return errors
 
 
 def aggregate_chunk_extractions(
@@ -200,6 +238,41 @@ def write_archaeology_aggregate(
     return output, errors
 
 
+def aggregate_source_import(
+    project_root: Path,
+    work_id: str,
+) -> tuple[Path, list[str]]:
+    root = project_root.resolve()
+    safe_work_id = _validated_work_id(work_id)
+    import_dir = (root / "sources" / "imports" / safe_work_id).resolve()
+    imports_root = (root / "sources" / "imports").resolve()
+    if not import_dir.is_relative_to(imports_root):
+        raise ValueError("source import path leaves the work project")
+    manifest_path = import_dir / "source_manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"source manifest not found for work_id: {safe_work_id}")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"source manifest is not valid UTF-8 JSON: {safe_work_id}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError("source manifest root must be an object")
+    plan = manifest.get("archaeology")
+    if not isinstance(plan, dict):
+        raise ValueError("source import does not contain an archaeology extraction plan")
+    output = _project_output_path(
+        root,
+        plan.get("aggregate_path"),
+        import_dir=import_dir,
+    )
+    return write_archaeology_aggregate(
+        root,
+        manifest,
+        import_dir=import_dir.relative_to(root),
+        output=output,
+    )
+
+
 def _namespace_occurrences(
     payloads: list[dict[str, Any]],
     collection: str,
@@ -236,3 +309,41 @@ def _namespace_references(record: dict[str, Any], chunk_id: str) -> dict[str, An
             f"{chunk_id}::{value}" for value in result["participant_refs"]
         ]
     return result
+
+
+def _chunk_task_path(import_dir: str | Path, chunk_id: str) -> str:
+    base = Path(import_dir).as_posix().rstrip("/")
+    stem = Path(chunk_extraction_path(import_dir, chunk_id)).stem
+    return f"{base}/extractions/tasks/{stem}.agent_tasks.md"
+
+
+def _chunk_completion_path(import_dir: str | Path, chunk_id: str) -> str:
+    task_path = _chunk_task_path(import_dir, chunk_id)
+    return task_path[: -len(".agent_tasks.md")] + ".agent_completion.json"
+
+
+def _validated_work_id(value: str) -> str:
+    work_id = value.strip()
+    if (
+        not work_id
+        or "/" in work_id
+        or "\\" in work_id
+        or work_id in {".", ".."}
+    ):
+        raise ValueError("work_id must be a single source-import directory name")
+    return work_id
+
+
+def _project_output_path(
+    root: Path,
+    value: object,
+    *,
+    import_dir: Path,
+) -> Path:
+    relative = Path(str(value or "").replace("\\", "/"))
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("archaeology aggregate path must be project-relative")
+    output = (root / relative).resolve()
+    if not output.is_relative_to(import_dir):
+        raise ValueError("archaeology aggregate path must stay inside the source import")
+    return output

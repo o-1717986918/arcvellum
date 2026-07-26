@@ -8,15 +8,107 @@ from unittest.mock import patch
 
 from literary_engineering_studio.contracts import TASK_SCHEMA, TaskPackage, load_task_package
 from literary_engineering_studio.sandbox import SandboxManifest, stage_task
+from literary_engineering_studio.runtime.sandbox import (
+    control_sandbox_view,
+    sync_agent_outputs_to_control,
+)
 from literary_engineering_studio.task_preflight import (
     COMPLETION_SCHEMA,
     _semantic_artifact_repair_instruction,
     canonicalize_task_outputs,
     validate_task_outputs,
 )
+from literary_engineering_studio_engine.projects.source_ingest import (
+    ingest_existing_work,
+)
+from literary_engineering_studio_engine.source_ingest_route import (
+    build_task_payload as build_source_ingest_task_payload,
+)
+from literary_engineering_studio_engine.task_package_contract import (
+    enrich_task_payload,
+)
 
 
 class TaskPreflightTests(unittest.TestCase):
+    def test_archaeology_chunk_machine_identity_is_worker_owned(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            root.mkdir()
+            (root / "project.yaml").write_text(
+                "schema: test-project\n",
+                encoding="utf-8",
+            )
+            result = ingest_existing_work(
+                root,
+                text="第一章\n林舟抵达城门。\n",
+                work_id="source-work",
+                rights_declaration="Authorized test source.",
+            )
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            chunk_plan = manifest["archaeology"]["chunk_tasks"][0]
+            payload = enrich_task_payload(
+                build_source_ingest_task_payload(
+                    root,
+                    "source-ingest",
+                    {
+                        "work_id": "source-work",
+                        "import_dir": "sources/imports/source-work",
+                        "current_step": "chunk-extraction-agent-task",
+                        "chunk_id": chunk_plan["chunk_id"],
+                    },
+                )
+            )
+            task_json = root / "workflow/tasks/test.task.json"
+            task_markdown = root / "workflow/tasks/test.agent_tasks.md"
+            task_json.parent.mkdir(parents=True)
+            task_json.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            task_markdown.write_text("# task\n", encoding="utf-8")
+            task = TaskPackage(root, task_json, task_markdown, payload)
+            sandbox = stage_task(
+                task,
+                Path(temporary) / "runs",
+                runtime="test",
+            )
+            output = sandbox.workspace / chunk_plan["expected_output"]
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(
+                json.dumps(
+                    {
+                        "schema": "agent-guessed",
+                        "work_id": "wrong-work",
+                        "entities": [],
+                        "events": [],
+                        "relations": [],
+                        "claims": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            sync_agent_outputs_to_control(task, sandbox)
+            preflight = validate_task_outputs(task, control_sandbox_view(sandbox))
+
+            normalized = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(
+                normalized["schema"],
+                "arcvellum/project-archaeology-chunk-extraction/v1",
+            )
+            self.assertEqual(normalized["work_id"], "source-work")
+            self.assertEqual(normalized["chunk_id"], chunk_plan["chunk_id"])
+            self.assertEqual(
+                normalized["source_chunk_path"],
+                chunk_plan["source_chunk_path"],
+            )
+            self.assertTrue(normalized["source_chunk_sha256"])
+            self.assertEqual(normalized["status"], "complete")
+            self.assertTrue(changes)
+            self.assertTrue(preflight.passed, preflight.as_dict())
+
     def test_continuity_delta_pending_template_is_repaired_before_core_writeback(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

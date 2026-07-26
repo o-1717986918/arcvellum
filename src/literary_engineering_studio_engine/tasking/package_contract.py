@@ -15,7 +15,7 @@ from pathlib import Path
 from ..prompt_registry import resolve_prompt_asset
 
 
-TASK_CONTRACT_REVISION = "2026-07-25.24"
+TASK_CONTRACT_REVISION = "2026-07-26.25"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 _OPERATING_REFERENCE_PATHS = {
     "SKILL.md",

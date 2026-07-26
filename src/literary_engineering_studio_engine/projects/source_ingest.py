@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
-from shutil import rmtree
 
 from ..agent_tasks import write_agent_tasks
 from ..literary.ingest import (
@@ -15,11 +14,13 @@ from ..literary.ingest import (
     SOURCE_INGEST_SCHEMA_V2,
     SUPPORTED_SOURCE_EXTENSIONS,
     StagedSourceImport,
-    commit_import,
+    build_archaeology_plan,
     import_revision,
-    recover_interrupted_import,
+    prepare_import_location,
+    run_import_transaction,
     stage_source_import,
 )
+from ..literary.ingest.tasks import write_chunk_extraction_tasks
 
 
 TEXT_EXTENSIONS = SUPPORTED_SOURCE_EXTENSIONS
@@ -37,6 +38,7 @@ class SourceIngestResult:
     source_count: int
     chunk_count: int
     candidate_outputs: dict[str, str]
+    chunk_task_paths: tuple[Path, ...] = ()
 
 
 def ingest_existing_work(
@@ -54,26 +56,23 @@ def ingest_existing_work(
     """Preserve sources and write a candidate-only reverse extraction task."""
 
     root = project_root.resolve()
-    if not (root / "project.yaml").exists():
-        raise FileNotFoundError(f"work project not found: {root}")
-    if mode not in INGEST_MODES:
-        raise ValueError(f"unknown source ingest mode: {mode}")
-    if not source and not text:
-        raise ValueError("source ingest requires a source path or inline text")
-
+    _validate_ingest_request(root, source=source, text=text, mode=mode)
     resolved_source = source.resolve() if source else None
-    resolved_id = _slug(work_id or title or (resolved_source.stem if resolved_source else "existing-work"))
-    imports_dir = root / "sources" / "imports"
-    import_dir = imports_dir / resolved_id
-    recover_interrupted_import(import_dir)
-    if import_dir.exists() and any(import_dir.iterdir()):
-        if not overwrite:
-            raise FileExistsError(f"source import already exists: {import_dir}")
-    staging_dir = imports_dir / f".{resolved_id}.importing"
-    if staging_dir.exists():
-        rmtree(staging_dir)
-    try:
-        artifacts = _stage_import(
+    resolved_id = _slug(
+        work_id
+        or title
+        or (resolved_source.stem if resolved_source else "existing-work")
+    )
+    import_dir, staging_dir = prepare_import_location(
+        root,
+        resolved_id,
+        overwrite=overwrite,
+    )
+    artifacts = run_import_transaction(
+        staging_dir=staging_dir,
+        import_dir=import_dir,
+        overwrite=overwrite,
+        stage=lambda: _stage_import(
             root=root,
             staging_dir=staging_dir,
             work_id=resolved_id,
@@ -83,27 +82,52 @@ def ingest_existing_work(
             mode=mode,
             chunk_size=chunk_size,
             rights_declaration=rights_declaration,
-        )
-        commit_import(staging_dir, import_dir, overwrite=overwrite)
-    except Exception:
-        if staging_dir.exists():
-            rmtree(staging_dir)
-        raise
-
-    manifest_path = import_dir / "source_manifest.json"
-    report_path = import_dir / "source_ingest.md"
-    task_path = import_dir / "extract_project_files.agent_tasks.md"
-
-    return SourceIngestResult(
+        ),
+    )
+    return _ingest_result(
         project_root=root,
         work_id=resolved_id,
         import_dir=import_dir,
-        manifest_path=manifest_path,
-        report_path=report_path,
-        task_path=task_path,
+        artifacts=artifacts,
+    )
+
+
+def _validate_ingest_request(
+    root: Path,
+    *,
+    source: Path | None,
+    text: str,
+    mode: str,
+) -> None:
+    if not (root / "project.yaml").exists():
+        raise FileNotFoundError(f"work project not found: {root}")
+    if mode not in INGEST_MODES:
+        raise ValueError(f"unknown source ingest mode: {mode}")
+    if not source and not text:
+        raise ValueError("source ingest requires a source path or inline text")
+
+
+def _ingest_result(
+    *,
+    project_root: Path,
+    work_id: str,
+    import_dir: Path,
+    artifacts: dict[str, object],
+) -> SourceIngestResult:
+    return SourceIngestResult(
+        project_root=project_root,
+        work_id=work_id,
+        import_dir=import_dir,
+        manifest_path=import_dir / "source_manifest.json",
+        report_path=import_dir / "source_ingest.md",
+        task_path=import_dir / "extract_project_files.agent_tasks.md",
         source_count=int(artifacts["source_count"]),
         chunk_count=int(artifacts["chunk_count"]),
         candidate_outputs=dict(artifacts["candidate_outputs"]),
+        chunk_task_paths=tuple(
+            import_dir / Path(str(item))
+            for item in artifacts["chunk_task_relpaths"]
+        ),
     )
 
 
@@ -135,6 +159,55 @@ def _stage_import(
     candidate_outputs = _candidate_outputs(work_id)
     logical_manifest = root / logical_import / "source_manifest.json"
     logical_report = root / logical_import / "source_ingest.md"
+    manifest = _staged_manifest(
+        work_id=work_id,
+        mode=mode,
+        rights_declaration=rights_declaration,
+        logical_evidence=logical_evidence,
+        staged=staged,
+        candidate_outputs=candidate_outputs,
+        logical_import=logical_import,
+    )
+    _write_json_file(staging_dir / "source_manifest.json", manifest)
+    chunk_tasks = write_chunk_extraction_tasks(
+        root=root,
+        staging_dir=staging_dir,
+        manifest=manifest,
+    )
+    _write_staged_guidance(
+        root=root,
+        staging_dir=staging_dir,
+        manifest=manifest,
+        staged=staged,
+        logical_manifest=logical_manifest,
+        logical_report=logical_report,
+        logical_evidence=logical_evidence,
+        candidate_outputs=candidate_outputs,
+        mode=mode,
+        work_id=work_id,
+        logical_import=logical_import,
+    )
+    return {
+        "source_count": staged.source_count,
+        "chunk_count": staged.chunk_count,
+        "candidate_outputs": candidate_outputs,
+        "chunk_task_relpaths": [
+            path.relative_to(staging_dir)
+            for path in chunk_tasks
+        ],
+    }
+
+
+def _staged_manifest(
+    *,
+    work_id: str,
+    mode: str,
+    rights_declaration: str,
+    logical_evidence: str,
+    staged: StagedSourceImport,
+    candidate_outputs: dict[str, str],
+    logical_import: str,
+) -> dict[str, object]:
     manifest = _source_manifest(
         work_id=work_id,
         mode=mode,
@@ -143,11 +216,28 @@ def _stage_import(
         staged=staged,
         candidate_outputs=candidate_outputs,
     )
-    manifest["import_revision"] = import_revision(manifest)
-    (staging_dir / "source_manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    manifest["archaeology"] = build_archaeology_plan(
+        manifest,
+        import_dir=logical_import,
     )
+    manifest["import_revision"] = import_revision(manifest)
+    return manifest
+
+
+def _write_staged_guidance(
+    *,
+    root: Path,
+    staging_dir: Path,
+    manifest: dict[str, object],
+    staged: StagedSourceImport,
+    logical_manifest: Path,
+    logical_report: Path,
+    logical_evidence: str,
+    candidate_outputs: dict[str, str],
+    mode: str,
+    work_id: str,
+    logical_import: str,
+) -> None:
     (staging_dir / "source_ingest.md").write_text(
         _render_report(
             root=root,
@@ -171,16 +261,18 @@ def _stage_import(
         manifest_path=logical_manifest,
         report_path=logical_report,
         evidence_path=root / logical_evidence,
-        chunk_paths=[root / str(record["path"]) for record in staged.chunk_records],
+        aggregate_path=root / str(manifest["archaeology"]["aggregate_path"]),
         candidate_outputs=candidate_outputs,
         task_path=staging_dir / "extract_project_files.agent_tasks.md",
         task_identity_path=root / logical_import / "extract_project_files.agent_tasks.md",
     )
-    return {
-        "source_count": staged.source_count,
-        "chunk_count": staged.chunk_count,
-        "candidate_outputs": candidate_outputs,
-    }
+
+
+def _write_json_file(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _source_manifest(
@@ -256,7 +348,7 @@ def _write_extraction_task(
     manifest_path: Path,
     report_path: Path,
     evidence_path: Path,
-    chunk_paths: list[Path],
+    aggregate_path: Path,
     candidate_outputs: dict[str, str],
     task_path: Path,
     task_identity_path: Path,
@@ -266,7 +358,7 @@ def _write_extraction_task(
         manifest_path,
         report_path,
         evidence_path,
-        *chunk_paths,
+        aggregate_path,
     ]
     output_lines = "\n".join(f"- {key}: `{path}`" for key, path in candidate_outputs.items())
     write_agent_tasks(
@@ -284,7 +376,7 @@ def _write_extraction_task(
         tasks=[
             (
                 "读取源作品与边界",
-                f"""读取 `project.yaml`、`{_rel(manifest_path, root)}`、`{_rel(report_path, root)}`、`{_rel(evidence_path, root)}` 和所有 chunk。确认作品标题 `{title or work_id}`、使用目的 `{mode}`、项目身份和清单中声明的边界。不要尝试读取 task package 未列出的项目资料；只使用证据索引中可解析的 evidence id。""",
+                f"""读取 `project.yaml`、`{_rel(manifest_path, root)}`、`{_rel(report_path, root)}`、`{_rel(evidence_path, root)}` 和 `{_rel(aggregate_path, root)}`。确认作品标题 `{title or work_id}`、使用目的 `{mode}`、项目身份和清单中声明的边界。只有 fan-in 状态为 ready 才能继续；不要尝试读取 task package 未列出的项目资料，只使用聚合结果和证据索引中可解析的 evidence id。""",
             ),
             (
                 "反推项目简报",

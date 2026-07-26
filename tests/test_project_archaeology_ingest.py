@@ -11,6 +11,7 @@ from literary_engineering_studio_engine.source_ingest_route import (
     build_task_payload,
     manifest_gate_errors,
 )
+from literary_engineering_studio_engine.task_registry import issue_next_task
 
 
 class ProjectArchaeologyIngestTests(unittest.TestCase):
@@ -47,6 +48,16 @@ class ProjectArchaeologyIngestTests(unittest.TestCase):
             self.assertTrue(all(item["bounds"] for item in manifest["source_documents"]))
             self.assertTrue(all(item["evidence_refs"] for item in manifest["chunks"]))
             self.assertIn("chapter", {item["kind"] for item in evidence["segments"]})
+            self.assertEqual(
+                manifest["archaeology"]["schema"],
+                "arcvellum/project-archaeology-extraction-plan/v1",
+            )
+            self.assertEqual(
+                len(manifest["archaeology"]["chunk_tasks"]),
+                manifest["chunk_count"],
+            )
+            self.assertEqual(len(result.chunk_task_paths), manifest["chunk_count"])
+            self.assertTrue(all(path.is_file() for path in result.chunk_task_paths))
             self.assertEqual(manifest_gate_errors(root, result.import_dir), [])
             task_text = result.task_path.read_text(encoding="utf-8")
             self.assertIn("sources/imports/known-work/evidence_index.json", task_text)
@@ -64,6 +75,48 @@ class ProjectArchaeologyIngestTests(unittest.TestCase):
             self.assertIn(
                 "sources/imports/known-work/evidence_index.json",
                 task["source_paths"],
+            )
+            first_chunk = manifest["archaeology"]["chunk_tasks"][0]
+            chunk_task = build_task_payload(
+                root,
+                "source-ingest",
+                {
+                    "work_id": "known-work",
+                    "import_dir": "sources/imports/known-work",
+                    "current_step": "chunk-extraction-agent-task",
+                    "chunk_id": first_chunk["chunk_id"],
+                },
+            )
+            self.assertEqual(
+                chunk_task["prompt_asset_id"],
+                "route.source-ingest.chunk-extraction.v1",
+            )
+            self.assertEqual(
+                chunk_task["agent_source_paths"],
+                [
+                    "project.yaml",
+                    "sources/imports/known-work/source_manifest.json",
+                    "sources/imports/known-work/evidence_index.json",
+                    first_chunk["source_chunk_path"],
+                ],
+            )
+            self.assertNotIn(first_chunk["task_path"], chunk_task["agent_source_paths"])
+            self.assertEqual(
+                chunk_task["expected_outputs"],
+                [
+                    first_chunk["expected_output"],
+                    first_chunk["completion_path"],
+                ],
+            )
+            issued = issue_next_task(root, route="source-ingest")
+            issued_payload = _json(issued.task_json_path)
+            self.assertEqual(
+                issued_payload["current_state"],
+                "chunk-extraction-agent-task",
+            )
+            self.assertEqual(
+                issued_payload["prompt_asset"]["resolved_id"],
+                "route.source-ingest.chunk-extraction.v1",
             )
 
     def test_docx_reader_keeps_heading_body_table_and_footnote_order(self):
