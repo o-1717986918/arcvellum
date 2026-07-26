@@ -2,6 +2,25 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.96.0] - 2026-07-26
+
+### Added
+
+- Completed the narrative Orrery W1 experience with semantic focus, relation lenses, search, minimap, reader links, heat layers, bookmarks, and repeatable 100/300-scene visual acceptance.
+- Added schema-bound Creative Execution Plans, deterministic lint/compiler/simulation, audited shadow planning, isolated planner/reviewer roles, context ledgers, mutation receipts, and a bounded Capability Broker.
+- Added exact prepared-context snapshots for Agent tasks and stable usage snapshot identities for trustworthy throughput measurement.
+
+### Changed
+
+- Reduced deterministic sandbox staging by about 75% in the measured real-project dependency set.
+- Deferred Agent workspace materialization until CLI-protected outputs exist, avoiding duplicate workspace assembly.
+- Preserved all formal literary gates while reducing repeated model file-reading turns.
+
+### Fixed
+
+- Prevented cumulative OpenCode usage snapshots from being summed repeatedly.
+- Kept the fixed formal route as the only mutation authority while adaptive orchestration remains in audited shadow mode.
+
 ## [0.95.2] - 2026-07-25
 
 ### Fixed
@@ -46,6 +65,7 @@ All notable ArcVellum changes are documented in this file. Detailed release evid
 
 - Candidate output, lifecycle status, and continuity-ledger edge cases found during end-to-end scene promotion testing.
 
+[0.96.0]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.0
 [0.95.2]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.95.2
 [0.95.1]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.95.1
 [0.95.0]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.95.0

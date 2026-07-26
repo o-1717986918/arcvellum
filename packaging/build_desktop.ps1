@@ -139,7 +139,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v0.95.3 adds common model-provider presets, persistent role-based model selection, and OpenAI-compatible custom endpoints while preserving credential isolation."
+        --notes "ArcVellum v$($StudioVersion.Trim()) improves the narrative orrery, audited creative planning, and bounded Agent task throughput."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

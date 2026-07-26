@@ -1554,7 +1554,7 @@ context 失败只能留下 fallback 证据，不得改变 fixed route。
 
 ### W6-4E：星仪 W1 文档差距补缺
 
-**状态：进行中，W1-Fix A/B/C/D 已完成，自动化视觉退出验收待实施。**
+**状态：完成。W1-Fix A/B/C/D 与自动化视觉退出验收均已关闭。**
 
 实际代码与 W1 文档复核确认星仪基础完整，但存在不能等到 W6-9 的产品缺口：
 
@@ -1626,8 +1626,37 @@ W1-Fix D 实现结果：
 - 评审见
   `docs/architecture/reviews/orrery-w1-advanced-exploration-review.md`。
 
-剩余 W1-Exit 不得省略：四主题/四焦点/100-1000 节点可重复视觉回归、canvas pixel
-check、SSE 后焦点与窗口稳定性、低性能模式和 reduced-motion 功能等价仍需独立提交。
+W1-Exit 实现结果：
+
+- Playwright 覆盖 100/300 场景、五主题、四焦点、关系、章节主脊、目录、Canvas 像素和控件避让；
+- SSE 增量后保持焦点与多开窗口身份，reduced-motion 保持核心探索功能等价；
+- 1000 场景六种空间语法通过有限坐标、可寻址性、Canvas 与交互规模门禁，布局基线约
+  32–61 ms；
+- 千场详细整页 PNG 只保留为受控 Chromium 的非阻断证据，不把渲染全部 DOM 标签误作
+  语义完整性。
+
+退出评审见 `docs/architecture/reviews/orrery-w1-visual-exit-review.md`。
+
+### W6-4F：v0.96.0 创作吞吐收口
+
+**状态：完成首批安全优化；AO-5/AO-6 的 Bundle、缓存与有限并发仍未提前开放。**
+
+- 真实任务分段测量确认模型执行约 189 秒，是 task selection、staging 和 writeback 之外的
+  主瓶颈；
+- Agent 首轮获得许可 Source、Reference 与 CLI Protected Outputs 的完整带摘要快照，
+  省略文件仍留在受限工作区并显式声明；
+- 确定性任务采用最小 Agent 沙箱，带 CLI 前置命令的任务延迟到 protected outputs 生成后
+  只物化一次；
+- 真实 deterministic dependency set 的 staging 从约 0.371 秒降到约 0.092 秒；
+- 累计 usage snapshot 改为按稳定消息身份计算增量，修复吞吐面板 token 重复累计。
+
+退出证据：
+
+- Python：632 tests passed，1 skipped；
+- Client：41 files、128 tests passed；
+- Architecture Audit：35 个既有 file debt、223 个既有 function debt、0 cycle，无新增债务；
+- `compileall`、`vue-tsc` 与 `git diff --check`：passed；
+- 评审见 `docs/architecture/reviews/v096-throughput-optimization-review.md`。
 
 ### W6 后续完整阶段映射
 
