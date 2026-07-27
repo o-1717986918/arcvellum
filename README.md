@@ -90,6 +90,8 @@ flowchart LR
 
 这使 ArcVellum 能同时保留文学创作的自由度与大型项目应有的约束力。
 
+从 v0.96.2 开始，场景任务还可以携带受 Schema 约束的创作策略：推演深度、分支数量、叙事距离、字数目标、修订方式和回退策略都能随作品需要调整；强制门禁仍由系统注入，Agent 可以改变创作路径，不能删除文学工程底线。策略变化通过带版本与指纹的计划补丁进入任务图，便于复查、失效检测和后续恢复。
+
 ## 一条可复查的创作路线
 
 具体任务会随项目而变，但单个场景的正式开发遵循一条稳定的契约：
@@ -141,7 +143,7 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### Windows 桌面端
 
-1. 在 [Releases](https://github.com/o-1717986918/arcvellum/releases) 下载最新 x64 安装程序。
+1. 下载 [ArcVellum v0.96.2 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.96.2/ArcVellum_0.96.2_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
 2. 启动 ArcVellum。默认作品库为 `Documents/ArcVellum/Works`，也可在设置中调整。
 3. 打开 **设置 -> 连接与模型**，连接模型服务并为不同角色选择模型。
 4. 新建作品，写下创作大方向与约束，再选择协作、监督自动或全自动推进方式。
@@ -151,7 +153,7 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### 自动更新
 
-ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.96.1**。
+ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.96.2**。
 
 ## 开发者入口
 
@@ -214,7 +216,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 
 ## 项目状态与 v1.0 方向
 
-ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本地 Agent Runtime、正式文学工作流门禁、2.5D 叙事星仪、正文阅读与清洁导出均已可用。
+ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.96.2 同时改善了大型项目顾问快照和恢复任务的状态呈现，减少已恢复任务仍显示旧阻断信息的问题。
 
 走向 v1.0 的重点不是继续堆功能，而是积累证据：更多题材的长期项目样本、无人值守恢复验证、Windows 10/11 干净环境下的安装/覆盖升级矩阵、更强的模型连接诊断，以及在真实稿件上的创作质量评估。
 
@@ -224,6 +226,7 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本�
 - [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
+- [v0.96.2 发行说明](docs/releases/v0.96.2.md)
 - [v0.96.1 发行说明](docs/releases/v0.96.1.md)
 - [v0.96.0 发行说明](docs/releases/v0.96.0.md)
 - [贡献指南](CONTRIBUTING.md)
