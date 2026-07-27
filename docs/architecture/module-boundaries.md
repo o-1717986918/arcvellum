@@ -316,15 +316,19 @@ W6-4G 上下文与 Token 效率边界进一步固定：
 - `runtime/context_selection.py` 拥有 Agent 可见资料和操作手册排除策略；
   `runtime/task_program.py` 只能消费信封并渲染程序，不能重新建立第二套 source/reference
   选择；
+- `routes/scene/context_contract.py` 只声明正文生成、精确审查和语义修订任务族的文学
+  mandatory 资料；`tasking/context_contract.py` 只做 Engine 侧协议规范化，
+  `protocols/task_context.py` 由 Studio 独立验证消费端合同，三者不得拥有预算或 Runtime
+  配置；
 - `observability/throughput_aggregation.py` 只消费事件并维护临时聚合状态，
   `throughput_facts.py` 只计算 Token/context/attribution 数值，
   `throughput_metrics.py` 只输出用户安全的只读投影；
 - throughput projection 可暴露计数、digest、task/scene/role/model attribution，
   不能暴露 Prompt、正文、推理、凭证或绝对路径；
-- `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择与
-  `ExecutionContextEnvelope` 已建立可验证合同，但 Engine task package 尚未为生产
-  bounded 显式声明完整 mandatory/tier contract；不得仅修改配置就把 bounded 宣称为
-  生产可用。
+- `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择、
+  `ExecutionContextEnvelope` 和首批高成本场景任务的 Engine mandatory contract 已建立
+  可验证合同；其余任务族、真实模型 A/B 和生产回退尚未完成，不得仅修改配置就把
+  bounded 宣称为生产可用。
 
 ## 当前大文件的正确处理方式
 

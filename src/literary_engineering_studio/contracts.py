@@ -7,6 +7,9 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .protocols.task_context import (
+    validate_optional_context_contract as _validate_optional_context_contract,
+)
 
 TASK_SCHEMA = "literary-engineering-workbench/agent-task/v1"
 EXECUTION_CONTRACT_SCHEMA = "literary-engineering-studio/task-execution/v0.3"
@@ -291,6 +294,10 @@ def _validate_task_payload(payload: dict[str, Any]) -> None:
         if not isinstance(payload.get(field), list):
             raise ValueError(f"task package field must be a list: {field}")
     _validate_optional_execution_contract(payload)
+    _validate_optional_context_contract(
+        payload,
+        normalize_path=normalize_relative_path,
+    )
 
 
 def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:

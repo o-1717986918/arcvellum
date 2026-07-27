@@ -85,6 +85,21 @@ class ContextBudgetTests(unittest.TestCase):
             self.assertEqual(report.budget_overage_count, 1)
             self.assertGreater(report.budget_overage_characters, 0)
 
+    def test_high_risk_review_budget_preserves_real_mandatory_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            budget = resolve_task_context_budget(
+                _task(
+                    Path(temporary),
+                    task_type="platform-agent-review",
+                    role="main-review-agent",
+                    current_state="candidate-review",
+                )
+            )
+
+            self.assertIs(budget.task_kind, ContextTaskKind.REVIEW)
+            self.assertEqual(budget.target_inline_characters, 80_500)
+            self.assertEqual(budget.enforced_inline_characters, 180_000)
+
     def test_route_and_scene_semantics_take_priority_over_reviewer_role(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

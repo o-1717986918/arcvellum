@@ -386,6 +386,76 @@ class SandboxTests(unittest.TestCase):
                     context_budget=budget,
                 )
 
+    def test_bounded_sandbox_inlines_mandatory_and_keeps_other_sources_exact(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            support = root / "canon" / "large-support.md"
+            support.parent.mkdir()
+            support.write_text("按需精确资料。" * 20_000, encoding="utf-8")
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload.update(
+                {
+                    "source_paths": [
+                        "scenes/scene_0001.yaml",
+                        "canon/large-support.md",
+                    ],
+                    "agent_source_paths": [
+                        "scenes/scene_0001.yaml",
+                        "canon/large-support.md",
+                    ],
+                    "context_contract_required": True,
+                    "context_contract_schema": (
+                        "literary-engineering-workbench/task-context-contract/v1"
+                    ),
+                    "context_contract_revision": "scene-v1",
+                    "context_contract_status": "shadow-ready",
+                    "context_must_inline_paths": ["scenes/scene_0001.yaml"],
+                }
+            )
+            task.task_json_path.write_text(
+                json.dumps(_enrich_task_payload(payload), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            task = load_task_package(root, task.task_json_path)
+            budget = resolve_task_context_budget(
+                task,
+                {"context_budget": {"mode": "bounded"}},
+            )
+
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-bounded-contract",
+                context_budget=budget,
+            )
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            task_context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            context = task_context["execution_context"]
+
+            self.assertEqual(
+                context["must_inline"],
+                ["scenes/scene_0001.yaml"],
+            )
+            self.assertEqual(
+                context["exact_on_demand"],
+                ["canon/large-support.md"],
+            )
+            self.assertTrue(
+                (sandbox.workspace / "canon" / "large-support.md").is_file()
+            )
+            self.assertLessEqual(
+                context["first_turn_visible_characters"],
+                context["character_budget"],
+            )
+            self.assertEqual(
+                manifest["execution_context"]["digest"],
+                context["context_digest"],
+            )
+
     def test_sandbox_persists_controlled_capability_and_resource_contracts(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
             root = Path(temporary)

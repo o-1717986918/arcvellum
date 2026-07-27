@@ -69,6 +69,7 @@ def materialize_agent_context_contract(
         selection=selection,
         prepared_context=prepared_context,
         budget=context_budget,
+        user_direction=direction,
     )
     prompt_path.write_text(
         render_worker_program(

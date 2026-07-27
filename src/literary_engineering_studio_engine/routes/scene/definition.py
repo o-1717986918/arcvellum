@@ -1,10 +1,11 @@
-"""Stable task payload facade for the formal scene-development route."""
+"""Formal scene-development task payload owner."""
 
 from __future__ import annotations
 
 from pathlib import Path
 import re
 
+from .context_contract import scene_context_contract
 from ...scene_route_blueprints import _blueprint_for_state
 from ...scene_route_gates import (
     _candidate_review_gate_errors,
@@ -45,8 +46,7 @@ def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) 
         "prompt_asset_id": blueprint["prompt_asset_id"],
         "command": blueprint["command"],
         "required_reading": [
-            "SKILL.md", "AGENTS.md", "agentread.yaml", "references/agent-run-protocol.md",
-            "references/cli-run-protocol.md", "references/punctuation-standard.md",
+            "SKILL.md", "AGENTS.md", "agentread.yaml", "references/agent-run-protocol.md", "references/cli-run-protocol.md", "references/punctuation-standard.md",
         ],
         "source_paths": source_paths,
         "context_trace": blueprint.get("context_trace", ""),
@@ -83,6 +83,7 @@ def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) 
         source = _resolve_project_path(root, str(blueprint["revision_source"]))
         if source.is_file():
             payload["candidate_sha256_before_revision"] = _file_sha256(source)
+    payload.update(scene_context_contract(root, payload))
     return payload
 
 

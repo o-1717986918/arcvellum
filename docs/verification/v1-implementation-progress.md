@@ -1665,8 +1665,9 @@ W1-Exit 实现结果：
 ### W6-4G：上下文与 Token 效率止损
 
 **状态：进行中。W6-4G1 usage truth 与 budget-shadow、W6-4G2
-ExecutionContextEnvelope 与四级资料合同已完成；Engine 任务层级声明、bounded
-生产 A/B 和增量 repair 仍待后续子批。完成 W6-4G 后继续 W6-5B。**
+ExecutionContextEnvelope 与四级资料合同、W6-4G3 首批 Engine 资料合同与 bounded
+影子验证已完成；真实模型 A/B、重复 sidecar 紧凑投影、生产激活和增量 repair 仍待
+后续子批。完成 W6-4G 后继续 W6-5B。**
 
 2026-07-28 真实项目运行审计发现，W6-4F 已解决 usage 累计快照重复计数和沙箱重复
 物化，但模型侧仍存在结构性上下文成本：
@@ -1811,13 +1812,55 @@ Gate、Agent 角色、Sandbox 写权限和 writeback：
 - Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
   无新增 violation。
 
-本批不声称真实 Token 已下降。131175 个首轮字符仍高于 63250 的影子目标；下一批必须
-由 Engine task package 显式提供 machine-authored mandatory/tier contract，并完成同
-模型等价任务的 bounded A/B。增量 repair、语义摘要、ContextCacheKey、session reuse、
-Bundle 与并发仍未完成。
+本批不声称真实 Token 已下降。131175 个首轮字符仍高于 63250 的影子目标；Engine
+mandatory contract 已在 W6-4G3 的首批高成本场景任务中完成，同模型等价任务的
+bounded A/B 仍待 G4。增量 repair、语义摘要、ContextCacheKey、session reuse、Bundle
+与并发仍未完成。
 
 详细实现、真实项目证据与延期项见
 `docs/architecture/reviews/w6-4g2-execution-context-envelope-review.md`。
+
+#### W6-4G3：Engine 资料合同与 bounded 影子验证
+
+**状态：完成。**
+
+本子批让 Engine 正式任务包声明首轮不可省略资料，并在不调用模型、不改变生产配置和
+不写回作品的前提下验证 bounded materialization：
+
+- 首批覆盖正文候选生成、精确候选审查、候选修订和静态修订；
+- scene task contract 显式声明 `context_must_inline_paths`，精确候选、修订源、审查
+  证据和 CLI task sidecar 缺失时 fail closed；
+- 资料合同字段进入 executable task fingerprint，旧 completion receipt 不能证明新
+  合同已经执行；
+- Engine 与 Studio 分别规范化和验证 schema、status、来源、重复、目录及越界路径；
+- 用户修订方向以 SHA-256 进入 execution-context identity，安全投影不暴露原文或该
+  digest；
+- 协议校验从既有大文件中拆出，Architecture Audit 没有接受新债务 baseline。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 只读比较：
+
+- off/shadow 首轮：131175 字符；
+- bounded 首轮：75247 字符，下降 42.6%；
+- target/enforced：80500 / 80500；
+- 9 项 mandatory 零遗漏，3 项资料保持 exact-on-demand，tier 零重叠；
+- Prompt、Task Context、Run Manifest 和 Context Ledger digest 一致；
+- 正式项目 859 个文件的内容快照前后一致，没有 writeback。
+
+该结果没有达到全路线首轮中位数下降 50% 的退出目标。旧 63250 Review 目标低于真实
+mandatory 证据，已按正确性校准为 80500。G4 在真实模型 A/B 前必须先压缩 Review
+sidecar 与 task package 的重复语义，不能靠删除文学证据或继续上调预算达标。
+
+验收证据：
+
+- Python：668 passed，1 skipped；
+- Client：44 files、135 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- `client:build`、Architecture Audit、`compileall` 与 `git diff --check`：passed；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+详细实现、真实项目证据与延期项见
+`docs/architecture/reviews/w6-4g3-engine-context-contract-and-bounded-shadow-review.md`。
 
 ### W6 后续完整阶段映射
 

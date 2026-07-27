@@ -73,12 +73,15 @@ class ExecutionContextEnvelope:
     first_turn_visible_characters: int
     budget_mode: str
     prepared_context_sha256: str
+    user_direction_sha256: str
 
     def __post_init__(self) -> None:
         if not self.task_id.strip() or not self.agent_role.strip():
             raise ValueError("execution context task_id and agent_role are required")
         if not _SHA256.fullmatch(self.context_digest):
             raise ValueError("execution context digest is invalid")
+        if not _SHA256.fullmatch(self.user_direction_sha256):
+            raise ValueError("execution context user direction digest is invalid")
         if self.character_budget < 0 or self.first_turn_visible_characters < 0:
             raise ValueError("execution context character counts cannot be negative")
         _validate_disjoint_tiers(self)
@@ -124,6 +127,7 @@ class ExecutionContextEnvelope:
             "first_turn_visible_characters": self.first_turn_visible_characters,
             "budget_mode": self.budget_mode,
             "prepared_context_sha256": self.prepared_context_sha256,
+            "user_direction_sha256": self.user_direction_sha256,
         }
 
     def safe_projection(self) -> dict[str, Any]:
@@ -156,6 +160,7 @@ def build_execution_context_envelope(
     selection: AgentContextSelection,
     prepared_context: PreparedPromptContext,
     budget: TaskContextBudget | None,
+    user_direction: str = "",
 ) -> ExecutionContextEnvelope:
     summaries = _summary_references(task.payload.get("context_summary_references"))
     _validate_summary_sources(task, summaries)
@@ -170,6 +175,7 @@ def build_execution_context_envelope(
         hard_constraints=hard_constraints,
         prepared_context=prepared_context,
         budget=budget,
+        user_direction=user_direction,
     )
     digest = _digest(identity)
     return ExecutionContextEnvelope(
@@ -192,6 +198,7 @@ def build_execution_context_envelope(
         first_turn_visible_characters=prepared_context.character_count,
         budget_mode=str(identity["budget_mode"]),
         prepared_context_sha256=prepared_context.sha256,
+        user_direction_sha256=str(identity["user_direction_sha256"]),
     )
 
 
@@ -272,6 +279,7 @@ def _execution_context_identity(
     hard_constraints: tuple[str, ...],
     prepared_context: PreparedPromptContext,
     budget: TaskContextBudget | None,
+    user_direction: str,
 ) -> dict[str, Any]:
     return {
         "schema": EXECUTION_CONTEXT_SCHEMA,
@@ -292,6 +300,7 @@ def _execution_context_identity(
         "character_budget": budget.target_inline_characters if budget is not None else 0,
         "budget_mode": budget.mode.value if budget is not None else "off",
         "prepared_context_sha256": prepared_context.sha256,
+        "user_direction_sha256": _sha256(user_direction.encode("utf-8")),
     }
 
 

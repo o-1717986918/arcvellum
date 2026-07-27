@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -149,6 +150,49 @@ class ExecutionContextEnvelopeTests(unittest.TestCase):
                     prepared_context=_prepared(),
                     budget=resolve_task_context_budget(task),
                 )
+
+    def test_user_direction_changes_context_identity_without_exposing_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "inline.md").write_text("exact first turn", encoding="utf-8")
+            (root / "on-demand.md").write_text("exact later", encoding="utf-8")
+            task = _task(root)
+            selection = AgentContextSelection(
+                source_paths=("inline.md", "on-demand.md"),
+                reference_paths=(),
+                operational_paths=(),
+                visible_paths=("inline.md", "on-demand.md"),
+            )
+            budget = resolve_task_context_budget(task)
+            first = build_execution_context_envelope(
+                task,
+                workspace=root,
+                selection=selection,
+                prepared_context=_prepared(),
+                budget=budget,
+                user_direction="保留克制的叙事距离。",
+            )
+            changed = build_execution_context_envelope(
+                task,
+                workspace=root,
+                selection=selection,
+                prepared_context=_prepared(),
+                budget=budget,
+                user_direction="把结尾改成静默余波。",
+            )
+
+            self.assertNotEqual(first.context_digest, changed.context_digest)
+            self.assertNotEqual(
+                first.user_direction_sha256,
+                changed.user_direction_sha256,
+            )
+            safe = json.dumps(changed.safe_projection(), ensure_ascii=False)
+            self.assertNotIn("把结尾改成静默余波", safe)
+            self.assertNotIn(changed.user_direction_sha256, safe)
+            self.assertEqual(
+                changed.as_dict()["user_direction_sha256"],
+                changed.user_direction_sha256,
+            )
 
 
 def _prepared() -> PreparedPromptContext:

@@ -6,12 +6,12 @@ task rendering.  That separation lets routes evolve independently without
 duplicating the formal Agent/Worker contract.
 """
 from __future__ import annotations
-
 import hashlib
 import json
 from pathlib import Path
+from .context_contract import CONTEXT_CONTRACT_FINGERPRINT_FIELDS, normalize_context_contract as _normalize_context_contract
 from ..prompt_registry import resolve_prompt_asset
-TASK_CONTRACT_REVISION = "2026-07-26.26"
+TASK_CONTRACT_REVISION = "2026-07-28.27"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 _OPERATING_REFERENCE_PATHS = {
     "SKILL.md",
@@ -106,6 +106,7 @@ def task_contract_fingerprint(task: dict[str, object]) -> str:
             "required_reading",
             "source_paths",
             "agent_source_paths",
+            *CONTEXT_CONTRACT_FINGERPRINT_FIELDS,
             "expected_outputs",
             "repair_targets",
             "repair_target_sha256",
@@ -130,7 +131,6 @@ def task_contract_fingerprint(task: dict[str, object]) -> str:
 
 def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
     """Add the authoritative execution and prompt contracts to a task."""
-
     enriched = dict(task)
     enriched["task_contract_revision"] = TASK_CONTRACT_REVISION
     prompt_id = str(enriched.get("prompt_asset_id") or "").strip()
@@ -164,6 +164,7 @@ def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
 
     expected_outputs = [str(item) for item in enriched.get("expected_outputs") or []]
     core_managed_outputs = {str(item) for item in enriched.get("core_managed_outputs") or []}
+    _normalize_context_contract(enriched)
     semantic = enriched.get("semantic_artifact") if isinstance(enriched.get("semantic_artifact"), dict) else None
     if semantic is not None:
         semantic_path = normalize_relative(str(semantic.get("path") or ""))
