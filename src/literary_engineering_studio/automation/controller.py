@@ -486,7 +486,7 @@ class AutopilotService:
                         self.store.advance_autopilot_run(
                             run_id,
                             consecutive_revisions=next_revision_count(run, result.task_id),
-                            failures=0,
+                            failures=0, last_error="",
                             progress_fingerprint=progress_after,
                             stalled_cycles=0,
                             last_progress_at=_now(),

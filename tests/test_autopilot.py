@@ -483,6 +483,89 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(RecoveringWorker.resume_calls, 1)
             self.assertTrue(any(event["event"] == "task.recovery_succeeded" for event in events))
 
+    def test_successful_writeback_clears_a_stale_task_error(self):
+        class WritebackWorker:
+            run_calls = 0
+
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                self.__class__.run_calls += 1
+                if self.__class__.run_calls == 1:
+                    run_root = project.parent / "run-writeback"
+                    return WorkerRunResult(
+                        "waiting_writeback",
+                        project,
+                        route,
+                        "scene-review",
+                        runtime_id,
+                        run_root,
+                        run_root / "workspace",
+                        "等待写回。",
+                    )
+                return WorkerRunResult(
+                    "route_ready",
+                    project,
+                    route,
+                    "",
+                    runtime_id,
+                    None,
+                    None,
+                    "路线已完成。",
+                )
+
+            def approve_writeback(self, run_root, *, approved_by):
+                output = project / "reviews" / "scene-review.json"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text('{"status":"pass"}\n', encoding="utf-8")
+                return WorkerRunResult(
+                    "complete",
+                    project,
+                    "scene-development",
+                    "scene-review",
+                    "opencode",
+                    run_root,
+                    run_root / "workspace",
+                    "写回完成。",
+                )
+
+        class FakeRelease:
+            def __init__(self, config):
+                self.config = config
+
+            def release(self, project, *, approved_by, autopilot_run_id=""):
+                return {"ok": True, "manifest_path": "release.json"}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="full_auto",
+                runtime="opencode",
+                policy=policy,
+            )
+            store.update_autopilot_run(run["run_id"], last_error="旧的预检错误")
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", WritebackWorker),
+                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("scene-development",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            completed = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(completed["status"], "complete")
+            self.assertEqual(completed["tasks_completed"], 1)
+            self.assertEqual(completed["last_error"], "")
+
     def test_structured_approval_choice_materializes_core_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "project"

@@ -2,6 +2,34 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.96.2] - 2026-07-28
+
+### Added
+
+- Added schema-bound scene strategy contracts for roleplay depth, branch count, narrative distance, word targets, revision policy, and bounded fallback behavior.
+- Added deterministic scene plan patches with revision, fingerprint, scope, dependency, and Freedom Budget validation.
+- Added a formal Token-efficiency workstream to the v1 roadmap, including task context budgets, one model-facing execution envelope, content-addressed cache boundaries, and measurable quality-preserving targets.
+
+### Changed
+
+- Split roleplay depth, task sidecars, scene strategy policy, and plan context into focused modules without introducing a second task lifecycle.
+- Made large-project advisor snapshots prioritize stable creative assets and omit disposable workflow-run traces.
+- Raised the advisor formal-source ceiling while keeping a complete project index and bounded Agent-readable snapshot.
+
+### Fixed
+
+- Prevented large projects from exceeding the advisor snapshot file limit because of accumulated workflow traces.
+- Replaced the internal writeback-ready English status with a clear Chinese instruction to review the diff before import.
+- Cleared obsolete preflight errors after a later approved writeback succeeds, so a recovered task no longer appears blocked.
+
+## [0.96.1] - 2026-07-27
+
+### Fixed
+
+- Restored narrative Orrery motion in the desktop client while preserving reduced-motion accessibility controls.
+- Restored file-based style corpus import for UTF-8 TXT and Markdown sources.
+- Persisted role-specific model selection without allowing stale startup responses to restore the default model.
+
 ## [0.96.0] - 2026-07-26
 
 ### Added
@@ -65,6 +93,8 @@ All notable ArcVellum changes are documented in this file. Detailed release evid
 
 - Candidate output, lifecycle status, and continuity-ledger edge cases found during end-to-end scene promotion testing.
 
+[0.96.2]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.2
+[0.96.1]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.1
 [0.96.0]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.0
 [0.95.2]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.95.2
 [0.95.1]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.95.1
