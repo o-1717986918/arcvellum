@@ -27,6 +27,7 @@ class PreparedPromptContext:
     character_count: int
     sha256: str
     budget_report: ContextBudgetReport | None = None
+    unavailable_paths: tuple[str, ...] = ()
 
     def budget_report_dict(self) -> dict[str, object]:
         return self.budget_report.as_dict() if self.budget_report is not None else {}
@@ -37,6 +38,8 @@ class _ContextRecord:
     relative: str
     text: str | None
     block: str | None
+    available_on_demand: bool
+    character_count: int
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ def build_prepared_prompt_context(
         character_count=len(selected.rendered),
         sha256=hashlib.sha256(selected.rendered.encode("utf-8")).hexdigest(),
         budget_report=report,
+        unavailable_paths=selected.unavailable,
     )
 
 
@@ -94,9 +98,19 @@ def _inline_limit(
 def _load_records(workspace: Path, paths: Iterable[str]) -> tuple[_ContextRecord, ...]:
     records: list[_ContextRecord] = []
     for relative in _unique(paths):
-        text = _read_text_file(workspace / Path(relative))
+        path = workspace / Path(relative)
+        text = _read_text_file(path)
         block = _render_file(relative, text) if text is not None else None
-        records.append(_ContextRecord(relative, text, block))
+        on_demand_count = len(text) if text is not None else _directory_character_count(path)
+        records.append(
+            _ContextRecord(
+                relative,
+                text,
+                block,
+                available_on_demand=text is not None or path.is_dir(),
+                character_count=on_demand_count,
+            )
+        )
     return tuple(records)
 
 
@@ -147,7 +161,11 @@ def _select_records(
     for record in records:
         if record.text is None or record.block is None:
             omitted.append(record.relative)
-            unavailable.append(record.relative)
+            if record.available_on_demand:
+                on_demand += record.character_count
+                authorized += record.character_count
+            else:
+                unavailable.append(record.relative)
             continue
         authorized += len(record.text)
         if record.relative in mandatory:
@@ -225,13 +243,26 @@ def _read_text_file(path: Path) -> str | None:
         return None
 
 
+def _directory_character_count(path: Path) -> int:
+    if not path.is_dir():
+        return 0
+    count = 0
+    for item in path.rglob("*"):
+        if not item.is_file():
+            continue
+        text = _read_text_file(item)
+        if text is not None:
+            count += len(text)
+    return count
+
+
 def _render_file(relative: str, text: str) -> str:
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return (
-        f"----- BEGIN AUTHORIZED FILE: {relative} "
+        f"----- BEGIN AUTHORIZED FILE: `{relative}` "
         f"(sha256={digest}, characters={len(text)}) -----\n"
         f"{text}\n"
-        f"----- END AUTHORIZED FILE: {relative} -----"
+        f"----- END AUTHORIZED FILE: `{relative}` -----"
     )
 
 

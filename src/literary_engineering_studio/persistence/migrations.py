@@ -42,6 +42,18 @@ def ensure_additive_columns(connection: sqlite3.Connection) -> None:
             "ALTER TABLE creative_plan_events "
             "ADD COLUMN session_id TEXT NOT NULL DEFAULT 'studio-store'"
         )
+    context_ledger_columns = _columns(connection, "context_ledgers")
+    if "execution_context_digest" not in context_ledger_columns:
+        connection.execute(
+            "ALTER TABLE context_ledgers "
+            "ADD COLUMN execution_context_digest TEXT NOT NULL DEFAULT ''"
+        )
+    context_entry_columns = _columns(connection, "context_ledger_entries")
+    if "visibility_tier" not in context_entry_columns:
+        connection.execute(
+            "ALTER TABLE context_ledger_entries "
+            "ADD COLUMN visibility_tier TEXT NOT NULL DEFAULT ''"
+        )
 
 
 def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
@@ -51,6 +63,8 @@ def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
         "archive_asset_transactions",
         "agent_sessions",
         "creative_plan_events",
+        "context_ledgers",
+        "context_ledger_entries",
     }:
         raise ValueError(f"unsupported migration table: {table}")
     return {

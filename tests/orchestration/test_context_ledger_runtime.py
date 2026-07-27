@@ -36,8 +36,16 @@ class RuntimeContextLedgerTests(unittest.TestCase):
             self.assertIn("`scenes/scene_0001.yaml`", prompt)
             self.assertNotIn("scenes/missing.yaml", prompt)
             self.assertTrue(entries["scenes/scene_0001.yaml"].included)
+            self.assertEqual(
+                entries["scenes/scene_0001.yaml"].visibility_tier,
+                "must_inline",
+            )
             self.assertFalse(entries["scenes/missing.yaml"].included)
             self.assertEqual(entries["scenes/missing.yaml"].note, "missing_or_not_materialized")
+            self.assertEqual(
+                entries["scenes/missing.yaml"].visibility_tier,
+                "excluded",
+            )
             for machine_path in (
                 "AGENT_TASK.md",
                 "TASK_CONTEXT.json",
@@ -54,9 +62,21 @@ class RuntimeContextLedgerTests(unittest.TestCase):
                 hashlib.sha256(sandbox.prompt_path.read_bytes()).hexdigest(),
             )
             manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            task_context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
             self.assertEqual(manifest["agent_prompt_source_paths"], ["scenes/scene_0001.yaml"])
             self.assertEqual(manifest["context_ledger_id"], ledger.ledger_id)
             self.assertEqual(manifest["context_ledger_digest"], ledger.digest)
+            self.assertEqual(
+                manifest["execution_context"]["digest"],
+                ledger.execution_context_digest,
+            )
+            self.assertEqual(
+                task_context["execution_context"]["context_digest"],
+                ledger.execution_context_digest,
+            )
+            self.assertIn(ledger.execution_context_digest, prompt)
 
     def test_changed_context_produces_a_new_prompt_and_ledger_digest(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
@@ -147,6 +167,16 @@ class RuntimeContextLedgerTests(unittest.TestCase):
             serialized = json.dumps(persisted, ensure_ascii=False)
             self.assertNotIn("test-placeholder-secret-value", serialized)
             self.assertIn("[REDACTED]", serialized)
+            self.assertEqual(
+                persisted["execution_context_digest"],
+                json.loads(
+                    sandbox.manifest_path.read_text(encoding="utf-8")
+                )["execution_context"]["digest"],
+            )
+            self.assertIn(
+                "must_inline",
+                {item["visibility_tier"] for item in persisted["entries"]},
+            )
 
             common = {
                 "project_root": str(root),

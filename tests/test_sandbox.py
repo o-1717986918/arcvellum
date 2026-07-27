@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -273,6 +274,70 @@ class SandboxTests(unittest.TestCase):
 
             self.assertTrue((sandbox.workspace / "scenes" / "scene_0001.yaml").is_file())
             self.assertFalse((sandbox.workspace / "canon").exists())
+            task_context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            self.assertIn(
+                "canon",
+                task_context["execution_context"]["excluded"],
+            )
+
+    def test_digest_bound_summary_replaces_source_without_expanding_workspace(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            source = root / "canon" / "long-history.md"
+            source.parent.mkdir()
+            source.write_text("A very long canonical history.", encoding="utf-8")
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload["source_paths"] = [
+                "scenes/scene_0001.yaml",
+                "canon/long-history.md",
+            ]
+            payload["agent_source_paths"] = list(payload["source_paths"])
+            payload["context_summary_references"] = [
+                {
+                    "source_ref": "canon/long-history.md",
+                    "summary": "Only the digest-bound history summary.",
+                    "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                }
+            ]
+            task.task_json_path.write_text(
+                json.dumps(_enrich_task_payload(payload)),
+                encoding="utf-8",
+            )
+            task = load_task_package(root, task.task_json_path)
+
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-summary-reference",
+            )
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            ledger = json.loads(
+                (sandbox.run_root / "context-ledger.json").read_text(encoding="utf-8")
+            )
+            entry = next(
+                item
+                for item in ledger["entries"]
+                if item["source_ref"] == "canon/long-history.md"
+            )
+
+            self.assertFalse(
+                (sandbox.workspace / "canon" / "long-history.md").exists()
+            )
+            self.assertIn("Only the digest-bound history summary.", prompt)
+            self.assertNotIn("A very long canonical history.", prompt)
+            self.assertEqual(
+                context["execution_context"]["summary_references"][0]["source_ref"],
+                "canon/long-history.md",
+            )
+            self.assertEqual(entry["visibility_tier"], "summary_reference")
+            self.assertEqual(entry["note"], "digest_bound_summary_reference")
 
     def test_agent_sandbox_persists_shadow_context_budget_evidence(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:

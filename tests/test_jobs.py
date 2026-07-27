@@ -215,7 +215,7 @@ class DurableJobTests(unittest.TestCase):
                 ["ses_worker_001"],
             )
 
-    def test_schema_fourteen_preserves_context_ledgers_and_adds_mutation_receipts(self):
+    def test_schema_fifteen_preserves_context_ledgers_and_adds_mutation_receipts(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "studio.sqlite3"
             first = JobStore(database)
@@ -238,7 +238,7 @@ class DurableJobTests(unittest.TestCase):
 
             restarted = JobStore(database)
             self.assertIsNotNone(restarted.migration_backup)
-            self.assertEqual(restarted.health()["schema_version"], 14)
+            self.assertEqual(restarted.health()["schema_version"], 15)
             session = restarted.read_agent_session("session-before-ledger")
             self.assertEqual(session["context_ledger_id"], "")
             self.assertEqual(session["context_ledger_digest"], "")
@@ -252,6 +252,42 @@ class DurableJobTests(unittest.TestCase):
             self.assertIn("context_ledgers", tables)
             self.assertIn("context_ledger_entries", tables)
             self.assertIn("mutation_receipts", tables)
+
+    def test_schema_fifteen_adds_execution_context_columns_to_existing_ledgers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "studio.sqlite3"
+            JobStore(database)
+            connection = sqlite3.connect(database)
+            try:
+                connection.execute(
+                    "ALTER TABLE context_ledgers DROP COLUMN execution_context_digest"
+                )
+                connection.execute(
+                    "ALTER TABLE context_ledger_entries DROP COLUMN visibility_tier"
+                )
+                connection.execute("PRAGMA user_version = 14")
+                connection.commit()
+            finally:
+                connection.close()
+
+            restarted = JobStore(database)
+
+            self.assertEqual(restarted.health()["schema_version"], 15)
+            with restarted._connection() as connection:
+                ledger_columns = {
+                    row["name"]
+                    for row in connection.execute(
+                        "PRAGMA table_info(context_ledgers)"
+                    ).fetchall()
+                }
+                entry_columns = {
+                    row["name"]
+                    for row in connection.execute(
+                        "PRAGMA table_info(context_ledger_entries)"
+                    ).fetchall()
+                }
+            self.assertIn("execution_context_digest", ledger_columns)
+            self.assertIn("visibility_tier", entry_columns)
 
     def test_supervisor_persists_completion(self):
         with tempfile.TemporaryDirectory() as temporary:

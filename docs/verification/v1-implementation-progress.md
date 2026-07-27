@@ -31,7 +31,7 @@
   仍按业主决定延期。
 - W6-5A 场景自适应契约层已经完成，正式生产激活仍属于 W6-5B；在继续 W6-5B 前先执行
   W6-4G 上下文与 Token 效率止损，避免后续真实 Agent 验收继续放大重复上下文成本。
-- 最近一次 Python 全量证据：652 tests passed、1 skipped；Client 最近一次基线为 135 tests passed；Python compileall、Prompt Registry、Architecture Audit、Client production build 与 `git diff --check` 全部通过。
+- 最近一次 Python 全量证据：657 tests passed、1 skipped；Client 最近一次基线为 135 tests passed；Python compileall、Prompt Registry、Architecture Audit、Client production build 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -1664,9 +1664,9 @@ W1-Exit 实现结果：
 
 ### W6-4G：上下文与 Token 效率止损
 
-**状态：进行中。W6-4G1 usage truth 与 budget-shadow 已完成；bounded context、
-ExecutionContextEnvelope、四级资料选择和增量 repair 仍待后续子批。完成 W6-4G 后继续
-W6-5B。**
+**状态：进行中。W6-4G1 usage truth 与 budget-shadow、W6-4G2
+ExecutionContextEnvelope 与四级资料合同已完成；Engine 任务层级声明、bounded
+生产 A/B 和增量 repair 仍待后续子批。完成 W6-4G 后继续 W6-5B。**
 
 2026-07-28 真实项目运行审计发现，W6-4F 已解决 usage 累计快照重复计数和沙箱重复
 物化，但模型侧仍存在结构性上下文成本：
@@ -1770,6 +1770,54 @@ adaptive-depth 与 parallel-review 不在本批冒充完成，继续归属 W6-6/
 
 详细边界与延期项见
 `docs/architecture/reviews/w6-4g1-token-truth-and-budget-shadow-review.md`。
+
+#### W6-4G2：唯一执行上下文信封与四级资料合同
+
+**状态：完成。**
+
+本子批把模型实际可见资料收敛为版本化
+`arcvellum/execution-context-envelope/v1`，仍不改变 fixed route、任务顺序、文学
+Gate、Agent 角色、Sandbox 写权限和 writeback：
+
+- `must_inline`、`exact_on_demand`、`summary_reference`、`excluded` 四级路径互斥；
+- mandatory 未实际内联、on-demand 文件不存在、summary source digest 过期时
+  fail closed；
+- Prompt、`TASK_CONTEXT.json`、Run Manifest 与 Context Ledger 使用同一个 envelope
+  digest；
+- Context Ledger 每条记录拥有真实 `visibility_tier`，SQLite schema 15 保存 tier 与
+  execution context digest；
+- task program 不再重复展开已由 Prepared Context 和执行信封表达的完整
+  source/reference 清单；
+- 旧 Context Ledger 可继续解析，安全投影不包含正文、Prompt、绝对路径、凭证或隐藏
+  推理。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 只读沙箱证据：
+
+- mode：`shadow`；
+- target/enforced/actual first turn：63250 / 180000 / 131175 字符；
+- must-inline / exact-on-demand / summary / excluded：12 / 0 / 0 / 35；
+- 10 个 Agent source 全部有且仅有一个层级，0 overlap、0 missing；
+- 四处 digest 均为
+  `aea856ac7acffdde0fc16790118ab0f21b3b2891ae24fd6a0f752e1fc01e0b5a`；
+- 正式项目取样前后均为 910 个文件，mtime/size 快照一致，没有 writeback。
+
+验收证据：
+
+- 全量 Python：657 passed，1 skipped；
+- Client：44 files、135 tests passed；
+- `client:build`、Prompt Registry、Architecture Audit、`compileall` 和
+  `git diff --check`：passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+本批不声称真实 Token 已下降。131175 个首轮字符仍高于 63250 的影子目标；下一批必须
+由 Engine task package 显式提供 machine-authored mandatory/tier contract，并完成同
+模型等价任务的 bounded A/B。增量 repair、语义摘要、ContextCacheKey、session reuse、
+Bundle 与并发仍未完成。
+
+详细实现、真实项目证据与延期项见
+`docs/architecture/reviews/w6-4g2-execution-context-envelope-review.md`。
 
 ### W6 后续完整阶段映射
 

@@ -27,19 +27,28 @@ WORKER_PROGRAM_TEMPLATE = """# ArcVellum Studio Worker Program
 
 {task_body}
 
-## Source Artifacts
+## Execution Context
 
-{source_lines}
+{context_identity}
 
-## Reference Material
+首轮先使用 Must Inline 快照。只有快照不足以完成一条具体判断时，才读取 Exact On Demand
+中列出的精确文件；不要自行遍历目录。Summary Reference 只是带摘要身份的可重建短参考，
+不能覆盖 Canon、人物当前状态、挂载文风、字数/节奏契约或精确候选。未列入以下层级的项目
+资料不属于本任务权限。
 
-{reference_lines}
+`TASK_CONTEXT.json` 的 `workspace_dependency_paths` 是 CLI 为复现正式门禁而暂存的底层依赖；它们不是额外阅读任务。尤其不要递归枚举 `canon/`、`characters/`、`style/`、`plot/` 或其他目录。上下文包和上列精确文件是本次创作判断的权威输入；只有当前上下文明确不足时，才读取 Exact On Demand 中与当前判断直接相关的一份精确文件。
 
-Reference 只用于解决具体约束；先使用 Prepared Context Snapshot，再读取其中明确列出的 omitted 文件。不要自行遍历工作区。审查类任务应先掌握候选正文、CLI Protected Outputs 中的审查骨架、场景定义、构图审查、分支选择和上下文 trace；完成这些必要阅读后立即写出 Allowed Outputs。除非需要核实一条具体矛盾，不要在写出初稿前连续读取超过八份 source/reference。
-
-`TASK_CONTEXT.json` 的 `workspace_dependency_paths` 是 CLI 为复现正式门禁而暂存的底层依赖；它们不是额外阅读任务。尤其不要递归枚举 `canon/`、`characters/`、`style/`、`plot/` 或其他目录。上下文包和上列精确文件是本次创作判断的权威输入；只有当前 source 明确不足时，才读取与当前场景直接相关的一份精确文件。
+### Must Inline
 
 {prepared_section}
+
+### Exact On Demand
+
+{on_demand_lines}
+
+### Summary Reference
+
+{summary_reference_lines}
 
 ## Allowed Outputs
 

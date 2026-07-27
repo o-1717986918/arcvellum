@@ -16,6 +16,10 @@ from .context_budget import (
 from .context_ledger import materialize_runtime_context_ledger
 from .context_selection import AgentContextSelection
 from .execution_boundaries import materialize_execution_boundaries
+from .execution_context import (
+    ExecutionContextEnvelope,
+    build_execution_context_envelope,
+)
 from .prompt_context import PreparedPromptContext, build_prepared_prompt_context
 from .task_program import render_worker_program, write_task_context
 
@@ -26,6 +30,7 @@ class MaterializedContextContract:
     reference_paths: tuple[str, ...]
     ledger: ContextLedger
     prepared_context: PreparedPromptContext
+    execution_context: ExecutionContextEnvelope
 
 
 def materialize_agent_context_contract(
@@ -58,6 +63,13 @@ def materialize_agent_context_contract(
         budget=context_budget,
         mandatory_paths=mandatory_paths,
     )
+    execution_context = build_execution_context_envelope(
+        task,
+        workspace=workspace,
+        selection=selection,
+        prepared_context=prepared_context,
+        budget=context_budget,
+    )
     prompt_path.write_text(
         render_worker_program(
             task,
@@ -67,6 +79,7 @@ def materialize_agent_context_contract(
             prepared_context=prepared_context.rendered,
             prepared_context_paths=prepared_context.included_paths,
             omitted_context_paths=prepared_context.omitted_paths,
+            execution_context=execution_context,
         ),
         encoding="utf-8",
     )
@@ -75,6 +88,7 @@ def materialize_agent_context_contract(
         workspace / "TASK_CONTEXT.json",
         reference_paths=references,
         source_paths=sources,
+        execution_context=execution_context,
     )
     materialize_execution_boundaries(run_root, task_dir, task_context_path=context_path)
     ledger = materialize_runtime_context_ledger(
@@ -86,8 +100,15 @@ def materialize_agent_context_contract(
         prompt_source_paths=sources,
         prompt_reference_paths=references,
         prompt_path=prompt_path,
+        execution_context=execution_context,
     )
-    return MaterializedContextContract(sources, references, ledger, prepared_context)
+    return MaterializedContextContract(
+        sources,
+        references,
+        ledger,
+        prepared_context,
+        execution_context,
+    )
 
 
 def _mandatory_context_paths(

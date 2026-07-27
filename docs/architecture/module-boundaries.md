@@ -254,8 +254,9 @@ AO-2 持久化边界：
   compiled graph digest、simulation fingerprint 与 provenance 语义链；
 - `shadow.py` 只量测 Normalize/Lint/Compile/Simulate，Lint 失败即停止。它不持久化、
   不执行、不激活，也没有 Autopilot 调用入口；
-- AO-2 在 schema 12 建立计划索引；schema 13 增加 Context Ledger 元数据；当前
-  schema 14 增加 Worker Mutation Receipt 索引与 plan event session binding，继续沿用
+- AO-2 在 schema 12 建立计划索引；schema 13 增加 Context Ledger 元数据；schema 14
+  增加 Worker Mutation Receipt 索引与 plan event session binding；当前 schema 15
+  增加 execution context digest 与 visibility tier 索引，继续沿用
   JobStore migration backup。删除 Studio 编排/可观测索引不得删除或改变正式作品与项目
   审计文件。
 - plan `status` 是机器字段，初始值固定为 `shadow`；只有通过完整审计协调器验证的 revision
@@ -307,13 +308,23 @@ W6-4G 上下文与 Token 效率边界进一步固定：
 - `runtime/context_materialization.py` 是预算、资料选择、Prompt、Task Context、
   Execution Boundary 与 Context Ledger 的单一装配入口；bounded 模式只有在任务包
   显式提供 `context_must_inline_paths` 后才可继续；
+- `runtime/execution_context.py` 只拥有不可变 `ExecutionContextEnvelope`、四级资料
+  枚举、摘要引用、内容身份与安全投影；它不能选择正式任务、扩大 Sandbox 权限或写回；
+- `must_inline`、`exact_on_demand`、`summary_reference` 与 `excluded` 必须互斥。
+  Prompt、`TASK_CONTEXT.json`、Run Manifest 和 Context Ledger 必须绑定同一 envelope
+  digest；模型实际可见层级与 SQLite ledger tier 必须一致；
+- `runtime/context_selection.py` 拥有 Agent 可见资料和操作手册排除策略；
+  `runtime/task_program.py` 只能消费信封并渲染程序，不能重新建立第二套 source/reference
+  选择；
 - `observability/throughput_aggregation.py` 只消费事件并维护临时聚合状态，
   `throughput_facts.py` 只计算 Token/context/attribution 数值，
   `throughput_metrics.py` 只输出用户安全的只读投影；
 - throughput projection 可暴露计数、digest、task/scene/role/model attribution，
   不能暴露 Prompt、正文、推理、凭证或绝对路径；
 - `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择与
-  `ExecutionContextEnvelope` 完成前，不得仅修改配置就把 bounded 宣称为生产可用。
+  `ExecutionContextEnvelope` 已建立可验证合同，但 Engine task package 尚未为生产
+  bounded 显式声明完整 mandatory/tier contract；不得仅修改配置就把 bounded 宣称为
+  生产可用。
 
 ## 当前大文件的正确处理方式
 

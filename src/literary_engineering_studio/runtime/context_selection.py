@@ -6,7 +6,17 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from ..contracts import TaskPackage
-from .task_program import compact_task_references
+
+
+OPERATING_REFERENCE_PATHS = {
+    "SKILL.md",
+    "AGENTS.md",
+    "agentread.yaml",
+    "references/agent-run-protocol.md",
+    "references/cli-run-protocol.md",
+    "references/artifact-contracts.md",
+    "references/workflows.md",
+}
 
 
 @dataclass(frozen=True)
@@ -15,6 +25,8 @@ class AgentContextSelection:
     reference_paths: tuple[str, ...]
     operational_paths: tuple[str, ...]
     visible_paths: tuple[str, ...]
+    excluded_paths: tuple[str, ...] = ()
+    summary_reference_paths: tuple[str, ...] = ()
 
     @property
     def requested_context_paths(self) -> tuple[str, ...]:
@@ -30,6 +42,25 @@ class AgentContextSelection:
         return sources, references
 
 
+def compact_task_references(task: TaskPackage) -> tuple[str, ...]:
+    """Remove host-operation manuals when an exact task Prompt owns protocol."""
+
+    prompt_asset = (
+        task.payload.get("prompt_asset")
+        if isinstance(task.payload.get("prompt_asset"), dict)
+        else {}
+    )
+    if task.execution_contract.execution_policy == "deterministic":
+        return ()
+    if prompt_asset.get("exact") is not True:
+        return task.required_reading
+    return tuple(
+        path
+        for path in task.required_reading
+        if path not in OPERATING_REFERENCE_PATHS
+    )
+
+
 def select_agent_context(task: TaskPackage) -> AgentContextSelection:
     agent_sources = task.payload.get("agent_source_paths")
     sources = (
@@ -38,17 +69,32 @@ def select_agent_context(task: TaskPackage) -> AgentContextSelection:
         else tuple(task.source_paths)
     )
     references = compact_task_references(task)
+    summary_paths = _summary_paths(task.payload.get("context_summary_references"))
+    explicitly_excluded = _strings(task.payload.get("context_excluded_paths"))
+    unavailable_inline = set((*explicitly_excluded, *summary_paths))
+    sources = tuple(path for path in _unique(sources) if path not in unavailable_inline)
+    references = tuple(path for path in _unique(references) if path not in unavailable_inline)
     operational = (
         *task.expected_outputs,
         *task.core_managed_outputs,
         "project.yaml",
         "workflow/studio/user_directions.md",
     )
+    visible = _unique((*references, *sources, *operational))
+    excluded = _unique(
+        (
+            *explicitly_excluded,
+            *(path for path in task.source_paths if path not in visible and path not in summary_paths),
+            *(path for path in task.required_reading if path not in visible and path not in summary_paths),
+        )
+    )
     return AgentContextSelection(
-        source_paths=_unique(sources),
-        reference_paths=_unique(references),
+        source_paths=sources,
+        reference_paths=references,
         operational_paths=_unique(operational),
-        visible_paths=_unique((*references, *sources, *operational)),
+        visible_paths=visible,
+        excluded_paths=excluded,
+        summary_reference_paths=summary_paths,
     )
 
 
@@ -61,3 +107,20 @@ def _unique(values: Iterable[str]) -> tuple[str, ...]:
             result.append(normalized)
             seen.add(normalized)
     return tuple(result)
+
+
+def _strings(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return _unique(str(item) for item in value if str(item).strip())
+
+
+def _summary_paths(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return _unique(
+        str(item.get("source_ref") or item.get("source_path") or "")
+        for item in value
+        if isinstance(item, dict)
+        and str(item.get("source_ref") or item.get("source_path") or "").strip()
+    )

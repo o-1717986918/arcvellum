@@ -206,6 +206,7 @@ def materialize_agent_workspace(
         prepared_context_characters=context.prepared_context.character_count,
         prepared_context_sha256=context.prepared_context.sha256,
         context_budget=context.prepared_context.budget_report_dict(),
+        execution_context=context.execution_context.safe_projection(),
     )
     return tuple(copied)
 
