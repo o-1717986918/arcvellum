@@ -1399,7 +1399,7 @@ AO-2 退出结论：
 
 ## W6-4：AO-3 Planner、Reviewer 与可审计运行基础
 
-**状态：进行中。**
+**状态：完成。AO-3 已退出，生产激活边界转入 W6-5 / AO-4。**
 
 本阶段继续保持 `orchestration.enabled=false` 的默认路径，不把 Planner 接入生产
 Autopilot，也不建立第二套 task lifecycle。按以下四个可回滚子批执行：
@@ -1729,3 +1729,21 @@ W6-5A 实现结果：
 - 修正 v0.96.1 发布后遗留的版本同步测试常量，所有公共版本声明仍保持一致；
 - W6-5B 必须通过已验证 active-plan loader 把绑定接入 Worker；W6-5A 不声称
   shadow plan 已经影响真实创作。
+
+### W6-5B：场景自适应计划生产激活与完整闭环
+
+**状态：待实施。**
+
+1. 增加校验审计文件、SQLite revision、项目 fingerprint 与 active projection 一致性的
+   active-plan loader；`shadow` revision 不得直接成为生产计划。
+2. 建立独立 review 后的 assisted activation，并把 scene binding 注入现有
+   `AgentWorker` 工厂；没有有效计划时确定性回退 fixed route。
+3. 将机器绑定后的 task package 固化为 run-scoped 不可变快照，恢复、预检和写回必须
+   读取同一份计划身份，不能重新读取已变化的原始 task JSON。
+4. 用 Context Ledger 和 Mutation Receipt 证明计划策略、Agent 可读上下文、候选成果与
+   正式写回属于同一 scene plan/revision/node。
+5. 完成一条真实场景从计划、RP、分支、正文、Review、修订、promotion 到 state/canon
+   演化的端到端闭环，并证明 fixed/shadow 回退不改变现有正式路线。
+
+W6-5B 关闭前不得进入 W6-6 Rolling Horizon；AO-5 至 AO-8 和 v1 最终验收仍按上方阶段表
+依次实施。

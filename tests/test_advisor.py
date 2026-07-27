@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
@@ -42,6 +43,35 @@ class AdvisorTests(unittest.TestCase):
 
             self.assertEqual(before, after)
             self.assertFalse((snapshot.workspace / "workflow" / "dashboard").exists())
+
+    def test_large_generated_workflow_does_not_exhaust_snapshot_budget(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            workflow_tasks = project / "workflow" / "tasks"
+            workflow_tasks.mkdir(parents=True)
+            (project / "canon").mkdir()
+            (project / "project.yaml").write_text("title: 海岸线\n", encoding="utf-8")
+            (project / "canon" / "world_rules.yaml").write_text(
+                "rules:\n  - 潮汐每日一次\n",
+                encoding="utf-8",
+            )
+            for index in range(550):
+                (workflow_tasks / f"task-{index:04d}.json").write_text(
+                    '{"status":"complete"}\n',
+                    encoding="utf-8",
+                )
+
+            snapshot = create_advisor_snapshot(project, root / "snapshots")
+            manifest = json.loads(snapshot.manifest_path.read_text(encoding="utf-8"))
+            index_text = snapshot.index_path.read_text(encoding="utf-8")
+
+            self.assertEqual(snapshot.file_count, 2)
+            self.assertEqual(snapshot.source_file_count, 552)
+            self.assertEqual(snapshot.omitted_file_count, 550)
+            self.assertEqual(manifest["schema"], "literary-engineering-studio/advisor-snapshot/v0.2")
+            self.assertFalse((snapshot.workspace / "workflow" / "tasks").exists())
+            self.assertIn("未复制的运行记录：`550`", index_text)
 
     def test_advisor_sessions_survive_store_restart(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -71,7 +71,7 @@ class WorkerWritebackMixin:
                 runtime_id,
                 sandbox.run_root,
                 sandbox.workspace,
-                "Agent output is ready; review the writeback diff before importing it",
+                "候选成果已通过预检，正式项目尚未改变。请查看写回差异后确认导入或退回。",
                 writeback_preview=preview.as_dict(),
             )
         return self._finalize(task, sandbox, preview, approved_by="policy:automatic")
