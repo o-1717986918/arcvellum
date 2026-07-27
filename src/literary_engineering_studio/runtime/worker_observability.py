@@ -36,6 +36,7 @@ class WorkerObservabilityMixin:
             return
         run = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
         self._bind_context_ledger(run)
+        budget = run.get("context_budget") if isinstance(run.get("context_budget"), dict) else {}
         self._emit(
             "sandbox.context_ready",
             {
@@ -45,6 +46,7 @@ class WorkerObservabilityMixin:
                 "project_root": str(task.project_root),
                 "runner_id": runtime_id,
                 "task_id": task.task_id,
+                "context_budget": budget,
             },
         )
 

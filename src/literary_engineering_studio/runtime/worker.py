@@ -11,6 +11,7 @@ from ..application.config import load_config
 from ..contracts import TaskPackage, load_task_package
 from ..core_bridge import CoreBridge, task_command_parameters
 from ..runtimes import build_runtime
+from .context_budget import resolve_task_context_budget
 from .sandbox import (
     SandboxManifest,
     capture_core_managed_outputs,
@@ -32,6 +33,17 @@ from .worker_writeback import WorkerWritebackMixin
 
 def _materialize_agent_view_immediately(task: TaskPackage) -> bool:
     return task.execution_contract.execution_policy == "agent-required" and not task.command
+
+
+def _task_opened_payload(task: TaskPackage) -> dict[str, Any]:
+    return {
+        "task_id": task.task_id,
+        "route": task.route,
+        "current_state": task.current_state,
+        "scene_id": str(task.payload.get("scene_id") or ""),
+        "agent_role": task.execution_contract.agent_role,
+        "execution_contract": task.execution_contract.as_dict(),
+    }
 
 
 class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
@@ -77,15 +89,8 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         opened = self.bridge.task_open(project, selected_task_id)
         task_json_path = _resolve_task_json_path(project, selected_task_id, opened.fields.get("task_json", ""))
         task = load_task_package(project, task_json_path)
-        self._emit(
-            "task.opened",
-            {
-                "task_id": task.task_id,
-                "route": task.route,
-                "current_state": task.current_state,
-                "execution_contract": task.execution_contract.as_dict(),
-            },
-        )
+        context_budget = resolve_task_context_budget(task, self.config.get("worker"))
+        self._emit("task.opened", _task_opened_payload(task))
         if task.human_gate_reasons:
             self._emit("human.required", {"reasons": list(task.human_gate_reasons), "task_id": task.task_id})
             return task, None, WorkerRunResult(
@@ -104,6 +109,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         sandbox = stage_task(
             task, runs_root, runtime=active_runtime,
             materialize_agent_view=_materialize_agent_view_immediately(task),
+            context_budget=context_budget,
         )
         self._emit(
             "sandbox.prepared",
@@ -164,7 +170,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             if protected:
                 self._emit("core.outputs_protected", {"task_id": task.task_id, "paths": list(protected)})
             if task.execution_contract.execution_policy == "agent-required":
-                visible = materialize_agent_workspace(task, sandbox)
+                visible = materialize_agent_workspace(task, sandbox, context_budget=context_budget)
                 self._emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
             self._emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
         self._publish_context_ready(task, sandbox, active_runtime)

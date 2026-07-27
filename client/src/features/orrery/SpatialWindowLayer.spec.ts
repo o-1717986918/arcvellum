@@ -26,6 +26,7 @@ describe("SpatialWindowLayer", () => {
     const windows = useSpatialWindowsStore();
     windows.setScope("C:\\ArcVellum\\潮汐之后::spine", []);
     windows.openInstrument("reader");
+    windows.openInstrument("agent");
     const wrapper = mount(SpatialWindowLayer, {
       props: {
         projection: null,
@@ -77,13 +78,32 @@ describe("SpatialWindowLayer", () => {
             pass_rate: null,
           },
           usage: {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: 1200,
+            non_cached_input_tokens: 1200,
+            output_tokens: 300,
             reasoning_tokens: 0,
-            cache_read_tokens: 0,
+            cache_read_tokens: 900,
             cache_write_tokens: 0,
             total_tokens: 0,
             cost_usd: 0,
+          },
+          context: {
+            reported_tasks: 1,
+            first_turn_visible_characters: 0,
+            median_first_turn_visible_characters: 63250,
+            exact_on_demand_characters: 0,
+            median_exact_on_demand_characters: 0,
+            excluded_characters: 0,
+            authorized_characters: 0,
+            budget_overage_count: 0,
+            budget_overage_characters: 0,
+          },
+          attribution: {
+            by_scene: [],
+            by_role: [],
+            by_runtime_role: [],
+            by_model: [],
+            by_context_digest: [],
           },
           stages: {},
           coverage: {
@@ -91,6 +111,8 @@ describe("SpatialWindowLayer", () => {
             bundle_events: false,
             cache_tokens: false,
             scene_attribution: false,
+            context_budget: false,
+            provider_model_attribution: false,
           },
           tasks: [],
           tasks_truncated: false,
@@ -103,5 +125,8 @@ describe("SpatialWindowLayer", () => {
 
     expect(wrapper.find('[data-spatial-window-id="instrument:reader"]').element).toBe(element);
     expect(wrapper.find(".reader-stub").text()).toBe("peek");
+    expect(wrapper.find(".agent-throughput-deck").text()).toContain("非缓存输入");
+    expect(wrapper.find(".agent-throughput-deck").text()).toContain("1.2k");
+    expect(wrapper.find(".agent-throughput-deck").text()).toContain("900");
   });
 });

@@ -298,6 +298,23 @@ AO-3 Agent 协议边界：
 - `runtime/worker.py` 继续负责领取、准备、Runner 执行和恢复编排；结果 DTO、路径验证、
   run manifest 读取与写回生命周期分别归入小模块，禁止重新堆回单文件。
 
+W6-4G 上下文与 Token 效率边界进一步固定：
+
+- `runtime/context_budget.py` 只拥有任务预算分类、模式、不可变 DTO、shadow report 与
+  `ContextBudgetExceeded`；它不选择资料、不组装 Prompt、不拥有 task lifecycle；
+- `runtime/prompt_context.py` 只加载 Agent 已获许可的文本，执行完整文件级选择并生成
+  report；不得半截断文件，也不得自行推断 Canon 或文学重要性；
+- `runtime/context_materialization.py` 是预算、资料选择、Prompt、Task Context、
+  Execution Boundary 与 Context Ledger 的单一装配入口；bounded 模式只有在任务包
+  显式提供 `context_must_inline_paths` 后才可继续；
+- `observability/throughput_aggregation.py` 只消费事件并维护临时聚合状态，
+  `throughput_facts.py` 只计算 Token/context/attribution 数值，
+  `throughput_metrics.py` 只输出用户安全的只读投影；
+- throughput projection 可暴露计数、digest、task/scene/role/model attribution，
+  不能暴露 Prompt、正文、推理、凭证或绝对路径；
+- `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择与
+  `ExecutionContextEnvelope` 完成前，不得仅修改配置就把 bounded 宣称为生产可用。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

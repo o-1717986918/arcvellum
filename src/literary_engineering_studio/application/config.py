@@ -58,6 +58,21 @@ def default_projects_root() -> Path:
     return Path.home() / "Documents" / "ArcVellum" / "Works"
 
 
+def _default_worker_config() -> dict[str, Any]:
+    return {
+        "runs_root": str(default_runs_root()),
+        "timeout_seconds": 1800,
+        "max_repair_attempts": 2,
+        "auto_run_task_command": True,
+        "pause_on_human_gate": True,
+        "context_budget": {
+            "mode": "shadow",
+            "legacy_max_inline_characters": 180000,
+            "max_exact_on_demand_characters": 360000,
+        },
+    }
+
+
 def default_config() -> dict[str, Any]:
     return {
         "schema": CONFIG_SCHEMA,
@@ -74,13 +89,7 @@ def default_config() -> dict[str, Any]:
             "max_workers": 2,
             "lease_seconds": 90,
         },
-        "worker": {
-            "runs_root": str(default_runs_root()),
-            "timeout_seconds": 1800,
-            "max_repair_attempts": 2,
-            "auto_run_task_command": True,
-            "pause_on_human_gate": True,
-        },
+        "worker": _default_worker_config(),
         "orchestration": _default_orchestration_config(),
         "agent_runners": {
             "opencode": {

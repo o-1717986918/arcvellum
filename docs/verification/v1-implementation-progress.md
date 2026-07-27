@@ -31,7 +31,7 @@
   仍按业主决定延期。
 - W6-5A 场景自适应契约层已经完成，正式生产激活仍属于 W6-5B；在继续 W6-5B 前先执行
   W6-4G 上下文与 Token 效率止损，避免后续真实 Agent 验收继续放大重复上下文成本。
-- 最近一次 Python 全量证据：618 tests passed、1 skipped，耗时约 137 秒；Client 最近一次基线为 101 tests passed；Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
+- 最近一次 Python 全量证据：652 tests passed、1 skipped；Client 最近一次基线为 135 tests passed；Python compileall、Prompt Registry、Architecture Audit、Client production build 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -1664,7 +1664,9 @@ W1-Exit 实现结果：
 
 ### W6-4G：上下文与 Token 效率止损
 
-**状态：已纳入路线，待实施；完成后继续 W6-5B。**
+**状态：进行中。W6-4G1 usage truth 与 budget-shadow 已完成；bounded context、
+ExecutionContextEnvelope、四级资料选择和增量 repair 仍待后续子批。完成 W6-4G 后继续
+W6-5B。**
 
 2026-07-28 真实项目运行审计发现，W6-4F 已解决 usage 累计快照重复计数和沙箱重复
 物化，但模型侧仍存在结构性上下文成本：
@@ -1726,6 +1728,48 @@ W1-Exit 实现结果：
 
 `ContextCacheKey`、跨任务有界 session lease、Execution Bundle、Rolling Horizon、
 adaptive-depth 与 parallel-review 不在本批冒充完成，继续归属 W6-6/W6-7。
+
+#### W6-4G1：Token 真相与预算影子模式
+
+**状态：完成。**
+
+本子批保持 fixed route、任务顺序、Gate 和 writeback 语义不变，只增加可回退的测量层：
+
+- `runtime/context_budget.py` 以 `task kind + agent role + risk level` 计算首轮目标，
+  默认 `shadow`，正式执行仍沿用 180000 字符旧上限；
+- 初始目标落在路线约定的 24000 至 89700 字符范围；报告区分首轮可见、精确按需、
+  排除、授权、mandatory 与预算超额；
+- `bounded` 不在本子批冒充可用：任务未显式声明 `context_must_inline_paths` 时直接
+  `ContextBudgetExceeded`，不会把 CLI protected output 错当文学必需资料，也不会静默
+  丢失 Canon、人物状态、文风或精确候选；
+- `sandbox.context_ready` 和 run manifest 持久化同一份安全 report，不保存 Prompt、
+  正文、路径或凭证；
+- throughput projection 区分非缓存 input、cache-read、cache-write、output、
+  reasoning 与 provider cost，并按 task、scene、Agent role、Runtime role、
+  provider/model 和 context digest 归因；
+- 星仪 Agent 面板分别展示非缓存输入、缓存读取、模型输出与首轮上下文中位数，不以
+  total token 暗示等价账单。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 只读沙箱测量结果：
+
+- Agent role：`main-review-agent`；
+- 预算模式：`shadow`；
+- 目标首轮字符：63250；
+- 旧行为实际首轮字符：131127；
+- 超额：67877；
+- enforced 上限仍为 180000，证明本批尚未改变生产上下文或正式创作结果。
+
+验收证据：
+
+- 全量 Python：652 passed，1 skipped；
+- Client：135 passed；
+- `client:build`、`vue-tsc`、Vite 与桌面前端同步：passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Architecture Audit：passed，0 新增 file/function/cycle/dependency debt；
+- `compileall`、`git diff --check`：passed。
+
+详细边界与延期项见
+`docs/architecture/reviews/w6-4g1-token-truth-and-budget-shadow-review.md`。
 
 ### W6 后续完整阶段映射
 

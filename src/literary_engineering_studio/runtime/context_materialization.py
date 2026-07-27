@@ -8,6 +8,11 @@ from typing import Iterable
 
 from ..contracts import TaskPackage
 from ..observability.context_ledger import ContextLedger
+from .context_budget import (
+    ContextBudgetExceeded,
+    ContextBudgetMode,
+    TaskContextBudget,
+)
 from .context_ledger import materialize_runtime_context_ledger
 from .context_selection import AgentContextSelection
 from .execution_boundaries import materialize_execution_boundaries
@@ -33,8 +38,10 @@ def materialize_agent_context_contract(
     task_dir: Path,
     selection: AgentContextSelection,
     copied_paths: Iterable[str],
+    context_budget: TaskContextBudget | None = None,
 ) -> MaterializedContextContract:
     sources, references = selection.copied_prompt_paths(copied_paths)
+    mandatory_paths = _mandatory_context_paths(task, context_budget)
     direction_path = task.project_root / "workflow/studio/user_directions.md"
     direction = (
         direction_path.read_text(encoding="utf-8", errors="ignore").strip()
@@ -48,6 +55,8 @@ def materialize_agent_context_contract(
             *sources,
             *references,
         ),
+        budget=context_budget,
+        mandatory_paths=mandatory_paths,
     )
     prompt_path.write_text(
         render_worker_program(
@@ -79,3 +88,23 @@ def materialize_agent_context_contract(
         prompt_path=prompt_path,
     )
     return MaterializedContextContract(sources, references, ledger, prepared_context)
+
+
+def _mandatory_context_paths(
+    task: TaskPackage,
+    budget: TaskContextBudget | None,
+) -> tuple[str, ...]:
+    declared = task.payload.get("context_must_inline_paths")
+    if isinstance(declared, list):
+        return tuple(
+            dict.fromkeys(
+                str(item).replace("\\", "/")
+                for item in declared
+                if str(item).strip()
+            )
+        )
+    if budget is not None and budget.mode is ContextBudgetMode.BOUNDED:
+        raise ContextBudgetExceeded(
+            "bounded context requires an explicit context_must_inline_paths contract"
+        )
+    return ()

@@ -219,6 +219,79 @@ class ThroughputMetricsTests(unittest.TestCase):
         self.assertEqual(projection["usage"]["output_tokens"], 15)
         self.assertEqual(projection["usage"]["total_tokens"], 135)
 
+    def test_attributes_usage_and_context_budget_without_exposing_context_text(self):
+        projection = build_throughput_projection(
+            [
+                _event(
+                    1,
+                    "worker.task.opened",
+                    "2026-07-25T00:00:00Z",
+                    task_id="scene-review",
+                    route="scene-development",
+                    scene_id="scene_0004",
+                    agent_role="main-review-agent",
+                ),
+                _event(
+                    2,
+                    "worker.sandbox.context_ready",
+                    "2026-07-25T00:00:01Z",
+                    task_id="scene-review",
+                    context_ledger_digest="context-digest-4",
+                    context_budget={
+                        "mode": "shadow",
+                        "task_kind": "review",
+                        "risk_level": "high",
+                        "target_inline_characters": 126500,
+                        "enforced_inline_characters": 180000,
+                        "first_turn_visible_characters": 140000,
+                        "exact_on_demand_characters": 24000,
+                        "excluded_characters": 0,
+                        "authorized_characters": 164000,
+                        "mandatory_characters": 18000,
+                        "included_file_count": 8,
+                        "on_demand_file_count": 2,
+                        "excluded_file_count": 0,
+                        "budget_overage_count": 1,
+                        "budget_overage_characters": 13500,
+                        "digest": "budget-digest-4",
+                    },
+                ),
+                _event(
+                    3,
+                    "worker.usage.updated",
+                    "2026-07-25T00:00:02Z",
+                    task_id="scene-review",
+                    role="reviewer",
+                    provider="zhipuai",
+                    model="glm-5",
+                    context_ledger_digest="context-digest-4",
+                    usage={"input": 1200, "output": 300, "cache": {"read": 900}},
+                ),
+            ]
+        )
+
+        self.assertEqual(projection["usage"]["non_cached_input_tokens"], 1200)
+        self.assertEqual(projection["context"]["reported_tasks"], 1)
+        self.assertEqual(projection["context"]["budget_overage_count"], 1)
+        self.assertTrue(projection["coverage"]["scene_attribution"])
+        self.assertTrue(projection["coverage"]["context_budget"])
+        task = projection["tasks"][0]
+        self.assertEqual(task["scene_id"], "scene_0004")
+        self.assertEqual(task["role"], "main-review-agent")
+        self.assertEqual(task["runtime_role"], "reviewer")
+        self.assertEqual(task["model_identity"], "zhipuai/glm-5")
+        self.assertEqual(task["context_digest"], "context-digest-4")
+        self.assertEqual(projection["attribution"]["by_scene"][0]["key"], "scene_0004")
+        self.assertEqual(
+            projection["attribution"]["by_runtime_role"][0]["key"],
+            "reviewer",
+        )
+        self.assertEqual(
+            projection["attribution"]["by_model"][0]["usage"]["cache_read_tokens"],
+            900,
+        )
+        self.assertNotIn("context text", repr(projection))
+
     def test_projection_does_not_expose_event_payload_text_paths_or_credentials(self):
         projection = build_throughput_projection(
             [

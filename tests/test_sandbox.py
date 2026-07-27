@@ -19,6 +19,10 @@ from literary_engineering_studio.sandbox import (
     stage_task,
 )
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio.runtime.context_budget import (
+    ContextBudgetExceeded,
+    resolve_task_context_budget,
+)
 from literary_engineering_studio.runtime.task_program import build_task_context, render_worker_program
 from literary_engineering_studio.runtime.execution_boundaries import execution_boundary_paths
 from literary_engineering_studio.task_preflight import validate_task_outputs
@@ -269,6 +273,53 @@ class SandboxTests(unittest.TestCase):
 
             self.assertTrue((sandbox.workspace / "scenes" / "scene_0001.yaml").is_file())
             self.assertFalse((sandbox.workspace / "canon").exists())
+
+    def test_agent_sandbox_persists_shadow_context_budget_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            budget = resolve_task_context_budget(task)
+
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-context-budget",
+                context_budget=budget,
+            )
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            report = manifest["context_budget"]
+
+            self.assertEqual(report["schema"], "arcvellum/context-budget-report/v1")
+            self.assertEqual(report["mode"], "shadow")
+            self.assertGreater(report["first_turn_visible_characters"], 0)
+            self.assertEqual(
+                report["first_turn_visible_characters"],
+                manifest["prepared_context_characters"],
+            )
+            self.assertEqual(len(report["digest"]), 64)
+            self.assertNotIn(str(root.resolve()), json.dumps(report))
+
+    def test_agent_sandbox_refuses_bounded_mode_without_explicit_tiers(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            budget = resolve_task_context_budget(
+                task,
+                {"context_budget": {"mode": "bounded"}},
+            )
+
+            with self.assertRaisesRegex(
+                ContextBudgetExceeded,
+                "context_must_inline_paths",
+            ):
+                stage_task(
+                    task,
+                    Path(runs),
+                    runtime="opencode",
+                    run_id="run-bounded-without-tiers",
+                    context_budget=budget,
+                )
 
     def test_sandbox_persists_controlled_capability_and_resource_contracts(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
