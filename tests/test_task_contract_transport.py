@@ -191,9 +191,13 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertIn("--materialization-scope scene", blueprint["command"])
             self.assertIn("--draft drafts/candidates/scene_0001-platform-agent.md", blueprint["command"])
             self.assertNotIn(" --out ", blueprint["command"])
-            self.assertIn("schemas/agent_outputs/scene_review.v1.schema.json", blueprint["source_paths"])
+            self.assertNotIn("schemas/agent_outputs/scene_review.v1.schema.json", blueprint["source_paths"])
             self.assertIn(
                 "reviews/agent/scene_0001_scene_review.agent_tasks.md",
+                blueprint["core_managed_outputs"],
+            )
+            self.assertIn(
+                "reviews/agent/scene_0001_scene_review.context.json",
                 blueprint["core_managed_outputs"],
             )
 

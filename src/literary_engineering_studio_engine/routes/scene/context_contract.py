@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from ...literary.review.context_evidence import (
+    scene_review_context_declaration,
+)
 from ...tasking.context_contract import CONTEXT_CONTRACT_SCHEMA
 
-CONTEXT_CONTRACT_REVISION = "scene-v1"
+CONTEXT_CONTRACT_REVISION = "scene-v2"
 CONTEXT_CONTRACT_STATUS = "shadow-ready"
 CONTEXT_CONTRACT_STATES = {
     "candidate-generation-provenance",
@@ -44,13 +47,25 @@ def scene_context_contract(
         )
     )
     _validate_primary_evidence(state, task, mandatory)
-    return {
+    contract = {
         "context_contract_required": True,
         "context_contract_schema": CONTEXT_CONTRACT_SCHEMA,
         "context_contract_revision": CONTEXT_CONTRACT_REVISION,
         "context_contract_status": CONTEXT_CONTRACT_STATUS,
         "context_must_inline_paths": list(mandatory),
     }
+    if state == "candidate-review":
+        contract["context_exact_on_demand_paths"] = [
+            path
+            for path in core_outputs
+            if path.endswith(".agent_tasks.md")
+        ]
+        contract["context_evidence_contract"] = _review_evidence_declaration(
+            task,
+            scene_id,
+            core_outputs,
+        )
+    return contract
 
 
 def _mandatory_candidates(
@@ -60,15 +75,14 @@ def _mandatory_candidates(
     sources: tuple[str, ...],
     core_outputs: tuple[str, ...],
 ) -> tuple[str, ...]:
-    sidecars = tuple(
-        path for path in core_outputs if path.endswith(".agent_tasks.md")
-    )
     common = (
         f"scenes/{scene_id}.yaml",
         f"memory/context_packets/{scene_id}.md",
         "style/creative_quality_profile.json",
         "style/style-profile.md",
-        *sidecars,
+    )
+    sidecars = tuple(
+        path for path in core_outputs if path.endswith(".agent_tasks.md")
     )
     if state == "candidate-generation-provenance":
         chapter_obligations = tuple(
@@ -79,6 +93,7 @@ def _mandatory_candidates(
         )
         return (
             *common,
+            *sidecars,
             f"branches/{scene_id}/branch_selection.md",
             f"drafts/compositions/{scene_id}_composition.md",
             f"drafts/compositions/{scene_id}_composition.json",
@@ -86,9 +101,16 @@ def _mandatory_candidates(
             *chapter_obligations,
         )
     if state == "candidate-review":
+        compact = tuple(
+            path
+            for path in core_outputs
+            if path.startswith("reviews/agent/")
+            and path.endswith("_scene_review.context.json")
+        )
         return (
             *_candidate_markdown_sources(sources),
             *common,
+            *compact,
             f"drafts/compositions/{scene_id}_composition_review.json",
             f"branches/{scene_id}/branch_selection.md",
         )
@@ -96,6 +118,7 @@ def _mandatory_candidates(
         *_revision_source(task, sources),
         *_review_evidence_sources(sources),
         *common,
+        *sidecars,
     )
 
 
@@ -147,14 +170,15 @@ def _validate_primary_evidence(
     task: Mapping[str, object],
     mandatory: tuple[str, ...],
 ) -> None:
-    if not any(path.endswith(".agent_tasks.md") for path in mandatory):
+    if (
+        state != "candidate-review"
+        and not any(path.endswith(".agent_tasks.md") for path in mandatory)
+    ):
         raise ValueError(
             f"{state} context contract requires a CLI-owned task sidecar"
         )
-    if state == "candidate-review" and not _candidate_markdown_sources(mandatory):
-        raise ValueError(
-            "candidate-review context contract requires the exact candidate Markdown"
-        )
+    if state == "candidate-review":
+        _validate_candidate_review_evidence(task, mandatory)
     if state in {"candidate-revision", "static-revision"}:
         revision_source = str(task.get("revision_source") or "").replace("\\", "/")
         if not revision_source or revision_source not in mandatory:
@@ -165,6 +189,88 @@ def _validate_primary_evidence(
             raise ValueError(
                 f"{state} context contract requires exact review evidence"
             )
+
+
+def _validate_candidate_review_evidence(
+    task: Mapping[str, object],
+    mandatory: tuple[str, ...],
+) -> None:
+    core_outputs = _strings(task.get("core_managed_outputs"))
+    if not any(path.endswith(".agent_tasks.md") for path in core_outputs):
+        raise ValueError(
+            "candidate-review context contract requires a CLI-owned task sidecar"
+        )
+    if not _candidate_markdown_sources(mandatory):
+        raise ValueError(
+            "candidate-review context contract requires the exact candidate Markdown"
+        )
+    if not any(
+        path.endswith("_scene_review.context.json")
+        for path in mandatory
+    ):
+        raise ValueError(
+            "candidate-review context contract requires compact review evidence"
+        )
+
+
+def _review_evidence_declaration(
+    task: Mapping[str, object],
+    scene_id: str,
+    core_outputs: tuple[str, ...],
+) -> dict[str, object]:
+    expected = _strings(task.get("expected_outputs"))
+    candidate = str(task.get("candidate") or "").replace("\\", "/")
+    artifact = _single_path(
+        core_outputs,
+        suffix="_scene_review.context.json",
+        label="compact review evidence",
+    )
+    sidecar = _single_path(
+        core_outputs,
+        suffix=".agent_tasks.md",
+        label="review sidecar",
+    )
+    review_json = _single_path(
+        expected,
+        suffix="_scene_review.json",
+        label="review JSON",
+    )
+    report = _single_path(
+        tuple(
+            path
+            for path in expected
+            if path.endswith("_scene_review.md")
+            and not path.endswith(".agent_tasks.md")
+        ),
+        suffix="_scene_review.md",
+        label="review report",
+    )
+    if not candidate:
+        raise ValueError(
+            "candidate-review context contract requires a candidate path"
+        )
+    return scene_review_context_declaration(
+        scene_id=scene_id,
+        candidate_path=candidate,
+        artifact_path=artifact,
+        sidecar_path=sidecar,
+        review_json_path=review_json,
+        review_report_path=report,
+    )
+
+
+def _single_path(
+    paths: tuple[str, ...],
+    *,
+    suffix: str,
+    label: str,
+) -> str:
+    matches = tuple(path for path in paths if path.endswith(suffix))
+    if len(matches) != 1:
+        raise ValueError(
+            f"candidate-review context contract requires one {label}"
+        )
+    return matches[0]
 
 
 def _strings(value: object) -> tuple[str, ...]:

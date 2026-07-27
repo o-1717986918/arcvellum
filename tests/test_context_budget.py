@@ -97,7 +97,7 @@ class ContextBudgetTests(unittest.TestCase):
             )
 
             self.assertIs(budget.task_kind, ContextTaskKind.REVIEW)
-            self.assertEqual(budget.target_inline_characters, 80_500)
+            self.assertEqual(budget.target_inline_characters, 65_550)
             self.assertEqual(budget.enforced_inline_characters, 180_000)
 
     def test_route_and_scene_semantics_take_priority_over_reviewer_role(self):

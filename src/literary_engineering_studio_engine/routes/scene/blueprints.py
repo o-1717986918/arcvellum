@@ -444,13 +444,12 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                         *scene_runtime_sources,
                         f"{candidate}.md",
                         f"{candidate}.json",
-                        "schemas/agent_outputs/scene_review.v1.schema.json",
                     ]
                 )
             ),
             "context_trace": context_trace,
-            "expected_outputs": [f"{review}.json", f"{review}.md", f"{review}.agent_tasks.md", f"{review}.agent_completion.json"],
-            "core_managed_outputs": [f"{review}.agent_tasks.md"],
+            "expected_outputs": [f"{review}.json", f"{review}.md", f"{review}.agent_tasks.md", f"{review}.context.json", f"{review}.agent_completion.json"],
+            "core_managed_outputs": [f"{review}.agent_tasks.md", f"{review}.context.json"],
             "hard_constraints": [
                 "Review the exact candidate path; pass_with_notes, warnings, or revision actions block promotion.",
                 "A non-pass verdict is a valid completed review and must remain available to the formal candidate-revision task.",

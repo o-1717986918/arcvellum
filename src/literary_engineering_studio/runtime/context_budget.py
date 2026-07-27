@@ -38,11 +38,11 @@ class ContextRiskLevel(str, Enum):
 
 _INLINE_LIMITS = {
     ContextTaskKind.PROSE: 78_000,
-    # Real scene-review evidence needs roughly 75k characters before any
-    # optional trace or full-book budget is included. Keep the high-risk
-    # ceiling honest instead of silently dropping the exact candidate,
-    # composition/branch evidence, or deterministic review sidecar.
-    ContextTaskKind.REVIEW: 70_000,
+    # Compact digest-bound review evidence keeps the exact candidate, scene,
+    # composition/branch, style, rhythm, and punctuation contracts inside
+    # roughly 64k characters. Keep a small high-risk margin while leaving the
+    # full recovery sidecar and optional traces available exact-on-demand.
+    ContextTaskKind.REVIEW: 57_000,
     ContextTaskKind.ARCHAEOLOGY: 45_000,
     ContextTaskKind.STYLE: 50_000,
     ContextTaskKind.PLANNING: 45_000,

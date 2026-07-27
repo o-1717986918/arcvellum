@@ -45,6 +45,22 @@ def validate_optional_context_contract(
             "task package mandatory context is outside the Agent source contract: "
             + ", ".join(unauthorized)
         )
+    exact = _optional_tier_paths(
+        payload,
+        "context_exact_on_demand_paths",
+        normalize_path,
+    )
+    unauthorized_exact = [path for path in exact if path not in allowed]
+    if unauthorized_exact:
+        raise ValueError(
+            "task package exact-on-demand context is outside the Agent source "
+            "contract: " + ", ".join(unauthorized_exact)
+        )
+    overlap = sorted(set(normalized) & set(exact))
+    if overlap:
+        raise ValueError(
+            "task package context tiers overlap: " + ", ".join(overlap)
+        )
 
 
 def _validate_header(payload: dict[str, Any], present: set[str]) -> None:
@@ -92,6 +108,19 @@ def _source_paths(
     if not isinstance(values, list):
         raise ValueError(f"task package context source field must be a list: {field}")
     return [_context_path(item, normalize_path) for item in values]
+
+
+def _optional_tier_paths(
+    payload: dict[str, Any],
+    field: str,
+    normalize_path: Callable[[str], object],
+) -> list[str]:
+    if field not in payload:
+        return []
+    values = _source_paths(payload, field, normalize_path)
+    if len(values) != len(set(values)):
+        raise ValueError(f"task package {field} contains duplicates")
+    return values
 
 
 def _context_path(

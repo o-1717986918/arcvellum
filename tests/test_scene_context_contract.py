@@ -121,24 +121,38 @@ class SceneContextContractTests(unittest.TestCase):
             self._write("branches/scene_0001/branch_selection.md"),
         ]
         sidecar = "reviews/agent/scene_0001_scene_review.agent_tasks.md"
+        compact = "reviews/agent/scene_0001_scene_review.context.json"
         contract = scene_context_contract(
             self.root,
             self._task(
                 "candidate-review",
                 sources=sources,
                 sidecar=sidecar,
+                candidate=candidate,
+                expected_outputs=[
+                    "reviews/agent/scene_0001_scene_review.json",
+                    "reviews/agent/scene_0001_scene_review.md",
+                    sidecar,
+                    compact,
+                ],
+                core_managed_outputs=[sidecar, compact],
             ),
         )
 
         mandatory = contract["context_must_inline_paths"]
         self.assertIn(candidate, mandatory)
-        self.assertIn(sidecar, mandatory)
+        self.assertIn(compact, mandatory)
+        self.assertNotIn(sidecar, mandatory)
         self.assertNotIn(
             "drafts/candidates/scene_0001-platform-agent.json",
             mandatory,
         )
         self.assertNotIn("memory/context_packets/scene_0001.trace.json", mandatory)
         self.assertNotIn("plot/word_budget/word_budget.json", mandatory)
+        declaration = contract["context_evidence_contract"]
+        self.assertEqual(declaration["candidate_path"], candidate)
+        self.assertEqual(declaration["artifact_path"], compact)
+        self.assertEqual(declaration["sidecar_path"], sidecar)
 
     def test_revision_contract_inlines_exact_source_and_machine_review(self) -> None:
         source = self._write(
@@ -294,6 +308,36 @@ class SceneContextContractTests(unittest.TestCase):
                     len(enriched["context_must_inline_paths"]),
                     len(set(enriched["context_must_inline_paths"])),
                 )
+                if state == "candidate-review":
+                    compact = (
+                        "reviews/agent/"
+                        "scene_0001_scene_review.context.json"
+                    )
+                    sidecar = (
+                        "reviews/agent/"
+                        "scene_0001_scene_review.agent_tasks.md"
+                    )
+                    self.assertIn(
+                        compact,
+                        enriched["context_must_inline_paths"],
+                    )
+                    self.assertNotIn(
+                        sidecar,
+                        enriched["context_must_inline_paths"],
+                    )
+                    self.assertEqual(
+                        enriched["context_exact_on_demand_paths"],
+                        [sidecar],
+                    )
+                    declaration = enriched["context_evidence_contract"]
+                    self.assertEqual(
+                        declaration["artifact_path"],
+                        compact,
+                    )
+                    self.assertEqual(
+                        declaration["sidecar_path"],
+                        sidecar,
+                    )
 
     def test_engine_and_studio_reject_malformed_context_sources(self) -> None:
         engine_task = {

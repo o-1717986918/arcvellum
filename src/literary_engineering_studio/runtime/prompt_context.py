@@ -60,6 +60,7 @@ def build_prepared_prompt_context(
     max_characters: int | None = None,
     budget: TaskContextBudget | None = None,
     mandatory_paths: Iterable[str] = (),
+    exact_on_demand_paths: Iterable[str] = (),
 ) -> PreparedPromptContext:
     """Inline complete authorized files while leaving oversized files explicit.
 
@@ -69,11 +70,23 @@ def build_prepared_prompt_context(
 
     inline_limit = _inline_limit(max_characters, budget)
     mandatory = set(_unique(mandatory_paths))
+    exact_on_demand = set(_unique(exact_on_demand_paths))
+    overlap = sorted(mandatory & exact_on_demand)
+    if overlap:
+        raise ValueError(
+            "prepared context paths cannot be both mandatory and exact-on-demand: "
+            + ", ".join(overlap)
+        )
     records = _load_records(workspace, paths)
     if budget is not None and budget.mode is ContextBudgetMode.BOUNDED:
         records = _mandatory_first(records, mandatory)
         _validate_mandatory_records(records, mandatory, inline_limit)
-    selected = _select_records(records, mandatory, inline_limit)
+    selected = _select_records(
+        records,
+        mandatory,
+        exact_on_demand,
+        inline_limit,
+    )
     report = _budget_report(budget, selected)
     return PreparedPromptContext(
         rendered=selected.rendered,
@@ -150,6 +163,7 @@ def _validate_mandatory_records(
 def _select_records(
     records: tuple[_ContextRecord, ...],
     mandatory: set[str],
+    exact_on_demand: set[str],
     inline_limit: int,
 ) -> _ContextSelection:
     remaining = inline_limit
@@ -170,6 +184,10 @@ def _select_records(
         authorized += len(record.text)
         if record.relative in mandatory:
             mandatory_characters += len(record.block)
+        if record.relative in exact_on_demand:
+            omitted.append(record.relative)
+            on_demand += len(record.text)
+            continue
         if len(record.block) > remaining:
             omitted.append(record.relative)
             on_demand += len(record.text)

@@ -320,6 +320,13 @@ W6-4G 上下文与 Token 效率边界进一步固定：
   mandatory 资料；`tasking/context_contract.py` 只做 Engine 侧协议规范化，
   `protocols/task_context.py` 由 Studio 独立验证消费端合同，三者不得拥有预算或 Runtime
   配置；
+- `literary/review/context_evidence.py` 只生成 digest-bound 候选审查紧凑证据；
+  `protocols/review_context.py` 只在 Studio 侧独立验证该证据和任务声明，二者不得相互
+  导入。完整审查 sidecar 保持 CLI/Engine 所有并留在授权 workspace，不能被紧凑证据
+  替代或删除；
+- `context_exact_on_demand_paths` 是正式任务合同而非 Runtime 猜测；它与
+  `context_must_inline_paths` 必须互斥并共同进入任务指纹。只有 bounded 模式按该声明
+  延迟首轮内联，off/shadow 必须保持兼容行为；
 - `observability/throughput_aggregation.py` 只消费事件并维护临时聚合状态，
   `throughput_facts.py` 只计算 Token/context/attribution 数值，
   `throughput_metrics.py` 只输出用户安全的只读投影；

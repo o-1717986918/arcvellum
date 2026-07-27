@@ -1862,6 +1862,49 @@ sidecar 与 task package 的重复语义，不能靠删除文学证据或继续�
 详细实现、真实项目证据与延期项见
 `docs/architecture/reviews/w6-4g3-engine-context-contract-and-bounded-shadow-review.md`。
 
+#### W6-4G4：紧凑审查证据与 bounded A/B 前置验收
+
+**状态：确定性实施完成；真实模型 A/B 与生产激活未完成。**
+
+本子批没有删减审查资料，而是拆开“首轮机器证据”和“完整恢复说明”：
+
+- Engine 生成 digest-bound
+  `reviews/agent/<scene_id>_scene_review.context.json`，绑定 exact candidate、完整
+  sidecar、`scene_review.v1` schema、Style Lint、字数、读者体验、节奏和文风证据；
+- 完整 `.agent_tasks.md` 继续存在并保持 standalone Skill 兼容，bounded 首轮将其作为
+  `exact_on_demand`，紧凑证据固定为 `must_inline`；
+- 新增正式 `context_exact_on_demand_paths` 合同字段，与 mandatory 合同共同进入任务
+  指纹；Engine 和 Studio 独立验证路径授权、互斥、摘要、scene/candidate/output 身份；
+- off/shadow 行为保持兼容，生产配置仍为 `shadow`；bounded 缺失或过期时继续
+  fail closed。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 无模型只读比较：
+
+- off/shadow 首轮：139894 字符；
+- bounded 首轮：64085 字符，相对当前 off 下降 **54.19%**，相对历史 131175 基线
+  下降 **51.15%**；
+- bounded target/enforced：65550 / 65550，mandatory 为 64069 字符；
+- 9 项 must-inline、4 项 exact-on-demand、34 项 excluded，零缺失、零重叠；
+- 紧凑证据 10796 bytes，完整 sidecar 31737 bytes，candidate/sidecar/schema 摘要全部
+  匹配；
+- Prompt、Task Context、Run Manifest 和 Context Ledger digest 一致；
+- 正式项目 859 个文件、9388972 bytes 的内容快照前后一致，没有 writeback。
+
+本子批验收证据：
+
+- Python：674 passed，1 skipped；Client：44 files、135 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Client production build、Architecture Audit、`compileall`：passed；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+本结果只证明真实模型 A/B 的前置条件满足，不证明真实 Token、时延、repair 或文学质量
+已经改善。生产 bounded、全任务族中位数/P95、增量 repair、缓存/session/Bundle 和并发
+仍按 W6-4G 后续门槛执行。
+
+详细证据见
+`docs/architecture/reviews/w6-4g4-compact-review-evidence-and-bounded-ab-review.md`。
+
 ### W6 后续完整阶段映射
 
 W6 不以一个模糊“长周期验收”跳过剩余路线。AO-3 退出后继续：

@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from ..contracts import TaskPackage
+from ..contracts import TaskPackage, normalize_relative_path
 from ..observability.context_ledger import ContextLedger
+from ..protocols.review_context import validate_materialized_review_context
 from .context_budget import (
     ContextBudgetExceeded,
     ContextBudgetMode,
@@ -47,12 +48,12 @@ def materialize_agent_context_contract(
 ) -> MaterializedContextContract:
     sources, references = selection.copied_prompt_paths(copied_paths)
     mandatory_paths = _mandatory_context_paths(task, context_budget)
-    direction_path = task.project_root / "workflow/studio/user_directions.md"
-    direction = (
-        direction_path.read_text(encoding="utf-8", errors="ignore").strip()
-        if direction_path.is_file()
-        else ""
+    exact_on_demand_paths = _exact_on_demand_context_paths(
+        task,
+        context_budget,
     )
+    _validate_review_context(task, workspace, context_budget)
+    direction = _user_direction(task)
     prepared_context = build_prepared_prompt_context(
         workspace,
         (
@@ -62,6 +63,7 @@ def materialize_agent_context_contract(
         ),
         budget=context_budget,
         mandatory_paths=mandatory_paths,
+        exact_on_demand_paths=exact_on_demand_paths,
     )
     execution_context = build_execution_context_envelope(
         task,
@@ -112,6 +114,34 @@ def materialize_agent_context_contract(
     )
 
 
+def _user_direction(task: TaskPackage) -> str:
+    path = task.project_root / "workflow/studio/user_directions.md"
+    if not path.is_file():
+        return ""
+    return path.read_text(
+        encoding="utf-8",
+        errors="ignore",
+    ).strip()
+
+
+def _validate_review_context(
+    task: TaskPackage,
+    workspace: Path,
+    budget: TaskContextBudget | None,
+) -> None:
+    require = (
+        budget is not None
+        and budget.mode is ContextBudgetMode.BOUNDED
+        and task.current_state == "candidate-review"
+    )
+    validate_materialized_review_context(
+        task.payload,
+        workspace,
+        normalize_path=normalize_relative_path,
+        require=require,
+    )
+
+
 def _mandatory_context_paths(
     task: TaskPackage,
     budget: TaskContextBudget | None,
@@ -130,3 +160,21 @@ def _mandatory_context_paths(
             "bounded context requires an explicit context_must_inline_paths contract"
         )
     return ()
+
+
+def _exact_on_demand_context_paths(
+    task: TaskPackage,
+    budget: TaskContextBudget | None,
+) -> tuple[str, ...]:
+    if budget is None or budget.mode is not ContextBudgetMode.BOUNDED:
+        return ()
+    declared = task.payload.get("context_exact_on_demand_paths")
+    if not isinstance(declared, list):
+        return ()
+    return tuple(
+        dict.fromkeys(
+            str(item).replace("\\", "/")
+            for item in declared
+            if str(item).strip()
+        )
+    )

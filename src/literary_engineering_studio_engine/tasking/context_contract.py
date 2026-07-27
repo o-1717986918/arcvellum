@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import PurePosixPath
+import re
 
 
 CONTEXT_CONTRACT_SCHEMA = (
@@ -22,14 +23,20 @@ CONTEXT_CONTRACT_FINGERPRINT_FIELDS = (
     "context_contract_revision",
     "context_contract_status",
     "context_must_inline_paths",
+    "context_exact_on_demand_paths",
     "context_summary_references",
     "context_excluded_paths",
+    "context_evidence_contract",
 )
 CONTEXT_SOURCE_FIELDS = (
     "agent_source_paths",
     "core_managed_outputs",
     "required_reading",
 )
+REVIEW_EVIDENCE_DECLARATION_SCHEMA = (
+    "literary-engineering-workbench/scene-review-context-declaration/v1"
+)
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def normalize_context_contract(task: dict[str, object]) -> None:
@@ -49,7 +56,25 @@ def normalize_context_contract(task: dict[str, object]) -> None:
             "formal task mandatory context is outside the Agent source contract: "
             + ", ".join(unauthorized)
         )
+    exact = _optional_tier_paths(
+        task,
+        "context_exact_on_demand_paths",
+    )
+    unauthorized_exact = [path for path in exact if path not in allowed]
+    if unauthorized_exact:
+        raise ValueError(
+            "formal task exact-on-demand context is outside the Agent source "
+            "contract: " + ", ".join(unauthorized_exact)
+        )
+    overlap = sorted(set(normalized) & set(exact))
+    if overlap:
+        raise ValueError(
+            "formal task context tiers overlap: " + ", ".join(overlap)
+        )
     task["context_must_inline_paths"] = normalized
+    if exact:
+        task["context_exact_on_demand_paths"] = exact
+    _normalize_review_evidence_contract(task)
 
 
 def _validate_header(task: dict[str, object], present: set[str]) -> None:
@@ -92,6 +117,18 @@ def _path_list(task: dict[str, object], field: str) -> list[str]:
     return [_normalize_path(item) for item in value]
 
 
+def _optional_tier_paths(
+    task: dict[str, object],
+    field: str,
+) -> list[str]:
+    if field not in task:
+        return []
+    values = _path_list(task, field)
+    if len(values) != len(set(values)):
+        raise ValueError(f"formal task {field} contains duplicates")
+    return values
+
+
 def _normalize_path(value: object) -> str:
     text = str(value or "").strip().replace("\\", "/")
     if not text:
@@ -107,3 +144,99 @@ def _normalize_path(value: object) -> str:
             f"formal task context path must be a normalized file path: {value}"
         )
     return path.as_posix()
+
+
+def _normalize_review_evidence_contract(task: dict[str, object]) -> None:
+    value = task.get("context_evidence_contract")
+    is_current_review = (
+        str(task.get("current_state") or "") == "candidate-review"
+        and str(task.get("context_contract_revision") or "") == "scene-v2"
+    )
+    if value is None:
+        if is_current_review:
+            raise ValueError(
+                "candidate-review scene-v2 requires context_evidence_contract"
+            )
+        return
+    declaration = _review_declaration(value, task)
+    normalized = _review_paths(declaration)
+    _validate_review_path_ownership(task, normalized)
+    _validate_review_digests(declaration)
+    task["context_evidence_contract"] = {**declaration, **normalized}
+
+
+def _review_declaration(
+    value: object,
+    task: dict[str, object],
+) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError("context_evidence_contract must be an object")
+    if value.get("schema") != REVIEW_EVIDENCE_DECLARATION_SCHEMA:
+        raise ValueError("context_evidence_contract schema is invalid")
+    for field in ("revision", "scene_id", "output_schema_name"):
+        if not str(value.get(field) or "").strip():
+            raise ValueError(
+                f"context_evidence_contract.{field} is required"
+            )
+    if str(value.get("scene_id")) != str(task.get("scene_id") or ""):
+        raise ValueError(
+            "context_evidence_contract scene_id does not match task"
+        )
+    return value
+
+
+def _review_paths(value: dict[str, object]) -> dict[str, str]:
+    return {
+        field: _normalize_path(value.get(field))
+        for field in (
+            "artifact_path",
+            "candidate_path",
+            "sidecar_path",
+            "review_json_path",
+            "review_report_path",
+        )
+    }
+
+
+def _validate_review_path_ownership(
+    task: dict[str, object],
+    normalized: dict[str, str],
+) -> None:
+    expected = set(_path_list(task, "expected_outputs"))
+    core = set(_path_list(task, "core_managed_outputs"))
+    sources = set(_path_list(task, "agent_source_paths"))
+    if normalized["candidate_path"] not in sources:
+        raise ValueError(
+            "context_evidence_contract candidate is outside Agent sources"
+        )
+    for field in ("artifact_path", "sidecar_path"):
+        if normalized[field] not in expected or normalized[field] not in core:
+            raise ValueError(
+                f"context_evidence_contract {field} must be a core-managed output"
+            )
+    for field in ("review_json_path", "review_report_path"):
+        if normalized[field] not in expected:
+            raise ValueError(
+                f"context_evidence_contract {field} must be an expected output"
+            )
+    mandatory = set(_path_list(task, "context_must_inline_paths"))
+    exact = set(_path_list(task, "context_exact_on_demand_paths"))
+    if normalized["artifact_path"] not in mandatory:
+        raise ValueError(
+            "context_evidence_contract artifact must be mandatory inline"
+        )
+    if normalized["sidecar_path"] not in exact:
+        raise ValueError(
+            "context_evidence_contract sidecar must be exact-on-demand"
+        )
+
+
+def _validate_review_digests(value: dict[str, object]) -> None:
+    for field in (
+        "output_schema_resource_sha256",
+        "output_schema_contract_sha256",
+    ):
+        if not _SHA256.fullmatch(str(value.get(field) or "")):
+            raise ValueError(
+                f"context_evidence_contract.{field} is invalid"
+            )

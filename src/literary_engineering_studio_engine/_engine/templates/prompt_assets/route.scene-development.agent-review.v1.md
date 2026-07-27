@@ -2,12 +2,13 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.agent-review.v1
 match: route.scene-development.agent-review.v1
-version: v2
+version: v3
 route: scene-development
 task_type: platform-agent-review
 title: Scene Agent Review Exact Prompt Asset
 required_inputs:
   - exact candidate path
+  - digest-bound compact review evidence
   - scene yaml
   - candidate manifest
   - context packet and context trace
@@ -25,6 +26,7 @@ context_groups:
   - narrative rhythm
 hard_constraints:
   - Review the exact candidate path and candidate_sha256 supplied by the task; stale or wrong-content reviews fail.
+  - Treat the compact review evidence as the authoritative deterministic projection. Its candidate, full-sidecar, and output-schema digests must match; use the full sidecar only as exact-on-demand recovery evidence.
   - Medium+ Style Lint, unresolved word-budget failure, reader-experience failure, new-character unresolved status, missing scene function, reader question/promise-payoff failure, narrative-distance monotony, texture repetition, or rhythm/bridge failure blocks pass.
   - pass_with_notes must go through revise-scene or explicit user accepted notes; it does not promote cleanly.
   - Canon writeback must be classified as no_change, declared, needs_patch, or unknown.
@@ -42,4 +44,4 @@ forbidden_shortcuts:
 
 # Exact Scene Agent Review Prompt Asset
 
-Judge the candidate as a formal gate, not as praise. First read the exact candidate, the CLI-protected review skeleton, scene definition, composition review, branch selection, context trace, and mounted style evidence. Then immediately write the required `scene_review.v1` JSON and Markdown report. Do not inspect directories, search for more project files, or keep gathering background after those materials are sufficient. Include narrative_rhythm_adherence and canon_writeback in the review result. Check scene function, reader effect, incoming pressure, outgoing hook, narrative distance, and texture variety, and do not let pass_with_notes behave like pass.
+Judge the candidate as a formal gate, not as praise. First read the exact candidate, the digest-bound compact review evidence, scene definition, composition review, branch selection, and mounted style evidence. The compact evidence carries exact deterministic Style Lint, word-budget, reader-experience, rhythm/bridge, style-version, output-schema, and digest contracts. The full CLI review sidecar remains available on demand for recovery or evidence conflict; do not reread it by default when the compact evidence validates. Then immediately write the required `scene_review.v1` JSON and Markdown report. Do not inspect directories, search for more project files, or keep gathering background after those materials are sufficient. Include narrative_rhythm_adherence and canon_writeback in the review result. Check scene function, reader effect, incoming pressure, outgoing hook, narrative distance, and texture variety, and do not let pass_with_notes behave like pass.

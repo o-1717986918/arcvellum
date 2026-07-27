@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from .context_contract import CONTEXT_CONTRACT_FINGERPRINT_FIELDS, normalize_context_contract as _normalize_context_contract
 from ..prompt_registry import resolve_prompt_asset
-TASK_CONTRACT_REVISION = "2026-07-28.27"
+TASK_CONTRACT_REVISION = "2026-07-28.28"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 _OPERATING_REFERENCE_PATHS = {
     "SKILL.md",
