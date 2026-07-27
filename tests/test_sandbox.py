@@ -19,6 +19,9 @@ from literary_engineering_studio.sandbox import (
     sandbox_from_run,
     stage_task,
 )
+from literary_engineering_studio.runtime.sandbox_hygiene import (
+    restore_unexpected_agent_changes,
+)
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload
 from literary_engineering_studio.runtime.context_budget import (
     ContextBudgetExceeded,
@@ -515,6 +518,37 @@ class SandboxTests(unittest.TestCase):
             self.assertEqual(sandbox_change_issues(sandbox), [])
             (sandbox.workspace / "scenes" / "scene_0001.yaml").write_text("scene_id: changed\n", encoding="utf-8")
             self.assertTrue(sandbox_change_issues(sandbox))
+
+    def test_restores_unexpected_changes_without_model_repair(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            tempfile.TemporaryDirectory() as runs,
+        ):
+            root = Path(temporary)
+            task = self._task(root)
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-unexpected-restore",
+            )
+            source = (
+                sandbox.workspace / "scenes" / "scene_0001.yaml"
+            )
+            original = source.read_text(encoding="utf-8")
+            source.write_text("scene_id: changed\n", encoding="utf-8")
+            rogue = sandbox.workspace / "rogue.txt"
+            rogue.write_text("should not persist", encoding="utf-8")
+
+            restored = restore_unexpected_agent_changes(sandbox)
+
+            self.assertEqual(
+                restored,
+                ("rogue.txt", "scenes/scene_0001.yaml"),
+            )
+            self.assertEqual(source.read_text(encoding="utf-8"), original)
+            self.assertFalse(rogue.exists())
+            self.assertEqual(sandbox_change_issues(sandbox), [])
 
     def test_preflight_does_not_assign_worker_completion_receipts_to_agent(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:

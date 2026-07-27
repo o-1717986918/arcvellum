@@ -53,6 +53,7 @@ def build_throughput_projection(events: list[dict[str, Any]]) -> dict[str, Any]:
         "model_turns": accumulator.totals["model_turns"],
         "repairs": accumulator.totals["repairs"],
         "retries": accumulator.totals["retries"],
+        "repair_context": dict(accumulator.repair_context),
         "first_validation": {
             "evaluated_tasks": evaluated,
             "passed_first_attempt": passed_first,
@@ -81,6 +82,10 @@ def build_throughput_projection(events: list[dict[str, Any]]) -> dict[str, Any]:
             ),
             "scene_attribution": any(item["scene_id"] for item in public_tasks),
             "context_budget": context["reported_tasks"] > 0,
+            "incremental_repair_context": bool(
+                accumulator.repair_context["targeted_turns"]
+                or accumulator.repair_context["fallback_turns"]
+            ),
             "provider_model_attribution": any(
                 item["model"] for item in public_tasks
             ),

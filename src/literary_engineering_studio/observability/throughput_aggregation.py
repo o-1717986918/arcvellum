@@ -30,6 +30,7 @@ _EVENT_HANDLERS = {
     "worker.runner.started": "_runner_started",
     "worker.runner.completed": "_runner_completed",
     "worker.repair.started": "_repair_started",
+    "worker.repair.output_guard.finalized": "_repair_guard_finalized",
     "task.recovery_started": "_retry_started",
     "worker.run.resume_started": "_retry_started",
     "worker.usage.updated": "_usage_updated",
@@ -60,6 +61,7 @@ class ThroughputAccumulator:
         self.bundles_seen: set[str] = set()
         self.usage_snapshots: dict[tuple[str, str], dict[str, float]] = {}
         self.totals = {"model_turns": 0, "repairs": 0, "retries": 0}
+        self.repair_context = _empty_repair_context()
         self.usage = empty_usage()
 
     def consume(self, item: dict[str, Any]) -> None:
@@ -145,12 +147,31 @@ class ThroughputAccumulator:
                 stamp,
             )
 
-    def _repair_started(self, _event, _data, _stamp, task, _item) -> None:
+    def _repair_started(self, _event, data, _stamp, task, _item) -> None:
         self.totals["repairs"] += 1
         self.totals["model_turns"] += 1
+        _merge_repair_context(self.repair_context, data)
         if task is not None:
             task["repairs"] += 1
             task["model_turns"] += 1
+            _merge_repair_context(task["repair_context"], data)
+            task["repair_context_digest"] = str(
+                data.get("repair_context_digest")
+                or task["repair_context_digest"]
+            )
+
+    def _repair_guard_finalized(
+        self,
+        _event,
+        data,
+        _stamp,
+        task,
+        _item,
+    ) -> None:
+        restored = _safe_int(data.get("restored_output_count"))
+        self.repair_context["restored_outputs"] += restored
+        if task is not None:
+            task["repair_context"]["restored_outputs"] += restored
 
     def _retry_started(self, event, _data, _stamp, task, _item) -> None:
         if event not in _RETRY_EVENTS:
@@ -292,12 +313,14 @@ def _new_task(task_id: str) -> dict[str, Any]:
         "provider": "",
         "model": "",
         "context_digest": "",
+        "repair_context_digest": "",
         "model_turns": 0,
         "repairs": 0,
         "retries": 0,
         "first_validation_passed": None,
         "usage": empty_usage(),
         "context": empty_context(),
+        "repair_context": _empty_repair_context(),
         "_stage_seconds": {name: 0.0 for name in STAGE_NAMES},
         "_open_count": 0,
     }
@@ -314,12 +337,14 @@ def _public_task(task: dict[str, Any]) -> dict[str, Any]:
         "model": task["model"],
         "model_identity": _model_identity(task["provider"], task["model"]),
         "context_digest": task["context_digest"],
+        "repair_context_digest": task["repair_context_digest"],
         "model_turns": task["model_turns"],
         "repairs": task["repairs"],
         "retries": task["retries"],
         "first_validation_passed": task["first_validation_passed"],
         "usage": rounded_usage(task["usage"]),
         "context": dict(task["context"]),
+        "repair_context": dict(task["repair_context"]),
         "stage_seconds": {
             name: round(float(task["_stage_seconds"][name]), 3)
             for name in STAGE_NAMES
@@ -333,3 +358,41 @@ def _model_identity(provider: object, model: object) -> str:
     if provider_id and model_id:
         return f"{provider_id}/{model_id}"
     return model_id or provider_id
+
+
+def _empty_repair_context() -> dict[str, int]:
+    return {
+        "prompt_characters": 0,
+        "excerpt_characters": 0,
+        "targeted_turns": 0,
+        "fallback_turns": 0,
+        "protected_outputs": 0,
+        "restored_outputs": 0,
+    }
+
+
+def _merge_repair_context(
+    target: dict[str, int],
+    data: dict[str, Any],
+) -> None:
+    target["prompt_characters"] += _safe_int(
+        data.get("repair_prompt_characters")
+    )
+    target["excerpt_characters"] += _safe_int(
+        data.get("repair_excerpt_characters")
+    )
+    target["protected_outputs"] += _safe_int(
+        data.get("repair_protected_count")
+    )
+    mode = str(data.get("repair_write_scope_mode") or "")
+    if mode == "targeted":
+        target["targeted_turns"] += 1
+    elif mode == "all_declared_outputs_fallback":
+        target["fallback_turns"] += 1
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0

@@ -12,6 +12,7 @@ from ..contracts import TaskPackage, load_task_package
 from ..core_bridge import CoreBridge, task_command_parameters
 from ..runtimes import build_runtime
 from .context_budget import resolve_task_context_budget
+from .repair_context import RepairContextCoordinator
 from .sandbox import (
     SandboxManifest,
     capture_core_managed_outputs,
@@ -229,6 +230,8 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             "cancel_event": self.cancel_event,
         }
         if runtime_id == "opencode":
+            repair_context = RepairContextCoordinator(task, sandbox)
+
             def validate_outputs():
                 return self._validate_outputs(
                     task,
@@ -240,6 +243,8 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
                 {
                     "output_validator": validate_outputs,
                     "max_repairs": int(self.config.get("worker", {}).get("max_repair_attempts") or 2),
+                    "repair_prompt_builder": repair_context.prepare,
+                    "repair_turn_finalizer": repair_context.finalize,
                 }
             )
         runtime_result = runtime.execute(

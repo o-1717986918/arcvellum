@@ -170,6 +170,61 @@ class ThroughputMetricsTests(unittest.TestCase):
         self.assertEqual(first["revision"], second["revision"])
         self.assertNotEqual(first["revision"], changed["revision"])
 
+    def test_projects_bounded_repair_metrics_without_output_content(self):
+        projection = build_throughput_projection(
+            [
+                _event(
+                    1,
+                    "worker.task.opened",
+                    "2026-07-25T00:00:00Z",
+                    task_id="task-a",
+                ),
+                _event(
+                    2,
+                    "worker.repair.started",
+                    "2026-07-25T00:00:01Z",
+                    repair_context_digest="a" * 64,
+                    repair_prompt_characters=900,
+                    repair_excerpt_characters=240,
+                    repair_target_count=1,
+                    repair_protected_count=2,
+                    repair_write_scope_mode="targeted",
+                    unsafe_excerpt="正文不得进入投影",
+                ),
+                _event(
+                    3,
+                    "worker.repair.output_guard.finalized",
+                    "2026-07-25T00:00:02Z",
+                    restored_output_count=1,
+                    restored_outputs=["private/output.md"],
+                ),
+            ]
+        )
+
+        self.assertEqual(
+            projection["repair_context"],
+            {
+                "prompt_characters": 900,
+                "excerpt_characters": 240,
+                "targeted_turns": 1,
+                "fallback_turns": 0,
+                "protected_outputs": 2,
+                "restored_outputs": 1,
+            },
+        )
+        self.assertTrue(
+            projection["coverage"]["incremental_repair_context"]
+        )
+        self.assertEqual(
+            projection["tasks"][0]["repair_context_digest"],
+            "a" * 64,
+        )
+        self.assertNotIn(
+            "正文不得进入投影",
+            str(projection),
+        )
+        self.assertNotIn("private/output.md", str(projection))
+
     def test_reopening_the_same_task_counts_as_a_retry(self):
         projection = build_throughput_projection(
             [

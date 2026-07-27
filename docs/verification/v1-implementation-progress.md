@@ -1905,6 +1905,49 @@ sidecar 与 task package 的重复语义，不能靠删除文学证据或继续�
 详细证据见
 `docs/architecture/reviews/w6-4g4-compact-review-evidence-and-bounded-ab-review.md`。
 
+#### W6-4G5：增量 Repair Context 与越权改动恢复
+
+**状态：确定性实施完成；真实模型同任务 A/B 未完成。**
+
+本子批修正了历史运行中“Agent 已完成语义修订，却因顺手修改未授权文件而耗尽 repair
+次数”的结构性问题：
+
+- 非 `expected_outputs` 改动先由 staged baseline 与 control workspace 进行确定性
+  恢复；新建越权文件移除，已有文件只有 digest 可证明时才恢复，未知改动继续
+  fail closed；
+- repair 保持同一 OpenCode session、同一正式 task、同一 preflight 与 writeback
+  lifecycle，不建立第二套修复任务；
+- `arcvellum/repair-context/v1` 为 issue 建立稳定 ID，并只发送目标输出的有界片段；
+- 单输出 excerpt 上限 1200 字符、总上限 6000 字符；protected outputs 只暴露
+  path/SHA/size，并在 repair 后确定性恢复；
+- 无法映射到精确输出的旧 issue 显式使用
+  `all_declared_outputs_fallback`，不伪造精确写范围；
+- throughput projection 只公开安全数值和 digest，不泄露 Prompt、正文、excerpt、
+  绝对路径或被恢复文件名。
+
+历史 `scene_0004 candidate-revision` 失败 run 的临时副本验证：
+
+- 原问题为越权修改 `characters/candidates/scene-0004-母亲.json`；
+- 确定性恢复后 sandbox change issue 从 1 降为 0；
+- 原历史 run 的 208 文件内容快照保持不变；
+- 实际 provenance repair 被映射到单一修订正文，bounded excerpt 1200 字符、
+  protected outputs 2、full task replay 为 false。
+
+本子批验收：
+
+- Python：682 passed，1 skipped；Client：44 files、135 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Client production build、Architecture Audit 与 `compileall`：passed；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+旧 issue-only prompt 为 519 字符，新有界证据 prompt 为 2553 字符，不能据此声称
+prompt 本身更短。真实收益是否体现为更少盲读、更低非缓存 Token、更少 repair/retry
+和更短时延，仍需同模型等价任务 A/B。生产 context mode 继续保持 `shadow`。
+
+详细证据见
+`docs/architecture/reviews/w6-4g5-incremental-repair-context-review.md`。
+
 ### W6 后续完整阶段映射
 
 W6 不以一个模糊“长周期验收”跳过剩余路线。AO-3 退出后继续：

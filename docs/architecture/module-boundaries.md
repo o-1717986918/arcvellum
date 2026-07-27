@@ -332,6 +332,16 @@ W6-4G 上下文与 Token 效率边界进一步固定：
   `throughput_metrics.py` 只输出用户安全的只读投影；
 - throughput projection 可暴露计数、digest、task/scene/role/model attribution，
   不能暴露 Prompt、正文、推理、凭证或绝对路径；
+- `runtime/repair_context.py` 只把 deterministic preflight issue 映射为同 session
+  的有界 Repair Context，拥有 issue identity、目标选择、片段预算和已通过输出保护；
+  它不能判定文学质量、扩大 expected outputs 或直接写回正式项目；
+- `runtime/repair_rendering.py` 只渲染有界修复提示，`runtime/repair_snapshots.py`
+  只保存和恢复 run-local protected outputs；两者都不能读取正式项目权限之外的资料；
+- `runtime/sandbox_hygiene.py` 只恢复可由 staged baseline 与 control workspace
+  digest 证明的非输出改动。无法证明可恢复的路径必须继续由 sandbox preflight
+  fail closed，不能把“自动清理”变成权限豁免；
+- `runtimes/opencode_repair.py` 只拥有 transport-level 同 session repair loop。
+  TaskPackage、Sandbox、preflight、Gate 和 writeback 所有权继续留在 Worker；
 - `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择、
   `ExecutionContextEnvelope` 和首批高成本场景任务的 Engine mandatory contract 已建立
   可验证合同；其余任务族、真实模型 A/B 和生产回退尚未完成，不得仅修改配置就把
