@@ -2,7 +2,7 @@
 
 > 文档状态：下一阶段强指导性开发基线  
 > 基线版本：ArcVellum v0.95.3  
-> 更新日期：2026-07-25  
+> 更新日期：2026-07-28
 > 目标：在不削弱现有 CLI 状态机、任务沙箱、确定性预检和正式 Gate 的前提下，让 Agent 根据作品理解设计、执行并动态调整创作路径  
 > 非目标：允许模型生成任意命令、直接修改正式项目、删除强制 Gate，或用另一套 Agent 框架替换 Literary Engineering Engine
 
@@ -1021,6 +1021,31 @@ measure-only
 
 这些状态只决定执行方式，不改变 task completion、route gate 或 formal writeback 的定义。
 
+#### 18.3.1 Token 效率与上下文预算接线
+
+本节服从统一实施方案 `11.5A 上下文与 Token 效率专项`，不另建一套 Context Broker。
+实现顺序固定为：
+
+1. `usage truth`：先把 cache-read、非缓存 input、output、reasoning、model turn、
+   repair/retry 和 task/scene attribution 分开；
+2. `budget shadow`：按 task kind、role 和 SceneRiskProfile 计算预算，只报告不裁剪；
+3. `ExecutionContextEnvelope`：把 task package、prompt asset、Context Ledger 和
+   capability contract 规范化为唯一模型输入；
+4. `bounded context`：启用 must-inline、exact-on-demand、summary-reference、excluded
+   四级资料策略；
+5. `content cache`：按 project/canon/state/style/budget/contract hash 缓存可重建分区；
+6. `bounded session lease`：只在同角色、同上下文、同短期任务族内复用，并设置
+   token/time/failure reset；
+7. `adaptive cost`：SceneRiskProfile 决定 compact/standard/deep 的资料深度和模型能力
+   等级，不能删除正式 Gate。
+
+Planner 只能提出资料需求和提高风险等级；最终预算、强制资料、缓存失效与会话复用由
+确定性 Context Broker/Runtime 决定。跨角色共享稳定事实摘要是允许的，跨角色共享会话
+历史、隐藏推理或 Writer 自我解释是禁止的。
+
+W6-4G 只交付 usage truth、budget shadow/bounded context 和重复语义消除；真正的
+ContextCacheKey、session lease、Bundle 与只读并发仍在 AO-6/W6-7 激活。
+
 ## 19. 前端“创作策略”页面
 
 ### 19.1 路由与信息架构
@@ -1278,18 +1303,20 @@ client/src/features/strategy/
 6. Plan Compiler。
 7. Plan Simulator。
 8. 吞吐 measure-only 和固定路线基线。
-9. Persistence 与恢复。
-10. Planner/Reviewer Runtime 角色。
-11. Context cache 和 session lease。
-12. Bundle Compiler shadow 与等价性测试。
-13. 场景级 shadow mode。
-14. 场景级 assisted mode。
-15. Progress Contract 与 Replanner。
-16. Rolling Horizon 和 SceneRiskProfile。
-17. 受控 Bundle execution 与局部 repair。
-18. 只读并发。
-19. 前端策略页面。
-20. supervised/full adaptive。
+9. Token 分类、task/scene attribution 和 Context Budget shadow。
+10. ExecutionContextEnvelope 与 bounded-context fixed-route A/B。
+11. Persistence 与恢复。
+12. Planner/Reviewer Runtime 角色。
+13. Context cache 和有界 session lease。
+14. Bundle Compiler shadow 与等价性测试。
+15. 场景级 shadow mode。
+16. 场景级 assisted mode。
+17. Progress Contract 与 Replanner。
+18. Rolling Horizon 和 SceneRiskProfile。
+19. 受控 Bundle execution 与局部 repair。
+20. 只读并发。
+21. 前端策略页面。
+22. supervised/full adaptive。
 
 任一阶段未通过验收，不进入下一阶段。尤其不能在默认计划等价性和场景闭环未通过前开发全书动态重规划。
 
@@ -1305,6 +1332,9 @@ client/src/features/strategy/
 | `runtime/capabilities/contracts.py`、`runtime/resources/claims.py` | 定义 `CapabilityManifest`、`ResourceClaim`；`contracts.py` 只保留 task package 的兼容解析和计划绑定元数据 | 在根 `contracts.py` 堆积跨领域实现，或用自由字符串表达能力和角色 |
 | `runtime/worker.py` | 接收可选 `plan_id/revision/node_id`，把它们写入 run manifest 和事件；执行流程不改 | 让 Worker 解释计划或自行找下一任务 |
 | `runtime/sandbox.py` | 在 manifest 中记录 plan binding、resource claims、context ledger 路径 | 给 planner 或 worker 开放项目根目录 |
+| `runtime/context_budget.py` | 按 task kind/role/risk 计算字符与 Token 预算、输出 shadow report 和超额原因 | 静默裁剪 mandatory context，或让 Planner 自定上限 |
+| `runtime/execution_context.py` | 生成唯一模型执行信封，引用现有 task package/prompt/ledger，不拥有 task lifecycle | 复制一套 task schema 或在多种 sidecar 中重复展开正文与约束 |
+| `runtime/context_selection.py`、`runtime/context_materialization.py`、`runtime/prompt_context.py` | 实现四级资料选择、精确去重和 budget report；保留受限工作区与完整来源 digest | 用全局字符截断替代任务语义选择 |
 | `runtime/bundle_executor.py` | 顺序执行白名单 Bundle step、维持单角色 session lease、统一失败回滚 | 自行决定跳过 task、validator 或 decision boundary |
 | `runtime/context_cache.py` | 按 project/canon/state/style/budget/contract hash 缓存可重建上下文 | 把缓存当作 Canon，或在依赖变化后继续复用 |
 | `runtime/output_repair.py` | 根据稳定 preflight issue ID 生成局部修复任务，只开放 invalid outputs | 用格式 repair 处理语义失败 |
@@ -1313,7 +1343,7 @@ client/src/features/strategy/
 | `integrations/opencode/opencode_profiles.py` | 角色枚举化；新增 planner/reviewer；未知角色报错 | 继续使用 `else -> worker` 静默回退 |
 | `integrations/opencode/opencode_runtime_pool.py` | 支持 planner/reviewer session key、复用、超时和独立审查会话 | 复用正文 writer 会话做 plan review |
 | `observability/agent_session_tracking.py` | 记录 plan/node/context/mutation receipt 摘要 | 记录隐藏思维链 |
-| `observability/throughput_metrics.py` | 聚合模型轮次、阶段耗时、缓存、repair/retry 和首次通过率 | 通过减少 Gate 美化吞吐指标 |
+| `observability/throughput_metrics.py` | 聚合模型轮次、阶段耗时、非缓存输入/cache-read/cache-write、上下文字符、repair/retry、task/scene attribution 和首次通过率 | 通过减少 Gate 美化吞吐指标，或把 cache token 伪装成同价账单 |
 | `persistence/job_store.py` | DDL 与 migration；把计划读写拆入 `persistence/creative_plans.py` mixin | 继续把所有 SQL 堆入 `job_store.py` |
 | `api/routers/__init__.py` | 注册 orchestration router | 在旧 worker router 里塞全部计划 API |
 | `application/config.py` | 增加 feature flag、默认 strategy preset 和预算范围 | 把用户项目的计划状态写进全局配置 |

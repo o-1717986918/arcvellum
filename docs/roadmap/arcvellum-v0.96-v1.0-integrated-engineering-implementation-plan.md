@@ -2,7 +2,7 @@
 
 > 文档状态：模块级、架构级、代码级强指导性实施基线  
 > 基线版本：ArcVellum v0.95.3  
-> 更新日期：2026-07-25  
+> 更新日期：2026-07-28
 > 适用仓库：`o-1717986918/arcvellum`  
 > 目标：把长期产品路线、自适应创作编排、运行时升级和独立研究成果收束为一条可执行、可验收且不重复建设的工程路线  
 > 非目标：在一个版本内同时铺开全部能力，重写 Literary Engineering Engine，建立第二套状态机，或把 ArcVellum 改造成通用 Agent IDE
@@ -1294,6 +1294,107 @@ automation/campaign/
 - 用一个超大 Prompt 一次生成整章所有产物。
 - 把缺少必要产物的快速路径标记为正式完成。
 
+### 11.5A 上下文与 Token 效率专项
+
+2026-07-28 对真实项目 `1+1=2` 的最近 2000 条运行事件进行只读测量，得到以下阶段性
+基线：
+
+- 27 个正式任务产生约 965 万个供应商 usage token；
+- 其中约 743 万为 cache-read、191 万为非缓存输入、23 万为输出、8 万为推理；
+- 样本中存在 12 次局部 repair 和 18 次 retry/recovery；
+- OpenCode 服务进程已经复用，但每个正式任务仍创建独立 Agent session；
+- 首轮 Prepared Context 上限为 180000 字符，部分任务许可工作区的 Context Ledger
+  超过 190 万字符，Agent 仍可能继续读取未内联文件；
+- `AGENT_TASK.md`、`TASK_CONTEXT.json`、`task.json` 和 task sidecar 承载了部分重复语义。
+
+这些数字只用于定位结构性浪费。`cache-read token` 不得直接等同于非缓存输入或实际
+账单金额；前端和审计报告必须分别展示 input、cache-read、cache-write、output、
+reasoning 和供应商可用时的 billed cost。
+
+专项路线不另建第二套状态机，按以下工作包并入 W6：
+
+| 工作包 | 正式阶段 | 内容 | 明确不做 |
+| --- | --- | --- | --- |
+| `TE-0 usage truth` | W6-4G | 修正 Token 分类、增加 task/scene 归因、上下文字符量、重试与 repair 成本 | 用一个总 Token 数代替成本 |
+| `TE-1 bounded context` | W6-4G | 任务级上下文预算、四级资料选择、唯一模型执行信封、重复语义审计 | 语义向量库、跨角色会话复用 |
+| `TE-2 content cache` | W6-7 | ContextCacheKey、内容寻址缓存、确定性失效、增量 repair | 把缓存当 Canon |
+| `TE-3 bounded reuse` | W6-7 | 同角色短租约、Bundle 内上下文复用、token/time/failure 上限 | 无限长会话、Writer/Reviewer 混用 |
+| `TE-4 adaptive cost` | W6-6/W6-7 | SceneRiskProfile 驱动 compact/standard/deep、能力级模型路由 | 通过低价模型豁免 Gate |
+| `TE-5 longform compaction` | W6-8 | Rolling Horizon、章节增量摘要、长会话压缩和 checkpoint | 把摘要升级为事实源 |
+
+#### 任务级上下文预算
+
+新增 `runtime/context_budget.py`，按 `task kind + agent role + risk level` 计算预算，不能再
+只使用一个全局 180000 字符上限。首批保守校准区间：
+
+| 任务族 | 首轮模型上下文目标 | 主要必需资料 |
+| --- | --- | --- |
+| 机械结构与状态提取 | 15000 - 30000 字符 | 当前候选、schema、相关正式状态 |
+| state/canon/continuity 审查 | 20000 - 40000 字符 | 当前正文、delta、相关 Canon/人物状态 |
+| RP/branch/composition | 30000 - 60000 字符 | 场景、涉及角色、桥接、预算、相关 Canon |
+| 正文生成 | 60000 - 90000 字符 | composition、选定分支、文风、节奏、字数、连续性 |
+| 正文 Review/revision | 40000 - 70000 字符 | 精确候选、审查骨架、Style Lint、相关事实 |
+
+这些是初始性能预算，不是文学事实。必需资料超过预算时必须产生结构化
+`context_budget_exceeded`，由 Context Broker 重选或升级任务等级；禁止静默截断
+Canon、人物当前状态、挂载文风、字数/节奏契约或精确候选。
+
+每份资料只能处于一个模型可见层级：
+
+1. `must_inline`：本任务不可缺少的精确文本。
+2. `exact_on_demand`：授权读取但不在首轮重复内联。
+3. `summary_reference`：带来源 digest 的可重建摘要。
+4. `excluded`：与当前任务无关，模型不可自行遍历。
+
+#### 唯一模型执行信封
+
+新增 `runtime/execution_context.py`，输出唯一 `ExecutionContextEnvelope`。它只负责把
+现有 task package、prompt asset、Context Ledger 和 capability/resource contract 规范化
+为一次模型输入，不拥有 task lifecycle：
+
+```python
+@dataclass(frozen=True)
+class ExecutionContextEnvelope:
+    task_id: str
+    task_kind: str
+    agent_role: str
+    prompt_asset_id: str
+    must_inline: tuple[str, ...]
+    exact_on_demand: tuple[str, ...]
+    summary_references: tuple[str, ...]
+    expected_outputs: tuple[str, ...]
+    hard_constraints: tuple[str, ...]
+    context_digest: str
+    character_budget: int
+```
+
+`AGENT_TASK.md`、`TASK_CONTEXT.json`、task JSON 和 sidecar 仍可分别保留人读、机器恢复与
+审计用途，但模型执行程序不得重复展开同一约束、同一文件正文或同一输出合同。
+
+#### 会话与 repair 原则
+
+- 当前 repair 已在原 OpenCode session 内进行，继续保留；repair prompt 只包含稳定
+  issue ID、无效输出、相关片段和只读的已通过输出，不重新发送完整任务包。
+- 跨任务 session reuse 不是默认优化。只有 role/project/model/context hash 一致、上下文
+  未失效且会话未超过 token/time/failure 预算时才可短期复用。
+- 长会话会累积历史内容，可能比新会话更贵；必须支持 compaction、主动 reset 和统计
+  对比，不能以“持久会话”本身作为完成标准。
+- Writer、Reviewer、Planner 和 Advisor 继续保持隔离，缓存可共享稳定事实摘要，隐藏
+  对话历史不可跨角色共享。
+
+#### 专项验收指标
+
+在同一项目、同一模型、同一正式路线和等价任务样本上进行 A/B。W6-4G 先建立可信
+scene attribution，再把以下作为初始目标而非未经验证的承诺：
+
+- 非缓存输入 token 中位数下降至少 40%；
+- 模型首轮可见字符中位数下降至少 50%；
+- repair + retry 模型轮次下降至少 25%；
+- 精确候选首次 preflight 和 AgentReview 通过率不下降；
+- Canon、人物状态、文风、字数、节奏、promotion 和写回 Gate 零缺失；
+- 缓存命中必须能解释对应 `ContextCacheKey`，失效后不得继续复用；
+- 任何优化均可按 feature flag 退回 fixed 单任务路线。
+
 ### 11.6 Execution Bundle
 
 `ExecutionBundle` 是已编译任务节点的受控执行优化，不是新的 task lifecycle。
@@ -1426,6 +1527,13 @@ observability/
 
 `context_cache.py` 只消费 Context Broker 提供的 hash，不自行扫描项目决定文学依赖；Runtime 只发出 typed throughput events，`observability/throughput_metrics.py` 订阅并聚合，避免 Runtime 反向依赖展示层。
 
+缓存分为两层：
+
+- provider cache 观测层：只记录供应商报告的 cache-read/cache-write，不假定其价格、
+  TTL 或额度语义；
+- ArcVellum content cache：缓存已规范化、可重建的 context partition 和摘要，以
+  `ContextCacheKey` 校验，不缓存隐藏思维链或正式写回结果。
+
 局部修复契约：
 
 ```python
@@ -1474,6 +1582,9 @@ Writer session 不能转为 Reviewer；Reviewer 也不能沿用 Writer 的隐藏
 - Agent 模型轮次。
 - 排队、上下文装载、模型、preflight、writeback 和等待决策耗时。
 - 输入/输出 token 估计。
+- cache-read/cache-write token 与非缓存输入分栏。
+- 模型首轮可见字符、按需读取字符、被排除字符和上下文预算超额次数。
+- task、scene、role、model 和 context digest 归因。
 - Context cache hit ratio。
 - 局部 repair 和整轮 retry 次数。
 - 首次 preflight 通过率。
@@ -1486,13 +1597,15 @@ Writer session 不能转为 Reviewer；Reviewer 也不能沿用 Writer 的隐藏
 ### 11.12 分阶段启用
 
 1. `measure-only`：仅记录阶段耗时和模型轮次。
-2. `cache-only`：启用依赖 hash 缓存，不改变任务顺序。
-3. `session-reuse`：同角色、同上下文复用会话。
-4. `bundle-shadow`：编译 Bundle，但仍按原任务执行，对比结果。
-5. `bundle-execute`：只开放 `scene-analysis` 和 `chapter-planning`。
-6. `rolling-horizon`：章节计划加 2 - 4 场景窗口。
-7. `adaptive-depth`：启用 SceneRiskProfile。
-8. `parallel-review`：在 ResourceClaim 保护下并行只读审查。
+2. `budget-shadow`：只报告任务预算、重复内容和资料层级，不改变 Prompt。
+3. `bounded-context`：启用 ExecutionContextEnvelope 和任务预算，保留 fixed task 顺序。
+4. `cache-only`：启用依赖 hash 缓存，不改变任务顺序。
+5. `session-reuse`：同角色、同上下文、有界复用会话。
+6. `bundle-shadow`：编译 Bundle，但仍按原任务执行，对比结果。
+7. `bundle-execute`：只开放 `scene-analysis` 和 `chapter-planning`。
+8. `rolling-horizon`：章节计划加 2 - 4 场景窗口。
+9. `adaptive-depth`：启用 SceneRiskProfile。
+10. `parallel-review`：在 ResourceClaim 保护下并行只读审查。
 
 任一阶段可退回固定路线。默认不得直接启用全部优化。
 
@@ -1504,6 +1617,9 @@ Writer session 不能转为 Reviewer；Reviewer 也不能沿用 Writer 的隐藏
 - 无重复 task complete、重复 promotion 或无限重试。
 - 全自动无法恢复时明确说明阻断事实和最后安全状态。
 - Bundle 开启前后正式产物、Gate 和 promotion 结论等价。
+- Token 面板不再把 cache-read 与非缓存输入或实际账单混为一个数字。
+- Context Envelope、预算、缓存与会话租约均可追溯到 task/scene/context digest。
+- 用同一真实场景进行 fixed 与 bounded-context A/B，质量 Gate 等价且 Token 目标达标。
 - 同一章节的 Agent 模型轮次和重复上下文量相对基线下降。
 - Context 失效后不会复用旧 Canon、人物状态或文风。
 - 局部格式修复不会改变已通过正文或绕过语义 revision。

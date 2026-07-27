@@ -27,6 +27,10 @@
 - W2 Narrative Archive IDE 已完成受控资产身份、校验、影响预览、Owner Override、修订历史、正式 stale 传播、可逆归档/恢复、候选晋升、Registry 驱动的结构化编辑、状态化引导和隔离真实项目作者闭环。
 - W2 已满足统一实施方案当前定义的产品、Gate、Stable Knowledge 与架构出口；后续 W3-W8/AO 工作流仍未实施完毕，不得据此声称 v1 已交付。
 - W4 Project Archaeology 已完成不可变源证据、分块提取、全书聚合、实体解析、候选重建、领域审查、Archive 晋升边界、四模式工作台和真实纵向 Exit Audit。
+- 受限 W5 Capability Broker 已完成；Pi RPC、Ollama、新供应商和外部 CLI tool-call transport
+  仍按业主决定延期。
+- W6-5A 场景自适应契约层已经完成，正式生产激活仍属于 W6-5B；在继续 W6-5B 前先执行
+  W6-4G 上下文与 Token 效率止损，避免后续真实 Agent 验收继续放大重复上下文成本。
 - 最近一次 Python 全量证据：618 tests passed、1 skipped，耗时约 137 秒；Client 最近一次基线为 101 tests passed；Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
@@ -1658,12 +1662,78 @@ W1-Exit 实现结果：
 - `compileall`、`vue-tsc` 与 `git diff --check`：passed；
 - 评审见 `docs/architecture/reviews/v096-throughput-optimization-review.md`。
 
+### W6-4G：上下文与 Token 效率止损
+
+**状态：已纳入路线，待实施；完成后继续 W6-5B。**
+
+2026-07-28 真实项目运行审计发现，W6-4F 已解决 usage 累计快照重复计数和沙箱重复
+物化，但模型侧仍存在结构性上下文成本：
+
+- 最近 2000 条事件、27 个任务约记录 965 万 usage token，其中 cache-read 约占 77%；
+- 样本内有 12 次 repair、18 次 retry/recovery；
+- OpenCode 服务复用但任务 session 独立；
+- 首轮上下文使用统一 180000 字符上限，缺少 task kind/role/risk 预算；
+- task JSON、task sidecar、`TASK_CONTEXT.json` 和 `AGENT_TASK.md` 有重复语义暴露；
+- 部分任务许可工作区超过 190 万字符，Agent 可能继续读取大量 omitted source。
+
+本批只做 fixed route 下的安全止损，不提前实现 AO-6 Bundle、并发或跨任务长会话：
+
+1. `TE-0 usage truth`
+   - Token 分为非缓存 input、cache-read、cache-write、output、reasoning 和供应商 cost；
+   - 增加 task/scene/role/model/context digest 归因；
+   - 增加首轮可见字符、按需读取字符、排除字符和预算超额次数；
+   - 前端不得继续用一个 total token 暗示同等账单成本。
+2. `TE-1 context budget`
+   - 新增 `runtime/context_budget.py`；
+   - 先启用 `budget-shadow`，再启用 bounded context；
+   - task kind、role 和风险等级决定预算，mandatory context 超额时 fail closed，不静默截断。
+3. `TE-1 execution envelope`
+   - 新增 `runtime/execution_context.py`；
+   - 模型只接收一个规范化 `ExecutionContextEnvelope`；
+   - sidecar/JSON/Markdown 继续用于恢复、审计和人读，但不重复展开同一正文、约束和输出合同。
+4. 四级资料选择
+   - `must_inline`；
+   - `exact_on_demand`；
+   - `summary_reference`；
+   - `excluded`。
+5. 增量 repair
+   - 保留当前同 session repair；
+   - 只发送 issue ID、无效输出、相关片段和只读已通过输出；
+   - 不把语义失败伪装成格式修复。
+
+模块级改动：
+
+- `runtime/context_budget.py`：预算策略、shadow report、超额错误；
+- `runtime/execution_context.py`：唯一模型执行信封；
+- `runtime/context_selection.py`：四级资料分层；
+- `runtime/context_materialization.py`、`runtime/prompt_context.py`、`runtime/task_program.py`：
+  单次展开、去重和模型可见内容；
+- `runtimes/opencode.py`：记录 prompt/context identity，保持本任务内增量 repair；
+- `observability/throughput_metrics.py`：Token 真相与 scene attribution；
+- API/Client observability：分栏展示，不暴露 Prompt 或隐藏推理；
+- 定向单元、Worker/preflight 集成和真实项目 A/B。
+
+退出门槛：
+
+- fixed route 的 task、Gate、正式产物和 writeback 语义不变；
+- 同一模型、同一项目、等价场景样本中，非缓存输入 token 中位数初始目标下降 40%，
+  首轮模型可见字符中位数初始目标下降 50%；
+- repair + retry 模型轮次初始目标下降 25%；
+- 首次 preflight、AgentReview、Canon/状态/文风/字数/节奏 Gate 不退化；
+- 任一 mandatory context 无静默丢失；
+- `budget-shadow`、`bounded-context` 均可独立关闭并回退当前 fixed 行为；
+- 全量 Python/Client、Architecture Audit、`compileall`、构建和 `git diff --check` 通过。
+
+`ContextCacheKey`、跨任务有界 session lease、Execution Bundle、Rolling Horizon、
+adaptive-depth 与 parallel-review 不在本批冒充完成，继续归属 W6-6/W6-7。
+
 ### W6 后续完整阶段映射
 
 W6 不以一个模糊“长周期验收”跳过剩余路线。AO-3 退出后继续：
 
 | 实施批次 | 自适应阶段 | 统一实施方案覆盖 |
 | --- | --- | --- |
+| W6-4G | Fixed-route Token 止损 | usage truth、task context budget、ExecutionContextEnvelope、增量 repair |
 | W6-5 | AO-4 场景级自适应 | RP 深度、分支数、修订策略、scene Plan Patch、完整场景闭环 |
 | W6-6 | AO-5 章节级编排 | Rolling Horizon、SceneRiskProfile、事件库存、字数/节奏/承诺义务 |
 | W6-7 | AO-6 资源锁与有限并发 | Resource Gate、Execution Bundle、上下文缓存、局部修复、session lease、只读并发 |
