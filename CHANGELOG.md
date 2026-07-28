@@ -2,6 +2,27 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.96.3] - 2026-07-28
+
+### Added
+
+- Added one immutable `ExecutionContextEnvelope` with explicit must-inline, exact-on-demand, summary-reference, and excluded evidence tiers.
+- Added contract-driven bounded context canaries, historical task-contract replay, and isolated same-model A/B reporting without mutating the source project.
+- Added compact digest-bound candidate-review evidence and bounded same-session repair context with safe throughput attribution.
+
+### Changed
+
+- Kept the production context policy in shadow mode while recording requested/effective modes, contract readiness, rollout reasons, and stable policy digests.
+- Reduced the measured candidate-review first-turn visible context by 54.20% in the first real same-model A/B sample; the release does not claim lower total tokens because that sample used 9.23% more non-cached input tokens.
+- Restored or removed provable out-of-scope sandbox changes before model repair, while unknown changes still fail closed.
+
+### Fixed
+
+- Restored functional creation controls in the style atelier by generating valid stable identifiers and showing exact missing requirements instead of silently disabling actions.
+- Restored eased focus, fit, and cluster camera transitions in the desktop Orrery fallback renderer while respecting reduced-motion settings.
+- Prevented a model-created file outside `expected_outputs` from exhausting repair attempts merely because its content was later emptied instead of deleting the file.
+- Prevented OpenCode stream timeouts from escaping as unhandled thread errors.
+
 ## [0.96.2] - 2026-07-28
 
 ### Added
@@ -93,6 +114,7 @@ All notable ArcVellum changes are documented in this file. Detailed release evid
 
 - Candidate output, lifecycle status, and continuity-ledger edge cases found during end-to-end scene promotion testing.
 
+[0.96.3]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.3
 [0.96.2]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.2
 [0.96.1]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.1
 [0.96.0]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.0
