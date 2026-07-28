@@ -8,14 +8,13 @@ skill, then downstream gates validate the artifacts that platform agent writes.
 from __future__ import annotations
 
 import json
-import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import re
 
 from ..agent_tasks import write_agent_tasks
-from ..anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE, render_ai_style_lint_block
+from ..anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE
 from ..asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES, ASSET_TYPES
 from ..asset_context import compact_asset_context_paths
 from ..context_broker import default_context_trace_path
@@ -25,14 +24,15 @@ from ..creative_quality import (
     load_creative_quality_profile,
     render_creative_quality_prompt,
 )
-from ..draft_text import count_delivery_chars, final_body_from_workbench_text
+from ..draft_text import count_delivery_chars
+from ..literary.review.context_evidence import build_scene_review_evidence, scene_review_context_path, write_scene_review_context
 from ..narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from ..new_character_register import render_new_character_register_contract
 from ..punctuation_standard import PUNCTUATION_STANDARD_SHORT_RULE
-from ..reader_experience import reader_experience_adherence_for_body, reader_experience_contract, scene_chapter_obligation_id
+from ..reader_experience import reader_experience_contract, scene_chapter_obligation_id
 from ..resources import engine_path
 from ..style_prompt import STYLE_PROMPT_LENGTH_RULE, STYLE_PROMPT_QUALITY_RULE
-from ..word_budget import scene_word_budget_contract, word_budget_adherence_for_body
+from ..word_budget import scene_word_budget_contract
 from .style_task_contract import render_scene_review_style_task, scene_review_style_materials
 
 
@@ -69,19 +69,15 @@ def write_platform_scene_review_task(
     if obligation_path.exists():
         source_paths.append(obligation_path)
     _extend_unique(source_paths, _style_source_paths(root))
-    quality_profile = load_creative_quality_profile(root)
     if creative_quality_profile_exists(root):
         source_paths.append(creative_quality_profile_path(root))
-    draft_text = _read_optional(draft_path)
-    candidate_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
-    body = final_body_from_workbench_text(draft_text)
-    style_lint_block = render_ai_style_lint_block(body or draft_text, profile=quality_profile, scope=scene_id)
-    word_budget_adherence = word_budget_adherence_for_body(
-        root, scene_path, body,
-        materialization_scope=materialization_scope,
+    evidence = build_scene_review_evidence(
+        root, scene_path=scene_path, draft_path=draft_path, composition_path=composition_json if composition_json.exists() else None,
+        style_mount_snapshot=style_mount_snapshot, materialization_scope=materialization_scope,
     )
-    reader_adherence = reader_experience_adherence_for_body(root, scene_path, body)
-    rhythm_contract_text = render_narrative_rhythm_contract(root, scene_path, composition_json if composition_json.exists() else None)
+    quality_profile, candidate_sha256 = evidence.quality_profile, evidence.candidate_sha256
+    style_lint_block, word_budget_adherence = evidence.style_lint_block, evidence.word_budget_adherence
+    reader_adherence, rhythm_contract_text = evidence.reader_adherence, evidence.rhythm_contract_text
     new_character_contract = render_new_character_register_contract()
     task_path = json_output.with_suffix(".agent_tasks.md")
     write_agent_tasks(
@@ -242,6 +238,10 @@ def write_platform_scene_review_task(
                 f"""创建或覆盖 `{_rel(report, root)}`，说明结论、阻塞问题、修订动作、人物逻辑、canon 风险和风格备注。必须新增“新角色登记门禁”段落：列出正文是否出现新角色、哪些是一次性路人、哪些需要候选资产/审查/approval/promotion。必须新增“文风执行门禁”段落：写明 style_adherence.status、证据、偏差和修订动作。必须新增“字数预算门禁”段落：写明目标/最低/最高/清洗后正文中文内容字符、机器非空白字符诊断、叙事负载是否满足、是否存在灌水或摘要化。必须新增“读者体验门禁”段落：写明读者问题、承诺回报、暂扣信息、兑现/延迟、张力来源、反摘要要求和读后余味是否被正文执行。必须新增“叙事节奏与场景桥接门禁”段落：写明入场压力、本场转折、详略节奏和出场钩子是否执行。必须新增“Canon 写回判断”段落：说明是否有持续世界事实，若无写理由，若有列候选 patch 路径。必须新增“反规避负担证明”段落：列出是否存在换皮转折、保留显式转折的理由、批判性反驳和最终判断。若结论为 pass_with_notes，必须新增“小修闭环”段落：列出 writing agent 必须执行的小修项、可接受的最小改动、需要人工确认的 notes。不要写入 `[AGENT_TASK: ...]`。""",
             ),
         ],
+    )
+    write_scene_review_context(
+        root, evidence=evidence, sidecar_path=task_path, artifact_path=scene_review_context_path(json_output),
+        review_json_path=json_output, review_report_path=report,
     )
     return PlatformAgentTaskResult(task_path, report, json_output)
 def write_platform_scene_generation_task(

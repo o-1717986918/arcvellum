@@ -254,8 +254,9 @@ AO-2 持久化边界：
   compiled graph digest、simulation fingerprint 与 provenance 语义链；
 - `shadow.py` 只量测 Normalize/Lint/Compile/Simulate，Lint 失败即停止。它不持久化、
   不执行、不激活，也没有 Autopilot 调用入口；
-- AO-2 在 schema 12 建立计划索引；schema 13 增加 Context Ledger 元数据；当前
-  schema 14 增加 Worker Mutation Receipt 索引与 plan event session binding，继续沿用
+- AO-2 在 schema 12 建立计划索引；schema 13 增加 Context Ledger 元数据；schema 14
+  增加 Worker Mutation Receipt 索引与 plan event session binding；当前 schema 15
+  增加 execution context digest 与 visibility tier 索引，继续沿用
   JobStore migration backup。删除 Studio 编排/可观测索引不得删除或改变正式作品与项目
   审计文件。
 - plan `status` 是机器字段，初始值固定为 `shadow`；只有通过完整审计协调器验证的 revision
@@ -297,6 +298,60 @@ AO-3 Agent 协议边界：
   Autopilot 经现有 event/session 汇聚入口持久化，CLI 直跑仍保留 run-root 便携回执；
 - `runtime/worker.py` 继续负责领取、准备、Runner 执行和恢复编排；结果 DTO、路径验证、
   run manifest 读取与写回生命周期分别归入小模块，禁止重新堆回单文件。
+
+W6-4G 上下文与 Token 效率边界进一步固定：
+
+- `runtime/context_budget.py` 只拥有任务预算分类、模式、不可变 DTO、shadow report 与
+  `ContextBudgetExceeded`；它不选择资料、不组装 Prompt、不拥有 task lifecycle；
+- `runtime/prompt_context.py` 只加载 Agent 已获许可的文本，执行完整文件级选择并生成
+  report；不得半截断文件，也不得自行推断 Canon 或文学重要性；
+- `runtime/context_materialization.py` 是预算、资料选择、Prompt、Task Context、
+  Execution Boundary 与 Context Ledger 的单一装配入口；bounded 模式只有在任务包
+  显式提供 `context_must_inline_paths` 后才可继续；
+- `runtime/execution_context.py` 只拥有不可变 `ExecutionContextEnvelope`、四级资料
+  枚举、摘要引用、内容身份与安全投影；它不能选择正式任务、扩大 Sandbox 权限或写回；
+- `must_inline`、`exact_on_demand`、`summary_reference` 与 `excluded` 必须互斥。
+  Prompt、`TASK_CONTEXT.json`、Run Manifest 和 Context Ledger 必须绑定同一 envelope
+  digest；模型实际可见层级与 SQLite ledger tier 必须一致；
+- `runtime/context_selection.py` 拥有 Agent 可见资料和操作手册排除策略；
+  `runtime/task_program.py` 只能消费信封并渲染程序，不能重新建立第二套 source/reference
+  选择；
+- `routes/scene/context_contract.py` 只声明正文生成、精确审查和语义修订任务族的文学
+  mandatory 资料；`tasking/context_contract.py` 只做 Engine 侧协议规范化，
+  `protocols/task_context.py` 由 Studio 独立验证消费端合同，三者不得拥有预算或 Runtime
+  配置；
+- `literary/review/context_evidence.py` 只生成 digest-bound 候选审查紧凑证据；
+  `protocols/review_context.py` 只在 Studio 侧独立验证该证据和任务声明，二者不得相互
+  导入。完整审查 sidecar 保持 CLI/Engine 所有并留在授权 workspace，不能被紧凑证据
+  替代或删除；
+- `context_exact_on_demand_paths` 是正式任务合同而非 Runtime 猜测；它与
+  `context_must_inline_paths` 必须互斥并共同进入任务指纹。只有 bounded 模式按该声明
+  延迟首轮内联，off/shadow 必须保持兼容行为；
+- `observability/throughput_aggregation.py` 只消费事件并维护临时聚合状态，
+  `throughput_facts.py` 只计算 Token/context/attribution 数值，
+  `throughput_metrics.py` 只输出用户安全的只读投影；
+- throughput projection 可暴露计数、digest、task/scene/role/model attribution，
+  不能暴露 Prompt、正文、推理、凭证或绝对路径；
+- `runtime/repair_context.py` 只把 deterministic preflight issue 映射为同 session
+  的有界 Repair Context，拥有 issue identity、目标选择、片段预算和已通过输出保护；
+  它不能判定文学质量、扩大 expected outputs 或直接写回正式项目；
+- `runtime/repair_rendering.py` 只渲染有界修复提示，`runtime/repair_snapshots.py`
+  只保存和恢复 run-local protected outputs；两者都不能读取正式项目权限之外的资料；
+- `runtime/sandbox_hygiene.py` 只恢复可由 staged baseline 与 control workspace
+  digest 证明的非输出改动。无法证明可恢复的路径必须继续由 sandbox preflight
+  fail closed，不能把“自动清理”变成权限豁免；
+- `runtimes/opencode_repair.py` 只拥有 transport-level 同 session repair loop。
+  TaskPackage、Sandbox、preflight、Gate 和 writeback 所有权继续留在 Worker；
+- `runtime/context_rollout.py` 只消费请求模式、Engine contract status 和配置白名单，
+  输出带稳定 policy digest 的灰度决策；它不选择资料、修改 task 或拥有 writeback。
+  `off` 不得被覆盖，显式 bounded 遇非 `bounded-ready` 合同必须 fail closed；
+- `runtime/context_ab.py` 和 `context_ab_reporting.py` 只在临时项目副本中组合正式
+  Worker 生命周期与安全观测投影。每一实验臂必须独占并关闭 RuntimePool /
+  ProcessManager，不得把临时产物直接复制回正式项目；
+- `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择、
+  `ExecutionContextEnvelope`、首批高成本场景任务合同和 candidate-review 单样本真实
+  A/B 已建立可验证证据；生产默认仍为 shadow，灰度开关仍关闭。其余任务族、多样本
+  中位数/P95 和 rollback 未完成，不得把单样本 canary 候选宣称为生产可用。
 
 ## 当前大文件的正确处理方式
 

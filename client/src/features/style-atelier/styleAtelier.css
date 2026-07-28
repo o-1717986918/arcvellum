@@ -305,6 +305,7 @@
 .style-partition-warning { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 9px; color: var(--instrument-warning); border-top: 1px solid var(--style-line); font-size: 8px; }
 .style-engineering-setup > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .style-engineering-setup > footer > span { display: inline-flex; align-items: center; gap: 6px; color: var(--style-muted); font-size: 8px; }
+.style-engineering-setup > footer > span.danger { color: var(--cinnabar-400); }
 .style-engineering-console button.primary { min-height: 31px; padding: 0 11px; color: var(--instrument-deep); background: var(--instrument-accent); border-radius: 4px; font-size: 8px; font-weight: 800; }
 .style-engineering-console button:disabled { opacity: .35; }
 .style-engineering-live { display: grid; grid-template-columns: 42px minmax(180px, .9fr) minmax(260px, 1.2fr) auto; align-items: center; gap: 12px; min-height: 76px; padding: 10px 11px; background: color-mix(in srgb, var(--instrument-deep) 42%, transparent); border: 1px solid var(--style-line); border-radius: 5px; }

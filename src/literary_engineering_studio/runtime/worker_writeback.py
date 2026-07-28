@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..contracts import TaskPackage, load_task_package
+from ..preflight.common import PreflightIssue, PreflightResult
 from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
 from .mutation_tracking import WorkerMutationTracker
 from .run_manifest import load_run
@@ -16,10 +17,12 @@ from .sandbox import (
     load_writeback_preview,
     rollback_expected_outputs,
     sandbox_from_run,
+    sandbox_change_issues,
     sync_agent_outputs_to_control,
     restore_core_managed_outputs,
     update_run_manifest,
 )
+from .sandbox_hygiene import restore_unexpected_agent_changes
 from .worker_paths import resolve_task_json_path, validate_project
 from .worker_results import WorkerRunResult
 
@@ -274,6 +277,16 @@ class WorkerWritebackMixin:
         *,
         runtime_id: str,
     ):
+        restored_unexpected = restore_unexpected_agent_changes(sandbox)
+        if restored_unexpected:
+            self._emit(
+                "sandbox.unexpected_changes_restored",
+                {
+                    "task_id": task.task_id,
+                    "count": len(restored_unexpected),
+                    "paths": list(restored_unexpected),
+                },
+            )
         restored = restore_core_managed_outputs(sandbox)
         if restored:
             self._emit(
@@ -290,6 +303,26 @@ class WorkerWritebackMixin:
                 {"task_id": task.task_id, "paths": list(synced)},
             )
         result = validate_task_outputs(task, control_sandbox_view(sandbox))
+        remaining_changes = sandbox_change_issues(sandbox)
+        if remaining_changes:
+            result = PreflightResult(
+                False,
+                (
+                    *(
+                        PreflightIssue(
+                            "unexpected-change",
+                            "workspace",
+                            message,
+                            (
+                                "Studio 无法从受控基线恢复该路径；"
+                                "停止本次运行并重新创建沙箱。"
+                            ),
+                        )
+                        for message in remaining_changes
+                    ),
+                    *result.issues,
+                ),
+            )
         tracker = self._mutation_tracker(task, sandbox, runtime_id)
         tracker.candidate_outputs(
             preflight_status="pass" if result.passed else "rejected"

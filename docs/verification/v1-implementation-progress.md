@@ -31,7 +31,7 @@
   仍按业主决定延期。
 - W6-5A 场景自适应契约层已经完成，正式生产激活仍属于 W6-5B；在继续 W6-5B 前先执行
   W6-4G 上下文与 Token 效率止损，避免后续真实 Agent 验收继续放大重复上下文成本。
-- 最近一次 Python 全量证据：618 tests passed、1 skipped，耗时约 137 秒；Client 最近一次基线为 101 tests passed；Python compileall、Prompt Registry、Architecture Audit 与 `git diff --check` 全部通过。
+- 最近一次 Python 全量证据：657 tests passed、1 skipped；Client 最近一次基线为 135 tests passed；Python compileall、Prompt Registry、Architecture Audit、Client production build 与 `git diff --check` 全部通过。
 
 ## F0-1：Measure-only 创作吞吐投影
 
@@ -1664,7 +1664,10 @@ W1-Exit 实现结果：
 
 ### W6-4G：上下文与 Token 效率止损
 
-**状态：已纳入路线，待实施；完成后继续 W6-5B。**
+**状态：进行中。W6-4G1 usage truth 与 budget-shadow、W6-4G2
+ExecutionContextEnvelope 与四级资料合同、W6-4G3 首批 Engine 资料合同与 bounded
+影子验证已完成；真实模型 A/B、重复 sidecar 紧凑投影、生产激活和增量 repair 仍待
+后续子批。完成 W6-4G 后继续 W6-5B。**
 
 2026-07-28 真实项目运行审计发现，W6-4F 已解决 usage 累计快照重复计数和沙箱重复
 物化，但模型侧仍存在结构性上下文成本：
@@ -1726,6 +1729,267 @@ W1-Exit 实现结果：
 
 `ContextCacheKey`、跨任务有界 session lease、Execution Bundle、Rolling Horizon、
 adaptive-depth 与 parallel-review 不在本批冒充完成，继续归属 W6-6/W6-7。
+
+#### W6-4G1：Token 真相与预算影子模式
+
+**状态：完成。**
+
+本子批保持 fixed route、任务顺序、Gate 和 writeback 语义不变，只增加可回退的测量层：
+
+- `runtime/context_budget.py` 以 `task kind + agent role + risk level` 计算首轮目标，
+  默认 `shadow`，正式执行仍沿用 180000 字符旧上限；
+- 初始目标落在路线约定的 24000 至 89700 字符范围；报告区分首轮可见、精确按需、
+  排除、授权、mandatory 与预算超额；
+- `bounded` 不在本子批冒充可用：任务未显式声明 `context_must_inline_paths` 时直接
+  `ContextBudgetExceeded`，不会把 CLI protected output 错当文学必需资料，也不会静默
+  丢失 Canon、人物状态、文风或精确候选；
+- `sandbox.context_ready` 和 run manifest 持久化同一份安全 report，不保存 Prompt、
+  正文、路径或凭证；
+- throughput projection 区分非缓存 input、cache-read、cache-write、output、
+  reasoning 与 provider cost，并按 task、scene、Agent role、Runtime role、
+  provider/model 和 context digest 归因；
+- 星仪 Agent 面板分别展示非缓存输入、缓存读取、模型输出与首轮上下文中位数，不以
+  total token 暗示等价账单。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 只读沙箱测量结果：
+
+- Agent role：`main-review-agent`；
+- 预算模式：`shadow`；
+- 目标首轮字符：63250；
+- 旧行为实际首轮字符：131127；
+- 超额：67877；
+- enforced 上限仍为 180000，证明本批尚未改变生产上下文或正式创作结果。
+
+验收证据：
+
+- 全量 Python：652 passed，1 skipped；
+- Client：135 passed；
+- `client:build`、`vue-tsc`、Vite 与桌面前端同步：passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Architecture Audit：passed，0 新增 file/function/cycle/dependency debt；
+- `compileall`、`git diff --check`：passed。
+
+详细边界与延期项见
+`docs/architecture/reviews/w6-4g1-token-truth-and-budget-shadow-review.md`。
+
+#### W6-4G2：唯一执行上下文信封与四级资料合同
+
+**状态：完成。**
+
+本子批把模型实际可见资料收敛为版本化
+`arcvellum/execution-context-envelope/v1`，仍不改变 fixed route、任务顺序、文学
+Gate、Agent 角色、Sandbox 写权限和 writeback：
+
+- `must_inline`、`exact_on_demand`、`summary_reference`、`excluded` 四级路径互斥；
+- mandatory 未实际内联、on-demand 文件不存在、summary source digest 过期时
+  fail closed；
+- Prompt、`TASK_CONTEXT.json`、Run Manifest 与 Context Ledger 使用同一个 envelope
+  digest；
+- Context Ledger 每条记录拥有真实 `visibility_tier`，SQLite schema 15 保存 tier 与
+  execution context digest；
+- task program 不再重复展开已由 Prepared Context 和执行信封表达的完整
+  source/reference 清单；
+- 旧 Context Ledger 可继续解析，安全投影不包含正文、Prompt、绝对路径、凭证或隐藏
+  推理。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 只读沙箱证据：
+
+- mode：`shadow`；
+- target/enforced/actual first turn：63250 / 180000 / 131175 字符；
+- must-inline / exact-on-demand / summary / excluded：12 / 0 / 0 / 35；
+- 10 个 Agent source 全部有且仅有一个层级，0 overlap、0 missing；
+- 四处 digest 均为
+  `aea856ac7acffdde0fc16790118ab0f21b3b2891ae24fd6a0f752e1fc01e0b5a`；
+- 正式项目取样前后均为 910 个文件，mtime/size 快照一致，没有 writeback。
+
+验收证据：
+
+- 全量 Python：657 passed，1 skipped；
+- Client：44 files、135 tests passed；
+- `client:build`、Prompt Registry、Architecture Audit、`compileall` 和
+  `git diff --check`：passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+本批不声称真实 Token 已下降。131175 个首轮字符仍高于 63250 的影子目标；Engine
+mandatory contract 已在 W6-4G3 的首批高成本场景任务中完成，同模型等价任务的
+bounded A/B 仍待 G4。增量 repair、语义摘要、ContextCacheKey、session reuse、Bundle
+与并发仍未完成。
+
+详细实现、真实项目证据与延期项见
+`docs/architecture/reviews/w6-4g2-execution-context-envelope-review.md`。
+
+#### W6-4G3：Engine 资料合同与 bounded 影子验证
+
+**状态：完成。**
+
+本子批让 Engine 正式任务包声明首轮不可省略资料，并在不调用模型、不改变生产配置和
+不写回作品的前提下验证 bounded materialization：
+
+- 首批覆盖正文候选生成、精确候选审查、候选修订和静态修订；
+- scene task contract 显式声明 `context_must_inline_paths`，精确候选、修订源、审查
+  证据和 CLI task sidecar 缺失时 fail closed；
+- 资料合同字段进入 executable task fingerprint，旧 completion receipt 不能证明新
+  合同已经执行；
+- Engine 与 Studio 分别规范化和验证 schema、status、来源、重复、目录及越界路径；
+- 用户修订方向以 SHA-256 进入 execution-context identity，安全投影不暴露原文或该
+  digest；
+- 协议校验从既有大文件中拆出，Architecture Audit 没有接受新债务 baseline。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 只读比较：
+
+- off/shadow 首轮：131175 字符；
+- bounded 首轮：75247 字符，下降 42.6%；
+- target/enforced：80500 / 80500；
+- 9 项 mandatory 零遗漏，3 项资料保持 exact-on-demand，tier 零重叠；
+- Prompt、Task Context、Run Manifest 和 Context Ledger digest 一致；
+- 正式项目 859 个文件的内容快照前后一致，没有 writeback。
+
+该结果没有达到全路线首轮中位数下降 50% 的退出目标。旧 63250 Review 目标低于真实
+mandatory 证据，已按正确性校准为 80500。G4 在真实模型 A/B 前必须先压缩 Review
+sidecar 与 task package 的重复语义，不能靠删除文学证据或继续上调预算达标。
+
+验收证据：
+
+- Python：668 passed，1 skipped；
+- Client：44 files、135 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- `client:build`、Architecture Audit、`compileall` 与 `git diff --check`：passed；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+详细实现、真实项目证据与延期项见
+`docs/architecture/reviews/w6-4g3-engine-context-contract-and-bounded-shadow-review.md`。
+
+#### W6-4G4：紧凑审查证据与 bounded A/B 前置验收
+
+**状态：确定性实施完成；真实模型 A/B 与生产激活未完成。**
+
+本子批没有删减审查资料，而是拆开“首轮机器证据”和“完整恢复说明”：
+
+- Engine 生成 digest-bound
+  `reviews/agent/<scene_id>_scene_review.context.json`，绑定 exact candidate、完整
+  sidecar、`scene_review.v1` schema、Style Lint、字数、读者体验、节奏和文风证据；
+- 完整 `.agent_tasks.md` 继续存在并保持 standalone Skill 兼容，bounded 首轮将其作为
+  `exact_on_demand`，紧凑证据固定为 `must_inline`；
+- 新增正式 `context_exact_on_demand_paths` 合同字段，与 mandatory 合同共同进入任务
+  指纹；Engine 和 Studio 独立验证路径授权、互斥、摘要、scene/candidate/output 身份；
+- off/shadow 行为保持兼容，生产配置仍为 `shadow`；bounded 缺失或过期时继续
+  fail closed。
+
+真实项目 `1+1=2` 的 `scene_0004 candidate-review` 无模型只读比较：
+
+- off/shadow 首轮：139894 字符；
+- bounded 首轮：64085 字符，相对当前 off 下降 **54.19%**，相对历史 131175 基线
+  下降 **51.15%**；
+- bounded target/enforced：65550 / 65550，mandatory 为 64069 字符；
+- 9 项 must-inline、4 项 exact-on-demand、34 项 excluded，零缺失、零重叠；
+- 紧凑证据 10796 bytes，完整 sidecar 31737 bytes，candidate/sidecar/schema 摘要全部
+  匹配；
+- Prompt、Task Context、Run Manifest 和 Context Ledger digest 一致；
+- 正式项目 859 个文件、9388972 bytes 的内容快照前后一致，没有 writeback。
+
+本子批验收证据：
+
+- Python：674 passed，1 skipped；Client：44 files、135 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Client production build、Architecture Audit、`compileall`：passed；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+本结果只证明真实模型 A/B 的前置条件满足，不证明真实 Token、时延、repair 或文学质量
+已经改善。生产 bounded、全任务族中位数/P95、增量 repair、缓存/session/Bundle 和并发
+仍按 W6-4G 后续门槛执行。
+
+详细证据见
+`docs/architecture/reviews/w6-4g4-compact-review-evidence-and-bounded-ab-review.md`。
+
+#### W6-4G5：增量 Repair Context 与越权改动恢复
+
+**状态：确定性实施完成；真实模型同任务 A/B 未完成。**
+
+本子批修正了历史运行中“Agent 已完成语义修订，却因顺手修改未授权文件而耗尽 repair
+次数”的结构性问题：
+
+- 非 `expected_outputs` 改动先由 staged baseline 与 control workspace 进行确定性
+  恢复；新建越权文件移除，已有文件只有 digest 可证明时才恢复，未知改动继续
+  fail closed；
+- repair 保持同一 OpenCode session、同一正式 task、同一 preflight 与 writeback
+  lifecycle，不建立第二套修复任务；
+- `arcvellum/repair-context/v1` 为 issue 建立稳定 ID，并只发送目标输出的有界片段；
+- 单输出 excerpt 上限 1200 字符、总上限 6000 字符；protected outputs 只暴露
+  path/SHA/size，并在 repair 后确定性恢复；
+- 无法映射到精确输出的旧 issue 显式使用
+  `all_declared_outputs_fallback`，不伪造精确写范围；
+- throughput projection 只公开安全数值和 digest，不泄露 Prompt、正文、excerpt、
+  绝对路径或被恢复文件名。
+
+历史 `scene_0004 candidate-revision` 失败 run 的临时副本验证：
+
+- 原问题为越权修改 `characters/candidates/scene-0004-母亲.json`；
+- 确定性恢复后 sandbox change issue 从 1 降为 0；
+- 原历史 run 的 208 文件内容快照保持不变；
+- 实际 provenance repair 被映射到单一修订正文，bounded excerpt 1200 字符、
+  protected outputs 2、full task replay 为 false。
+
+本子批验收：
+
+- Python：682 passed，1 skipped；Client：44 files、135 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Client production build、Architecture Audit 与 `compileall`：passed；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation。
+
+旧 issue-only prompt 为 519 字符，新有界证据 prompt 为 2553 字符，不能据此声称
+prompt 本身更短。真实收益是否体现为更少盲读、更低非缓存 Token、更少 repair/retry
+和更短时延，仍需同模型等价任务 A/B。生产 context mode 继续保持 `shadow`。
+
+详细证据见
+`docs/architecture/reviews/w6-4g5-incremental-repair-context-review.md`。
+
+#### W6-4G6：合同驱动 Canary 与真实同模型 A/B
+
+**状态：单样本 canary 候选完成；生产默认保持 shadow，W6-4G 尚未最终退出。**
+
+本子批没有把 bounded 变成全局开关，而是建立合同驱动的有限激活和隔离实验：
+
+- Engine 将 `candidate-review` 声明为 `bounded-ready`，其他当前场景合同继续
+  `shadow-ready`；
+- rollout policy 以 requested mode、route、state、contract status 和稳定 policy
+  digest 决定 effective mode；`off` 不可覆盖，错误合同 fail closed；
+- 默认 `mode=shadow`、`bounded_rollout.enabled=false`，未静默改变生产行为；
+- 历史任务可在隔离副本中按当前合同 replay，不修改正式任务或项目；
+- 同模型 A/B 的每一臂拥有独立临时项目、RuntimePool 和 ProcessManager，并经现有
+  preview approval、submit/complete 与正式 preflight 路径结束；
+- 安全报告只保存数值、状态、digest 和 conclusion，不保存作品文本、Prompt、凭证或
+  隐藏推理。
+
+真实项目 `1+1=2`、任务
+`scene-development-scene-0004-candidate-review`、模型
+`deepseek/deepseek-v4-flash` 的单样本结果：
+
+- shadow / bounded 均 complete、首次 preflight 均 pass；
+- Review 分别为 `pass` 与 `pass_with_notes`，schema 均合法；
+- 首轮可见字符 139668 → 63967，下降 54.20%；
+- 非缓存输入 Token 69535 → 75950，bounded 反而增加 9.23%；
+- 时延 140.579 s → 142.284 s，Repair/Retry 增量为 0；
+- mandatory 零缺失、tier 零重叠，原项目执行前后 digest 完全一致。
+
+该结果证明合同、Sandbox、Gate、隔离写回和进程回收闭环成立，但不证明 Token 或时延
+总体改善。W6-4G 最终退出仍需多样本中位数/P95、质量不退化和 rollback 演练。
+
+本子批验收：
+
+- Python：691 tests passed，1 skipped；Client：48 files、141 tests passed；
+- Client production build：passed，桌面资源同步通过；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation；
+- `compileall` 与 `git diff --check`：passed。
+
+详细证据见
+`docs/architecture/reviews/w6-4g6-bounded-canary-and-live-ab-review.md`。
 
 ### W6 后续完整阶段映射
 

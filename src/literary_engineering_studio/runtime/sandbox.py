@@ -15,9 +15,11 @@ from typing import Iterable
 
 from literary_engineering_studio_engine.resources import engine_root
 from ..contracts import TaskPackage
+from .context_budget import TaskContextBudget
 from .context_materialization import materialize_agent_context_contract
 from .context_selection import select_agent_context
 from .execution_boundaries import prepare_execution_boundaries
+from .writeback_contracts import WritebackPreview
 
 MANIFEST_SCHEMA = "literary-engineering-studio/task-sandbox/v0.1"
 IGNORED_RUNTIME_PATHS = {"AGENT_TASK.md", "_task", ".claude", ".codex", ".git"}
@@ -39,22 +41,6 @@ class SandboxManifest:
     agent_workspace: Path | None = None
 
 
-@dataclass(frozen=True)
-class WritebackPreview:
-    policy: str
-    preview_path: Path
-    changes: tuple[dict[str, object], ...]
-
-    def as_dict(self) -> dict[str, object]:
-        return {
-            "schema": "literary-engineering-studio/writeback-preview/v0.1",
-            "policy": self.policy,
-            "preview_path": str(self.preview_path),
-            "change_count": len(self.changes),
-            "changes": list(self.changes),
-        }
-
-
 def stage_task(
     task: TaskPackage,
     runs_root: Path,
@@ -62,6 +48,7 @@ def stage_task(
     runtime: str,
     run_id: str | None = None,
     materialize_agent_view: bool = True,
+    context_budget: TaskContextBudget | None = None,
 ) -> SandboxManifest:
     identifier = run_id or _run_id(task.task_id)
     run_root = runs_root.expanduser().resolve() / _project_key(task.project_root) / identifier
@@ -149,7 +136,7 @@ def stage_task(
         agent_workspace=workspace,
     )
     if materialize_agent_view:
-        materialize_agent_workspace(task, sandbox)
+        materialize_agent_workspace(task, sandbox, context_budget=context_budget)
     else:
         workspace.mkdir(parents=True, exist_ok=False)
         baseline_path.write_text("{}\n", encoding="utf-8")
@@ -157,7 +144,9 @@ def stage_task(
     return sandbox
 
 
-def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
+def materialize_agent_workspace(
+    task: TaskPackage, sandbox: SandboxManifest, *, context_budget: TaskContextBudget | None = None,
+) -> tuple[str, ...]:
     """Build the bounded Agent view from the fully reproducible control view."""
 
     workspace = _agent_workspace(sandbox)
@@ -198,6 +187,7 @@ def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> 
         task_dir=task_dir,
         selection=selection,
         copied_paths=copied,
+        context_budget=context_budget,
     )
     refresh_sandbox_baseline(sandbox)
     update_run_manifest(
@@ -215,6 +205,8 @@ def materialize_agent_workspace(task: TaskPackage, sandbox: SandboxManifest) -> 
         omitted_context_paths=list(context.prepared_context.omitted_paths),
         prepared_context_characters=context.prepared_context.character_count,
         prepared_context_sha256=context.prepared_context.sha256,
+        context_budget=context.prepared_context.budget_report_dict(),
+        execution_context=context.execution_context.safe_projection(),
     )
     return tuple(copied)
 

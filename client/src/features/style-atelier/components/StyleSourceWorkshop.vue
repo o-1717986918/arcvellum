@@ -16,6 +16,7 @@ import {
   decodeStyleSourceFile,
   type PreparedStyleSource,
 } from "../services/styleSourceFiles";
+import { styleIdentity } from "../services/styleIdentity";
 import type {
   StyleAuthor,
   StyleAuthorCreatePayload,
@@ -45,6 +46,9 @@ const sourceInputMode = ref<SourceInputMode>("file");
 const fileInput = ref<HTMLInputElement | null>(null);
 const preparedFiles = ref<PreparedStyleSource[]>([]);
 const fileError = ref("");
+const formError = ref("");
+const authorIdEdited = ref(false);
+const workIdEdited = ref(false);
 const rightsModes: Array<{ value: StyleRightsMode; label: string; hint: string }> = [
   { value: "public-domain", label: "公版作品", hint: "版权保护期已结束或依法属于公有领域" },
   { value: "authorized", label: "已获授权", hint: "权利人明确允许用于本项目的文风分析" },
@@ -118,6 +122,15 @@ watch(
   },
 );
 watch(() => sourceForm.author_id, alignSourceWork);
+watch(mode, () => { formError.value = ""; });
+watch(() => authorForm.name, (name) => {
+  if (!authorIdEdited.value) authorForm.author_id = styleIdentity(name, "author");
+  formError.value = "";
+});
+watch(() => workForm.title, (title) => {
+  if (!workIdEdited.value) workForm.work_id = styleIdentity(title, "work");
+  formError.value = "";
+});
 watch(() => sourceForm.media_type, (mediaType) => {
   const extension = mediaType === "text/markdown" ? ".md" : ".txt";
   sourceForm.filename = `${sourceForm.filename.replace(/\.(txt|md|markdown)$/i, "") || "source"}${extension}`;
@@ -164,7 +177,44 @@ function removePreparedFile(fileKey: string): void {
   preparedFiles.value = preparedFiles.value.filter((item) => item.file_key !== fileKey);
 }
 
+function submitAuthor(): void {
+  formError.value = "";
+  if (!authorReady.value) {
+    formError.value = !authorForm.name.trim()
+      ? "请填写作者名称。"
+      : !/^[a-z0-9][a-z0-9-]{1,63}$/.test(authorForm.author_id)
+        ? "资料短名需由 2 至 64 个小写字母、数字或短横线组成。"
+        : "请用至少 12 个字符说明文本的权利依据。";
+    return;
+  }
+  emit("createAuthor", { ...authorForm });
+}
+
+function submitWork(): void {
+  formError.value = "";
+  if (!workReady.value) {
+    formError.value = !workForm.author_id
+      ? "请先选择所属作者。"
+      : !workForm.title.trim()
+        ? "请填写作品名称。"
+        : "资料短名需由 2 至 64 个小写字母、数字或短横线组成。";
+    return;
+  }
+  emit("createWork", { ...workForm });
+}
+
 function submitSources(): void {
+  formError.value = "";
+  if (!sourceReady.value) {
+    formError.value = !sourceForm.author_id || !sourceForm.work_id
+      ? "请先选择作者和作品。"
+      : sourceForm.rights_declaration.trim().length < 12
+        ? "请用至少 12 个字符说明这批文本的权利依据。"
+        : sourceInputMode.value === "file"
+          ? "请先选择至少一份 TXT 或 Markdown 文件。"
+          : "请填写合法文件名并粘贴来源正文。";
+    return;
+  }
   const shared = {
     author_id: sourceForm.author_id,
     work_id: sourceForm.work_id,
@@ -208,13 +258,13 @@ function submitSources(): void {
         </button>
       </nav>
 
-      <form v-if="mode === 'author'" class="style-source-workshop-form" @submit.prevent="emit('createAuthor', { ...authorForm })">
+      <form v-if="mode === 'author'" class="style-source-workshop-form" @submit.prevent="submitAuthor">
         <div class="style-source-workshop-intro">
           <UserRoundPlus :size="19" /><span><strong>建立作者资料</strong><small>作者资料只保存身份与权利声明，不保存来源正文。</small></span>
         </div>
         <div class="style-source-form-grid">
-          <label><span>作者名称</span><input v-model="authorForm.name" autocomplete="off" placeholder="例如：某位公版作家" /></label>
-          <label><span>资料短名</span><input v-model="authorForm.author_id" autocomplete="off" placeholder="例如：classic-author" /><small>使用小写字母、数字和短横线</small></label>
+          <label><span>作者名称</span><input v-model="authorForm.name" autocomplete="off" placeholder="例如：某位公版作家" @input="formError = ''" /></label>
+          <label><span>资料短名</span><input v-model="authorForm.author_id" autocomplete="off" placeholder="例如：classic-author" @input="authorIdEdited = true; formError = ''" /><small>已自动生成，也可改为小写字母、数字和短横线</small></label>
         </div>
         <label>
           <span>权利依据</span>
@@ -225,23 +275,25 @@ function submitSources(): void {
         </label>
         <label>
           <span>权利说明</span>
-          <textarea v-model="authorForm.rights_declaration" rows="3" placeholder="说明来源为何可以用于文风分析，至少 12 个字符。"></textarea>
+            <textarea v-model="authorForm.rights_declaration" rows="3" placeholder="说明来源为何可以用于文风分析，至少 12 个字符。" @input="formError = ''"></textarea>
         </label>
-        <footer><span><ShieldCheck :size="14" />成功后会生成不可改写的事务回执</span><button class="primary" :disabled="!authorReady || busy">建立作者</button></footer>
+        <p v-if="formError" class="style-source-file-error" role="alert">{{ formError }}</p>
+        <footer><span><ShieldCheck :size="14" />成功后会生成不可改写的事务回执</span><button class="primary" :disabled="busy">建立作者</button></footer>
       </form>
 
-      <form v-else-if="mode === 'work'" class="style-source-workshop-form" @submit.prevent="emit('createWork', { ...workForm })">
+      <form v-else-if="mode === 'work'" class="style-source-workshop-form" @submit.prevent="submitWork">
         <div class="style-source-workshop-intro">
           <BookOpenCheck :size="19" /><span><strong>登记一部作品</strong><small>作品用于组织来源，不会自动成为可挂载文风。</small></span>
         </div>
         <div class="style-source-form-grid">
           <label><span>所属作者</span><select v-model="workForm.author_id"><option v-for="author in authors" :key="author.author_id" :value="author.author_id">{{ author.name }}</option></select></label>
-          <label><span>作品名称</span><input v-model="workForm.title" autocomplete="off" placeholder="作品正式名称" /></label>
-          <label><span>资料短名</span><input v-model="workForm.work_id" autocomplete="off" placeholder="例如：work-one" /><small>使用小写字母、数字和短横线</small></label>
+          <label><span>作品名称</span><input v-model="workForm.title" autocomplete="off" placeholder="作品正式名称" @input="formError = ''" /></label>
+          <label><span>资料短名</span><input v-model="workForm.work_id" autocomplete="off" placeholder="例如：work-one" @input="workIdEdited = true; formError = ''" /><small>已自动生成，也可改为小写字母、数字和短横线</small></label>
           <label><span>创作年份</span><input v-model="workForm.year" autocomplete="off" placeholder="可选" /></label>
         </div>
         <label><span>备注</span><textarea v-model="workForm.notes" rows="3" placeholder="可选：版本、译本或来源背景。"></textarea></label>
-        <footer><span>下一步可以为这部作品导入一份或多份文本。</span><button class="primary" :disabled="!workReady || busy">登记作品</button></footer>
+        <p v-if="formError" class="style-source-file-error" role="alert">{{ formError }}</p>
+        <footer><span>下一步可以为这部作品导入一份或多份文本。</span><button class="primary" :disabled="busy">登记作品</button></footer>
       </form>
 
       <form v-else class="style-source-workshop-form style-source-text-form" @submit.prevent="submitSources">
@@ -252,7 +304,7 @@ function submitSources(): void {
           <label><span>作者</span><select v-model="sourceForm.author_id"><option v-for="author in authors" :key="author.author_id" :value="author.author_id">{{ author.name }}</option></select></label>
           <label><span>作品</span><select v-model="sourceForm.work_id"><option v-for="work in availableWorks" :key="work.work_id" :value="work.work_id">{{ work.title }}</option></select></label>
           <label><span>权利依据</span><select v-model="sourceForm.rights_mode"><option v-for="item in rightsModes" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
-          <label><span>权利说明</span><input v-model="sourceForm.rights_declaration" autocomplete="off" placeholder="说明这份文本的权利依据" /></label>
+          <label><span>权利说明</span><input v-model="sourceForm.rights_declaration" autocomplete="off" placeholder="说明这份文本的权利依据" @input="formError = ''" /></label>
         </div>
         <div class="style-source-input-switch" role="tablist" aria-label="语料输入方式">
           <button type="button" :class="{ active: sourceInputMode === 'file' }" @click="sourceInputMode = 'file'"><FileUp :size="14" />选择文件</button>
@@ -280,7 +332,8 @@ function submitSources(): void {
           </div>
           <label class="style-source-body"><span>来源正文</span><textarea v-model="sourceForm.content" rows="10" spellcheck="false" placeholder="粘贴用于分析的完整文本。导入后不会在工作台中回显。"></textarea></label>
         </template>
-        <footer><span><ShieldCheck :size="14" />系统会拒绝重复文本、路径文件名与无效编码</span><button class="primary" :disabled="!sourceReady || busy">导入并固化{{ sourceInputMode === 'file' && preparedFiles.length > 1 ? `（${preparedFiles.length} 份）` : '' }}</button></footer>
+        <p v-if="formError" class="style-source-file-error" role="alert">{{ formError }}</p>
+        <footer><span><ShieldCheck :size="14" />系统会拒绝重复文本、路径文件名与无效编码</span><button class="primary" :disabled="busy">导入并固化{{ sourceInputMode === 'file' && preparedFiles.length > 1 ? `（${preparedFiles.length} 份）` : '' }}</button></footer>
       </form>
     </section>
   </div>

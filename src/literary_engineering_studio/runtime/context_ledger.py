@@ -15,6 +15,11 @@ from ..observability.context_ledger import (
 from ..observability.redaction import redact_preview
 from ..orchestration.truth_partition import TruthPartition
 from .context_selection import AgentContextSelection
+from .execution_context import (
+    ContextVisibilityTier,
+    ExecutionContextEnvelope,
+    SummaryReference,
+)
 
 
 LEDGER_FILENAME = "context-ledger.json"
@@ -39,35 +44,22 @@ def materialize_runtime_context_ledger(
     prompt_source_paths: tuple[str, ...],
     prompt_reference_paths: tuple[str, ...],
     prompt_path: Path,
+    execution_context: ExecutionContextEnvelope,
 ) -> ContextLedger:
-    selected = {*prompt_source_paths, *prompt_reference_paths}
-    selected.update(
-        path
-        for path in selection.operational_paths
-        if (workspace / Path(path)).exists()
+    entries = _ledger_entries(
+        task,
+        workspace=workspace,
+        selection=selection,
+        prompt_source_paths=prompt_source_paths,
+        prompt_reference_paths=prompt_reference_paths,
+        execution_context=execution_context,
     )
-    selected.update(
-        path for path in MACHINE_CONTEXT_PATHS if (workspace / Path(path)).exists()
-    )
-    requested = (
-        *selection.requested_context_paths,
-        *selection.operational_paths,
-        *MACHINE_CONTEXT_PATHS,
-    )
-    entries = [
-        _path_entry(
-            workspace,
-            source_ref,
-            included=source_ref in selected,
-            purpose=_purpose_for(task, selection, source_ref),
-        )
-        for source_ref in _unique(requested)
-    ]
     assembled_sha256 = hashlib.sha256(prompt_path.read_bytes()).hexdigest()
     identity_sha256 = _context_identity_sha256(
         assembled_sha256,
         entries,
         plan_id=str(task.payload.get("creative_plan_id") or ""),
+        execution_context_digest=execution_context.context_digest,
     )
     ledger = ContextLedger(
         ledger_id=context_ledger_id(
@@ -83,6 +75,7 @@ def materialize_runtime_context_ledger(
         plan_id=str(task.payload.get("creative_plan_id") or ""),
         entries=tuple(entries),
         assembled_sha256=assembled_sha256,
+        execution_context_digest=execution_context.context_digest,
     )
     (run_root / LEDGER_FILENAME).write_text(
         json.dumps(ledger.as_dict(), ensure_ascii=False, indent=2) + "\n",
@@ -91,15 +84,131 @@ def materialize_runtime_context_ledger(
     return ledger
 
 
+def _ledger_entries(
+    task: TaskPackage,
+    *,
+    workspace: Path,
+    selection: AgentContextSelection,
+    prompt_source_paths: tuple[str, ...],
+    prompt_reference_paths: tuple[str, ...],
+    execution_context: ExecutionContextEnvelope,
+) -> list[ContextLedgerEntry]:
+    selected = _selected_paths(
+        workspace,
+        selection,
+        prompt_source_paths,
+        prompt_reference_paths,
+    )
+    requested = _requested_paths(selection, execution_context)
+    summaries = {
+        item.source_ref: item
+        for item in execution_context.summary_references
+    }
+    return [
+        _path_entry(
+            workspace,
+            source_ref,
+            included=_included(source_ref, selected, execution_context),
+            purpose=(
+                "digest-bound summary reference"
+                if source_ref in summaries
+                else _purpose_for(task, selection, source_ref)
+            ),
+            visibility_tier=_visibility_tier(
+                source_ref,
+                selected,
+                execution_context,
+            ),
+            summary=summaries.get(source_ref),
+        )
+        for source_ref in requested
+    ]
+
+
+def _selected_paths(
+    workspace: Path,
+    selection: AgentContextSelection,
+    prompt_source_paths: tuple[str, ...],
+    prompt_reference_paths: tuple[str, ...],
+) -> set[str]:
+    selected = {*prompt_source_paths, *prompt_reference_paths}
+    selected.update(
+        path
+        for path in selection.operational_paths
+        if (workspace / Path(path)).exists()
+    )
+    selected.update(
+        path
+        for path in MACHINE_CONTEXT_PATHS
+        if (workspace / Path(path)).exists()
+    )
+    return selected
+
+
+def _requested_paths(
+    selection: AgentContextSelection,
+    execution_context: ExecutionContextEnvelope,
+) -> tuple[str, ...]:
+    return _unique(
+        (
+            *execution_context.must_inline,
+            *execution_context.exact_on_demand,
+            *execution_context.summary_reference_paths,
+            *execution_context.excluded,
+            *selection.requested_context_paths,
+            *selection.operational_paths,
+            *MACHINE_CONTEXT_PATHS,
+        )
+    )
+
+
+def _included(
+    source_ref: str,
+    selected: set[str],
+    execution_context: ExecutionContextEnvelope,
+) -> bool:
+    tier = execution_context.tier_for(source_ref)
+    return source_ref in selected or tier in {
+        ContextVisibilityTier.MUST_INLINE,
+        ContextVisibilityTier.EXACT_ON_DEMAND,
+        ContextVisibilityTier.SUMMARY_REFERENCE,
+    }
+
+
+def _visibility_tier(
+    source_ref: str,
+    selected: set[str],
+    execution_context: ExecutionContextEnvelope,
+) -> ContextVisibilityTier:
+    tier = execution_context.tier_for(source_ref)
+    if tier is not None:
+        return tier
+    return (
+        ContextVisibilityTier.EXACT_ON_DEMAND
+        if source_ref in selected
+        else ContextVisibilityTier.EXCLUDED
+    )
+
+
 def _path_entry(
     workspace: Path,
     source_ref: str,
     *,
     included: bool,
     purpose: str,
+    visibility_tier: ContextVisibilityTier,
+    summary: SummaryReference | None,
 ) -> ContextLedgerEntry:
     path = workspace / Path(source_ref)
-    digest, byte_count, character_count, preview = _path_metadata(path)
+    if summary is not None:
+        digest = summary.source_sha256
+        byte_count = 0
+        character_count = len(summary.summary)
+        preview = redact_preview(summary.summary)
+        note = "digest_bound_summary_reference"
+    else:
+        digest, byte_count, character_count, preview = _path_metadata(path)
+        note = "" if included else "missing_or_not_materialized"
     return ContextLedgerEntry(
         source_ref=source_ref,
         title=Path(source_ref).name or source_ref,
@@ -113,7 +222,8 @@ def _path_entry(
         limit=None,
         unit="characters",
         preview=preview,
-        note="" if included else "missing_or_not_materialized",
+        note=note,
+        visibility_tier=visibility_tier.value,
     )
 
 
@@ -186,10 +296,12 @@ def _context_identity_sha256(
     entries: list[ContextLedgerEntry],
     *,
     plan_id: str,
+    execution_context_digest: str,
 ) -> str:
     payload = {
         "prompt_sha256": prompt_sha256,
         "plan_id": plan_id,
+        "execution_context_digest": execution_context_digest,
         "entries": [item.as_dict() for item in entries],
     }
     rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

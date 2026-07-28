@@ -18,6 +18,12 @@ _TRUTH_PARTITIONS = {
     "future_intent",
     "evidence_and_opinion",
 }
+_VISIBILITY_TIERS = {
+    "must_inline",
+    "exact_on_demand",
+    "summary_reference",
+    "excluded",
+}
 
 
 @dataclass(frozen=True)
@@ -35,6 +41,7 @@ class ContextLedgerEntry:
     unit: Literal["bytes", "characters", "tokens"]
     preview: str
     note: str = ""
+    visibility_tier: str = ""
 
     def __post_init__(self) -> None:
         if not self.source_ref.strip() or not self.title.strip() or not self.purpose.strip():
@@ -51,9 +58,13 @@ class ContextLedgerEntry:
             raise ValueError("context ledger preview exceeds the safe metadata limit")
         if self.truncated and not self.included:
             raise ValueError("an excluded context source cannot be marked truncated")
+        if self.visibility_tier and self.visibility_tier not in _VISIBILITY_TIERS:
+            raise ValueError(
+                f"unsupported context visibility tier: {self.visibility_tier}"
+            )
 
     def as_dict(self) -> dict[str, object]:
-        return {
+        payload = {
             "source_ref": self.source_ref,
             "title": self.title,
             "purpose": self.purpose,
@@ -68,6 +79,9 @@ class ContextLedgerEntry:
             "preview": self.preview,
             "note": self.note,
         }
+        if self.visibility_tier:
+            payload["visibility_tier"] = self.visibility_tier
+        return payload
 
 
 @dataclass(frozen=True)
@@ -79,6 +93,7 @@ class ContextLedger:
     plan_id: str
     entries: tuple[ContextLedgerEntry, ...]
     assembled_sha256: str
+    execution_context_digest: str = ""
 
     def __post_init__(self) -> None:
         for field_name, value in (
@@ -91,6 +106,11 @@ class ContextLedger:
                 raise ValueError(f"context ledger {field_name} is required")
         if not _SHA256.fullmatch(self.assembled_sha256):
             raise ValueError("context ledger assembled_sha256 is invalid")
+        if (
+            self.execution_context_digest
+            and not _SHA256.fullmatch(self.execution_context_digest)
+        ):
+            raise ValueError("context ledger execution_context_digest is invalid")
         if len({entry.source_ref for entry in self.entries}) != len(self.entries):
             raise ValueError("context ledger contains duplicate source refs")
 
@@ -99,7 +119,7 @@ class ContextLedger:
         return _digest(self._body())
 
     def _body(self) -> dict[str, object]:
-        return {
+        payload = {
             "schema": CONTEXT_LEDGER_SCHEMA,
             "ledger_id": self.ledger_id,
             "project_root_hash": self.project_root_hash,
@@ -109,6 +129,9 @@ class ContextLedger:
             "entries": [entry.as_dict() for entry in self.entries],
             "assembled_sha256": self.assembled_sha256,
         }
+        if self.execution_context_digest:
+            payload["execution_context_digest"] = self.execution_context_digest
+        return payload
 
     def as_dict(self) -> dict[str, object]:
         return {**self._body(), "digest": self.digest}
@@ -150,6 +173,7 @@ def parse_context_ledger(payload: dict[str, Any]) -> ContextLedger:
         plan_id=str(payload.get("plan_id") or ""),
         entries=entries,
         assembled_sha256=str(payload.get("assembled_sha256") or ""),
+        execution_context_digest=str(payload.get("execution_context_digest") or ""),
     )
     supplied_digest = str(payload.get("digest") or "")
     if supplied_digest and supplied_digest != ledger.digest:
@@ -175,6 +199,7 @@ def _parse_entry(item: Any) -> ContextLedgerEntry:
         unit=str(item.get("unit") or "characters"),
         preview=str(item.get("preview") or ""),
         note=str(item.get("note") or ""),
+        visibility_tier=str(item.get("visibility_tier") or ""),
     )
 
 

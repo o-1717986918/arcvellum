@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,7 +19,14 @@ from literary_engineering_studio.sandbox import (
     sandbox_from_run,
     stage_task,
 )
+from literary_engineering_studio.runtime.sandbox_hygiene import (
+    restore_unexpected_agent_changes,
+)
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio.runtime.context_budget import (
+    ContextBudgetExceeded,
+    resolve_task_context_budget,
+)
 from literary_engineering_studio.runtime.task_program import build_task_context, render_worker_program
 from literary_engineering_studio.runtime.execution_boundaries import execution_boundary_paths
 from literary_engineering_studio.task_preflight import validate_task_outputs
@@ -269,6 +277,188 @@ class SandboxTests(unittest.TestCase):
 
             self.assertTrue((sandbox.workspace / "scenes" / "scene_0001.yaml").is_file())
             self.assertFalse((sandbox.workspace / "canon").exists())
+            task_context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            self.assertIn(
+                "canon",
+                task_context["execution_context"]["excluded"],
+            )
+
+    def test_digest_bound_summary_replaces_source_without_expanding_workspace(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            source = root / "canon" / "long-history.md"
+            source.parent.mkdir()
+            source.write_text("A very long canonical history.", encoding="utf-8")
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload["source_paths"] = [
+                "scenes/scene_0001.yaml",
+                "canon/long-history.md",
+            ]
+            payload["agent_source_paths"] = list(payload["source_paths"])
+            payload["context_summary_references"] = [
+                {
+                    "source_ref": "canon/long-history.md",
+                    "summary": "Only the digest-bound history summary.",
+                    "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                }
+            ]
+            task.task_json_path.write_text(
+                json.dumps(_enrich_task_payload(payload)),
+                encoding="utf-8",
+            )
+            task = load_task_package(root, task.task_json_path)
+
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-summary-reference",
+            )
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            ledger = json.loads(
+                (sandbox.run_root / "context-ledger.json").read_text(encoding="utf-8")
+            )
+            entry = next(
+                item
+                for item in ledger["entries"]
+                if item["source_ref"] == "canon/long-history.md"
+            )
+
+            self.assertFalse(
+                (sandbox.workspace / "canon" / "long-history.md").exists()
+            )
+            self.assertIn("Only the digest-bound history summary.", prompt)
+            self.assertNotIn("A very long canonical history.", prompt)
+            self.assertEqual(
+                context["execution_context"]["summary_references"][0]["source_ref"],
+                "canon/long-history.md",
+            )
+            self.assertEqual(entry["visibility_tier"], "summary_reference")
+            self.assertEqual(entry["note"], "digest_bound_summary_reference")
+
+    def test_agent_sandbox_persists_shadow_context_budget_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            budget = resolve_task_context_budget(task)
+
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-context-budget",
+                context_budget=budget,
+            )
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            report = manifest["context_budget"]
+
+            self.assertEqual(report["schema"], "arcvellum/context-budget-report/v1")
+            self.assertEqual(report["mode"], "shadow")
+            self.assertGreater(report["first_turn_visible_characters"], 0)
+            self.assertEqual(
+                report["first_turn_visible_characters"],
+                manifest["prepared_context_characters"],
+            )
+            self.assertEqual(len(report["digest"]), 64)
+            self.assertNotIn(str(root.resolve()), json.dumps(report))
+
+    def test_agent_sandbox_refuses_bounded_mode_without_explicit_tiers(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            task.payload["context_contract_status"] = "bounded-ready"
+            budget = resolve_task_context_budget(
+                task,
+                {"context_budget": {"mode": "bounded"}},
+            )
+
+            with self.assertRaisesRegex(
+                ContextBudgetExceeded,
+                "context_must_inline_paths",
+            ):
+                stage_task(
+                    task,
+                    Path(runs),
+                    runtime="opencode",
+                    run_id="run-bounded-without-tiers",
+                    context_budget=budget,
+                )
+
+    def test_bounded_sandbox_inlines_mandatory_and_keeps_other_sources_exact(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            support = root / "canon" / "large-support.md"
+            support.parent.mkdir()
+            support.write_text("按需精确资料。" * 20_000, encoding="utf-8")
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload.update(
+                {
+                    "source_paths": [
+                        "scenes/scene_0001.yaml",
+                        "canon/large-support.md",
+                    ],
+                    "agent_source_paths": [
+                        "scenes/scene_0001.yaml",
+                        "canon/large-support.md",
+                    ],
+                    "context_contract_required": True,
+                    "context_contract_schema": (
+                        "literary-engineering-workbench/task-context-contract/v1"
+                    ),
+                    "context_contract_revision": "scene-v1",
+                    "context_contract_status": "bounded-ready",
+                    "context_must_inline_paths": ["scenes/scene_0001.yaml"],
+                }
+            )
+            task.task_json_path.write_text(
+                json.dumps(_enrich_task_payload(payload), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            task = load_task_package(root, task.task_json_path)
+            budget = resolve_task_context_budget(
+                task,
+                {"context_budget": {"mode": "bounded"}},
+            )
+
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-bounded-contract",
+                context_budget=budget,
+            )
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            task_context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            context = task_context["execution_context"]
+
+            self.assertEqual(
+                context["must_inline"],
+                ["scenes/scene_0001.yaml"],
+            )
+            self.assertEqual(
+                context["exact_on_demand"],
+                ["canon/large-support.md"],
+            )
+            self.assertTrue(
+                (sandbox.workspace / "canon" / "large-support.md").is_file()
+            )
+            self.assertLessEqual(
+                context["first_turn_visible_characters"],
+                context["character_budget"],
+            )
+            self.assertEqual(
+                manifest["execution_context"]["digest"],
+                context["context_digest"],
+            )
 
     def test_sandbox_persists_controlled_capability_and_resource_contracts(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
@@ -329,6 +519,37 @@ class SandboxTests(unittest.TestCase):
             self.assertEqual(sandbox_change_issues(sandbox), [])
             (sandbox.workspace / "scenes" / "scene_0001.yaml").write_text("scene_id: changed\n", encoding="utf-8")
             self.assertTrue(sandbox_change_issues(sandbox))
+
+    def test_restores_unexpected_changes_without_model_repair(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            tempfile.TemporaryDirectory() as runs,
+        ):
+            root = Path(temporary)
+            task = self._task(root)
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="opencode",
+                run_id="run-unexpected-restore",
+            )
+            source = (
+                sandbox.workspace / "scenes" / "scene_0001.yaml"
+            )
+            original = source.read_text(encoding="utf-8")
+            source.write_text("scene_id: changed\n", encoding="utf-8")
+            rogue = sandbox.workspace / "rogue.txt"
+            rogue.write_text("should not persist", encoding="utf-8")
+
+            restored = restore_unexpected_agent_changes(sandbox)
+
+            self.assertEqual(
+                restored,
+                ("rogue.txt", "scenes/scene_0001.yaml"),
+            )
+            self.assertEqual(source.read_text(encoding="utf-8"), original)
+            self.assertFalse(rogue.exists())
+            self.assertEqual(sandbox_change_issues(sandbox), [])
 
     def test_preflight_does_not_assign_worker_completion_receipts_to_agent(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:

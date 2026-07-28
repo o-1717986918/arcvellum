@@ -19,6 +19,10 @@ from ..process_manager import ProcessManager
 from ..runtime_events import merge_usage_summary, normalize_opencode_event
 from ..subprocess_utils import run_hidden
 from .base import AgentRunnerCapabilities, AgentRuntime, RuntimeAvailability, RuntimeResult
+from .opencode_repair import (
+    repair_failure_result,
+    run_open_code_repairs,
+)
 from .opencode_session import execution_identity, open_role_client, selected_model
 
 
@@ -105,6 +109,8 @@ class OpenCodeRuntime(AgentRuntime):
         cancel_event: threading.Event | None = None,
         output_validator: Callable[[], Any] | None = None,
         max_repairs: int = 0,
+        repair_prompt_builder: Callable[[Any, int, int], Any] | None = None,
+        repair_turn_finalizer: Callable[[], dict[str, object]] | None = None,
     ) -> RuntimeResult:
         executable = locate_opencode(self.settings)
         if executable is None:
@@ -223,7 +229,7 @@ class OpenCodeRuntime(AgentRuntime):
                                     "public_message": _public_model_error(raw_error),
                                 }
                             emit(name, data)
-                except RuntimeError as exc:
+                except (RuntimeError, OSError, TimeoutError) as exc:
                     if not event_stop.is_set():
                         emit("runner.warning", {"session_id": session_id, "kind": "event-stream", "detail": str(exc)})
 
@@ -274,66 +280,38 @@ class OpenCodeRuntime(AgentRuntime):
                     f"session produced no activity for {session_idle_timeout}s",
                 )
 
-            repairs = 0
-            final_preflight = None
-            if output_validator is not None and not errors:
-                while True:
-                    final_preflight = output_validator()
-                    payload = final_preflight.as_dict() if hasattr(final_preflight, "as_dict") else {"passed": bool(final_preflight)}
-                    payload.update({"attempt": repairs, "maximum_repairs": max(0, int(max_repairs))})
-                    emit("validation.passed" if payload.get("passed") else "validation.failed", {"kind": "sandbox-preflight", **payload})
-                    if payload.get("passed"):
-                        break
-                    if repairs >= max(0, int(max_repairs)):
-                        messages = client.messages(session_id)
-                        assistant_text, _ = _assistant_result(messages)
-                        output_path.write_text(assistant_text, encoding="utf-8")
-                        emit(
-                            "runner.session.finished",
-                            {"session_id": session_id, "model": model, "status": "failed", "reason": "preflight_failed"},
-                        )
-                        emit(
-                            "runner.process.completed",
-                            {"runner_id": self.runtime_id, "session_id": session_id, "model": model, "status": "preflight_failed"},
-                        )
-                        return RuntimeResult(
-                            self.runtime_id,
-                            "preflight_failed",
-                            2,
-                            self.build_command(workspace),
-                            output_path,
-                            "sandbox output still fails deterministic preflight",
-                            {"session_id": session_id, "repairs": repairs, "preflight": payload},
-                        )
-                    repairs += 1
-                    repair_prompt = final_preflight.repair_prompt(repairs, max(1, int(max_repairs)))
-                    emit("repair.started", {"attempt": repairs, "issue_count": payload.get("issue_count", 0), "session_id": session_id})
-                    client.prompt_async(session_id, text=repair_prompt, model=model, agent=agent_id)
-                    repair_deadline = time.monotonic() + min(300, max(60, int(timeout) // 3))
-                    mark_activity()
-                    repair_idle_timeout = max(30, int(self.settings.get("repair_idle_timeout_seconds") or 75))
-                    wait_status = _wait_for_session(
-                        client,
-                        session_id,
-                        repair_deadline,
-                        cancellation,
-                        idle_timeout=repair_idle_timeout,
-                        last_activity=last_activity,
-                    )
-                    if wait_status != "completed":
-                        client.abort(session_id)
-                        status = "cancelled" if wait_status == "cancelled" else "timeout"
-                        emit(
-                            "runner.session.finished",
-                            {
-                                "session_id": session_id,
-                                "model": model,
-                                "status": "cancelled" if status == "cancelled" else "failed",
-                                "reason": f"repair_{status}",
-                            },
-                        )
-                        return RuntimeResult(self.runtime_id, status, None, self.build_command(workspace), output_path, f"repair {status}")
-                    emit("repair.completed", {"attempt": repairs, "session_id": session_id})
+            repair_result = run_open_code_repairs(
+                client=client,
+                session_id=session_id,
+                model=model,
+                agent_id=agent_id,
+                timeout=timeout,
+                cancellation=cancellation,
+                settings=self.settings,
+                emit=emit,
+                mark_activity=mark_activity,
+                last_activity=last_activity,
+                wait_for_session=_wait_for_session,
+                output_validator=(
+                    output_validator if not errors else None
+                ),
+                max_repairs=max_repairs,
+                repair_prompt_builder=repair_prompt_builder,
+                repair_turn_finalizer=repair_turn_finalizer,
+            )
+            repairs = repair_result.repairs
+            final_preflight = repair_result.preflight
+            if repair_result.status != "passed":
+                return repair_failure_result(
+                    repair_result,
+                    runtime_id=self.runtime_id,
+                    command=self.build_command(workspace),
+                    client=client,
+                    session_id=session_id,
+                    model=model,
+                    output_path=output_path,
+                    emit=emit,
+                )
 
             messages = client.messages(session_id)
             assistant_text, message_error = _assistant_result(messages)
@@ -426,6 +404,7 @@ class OpenCodeRuntime(AgentRuntime):
                 event_thread.join(timeout=3)
             if manager is not None:
                 manager.shutdown()
+
 
 def _assistant_result(messages: list[dict[str, Any]]) -> tuple[str, str]:
     texts: list[str] = []

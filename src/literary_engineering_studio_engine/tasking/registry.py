@@ -56,10 +56,12 @@ from ..tasking.lifecycle import (
     submit_task as _submit_lifecycle_task,
 )
 from ..tasking.paths import append_event as _append_event
+from ..tasking.paths import load_task as _load_task
 from ..tasking.paths import normalize_route as _normalize_route
 from ..tasking.paths import read_json as _read_json
 from ..tasking.paths import relative_path as _rel
 from ..tasking.paths import resolve_project_path as _resolve_project_path
+from ..tasking.paths import task_json_path as _task_json_path
 from ..tasking.paths import task_markdown_path as _task_markdown_path
 from ..workflow_state import build_workflow_state, next_scene_workflow_state
 
@@ -108,6 +110,81 @@ def issue_next_task(
 
 def open_task(project_root: Path, task_id: str) -> TaskRegistryResult:
     return _open_lifecycle_task(project_root, task_id, services=_lifecycle_services())
+
+
+def replay_task_contract(
+    project_root: Path,
+    task_id: str,
+) -> TaskRegistryResult:
+    """Rebuild one stored task identity with the current Engine contract.
+
+    This does not select a route state, execute the task, preserve an old
+    completion, or touch literary artifacts. It exists for isolated replay,
+    migration verification, and same-task context experiments.
+    """
+
+    root = project_root.resolve()
+    task_json = _task_json_path(root, task_id)
+    stored = _load_task(task_json)
+    route = _normalize_route(str(stored.get("route") or ""))
+    if route != "scene-development":
+        raise ValueError(
+            "task-contract-replay currently supports scene-development only"
+        )
+    current_state = str(stored.get("current_state") or "").strip()
+    scene_id = str(stored.get("scene_id") or "").strip()
+    if not current_state or not scene_id:
+        raise ValueError(
+            "task-contract-replay requires stored scene and state identity"
+        )
+    work_item = {
+        **stored,
+        "target_id": scene_id,
+        "current_step": current_state,
+        "next_action": "replay the exact stored task identity",
+    }
+    rebuilt = _enrich_task_payload(
+        _route_definition(route).build_task(root, route, work_item)
+    )
+    if str(rebuilt.get("task_id") or "") != task_id:
+        raise ValueError(
+            "replayed task identity does not match stored task id"
+        )
+    task_markdown = _task_markdown_path(root, task_id)
+    rebuilt["task_json"] = _rel(task_json, root)
+    rebuilt["task_markdown"] = _rel(task_markdown, root)
+    task_json.write_text(
+        json.dumps(rebuilt, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    task_markdown.write_text(
+        _render_task_markdown(rebuilt, root),
+        encoding="utf-8",
+    )
+    _append_event(
+        root,
+        "task_contract_replayed",
+        task_id,
+        {
+            "route": route,
+            "scene_id": scene_id,
+            "current_state": current_state,
+        },
+    )
+    return TaskRegistryResult(
+        project_root=root,
+        task_id=task_id,
+        task_json_path=task_json,
+        task_markdown_path=task_markdown,
+        status="issued",
+        route=route,
+        scene_id=scene_id,
+        current_state=current_state,
+        message="task contract replayed without executing artifacts",
+        expected_output_count=len(
+            rebuilt.get("expected_outputs") or []
+        ),
+    )
 
 
 def submit_task(

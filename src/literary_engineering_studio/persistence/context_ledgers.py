@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS context_ledgers (
     operation_id TEXT NOT NULL,
     plan_id TEXT NOT NULL DEFAULT '',
     assembled_sha256 TEXT NOT NULL,
+    execution_context_digest TEXT NOT NULL DEFAULT '',
     digest TEXT NOT NULL,
     entry_count INTEGER NOT NULL,
     created_at TEXT NOT NULL
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS context_ledger_entries (
     unit TEXT NOT NULL,
     preview TEXT NOT NULL,
     note TEXT NOT NULL DEFAULT '',
+    visibility_tier TEXT NOT NULL DEFAULT '',
     PRIMARY KEY(ledger_id, position),
     UNIQUE(ledger_id, source_ref),
     FOREIGN KEY(ledger_id) REFERENCES context_ledgers(ledger_id) ON DELETE CASCADE
@@ -81,9 +83,10 @@ class ContextLedgerStoreMixin:
                 """
                 INSERT INTO context_ledgers (
                     ledger_id, project_root, project_root_hash, session_id,
-                    operation_id, plan_id, assembled_sha256, digest,
+                    operation_id, plan_id, assembled_sha256,
+                    execution_context_digest, digest,
                     entry_count, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     ledger.ledger_id,
@@ -93,6 +96,7 @@ class ContextLedgerStoreMixin:
                     ledger.operation_id,
                     ledger.plan_id,
                     ledger.assembled_sha256,
+                    ledger.execution_context_digest,
                     ledger.digest,
                     len(ledger.entries),
                     created_at,
@@ -103,8 +107,9 @@ class ContextLedgerStoreMixin:
                 INSERT INTO context_ledger_entries (
                     ledger_id, position, source_ref, title, purpose,
                     partition_name, byte_count, character_count, sha256,
-                    included, truncated, source_limit, unit, preview, note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    included, truncated, source_limit, unit, preview, note,
+                    visibility_tier
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -123,6 +128,7 @@ class ContextLedgerStoreMixin:
                         entry.unit,
                         entry.preview,
                         entry.note,
+                        entry.visibility_tier,
                     )
                     for position, entry in enumerate(ledger.entries)
                 ],
@@ -176,6 +182,7 @@ class ContextLedgerStoreMixin:
             "plan_id": metadata["plan_id"],
             "entries": [_entry_row(item) for item in entries],
             "assembled_sha256": metadata["assembled_sha256"],
+            "execution_context_digest": metadata["execution_context_digest"],
             "digest": metadata["digest"],
             "created_at": metadata["created_at"],
         }
@@ -214,4 +221,5 @@ def _entry_row(row) -> dict[str, Any]:
         "unit": payload["unit"],
         "preview": payload["preview"],
         "note": payload["note"],
+        "visibility_tier": payload["visibility_tier"],
     }

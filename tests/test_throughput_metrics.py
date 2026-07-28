@@ -170,6 +170,61 @@ class ThroughputMetricsTests(unittest.TestCase):
         self.assertEqual(first["revision"], second["revision"])
         self.assertNotEqual(first["revision"], changed["revision"])
 
+    def test_projects_bounded_repair_metrics_without_output_content(self):
+        projection = build_throughput_projection(
+            [
+                _event(
+                    1,
+                    "worker.task.opened",
+                    "2026-07-25T00:00:00Z",
+                    task_id="task-a",
+                ),
+                _event(
+                    2,
+                    "worker.repair.started",
+                    "2026-07-25T00:00:01Z",
+                    repair_context_digest="a" * 64,
+                    repair_prompt_characters=900,
+                    repair_excerpt_characters=240,
+                    repair_target_count=1,
+                    repair_protected_count=2,
+                    repair_write_scope_mode="targeted",
+                    unsafe_excerpt="正文不得进入投影",
+                ),
+                _event(
+                    3,
+                    "worker.repair.output_guard.finalized",
+                    "2026-07-25T00:00:02Z",
+                    restored_output_count=1,
+                    restored_outputs=["private/output.md"],
+                ),
+            ]
+        )
+
+        self.assertEqual(
+            projection["repair_context"],
+            {
+                "prompt_characters": 900,
+                "excerpt_characters": 240,
+                "targeted_turns": 1,
+                "fallback_turns": 0,
+                "protected_outputs": 2,
+                "restored_outputs": 1,
+            },
+        )
+        self.assertTrue(
+            projection["coverage"]["incremental_repair_context"]
+        )
+        self.assertEqual(
+            projection["tasks"][0]["repair_context_digest"],
+            "a" * 64,
+        )
+        self.assertNotIn(
+            "正文不得进入投影",
+            str(projection),
+        )
+        self.assertNotIn("private/output.md", str(projection))
+
     def test_reopening_the_same_task_counts_as_a_retry(self):
         projection = build_throughput_projection(
             [
@@ -218,6 +273,88 @@ class ThroughputMetricsTests(unittest.TestCase):
         self.assertEqual(projection["usage"]["input_tokens"], 120)
         self.assertEqual(projection["usage"]["output_tokens"], 15)
         self.assertEqual(projection["usage"]["total_tokens"], 135)
+
+    def test_attributes_usage_and_context_budget_without_exposing_context_text(self):
+        projection = build_throughput_projection(
+            [
+                _event(
+                    1,
+                    "worker.task.opened",
+                    "2026-07-25T00:00:00Z",
+                    task_id="scene-review",
+                    route="scene-development",
+                    scene_id="scene_0004",
+                    agent_role="main-review-agent",
+                ),
+                _event(
+                    2,
+                    "worker.sandbox.context_ready",
+                    "2026-07-25T00:00:01Z",
+                    task_id="scene-review",
+                    context_ledger_digest="context-digest-4",
+                    context_budget={
+                        "mode": "shadow",
+                        "requested_mode": "shadow",
+                        "task_kind": "review",
+                        "risk_level": "high",
+                        "contract_status": "bounded-ready",
+                        "rollout_reason": "rollout-disabled",
+                        "rollout_policy_digest": "c" * 64,
+                        "target_inline_characters": 126500,
+                        "enforced_inline_characters": 180000,
+                        "first_turn_visible_characters": 140000,
+                        "exact_on_demand_characters": 24000,
+                        "excluded_characters": 0,
+                        "authorized_characters": 164000,
+                        "mandatory_characters": 18000,
+                        "included_file_count": 8,
+                        "on_demand_file_count": 2,
+                        "excluded_file_count": 0,
+                        "budget_overage_count": 1,
+                        "budget_overage_characters": 13500,
+                        "digest": "budget-digest-4",
+                    },
+                ),
+                _event(
+                    3,
+                    "worker.usage.updated",
+                    "2026-07-25T00:00:02Z",
+                    task_id="scene-review",
+                    role="reviewer",
+                    provider="zhipuai",
+                    model="glm-5",
+                    context_ledger_digest="context-digest-4",
+                    usage={"input": 1200, "output": 300, "cache": {"read": 900}},
+                ),
+            ]
+        )
+
+        self.assertEqual(projection["usage"]["non_cached_input_tokens"], 1200)
+        self.assertEqual(projection["context"]["reported_tasks"], 1)
+        self.assertEqual(projection["context"]["budget_overage_count"], 1)
+        self.assertTrue(projection["coverage"]["scene_attribution"])
+        self.assertTrue(projection["coverage"]["context_budget"])
+        context = projection["tasks"][0]["context"]
+        self.assertEqual(context["requested_mode"], "shadow")
+        self.assertEqual(context["contract_status"], "bounded-ready")
+        self.assertEqual(context["rollout_reason"], "rollout-disabled")
+        self.assertEqual(context["rollout_policy_digest"], "c" * 64)
+        task = projection["tasks"][0]
+        self.assertEqual(task["scene_id"], "scene_0004")
+        self.assertEqual(task["role"], "main-review-agent")
+        self.assertEqual(task["runtime_role"], "reviewer")
+        self.assertEqual(task["model_identity"], "zhipuai/glm-5")
+        self.assertEqual(task["context_digest"], "context-digest-4")
+        self.assertEqual(projection["attribution"]["by_scene"][0]["key"], "scene_0004")
+        self.assertEqual(
+            projection["attribution"]["by_runtime_role"][0]["key"],
+            "reviewer",
+        )
+        self.assertEqual(
+            projection["attribution"]["by_model"][0]["usage"]["cache_read_tokens"],
+            900,
+        )
+        self.assertNotIn("context text", repr(projection))
 
     def test_projection_does_not_expose_event_payload_text_paths_or_credentials(self):
         projection = build_throughput_projection(

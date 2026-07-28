@@ -92,6 +92,17 @@ class _StreamingFailureClient(_Client):
         ]
 
 
+class _PreparedRepair:
+    prompt = "# Bounded Repair"
+
+    @staticmethod
+    def event_fields():
+        return {
+            "repair_context_digest": "a" * 64,
+            "repair_prompt_characters": len(_PreparedRepair.prompt),
+        }
+
+
 class OpenCodeRuntimeExecutionTests(unittest.TestCase):
     def test_runtime_builder_applies_role_without_mutating_persisted_settings(self):
         config = default_config()
@@ -143,6 +154,141 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
             finished = [data for event, data in events if event == "runner.session.finished"]
             self.assertEqual(finished[-1]["session_id"], "session-fixed")
             self.assertEqual(finished[-1]["status"], "complete")
+
+    def test_bounded_repair_callbacks_keep_session_and_finalize_guard(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = root / "prompt.md"
+            prompt.write_text("执行正式任务", encoding="utf-8")
+            client = _Client()
+            pool = _Pool(client)
+            validator = _RepairingValidator()
+            built = []
+            finalized = []
+            events = []
+            runtime = OpenCodeRuntime(
+                {
+                    "model": "fixture/model",
+                    "models": {"worker": "fixture/model"},
+                }
+            )
+            runtime.runtime_pool = pool
+
+            def build_repair(result, attempt, maximum):
+                built.append((result, attempt, maximum))
+                return _PreparedRepair()
+
+            def finalize_repair():
+                finalized.append(True)
+                return {
+                    "repair_context_digest": "a" * 64,
+                    "protected_output_count": 1,
+                    "restored_output_count": 1,
+                    "restored_outputs": ["passed.md"],
+                }
+
+            with patch(
+                "literary_engineering_studio.runtimes.opencode.locate_opencode",
+                return_value=Path("opencode.exe"),
+            ):
+                result = runtime.execute(
+                    workspace,
+                    prompt,
+                    run_root,
+                    timeout=10,
+                    event_sink=lambda event, data: events.append(
+                        (event, data)
+                    ),
+                    output_validator=validator,
+                    max_repairs=2,
+                    repair_prompt_builder=build_repair,
+                    repair_turn_finalizer=finalize_repair,
+                )
+
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(len(built), 1)
+            self.assertEqual(finalized, [True])
+            self.assertEqual(client.prompts[1]["text"], "# Bounded Repair")
+            self.assertEqual(
+                {item["session_id"] for item in client.prompts},
+                {"session-fixed"},
+            )
+            started = [
+                data for event, data in events if event == "repair.started"
+            ]
+            self.assertEqual(
+                started[0]["repair_context_digest"],
+                "a" * 64,
+            )
+            guarded = [
+                data
+                for event, data in events
+                if event == "repair.output_guard.finalized"
+            ]
+            self.assertEqual(guarded[0]["restored_output_count"], 1)
+
+    def test_repair_timeout_still_finalizes_output_guard(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = root / "prompt.md"
+            prompt.write_text("执行正式任务", encoding="utf-8")
+            client = _Client()
+            pool = _Pool(client)
+            validator = _RepairingValidator()
+            finalized = []
+            runtime = OpenCodeRuntime(
+                {
+                    "model": "fixture/model",
+                    "models": {"worker": "fixture/model"},
+                }
+            )
+            runtime.runtime_pool = pool
+
+            def finalize_repair():
+                finalized.append(True)
+                return {
+                    "repair_context_digest": "b" * 64,
+                    "protected_output_count": 1,
+                    "restored_output_count": 0,
+                    "restored_outputs": [],
+                }
+
+            with (
+                patch(
+                    "literary_engineering_studio.runtimes.opencode.locate_opencode",
+                    return_value=Path("opencode.exe"),
+                ),
+                patch(
+                    "literary_engineering_studio.runtimes.opencode._wait_for_session",
+                    side_effect=["completed", "timeout"],
+                ),
+            ):
+                result = runtime.execute(
+                    workspace,
+                    prompt,
+                    run_root,
+                    timeout=10,
+                    output_validator=validator,
+                    max_repairs=1,
+                    repair_prompt_builder=(
+                        lambda _result, _attempt, _maximum: _PreparedRepair()
+                    ),
+                    repair_turn_finalizer=finalize_repair,
+                )
+
+            self.assertEqual(result.status, "timeout")
+            self.assertEqual(finalized, [True])
+            self.assertTrue(client.aborted)
 
     def test_streaming_failure_is_presented_as_retryable_user_safe_error(self):
         with tempfile.TemporaryDirectory() as temporary:

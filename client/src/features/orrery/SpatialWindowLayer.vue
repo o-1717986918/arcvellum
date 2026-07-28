@@ -30,6 +30,7 @@ const observedSessions = computed(() => app.agentObservability?.sessions || []);
 const observedServices = computed(() => app.agentObservability?.services || []);
 const observedController = computed(() => app.agentObservability?.controller || null);
 const observedTimeline = computed(() => (app.agentObservability?.recent_events || []).slice(-12).reverse());
+const throughput = computed(() => app.agentObservability?.throughput || null);
 const deliveryReady = computed(() => String(props.delivery?.status || "") === "ready");
 const progressParts = computed(() => asList<Record<string, unknown>>(props.progress?.parts));
 const progressPercent = computed(() => Number(props.progress?.overall_percent));
@@ -65,6 +66,13 @@ function elapsedLabel(seconds: number | undefined): string {
   if (value < 60) return `${value} 秒`;
   if (value < 3600) return `${Math.floor(value / 60)} 分 ${value % 60} 秒`;
   return `${Math.floor(value / 3600)} 小时 ${Math.floor(value % 3600 / 60)} 分`;
+}
+
+function compactMetric(value: number | undefined): string {
+  const amount = Math.max(0, Number(value || 0));
+  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}m`;
+  if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}k`;
+  return String(Math.round(amount));
 }
 
 function choiceOptions(choice: Record<string, unknown>): Record<string, unknown>[] {
@@ -238,6 +246,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
             <div><dt>正式推进</dt><dd>{{ Number(observedTask?.tasks_completed || 0) }} 次</dd></div>
             <div><dt>停滞周期</dt><dd>{{ Number(observedController?.stalled_cycles || 0) }}</dd></div>
           </dl>
+          <section class="agent-throughput-deck">
+            <header><span>模型与上下文用量</span><small>{{ throughput?.context.reported_tasks ? `${throughput.context.reported_tasks} 项已记录` : '等待首项记录' }}</small></header>
+            <dl>
+              <div><dt>非缓存输入</dt><dd>{{ compactMetric(throughput?.usage.non_cached_input_tokens) }}</dd></div>
+              <div><dt>缓存读取</dt><dd>{{ compactMetric(throughput?.usage.cache_read_tokens) }}</dd></div>
+              <div><dt>模型输出</dt><dd>{{ compactMetric(throughput?.usage.output_tokens) }}</dd></div>
+              <div><dt>首轮上下文中位数</dt><dd>{{ compactMetric(throughput?.context.median_first_turn_visible_characters) }} 字符</dd></div>
+            </dl>
+            <p>缓存读取、非缓存输入和输出分别计量，不用总 Token 代替实际成本。</p>
+          </section>
           <section class="agent-service-deck">
             <header><span>常驻服务</span><small>{{ observedServices.length ? `${observedServices.length} 个角色服务` : '按需启动' }}</small></header>
             <div v-if="observedServices.length">

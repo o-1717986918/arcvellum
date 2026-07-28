@@ -8,44 +8,21 @@ from typing import Any
 
 from ..contracts import TaskPackage
 from literary_engineering_studio_engine.agent_schema import load_schema_spec
+from .context_selection import compact_task_references
 from .creative_plan_context import creative_plan_task_context
+from .execution_context import (
+    ExecutionContextEnvelope,
+    execution_context_program_fields,
+)
 from .prompt_context import PreparedPromptContext, render_prepared_context_section
 from .worker_program_template import WORKER_PROGRAM_TEMPLATE
-
-
-OPERATING_REFERENCE_PATHS = {
-    "SKILL.md",
-    "AGENTS.md",
-    "agentread.yaml",
-    "references/agent-run-protocol.md",
-    "references/cli-run-protocol.md",
-    "references/artifact-contracts.md",
-    "references/workflows.md",
-}
-
-
-def compact_task_references(task: TaskPackage) -> tuple[str, ...]:
-    """Keep domain references while removing host-operation manuals.
-
-    Exact prompt assets and the Studio Worker constitution already carry the
-    execution protocol. Refeeding the full Skill manuals wastes context and
-    encourages a task Agent to rediscover the wider project instead of doing
-    its one bounded job.
-    """
-
-    prompt_asset = task.payload.get("prompt_asset") if isinstance(task.payload.get("prompt_asset"), dict) else {}
-    if task.execution_contract.execution_policy == "deterministic":
-        return ()
-    if prompt_asset.get("exact") is not True:
-        return task.required_reading
-    return tuple(path for path in task.required_reading if path not in OPERATING_REFERENCE_PATHS)
-
 
 def build_task_context(
     task: TaskPackage,
     *,
     reference_paths: tuple[str, ...] | None = None,
     source_paths: tuple[str, ...] | None = None,
+    execution_context: ExecutionContextEnvelope | None = None,
 ) -> dict[str, Any]:
     prompt_asset = task.payload.get("prompt_asset") if isinstance(task.payload.get("prompt_asset"), dict) else {}
     agent_sources = task.payload.get("agent_source_paths")
@@ -99,6 +76,11 @@ def build_task_context(
                 "forbidden_shortcuts",
             )
         },
+        "execution_context": (
+            execution_context.as_dict()
+            if execution_context is not None
+            else {}
+        ),
     }
 
 
@@ -108,6 +90,7 @@ def write_task_context(
     *,
     reference_paths: tuple[str, ...] | None = None,
     source_paths: tuple[str, ...] | None = None,
+    execution_context: ExecutionContextEnvelope | None = None,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -116,6 +99,7 @@ def write_task_context(
                 task,
                 reference_paths=reference_paths,
                 source_paths=source_paths,
+                execution_context=execution_context,
             ),
             ensure_ascii=False,
             indent=2,
@@ -132,8 +116,14 @@ def render_worker_program(
     prepared_context: str = "",
     prepared_context_paths: tuple[str, ...] = (),
     omitted_context_paths: tuple[str, ...] = (),
+    execution_context: ExecutionContextEnvelope | None = None,
 ) -> str:
-    context = build_task_context(task, reference_paths=reference_paths, source_paths=source_paths)
+    context = build_task_context(
+        task,
+        reference_paths=reference_paths,
+        source_paths=source_paths,
+        execution_context=execution_context,
+    )
     prepared = PreparedPromptContext(
         rendered=prepared_context,
         included_paths=prepared_context_paths,
@@ -159,13 +149,25 @@ def _worker_program_fields(
         "agent_role": task.execution_contract.agent_role,
         "direction": user_direction.strip() or "没有额外的用户方向；只执行当前任务合同。",
         "task_body": asset.get("body") or "按当前任务合同完成声明的产物。",
-        "source_lines": _path_lines(context["source_paths"]),
-        "reference_lines": _path_lines(context["reference_paths"]),
     }
     fields.update(_output_program_fields(context))
     fields.update(_constraint_program_fields(context, asset))
     fields.update(_semantic_program_fields(context, fields["output_contracts"]))
     fields.update(_prepared_program_fields(context, prepared))
+    fields.update(
+        execution_context_program_fields(
+            (
+                context.get("execution_context")
+                if isinstance(context.get("execution_context"), dict)
+                else {}
+            ),
+            prepared,
+            fallback_paths=(
+                *context["source_paths"],
+                *context["reference_paths"],
+            ),
+        )
+    )
     fields.pop("output_contracts")
     return fields
 

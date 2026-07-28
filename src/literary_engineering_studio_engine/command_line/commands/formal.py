@@ -22,11 +22,35 @@ from ...protocol import protocol_to_json, render_protocol, render_protocol_list,
 from ...task_contract_audit import build_task_contract_audit
 from ...task_registry import (
     advance_workflow, build_workflow_events, complete_task, issue_next_task, open_task,
-    revert_task_submission, submit_task,
+    replay_task_contract, revert_task_submission, submit_task,
 )
 from ...workflow_contract import validate_workflow_contract
 from ...workflow_dashboard import build_workflow_dashboard
 from ...workflow_state import build_workflow_state, next_scene_workflow_state
+
+
+def _handle_task_access(args, parser) -> int:
+    try:
+        result = (
+            open_task(Path(args.project), args.task_id)
+            if args.command == "task-open"
+            else replay_task_contract(Path(args.project), args.task_id)
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        parser.error(str(exc))
+    print(f"status: {result.status}")
+    print(f"task_id: {result.task_id}")
+    print(f"task_json: {result.task_json_path}")
+    print(f"task: {result.task_markdown_path}")
+    print(f"route: {result.route}")
+    print(f"scene: {result.scene_id or 'n/a'}")
+    print(f"current_state: {result.current_state}")
+    print(f"expected_outputs: {result.expected_output_count}")
+    if args.command == "task-contract-replay":
+        print(f"message: {result.message}")
+    return 0
+
+
 def handle(args, parser) -> int | None:
     if args.command == "formal-help":
         print(_render_formal_help(args.project, args.route), end="")
@@ -146,20 +170,8 @@ def handle(args, parser) -> int | None:
         print(f"message: {result.message}")
         return 0
 
-    if args.command == "task-open":
-        try:
-            result = open_task(Path(args.project), args.task_id)
-        except (FileNotFoundError, ValueError) as exc:
-            parser.error(str(exc))
-        print(f"status: {result.status}")
-        print(f"task_id: {result.task_id}")
-        print(f"task_json: {result.task_json_path}")
-        print(f"task: {result.task_markdown_path}")
-        print(f"route: {result.route}")
-        print(f"scene: {result.scene_id or 'n/a'}")
-        print(f"current_state: {result.current_state}")
-        print(f"expected_outputs: {result.expected_output_count}")
-        return 0
+    if args.command in {"task-open", "task-contract-replay"}:
+        return _handle_task_access(args, parser)
 
     if args.command == "task-submit":
         try:

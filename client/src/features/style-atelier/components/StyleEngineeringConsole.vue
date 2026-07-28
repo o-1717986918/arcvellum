@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Square,
 } from "lucide-vue-next";
+import { styleIdentity } from "../services/styleIdentity";
 import type {
   StyleAuthor,
   StyleCompilePayload,
@@ -52,6 +53,8 @@ const authorId = ref(props.selectedAuthorId);
 const profileId = ref("");
 const displayName = ref("");
 const sourceRoles = ref<Record<string, SourceRole>>({});
+const setupError = ref("");
+const profileIdEdited = ref(false);
 
 const author = computed(() =>
   props.authors.find((item) => item.author_id === authorId.value)
@@ -84,6 +87,13 @@ const compileReady = computed(() =>
   && trainingSources.value.length > 0
   && holdoutSources.value.length > 0,
 );
+const compileRequirement = computed(() => {
+  if (!displayName.value.trim()) return "请先填写文风名称。";
+  if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(profileId.value)) return "版本短名需由 2 至 64 个小写字母、数字或短横线组成。";
+  if (!trainingSources.value.length) return "请至少指定一份用于学习的文本。";
+  if (!holdoutSources.value.length) return "请至少指定一份只用于隔离评测的文本。";
+  return "";
+});
 const active = computed(() => ["queued", "running", "stopping"].includes(props.job?.status || ""));
 const jobMessage = computed(() =>
   String(props.job?.result?.message || props.job?.error || statusMessage(props.job?.status || "")),
@@ -111,6 +121,11 @@ watch(
 );
 watch(authorId, () => initializeSourceRoles());
 watch(sources, initializeSourceRoles, { immediate: true });
+watch(displayName, (name) => {
+  if (!profileIdEdited.value) profileId.value = styleIdentity(name, "style");
+  setupError.value = "";
+});
+watch(sourceRoles, () => { setupError.value = ""; }, { deep: true });
 watch(
   () => props.selectedVersion,
   (version) => {
@@ -138,6 +153,7 @@ function initializeSourceRoles(): void {
 }
 
 function startCompilation(): void {
+  setupError.value = compileRequirement.value;
   if (!compileReady.value) return;
   emit("compile", {
     author_id: authorId.value,
@@ -247,7 +263,7 @@ function eventLabel(event: string): string {
             </select>
           </label>
           <label><span>文风名称</span><input v-model="displayName" placeholder="例如：克制而有余波的叙事" /></label>
-          <label><span>版本短名</span><input v-model="profileId" placeholder="例如：restrained-prose" /><small>使用小写字母、数字和短横线</small></label>
+          <label><span>版本短名</span><input v-model="profileId" placeholder="例如：restrained-prose" @input="profileIdEdited = true; setupError = ''" /><small>已自动生成，也可改为小写字母、数字和短横线</small></label>
         </div>
 
         <div class="style-source-partition">
@@ -266,8 +282,8 @@ function eventLabel(event: string): string {
         </div>
 
         <footer>
-          <span><Beaker :size="14" />{{ trainingSources.length }} 份学习 · {{ holdoutSources.length }} 份隔离评测</span>
-          <button class="primary" :disabled="!compileReady || busy" @click="startCompilation">
+          <span :class="{ danger: Boolean(setupError) }"><CircleAlert v-if="setupError" :size="14" /><Beaker v-else :size="14" />{{ setupError || `${trainingSources.length} 份学习 · ${holdoutSources.length} 份隔离评测` }}</span>
+          <button class="primary" :disabled="busy" @click="startCompilation">
             <Play :size="14" />开始正式工程
           </button>
         </footer>
