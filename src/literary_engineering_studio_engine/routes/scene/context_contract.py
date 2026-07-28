@@ -11,7 +11,6 @@ from ...literary.review.context_evidence import (
 from ...tasking.context_contract import CONTEXT_CONTRACT_SCHEMA
 
 CONTEXT_CONTRACT_REVISION = "scene-v2"
-CONTEXT_CONTRACT_STATUS = "shadow-ready"
 CONTEXT_CONTRACT_STATES = {
     "candidate-generation-provenance",
     "candidate-review",
@@ -51,7 +50,7 @@ def scene_context_contract(
         "context_contract_required": True,
         "context_contract_schema": CONTEXT_CONTRACT_SCHEMA,
         "context_contract_revision": CONTEXT_CONTRACT_REVISION,
-        "context_contract_status": CONTEXT_CONTRACT_STATUS,
+        "context_contract_status": _contract_status(state),
         "context_must_inline_paths": list(mandatory),
     }
     if state == "candidate-review":
@@ -66,6 +65,10 @@ def scene_context_contract(
             core_outputs,
         )
     return contract
+
+
+def _contract_status(state: str) -> str:
+    return "bounded-ready" if state == "candidate-review" else "shadow-ready"
 
 
 def _mandatory_candidates(

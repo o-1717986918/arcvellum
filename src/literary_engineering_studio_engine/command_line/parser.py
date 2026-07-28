@@ -217,6 +217,16 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     task_open.add_argument("project", help="Work project directory.")
     task_open.add_argument("--task-id", required=True)
 
+    task_replay = sub.add_parser(
+        "task-contract-replay",
+        help=(
+            "Rebuild a stored scene task with the current Engine contract "
+            "without selecting or executing route work."
+        ),
+    )
+    task_replay.add_argument("project", help="Work project directory.")
+    task_replay.add_argument("--task-id", required=True)
+
     task_submit = sub.add_parser("task-submit", help="Record platform-agent outputs for a CLI-mediated task.")
     task_submit.add_argument("project", help="Work project directory.")
     task_submit.add_argument("--task-id", required=True)

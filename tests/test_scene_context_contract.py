@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
@@ -140,6 +141,10 @@ class SceneContextContractTests(unittest.TestCase):
         )
 
         mandatory = contract["context_must_inline_paths"]
+        self.assertEqual(
+            contract["context_contract_status"],
+            "bounded-ready",
+        )
         self.assertIn(candidate, mandatory)
         self.assertIn(compact, mandatory)
         self.assertNotIn(sidecar, mandatory)
@@ -309,6 +314,10 @@ class SceneContextContractTests(unittest.TestCase):
                     len(set(enriched["context_must_inline_paths"])),
                 )
                 if state == "candidate-review":
+                    self.assertEqual(
+                        enriched["context_contract_status"],
+                        "bounded-ready",
+                    )
                     compact = (
                         "reviews/agent/"
                         "scene_0001_scene_review.context.json"
@@ -337,6 +346,11 @@ class SceneContextContractTests(unittest.TestCase):
                     self.assertEqual(
                         declaration["sidecar_path"],
                         sidecar,
+                    )
+                else:
+                    self.assertEqual(
+                        enriched["context_contract_status"],
+                        "shadow-ready",
                     )
 
     def test_engine_and_studio_reject_malformed_context_sources(self) -> None:
@@ -402,6 +416,81 @@ class SceneContextContractTests(unittest.TestCase):
                     "context_must_inline_paths": ["scenes/"],
                 }
             )
+
+    def test_historical_scene_task_replay_rebuilds_current_contract(self):
+        candidate = self._write(
+            "drafts/candidates/scene_0001-platform-agent.md",
+            "正文\n",
+        )
+        self._write(
+            "drafts/candidates/scene_0001-platform-agent.json",
+            "{}\n",
+        )
+        self._common_sources()
+        self._write(
+            "drafts/compositions/scene_0001_composition_review.json",
+            "{}\n",
+        )
+        self._write("branches/scene_0001/branch_selection.md")
+        self._write("references/punctuation-standard.md")
+        task = task_registry._enrich_task_payload(
+            task_registry._build_task_payload(
+                self.root,
+                "scene-development",
+                {
+                    "scene_id": self.scene_id,
+                    "scene": "scenes/scene_0001.yaml",
+                    "current_step": "candidate-review",
+                },
+            )
+        )
+        for field in tuple(task):
+            if field.startswith("context_"):
+                task.pop(field)
+        task["status"] = "complete"
+        task["task_contract_revision"] = "historical-v1"
+        task["expected_outputs"] = [
+            path
+            for path in task["expected_outputs"]
+            if not path.endswith(".context.json")
+        ]
+        task["core_managed_outputs"] = [
+            path
+            for path in task["core_managed_outputs"]
+            if not path.endswith(".context.json")
+        ]
+        task_root = self.root / "workflow" / "tasks"
+        task_root.mkdir(parents=True)
+        task_id = str(task["task_id"])
+        task_json = task_root / f"{task_id}.task.json"
+        task_markdown = task_root / f"{task_id}.agent_tasks.md"
+        task["task_json"] = task_json.relative_to(self.root).as_posix()
+        task["task_markdown"] = (
+            task_markdown.relative_to(self.root).as_posix()
+        )
+        task_json.write_text(
+            json.dumps(task, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        task_markdown.write_text("# old\n", encoding="utf-8")
+
+        result = task_registry.replay_task_contract(
+            self.root,
+            task_id,
+        )
+        replayed = json.loads(task_json.read_text(encoding="utf-8"))
+
+        self.assertEqual(result.status, "issued")
+        self.assertEqual(replayed["candidate"], candidate)
+        self.assertEqual(
+            replayed["context_contract_status"],
+            "bounded-ready",
+        )
+        self.assertIn(
+            "reviews/agent/scene_0001_scene_review.context.json",
+            replayed["core_managed_outputs"],
+        )
+        self.assertNotIn("completed_at", replayed)
 
 
 if __name__ == "__main__":

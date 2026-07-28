@@ -1948,6 +1948,49 @@ prompt 本身更短。真实收益是否体现为更少盲读、更低非缓存 
 详细证据见
 `docs/architecture/reviews/w6-4g5-incremental-repair-context-review.md`。
 
+#### W6-4G6：合同驱动 Canary 与真实同模型 A/B
+
+**状态：单样本 canary 候选完成；生产默认保持 shadow，W6-4G 尚未最终退出。**
+
+本子批没有把 bounded 变成全局开关，而是建立合同驱动的有限激活和隔离实验：
+
+- Engine 将 `candidate-review` 声明为 `bounded-ready`，其他当前场景合同继续
+  `shadow-ready`；
+- rollout policy 以 requested mode、route、state、contract status 和稳定 policy
+  digest 决定 effective mode；`off` 不可覆盖，错误合同 fail closed；
+- 默认 `mode=shadow`、`bounded_rollout.enabled=false`，未静默改变生产行为；
+- 历史任务可在隔离副本中按当前合同 replay，不修改正式任务或项目；
+- 同模型 A/B 的每一臂拥有独立临时项目、RuntimePool 和 ProcessManager，并经现有
+  preview approval、submit/complete 与正式 preflight 路径结束；
+- 安全报告只保存数值、状态、digest 和 conclusion，不保存作品文本、Prompt、凭证或
+  隐藏推理。
+
+真实项目 `1+1=2`、任务
+`scene-development-scene-0004-candidate-review`、模型
+`deepseek/deepseek-v4-flash` 的单样本结果：
+
+- shadow / bounded 均 complete、首次 preflight 均 pass；
+- Review 分别为 `pass` 与 `pass_with_notes`，schema 均合法；
+- 首轮可见字符 139668 → 63967，下降 54.20%；
+- 非缓存输入 Token 69535 → 75950，bounded 反而增加 9.23%；
+- 时延 140.579 s → 142.284 s，Repair/Retry 增量为 0；
+- mandatory 零缺失、tier 零重叠，原项目执行前后 digest 完全一致。
+
+该结果证明合同、Sandbox、Gate、隔离写回和进程回收闭环成立，但不证明 Token 或时延
+总体改善。W6-4G 最终退出仍需多样本中位数/P95、质量不退化和 rollback 演练。
+
+本子批验收：
+
+- Python：691 tests passed，1 skipped；Client：48 files、141 tests passed；
+- Client production build：passed，桌面资源同步通过；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Architecture Audit：34 个既有 file debt、221 个既有 function debt、0 cycle，
+  无新增 violation；
+- `compileall` 与 `git diff --check`：passed。
+
+详细证据见
+`docs/architecture/reviews/w6-4g6-bounded-canary-and-live-ab-review.md`。
+
 ### W6 后续完整阶段映射
 
 W6 不以一个模糊“长周期验收”跳过剩余路线。AO-3 退出后继续：

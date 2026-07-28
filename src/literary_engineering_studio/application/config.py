@@ -69,6 +69,12 @@ def _default_worker_config() -> dict[str, Any]:
             "mode": "shadow",
             "legacy_max_inline_characters": 180000,
             "max_exact_on_demand_characters": 360000,
+            "bounded_rollout": {
+                "enabled": False,
+                "routes": ["scene-development"],
+                "states": ["candidate-review"],
+                "contract_statuses": ["bounded-ready"],
+            },
         },
     }
 

@@ -11,8 +11,12 @@ export interface ThroughputUsage {
 
 export interface ThroughputContextMetric {
   mode: "" | "off" | "shadow" | "bounded";
+  requested_mode: "" | "off" | "shadow" | "bounded";
   task_kind: string;
   risk_level: string;
+  contract_status: string;
+  rollout_reason: string;
+  rollout_policy_digest: string;
   target_inline_characters: number;
   enforced_inline_characters: number;
   first_turn_visible_characters: number;

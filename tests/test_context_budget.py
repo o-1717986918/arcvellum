@@ -24,6 +24,7 @@ def _task(
     route: str = "scene-development",
     current_state: str = "structured-agent-task",
     outputs: tuple[str, ...] = ("workflow/result.json",),
+    contract_status: str = "",
 ) -> TaskPackage:
     payload = {
         "task_id": "scene-development-task",
@@ -44,6 +45,8 @@ def _task(
             for path in outputs
         ],
     }
+    if contract_status:
+        payload["context_contract_status"] = contract_status
     return TaskPackage(root, root / "task.json", root / "task.md", payload)
 
 
@@ -136,7 +139,7 @@ class ContextBudgetTests(unittest.TestCase):
             root = Path(temporary)
             (root / "required.md").write_text("x" * 80_000, encoding="utf-8")
             budget = resolve_task_context_budget(
-                _task(root),
+                _task(root, contract_status="bounded-ready"),
                 {
                     "context_budget": {
                         "mode": "bounded",
@@ -155,6 +158,92 @@ class ContextBudgetTests(unittest.TestCase):
                     budget=budget,
                     mandatory_paths=("required.md",),
                 )
+
+    def test_explicit_bounded_rejects_non_ready_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(
+                ContextBudgetExceeded,
+                "bounded-ready",
+            ):
+                resolve_task_context_budget(
+                    _task(Path(temporary)),
+                    {"context_budget": {"mode": "bounded"}},
+                )
+
+    def test_candidate_review_canary_activates_only_for_ready_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = {
+                "context_budget": {
+                    "mode": "shadow",
+                    "bounded_rollout": {
+                        "enabled": True,
+                        "routes": ["scene-development"],
+                        "states": ["candidate-review"],
+                        "contract_statuses": ["bounded-ready"],
+                    },
+                }
+            }
+            eligible = resolve_task_context_budget(
+                _task(
+                    root,
+                    task_type="platform-agent-review",
+                    role="main-review-agent",
+                    current_state="candidate-review",
+                    contract_status="bounded-ready",
+                ),
+                config,
+            )
+            shadow = resolve_task_context_budget(
+                _task(
+                    root,
+                    task_type="platform-agent-review",
+                    role="main-review-agent",
+                    current_state="candidate-review",
+                    contract_status="shadow-ready",
+                ),
+                config,
+            )
+
+            self.assertIs(eligible.mode, ContextBudgetMode.BOUNDED)
+            self.assertIs(
+                eligible.requested_mode,
+                ContextBudgetMode.SHADOW,
+            )
+            self.assertEqual(
+                eligible.rollout_reason,
+                "canary-contract-match",
+            )
+            self.assertIs(shadow.mode, ContextBudgetMode.SHADOW)
+            self.assertEqual(
+                shadow.rollout_reason,
+                "contract-status-not-allowlisted",
+            )
+            self.assertEqual(len(eligible.rollout_policy_digest), 64)
+
+    def test_off_mode_cannot_be_overridden_by_canary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            budget = resolve_task_context_budget(
+                _task(
+                    Path(temporary),
+                    current_state="candidate-review",
+                    contract_status="bounded-ready",
+                ),
+                {
+                    "context_budget": {
+                        "mode": "off",
+                        "bounded_rollout": {
+                            "enabled": True,
+                            "routes": ["scene-development"],
+                            "states": ["candidate-review"],
+                            "contract_statuses": ["bounded-ready"],
+                        },
+                    }
+                },
+            )
+
+            self.assertIs(budget.mode, ContextBudgetMode.OFF)
+            self.assertEqual(budget.rollout_reason, "requested-off")
 
     def test_invalid_mode_falls_back_to_shadow(self):
         with tempfile.TemporaryDirectory() as temporary:

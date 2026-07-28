@@ -294,8 +294,12 @@ class ThroughputMetricsTests(unittest.TestCase):
                     context_ledger_digest="context-digest-4",
                     context_budget={
                         "mode": "shadow",
+                        "requested_mode": "shadow",
                         "task_kind": "review",
                         "risk_level": "high",
+                        "contract_status": "bounded-ready",
+                        "rollout_reason": "rollout-disabled",
+                        "rollout_policy_digest": "c" * 64,
                         "target_inline_characters": 126500,
                         "enforced_inline_characters": 180000,
                         "first_turn_visible_characters": 140000,
@@ -330,6 +334,11 @@ class ThroughputMetricsTests(unittest.TestCase):
         self.assertEqual(projection["context"]["budget_overage_count"], 1)
         self.assertTrue(projection["coverage"]["scene_attribution"])
         self.assertTrue(projection["coverage"]["context_budget"])
+        context = projection["tasks"][0]["context"]
+        self.assertEqual(context["requested_mode"], "shadow")
+        self.assertEqual(context["contract_status"], "bounded-ready")
+        self.assertEqual(context["rollout_reason"], "rollout-disabled")
+        self.assertEqual(context["rollout_policy_digest"], "c" * 64)
         task = projection["tasks"][0]
         self.assertEqual(task["scene_id"], "scene_0004")
         self.assertEqual(task["role"], "main-review-agent")

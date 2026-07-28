@@ -102,10 +102,20 @@ def rounded_usage(usage: dict[str, float]) -> dict[str, int | float]:
 
 def context_from_event(report: dict[str, Any]) -> dict[str, Any]:
     context = empty_context()
-    for key in ("mode", "task_kind", "risk_level", "digest"):
+    string_fields = {
+        "mode",
+        "requested_mode",
+        "task_kind",
+        "risk_level",
+        "contract_status",
+        "rollout_reason",
+        "rollout_policy_digest",
+        "digest",
+    }
+    for key in string_fields:
         context[key] = str(report.get(key) or "")
     for key in context:
-        if key not in {"mode", "task_kind", "risk_level", "digest"}:
+        if key not in string_fields:
             context[key] = int(_number(report.get(key)))
     return context
 
@@ -113,8 +123,12 @@ def context_from_event(report: dict[str, Any]) -> dict[str, Any]:
 def empty_context() -> dict[str, Any]:
     return {
         "mode": "",
+        "requested_mode": "",
         "task_kind": "",
         "risk_level": "",
+        "contract_status": "",
+        "rollout_reason": "",
+        "rollout_policy_digest": "",
         "target_inline_characters": 0,
         "enforced_inline_characters": 0,
         "first_turn_visible_characters": 0,

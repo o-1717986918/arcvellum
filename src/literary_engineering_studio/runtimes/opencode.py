@@ -229,7 +229,7 @@ class OpenCodeRuntime(AgentRuntime):
                                     "public_message": _public_model_error(raw_error),
                                 }
                             emit(name, data)
-                except RuntimeError as exc:
+                except (RuntimeError, OSError, TimeoutError) as exc:
                     if not event_stop.is_set():
                         emit("runner.warning", {"session_id": session_id, "kind": "event-stream", "detail": str(exc)})
 

@@ -372,6 +372,7 @@ class SandboxTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
             root = Path(temporary)
             task = self._task(root)
+            task.payload["context_contract_status"] = "bounded-ready"
             budget = resolve_task_context_budget(
                 task,
                 {"context_budget": {"mode": "bounded"}},
@@ -412,7 +413,7 @@ class SandboxTests(unittest.TestCase):
                         "literary-engineering-workbench/task-context-contract/v1"
                     ),
                     "context_contract_revision": "scene-v1",
-                    "context_contract_status": "shadow-ready",
+                    "context_contract_status": "bounded-ready",
                     "context_must_inline_paths": ["scenes/scene_0001.yaml"],
                 }
             )

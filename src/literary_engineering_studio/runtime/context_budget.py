@@ -9,6 +9,10 @@ import json
 from typing import Any, Mapping
 
 from ..contracts import TaskPackage
+from .context_rollout import (
+    ContextRolloutRejected,
+    resolve_context_rollout,
+)
 
 
 LEGACY_MAX_INLINE_CHARACTERS = 180_000
@@ -59,18 +63,23 @@ _RISK_MULTIPLIERS = {
 @dataclass(frozen=True)
 class TaskContextBudget:
     mode: ContextBudgetMode
+    requested_mode: ContextBudgetMode
     task_kind: ContextTaskKind
     role: str
     risk_level: ContextRiskLevel
     target_inline_characters: int
     enforced_inline_characters: int
     max_exact_on_demand_characters: int
+    contract_status: str
+    rollout_reason: str
+    rollout_policy_digest: str
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "schema": "arcvellum/task-context-budget/v1",
             **asdict(self),
             "mode": self.mode.value,
+            "requested_mode": self.requested_mode.value,
             "task_kind": self.task_kind.value,
             "risk_level": self.risk_level.value,
         }
@@ -79,6 +88,7 @@ class TaskContextBudget:
 @dataclass(frozen=True)
 class ContextBudgetReport:
     mode: ContextBudgetMode
+    requested_mode: ContextBudgetMode
     task_kind: ContextTaskKind
     role: str
     risk_level: ContextRiskLevel
@@ -94,6 +104,9 @@ class ContextBudgetReport:
     excluded_file_count: int
     budget_overage_count: int
     budget_overage_characters: int
+    contract_status: str
+    rollout_reason: str
+    rollout_policy_digest: str
     digest: str
 
     def as_dict(self) -> dict[str, Any]:
@@ -101,6 +114,7 @@ class ContextBudgetReport:
             "schema": "arcvellum/context-budget-report/v1",
             **asdict(self),
             "mode": self.mode.value,
+            "requested_mode": self.requested_mode.value,
             "task_kind": self.task_kind.value,
             "risk_level": self.risk_level.value,
         }
@@ -115,7 +129,12 @@ def resolve_task_context_budget(
     worker_config: Mapping[str, Any] | None = None,
 ) -> TaskContextBudget:
     config = _mapping((worker_config or {}).get("context_budget"))
-    mode = _mode(config.get("mode"))
+    try:
+        rollout = resolve_context_rollout(task, config)
+    except ContextRolloutRejected as exc:
+        raise ContextBudgetExceeded(str(exc)) from exc
+    mode = ContextBudgetMode(rollout.effective_mode)
+    requested_mode = ContextBudgetMode(rollout.requested_mode)
     kind = _task_kind(task)
     role = task.execution_contract.agent_role
     risk = _risk_level(task, kind)
@@ -131,12 +150,16 @@ def resolve_task_context_budget(
     on_demand = _positive_int(config.get("max_exact_on_demand_characters"), target * 3)
     return TaskContextBudget(
         mode=mode,
+        requested_mode=requested_mode,
         task_kind=kind,
         role=role,
         risk_level=risk,
         target_inline_characters=target,
         enforced_inline_characters=enforced,
         max_exact_on_demand_characters=on_demand,
+        contract_status=rollout.contract_status,
+        rollout_reason=rollout.reason,
+        rollout_policy_digest=rollout.policy_digest,
     )
 
 
@@ -155,6 +178,7 @@ def build_context_budget_report(
     overage = max(0, first_turn_visible_characters - budget.target_inline_characters)
     payload = {
         "mode": budget.mode.value,
+        "requested_mode": budget.requested_mode.value,
         "task_kind": budget.task_kind.value,
         "role": budget.role,
         "risk_level": budget.risk_level.value,
@@ -170,12 +194,16 @@ def build_context_budget_report(
         "excluded_file_count": max(0, excluded_file_count),
         "budget_overage_count": int(overage > 0),
         "budget_overage_characters": overage,
+        "contract_status": budget.contract_status,
+        "rollout_reason": budget.rollout_reason,
+        "rollout_policy_digest": budget.rollout_policy_digest,
     }
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return ContextBudgetReport(
         mode=budget.mode,
+        requested_mode=budget.requested_mode,
         task_kind=budget.task_kind,
         role=budget.role,
         risk_level=budget.risk_level,
@@ -191,6 +219,9 @@ def build_context_budget_report(
         excluded_file_count=payload["excluded_file_count"],
         budget_overage_count=payload["budget_overage_count"],
         budget_overage_characters=payload["budget_overage_characters"],
+        contract_status=payload["contract_status"],
+        rollout_reason=payload["rollout_reason"],
+        rollout_policy_digest=payload["rollout_policy_digest"],
         digest=digest,
     )
 
@@ -258,14 +289,6 @@ def _risk_level(task: TaskPackage, kind: ContextTaskKind) -> ContextRiskLevel:
     if high_impact or kind in {ContextTaskKind.STYLE, ContextTaskKind.CREATIVE}:
         return ContextRiskLevel.MEDIUM
     return ContextRiskLevel.LOW
-
-
-def _mode(value: object) -> ContextBudgetMode:
-    normalized = str(value or ContextBudgetMode.SHADOW.value).strip().lower()
-    try:
-        return ContextBudgetMode(normalized)
-    except ValueError:
-        return ContextBudgetMode.SHADOW
 
 
 def _mapping(value: object) -> Mapping[str, Any]:

@@ -101,14 +101,37 @@ class CoreBridge:
             fields=parse_cli_fields(completed.stdout),
         )
 
-    def task_next(self, project: Path, route: str, *, scene: str = "") -> CoreCommandResult:
+    def task_next(
+        self,
+        project: Path,
+        route: str,
+        *,
+        scene: str = "",
+        force: bool = False,
+    ) -> CoreCommandResult:
         args = ["task-next", str(project.resolve()), "--route", route]
         if scene:
             args.extend(["--scene", scene])
+        if force:
+            args.append("--force")
         return self.run(args).require_success()
 
     def task_open(self, project: Path, task_id: str) -> CoreCommandResult:
         return self.run(["task-open", str(project.resolve()), "--task-id", task_id]).require_success()
+
+    def task_contract_replay(
+        self,
+        project: Path,
+        task_id: str,
+    ) -> CoreCommandResult:
+        return self.run(
+            [
+                "task-contract-replay",
+                str(project.resolve()),
+                "--task-id",
+                task_id,
+            ]
+        ).require_success()
 
     def task_submit(self, project: Path, task_id: str, artifacts: Iterable[str], *, note: str = "") -> CoreCommandResult:
         args = ["task-submit", str(project.resolve()), "--task-id", task_id]

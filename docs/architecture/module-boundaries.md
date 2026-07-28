@@ -342,10 +342,16 @@ W6-4G 上下文与 Token 效率边界进一步固定：
   fail closed，不能把“自动清理”变成权限豁免；
 - `runtimes/opencode_repair.py` 只拥有 transport-level 同 session repair loop。
   TaskPackage、Sandbox、preflight、Gate 和 writeback 所有权继续留在 Worker；
+- `runtime/context_rollout.py` 只消费请求模式、Engine contract status 和配置白名单，
+  输出带稳定 policy digest 的灰度决策；它不选择资料、修改 task 或拥有 writeback。
+  `off` 不得被覆盖，显式 bounded 遇非 `bounded-ready` 合同必须 fail closed；
+- `runtime/context_ab.py` 和 `context_ab_reporting.py` 只在临时项目副本中组合正式
+  Worker 生命周期与安全观测投影。每一实验臂必须独占并关闭 RuntimePool /
+  ProcessManager，不得把临时产物直接复制回正式项目；
 - `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择、
-  `ExecutionContextEnvelope` 和首批高成本场景任务的 Engine mandatory contract 已建立
-  可验证合同；其余任务族、真实模型 A/B 和生产回退尚未完成，不得仅修改配置就把
-  bounded 宣称为生产可用。
+  `ExecutionContextEnvelope`、首批高成本场景任务合同和 candidate-review 单样本真实
+  A/B 已建立可验证证据；生产默认仍为 shadow，灰度开关仍关闭。其余任务族、多样本
+  中位数/P95 和 rollback 未完成，不得把单样本 canary 候选宣称为生产可用。
 
 ## 当前大文件的正确处理方式
 
