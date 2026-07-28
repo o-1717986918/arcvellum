@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NarrativeParallaxRenderer, type StageAnchor } from "@/features/orrery/engine/parallaxRenderer";
+import { cameraPoseAt, cameraTransitionDuration, type CameraPose } from "@/features/orrery/engine/cameraTransition";
 import { copyParallaxView, DEFAULT_PARALLAX_VIEW, fittedCameraFrame, isSameParallaxView, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import { resolveOrreryMotion } from "@/services/orreryPreferences";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
@@ -21,6 +22,7 @@ let observedQuality = "";
 const staticProjection = ref(false);
 const staticCamera = { x: 0, y: 0, scale: 0.78 };
 let staticCameraReady = false;
+let staticCameraAnimation = 0;
 let staticDrag: { pointerId: number; clientX: number; clientY: number; x: number; y: number } | null = null;
 const staticView: ParallaxView = { ...DEFAULT_PARALLAX_VIEW };
 let staticOrbit: { pointerId: number; clientX: number; clientY: number; view: ParallaxView; pivot: WorldPoint | null } | null = null;
@@ -108,6 +110,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   themeObserver?.disconnect();
   rendererGeneration += 1;
+  cancelStaticCameraAnimation();
   renderer?.dispose();
   renderer = null;
 });
@@ -228,6 +231,7 @@ function staticScreenAnchor(point: { x: number; y: number }, rect: DOMRect, dept
 }
 
 function resetStaticCamera(): void {
+  cancelStaticCameraAnimation();
   staticCameraReady = false;
   staticDrag = null;
   staticOrbit = null;
@@ -292,11 +296,11 @@ function fitStaticCamera(): void {
   const maxX = Math.max(...points.map((point) => point.x));
   const minY = Math.min(...points.map((point) => point.y));
   const maxY = Math.max(...points.map((point) => point.y));
-  staticCamera.x = (minX + maxX) / 2;
-  staticCamera.y = (minY + maxY) / 2;
-  staticCamera.scale = Math.max(0.08, Math.min(0.9, Math.min((rect.width - 260) / Math.max(420, maxX - minX + 240), (rect.height - 260) / Math.max(360, maxY - minY + 200))));
-  staticCameraReady = true;
-  emitStaticAnchors();
+  animateStaticCameraTo({
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+    scale: Math.max(0.08, Math.min(0.9, Math.min((rect.width - 260) / Math.max(420, maxX - minX + 240), (rect.height - 260) / Math.max(360, maxY - minY + 200)))),
+  }, 560);
 }
 
 function focusStaticPoint(point: WorldPoint): void {
@@ -305,11 +309,7 @@ function focusStaticPoint(point: WorldPoint): void {
   const primary = props.projection.nodes.filter((node) => node.type === "chapter" || node.type === "scene").sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
   const first = props.layout.points.get(primary[0]?.node_id || "") || { x: 0, y: 0, z: 0 };
   const world = staticWorldPoint(point, first);
-  staticCamera.x = world.x;
-  staticCamera.y = world.y;
-  staticCamera.scale = Math.max(0.72, staticCamera.scale);
-  staticCameraReady = true;
-  emitStaticAnchors();
+  animateStaticCameraTo({ x: world.x, y: world.y, scale: Math.max(0.72, staticCamera.scale) }, 680);
 }
 
 function focusStaticCluster(points: WorldPoint[]): void {
@@ -321,15 +321,12 @@ function focusStaticCluster(points: WorldPoint[]): void {
   const worlds = points.map((point) => staticWorldPoint(point, first));
   const frame = fittedCameraFrame(worlds, { width: rect.width - 240, height: rect.height - 210 }, { minWidth: 720, minHeight: 500, padX: 420, padY: 360, minScale: 0.12, maxScale: 1.32 });
   if (!frame) return;
-  staticCamera.x = frame.centerX;
-  staticCamera.y = frame.centerY;
-  staticCamera.scale = frame.scale;
-  staticCameraReady = true;
-  emitStaticAnchors();
+  animateStaticCameraTo({ x: frame.centerX, y: frame.centerY, scale: frame.scale }, 720);
 }
 
 function startStaticDrag(event: PointerEvent): void {
   if (!staticProjection.value || !host.value) return;
+  cancelStaticCameraAnimation();
   if (event.button === 1) {
     event.preventDefault();
     staticOrbit = {
@@ -375,6 +372,7 @@ function stopStaticDrag(event: PointerEvent): void {
 
 function zoomStatic(event: WheelEvent): void {
   if (!staticProjection.value || !host.value) return;
+  cancelStaticCameraAnimation();
   const rect = host.value.getBoundingClientRect();
   const localX = event.clientX - rect.left - rect.width / 2;
   const localY = event.clientY - rect.top - rect.height * 0.52;
@@ -429,6 +427,40 @@ function recenterStaticView(pivot: WorldPoint | null): void {
   const world = staticWorldPoint(pivot, first);
   staticCamera.x = world.x;
   staticCamera.y = world.y;
+}
+
+function animateStaticCameraTo(target: CameraPose, requestedDuration: number): void {
+  cancelStaticCameraAnimation();
+  const preference = document.documentElement.dataset.arcvellumMotion || "system";
+  const motion = resolveOrreryMotion(
+    preference === "full" || preference === "reduced" || preference === "still" ? preference : "system",
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const duration = cameraTransitionDuration(motion, requestedDuration);
+  const from = { ...staticCamera };
+  staticCameraReady = true;
+  if (!duration) {
+    Object.assign(staticCamera, target);
+    emitStaticAnchors();
+    return;
+  }
+  const startedAt = performance.now();
+  const step = (now: number): void => {
+    Object.assign(staticCamera, cameraPoseAt(from, target, (now - startedAt) / duration));
+    emitStaticAnchors();
+    if (now - startedAt >= duration) {
+      staticCameraAnimation = 0;
+      return;
+    }
+    staticCameraAnimation = window.requestAnimationFrame(step);
+  };
+  staticCameraAnimation = window.requestAnimationFrame(step);
+}
+
+function cancelStaticCameraAnimation(): void {
+  if (!staticCameraAnimation) return;
+  window.cancelAnimationFrame(staticCameraAnimation);
+  staticCameraAnimation = 0;
 }
 
 defineExpose({ fit, focus, focusCluster, openingSegment, resetView });
