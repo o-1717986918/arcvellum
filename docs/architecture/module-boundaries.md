@@ -348,10 +348,19 @@ W6-4G 上下文与 Token 效率边界进一步固定：
 - `runtime/context_ab.py` 和 `context_ab_reporting.py` 只在临时项目副本中组合正式
   Worker 生命周期与安全观测投影。每一实验臂必须独占并关闭 RuntimePool /
   ProcessManager，不得把临时产物直接复制回正式项目；
+- `runtime/context_access_policy.py` 只解释 protected output 与 Execution Context
+  tier 的读取义务；`runtime/context_access.py` 只从完成消息投影脱敏读取计数。两者
+  都不能选择文学资料、修改 task contract 或保存 Prompt、正文、工具输出和绝对路径；
+- `runtime/context_ab_suite.py` 与 `context_ab_suite_facts.py` 只聚合既有安全 A/B
+  报告并计算退出事实；`runtime/context_rollout_drill.py` 只验证策略切换和合同不变，
+  均不能执行 Worker、复制 preflight 或写正式项目；
+- `preflight/scene_review_metadata.py` 只绑定候选审查的 task-owned 机械身份，不得
+  修改 candidate digest、Agent conclusion、文学证据、问题或修订动作；
 - `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择、
-  `ExecutionContextEnvelope`、首批高成本场景任务合同和 candidate-review 单样本真实
-  A/B 已建立可验证证据；生产默认仍为 shadow，灰度开关仍关闭。其余任务族、多样本
-  中位数/P95 和 rollback 未完成，不得把单样本 canary 候选宣称为生产可用。
+  `ExecutionContextEnvelope`、首批高成本场景任务合同、candidate-review 多样本真实
+  A/B 与 rollback 已建立退出证据；生产默认仍为 shadow，灰度开关仍关闭，避免升级时
+  静默改变既有用户配置。其他任务族仍是 shadow-ready，不得从 candidate-review 的
+  结果推断其已具备 bounded 生产资格。
 
 ## 当前大文件的正确处理方式
 

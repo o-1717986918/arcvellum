@@ -1664,10 +1664,10 @@ W1-Exit 实现结果：
 
 ### W6-4G：上下文与 Token 效率止损
 
-**状态：进行中。W6-4G1 usage truth 与 budget-shadow、W6-4G2
-ExecutionContextEnvelope 与四级资料合同、W6-4G3 首批 Engine 资料合同与 bounded
-影子验证已完成；真实模型 A/B、重复 sidecar 紧凑投影、生产激活和增量 repair 仍待
-后续子批。完成 W6-4G 后继续 W6-5B。**
+**状态：完成。W6-4G1 至 W6-4G7 已建立 usage truth、Context Budget、
+ExecutionContextEnvelope、Engine 资料合同、紧凑审查证据、增量 repair、合同驱动
+canary、多样本真实 A/B 与回滚演练。candidate-review 已取得 bounded 生产激活资格；
+默认仍保持 shadow，避免升级时静默改变既有用户配置。下一批继续 W6-5B。**
 
 2026-07-28 真实项目运行审计发现，W6-4F 已解决 usage 累计快照重复计数和沙箱重复
 物化，但模型侧仍存在结构性上下文成本：
@@ -1990,6 +1990,50 @@ prompt 本身更短。真实收益是否体现为更少盲读、更低非缓存 
 
 详细证据见
 `docs/architecture/reviews/w6-4g6-bounded-canary-and-live-ab-review.md`。
+
+#### W6-4G7：Context Access 与多样本退出证据
+
+**状态：完成；W6-4G 正式退出。**
+
+本子批消除了 protected output 读取规则的内在冲突，并把退出判断从单场实验升级为
+可复核的多样本 Suite：
+
+- 已内联 protected output 直接使用快照，exact-on-demand protected output 只在
+  具体判断缺证据时读取，未分类 protected output 继续 fail closed；
+- candidate-review 将 27K–50K 字符的完整 context packet 从首轮内联移到精确按需
+  层，scene、候选、composition review、branch selection、质量规则和紧凑确定性证据
+  仍保留首轮；
+- Context Access 遥测只记录读取次数、类别和字符量，不保存路径、正文、Prompt、
+  工具输出、凭证或隐藏推理；
+- 新增多样本 A/B Suite 与 bounded-to-shadow rollback drill；
+- scene review 的 task-owned metadata 由独立 preflight 模块确定性绑定，不改 Agent
+  的结论、证据、问题或修订建议。
+
+真实项目 `1+1=2`、同一 `deepseek/deepseek-v4-flash` 模型的 scene_0001–0003
+candidate-review A/B：
+
+- 六个 arm 均 complete、首次 preflight pass、Review=`pass`；
+- 首轮可见字符降幅中位数 62.64%；
+- 非缓存输入 Token 降幅中位数 47.18%；
+- shadow / bounded repair+retry 均为 0；
+- mandatory 零缺失、tier 零重叠、正式项目 digest 不变；
+- 隔离回滚演练通过，task contracts 前后不变；
+- Suite 给出 `exit_candidate=true`。
+
+额外 scene_0004 bounded 结果为 `pass_with_notes`，准确发现两处对白破折号使密度超过
+2% 阈值。该样本按严格 ordinal 规则不计入通过样本，并记录为质量波动证据；未通过
+修改规则或隐藏结果换取退出。
+
+本子批验收：
+
+- Python：702 tests passed，1 skipped；Client：48 files、141 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Client production build、桌面资源同步、`compileall`、`git diff --check`：passed；
+- Architecture Audit：34 个既有 file debt、220 个既有 function debt、0 cycle，
+  无新增 violation。
+
+完整证据见
+`docs/architecture/reviews/w6-4g7-context-access-and-suite-exit-review.md`。
 
 ### W6 后续完整阶段映射
 

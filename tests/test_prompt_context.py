@@ -6,6 +6,7 @@ import unittest
 
 from literary_engineering_studio.runtime.prompt_context import (
     build_prepared_prompt_context,
+    render_prepared_context_section,
 )
 
 
@@ -32,6 +33,10 @@ class PreparedPromptContextTests(unittest.TestCase):
             self.assertNotIn("x" * 20, bundle.rendered)
             self.assertEqual(bundle.character_count, len(bundle.rendered))
             self.assertEqual(len(bundle.sha256), 64)
+            rendered = render_prepared_context_section(bundle)
+            self.assertIn("不代表必须读取", rendered)
+            self.assertIn("不得逐一补读", rendered)
+            self.assertNotIn("只有 omitted 列表中的文件需要另行读取", rendered)
 
     def test_deduplicates_normalized_paths(self):
         with tempfile.TemporaryDirectory() as temporary:

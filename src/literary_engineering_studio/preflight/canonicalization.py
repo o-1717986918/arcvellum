@@ -12,7 +12,8 @@ from ..contracts import TaskPackage
 from .archaeology import canonicalize_archaeology_metadata
 from .asset_evidence import review_machine_fields
 from .common import REVIEW_CONCLUSION, REVIEW_CONCLUSION_VARIANT
-from .style_snapshot import candidate_style_snapshot, prompt_style_snapshot
+from .scene_review_metadata import canonicalize_scene_review_metadata
+from .style_snapshot import prompt_style_snapshot
 from .style_metadata import canonicalize_style_machine_metadata
 from ..sandbox import SandboxManifest
 from literary_engineering_studio_engine.agent_schema import load_schema_spec
@@ -35,7 +36,7 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(_canonicalize_project_review_metadata(task, sandbox))
     changes.extend(_canonicalize_agent_completion_markers(task, sandbox))
     changes.extend(_canonicalize_scene_candidate_manifest(task, sandbox))
-    changes.extend(_canonicalize_scene_review_metadata(task, sandbox))
+    changes.extend(canonicalize_scene_review_metadata(task, sandbox))
     gates = " ".join(str(item) for item in task.payload.get("validation_gates") or []).lower()
     if "conclusion is pass" not in gates and "结论" not in gates:
         return changes
@@ -689,73 +690,6 @@ def _canonicalize_asset_completion_markers(
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         changed.append({"path": relative, "field": "completion", "reason": "generated deterministic asset-task completion metadata"})
     return changed
-
-
-def _canonicalize_scene_review_metadata(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Normalize mechanical review metadata without weakening evidence binding.
-
-    A review Agent supplies the verdict and evidence.  The schema label,
-    scene id, candidate path, source list, and reviewer identity are task-owned
-    facts.  The candidate digest is deliberately *not* normalized: it is the
-    cryptographic assertion that this judgement was made against this exact
-    prose revision.  Replacing a stale digest here would make an old verdict
-    appear to review newly written text.
-    """
-    if task.current_state not in {"candidate-review", "agent-review-task"}:
-        return []
-    review_rel = next(
-        (
-            relative
-            for relative in task.expected_outputs
-            if relative.endswith(".json")
-            and "scene_review" in relative
-            and not relative.endswith(".agent_completion.json")
-        ),
-        "",
-    )
-    review_path = sandbox.workspace / Path(review_rel)
-    candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
-    if not candidate_rel:
-        candidate_rel = next(
-            (
-                relative
-                for relative in task.source_paths
-                if relative.replace("\\", "/").startswith("drafts/candidates/") and relative.endswith(".md")
-            ),
-            "",
-        )
-    candidate_path = sandbox.workspace / Path(candidate_rel)
-    if not review_path.is_file() or not candidate_path.is_file():
-        return []
-    try:
-        payload = json.loads(review_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return []
-    if not isinstance(payload, dict) or not str(payload.get("conclusion") or "").strip() or not str(payload.get("summary") or "").strip():
-        return []
-
-    expected = {
-        "schema": "literary-engineering-workbench/scene-review-agent/v1",
-        "scene_id": str(task.payload.get("scene_id") or task.scene_id or "").strip(),
-        # The Agent does not choose which prose it is allowed to review.  Keep
-        # the exact candidate path alongside the Agent-authored digest so a
-        # following revision task cannot fall back to rewriting its own output
-        # in place.
-        "candidate": candidate_rel,
-        "source_paths": [str(item).replace("\\", "/") for item in task.source_paths],
-        "reviewer_session_id": _session_identity(task, "reviewer"),
-    }
-    expected["style_mount_snapshot"] = candidate_style_snapshot(candidate_path)
-    changed: list[str] = []
-    for field, value in expected.items():
-        if payload.get(field) == value:
-            continue
-        payload[field] = value
-        changed.append(field)
-    if not changed:
-        return []
-    review_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return [{"path": review_rel, "field": field, "reason": "normalized deterministic scene-review metadata"} for field in changed]
 
 
 def _canonicalize_scene_candidate_manifest(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:

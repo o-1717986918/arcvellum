@@ -29,6 +29,7 @@ def build_arm_report(
         "mode": mode,
         "status": result.status,
         "runtime": result.runtime,
+        "failure": _failure_summary(result, run_manifest),
         "elapsed_seconds": round(elapsed, 3),
         "model_identity": str(task_metrics.get("model_identity") or ""),
         "model_turns": int(projection.get("model_turns") or 0),
@@ -42,7 +43,31 @@ def build_arm_report(
             task,
             result.workspace,
         ),
+        "context_access": dict(
+            task_metrics.get("context_access") or {}
+        ),
         "review": _review_summary(task),
+    }
+
+
+def _failure_summary(
+    result: WorkerRunResult,
+    run_manifest: Mapping[str, Any],
+) -> dict[str, object]:
+    if result.status in {"complete", "waiting_writeback"}:
+        return {"present": False, "category": "", "retryable": False}
+    metadata = _mapping(run_manifest.get("runtime_metadata"))
+    retryable = metadata.get("retryable") is True
+    if result.status == "runtime_failed":
+        category = "streaming_interrupted" if retryable else "model_error"
+    elif result.status == "preflight_failed":
+        category = "deterministic_preflight"
+    else:
+        category = "worker_failure"
+    return {
+        "present": True,
+        "category": category,
+        "retryable": retryable,
     }
 
 

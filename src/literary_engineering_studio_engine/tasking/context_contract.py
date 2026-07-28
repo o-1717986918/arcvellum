@@ -56,25 +56,49 @@ def normalize_context_contract(task: dict[str, object]) -> None:
             "formal task mandatory context is outside the Agent source contract: "
             + ", ".join(unauthorized)
         )
+    exact, excluded = _normalized_optional_tiers(
+        task,
+        allowed=allowed,
+        mandatory=normalized,
+    )
+    task["context_must_inline_paths"] = normalized
+    if exact:
+        task["context_exact_on_demand_paths"] = exact
+    if excluded:
+        task["context_excluded_paths"] = excluded
+    _normalize_review_evidence_contract(task)
+
+
+def _normalized_optional_tiers(
+    task: dict[str, object],
+    *,
+    allowed: set[str],
+    mandatory: list[str],
+) -> tuple[list[str], list[str]]:
     exact = _optional_tier_paths(
         task,
         "context_exact_on_demand_paths",
     )
-    unauthorized_exact = [path for path in exact if path not in allowed]
-    if unauthorized_exact:
-        raise ValueError(
-            "formal task exact-on-demand context is outside the Agent source "
-            "contract: " + ", ".join(unauthorized_exact)
-        )
-    overlap = sorted(set(normalized) & set(exact))
+    excluded = _optional_tier_paths(task, "context_excluded_paths")
+    for label, paths in (
+        ("exact-on-demand", exact),
+        ("excluded", excluded),
+    ):
+        unauthorized = [path for path in paths if path not in allowed]
+        if unauthorized:
+            raise ValueError(
+                f"formal task {label} context is outside the Agent source "
+                "contract: " + ", ".join(unauthorized)
+            )
+    overlap = sorted(
+        (set(mandatory) & set(exact))
+        | (set(excluded) & set((*mandatory, *exact)))
+    )
     if overlap:
         raise ValueError(
             "formal task context tiers overlap: " + ", ".join(overlap)
         )
-    task["context_must_inline_paths"] = normalized
-    if exact:
-        task["context_exact_on_demand_paths"] = exact
-    _normalize_review_evidence_contract(task)
+    return exact, excluded
 
 
 def _validate_header(task: dict[str, object], present: set[str]) -> None:

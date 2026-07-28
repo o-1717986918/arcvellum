@@ -9,6 +9,7 @@ from typing import Any
 from ..contracts import TaskPackage
 from literary_engineering_studio_engine.agent_schema import load_schema_spec
 from .context_selection import compact_task_references
+from .context_access_policy import protected_output_read_rule
 from .creative_plan_context import creative_plan_task_context
 from .execution_context import (
     ExecutionContextEnvelope,
@@ -249,20 +250,12 @@ def _prepared_program_fields(
     context: dict[str, Any],
     prepared: PreparedPromptContext,
 ) -> dict[str, str]:
-    prepared_paths = set(prepared.included_paths)
-    protected_to_read = [item for item in context["core_managed_outputs"] if item not in prepared_paths]
-    if context["core_managed_outputs"] and not protected_to_read:
-        read_rule = (
-            "下列 CLI Protected Outputs 的精确快照已在 Prepared Context Snapshot 中。"
-            "必须逐一使用其中的 schema、字段和值，但不要再次调用读取工具。"
-        )
-    elif context["core_managed_outputs"]:
-        read_rule = "下列未内联的 CLI Protected Outputs 必须逐一读取；已内联的文件直接使用 Prepared Context Snapshot。"
-    else:
-        read_rule = "本任务没有 CLI Protected Outputs。"
     return {
         "prepared_section": render_prepared_context_section(prepared),
-        "protected_read_rule": read_rule,
+        "protected_read_rule": protected_output_read_rule(
+            context,
+            prepared_paths=prepared.included_paths,
+        ),
     }
 
 

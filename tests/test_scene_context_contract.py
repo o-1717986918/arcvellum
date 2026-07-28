@@ -148,12 +148,27 @@ class SceneContextContractTests(unittest.TestCase):
         self.assertIn(candidate, mandatory)
         self.assertIn(compact, mandatory)
         self.assertNotIn(sidecar, mandatory)
+        self.assertNotIn("memory/context_packets/scene_0001.md", mandatory)
+        self.assertEqual(
+            contract["context_exact_on_demand_paths"],
+            [sidecar, "memory/context_packets/scene_0001.md"],
+        )
         self.assertNotIn(
             "drafts/candidates/scene_0001-platform-agent.json",
             mandatory,
         )
         self.assertNotIn("memory/context_packets/scene_0001.trace.json", mandatory)
         self.assertNotIn("plot/word_budget/word_budget.json", mandatory)
+        excluded = contract["context_excluded_paths"]
+        self.assertIn(
+            "drafts/candidates/scene_0001-platform-agent.json",
+            excluded,
+        )
+        self.assertIn(
+            "memory/context_packets/scene_0001.trace.json",
+            excluded,
+        )
+        self.assertIn("plot/word_budget/word_budget.json", excluded)
         declaration = contract["context_evidence_contract"]
         self.assertEqual(declaration["candidate_path"], candidate)
         self.assertEqual(declaration["artifact_path"], compact)
@@ -336,7 +351,10 @@ class SceneContextContractTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         enriched["context_exact_on_demand_paths"],
-                        [sidecar],
+                        [
+                            sidecar,
+                            "memory/context_packets/scene_0001.md",
+                        ],
                     )
                     declaration = enriched["context_evidence_contract"]
                     self.assertEqual(

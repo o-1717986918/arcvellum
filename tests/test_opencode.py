@@ -117,6 +117,13 @@ class OpenCodeFoundationTests(unittest.TestCase):
         worker = worker_profile("opencode/big-pickle")
         worker_permissions = worker["agent"]["literary-worker"]["permission"]
         self.assertEqual(worker_permissions["edit"], "allow")
+        self.assertEqual(worker_permissions["read"]["*"], "allow")
+        self.assertEqual(
+            worker_permissions["read"]["*.agent_tasks.md"],
+            "deny",
+        )
+        self.assertEqual(worker_permissions["glob"], "deny")
+        self.assertEqual(worker_permissions["grep"], "deny")
         self.assertEqual(worker_permissions["bash"], "deny")
         self.assertEqual(worker_permissions["task"], "deny")
         advisor = advisor_profile("opencode/big-pickle")

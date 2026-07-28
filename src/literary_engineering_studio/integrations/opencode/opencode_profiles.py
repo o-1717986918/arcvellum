@@ -36,9 +36,12 @@ def worker_profile(model: str) -> dict[str, Any]:
         ),
         "permission": {
             "*": "deny",
-            "read": "allow",
-            "glob": "allow",
-            "grep": "allow",
+            "read": {
+                "*": "allow",
+                "*.agent_tasks.md": "deny",
+            },
+            "glob": "deny",
+            "grep": "deny",
             "list": "allow",
             "edit": "allow",
             "write": "allow",
