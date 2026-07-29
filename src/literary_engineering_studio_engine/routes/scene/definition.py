@@ -175,10 +175,7 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         revision_inputs = [
             relative
             for relative in source_paths
-            if (
-                relative.startswith(("drafts/candidates/", "drafts/scenes/", "reviews/agent/"))
-                or relative == f"reviews/{scene_id}-review.md"
-            )
+            if _is_revision_input(relative, scene_id)
             and relative.endswith((".md", ".json"))
         ]
         revision_minimum = [
@@ -215,6 +212,17 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         if (root / relative).is_file():
             curated.append(relative)
     return _unique(curated)
+
+
+def _is_revision_input(relative: str, scene_id: str) -> bool:
+    return relative.startswith(
+        (
+            "drafts/candidates/",
+            "drafts/revisions/",
+            "drafts/scenes/",
+            "reviews/agent/",
+        )
+    ) or relative == f"reviews/{scene_id}-review.md"
 
 
 build_task_payload = _build_task_payload

@@ -42,6 +42,8 @@ def preserve_historical_style_steps(
         "candidate-generation-provenance",
         "generation-agent-task",
         "candidate-review",
+        "candidate-revision",
+        "candidate-human-decision",
         "agent-review-task",
     }
     result: list[dict[str, object]] = []

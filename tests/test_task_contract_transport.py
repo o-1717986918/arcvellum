@@ -324,6 +324,51 @@ class TaskContractTransportTests(unittest.TestCase):
 
             self.assertIn("drafts/candidates/scene_0001-platform-agent.md", blueprint["source_paths"])
 
+    def test_revision_task_contract_accepts_an_existing_revision_as_exact_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "project:\n  title: 潮线\n",
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            revision = root / "drafts" / "revisions" / "scene_0001_revision.md"
+            review = root / "reviews" / "agent" / "scene_0001_scene_review.json"
+            scene.parent.mkdir(parents=True)
+            revision.parent.mkdir(parents=True)
+            review.parent.mkdir(parents=True)
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+                encoding="utf-8",
+            )
+            revision.write_text("上一版修订候选", encoding="utf-8")
+            review.write_text(
+                json.dumps(
+                    {
+                        "candidate": revision.relative_to(root).as_posix(),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            review.with_suffix(".md").write_text("审查证据", encoding="utf-8")
+
+            payload = task_registry._build_task_payload(
+                root,
+                "scene-development",
+                {
+                    "scene_id": "scene_0001",
+                    "scene": "scenes/scene_0001.yaml",
+                    "current_step": "candidate-revision",
+                    "next_action": "",
+                },
+            )
+
+            exact_source = revision.relative_to(root).as_posix()
+            self.assertEqual(payload["revision_source"], exact_source)
+            self.assertIn(exact_source, payload["agent_source_paths"])
+            self.assertIn(exact_source, payload["context_must_inline_paths"])
+
     def test_continuity_apply_stages_the_promoted_draft_needed_for_digest_validation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -864,6 +909,20 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertNotIn("canon", sources)
             self.assertNotIn("characters", sources)
             self.assertNotIn("scenes", sources)
+
+            revision = root / "drafts" / "revisions" / "scene_0001_revision.md"
+            revision.parent.mkdir(parents=True)
+            revision.write_text("上一版修订候选", encoding="utf-8")
+            revision_sources = _agent_reading_paths(
+                root,
+                [
+                    revision.relative_to(root).as_posix(),
+                    review.relative_to(root).as_posix(),
+                ],
+                current_state="candidate-revision",
+                scene_id="scene_0001",
+            )
+            self.assertIn(revision.relative_to(root).as_posix(), revision_sources)
 
     def test_state_patch_preparation_does_not_merge_the_following_agent_review(self):
         with tempfile.TemporaryDirectory() as temporary:

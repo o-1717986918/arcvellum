@@ -130,6 +130,18 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                     "message": "missing",
                     "next_action": "build",
                 },
+                {
+                    "key": "candidate-revision",
+                    "status": "context_trace_stale",
+                    "message": "a later character asset changed",
+                    "next_action": "revise",
+                },
+                {
+                    "key": "candidate-human-decision",
+                    "status": "human_required",
+                    "message": "a later asset now conflicts",
+                    "next_action": "decide",
+                },
             ]
             sealed_steps = preserve_historical_style_steps(
                 root,
@@ -139,6 +151,9 @@ class HistoricalScenePromotionTests(unittest.TestCase):
             self.assertEqual(sealed_steps[0]["status"], "pass")
             self.assertTrue(sealed_steps[0]["historical_truth"])
             self.assertEqual(sealed_steps[1]["status"], "missing")
+            self.assertEqual(sealed_steps[2]["status"], "pass")
+            self.assertTrue(sealed_steps[2]["historical_truth"])
+            self.assertEqual(sealed_steps[3]["status"], "pass")
 
             gates = [
                 {
