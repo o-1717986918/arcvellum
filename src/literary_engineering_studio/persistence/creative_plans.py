@@ -12,6 +12,7 @@ from .creative_plan_activation import (
     restore_active_projection,
 )
 from .creative_plan_artifacts import verify_indexed_plan_artifacts
+from .creative_plan_authorization import prepare_revision_authorization
 from .creative_plan_events import append_creative_plan_event_tx
 from .creative_plan_primitives import positive_revision, project_key, validate_plan_id
 from .primitives import _json, _now
@@ -183,6 +184,64 @@ class CreativePlanStoreMixin:
         if row is None:
             raise FileNotFoundError(f"creative plan revision not found: {plan_id}@{revision}")
         return _revision_row(row)
+
+    def authorize_creative_plan_revision(
+        self,
+        plan_id: str,
+        revision: int,
+        *,
+        authorized_by: str,
+        reason: str,
+        verified_revision_digest: str,
+    ) -> dict[str, Any]:
+        """Record explicit assisted authorization without changing audit files."""
+
+        validate_plan_id(plan_id)
+        requested_revision = positive_revision(revision)
+        with self._write_lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT * FROM creative_plan_revisions
+                WHERE plan_id = ? AND revision = ?
+                """,
+                (plan_id, requested_revision),
+            ).fetchone()
+            if row is None:
+                raise FileNotFoundError(
+                    f"creative plan revision not found: {plan_id}@{requested_revision}"
+                )
+            revision_payload = _revision_row(row)
+            prepared = prepare_revision_authorization(
+                revision_payload,
+                authorized_by=authorized_by,
+                reason=reason,
+                verified_revision_digest=verified_revision_digest,
+                authorized_at=_now(),
+            )
+            if prepared is None:
+                return revision_payload
+            review, authorization = prepared
+            connection.execute(
+                """
+                UPDATE creative_plan_revisions SET review_json = ?
+                WHERE plan_id = ? AND revision = ?
+                """,
+                (_json(review), plan_id, requested_revision),
+            )
+            append_creative_plan_event_tx(
+                connection,
+                plan_id,
+                requested_revision,
+                CreativePlanEventType.ACTIVATION_AUTHORIZED,
+                {
+                    "authorized_by": authorization["authorized_by"],
+                    "authorization_digest": authorization["digest"],
+                    "revision_digest": verified_revision_digest,
+                },
+                session_id=authorization["authorized_by"],
+            )
+        return self.read_creative_plan_revision(plan_id, requested_revision)
 
     def activate_creative_plan(
         self,

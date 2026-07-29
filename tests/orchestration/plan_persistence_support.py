@@ -140,6 +140,14 @@ def index_record(
             **references["review"],
             "status": review_status,
             "activation_eligible": True,
+            "lifecycle": "assisted_authorized",
+            "authorization": {
+                "authorized_by": "test:assisted-review",
+                "reason": "test fixture",
+                "revision_digest": record_digest(plan_id),
+                "authorized_at": "2026-07-26T00:00:00+00:00",
+                "digest": "d" * 64,
+            },
         },
         "digest": record_digest(plan_id),
         "created_at": "2026-07-26T00:00:00+00:00",
@@ -181,6 +189,7 @@ def active_projection_args(
             "plan_id": plan_id,
             "revision": 1,
             "revision_digest": revision_digest or record_digest(plan_id),
+            "authorization_digest": "d" * 64,
             "base_project_fingerprint": FINGERPRINT,
         },
     }

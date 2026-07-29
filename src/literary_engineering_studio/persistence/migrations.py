@@ -43,11 +43,16 @@ def ensure_additive_columns(connection: sqlite3.Connection) -> None:
             "ADD COLUMN session_id TEXT NOT NULL DEFAULT 'studio-store'"
         )
     context_ledger_columns = _columns(connection, "context_ledgers")
-    if "execution_context_digest" not in context_ledger_columns:
-        connection.execute(
-            "ALTER TABLE context_ledgers "
-            "ADD COLUMN execution_context_digest TEXT NOT NULL DEFAULT ''"
-        )
+    context_ledger_additions = {
+        "execution_context_digest": "TEXT NOT NULL DEFAULT ''",
+        "plan_revision": "INTEGER NOT NULL DEFAULT 0",
+        "node_id": "TEXT NOT NULL DEFAULT ''",
+    }
+    for name, declaration in context_ledger_additions.items():
+        if name not in context_ledger_columns:
+            connection.execute(
+                f"ALTER TABLE context_ledgers ADD COLUMN {name} {declaration}"
+            )
     context_entry_columns = _columns(connection, "context_ledger_entries")
     if "visibility_tier" not in context_entry_columns:
         connection.execute(

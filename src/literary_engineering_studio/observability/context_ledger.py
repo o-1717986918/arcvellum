@@ -93,6 +93,8 @@ class ContextLedger:
     plan_id: str
     entries: tuple[ContextLedgerEntry, ...]
     assembled_sha256: str
+    plan_revision: int = 0
+    node_id: str = ""
     execution_context_digest: str = ""
 
     def __post_init__(self) -> None:
@@ -111,6 +113,12 @@ class ContextLedger:
             and not _SHA256.fullmatch(self.execution_context_digest)
         ):
             raise ValueError("context ledger execution_context_digest is invalid")
+        if self.plan_revision < 0:
+            raise ValueError("context ledger plan revision cannot be negative")
+        if self.plan_revision and not self.plan_id.strip():
+            raise ValueError("context ledger plan revision requires a plan id")
+        if self.node_id.strip() and not self.plan_id.strip():
+            raise ValueError("context ledger node id requires a plan id")
         if len({entry.source_ref for entry in self.entries}) != len(self.entries):
             raise ValueError("context ledger contains duplicate source refs")
 
@@ -126,6 +134,8 @@ class ContextLedger:
             "session_id": self.session_id,
             "operation_id": self.operation_id,
             "plan_id": self.plan_id,
+            "plan_revision": self.plan_revision,
+            "node_id": self.node_id,
             "entries": [entry.as_dict() for entry in self.entries],
             "assembled_sha256": self.assembled_sha256,
         }
@@ -164,8 +174,21 @@ def parse_context_ledger(payload: dict[str, Any]) -> ContextLedger:
     raw_entries = payload.get("entries")
     if not isinstance(raw_entries, list):
         raise ValueError("context ledger entries must be a list")
-    entries = tuple(_parse_entry(item) for item in raw_entries)
-    ledger = ContextLedger(
+    ledger = _parse_ledger_metadata(
+        payload,
+        tuple(_parse_entry(item) for item in raw_entries),
+    )
+    supplied_digest = str(payload.get("digest") or "")
+    if supplied_digest and supplied_digest != ledger.digest:
+        raise ValueError("context ledger digest does not match its metadata")
+    return ledger
+
+
+def _parse_ledger_metadata(
+    payload: dict[str, Any],
+    entries: tuple[ContextLedgerEntry, ...],
+) -> ContextLedger:
+    return ContextLedger(
         ledger_id=str(payload.get("ledger_id") or ""),
         project_root_hash=str(payload.get("project_root_hash") or ""),
         session_id=str(payload.get("session_id") or ""),
@@ -173,12 +196,10 @@ def parse_context_ledger(payload: dict[str, Any]) -> ContextLedger:
         plan_id=str(payload.get("plan_id") or ""),
         entries=entries,
         assembled_sha256=str(payload.get("assembled_sha256") or ""),
+        plan_revision=int(payload.get("plan_revision") or 0),
+        node_id=str(payload.get("node_id") or ""),
         execution_context_digest=str(payload.get("execution_context_digest") or ""),
     )
-    supplied_digest = str(payload.get("digest") or "")
-    if supplied_digest and supplied_digest != ledger.digest:
-        raise ValueError("context ledger digest does not match its metadata")
-    return ledger
 
 
 def _parse_entry(item: Any) -> ContextLedgerEntry:

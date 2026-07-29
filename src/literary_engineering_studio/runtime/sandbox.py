@@ -19,9 +19,10 @@ from .context_budget import TaskContextBudget
 from .context_materialization import materialize_agent_context_contract
 from .context_selection import select_agent_context
 from .execution_boundaries import prepare_execution_boundaries
+from .run_manifest_factory import build_run_manifest_payload
+from .task_snapshot import materialize_task_snapshot
 from .writeback_contracts import WritebackPreview
 
-MANIFEST_SCHEMA = "literary-engineering-studio/task-sandbox/v0.1"
 IGNORED_RUNTIME_PATHS = {"AGENT_TASK.md", "_task", ".claude", ".codex", ".git"}
 
 
@@ -57,6 +58,7 @@ def stage_task(
     workspace = run_root / "workspace"
     control_workspace = run_root / "control-workspace"
     control_workspace.mkdir(parents=True, exist_ok=False)
+    task_snapshot = materialize_task_snapshot(task, run_root)
 
     copied_sources: list[str] = []
     missing_sources: list[str] = []
@@ -99,30 +101,22 @@ def stage_task(
     prompt_path = workspace / "AGENT_TASK.md"
     baseline_path = run_root / "agent-baseline.json"
     manifest_path = run_root / "run.json"
-    payload = {
-        "schema": MANIFEST_SCHEMA,
-        "run_id": identifier,
-        "status": "prepared",
-        "created_at": _now(),
-        "runtime": runtime,
-        "project_root": str(task.project_root),
-        "task_id": task.task_id,
-        "task_json": str(task.task_json_path),
-        "task_markdown": str(task.task_markdown_path),
-        "route": task.route,
-        "current_state": task.current_state,
-        "workspace": str(workspace),
-        "control_workspace": str(control_workspace),
-        "prompt": str(prompt_path),
-        "copied_sources": copied_sources,
-        "reference_paths": list(selection.reference_paths),
-        "omitted_reference_paths": [path for path in task.required_reading if path not in selection.reference_paths],
-        "missing_sources": missing_sources,
-        "expected_outputs": list(task.expected_outputs),
-        "human_gate_reasons": list(task.human_gate_reasons),
-        "execution_contract": task.execution_contract.as_dict(),
-        **prepare_execution_boundaries(task, run_root, runtime=runtime).run_manifest_fields(),
-    }
+    payload = build_run_manifest_payload(
+        task=task,
+        run_id=identifier,
+        runtime=runtime,
+        created_at=_now(),
+        workspace=workspace,
+        control_workspace=control_workspace,
+        prompt_path=prompt_path,
+        copied_sources=copied_sources,
+        missing_sources=missing_sources,
+        reference_paths=selection.reference_paths,
+        task_snapshot=task_snapshot,
+        execution_fields=prepare_execution_boundaries(
+            task, run_root, runtime=runtime
+        ).run_manifest_fields(),
+    )
     manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     sandbox = SandboxManifest(
         run_id=identifier,
@@ -172,8 +166,12 @@ def materialize_agent_workspace(
 
     task_dir = workspace / "_task"
     task_dir.mkdir(parents=True, exist_ok=False)
-    shutil.copy2(task.task_json_path, task_dir / "task.json")
-    shutil.copy2(task.task_markdown_path, task_dir / "task.agent_tasks.md")
+    snapshot_root = sandbox.run_root / "task-snapshot"
+    shutil.copy2(snapshot_root / "task.json", task_dir / "task.json")
+    shutil.copy2(
+        snapshot_root / "task.agent_tasks.md",
+        task_dir / "task.agent_tasks.md",
+    )
     (task_dir / "execution_contract.json").write_text(
         json.dumps(task.execution_contract.as_dict(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

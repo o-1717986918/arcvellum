@@ -2110,7 +2110,7 @@ W6-5A 实现结果：
 
 ### W6-5B：场景自适应计划生产激活与完整闭环
 
-**状态：待实施。**
+**状态：已完成。**
 
 1. 增加校验审计文件、SQLite revision、项目 fingerprint 与 active projection 一致性的
    active-plan loader；`shadow` revision 不得直接成为生产计划。
@@ -2123,5 +2123,29 @@ W6-5A 实现结果：
 5. 完成一条真实场景从计划、RP、分支、正文、Review、修订、promotion 到 state/canon
    演化的端到端闭环，并证明 fixed/shadow 回退不改变现有正式路线。
 
-W6-5B 关闭前不得进入 W6-6 Rolling Horizon；AO-5 至 AO-8 和 v1 最终验收仍按上方阶段表
-依次实施。
+实现与验收：
+
+- `ActivePlanLoader` 对项目投影、SQLite active revision、不可变审计文件、授权、
+  normalized plan、compiled graph 和 planning fingerprint 进行一体化验证；
+- 独立 Review 后的 assisted authorization 与 activation 已拆分，shadow-only direct
+  activation 被拒绝，重复同一授权幂等、冲突授权 fail closed；
+- Worker 只在 assisted/adaptive scene-development 中绑定 active plan；fixed 模式、
+  缺计划和不可用计划保留可观察的 fixed fallback；
+- 绑定后的 task JSON/Markdown 在 run 根形成不可变 snapshot，recovery、preflight、
+  approval 和 writeback 均验证并读取该 snapshot；
+- Context Ledger、SQLite ledger 与 Worker Mutation Receipt 共享
+  plan/revision/node identity；
+- 真实 Engine 状态矩阵覆盖 RP、分支、选支、Composition、正文、Review、Revision、
+  State 与 Canon；同一项目夹具经生产 `promote_scene_candidate()`、
+  `apply_character_state_patch()` 和 `apply_canon_patch()` 完成正式效果；
+- 不新增 Scheduler、第二套 task/review/promotion/state 生命周期或并发正式写回；
+- Python 全量：711 tests passed，1 skipped；Client：48 files、141 tests passed；
+- Client production build、`compileall`、Prompt Registry、Architecture Audit 与
+  `git diff --check` 全部通过；Architecture Audit 保持 34 个既有 file debt、
+  220 个既有 function debt、0 cycle。
+
+详细复核见
+`docs/architecture/reviews/w6-5b-active-plan-production-closure-review.md`。
+
+W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至 AO-8 和 v1
+最终验收仍按上方阶段表依次实施。

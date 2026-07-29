@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..contracts import TaskPackage, load_task_package
+from ..contracts import TaskPackage
 from ..preflight.common import PreflightIssue, PreflightResult
 from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
 from .mutation_tracking import WorkerMutationTracker
@@ -23,7 +23,8 @@ from .sandbox import (
     update_run_manifest,
 )
 from .sandbox_hygiene import restore_unexpected_agent_changes
-from .worker_paths import resolve_task_json_path, validate_project
+from .worker_paths import validate_project
+from .task_snapshot import load_run_task_snapshot
 from .worker_results import WorkerRunResult
 
 
@@ -374,14 +375,12 @@ class WorkerWritebackMixin:
     def _writeback_context(run_root: Path):
         run = load_run(run_root)
         project = validate_project(Path(str(run.get("project_root") or "")))
-        task_json = Path(str(run.get("task_json") or ""))
-        if not task_json.is_file():
-            task_json = resolve_task_json_path(
-                project,
-                str(run.get("task_id") or ""),
-                str(task_json),
-            )
-        return run, load_task_package(project, task_json), sandbox_from_run(run_root)
+        task = load_run_task_snapshot(
+            run_root,
+            project_root=project,
+            manifest=run,
+        )
+        return run, task, sandbox_from_run(run_root)
 
 
 def _fallback_session(runtime_id: str, run_id: str) -> str:

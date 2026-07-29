@@ -362,6 +362,31 @@ W6-4G 上下文与 Token 效率边界进一步固定：
   静默改变既有用户配置。其他任务族仍是 shadow-ready，不得从 candidate-review 的
   结果推断其已具备 bounded 生产资格。
 
+W6-5B Active Plan 生产激活边界进一步固定：
+
+- `orchestration/active_plan.py` 是生产 active-plan 的唯一读取入口；它验证项目投影、
+  SQLite active revision、不可变审计文件、authorization、normalized plan、compiled
+  graph 和 planning fingerprint，返回已经验证的不可变值；
+- `orchestration/activation.py` 只协调显式 assisted activation，
+  `persistence/creative_plan_authorization.py` 只验证并记录授权；两者都不能创建 task、
+  调用 Worker 或写正式文学资产；
+- `orchestration/project_fingerprint.py` 只哈希规划事实，排除候选、patch、state patch
+  和 run 产物；不能把执行产物纳入后造成计划自我失效，也不能排除 Canon、人物、场景
+  和正式规划事实；
+- `runtime/worker.py` 只在 Engine 已签发正式 task 后附加已验证的 scene plan binding；
+  task ID、task type、expected outputs 和 formal lifecycle 不可被替换；
+- `runtime/task_snapshot.py` 是 run-scoped bound task 的唯一冻结和重载入口；
+  `runtime/run_manifest_factory.py` 只组装 manifest。Recovery、preflight、approval 和
+  writeback 禁止重新读取可变的项目 task JSON；
+- `observability/context_ledger.py` 和 `runtime/mutation_tracking.py` 只记录同一
+  plan/revision/node 身份，不把计划意图冒充成 task completion 或 formal effect；
+- 缺少有效 active plan 时只能发出可观察的 fixed fallback；active projection、审计
+  文件或 snapshot 被篡改时必须 fail closed，不能以回退掩盖完整性错误；
+- Scene 节点绑定继续复用 Engine Capability/Gate Catalog。Revision、promotion、
+  state/canon approval/apply 和 release 的正式效果仍归原 Engine lifecycle；
+- W6-5B 不包含 Scheduler、Execution Bundle、Rolling Horizon、跨场景并发或并发正式
+  写回。这些只能在后续阶段复用上述证据链增量实现。
+
 ## 当前大文件的正确处理方式
 
 ### Studio 目录约定

@@ -59,6 +59,8 @@ def materialize_runtime_context_ledger(
         assembled_sha256,
         entries,
         plan_id=str(task.payload.get("creative_plan_id") or ""),
+        plan_revision=int(task.payload.get("creative_plan_revision") or 0),
+        node_id=str(task.payload.get("creative_plan_node_id") or ""),
         execution_context_digest=execution_context.context_digest,
     )
     ledger = ContextLedger(
@@ -75,6 +77,8 @@ def materialize_runtime_context_ledger(
         plan_id=str(task.payload.get("creative_plan_id") or ""),
         entries=tuple(entries),
         assembled_sha256=assembled_sha256,
+        plan_revision=int(task.payload.get("creative_plan_revision") or 0),
+        node_id=str(task.payload.get("creative_plan_node_id") or ""),
         execution_context_digest=execution_context.context_digest,
     )
     (run_root / LEDGER_FILENAME).write_text(
@@ -296,11 +300,15 @@ def _context_identity_sha256(
     entries: list[ContextLedgerEntry],
     *,
     plan_id: str,
+    plan_revision: int,
+    node_id: str,
     execution_context_digest: str,
 ) -> str:
     payload = {
         "prompt_sha256": prompt_sha256,
         "plan_id": plan_id,
+        "plan_revision": plan_revision,
+        "node_id": node_id,
         "execution_context_digest": execution_context_digest,
         "entries": [item.as_dict() for item in entries],
     }

@@ -28,6 +28,16 @@ class CreativePlanIndex(Protocol):
         revision: int,
     ) -> dict[str, Any]: ...
 
+    def authorize_creative_plan_revision(
+        self,
+        plan_id: str,
+        revision: int,
+        *,
+        authorized_by: str,
+        reason: str,
+        verified_revision_digest: str,
+    ) -> dict[str, Any]: ...
+
     def activate_creative_plan(
         self,
         plan_id: str,

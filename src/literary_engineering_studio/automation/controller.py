@@ -281,6 +281,15 @@ class AutopilotService:
             pass
         return "lost"
 
+    def _worker(
+        self, run_id: str, *, cancel_event: threading.Event | None = None,
+    ) -> AgentWorker:
+        return AgentWorker(
+            self.config, plan_store=self.store,
+            event_sink=lambda event, data: self._worker_event(run_id, event, data),
+            cancel_event=cancel_event, runtime_pool=self.runtime_pool,
+        )
+
     def _run_claimed(self, run_id: str, stop: threading.Event) -> None:
         run = self.store.read_autopilot_run(run_id)
         project = Path(run["project_root"])
@@ -348,12 +357,9 @@ class AutopilotService:
                     return
                 progress_before = _project_progress_fingerprint(project)
                 try:
-                    result = AgentWorker(
-                        self.config,
-                        event_sink=lambda event, data: self._worker_event(run_id, event, data),
-                        cancel_event=stop,
-                        runtime_pool=self.runtime_pool,
-                    ).run_once(project, route=route, runtime_id=run["runtime"])
+                    result = self._worker(run_id, cancel_event=stop).run_once(
+                        project, route=route, runtime_id=run["runtime"]
+                    )
                 finally:
                     if self.execution_coordinator is not None:
                         self.execution_coordinator.release(project, owner)
@@ -367,11 +373,9 @@ class AutopilotService:
                     )
                     if self.execution_coordinator is None or self.execution_coordinator.acquire(project, owner):
                         try:
-                            result = AgentWorker(
-                                self.config,
-                                event_sink=lambda event, data: self._worker_event(run_id, event, data),
-                                runtime_pool=self.runtime_pool,
-                            ).resume_from_run(result.run_root)
+                            result = self._worker(run_id).resume_from_run(
+                                result.run_root
+                            )
                             self.store.append_autopilot_event(
                                 run_id,
                                 "task.recovery_succeeded",
@@ -457,11 +461,7 @@ class AutopilotService:
                         self._pause_for(run_id, "project-busy", "正式写回前发现另一项任务正在使用作品，请稍后继续。")
                         return
                     try:
-                        final = AgentWorker(
-                            self.config,
-                            event_sink=lambda event, data: self._worker_event(run_id, event, data),
-                            runtime_pool=self.runtime_pool,
-                        ).approve_writeback(
+                        final = self._worker(run_id).approve_writeback(
                             result.run_root,
                             approved_by="delegated-agent:autopilot-controller",
                         )

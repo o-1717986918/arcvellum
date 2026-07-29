@@ -16,6 +16,7 @@ class CreativePlanEventType(str, Enum):
     REVISION_RESERVED = "plan.revision.reserved"
     REVISION_READY = "plan.revision.ready"
     REVIEW_COMPLETED = "plan.review.completed"
+    ACTIVATION_AUTHORIZED = "plan.activation.authorized"
     ACTIVATED = "plan.activated"
     REJECTED = "plan.rejected"
     STALE = "plan.stale"

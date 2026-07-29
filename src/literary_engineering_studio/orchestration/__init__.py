@@ -5,6 +5,12 @@ from .agent_transport import (
     OrchestrationAgentTransport,
     RuntimeOrchestrationAgentTransport,
 )
+from .activation import (
+    activate_persisted_revision,
+    assisted_activate_persisted_revision,
+    authorize_persisted_revision,
+)
+from .active_plan import ActivePlanLoader, ActiveScenePlan
 from .candidate import MACHINE_OWNED_FIELDS, parse_plan_candidate
 from .compiler import PlanCompilationError, compile_plan, compiled_graph_digest
 from .compiler_registry import CompilerRegistry
@@ -45,10 +51,11 @@ from .lint import PlanIssue, PlanIssueSeverity, PlanLintContext, PlanLintResult,
 from .normalizer import NormalizationContext, candidate_digest, normalize_plan_candidate
 from .persistence import (
     OrchestrationAuditArtifacts,
-    activate_persisted_revision,
     persist_shadow_revision,
+    read_verified_revision_payloads,
     verify_persisted_revision,
 )
+from .project_fingerprint import planning_project_fingerprint
 from .simulator import (
     FormalTaskObservation,
     FormalTaskStatus,
@@ -97,6 +104,8 @@ from .truth_partition import (
 
 __all__ = [
     "AssertionKind",
+    "ActivePlanLoader",
+    "ActiveScenePlan",
     "CANDIDATE_SCHEMA",
     "COMPILED_GRAPH_SCHEMA",
     "MACHINE_OWNED_FIELDS",
@@ -162,6 +171,8 @@ __all__ = [
     "evaluate_completed_shadow_candidate",
     "evaluate_scene_plan_patch",
     "activate_persisted_revision",
+    "assisted_activate_persisted_revision",
+    "authorize_persisted_revision",
     "lint_plan",
     "normalize_plan_candidate",
     "orchestration_settings",
@@ -173,6 +184,8 @@ __all__ = [
     "completed_candidate_from_event",
     "partition_can_satisfy_formal_gate",
     "persist_shadow_revision",
+    "planning_project_fingerprint",
+    "read_verified_revision_payloads",
     "simulate_plan",
     "to_primitive",
     "verify_persisted_revision",

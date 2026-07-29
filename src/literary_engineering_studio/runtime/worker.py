@@ -10,6 +10,11 @@ from collections.abc import Callable
 from ..application.config import load_config
 from ..contracts import TaskPackage, load_task_package
 from ..core_bridge import CoreBridge, task_command_parameters
+from ..orchestration.active_plan import ActivePlanLoader
+from ..orchestration.project_fingerprint import planning_project_fingerprint
+from ..orchestration.scene_binding import bind_scene_task
+from ..orchestration.settings import OrchestrationMode, orchestration_settings
+from ..persistence.job_store import JobStore
 from ..runtimes import build_runtime
 from .context_budget import resolve_task_context_budget
 from .repair_context import RepairContextCoordinator
@@ -23,6 +28,7 @@ from .sandbox import (
     update_run_manifest,
 )
 from .run_manifest import load_run
+from .task_snapshot import load_run_task_snapshot
 from .worker_observability import WorkerObservabilityMixin
 from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
@@ -55,12 +61,18 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         event_sink: Callable[[str, dict[str, Any]], None] | None = None,
         cancel_event: threading.Event | None = None,
         runtime_pool=None,
+        plan_store=None,
+        orchestration_fingerprint_provider: Callable[[Path], str] | None = None,
     ):
         self.config = config or load_config()
         self.bridge = CoreBridge(self.config)
         self.event_sink = event_sink
         self.cancel_event = cancel_event or threading.Event()
         self.runtime_pool = runtime_pool
+        self.plan_store = plan_store
+        self.orchestration_fingerprint_provider = (
+            orchestration_fingerprint_provider or planning_project_fingerprint
+        )
         self._reset_context_ledger()
 
     def prepare(
@@ -90,6 +102,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         opened = self.bridge.task_open(project, selected_task_id)
         task_json_path = _resolve_task_json_path(project, selected_task_id, opened.fields.get("task_json", ""))
         task = load_task_package(project, task_json_path)
+        task = self._bind_active_scene_plan(task)
         context_budget = resolve_task_context_budget(task, self.config.get("worker"))
         self._emit("task.opened", _task_opened_payload(task))
         if task.human_gate_reasons:
@@ -176,6 +189,58 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             self._emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
         self._publish_context_ready(task, sandbox, active_runtime)
         return task, sandbox, None
+
+    def _bind_active_scene_plan(self, task: TaskPackage) -> TaskPackage:
+        settings = orchestration_settings(self.config)
+        if settings.effective_mode in {
+            OrchestrationMode.FIXED,
+            OrchestrationMode.SHADOW,
+        }:
+            return task
+        if task.route != "scene-development" or not str(
+            task.payload.get("scene_id") or ""
+        ).strip():
+            return task
+        store = self.plan_store
+        if store is None:
+            application = self.config.get("application")
+            payload = application if isinstance(application, dict) else {}
+            store = JobStore(Path(str(payload.get("database_path") or "studio.sqlite3")))
+        try:
+            active = ActivePlanLoader(
+                store,
+                fingerprint_provider=self.orchestration_fingerprint_provider,
+            ).load(task.project_root)
+            if active is None:
+                self._emit(
+                    "orchestration.fixed_fallback",
+                    {"task_id": task.task_id, "reason": "no-active-plan"},
+                )
+                return task
+            binding = bind_scene_task(
+                task,
+                plan=active.plan,
+                graph=active.graph,
+                current_project_fingerprint=active.project_fingerprint,
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            self._emit(
+                "orchestration.fixed_fallback",
+                {"task_id": task.task_id, "reason": str(exc)},
+            )
+            return task
+        self._emit(
+            "orchestration.plan_bound",
+            {
+                "task_id": task.task_id,
+                "plan_id": binding.plan_id,
+                "plan_revision": binding.plan_revision,
+                "node_id": binding.node_id,
+                "node_kind": binding.node_kind,
+                "binding_status": binding.status,
+            },
+        )
+        return binding.task
 
     def run_once(
         self,
@@ -312,10 +377,11 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         run = load_run(run_root)
         self._bind_context_ledger(run)
         project = _validate_project(Path(str(run.get("project_root") or "")))
-        task_json = Path(str(run.get("task_json") or ""))
-        if not task_json.is_file():
-            task_json = _resolve_task_json_path(project, str(run.get("task_id") or ""), str(task_json))
-        task = load_task_package(project, task_json)
+        task = load_run_task_snapshot(
+            run_root,
+            project_root=project,
+            manifest=run,
+        )
         sandbox = sandbox_from_run(run_root)
         if str(run.get("task_id") or "") != task.task_id:
             raise ValueError("recovery sandbox task identity does not match its task package")

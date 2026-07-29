@@ -115,41 +115,6 @@ def persist_shadow_revision(
     )
 
 
-def activate_persisted_revision(
-    project_root: Path,
-    *,
-    store: CreativePlanIndex,
-    plan_id: str,
-    revision: int,
-    expected_active_revision: int,
-    current_project_fingerprint: str,
-) -> dict[str, Any]:
-    root = project_root.expanduser().resolve()
-    plan_record = store.read_creative_plan(plan_id)
-    expected_project = str(root).replace("\\", "/").rstrip("/").casefold()
-    if str(plan_record.get("project_root") or "") != expected_project:
-        raise RuntimeError("creative plan belongs to a different project")
-    revision_record = store.read_creative_plan_revision(plan_id, revision)
-    verified_digest = verify_persisted_revision(root, revision_record)
-    active_path = root / "workflow" / "orchestration" / "active_plan.json"
-    active_payload = {
-        "schema": "arcvellum/active-creative-plan/v1",
-        "plan_id": plan_id,
-        "revision": revision,
-        "revision_digest": verified_digest,
-        "base_project_fingerprint": current_project_fingerprint,
-    }
-    return store.activate_creative_plan(
-        plan_id,
-        revision,
-        expected_active_revision=expected_active_revision,
-        current_project_fingerprint=current_project_fingerprint,
-        verified_revision_digest=verified_digest,
-        active_plan_path=active_path,
-        active_plan_payload=active_payload,
-    )
-
-
 def verify_persisted_revision(
     project_root: Path,
     revision_record: dict[str, Any],
@@ -168,6 +133,18 @@ def verify_persisted_revision(
     if _provenance_files(provenance) != digests:
         raise RuntimeError("creative plan provenance file manifest is inconsistent")
     return revision_digest
+
+
+def read_verified_revision_payloads(
+    project_root: Path,
+    revision_record: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Return verified audit payloads after the complete semantic-chain check."""
+
+    root = project_root.expanduser().resolve()
+    verify_persisted_revision(root, revision_record)
+    payloads, _ = _read_verified_audit_payloads(root, revision_record)
+    return payloads
 
 
 def _prepare_shadow_revision(
