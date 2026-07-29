@@ -32,6 +32,7 @@ from .worker_results import WorkerRunResult
 
 
 _ARMS = ("shadow", "bounded")
+_MAX_TRANSIENT_ARM_RETRIES = 1
 
 
 def run_context_ab_experiment(
@@ -60,7 +61,7 @@ def run_context_ab_experiment(
     ) as temporary:
         experiment_root = Path(temporary)
         arms = {
-            mode: _run_arm(
+            mode: _run_arm_with_transient_retry(
                 project,
                 original_task.route,
                 task_id,
@@ -95,6 +96,42 @@ def run_context_ab_experiment(
             encoding="utf-8",
         )
     return report
+
+
+def _run_arm_with_transient_retry(
+    source_project: Path,
+    route: str,
+    task_id: str,
+    runtime_id: str,
+    config: dict[str, Any],
+    mode: str,
+    arm_root: Path,
+    worker_factory: Callable[..., AgentWorker],
+) -> dict[str, object]:
+    elapsed = 0.0
+    transient_retries = 0
+    report: dict[str, object] = {}
+    for attempt in range(_MAX_TRANSIENT_ARM_RETRIES + 1):
+        report = _run_arm(
+            source_project,
+            route,
+            task_id,
+            runtime_id,
+            config,
+            mode,
+            arm_root / f"attempt-{attempt + 1}",
+            worker_factory,
+        )
+        elapsed += float(report.get("elapsed_seconds") or 0)
+        failure = _mapping(report.get("failure"))
+        if failure.get("retryable") is not True:
+            break
+        transient_retries += 1
+    result = dict(report)
+    result["elapsed_seconds"] = round(elapsed, 3)
+    result["experiment_attempts"] = transient_retries + 1
+    result["experiment_transient_retries"] = transient_retries
+    return result
 
 
 def project_content_digest(root: Path) -> str:

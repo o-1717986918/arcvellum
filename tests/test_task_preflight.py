@@ -21,6 +21,9 @@ from literary_engineering_studio.task_preflight import (
 from literary_engineering_studio_engine.projects.source_ingest import (
     ingest_existing_work,
 )
+from literary_engineering_studio_engine.creative_quality import (
+    default_creative_quality_profile,
+)
 from literary_engineering_studio_engine.source_ingest_route import (
     build_task_payload as build_source_ingest_task_payload,
 )
@@ -655,6 +658,13 @@ class TaskPreflightTests(unittest.TestCase):
             candidate.parent.mkdir(parents=True)
             candidate.write_text("## 正文候选\n\n她推开了门。\n", encoding="utf-8")
             (project / "project.yaml").write_text("title: fixture\n", encoding="utf-8")
+            quality_profile = default_creative_quality_profile()
+            quality_path = project / "style" / "creative_quality_profile.json"
+            quality_path.parent.mkdir(parents=True)
+            quality_path.write_text(
+                json.dumps(quality_profile, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
             task_markdown = task_dir / "candidate-review.agent_tasks.md"
             task_markdown.write_text("# Candidate review\n", encoding="utf-8")
             task_json = task_dir / "candidate-review.json"
@@ -670,7 +680,10 @@ class TaskPreflightTests(unittest.TestCase):
                         "candidate": "drafts/candidates/scene_0001-platform-agent.md",
                         "task_markdown": "workflow/tasks/candidate-review.agent_tasks.md",
                         "required_reading": [],
-                        "source_paths": ["drafts/candidates/scene_0001-platform-agent.md"],
+                        "source_paths": [
+                            "drafts/candidates/scene_0001-platform-agent.md",
+                            "style/creative_quality_profile.json",
+                        ],
                         "expected_outputs": ["reviews/agent/scene_0001_scene_review.json"],
                         "validation_gates": ["scene_review.v1 JSON exists"],
                         "forbidden_shortcuts": [],
@@ -712,6 +725,15 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertEqual(normalized["schema"], "literary-engineering-workbench/scene-review-agent/v1")
             self.assertEqual(normalized["scene_id"], "scene_0001")
             self.assertIn("drafts/candidates/scene_0001-platform-agent.md", normalized["source_paths"])
+            self.assertEqual(
+                normalized["creative_quality_profile"],
+                {
+                    "path": "style/creative_quality_profile.json",
+                    "revision": quality_profile["revision"],
+                    "digest": quality_profile["digest"],
+                    "name": quality_profile["name"],
+                },
+            )
             remaining = validate_task_outputs(task, sandbox)
             self.assertTrue(any(item.code == "scene-review-schema-invalid" for item in remaining.issues))
             self.assertTrue(any(item.code == "scene-review-candidate-digest-mismatch" for item in remaining.issues))

@@ -348,10 +348,44 @@ W6-4G 上下文与 Token 效率边界进一步固定：
 - `runtime/context_ab.py` 和 `context_ab_reporting.py` 只在临时项目副本中组合正式
   Worker 生命周期与安全观测投影。每一实验臂必须独占并关闭 RuntimePool /
   ProcessManager，不得把临时产物直接复制回正式项目；
+- `runtime/context_access_policy.py` 只解释 protected output 与 Execution Context
+  tier 的读取义务；`runtime/context_access.py` 只从完成消息投影脱敏读取计数。两者
+  都不能选择文学资料、修改 task contract 或保存 Prompt、正文、工具输出和绝对路径；
+- `runtime/context_ab_suite.py` 与 `context_ab_suite_facts.py` 只聚合既有安全 A/B
+  报告并计算退出事实；`runtime/context_rollout_drill.py` 只验证策略切换和合同不变，
+  均不能执行 Worker、复制 preflight 或写正式项目；
+- `preflight/scene_review_metadata.py` 只绑定候选审查的 task-owned 机械身份，不得
+  修改 candidate digest、Agent conclusion、文学证据、问题或修订动作；
 - `budget-shadow` 不改变旧 180000 字符执行上限。四级资料选择、
-  `ExecutionContextEnvelope`、首批高成本场景任务合同和 candidate-review 单样本真实
-  A/B 已建立可验证证据；生产默认仍为 shadow，灰度开关仍关闭。其余任务族、多样本
-  中位数/P95 和 rollback 未完成，不得把单样本 canary 候选宣称为生产可用。
+  `ExecutionContextEnvelope`、首批高成本场景任务合同、candidate-review 多样本真实
+  A/B 与 rollback 已建立退出证据；生产默认仍为 shadow，灰度开关仍关闭，避免升级时
+  静默改变既有用户配置。其他任务族仍是 shadow-ready，不得从 candidate-review 的
+  结果推断其已具备 bounded 生产资格。
+
+W6-5B Active Plan 生产激活边界进一步固定：
+
+- `orchestration/active_plan.py` 是生产 active-plan 的唯一读取入口；它验证项目投影、
+  SQLite active revision、不可变审计文件、authorization、normalized plan、compiled
+  graph 和 planning fingerprint，返回已经验证的不可变值；
+- `orchestration/activation.py` 只协调显式 assisted activation，
+  `persistence/creative_plan_authorization.py` 只验证并记录授权；两者都不能创建 task、
+  调用 Worker 或写正式文学资产；
+- `orchestration/project_fingerprint.py` 只哈希规划事实，排除候选、patch、state patch
+  和 run 产物；不能把执行产物纳入后造成计划自我失效，也不能排除 Canon、人物、场景
+  和正式规划事实；
+- `runtime/worker.py` 只在 Engine 已签发正式 task 后附加已验证的 scene plan binding；
+  task ID、task type、expected outputs 和 formal lifecycle 不可被替换；
+- `runtime/task_snapshot.py` 是 run-scoped bound task 的唯一冻结和重载入口；
+  `runtime/run_manifest_factory.py` 只组装 manifest。Recovery、preflight、approval 和
+  writeback 禁止重新读取可变的项目 task JSON；
+- `observability/context_ledger.py` 和 `runtime/mutation_tracking.py` 只记录同一
+  plan/revision/node 身份，不把计划意图冒充成 task completion 或 formal effect；
+- 缺少有效 active plan 时只能发出可观察的 fixed fallback；active projection、审计
+  文件或 snapshot 被篡改时必须 fail closed，不能以回退掩盖完整性错误；
+- Scene 节点绑定继续复用 Engine Capability/Gate Catalog。Revision、promotion、
+  state/canon approval/apply 和 release 的正式效果仍归原 Engine lifecycle；
+- W6-5B 不包含 Scheduler、Execution Bundle、Rolling Horizon、跨场景并发或并发正式
+  写回。这些只能在后续阶段复用上述证据链增量实现。
 
 ## 当前大文件的正确处理方式
 

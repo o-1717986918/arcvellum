@@ -1664,10 +1664,10 @@ W1-Exit 实现结果：
 
 ### W6-4G：上下文与 Token 效率止损
 
-**状态：进行中。W6-4G1 usage truth 与 budget-shadow、W6-4G2
-ExecutionContextEnvelope 与四级资料合同、W6-4G3 首批 Engine 资料合同与 bounded
-影子验证已完成；真实模型 A/B、重复 sidecar 紧凑投影、生产激活和增量 repair 仍待
-后续子批。完成 W6-4G 后继续 W6-5B。**
+**状态：完成。W6-4G1 至 W6-4G7 已建立 usage truth、Context Budget、
+ExecutionContextEnvelope、Engine 资料合同、紧凑审查证据、增量 repair、合同驱动
+canary、多样本真实 A/B 与回滚演练。candidate-review 已取得 bounded 生产激活资格；
+默认仍保持 shadow，避免升级时静默改变既有用户配置。下一批继续 W6-5B。**
 
 2026-07-28 真实项目运行审计发现，W6-4F 已解决 usage 累计快照重复计数和沙箱重复
 物化，但模型侧仍存在结构性上下文成本：
@@ -1991,6 +1991,50 @@ prompt 本身更短。真实收益是否体现为更少盲读、更低非缓存 
 详细证据见
 `docs/architecture/reviews/w6-4g6-bounded-canary-and-live-ab-review.md`。
 
+#### W6-4G7：Context Access 与多样本退出证据
+
+**状态：完成；W6-4G 正式退出。**
+
+本子批消除了 protected output 读取规则的内在冲突，并把退出判断从单场实验升级为
+可复核的多样本 Suite：
+
+- 已内联 protected output 直接使用快照，exact-on-demand protected output 只在
+  具体判断缺证据时读取，未分类 protected output 继续 fail closed；
+- candidate-review 将 27K–50K 字符的完整 context packet 从首轮内联移到精确按需
+  层，scene、候选、composition review、branch selection、质量规则和紧凑确定性证据
+  仍保留首轮；
+- Context Access 遥测只记录读取次数、类别和字符量，不保存路径、正文、Prompt、
+  工具输出、凭证或隐藏推理；
+- 新增多样本 A/B Suite 与 bounded-to-shadow rollback drill；
+- scene review 的 task-owned metadata 由独立 preflight 模块确定性绑定，不改 Agent
+  的结论、证据、问题或修订建议。
+
+真实项目 `1+1=2`、同一 `deepseek/deepseek-v4-flash` 模型的 scene_0001–0003
+candidate-review A/B：
+
+- 六个 arm 均 complete、首次 preflight pass、Review=`pass`；
+- 首轮可见字符降幅中位数 62.64%；
+- 非缓存输入 Token 降幅中位数 47.18%；
+- shadow / bounded repair+retry 均为 0；
+- mandatory 零缺失、tier 零重叠、正式项目 digest 不变；
+- 隔离回滚演练通过，task contracts 前后不变；
+- Suite 给出 `exit_candidate=true`。
+
+额外 scene_0004 bounded 结果为 `pass_with_notes`，准确发现两处对白破折号使密度超过
+2% 阈值。该样本按严格 ordinal 规则不计入通过样本，并记录为质量波动证据；未通过
+修改规则或隐藏结果换取退出。
+
+本子批验收：
+
+- Python：702 tests passed，1 skipped；Client：48 files、141 tests passed；
+- Prompt Registry：54 assets、89 task prompt IDs、0 errors/warnings；
+- Client production build、桌面资源同步、`compileall`、`git diff --check`：passed；
+- Architecture Audit：34 个既有 file debt、220 个既有 function debt、0 cycle，
+  无新增 violation。
+
+完整证据见
+`docs/architecture/reviews/w6-4g7-context-access-and-suite-exit-review.md`。
+
 ### W6 后续完整阶段映射
 
 W6 不以一个模糊“长周期验收”跳过剩余路线。AO-3 退出后继续：
@@ -2066,7 +2110,7 @@ W6-5A 实现结果：
 
 ### W6-5B：场景自适应计划生产激活与完整闭环
 
-**状态：待实施。**
+**状态：已完成。**
 
 1. 增加校验审计文件、SQLite revision、项目 fingerprint 与 active projection 一致性的
    active-plan loader；`shadow` revision 不得直接成为生产计划。
@@ -2079,5 +2123,29 @@ W6-5A 实现结果：
 5. 完成一条真实场景从计划、RP、分支、正文、Review、修订、promotion 到 state/canon
    演化的端到端闭环，并证明 fixed/shadow 回退不改变现有正式路线。
 
-W6-5B 关闭前不得进入 W6-6 Rolling Horizon；AO-5 至 AO-8 和 v1 最终验收仍按上方阶段表
-依次实施。
+实现与验收：
+
+- `ActivePlanLoader` 对项目投影、SQLite active revision、不可变审计文件、授权、
+  normalized plan、compiled graph 和 planning fingerprint 进行一体化验证；
+- 独立 Review 后的 assisted authorization 与 activation 已拆分，shadow-only direct
+  activation 被拒绝，重复同一授权幂等、冲突授权 fail closed；
+- Worker 只在 assisted/adaptive scene-development 中绑定 active plan；fixed 模式、
+  缺计划和不可用计划保留可观察的 fixed fallback；
+- 绑定后的 task JSON/Markdown 在 run 根形成不可变 snapshot，recovery、preflight、
+  approval 和 writeback 均验证并读取该 snapshot；
+- Context Ledger、SQLite ledger 与 Worker Mutation Receipt 共享
+  plan/revision/node identity；
+- 真实 Engine 状态矩阵覆盖 RP、分支、选支、Composition、正文、Review、Revision、
+  State 与 Canon；同一项目夹具经生产 `promote_scene_candidate()`、
+  `apply_character_state_patch()` 和 `apply_canon_patch()` 完成正式效果；
+- 不新增 Scheduler、第二套 task/review/promotion/state 生命周期或并发正式写回；
+- Python 全量：711 tests passed，1 skipped；Client：48 files、141 tests passed；
+- Client production build、`compileall`、Prompt Registry、Architecture Audit 与
+  `git diff --check` 全部通过；Architecture Audit 保持 34 个既有 file debt、
+  220 个既有 function debt、0 cycle。
+
+详细复核见
+`docs/architecture/reviews/w6-5b-active-plan-production-closure-review.md`。
+
+W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至 AO-8 和 v1
+最终验收仍按上方阶段表依次实施。

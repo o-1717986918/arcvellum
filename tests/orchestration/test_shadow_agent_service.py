@@ -28,7 +28,7 @@ from literary_engineering_studio.orchestration.service import (
     ShadowOrchestrationService,
     ShadowPlanningInput,
 )
-from literary_engineering_studio.orchestration.persistence import (
+from literary_engineering_studio.orchestration.activation import (
     activate_persisted_revision,
 )
 from literary_engineering_studio.orchestration.settings import (

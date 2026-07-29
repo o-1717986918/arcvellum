@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS context_ledgers (
     session_id TEXT NOT NULL,
     operation_id TEXT NOT NULL,
     plan_id TEXT NOT NULL DEFAULT '',
+    plan_revision INTEGER NOT NULL DEFAULT 0,
+    node_id TEXT NOT NULL DEFAULT '',
     assembled_sha256 TEXT NOT NULL,
     execution_context_digest TEXT NOT NULL DEFAULT '',
     digest TEXT NOT NULL,
@@ -84,9 +86,10 @@ class ContextLedgerStoreMixin:
                 INSERT INTO context_ledgers (
                     ledger_id, project_root, project_root_hash, session_id,
                     operation_id, plan_id, assembled_sha256,
+                    plan_revision, node_id,
                     execution_context_digest, digest,
                     entry_count, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     ledger.ledger_id,
@@ -96,6 +99,8 @@ class ContextLedgerStoreMixin:
                     ledger.operation_id,
                     ledger.plan_id,
                     ledger.assembled_sha256,
+                    ledger.plan_revision,
+                    ledger.node_id,
                     ledger.execution_context_digest,
                     ledger.digest,
                     len(ledger.entries),
@@ -180,6 +185,8 @@ class ContextLedgerStoreMixin:
             "session_id": metadata["session_id"],
             "operation_id": metadata["operation_id"],
             "plan_id": metadata["plan_id"],
+            "plan_revision": metadata["plan_revision"],
+            "node_id": metadata["node_id"],
             "entries": [_entry_row(item) for item in entries],
             "assembled_sha256": metadata["assembled_sha256"],
             "execution_context_digest": metadata["execution_context_digest"],
@@ -202,6 +209,7 @@ def _validate_ledger_id(value: str) -> str:
 def _ledger_metadata_row(row) -> dict[str, Any]:
     payload = dict(row)
     payload["entry_count"] = int(payload.get("entry_count") or 0)
+    payload["plan_revision"] = int(payload.get("plan_revision") or 0)
     return payload
 
 

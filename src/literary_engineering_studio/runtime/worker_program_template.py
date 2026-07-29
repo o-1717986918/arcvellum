@@ -63,7 +63,10 @@ WORKER_PROGRAM_TEMPLATE = """# ArcVellum Studio Worker Program
 
 ## CLI Protected Outputs
 
-下列文件由任务命令生成，Studio 会保护并写回其原始版本。它们是本轮任务的只读合同输入，不是可选参考。{protected_read_rule} 若其中包含 `.agent_tasks.md`，必须以其中的精确 JSON 骨架、固定 schema 值和字段名为准，不得自造同义字段或替代版本。不得修改、删除、重命名或重新生成：
+下列文件由任务命令生成，Studio 会保护并写回其原始版本。它们是本轮任务的只读合同证据，
+按 Execution Context 的层级和下方规则使用。{protected_read_rule} 若确需读取其中的
+`.agent_tasks.md`，必须以其精确 JSON 骨架、固定 schema 值和字段名为准，不得自造同义
+字段或替代版本。不得修改、删除、重命名或重新生成：
 
 {protected_lines}
 

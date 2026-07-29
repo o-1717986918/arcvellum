@@ -169,11 +169,15 @@ def _narrative_dependencies(
 
 
 def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any) -> WorkerRouterDependencies:
+    def worker_factory(*args, **kwargs):
+        kwargs.setdefault("plan_store", jobs)
+        return AgentWorker(*args, **kwargs)
+
     return WorkerRouterDependencies(
         config=config,
         jobs=jobs,
         lifecycle=lifecycle,
-        worker_factory=lambda *args, **kwargs: AgentWorker(*args, **kwargs),
+        worker_factory=worker_factory,
         project_lock_key=lambda project_root, route: project_lock_key(project_root, route),
         track_agent_session_event=lambda *args, **kwargs: track_agent_session_event(*args, **kwargs),
         ephemeral_worker_events=EPHEMERAL_WORKER_EVENTS,

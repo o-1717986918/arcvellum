@@ -35,6 +35,7 @@ _EVENT_HANDLERS = {
     "worker.run.resume_started": "_retry_started",
     "worker.usage.updated": "_usage_updated",
     "worker.sandbox.context_ready": "_context_ready",
+    "worker.context.access.summary": "_context_access",
     "worker.validation.started": "_validation_started",
     "worker.validation.passed": "_validation_finished",
     "worker.validation.failed": "_validation_finished",
@@ -62,6 +63,7 @@ class ThroughputAccumulator:
         self.usage_snapshots: dict[tuple[str, str], dict[str, float]] = {}
         self.totals = {"model_turns": 0, "repairs": 0, "retries": 0}
         self.repair_context = _empty_repair_context()
+        self.context_access = _empty_context_access()
         self.usage = empty_usage()
 
     def consume(self, item: dict[str, Any]) -> None:
@@ -204,6 +206,12 @@ class ThroughputAccumulator:
             data.get("context_ledger_digest") or task["context_digest"]
         )
 
+    def _context_access(self, _event, data, _stamp, task, _item) -> None:
+        safe = _context_access_from_event(data)
+        _merge_context_access(self.context_access, safe)
+        if task is not None:
+            _merge_context_access(task["context_access"], safe)
+
     def _validation_started(self, _event, _data, stamp, task, _item) -> None:
         if task is not None:
             task["_validation_started_at"] = stamp
@@ -320,6 +328,7 @@ def _new_task(task_id: str) -> dict[str, Any]:
         "first_validation_passed": None,
         "usage": empty_usage(),
         "context": empty_context(),
+        "context_access": _empty_context_access(),
         "repair_context": _empty_repair_context(),
         "_stage_seconds": {name: 0.0 for name in STAGE_NAMES},
         "_open_count": 0,
@@ -344,6 +353,7 @@ def _public_task(task: dict[str, Any]) -> dict[str, Any]:
         "first_validation_passed": task["first_validation_passed"],
         "usage": rounded_usage(task["usage"]),
         "context": dict(task["context"]),
+        "context_access": dict(task["context_access"]),
         "repair_context": dict(task["repair_context"]),
         "stage_seconds": {
             name: round(float(task["_stage_seconds"][name]), 3)
@@ -369,6 +379,37 @@ def _empty_repair_context() -> dict[str, int]:
         "protected_outputs": 0,
         "restored_outputs": 0,
     }
+
+
+def _empty_context_access() -> dict[str, int]:
+    return {
+        "read_tool_calls": 0,
+        "unique_read_targets": 0,
+        "exact_on_demand_read_calls": 0,
+        "exact_on_demand_unique_files": 0,
+        "exact_on_demand_read_characters": 0,
+        "must_inline_reread_calls": 0,
+        "expected_output_read_calls": 0,
+        "infrastructure_read_calls": 0,
+        "other_authorized_read_calls": 0,
+        "unmapped_read_calls": 0,
+        "redundant_read_calls": 0,
+    }
+
+
+def _context_access_from_event(data: dict[str, Any]) -> dict[str, int]:
+    return {
+        key: _safe_int(data.get(key))
+        for key in _empty_context_access()
+    }
+
+
+def _merge_context_access(
+    target: dict[str, int],
+    value: dict[str, int],
+) -> None:
+    for key in target:
+        target[key] += value[key]
 
 
 def _merge_repair_context(

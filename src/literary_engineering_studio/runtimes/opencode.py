@@ -17,6 +17,7 @@ from ..opencode_binary import bundle_manifest, ensure_opencode_integrity, locate
 from ..opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
 from ..runtime_events import merge_usage_summary, normalize_opencode_event
+from ..runtime.context_access import summarize_context_access
 from ..subprocess_utils import run_hidden
 from .base import AgentRunnerCapabilities, AgentRuntime, RuntimeAvailability, RuntimeResult
 from .opencode_repair import (
@@ -140,6 +141,7 @@ class OpenCodeRuntime(AgentRuntime):
         first_text_ms = 0
         first_tool_ms = 0
         usage_summary: dict[str, Any] = {}
+        context_access: dict[str, object] = {}
         activity_lock = threading.Lock()
         last_activity_at = execution_started
 
@@ -314,6 +316,14 @@ class OpenCodeRuntime(AgentRuntime):
                 )
 
             messages = client.messages(session_id)
+            context_access = summarize_context_access(messages, workspace)
+            emit(
+                "context.access.summary",
+                {
+                    "session_id": session_id,
+                    **context_access,
+                },
+            )
             assistant_text, message_error = _assistant_result(messages)
             if message_error:
                 errors.append(message_error)
@@ -384,6 +394,7 @@ class OpenCodeRuntime(AgentRuntime):
                     "time_to_first_tool_ms": first_tool_ms,
                     "total_ms": round((time.monotonic() - execution_started) * 1000),
                     "usage": usage_summary,
+                    "context_access": context_access,
                 },
             )
         except Exception as exc:
@@ -433,6 +444,7 @@ def _is_transient_stream_failure(value: str) -> bool:
             "stream interrupted",
             "stream connection",
             "connection reset",
+            "messageabortederror",
         )
     )
 

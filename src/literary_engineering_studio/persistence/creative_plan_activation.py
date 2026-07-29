@@ -29,6 +29,7 @@ def apply_creative_plan_activation(
     _validate_activation_evidence(revision)
     _validate_active_plan_target(
         plan,
+        revision,
         active_plan_path,
         active_plan_payload,
         requested_revision=requested_revision,
@@ -98,6 +99,7 @@ def _validate_activation_evidence(revision: dict[str, Any]) -> None:
 
 def _validate_active_plan_target(
     plan: dict[str, Any],
+    revision: dict[str, Any],
     target: Path,
     payload: dict[str, Any],
     *,
@@ -115,6 +117,9 @@ def _validate_active_plan_target(
         "plan_id": str(plan["plan_id"]),
         "revision": requested_revision,
         "revision_digest": verified_revision_digest,
+        "authorization_digest": str(
+            (revision.get("review") or {}).get("authorization", {}).get("digest") or ""
+        ),
         "base_project_fingerprint": current_project_fingerprint,
     }
     if payload != expected:

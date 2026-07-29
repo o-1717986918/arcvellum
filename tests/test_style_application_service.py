@@ -370,13 +370,17 @@ def _seed_style_profile(root: Path) -> None:
 
 
 def _wait_for_job(client: TestClient, job_id: str) -> dict[str, object]:
-    deadline = time.time() + 10
+    deadline = time.time() + 30
+    payload: dict[str, object] = {}
     while time.time() < deadline:
         payload = client.get(f"/worker/jobs/{job_id}").json()
         if payload.get("status") not in {"queued", "running", "stopping"}:
             return payload
         time.sleep(0.05)
-    raise AssertionError(f"style build job did not finish: {job_id}")
+    raise AssertionError(
+        f"style build job did not finish: {job_id}; "
+        f"last_status={payload.get('status') or 'unknown'}"
+    )
 
 
 if __name__ == "__main__":

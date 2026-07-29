@@ -6,7 +6,10 @@ from unittest.mock import patch
 
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.runtimes import build_runtime
-from literary_engineering_studio.runtimes.opencode import OpenCodeRuntime
+from literary_engineering_studio.runtimes.opencode import (
+    OpenCodeRuntime,
+    _is_transient_stream_failure,
+)
 from literary_engineering_studio.task_preflight import PreflightIssue, PreflightResult
 
 
@@ -104,6 +107,13 @@ class _PreparedRepair:
 
 
 class OpenCodeRuntimeExecutionTests(unittest.TestCase):
+    def test_provider_aborted_message_is_retryable(self):
+        self.assertTrue(
+            _is_transient_stream_failure(
+                '{"name":"MessageAbortedError","data":{"message":"Aborted"}}'
+            )
+        )
+
     def test_runtime_builder_applies_role_without_mutating_persisted_settings(self):
         config = default_config()
         runtime = build_runtime("opencode", config, role="reviewer")

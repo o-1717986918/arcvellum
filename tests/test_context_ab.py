@@ -9,6 +9,7 @@ from unittest.mock import patch
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.runtime.context_ab import (
     CONTEXT_AB_SCHEMA,
+    _run_arm_with_transient_retry,
     project_content_digest,
     run_context_ab_experiment,
 )
@@ -212,6 +213,41 @@ class _BrokenPreviewWorker(_PreviewWorker):
 
 
 class ContextABTests(unittest.TestCase):
+    def test_transient_arm_failure_retries_once_in_a_fresh_attempt(self):
+        failed = {
+            "status": "runtime_failed",
+            "failure": {"present": True, "retryable": True},
+            "elapsed_seconds": 2.5,
+        }
+        completed = {
+            "status": "complete",
+            "failure": {"present": False, "retryable": False},
+            "elapsed_seconds": 3.5,
+        }
+        with patch(
+            "literary_engineering_studio.runtime.context_ab._run_arm",
+            side_effect=[failed, completed],
+        ) as run_arm:
+            report = _run_arm_with_transient_retry(
+                Path("."),
+                "scene-development",
+                TASK_ID,
+                "opencode",
+                {},
+                "shadow",
+                Path("arm"),
+                _FakeWorker,
+            )
+
+        self.assertEqual(report["status"], "complete")
+        self.assertEqual(report["elapsed_seconds"], 6.0)
+        self.assertEqual(report["experiment_attempts"], 2)
+        self.assertEqual(report["experiment_transient_retries"], 1)
+        self.assertEqual(
+            [call.args[6] for call in run_arm.call_args_list],
+            [Path("arm/attempt-1"), Path("arm/attempt-2")],
+        )
+
     def test_isolated_same_model_experiment_accepts_safe_canary(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

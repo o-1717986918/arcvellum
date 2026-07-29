@@ -2,6 +2,24 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.96.4] - 2026-07-29
+
+### Added
+
+- Added multi-sample bounded-context A/B evidence, safe context-access telemetry, and a configuration-only rollback drill for exact candidate review.
+- Added reviewed assisted activation for scene-level creative plans, immutable run-scoped task snapshots, and plan identity binding across context ledgers and mutation receipts.
+
+### Changed
+
+- Kept context materialization in `shadow` mode with bounded rollout disabled by default, while qualified candidate-review tasks can be enabled explicitly.
+- Bound verified scene strategy to the existing Engine task, review, promotion, state, and canon lifecycle without introducing a second scheduler or writeback path.
+- Preserved the fixed route as the deterministic fallback whenever adaptive orchestration is disabled, absent, stale, or invalid.
+
+### Fixed
+
+- Prevented shadow-only, tampered, stale, or unaudited creative plans from affecting production tasks.
+- Prevented an in-flight task from silently changing when its source task package or active plan changes after the run starts.
+
 ## [0.96.3] - 2026-07-28
 
 ### Added
@@ -114,6 +132,7 @@ All notable ArcVellum changes are documented in this file. Detailed release evid
 
 - Candidate output, lifecycle status, and continuity-ledger edge cases found during end-to-end scene promotion testing.
 
+[0.96.4]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.4
 [0.96.3]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.3
 [0.96.2]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.2
 [0.96.1]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.1

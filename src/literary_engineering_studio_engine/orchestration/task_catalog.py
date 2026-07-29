@@ -158,7 +158,11 @@ _CAPABILITIES = (
     _capability(
         PlanNodeKind.REVISION,
         "scene-development",
-        ("main-platform-agent-prose-revision",),
+        (
+            "platform-agent-revision",
+            "main-platform-agent-prose-revision",
+            "human-approval-boundary",
+        ),
         ("scene",),
         ("prose-candidate:read", "prose-revision:candidate-write"),
         "formal-prose-candidate",
@@ -168,7 +172,7 @@ _CAPABILITIES = (
     _capability(
         PlanNodeKind.STATE_EVOLUTION,
         "scene-development",
-        ("platform-agent-review", "deterministic-cli"),
+        ("platform-agent-review", "deterministic-cli", "human-approval-boundary"),
         ("scene",),
         ("promoted-prose:read", "state-patch:candidate-write"),
         "state-patch",
@@ -177,7 +181,12 @@ _CAPABILITIES = (
     _capability(
         PlanNodeKind.CANON_EVOLUTION,
         "review-and-audit",
-        ("platform-agent-review", "human-approval-boundary", "deterministic-cli"),
+        (
+            "platform-agent-review",
+            "human-approval-boundary",
+            "deterministic-cli",
+            "deterministic-cli-plus-platform-review",
+        ),
         ("scene", "chapter"),
         ("promoted-prose:read", "canon-patch:candidate-write"),
         "canon-patch",

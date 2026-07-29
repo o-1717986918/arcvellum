@@ -21,6 +21,8 @@
     "session_id": {"type": "string", "minLength": 1},
     "operation_id": {"type": "string", "minLength": 1},
     "plan_id": {"type": "string"},
+    "plan_revision": {"type": "integer", "minimum": 0},
+    "node_id": {"type": "string"},
     "assembled_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "entries": {

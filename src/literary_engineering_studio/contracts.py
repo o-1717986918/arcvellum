@@ -271,6 +271,28 @@ def load_task_package(project_root: Path, task_json_path: Path) -> TaskPackage:
     return TaskPackage(root, path, markdown_path, payload)
 
 
+def load_task_package_snapshot(
+    project_root: Path,
+    task_json_path: Path,
+    task_markdown_path: Path,
+) -> TaskPackage:
+    """Load a machine-owned run snapshot that intentionally lives outside the project."""
+
+    root = project_root.resolve()
+    json_path = task_json_path.resolve()
+    markdown_path = task_markdown_path.resolve()
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"invalid task snapshot JSON: {json_path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"task snapshot JSON must be an object: {json_path}")
+    _validate_task_payload(payload)
+    if not markdown_path.is_file():
+        raise FileNotFoundError(f"task snapshot Markdown not found: {markdown_path}")
+    return TaskPackage(root, json_path, markdown_path, payload)
+
+
 def normalize_relative_path(value: str) -> PurePosixPath:
     text = str(value or "").strip().replace("\\", "/")
     if not text:

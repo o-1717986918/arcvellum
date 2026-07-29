@@ -54,17 +54,67 @@ def scene_context_contract(
         "context_must_inline_paths": list(mandatory),
     }
     if state == "candidate-review":
-        contract["context_exact_on_demand_paths"] = [
-            path
-            for path in core_outputs
-            if path.endswith(".agent_tasks.md")
-        ]
+        contract["context_exact_on_demand_paths"] = list(
+            _candidate_review_exact_paths(scene_id, sources, core_outputs)
+        )
+        contract["context_excluded_paths"] = list(
+            _candidate_review_excluded_paths(
+                scene_id,
+                task,
+                sources,
+            )
+        )
         contract["context_evidence_contract"] = _review_evidence_declaration(
             task,
             scene_id,
             core_outputs,
         )
     return contract
+
+
+def _candidate_review_excluded_paths(
+    scene_id: str,
+    task: Mapping[str, object],
+    sources: tuple[str, ...],
+) -> tuple[str, ...]:
+    candidate = str(task.get("candidate") or "").replace("\\", "/")
+    candidate_manifest = (
+        Path(candidate).with_suffix(".json").as_posix()
+        if candidate
+        else ""
+    )
+    covered_by_compact_evidence = {
+        candidate_manifest,
+        f"memory/context_packets/{scene_id}.trace.json",
+        "plot/word_budget/word_budget.json",
+    }
+    return tuple(
+        path
+        for path in sources
+        if path in covered_by_compact_evidence
+    )
+
+
+def _candidate_review_exact_paths(
+    scene_id: str,
+    sources: tuple[str, ...],
+    core_outputs: tuple[str, ...],
+) -> tuple[str, ...]:
+    context_packet = f"memory/context_packets/{scene_id}.md"
+    return _unique(
+        (
+            *(
+                path
+                for path in core_outputs
+                if path.endswith(".agent_tasks.md")
+            ),
+            *(
+                path
+                for path in sources
+                if path == context_packet
+            ),
+        )
+    )
 
 
 def _contract_status(state: str) -> str:
@@ -112,7 +162,9 @@ def _mandatory_candidates(
         )
         return (
             *_candidate_markdown_sources(sources),
-            *common,
+            f"scenes/{scene_id}.yaml",
+            "style/creative_quality_profile.json",
+            "style/style-profile.md",
             *compact,
             f"drafts/compositions/{scene_id}_composition_review.json",
             f"branches/{scene_id}/branch_selection.md",
