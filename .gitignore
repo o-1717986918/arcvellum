@@ -30,4 +30,4 @@ studio-*.log
 dev-*.log
 ignored
 .tmp-dev/
-.tmp/archive-qa/
+.tmp/
