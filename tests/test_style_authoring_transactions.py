@@ -111,7 +111,44 @@ class StyleAuthoringTransactionTests(unittest.TestCase):
                 1,
             )
             with self.assertRaises(StyleTransactionError):
-                service.import_source(root, **{**source_args, "filename": "../escape.txt", "content": "另一份正文。"})
+                service.import_source(
+                    root,
+                    **{**source_args, "filename": "../escape.txt", "content": "另一份正文。"},
+                )
+
+    def test_replacement_or_nul_source_content_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = StyleAuthoringService()
+            service.create_author(
+                root,
+                author_id="author-one",
+                name="Public Domain Writer",
+                rights_mode="public-domain",
+                rights_declaration="Verified public-domain source collection.",
+            )
+            service.create_work(
+                root,
+                author_id="author-one",
+                work_id="work-one",
+                title="Work One",
+            )
+            base = {
+                "author_id": "author-one",
+                "work_id": "work-one",
+                "filename": "source.txt",
+                "media_type": "text/plain",
+                "rights_mode": "public-domain",
+                "rights_declaration": "Authorization covers this exact source.",
+            }
+
+            for content in ("正文\uFFFD残缺", "正文\x00\x00"):
+                with self.assertRaises(StyleTransactionError) as caught:
+                    service.import_source(root, **{**base, "content": content})
+                self.assertIn(
+                    "U+FFFD",
+                    str(caught.exception),
+                )
 
     def test_api_returns_stable_conflict_and_rights_codes(self):
         with tempfile.TemporaryDirectory() as temporary:
