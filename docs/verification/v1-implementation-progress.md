@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-campaign`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v098-strategy-typed-sse`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2485,3 +2485,34 @@ bounded replan 与无人值守 Campaign。
 
 下一批 W6-9（AO-8）：创作策略页、typed SSE、计划 diff/模拟/审批、
 Agent Observatory 与星仪投影。
+
+## W6-9A：创作策略读模型与 typed SSE
+
+**状态：完成。**
+
+1. `GET /project/strategy` 返回只读策略投影（编排设置、active plan 摘要、
+   Rolling Horizon 占位）；写入仍归正式 CLI/Engine。
+2. `GET /project/strategy/events` 以 `plan-event` 类型与稳定 event id
+   流式输出 `workflow/orchestration/runs/*/events.jsonl` 中的 typed plan
+   events，非法行跳过，仅暴露安全摘要。
+3. 客户端 `features/strategy` 数据层：类型、service（fetch/observe）与
+   store（只消费 `plan-event`、重载关闭旧流、错误可读）。
+4. 本批只读；页面 UI 属 W6-9B。
+
+实现与验收：
+
+- `api/routers/strategy.py`、`application/strategy_projection.py`、
+  `api/streaming.py::stream_typed_events`、`api_server.py` 注册；
+- `tests/test_strategy_router.py`：7 tests passed；
+- `client/src/features/strategy/stores/strategy.spec.ts`：3 tests passed；
+- Python 全量：822 tests passed，1 skipped；前端：49 files、144 tests
+  passed；`client:build` 通过；
+- Architecture Audit（34 file / 220 function debt、0 cycle）与
+  `git diff --check` 通过，无新增债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-9a-strategy-typed-sse-plan.md` 与
+`docs/architecture/reviews/w6-9a-strategy-typed-sse-review.md`。
+
+下一批 W6-9B：创作策略页（设置摘要、active plan、计划 diff/模拟/审批
+面板）。
