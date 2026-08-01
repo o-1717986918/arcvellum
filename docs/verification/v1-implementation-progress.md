@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-progress-checkpoint`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-recovery-replan`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2416,3 +2416,33 @@ bounded replan 与无人值守 Campaign。
 `docs/architecture/reviews/w6-8a-progress-checkpoint-review.md`。
 
 下一批 W6-8B：恢复阶梯与 bounded replan 契约。
+
+## W6-8B：恢复阶梯与 bounded replan 契约
+
+**状态：完成。**
+
+1. `recovery_step` 把六类失败（provider_unavailable、process_crash、
+   authorization_expired、version_conflict、no_progress、budget_exhausted）
+   映射到固定有界阶梯：retry → session-renew → checkpoint-restore →
+   bounded-replan → stop-with-evidence；未知失败与非法 attempt fail
+   closed，永不无限重试。
+2. no-progress 只允许一次 bounded replan，第二次直接 stop-with-evidence，
+   与 §11 Progress Contract 的连续两轮无进度暂停一致。
+3. `replan_allowed` 按 scope 的 Freedom Budget 限制重规划；预算耗尽与
+   用户方向二次重规划被拒绝。
+4. 本批不创建任务、不调用 Worker、不持久化、不激活计划。
+
+实现与验收：
+
+- `orchestration/recovery.py`、`orchestration/replan.py` 与
+  `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_recovery_replan.py`：11 tests passed；
+- Python 全量：808 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-8b-recovery-replan-plan.md` 与
+`docs/architecture/reviews/w6-8b-recovery-replan-review.md`。
+
+下一批 W6-8C：无人值守 Campaign 契约与 W6-8 Exit Audit。
