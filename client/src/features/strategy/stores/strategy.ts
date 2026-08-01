@@ -19,6 +19,7 @@ export const useStrategyStore = defineStore("strategy", () => {
   const projectRoot = computed(() => app.currentProjectPath);
   const settings = computed(() => projection.value?.settings ?? null);
   const activePlan = computed(() => projection.value?.active_plan ?? null);
+  const connected = computed(() => stream !== null);
 
   async function load(): Promise<void> {
     stopStream();
@@ -63,6 +64,7 @@ export const useStrategyStore = defineStore("strategy", () => {
     error,
     settings,
     activePlan,
+    connected,
     load,
     startStream,
     stopStream,

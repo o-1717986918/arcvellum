@@ -12,6 +12,7 @@ export const router = createRouter({
     { path: "/archaeology", name: "archaeology", component: () => import("@/features/archaeology/ArchaeologyView.vue"), meta: { label: "作品考古" } },
     { path: "/style", name: "style", component: () => import("@/features/style-atelier/StyleAtelierView.vue"), meta: { label: "文风工坊" } },
     { path: "/quality", name: "quality", component: () => import("@/features/quality/QualityView.vue"), meta: { label: "创作规则" } },
+    { path: "/strategy", name: "strategy", component: () => import("@/features/strategy/CreationStrategyView.vue"), meta: { label: "创作策略" } },
     { path: "/delivery", name: "delivery", component: () => import("@/features/delivery/DeliveryView.vue"), meta: { label: "交付" } },
     { path: "/settings", name: "settings", component: () => import("@/features/settings/SettingsView.vue"), meta: { label: "设置" } },
     { path: "/help", name: "help", component: () => import("@/features/help/HelpView.vue"), meta: { label: "使用帮助" } },
