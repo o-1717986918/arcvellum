@@ -72,6 +72,39 @@ def stream_read_model(event: str, function: Callable[[], dict[str, Any]], interv
     )
 
 
+def stream_typed_events(
+    event: str,
+    events: list[dict[str, Any]],
+    *,
+    interval_seconds: float = 0.0,
+    max_events: int = 0,
+):
+    """Emit typed plan events over SSE with stable event ids and pacing."""
+    interval = max(0.0, min(60.0, float(interval_seconds or 0.0)))
+    limit = max(0, int(max_events or 0))
+
+    def stream():
+        sent = 0
+        for item in events:
+            yield sse(
+                event,
+                item,
+                event_id=str(item.get("event_id") or sent + 1),
+            )
+            sent += 1
+            if limit and sent >= limit:
+                break
+            if interval:
+                time.sleep(interval)
+        yield f": {event} stream complete\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 def read_model_revision(payload: dict[str, Any], *, serialized: str | None = None) -> str:
     """Prefer an explicit semantic revision over volatile presentation fields."""
 

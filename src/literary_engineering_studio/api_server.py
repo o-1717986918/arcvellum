@@ -15,6 +15,7 @@ from typing import Any, Callable
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .application.style import StyleMountApplicationService
+from .application.strategy_projection import strategy_projection as _strategy_projection, typed_plan_events as _typed_plan_events
 from .api.dependencies import archaeology_router_dependencies, style_lab_dependencies
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
 from .api.models import (
@@ -65,6 +66,7 @@ from .api.routers.library import LibraryRouterDependencies, build_library_router
 from .api.routers.narrative import NarrativeRouterDependencies, build_narrative_router
 from .api.routers.delivery import DeliveryRouterDependencies, build_delivery_router
 from .api.routers.style_lab import build_style_lab_router
+from .api.routers.strategy import StrategyRouterDependencies, build_strategy_router
 from .api.routers.project_details import ProjectDetailRouterDependencies, build_project_detail_router
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
 from .advisor import ProjectAdvisor
@@ -91,6 +93,7 @@ from .narrative_projection_v3 import (
     spatial_projection_delta,
     spatial_projection_motion_events,
 )
+from .orchestration import orchestration_settings as _orchestration_settings
 from .project_progress import build_project_progress
 from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
 from .opencode_control import (
@@ -122,6 +125,21 @@ from literary_engineering_studio_engine.punctuation_standard import lint_punctua
 from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 
 _STYLE_MOUNTS = StyleMountApplicationService()
+
+
+def _register_strategy_router(app, config) -> None:
+    app.include_router(
+        build_strategy_router(
+            StrategyRouterDependencies(
+                load_strategy_projection=lambda root: _strategy_projection(
+                    root,
+                    _orchestration_settings(config),
+                ),
+                list_typed_plan_events=_typed_plan_events,
+            )
+        )
+    )
+
 
 try:
     from fastapi import FastAPI, HTTPException, Request
@@ -223,7 +241,6 @@ def create_app(config_override: dict[str, Any] | None = None):
     api_token = os.environ.get("LES_API_TOKEN", "").strip()
     startup_nonce = os.environ.get("LES_STARTUP_NONCE", "").strip()
     desktop_session_token = secrets.token_urlsafe(32) if api_token else ""
-
     if api_token:
         @app.middleware("http")
         async def desktop_auth(request: Request, call_next):
@@ -238,7 +255,6 @@ def create_app(config_override: dict[str, Any] | None = None):
     app.state.lifecycle = lifecycle
     app.state.bootstrap = bootstrap
     app.state.autopilot = autopilot
-
     read_models = ProjectReadModels(
         config,
         lifecycle,
@@ -336,6 +352,8 @@ def create_app(config_override: dict[str, Any] | None = None):
             )
         )
     )
+
+    _register_strategy_router(app, config)
 
     app.include_router(
         build_advisor_router(
