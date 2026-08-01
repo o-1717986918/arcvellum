@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-execution-bundles`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-context-cache-session-lease`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2316,3 +2316,33 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 `docs/architecture/reviews/w6-7a-execution-bundles-review.md`。
 
 下一批 W6-7B：ContextCacheKey 与 session lease 契约。
+
+## W6-7B：ContextCacheKey 与 session lease 契约
+
+**状态：完成。**
+
+1. `ContextCacheKey` 不可变缓存身份（project revision、scope、Canon digest、
+   人物状态 digest、文风 hash、字数预算 revision、节奏/桥契约 hash、角色与
+   任务类型），fingerprint 稳定且对任一字段敏感。
+2. `partition_reusable` 要求十个身份字段完全一致；任一变化即失效，缓存
+   分区不可复用。
+3. `SessionLease` 与 `session_reusable`：同角色、同项目/模型/文风、Context
+   Ledger 未失效、上一任务完成、token/时间/失败预算未超时才可复用；
+   Writer 与 Reviewer 永不互相转换。
+4. 缓存不成为项目正式事实；本批不读文件系统、不创建任务、不调用 Worker、
+   不持久化。
+
+实现与验收：
+
+- `runtime/context_cache.py`、`runtime/session_lease.py` 与
+  `tests/runtime/__init__.py`；
+- `tests/runtime/test_context_cache_session_lease.py`：10 tests passed；
+- Python 全量：776 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-7b-context-cache-session-lease-plan.md` 与
+`docs/architecture/reviews/w6-7b-context-cache-session-lease-review.md`。
+
+下一批 W6-7C：OutputRepairRequest 与 ResourceGate 只读并发准入。
