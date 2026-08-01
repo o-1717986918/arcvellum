@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v098-strategy-page`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v098-observatory-orrery`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2541,3 +2541,39 @@ Agent Observatory 与星仪投影。
 
 下一批 W6-9C：Agent Observatory 投影与星仪轻量计划投影，随后 W6-9 Exit
 Audit。
+
+## W6-9C：Agent Observatory 与星仪轻量计划投影
+
+**状态：完成。**
+
+1. `projectPlanOverlay` 把策略投影 + typed 事件流转换为星仪轻量叠加
+   （scope 节点在前、事件按序、上限 12），无计划时返回空叠加。
+2. 创作策略页新增“计划投影”条带，展示真实 plan_id/scope/事件计数。
+3. `AgentObservatoryView` 展示运行状态、活动任务、Worker 会话与最近事件
+   的安全投影；空态说明真实缺失；复用 `/agent-observability` 读模型。
+4. `/observatory` 路由注册；桌面前端同步产物一并更新。
+
+实现与验收：
+
+- `features/strategy/orreryPlanProjection.ts`（3 tests）、
+  `features/observatory/AgentObservatoryView.vue`（2 tests）；
+- 前端全量：52 files、152 tests passed；`client:build` 通过；
+- 本批未触碰 Python 侧，架构基线不变；`git diff --check` 通过。
+
+计划与复核见
+`docs/architecture/reviews/w6-9c-observatory-orrery-plan.md` 与
+`docs/architecture/reviews/w6-9c-observatory-orrery-review.md`。
+
+## W6-9 Exit Audit：AO-8 前端产品化收口
+
+**状态：完成。** 详见
+`docs/architecture/reviews/w6-9-exit-audit.md`。
+
+- 创作策略页、typed SSE、Agent Observatory 与星仪轻量投影全部落地；
+  20 个 W6-9 前端定向测试 + 后端 7 个测试通过；
+- 前端全量 52 files / 152 tests、Python 全量 822 tests 均通过；
+- 页面只读；计划 diff/模拟/审批以正式审计证据展示，交互式审批入口明确
+  列为后续批次，不冒充完成。
+
+下一批 W6-10：v1 最终验收（固定路线回退、真实项目长跑、吞吐基线、
+桌面生产构建与交付审计）。
