@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-output-repair-resource-gate`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-w6-7-exit-audit`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2373,3 +2373,19 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 `docs/architecture/reviews/w6-7c-output-repair-resource-gate-review.md`。
 
 下一批 W6-7 Exit Audit 收口 AO-6。
+
+## W6-7 Exit Audit：AO-6 资源锁与有限并发（契约与准入层收口）
+
+**状态：完成。** 详见
+`docs/architecture/reviews/w6-7-exit-audit.md`。
+
+- Execution Bundle、上下文缓存、局部修复、session lease、Resource Gate
+  与只读并发准入全部落地为确定性契约与准入层，32 个 W6-7 定向测试通过；
+- Python 全量 788 tests passed、1 skipped，Architecture Audit 无新增债务；
+- 未创建任务、未调用 Worker、未持久化、未激活计划；正式任务顺序与 Gate
+  不变，生产默认仍为 fixed 路线；
+- Bundle 执行器、缓存存储、session pool 与并行审查调度列为 W6-10 生产
+  硬化前的执行器接线批次，不冒充已完成。
+
+下一批 W6-8（AO-7）：Progress Fingerprint、checkpoint、恢复阶梯、
+bounded replan 与无人值守 Campaign。
