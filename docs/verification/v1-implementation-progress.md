@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-chapter-facts-io`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-execution-bundles`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2287,3 +2287,32 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 
 下一批 W6-7（AO-6）：Resource Gate、Execution Bundle、上下文缓存、
 局部修复、session lease 与只读并发。
+
+## W6-7A：Execution Bundle 契约与白名单编译器
+
+**状态：完成。**
+
+1. `ExecutionBundle` 不可变契约：bundle/plan/template/scope/step 节点/
+   角色/expected outputs/base revision/上下文快照 hash/原子写回组/
+   stop 边界。
+2. `BundleTemplate` 白名单目录：chapter-planning、scene-analysis、
+   scene-authoring、scene-quality、scene-state-extraction；每模板单一
+   Agent 角色，Writer 与 Reviewer 永不混入同一 Bundle。
+3. `compile_bundles` 从 `CompiledTaskGraph` 确定性编译，稳定 bundle_id，
+   合并 expected outputs 与原子写回组；未授权模板拒绝。
+4. 本批不创建任务、不调用 Worker、不持久化、不激活计划；stop 边界为
+   机器元数据，执行期遇人类决策/写回/高风险 Gate 仍必须切断。
+
+实现与验收：
+
+- `orchestration/bundles.py` 与 `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_execution_bundles.py`：10 tests passed；
+- Python 全量：766 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-7a-execution-bundles-plan.md` 与
+`docs/architecture/reviews/w6-7a-execution-bundles-review.md`。
+
+下一批 W6-7B：ContextCacheKey 与 session lease 契约。
