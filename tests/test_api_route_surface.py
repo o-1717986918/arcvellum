@@ -54,6 +54,8 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             ("GET", "/worker/jobs/{job_id}/stream"),
             ("GET", "/agent-observability"),
             ("GET", "/project/library"),
+            ("GET", "/project/strategy"),
+            ("GET", "/project/strategy/events"),
             ("GET", "/archive/tree"),
             ("GET", "/archive/candidates"),
             ("GET", "/archive/candidates/{candidate_id}"),
