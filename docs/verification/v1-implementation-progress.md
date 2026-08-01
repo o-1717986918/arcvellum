@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-rolling-horizon-risk`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-chapter-horizon-shadow`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2183,3 +2183,34 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 
 下一批 W6-6B：把本章规划事实（事件库存、字数预算、节奏与承诺义务）投影为
 窗口输入，并接入 shadow 管线。
+
+## W6-6B：章节规划事实投影与 shadow 验证
+
+**状态：完成。**
+
+1. 新增 `ChapterPlanningFacts` / `ScenePlanningFact` 不可变契约：场景库存
+   顺序、字数目标、节奏契约 hash、承诺义务 ID 与七个确定性风险信号。
+2. `chapter_facts_violations` 拒绝空章节/空库存、重复场景、空场景引用、
+   负数或非整数风险特征与字数；非法事实 fail closed。
+3. `project_chapter_horizon` 把事实投影为 `RollingHorizonWindow` 与全部
+   规划场景的 `SceneRiskProfile`；风险画像覆盖整章，深度窗口只影响推演/
+   分支规划范围。
+4. `evaluate_chapter_horizon_shadow` 是 measure-only shadow 入口
+   （`executed=False` + 耗时），不执行、不持久化、不激活。
+5. 本批不读文件系统，磁盘事实装配留给 W6-6C 适配器。
+
+实现与验收：
+
+- `orchestration/chapter_facts.py`、`orchestration/chapter_horizon.py` 与
+  `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_chapter_horizon_shadow.py`：9 tests passed；
+- Python 全量：745 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-6b-chapter-horizon-shadow-plan.md` 与
+`docs/architecture/reviews/w6-6b-chapter-horizon-shadow-review.md`。
+
+下一批 W6-6C：磁盘事实适配器（字数预算、节奏、承诺义务读取）接入投影，
+并把章节级窗口/风险画像接入 shadow 管线与章节计划编译/模拟。
