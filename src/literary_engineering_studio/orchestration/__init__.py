@@ -130,6 +130,20 @@ from .resource_gate import (
     ResourceGateViolation,
     admission_plan,
 )
+from .recovery import (
+    RecoveryDecision,
+    RecoveryStep,
+    RecoveryViolation,
+    recovery_step,
+    recovery_violations,
+)
+from .replan import (
+    ReplanBudgetState,
+    ReplanBudgetViolation,
+    ReplanDecision,
+    replan_allowed,
+    replan_budget_violations,
+)
 from .simulator import (
     FormalTaskObservation,
     FormalTaskStatus,
@@ -235,6 +249,12 @@ __all__ = [
     "ProgressFingerprintViolation",
     "ProvenanceRef",
     "ResourceGateViolation",
+    "RecoveryDecision",
+    "RecoveryStep",
+    "RecoveryViolation",
+    "ReplanBudgetState",
+    "ReplanBudgetViolation",
+    "ReplanDecision",
     "ReplanTrigger",
     "RevisionPolicy",
     "RoleplayDepth",
@@ -303,6 +323,10 @@ __all__ = [
     "project_chapter_candidate_parameters",
     "progress_fingerprint",
     "progress_input_violations",
+    "recovery_step",
+    "recovery_violations",
+    "replan_allowed",
+    "replan_budget_violations",
     "partition_can_satisfy_formal_gate",
     "persist_shadow_revision",
     "planning_project_fingerprint",
