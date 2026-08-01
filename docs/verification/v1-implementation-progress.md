@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-recovery-replan`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-campaign`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2446,3 +2446,42 @@ bounded replan 与无人值守 Campaign。
 `docs/architecture/reviews/w6-8b-recovery-replan-review.md`。
 
 下一批 W6-8C：无人值守 Campaign 契约与 W6-8 Exit Audit。
+
+## W6-8C：无人值守 Campaign 契约
+
+**状态：完成。**
+
+1. `CampaignPolicy`（章节/全书 scope、最大自主步数、checkpoint 间隔、
+   暂停原因白名单）与 `CampaignState`。
+2. `campaign_step_allowed`：白名单原因暂停、未处理原因 fail closed、
+   最大自主步数停止；`checkpoint_due` 在正间隔倍数触发。
+3. 本批不创建任务、不调用 Worker、不持久化、不激活计划；执行器接线留
+   后续批次。
+
+实现与验收：
+
+- `orchestration/campaign.py` 与 `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_campaign.py`：7 tests passed；
+- Python 全量：815 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-8c-campaign-plan.md` 与
+`docs/architecture/reviews/w6-8c-campaign-review.md`。
+
+## W6-8 Exit Audit：AO-7 全书重规划与无人值守（契约层收口）
+
+**状态：完成。** 详见
+`docs/architecture/reviews/w6-8-exit-audit.md`。
+
+- Progress Fingerprint、checkpoint、恢复阶梯、bounded replan 与无人值守
+  Campaign 全部落地为确定性契约，27 个 W6-8 定向测试通过；
+- Python 全量 815 tests passed、1 skipped，Architecture Audit 无新增债务；
+- 未创建任务、未调用 Worker、未持久化、未激活计划；正式任务顺序与 Gate
+  不变；
+- Campaign 执行器与恢复接线列为 W6-10 生产硬化前的执行器批次，不冒充
+  生产无人值守已开放。
+
+下一批 W6-9（AO-8）：创作策略页、typed SSE、计划 diff/模拟/审批、
+Agent Observatory 与星仪投影。
