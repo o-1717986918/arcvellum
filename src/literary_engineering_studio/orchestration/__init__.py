@@ -47,6 +47,13 @@ from .chapter_shadow import (
     evaluate_chapter_plan_shadow,
     evaluate_chapter_plan_shadow_from_project,
 )
+from .checkpoint import (
+    ChapterCheckpoint,
+    CheckpointViolation,
+    checkpoint_matches,
+    checkpoint_newer,
+    checkpoint_violations,
+)
 from .compiler import PlanCompilationError, compile_plan, compiled_graph_digest
 from .compiler_registry import CompilerRegistry
 from .constitution import OrchestrationConstitution, constitution_v1
@@ -109,6 +116,14 @@ from .persistence import (
     verify_persisted_revision,
 )
 from .project_fingerprint import planning_project_fingerprint
+from .progress import (
+    ProgressFingerprint,
+    ProgressFingerprintInput,
+    ProgressFingerprintViolation,
+    no_progress_detected,
+    progress_fingerprint,
+    progress_input_violations,
+)
 from .resource_gate import (
     AdmissionPlan,
     ParallelGroup,
@@ -171,12 +186,14 @@ __all__ = [
     "CANDIDATE_SCHEMA",
     "COMPILED_GRAPH_SCHEMA",
     "ChapterFactViolation",
+    "ChapterCheckpoint",
     "ChapterHorizonProjection",
     "ChapterHorizonShadowEvaluation",
     "ChapterHorizonViolation",
     "ChapterPlanShadowEvaluation",
     "ChapterPlanningFacts",
     "ChapterWindowPolicy",
+    "CheckpointViolation",
     "MACHINE_OWNED_FIELDS",
     "MAX_HORIZON_SIZE",
     "MIN_HORIZON_SIZE",
@@ -213,6 +230,9 @@ __all__ = [
     "PlanSimulationContext",
     "PlanSimulationResult",
     "PlanScopeKind",
+    "ProgressFingerprint",
+    "ProgressFingerprintInput",
+    "ProgressFingerprintViolation",
     "ProvenanceRef",
     "ResourceGateViolation",
     "ReplanTrigger",
@@ -268,6 +288,9 @@ __all__ = [
     "build_rolling_horizon",
     "build_scene_risk_profile",
     "chapter_facts_violations",
+    "checkpoint_matches",
+    "checkpoint_newer",
+    "checkpoint_violations",
     "evaluate_chapter_horizon_shadow",
     "evaluate_chapter_plan_shadow",
     "evaluate_chapter_plan_shadow_from_project",
@@ -275,8 +298,11 @@ __all__ = [
     "completed_candidate_from_event",
     "effective_risk_level",
     "machine_minimum_risk_level",
+    "no_progress_detected",
     "project_chapter_horizon",
     "project_chapter_candidate_parameters",
+    "progress_fingerprint",
+    "progress_input_violations",
     "partition_can_satisfy_formal_gate",
     "persist_shadow_revision",
     "planning_project_fingerprint",
