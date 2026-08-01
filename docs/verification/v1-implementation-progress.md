@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v098-strategy-typed-sse`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v098-strategy-page`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2516,3 +2516,28 @@ Agent Observatory 与星仪投影。
 
 下一批 W6-9B：创作策略页（设置摘要、active plan、计划 diff/模拟/审批
 面板）。
+
+## W6-9B：创作策略页
+
+**状态：完成。**
+
+1. `CreationStrategyView` 渲染编排设置（模式/预设/开关）与激活计划
+   （计划/版本/状态/范围），数据全部来自正式只读投影。
+2. 实时 typed 计划事件流面板只渲染审计产生的 `plan-event`；空态说明真实
+   缺失（“还没有激活的创作计划”“还没有收到计划事件”）。
+3. 页面明确只读边界：不提供审批或写回入口；断开/连接事件流可切换。
+4. `/strategy` 路由已注册；设计遵循现有 Studio 视觉语言与内容纪律。
+
+实现与验收：
+
+- `client/src/features/strategy/CreationStrategyView.vue` 与
+  `CreationStrategyView.spec.ts`（3 tests）；
+- 前端全量：50 files、147 tests passed；`client:build` 通过；
+- 本批未触碰 Python 侧，架构基线不变；`git diff --check` 通过。
+
+计划与复核见
+`docs/architecture/reviews/w6-9b-strategy-page-plan.md` 与
+`docs/architecture/reviews/w6-9b-strategy-page-review.md`。
+
+下一批 W6-9C：Agent Observatory 投影与星仪轻量计划投影，随后 W6-9 Exit
+Audit。
