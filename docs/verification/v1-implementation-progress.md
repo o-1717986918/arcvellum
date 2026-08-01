@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-archive-foundation`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-rolling-horizon-risk`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2149,3 +2149,37 @@ W6-5A 实现结果：
 
 W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至 AO-8 和 v1
 最终验收仍按上方阶段表依次实施。
+
+## W6-6A：Rolling Horizon 与 SceneRiskProfile 确定性契约底座
+
+**状态：完成。**
+
+1. 新增 `RollingHorizonWindow` 不可变契约与 `build_rolling_horizon` 确定性
+   生成器：深度窗口只包含活动场景之后的未来场景，长度由 2-4 的
+   `horizon_size` 限定；章节末尾自然缩短，活动场景为最后一个时允许空窗口。
+2. 新增 `rolling_horizon_violations` 确定性校验：重复场景、horizon 越界、
+   缺失 base revision、活动场景未规划、深度场景未规划/不属未来/超窗口、
+   剩余场景却空窗口均产生机器可读 violation。
+3. 新增 `SceneRiskFacts` / `SceneRiskProfile` 与 `machine_minimum_risk_level`：
+   依据 Canon 变化、人物状态变化、新资产风险、分支歧义、高潮权重、连续性
+   债务与文风新颖度阈值推导 `compact/standard/deep` 机器最低等级。
+4. `effective_risk_level` 与 `build_scene_risk_profile` 保证 Planner 只能
+   建议升高、不能降低机器最低等级；正式独立 AgentReview 永不豁免。
+5. 本批不创建任务、不调用 Worker、不持久化、不激活计划，不改变正式
+   Engine lifecycle。
+
+实现与验收：
+
+- `orchestration/rolling_horizon.py`、`orchestration/risk.py` 与
+  `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_rolling_horizon_risk.py`：24 tests passed；
+- Python 全量：736 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 与版本同步检查全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-6a-rolling-horizon-risk-contracts-plan.md` 与
+`docs/architecture/reviews/w6-6a-rolling-horizon-risk-contracts-review.md`。
+
+下一批 W6-6B：把本章规划事实（事件库存、字数预算、节奏与承诺义务）投影为
+窗口输入，并接入 shadow 管线。
