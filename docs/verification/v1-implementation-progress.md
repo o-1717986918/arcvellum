@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-chapter-horizon-shadow`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-chapter-plan-shadow`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2214,3 +2214,34 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 
 下一批 W6-6C：磁盘事实适配器（字数预算、节奏、承诺义务读取）接入投影，
 并把章节级窗口/风险画像接入 shadow 管线与章节计划编译/模拟。
+
+## W6-6C：章节计划 shadow 编译与模拟
+
+**状态：完成。**
+
+1. `ChapterWindowPolicy` 携带章节/活动场景/深度窗口/horizon/每场景风险
+   等级/全局分支数/rebase 策略，可安全投影为审计 JSON。
+2. `project_chapter_candidate_parameters` 把风险等级映射为
+   `roleplay_depth`（compact→light、standard→targeted、deep→full）与
+   分支数（2/3/5），并同步 `strategy.scene_inventory`，保持 W6-5A
+   策略绑定不变式。
+3. `evaluate_chapter_plan_shadow` 投影后复用既有 Normalize→Lint→Compile→
+   Simulate；`executed=False`，不执行、不持久化、不激活。
+4. 非法事实或窗口失败时 fail closed，不进入 AO-2 管线。
+
+实现与验收：
+
+- `orchestration/chapter_binding.py`、`orchestration/chapter_shadow.py` 与
+  `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_chapter_plan_shadow.py`：4 tests passed，含
+  完整 shadow 管线下 `roleplay_depth=full` 编译断言；
+- Python 全量：749 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-6c-chapter-plan-shadow-plan.md` 与
+`docs/architecture/reviews/w6-6c-chapter-plan-shadow-review.md`。
+
+下一批 W6-6 剩余：磁盘事实适配器（字数预算、节奏、承诺义务读取）接入
+`ChapterPlanningFacts`，随后 W6-6 Exit Audit 收口 AO-5。
