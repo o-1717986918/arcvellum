@@ -46,6 +46,17 @@ owner acceptance，不伪造证据。
   项目与模型授权，作为 owner acceptance 项。
 - PR #5–#19 已创建并满足分支保护检查门槛，合入需用户在 GitHub 审批。
 
+## 合入状态核查（2026-08-01）
+
+- PR #5–#19 全部为 `MERGEABLE`、无冲突；各分支按序继承（#5 → #19），
+  可顺序合入而无需 rebase。
+- CI 检查：全部 15 个 PR 的 `python-contracts` / `vue-client` /
+  `desktop-shell` 均通过（#19 于 2026-08-01 16:20 UTC+8 全绿）。
+- 审批核查：`gh pr review --approve` 被 GitHub 拒绝
+  （“Can not approve your own pull request”）；main 分支保护要求
+  1 个审批，因此合入必须由仓库所有者（或另一具备审批权账号）在
+  GitHub 上逐批批准。自动合入未获得用户授权，不代行。
+
 ## 结论
 
 W6 全部批次（AO-5 至 AO-8 + v1 验收）已完成契约、确定性测试、集成测试、
