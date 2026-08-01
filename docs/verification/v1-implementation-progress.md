@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-chapter-plan-shadow`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-chapter-facts-io`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2245,3 +2245,45 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 
 下一批 W6-6 剩余：磁盘事实适配器（字数预算、节奏、承诺义务读取）接入
 `ChapterPlanningFacts`，随后 W6-6 Exit Audit 收口 AO-5。
+
+## W6-6D：磁盘事实适配器与项目级 shadow 入口
+
+**状态：完成。**
+
+1. `load_chapter_planning_facts` 从 `scenes/*.yaml`、`plot/rhythm_plan.json`、
+   `plot/word_budget/word_budget.json` 与 `plot/chapter_obligations/` 加载
+   `ChapterPlanningFacts`：场景按 `time.timeline_order` 排序，字数目标按
+   场景/节奏/预算逐级回退，风险信号支持显式字段与 tension_curve 推导，
+   承诺义务支持 ID 列表与 `contract.obligations`。
+2. `evaluate_chapter_plan_shadow_from_project` 加载项目事实后直接进入
+   W6-6C shadow 评估（`executed=False`）。
+3. 可选文件缺失回退空默认值；整章无场景抛 `FileNotFoundError`；
+   YAML 非法抛 `ValueError`。
+
+实现与验收：
+
+- `orchestration/chapter_facts_io.py` 与 `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_chapter_facts_io.py`：7 tests passed，含
+  项目级 shadow 集成；
+- Python 全量：756 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-6d-chapter-facts-io-plan.md` 与
+`docs/architecture/reviews/w6-6d-chapter-facts-io-review.md`。
+
+## W6-6 Exit Audit：AO-5 章节级编排收口
+
+**状态：完成。** 详见
+`docs/architecture/reviews/w6-6-exit-audit.md`。
+
+- Rolling Horizon、SceneRiskProfile、事件库存、字数/节奏/承诺义务投影与
+  shadow 验证全部落地，44 个 W6-6 定向测试通过；
+- Python 全量 756 tests passed、1 skipped，Architecture Audit 无新增债务；
+- 未创建任务、未调用 Worker、未持久化、未激活计划；正式任务顺序与 Gate
+  不变；
+- Scheduler、Execution Bundle、并发与 Campaign 明确留给 W6-7 及之后批次。
+
+下一批 W6-7（AO-6）：Resource Gate、Execution Bundle、上下文缓存、
+局部修复、session lease 与只读并发。
