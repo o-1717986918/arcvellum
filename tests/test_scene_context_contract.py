@@ -103,6 +103,39 @@ class SceneContextContractTests(unittest.TestCase):
         self.assertNotIn("plot/word_budget/word_budget.json", mandatory)
         self.assertEqual(len(mandatory), len(set(mandatory)))
 
+    def test_missing_punctuation_standard_is_not_declared_mandatory(self) -> None:
+        sources = [
+            self._write("scenes/scene_0001.yaml", "scene_id: scene_0001\n"),
+            self._write("memory/context_packets/scene_0001.md"),
+            self._write("style/creative_quality_profile.json", "{}\n"),
+            self._write("style/style-profile.md"),
+            self._write("branches/scene_0001/branch_selection.md"),
+            self._write("drafts/compositions/scene_0001_composition.md"),
+            self._write("drafts/compositions/scene_0001_composition.json", "{}\n"),
+            self._write(
+                "drafts/compositions/scene_0001_composition_review.json",
+                "{}\n",
+            ),
+            self._write("plot/chapter_obligations/chapter_0001.json", "{}\n"),
+        ]
+        sidecar = self._write(
+            "drafts/candidates/scene_0001-generation.agent_tasks.md"
+        )
+        task = {
+            "current_state": "candidate-generation-provenance",
+            "scene_id": self.scene_id,
+            "agent_source_paths": sources,
+            "core_managed_outputs": [sidecar],
+            "required_reading": ["references/punctuation-standard.md"],
+        }
+
+        contract = scene_context_contract(self.root, task)
+
+        self.assertNotIn(
+            "references/punctuation-standard.md",
+            contract["context_must_inline_paths"],
+        )
+
     def test_review_contract_inlines_exact_markdown_not_large_support_files(self) -> None:
         candidate = self._write(
             "drafts/candidates/scene_0001-platform-agent.md",
