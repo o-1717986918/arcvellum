@@ -12,6 +12,21 @@ from .activation import (
 )
 from .active_plan import ActivePlanLoader, ActiveScenePlan
 from .candidate import MACHINE_OWNED_FIELDS, parse_plan_candidate
+from .chapter_facts import (
+    ChapterFactViolation,
+    ChapterPlanningFacts,
+    ScenePlanningFact,
+    chapter_facts_violations,
+    scene_order,
+    scene_risk_values,
+)
+from .chapter_horizon import (
+    ChapterHorizonProjection,
+    ChapterHorizonShadowEvaluation,
+    ChapterHorizonViolation,
+    evaluate_chapter_horizon_shadow,
+    project_chapter_horizon,
+)
 from .compiler import PlanCompilationError, compile_plan, compiled_graph_digest
 from .compiler_registry import CompilerRegistry
 from .constitution import OrchestrationConstitution, constitution_v1
@@ -126,6 +141,11 @@ __all__ = [
     "ActiveScenePlan",
     "CANDIDATE_SCHEMA",
     "COMPILED_GRAPH_SCHEMA",
+    "ChapterFactViolation",
+    "ChapterHorizonProjection",
+    "ChapterHorizonShadowEvaluation",
+    "ChapterHorizonViolation",
+    "ChapterPlanningFacts",
     "MACHINE_OWNED_FIELDS",
     "MAX_HORIZON_SIZE",
     "MIN_HORIZON_SIZE",
@@ -166,6 +186,7 @@ __all__ = [
     "RoleplayDepth",
     "SceneExecutionPolicy",
     "SceneFallbackLevel",
+    "ScenePlanningFact",
     "ScenePlanPatchEvaluation",
     "SceneTaskPlanBinding",
     "PlanPatchDiff",
@@ -208,16 +229,21 @@ __all__ = [
     "bind_scene_task",
     "build_rolling_horizon",
     "build_scene_risk_profile",
+    "chapter_facts_violations",
+    "evaluate_chapter_horizon_shadow",
     "parse_creative_plan_event",
     "completed_candidate_from_event",
     "effective_risk_level",
     "machine_minimum_risk_level",
+    "project_chapter_horizon",
     "partition_can_satisfy_formal_gate",
     "persist_shadow_revision",
     "planning_project_fingerprint",
     "read_verified_revision_payloads",
     "rolling_horizon_violations",
+    "scene_order",
     "scene_risk_violations",
+    "scene_risk_values",
     "simulate_plan",
     "to_primitive",
     "verify_persisted_revision",
