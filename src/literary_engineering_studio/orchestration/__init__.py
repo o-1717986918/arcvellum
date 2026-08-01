@@ -109,6 +109,12 @@ from .persistence import (
     verify_persisted_revision,
 )
 from .project_fingerprint import planning_project_fingerprint
+from .resource_gate import (
+    AdmissionPlan,
+    ParallelGroup,
+    ResourceGateViolation,
+    admission_plan,
+)
 from .simulator import (
     FormalTaskObservation,
     FormalTaskStatus,
@@ -159,6 +165,7 @@ __all__ = [
     "AssertionKind",
     "ActivePlanLoader",
     "ActiveScenePlan",
+    "AdmissionPlan",
     "BundleTemplate",
     "BundleViolation",
     "CANDIDATE_SCHEMA",
@@ -196,6 +203,7 @@ __all__ = [
     "OrchestrationConstitution",
     "OrchestrationAuditArtifacts",
     "OrchestrationSettings",
+    "ParallelGroup",
     "PlanIssue",
     "PlanIssueSeverity",
     "PlanCompilationError",
@@ -206,6 +214,7 @@ __all__ = [
     "PlanSimulationResult",
     "PlanScopeKind",
     "ProvenanceRef",
+    "ResourceGateViolation",
     "ReplanTrigger",
     "RevisionPolicy",
     "RoleplayDepth",
@@ -243,6 +252,7 @@ __all__ = [
     "evaluate_completed_shadow_candidate",
     "evaluate_scene_plan_patch",
     "activate_persisted_revision",
+    "admission_plan",
     "assisted_activate_persisted_revision",
     "authorize_persisted_revision",
     "lint_plan",
