@@ -11,6 +11,15 @@ from .activation import (
     authorize_persisted_revision,
 )
 from .active_plan import ActivePlanLoader, ActiveScenePlan
+from .bundles import (
+    BundleTemplate,
+    BundleViolation,
+    ExecutionBundle,
+    bundle_template,
+    bundle_template_catalog,
+    bundle_violations,
+    compile_bundles,
+)
 from .candidate import MACHINE_OWNED_FIELDS, parse_plan_candidate
 from .chapter_binding import (
     ChapterWindowPolicy,
@@ -150,6 +159,8 @@ __all__ = [
     "AssertionKind",
     "ActivePlanLoader",
     "ActiveScenePlan",
+    "BundleTemplate",
+    "BundleViolation",
     "CANDIDATE_SCHEMA",
     "COMPILED_GRAPH_SCHEMA",
     "ChapterFactViolation",
@@ -173,6 +184,7 @@ __all__ = [
     "CreativePlanEventType",
     "CREATIVE_PLAN_EVENT_SCHEMA",
     "DefaultPlanFactory",
+    "ExecutionBundle",
     "FixedRouteComparison",
     "FreedomBudget",
     "NormalizationContext",
@@ -240,6 +252,9 @@ __all__ = [
     "parse_plan_candidate",
     "parse_scene_plan_patch",
     "bind_scene_task",
+    "bundle_template",
+    "bundle_template_catalog",
+    "bundle_violations",
     "build_rolling_horizon",
     "build_scene_risk_profile",
     "chapter_facts_violations",
@@ -261,6 +276,7 @@ __all__ = [
     "scene_risk_violations",
     "scene_risk_values",
     "chapter_window_policy",
+    "compile_bundles",
     "load_chapter_planning_facts",
     "simulate_plan",
     "to_primitive",
