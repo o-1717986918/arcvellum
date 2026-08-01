@@ -20,6 +20,16 @@ from .bundles import (
     bundle_violations,
     compile_bundles,
 )
+from .campaign import (
+    CampaignPauseReason,
+    CampaignPolicy,
+    CampaignState,
+    CampaignStepDecision,
+    CampaignViolation,
+    campaign_step_allowed,
+    campaign_violations,
+    checkpoint_due,
+)
 from .candidate import MACHINE_OWNED_FIELDS, parse_plan_candidate
 from .chapter_binding import (
     ChapterWindowPolicy,
@@ -197,6 +207,11 @@ __all__ = [
     "AdmissionPlan",
     "BundleTemplate",
     "BundleViolation",
+    "CampaignPauseReason",
+    "CampaignPolicy",
+    "CampaignState",
+    "CampaignStepDecision",
+    "CampaignViolation",
     "CANDIDATE_SCHEMA",
     "COMPILED_GRAPH_SCHEMA",
     "ChapterFactViolation",
@@ -305,6 +320,9 @@ __all__ = [
     "bundle_template",
     "bundle_template_catalog",
     "bundle_violations",
+    "campaign_step_allowed",
+    "campaign_violations",
+    "checkpoint_due",
     "build_rolling_horizon",
     "build_scene_risk_profile",
     "chapter_facts_violations",
