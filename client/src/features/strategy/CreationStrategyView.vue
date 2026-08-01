@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { CircleAlert, Radio, RefreshCw, Unplug } from "lucide-vue-next";
+import { computed } from "vue";
+import { projectPlanOverlay } from "./orreryPlanProjection";
 import { useStrategyStore } from "./stores/strategy";
 
 const store = useStrategyStore();
+const overlay = computed(() =>
+  projectPlanOverlay(store.projection, store.events),
+);
 
 onMounted(() => void store.load());
 onUnmounted(() => store.stopStream());
@@ -64,6 +69,32 @@ onUnmounted(() => store.stopStream());
         </dl>
         <p v-else class="strategy-empty">还没有激活的创作计划。计划经独立审查与授权后才会出现在这里。</p>
       </article>
+    </section>
+
+    <section class="strategy-card strategy-overlay">
+      <header>
+        <span class="eyebrow">计划投影</span>
+        <h2>星仪轻量视图</h2>
+      </header>
+      <div class="plan-overlay-strip">
+        <span
+          v-for="node in overlay.nodes"
+          :key="node.id"
+          class="plan-overlay-node"
+          :data-kind="node.kind"
+          :title="node.detail || node.label"
+        >
+          <small>{{ node.slot }}</small>
+          {{ node.label }}
+        </span>
+      </div>
+      <p class="strategy-empty">
+        {{
+          overlay.plan_id
+            ? `${overlay.plan_id} · ${overlay.event_count} 个事件`
+            : "还没有可投影的激活计划。"
+        }}
+      </p>
     </section>
 
     <section class="strategy-events">
