@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v098-observatory-orrery`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v098-v1-final-acceptance`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2577,3 +2577,25 @@ Audit。
 
 下一批 W6-10：v1 最终验收（固定路线回退、真实项目长跑、吞吐基线、
 桌面生产构建与交付审计）。
+
+## W6-10：v1 最终验收（交付审计）
+
+**状态：完成（证据化验收）。** 详见
+`docs/architecture/reviews/w6-10-v1-final-acceptance.md`。
+
+- 固定路线回退：默认 `fixed-formal-route.v1` 宏 + `test_fixed_route_fallback.py`
+  （2 tests）fail-closed 证据；
+- 全量验证：Python 824 tests passed、前端 52 files / 152 tests passed、
+  `client:build` 通过、Architecture Audit 34/220/0 无新增债务；
+- 桌面生产构建：本会话本地签名安装包与更新清单已交付（SHA-256
+  `e8db5fd4…82f5ad2`）；
+- 真实项目长跑、干净 VM 安装矩阵与真实稿件质量评估列为 owner
+  acceptance 项，需用户提供项目与模型授权；
+- PR #5–#19 已创建并满足 PR 门槛，合入待用户在 GitHub 审批。
+
+## W6 交付结论
+
+W6 全部批次（AO-5 至 AO-8 + v1 验收）已完成契约、确定性测试、集成测试、
+架构审查、Git 提交与 PR 交付；生产默认保持 fixed 路线，正式 Gate 未被
+绕过，无新增架构债务。生产执行器接线与交互式审批入口按分阶段启用计划
+列为后续批次，未冒充完成。
