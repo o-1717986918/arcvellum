@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
+  Activity,
   BookOpenText,
   Boxes,
   ChevronDown,
@@ -9,6 +10,7 @@ import {
   Cog,
   FolderKanban,
   Fingerprint,
+  Gauge,
   LibraryBig,
   PackageCheck,
   Info,
@@ -41,6 +43,8 @@ const nav = [
   { to: "/archaeology", label: "作品考古", icon: ScanSearch, needsProject: true },
   { to: "/style", label: "文风工坊", icon: Fingerprint, needsProject: true },
   { to: "/quality", label: "创作规则", icon: SlidersHorizontal, needsProject: true },
+  { to: "/strategy", label: "创作策略", icon: Gauge, needsProject: true },
+  { to: "/observatory", label: "Agent 观测台", icon: Activity, needsProject: true },
   { to: "/delivery", label: "交付", icon: PackageCheck, needsProject: true },
   { to: "/settings", label: "设置", icon: Settings2, needsProject: false },
 ];

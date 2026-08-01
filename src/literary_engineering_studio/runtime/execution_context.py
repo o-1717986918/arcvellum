@@ -267,6 +267,8 @@ def _validate_mandatory_paths(
         raise ValueError(
             "execution context mandatory paths are not present in the first-turn snapshot: "
             + ", ".join(missing)
+            + "。请先完成前序正式步骤（上下文准备、场景合成、长期规划义务），"
+            "并确认缺失的项目资料（如 references/punctuation-standard.md）存在。"
         )
 
 

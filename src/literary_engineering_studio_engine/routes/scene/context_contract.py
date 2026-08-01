@@ -41,7 +41,6 @@ def scene_context_contract(
         if path in allowed
         and (
             path in core_outputs
-            or path == PUNCTUATION_STANDARD
             or (root / Path(path)).is_file()
         )
     )
