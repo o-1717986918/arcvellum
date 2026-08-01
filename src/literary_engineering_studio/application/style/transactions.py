@@ -318,7 +318,10 @@ def _source_body(content: str) -> str:
     if not body:
         raise StyleTransactionError("source content is required")
     if "\ufffd" in body or "\x00" in body:
-        raise StyleTransactionError("source content contains invalid replacement or NUL characters")
+        raise StyleTransactionError(
+            "source content contains invalid replacement (U+FFFD) or NUL characters; "
+            "convert the text to UTF-8 and remove NUL padding before importing"
+        )
     if len(body) > _MAX_SOURCE_CHARACTERS:
         raise StyleTransactionError(f"source content exceeds {_MAX_SOURCE_CHARACTERS} characters")
     return body

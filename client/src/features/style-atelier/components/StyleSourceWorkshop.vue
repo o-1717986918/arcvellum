@@ -14,6 +14,7 @@ import {
 } from "lucide-vue-next";
 import {
   decodeStyleSourceFile,
+  sanitizeStyleSourceText,
   type PreparedStyleSource,
 } from "../services/styleSourceFiles";
 import { styleIdentity } from "../services/styleIdentity";
@@ -205,6 +206,14 @@ function submitWork(): void {
 
 function submitSources(): void {
   formError.value = "";
+  if (sourceInputMode.value === "paste") {
+    const sanitized = sanitizeStyleSourceText(sourceForm.content);
+    if (!sanitized.ok) {
+      formError.value = sanitized.message || "请填写来源正文。";
+      return;
+    }
+    sourceForm.content = sanitized.content;
+  }
   if (!sourceReady.value) {
     formError.value = !sourceForm.author_id || !sourceForm.work_id
       ? "请先选择作者和作品。"
