@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-w6-7-exit-audit`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-progress-checkpoint`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2389,3 +2389,30 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 
 下一批 W6-8（AO-7）：Progress Fingerprint、checkpoint、恢复阶梯、
 bounded replan 与无人值守 Campaign。
+
+## W6-8A：Progress Fingerprint 与 ChapterCheckpoint 契约
+
+**状态：完成。**
+
+1. `ProgressFingerprint` 只接受正式项目事实（产物 hash、task lifecycle、
+   gate、晋升字数、义务/账本、review 绑定），不接受 Agent 自报。
+2. `no_progress_detected`：同 scope 指纹相等即 no-progress，供后续暂停
+   重规划与回退使用。
+3. `ChapterCheckpoint` 保存最近一次正式验证的安全状态；恢复前必须验证
+   项目指纹与进度指纹同时匹配；ISO-8601 确定性排序。
+4. 本批不读文件系统、不创建任务、不调用 Worker、不持久化、不激活计划。
+
+实现与验收：
+
+- `orchestration/progress.py`、`orchestration/checkpoint.py` 与
+  `orchestration/__init__.py` 导出；
+- `tests/orchestration/test_progress_checkpoint.py`：9 tests passed；
+- Python 全量：797 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-8a-progress-checkpoint-plan.md` 与
+`docs/architecture/reviews/w6-8a-progress-checkpoint-review.md`。
+
+下一批 W6-8B：恢复阶梯与 bounded replan 契约。
