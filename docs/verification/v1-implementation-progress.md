@@ -8,7 +8,7 @@
 >
 > 约束基线：`docs/architecture/module-boundaries.md`
 >
-> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-context-cache-session-lease`
+> 规划基线提交：`f3cc855`；当前实施分支：`feat/v097-output-repair-resource-gate`
 >
 > 本文件只记录已经通过退出门禁的事实。完成一段代码、通过定向测试或生成构建产物，均不能单独视为工作流交付。
 
@@ -2346,3 +2346,30 @@ W6-5B 已满足关闭条件。下一批可进入 W6-6 Rolling Horizon；AO-5 至
 `docs/architecture/reviews/w6-7b-context-cache-session-lease-review.md`。
 
 下一批 W6-7C：OutputRepairRequest 与 ResourceGate 只读并发准入。
+
+## W6-7C：OutputRepair 与 ResourceGate 只读并发准入
+
+**状态：完成。**
+
+1. `OutputRepairRequest` 只修复缺失或结构无效的 expected outputs；已通过
+   产物只读；语义不合格不得伪装成格式修复；attempt 有界。
+2. `admission_plan`：只读且两两不冲突的 `ResourceClaim` 进入并行组（受
+   `max_parallel_read_tasks` 限制）；任何写声明或排他 barrier 一律串行；
+   复用既有 `claims_conflict`，不引入第二套冲突判定。
+3. 重复声明、空声明 ID、非法并行上限 fail closed。
+
+实现与验收：
+
+- `runtime/output_repair.py`、`orchestration/resource_gate.py` 与
+  `orchestration/__init__.py` 导出；
+- `tests/runtime/test_output_repair.py`（5）+ 
+  `tests/orchestration/test_resource_gate.py`（7）= 12 tests passed；
+- Python 全量：788 tests passed，1 skipped；
+- `compileall`、Architecture Audit（34 file / 220 function debt、0 cycle）、
+  `git diff --check` 全部通过，无新增架构债务。
+
+计划与复核见
+`docs/architecture/reviews/w6-7c-output-repair-resource-gate-plan.md` 与
+`docs/architecture/reviews/w6-7c-output-repair-resource-gate-review.md`。
+
+下一批 W6-7 Exit Audit 收口 AO-6。
