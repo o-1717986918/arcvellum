@@ -8,6 +8,7 @@ persists, and never activates a plan.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
@@ -17,6 +18,7 @@ from .chapter_binding import (
     project_chapter_candidate_parameters,
 )
 from .chapter_facts import ChapterPlanningFacts
+from .chapter_facts_io import load_chapter_planning_facts
 from .chapter_horizon import (
     ChapterHorizonViolation,
     project_chapter_horizon,
@@ -98,6 +100,36 @@ def evaluate_chapter_plan_shadow(
         plan_evaluation=evaluation,
         violations=projection.violations,
         timing_ms=_elapsed_ms(started),
+    )
+
+
+def evaluate_chapter_plan_shadow_from_project(
+    root: Path,
+    chapter_id: str,
+    candidate_payload: dict[str, Any],
+    *,
+    active_scene_id: str,
+    horizon_size: int,
+    base_project_revision: str = "",
+    rebase_after: Sequence[str] = (),
+    proposed_levels: Mapping[str, SceneRiskLevel] | None = None,
+    normalization_context,
+    lint_context,
+    simulation_context_factory: Callable[[CompiledTaskGraph], Any],
+) -> ChapterPlanShadowEvaluation:
+    """Load project facts and evaluate the chapter plan in shadow mode."""
+    facts = load_chapter_planning_facts(root, chapter_id)
+    return evaluate_chapter_plan_shadow(
+        candidate_payload,
+        facts=facts,
+        active_scene_id=active_scene_id,
+        horizon_size=horizon_size,
+        base_project_revision=base_project_revision or facts.base_project_revision,
+        rebase_after=rebase_after,
+        proposed_levels=proposed_levels,
+        normalization_context=normalization_context,
+        lint_context=lint_context,
+        simulation_context_factory=simulation_context_factory,
     )
 
 

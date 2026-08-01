@@ -25,6 +25,7 @@ from .chapter_facts import (
     scene_order,
     scene_risk_values,
 )
+from .chapter_facts_io import load_chapter_planning_facts
 from .chapter_horizon import (
     ChapterHorizonProjection,
     ChapterHorizonShadowEvaluation,
@@ -35,6 +36,7 @@ from .chapter_horizon import (
 from .chapter_shadow import (
     ChapterPlanShadowEvaluation,
     evaluate_chapter_plan_shadow,
+    evaluate_chapter_plan_shadow_from_project,
 )
 from .compiler import PlanCompilationError, compile_plan, compiled_graph_digest
 from .compiler_registry import CompilerRegistry
@@ -243,6 +245,7 @@ __all__ = [
     "chapter_facts_violations",
     "evaluate_chapter_horizon_shadow",
     "evaluate_chapter_plan_shadow",
+    "evaluate_chapter_plan_shadow_from_project",
     "parse_creative_plan_event",
     "completed_candidate_from_event",
     "effective_risk_level",
@@ -258,6 +261,7 @@ __all__ = [
     "scene_risk_violations",
     "scene_risk_values",
     "chapter_window_policy",
+    "load_chapter_planning_facts",
     "simulate_plan",
     "to_primitive",
     "verify_persisted_revision",
