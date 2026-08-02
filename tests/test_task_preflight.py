@@ -30,6 +30,7 @@ from literary_engineering_studio_engine.source_ingest_route import (
 from literary_engineering_studio_engine.task_package_contract import (
     enrich_task_payload,
 )
+from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELDS
 
 
 class TaskPreflightTests(unittest.TestCase):
@@ -1516,6 +1517,173 @@ class TaskPreflightTests(unittest.TestCase):
                 normalized["evidence"]["candidate_sha256"],
                 hashlib.sha256(candidate.read_bytes()).hexdigest(),
             )
+
+    def test_story_architecture_agent_task_promotes_machine_status(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "plot").mkdir(parents=True)
+            candidate = workspace / "plot" / "story_architecture.candidate.json"
+            candidate.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/story-architecture/v1",
+                        "status": "pending_agent_judgment",
+                        "writer_session_id": "",
+                        **{
+                            field: (
+                                ["fixture"] if field in {"volume_obligations", "non_negotiable_payoffs"} else "fixture"
+                            )
+                            for field in REQUIRED_FIELDS
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "longform-planning-longform-story-architecture-agent-task",
+                    "route": "longform-planning",
+                    "current_state": "story-architecture-agent-task",
+                    "expected_outputs": ["plot/story_architecture.candidate.json"],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            normalized = json.loads(candidate.read_text(encoding="utf-8"))
+
+            self.assertEqual(normalized["status"], "complete")
+            self.assertTrue(
+                normalized["writer_session_id"].startswith("studio:writer:")
+            )
+            self.assertTrue(any(item["field"] == "status" for item in changes))
+
+    def test_story_architecture_agent_task_keeps_status_pending_when_fields_empty(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "plot").mkdir(parents=True)
+            candidate = workspace / "plot" / "story_architecture.candidate.json"
+            candidate.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/story-architecture/v1",
+                        "status": "pending_agent_judgment",
+                        "writer_session_id": "",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "longform-planning-longform-story-architecture-agent-task",
+                    "route": "longform-planning",
+                    "current_state": "story-architecture-agent-task",
+                    "expected_outputs": ["plot/story_architecture.candidate.json"],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            canonicalize_task_outputs(task, sandbox)
+            normalized = json.loads(candidate.read_text(encoding="utf-8"))
+
+            self.assertEqual(normalized["status"], "pending_agent_judgment")
+
+    def test_story_architecture_review_task_promotes_judged_status(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "plot").mkdir(parents=True)
+            (workspace / "reviews" / "longform").mkdir(parents=True)
+            candidate = workspace / "plot" / "story_architecture.candidate.json"
+            candidate.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/story-architecture/v1",
+                        "status": "complete",
+                        "writer_session_id": "studio:writer:longform-planning-longform-story-architecture-agent-task",
+                        **{
+                            field: (
+                                ["fixture"] if field in {"volume_obligations", "non_negotiable_payoffs"} else "fixture"
+                            )
+                            for field in REQUIRED_FIELDS
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            review = workspace / "reviews" / "longform" / "story_architecture_review.json"
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/story-architecture-review/v1",
+                        "status": "pending_agent_judgment",
+                        "verdict": "pass",
+                        "reviewer_session_id": "",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "longform-planning-longform-story-architecture-review",
+                    "route": "longform-planning",
+                    "current_state": "story-architecture-review",
+                    "expected_outputs": ["reviews/longform/story_architecture_review.json"],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            normalized = json.loads(review.read_text(encoding="utf-8"))
+
+            self.assertEqual(normalized["status"], "complete")
+            self.assertTrue(
+                normalized["reviewer_session_id"].startswith("studio:reviewer:")
+            )
+            self.assertEqual(
+                normalized["candidate_sha256"],
+                hashlib.sha256(candidate.read_bytes()).hexdigest(),
+            )
+            self.assertTrue(any(item["field"] == "status" for item in changes))
 
 
 if __name__ == "__main__":

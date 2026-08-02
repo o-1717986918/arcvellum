@@ -21,6 +21,7 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_definition,
     semantic_artifact_relative_path,
 )
+from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELDS
 
 
 def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
@@ -221,6 +222,12 @@ def _canonicalize_story_architecture_metadata(task: TaskPackage, sandbox: Sandbo
                 "writer_session_id": _session_identity(task, "writer"),
             }
             _normalize_complete_status(payload, expected)
+            if all(_meaningful(payload.get(field)) for field in REQUIRED_FIELDS):
+                # status is workflow-owned lifecycle metadata.  Once the
+                # Writer has produced every required creative field, the
+                # Worker completes the lifecycle instead of waiting for the
+                # model to guess a machine field.
+                expected["status"] = "complete"
             changes.extend(_write_machine_fields(path, candidate_rel, payload, expected, "story-architecture"))
     elif state == "story-architecture-review":
         path = sandbox.workspace / review_rel
@@ -236,8 +243,24 @@ def _canonicalize_story_architecture_metadata(task: TaskPackage, sandbox: Sandbo
                 "reviewer_session_id": _session_identity(task, "reviewer"),
             }
             _normalize_complete_status(payload, expected)
+            if str(payload.get("verdict") or "").strip().lower() in {
+                "pass",
+                "revise",
+                "block",
+            }:
+                expected["status"] = "complete"
             changes.extend(_write_machine_fields(path, review_rel, payload, expected, "story-architecture-review"))
     return changes
+
+
+def _meaningful(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, dict)):
+        return len(value) > 0
+    return True
 
 
 def _canonicalize_continuity_ledger_metadata(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
