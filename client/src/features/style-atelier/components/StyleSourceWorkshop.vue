@@ -14,7 +14,10 @@ import {
 } from "lucide-vue-next";
 import {
   decodeStyleSourceFile,
+  decodeStyleSourceFileLenient,
   sanitizeStyleSourceText,
+  StyleSourceEncodingError,
+  type StyleSourceEncoding,
   type PreparedStyleSource,
 } from "../services/styleSourceFiles";
 import { styleIdentity } from "../services/styleIdentity";
@@ -47,6 +50,12 @@ const sourceInputMode = ref<SourceInputMode>("file");
 const fileInput = ref<HTMLInputElement | null>(null);
 const preparedFiles = ref<PreparedStyleSource[]>([]);
 const fileError = ref("");
+const sourceEncoding = ref<StyleSourceEncoding>("auto");
+const lenientOffer = ref<{
+  filename: string;
+  replacementCount: number;
+  file: File;
+} | null>(null);
 const formError = ref("");
 const authorIdEdited = ref(false);
 const workIdEdited = ref(false);
@@ -160,18 +169,48 @@ async function chooseSourceFiles(event: Event): Promise<void> {
   const additions: PreparedStyleSource[] = [];
   for (const file of files) {
     try {
-      const prepared = await decodeStyleSourceFile(file);
+      const prepared = await decodeStyleSourceFile(file, sourceEncoding.value);
       if (!preparedFiles.value.some((item) => item.file_key === prepared.file_key)
         && !additions.some((item) => item.file_key === prepared.file_key)) {
         additions.push(prepared);
       }
     } catch (cause) {
-      fileError.value = cause instanceof Error ? cause.message : "文件没有成功读取。";
-      break;
+      if (
+        cause instanceof StyleSourceEncodingError
+        && cause.replacementCount > 0
+      ) {
+        lenientOffer.value = {
+          filename: file.name,
+          replacementCount: cause.replacementCount,
+          file,
+        };
+      } else {
+        fileError.value = cause instanceof Error ? cause.message : "文件没有成功读取。";
+        break;
+      }
     }
   }
   preparedFiles.value = [...preparedFiles.value, ...additions];
   input.value = "";
+}
+
+async function confirmLenientImport(): Promise<void> {
+  const offer = lenientOffer.value;
+  if (!offer) return;
+  try {
+    const prepared = await decodeStyleSourceFileLenient(
+      offer.file,
+      sourceEncoding.value,
+    );
+    preparedFiles.value = [...preparedFiles.value, prepared];
+    lenientOffer.value = null;
+  } catch (cause) {
+    fileError.value = cause instanceof Error ? cause.message : "文件没有成功读取。";
+  }
+}
+
+function cancelLenientOffer(): void {
+  lenientOffer.value = null;
 }
 
 function removePreparedFile(fileKey: string): void {
@@ -320,16 +359,34 @@ function submitSources(): void {
           <button type="button" :class="{ active: sourceInputMode === 'paste' }" @click="sourceInputMode = 'paste'"><ClipboardPaste :size="14" />粘贴文本</button>
         </div>
         <section v-if="sourceInputMode === 'file'" class="style-source-file-import">
+          <label class="style-source-encoding">
+            <span>文件编码</span>
+            <select v-model="sourceEncoding">
+              <option value="auto">自动检测</option>
+              <option value="utf-8">UTF-8</option>
+              <option value="gb18030">GB18030 / GBK</option>
+              <option value="big5">BIG5</option>
+              <option value="utf-16">UTF-16</option>
+            </select>
+          </label>
           <input ref="fileInput" class="style-source-file-input" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" multiple @change="chooseSourceFiles" />
           <button type="button" class="style-source-file-picker" @click="fileInput?.click()">
             <FileUp :size="21" />
-            <span><strong>从电脑选择语料文件</strong><small>支持 TXT、Markdown、UTF-8；一次最多 20 份</small></span>
+            <span><strong>从电脑选择语料文件</strong><small>支持 TXT、Markdown 与常见中文编码（UTF-8/GB18030/BIG5/UTF-16）；一次最多 20 份</small></span>
           </button>
           <p v-if="fileError" class="style-source-file-error" role="alert">{{ fileError }}</p>
+          <div v-if="lenientOffer" class="style-source-lenient-offer" role="alert">
+            <p>“{{ lenientOffer.filename }}”包含 {{ lenientOffer.replacementCount }} 个无法还原的替换字符（�）。移除这些字符后导入，文风分析会缺少这些位置的原字。</p>
+            <footer>
+              <button type="button" @click="cancelLenientOffer">取消</button>
+              <button type="button" class="primary" @click="confirmLenientImport">移除 {{ lenientOffer.replacementCount }} 个并导入</button>
+            </footer>
+          </div>
           <div v-if="preparedFiles.length" class="style-source-file-queue" aria-label="待导入语料">
             <article v-for="file in preparedFiles" :key="file.file_key">
               <FileText :size="15" />
               <span><strong>{{ file.filename }}</strong><small>{{ file.character_count.toLocaleString('zh-CN') }} 字符 · {{ file.media_type === 'text/markdown' ? 'Markdown' : '纯文本' }}</small></span>
+              <small v-if="file.replacement_count" class="style-source-lossy-note">已移除 {{ file.replacement_count }} 个损坏字符</small>
               <button type="button" :title="`移除 ${file.filename}`" @click="removePreparedFile(file.file_key)"><Trash2 :size="14" /></button>
             </article>
           </div>

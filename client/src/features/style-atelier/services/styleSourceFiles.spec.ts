@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   decodeStyleSourceFile,
+  decodeStyleSourceFileLenient,
   sanitizeStyleSourceText,
+  StyleSourceEncodingError,
 } from "./styleSourceFiles";
 
 function sourceFile(name: string, bytes: Uint8Array, lastModified = 1): File {
@@ -57,6 +59,32 @@ describe("style source files", () => {
     await expect(
       decodeStyleSourceFile(sourceFile("损坏.txt", bytes)),
     ).rejects.toThrow("替换字符");
+    await expect(
+      decodeStyleSourceFile(sourceFile("损坏.txt", bytes)),
+    ).rejects.toMatchObject({ replacementCount: 1 });
+  });
+
+  it("decodes explicit BIG5 and automatic UTF-16LE sources", async () => {
+    const big5 = await decodeStyleSourceFile(
+      sourceFile("傳統.txt", new Uint8Array([0xac, 0xf5, 0xbc, 0xd3, 0xb9, 0xda])),
+      "big5",
+    );
+    expect(big5.content).toBe("紅樓夢");
+
+    const utf16 = await decodeStyleSourceFile(
+      sourceFile("簡體.txt", new Uint8Array([0xff, 0xfe, 0xa2, 0x7e, 0x7c, 0x69, 0xa6, 0x68])),
+    );
+    expect(utf16.content).toBe("红楼梦");
+  });
+
+  it("lenient import removes replacement characters with an explicit count", async () => {
+    const bytes = new TextEncoder().encode("正\uFFFD文\uFFFD");
+    const prepared = await decodeStyleSourceFileLenient(
+      sourceFile("損壞.txt", bytes),
+    );
+
+    expect(prepared.content).toBe("正文");
+    expect(prepared.replacement_count).toBe(2);
   });
 
   it("sanitizes pasted text before a transaction starts", () => {
