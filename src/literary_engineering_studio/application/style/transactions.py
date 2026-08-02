@@ -17,6 +17,9 @@ from literary_engineering_studio_engine.style_lab import (
     ensure_style_library,
     import_work_source,
 )
+from literary_engineering_studio_engine.literary.style.session import (
+    source_content_digest,
+)
 
 from .contracts import RightsMode, SourceMediaType
 
@@ -143,7 +146,7 @@ class StyleAuthoringService:
         mode, declaration = _rights(rights_mode, rights_declaration)
         resolved_media = _media_type(media_type)
         body = _source_body(content)
-        content_sha = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        content_sha = source_content_digest(body)
         library = ensure_style_library(library_root)
         with _WRITE_LOCK:
             duplicate = _find_duplicate(library, content_sha)

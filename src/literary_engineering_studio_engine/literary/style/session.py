@@ -19,6 +19,8 @@ import shutil
 from typing import Iterable
 from uuid import uuid4
 
+from .text import source_content_digest
+
 
 STYLE_SESSION_SCHEMA = "arcvellum/style-engineering-session/v1"
 _IDENTITY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
@@ -471,8 +473,7 @@ def _require_inside(root: Path, target: Path) -> None:
 
 
 def _content_sha(text: str) -> str:
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return source_content_digest(text)
 
 
 def _read_json(path: Path) -> dict[str, object]:

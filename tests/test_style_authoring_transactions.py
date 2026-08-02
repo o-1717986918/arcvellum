@@ -14,6 +14,9 @@ from literary_engineering_studio.application.style.transactions import (
     StyleSourceDuplicateError,
     StyleTransactionError,
 )
+from literary_engineering_studio_engine.literary.style.session import (
+    source_content_digest,
+)
 from literary_engineering_studio.config import default_config
 
 
@@ -149,6 +152,54 @@ class StyleAuthoringTransactionTests(unittest.TestCase):
                     "U+FFFD",
                     str(caught.exception),
                 )
+
+    def test_imported_source_digest_matches_normalized_content(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = StyleAuthoringService()
+            service.create_author(
+                root,
+                author_id="author-one",
+                name="Public Domain Writer",
+                rights_mode="public-domain",
+                rights_declaration="Verified public-domain source collection.",
+            )
+            service.create_work(
+                root,
+                author_id="author-one",
+                work_id="work-one",
+                title="Work One",
+            )
+            service.import_source(
+                root,
+                author_id="author-one",
+                work_id="work-one",
+                filename="多段.txt",
+                media_type="text/plain",
+                content="第一段第一行\n第一段第二行\n\n第二段内容",
+                rights_mode="public-domain",
+                rights_declaration="Authorization covers this exact source.",
+            )
+
+            manifest_path = next(
+                (root / "authors").glob("*/works/*/sources/*.source.json")
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            work_dir = manifest_path.parents[1]
+            normalized_path = work_dir / str(manifest["normalized"])
+
+            self.assertEqual(
+                manifest["content_sha256"],
+                source_content_digest(
+                    normalized_path.read_text(encoding="utf-8")
+                ),
+            )
+            self.assertEqual(
+                manifest["content_sha256"],
+                source_content_digest(
+                    "第一段第一行第一段第二行\n\n第二段内容"
+                ),
+            )
 
     def test_api_returns_stable_conflict_and_rights_codes(self):
         with tempfile.TemporaryDirectory() as temporary:

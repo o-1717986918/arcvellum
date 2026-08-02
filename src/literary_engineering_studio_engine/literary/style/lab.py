@@ -21,6 +21,7 @@ from ...style_prompt import (
     build_style_prompt,
     style_prompt_quality_report,
 )
+from .text import normalize_source_text
 
 
 STYLE_LAB_SCHEMA = "literary-engineering-workbench/style-library/v0.1"
@@ -743,21 +744,7 @@ def _work_dir(library: Path, author_id: str, work_id: str) -> Path:
     return path
 
 
-def _normalize_text(text: str) -> str:
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    lines = [line.strip() for line in text.splitlines()]
-    paragraphs: list[str] = []
-    current: list[str] = []
-    for line in lines:
-        if not line:
-            if current:
-                paragraphs.append("".join(current))
-                current = []
-            continue
-        current.append(line)
-    if current:
-        paragraphs.append("".join(current))
-    return "\n\n".join(paragraphs)
+_normalize_text = normalize_source_text
 
 
 def _chunks(text: str, chunk_chars: int) -> list[str]:

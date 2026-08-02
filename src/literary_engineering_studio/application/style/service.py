@@ -10,6 +10,9 @@ from literary_engineering_studio_engine.style_lab import (
     active_project_style,
     default_style_library_root,
 )
+from literary_engineering_studio_engine.literary.style.session import (
+    source_content_digest,
+)
 
 from .contracts import RightsProjection, SourceProjection
 from .version_service import StyleVersionProjectionService
@@ -211,7 +214,9 @@ def _project_source(work_dir: Path, source_manifest: Path) -> dict[str, object] 
     return SourceProjection(
         source_id=str(payload.get("source_id") or source_manifest.stem),
         filename=str(payload.get("filename") or ""),
-        content_sha256=hashlib.sha256(normalized.read_bytes()).hexdigest(),
+        content_sha256=source_content_digest(
+            normalized.read_text(encoding="utf-8")
+        ),
         character_count=int(payload.get("char_count") or 0),
         chunk_count=int(payload.get("chunk_count") or 0),
         imported_at=str(payload.get("imported_at") or ""),
