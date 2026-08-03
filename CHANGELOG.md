@@ -2,6 +2,27 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.97.0] - 2026-08-03
+
+### Added
+
+- Added the deterministic AO-5 chapter orchestration layer: Rolling Horizon windows, SceneRiskProfile machine minimums, chapter planning facts, and measure-only shadow evaluation.
+- Added the AO-6 contract layer: Execution Bundle whitelist compiler, ContextCacheKey invalidation, session lease reuse, OutputRepair bounds, and ResourceGate read-only parallel admission.
+- Added the AO-7 contract layer: Progress Fingerprint, ChapterCheckpoint, recovery ladder, bounded replan budget, and unattended Campaign policy.
+- Added the AO-8 read-model and typed SSE surface for creation strategy and Agent observability, with the frontend entries temporarily hidden until the UI design matures.
+
+### Changed
+
+- Unified style source digests over normalized content so multi-paragraph Chinese sources validate consistently across import, session resolution, and projections.
+- Style source import now auto-detects UTF-8/GB18030/UTF-16, supports explicit BIG5 selection, strips NUL padding, and offers an explicit remove-and-import path for corrupted replacement characters.
+- The Studio Worker now completes machine-owned story architecture lifecycle status once the Writer has produced every required creative field, and the same for judged independent reviews.
+
+### Fixed
+
+- Fixed style source imports failing with "source content contains invalid replacement or NUL characters" for legacy Chinese encodings and NUL-padded files.
+- Fixed story architecture gates failing with "story architecture is incomplete: status" during unattended advancement.
+- Fixed style engineering failing with "style source content or digest is invalid" for multi-paragraph sources and sources without recorded digests.
+
 ## [0.96.4] - 2026-07-29
 
 ### Added
@@ -132,6 +153,7 @@ All notable ArcVellum changes are documented in this file. Detailed release evid
 
 - Candidate output, lifecycle status, and continuity-ledger edge cases found during end-to-end scene promotion testing.
 
+[0.97.0]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.97.0
 [0.96.4]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.4
 [0.96.3]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.3
 [0.96.2]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.96.2
