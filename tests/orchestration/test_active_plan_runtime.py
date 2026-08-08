@@ -196,6 +196,95 @@ class ActivePlanRuntimeTests(unittest.TestCase):
             self.assertNotIn("creative_plan_id", fallback.payload)
             self.assertEqual(events[-1][0], "orchestration.fixed_fallback")
 
+    def test_worker_dispatches_bundle_only_without_explicit_task_id(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = default_config()
+            config["orchestration"].update(
+                {"enabled": True, "mode": "assisted", "bundle_execution": True}
+            )
+            worker = AgentWorker(config)
+            sentinel = WorkerRunResult(
+                "complete",
+                root,
+                "scene-development",
+                "scene-task",
+                "opencode",
+                None,
+                None,
+                "bundle complete",
+            )
+
+            with patch(
+                "literary_engineering_studio.runtime.worker.dispatch_serial_bundle",
+                return_value=sentinel,
+            ) as dispatch:
+                result = worker.run_once(
+                    root,
+                    route="scene-development",
+                    runtime_id="opencode",
+                )
+            self.assertIs(result, sentinel)
+            dispatch.assert_called_once()
+
+            with (
+                patch(
+                    "literary_engineering_studio.runtime.worker.dispatch_serial_bundle"
+                ) as dispatch,
+                patch.object(
+                    worker,
+                    "prepare",
+                    return_value=(None, None, sentinel),
+                ) as prepare,
+            ):
+                explicit = worker.run_once(
+                    root,
+                    route="scene-development",
+                    runtime_id="opencode",
+                    task_id="scene-task",
+                )
+            self.assertIs(explicit, sentinel)
+            dispatch.assert_not_called()
+            prepare.assert_called_once()
+
+    def test_worker_binds_production_chapter_policy_into_formal_task(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, store, _ = _active_revision(Path(temporary))
+            _write_production_chapter_facts(root)
+            config = default_config()
+            config["orchestration"].update(
+                {
+                    "enabled": True,
+                    "mode": "assisted",
+                    "production_chapter_horizon": True,
+                    "chapter_horizon_size": 2,
+                }
+            )
+            worker = AgentWorker(
+                config,
+                plan_store=store,
+                orchestration_fingerprint_provider=lambda _root: FINGERPRINT,
+            )
+
+            bound = worker._bind_active_scene_plan(_scene_task(root))
+
+            self.assertEqual(
+                bound.payload["creative_chapter_policy"]["chapter_id"],
+                "chapter_01",
+            )
+            self.assertEqual(
+                len(bound.payload["creative_chapter_policy_digest"]),
+                64,
+            )
+            self.assertEqual(
+                bound.payload["creative_scene_policy"]["roleplay_depth"],
+                "full",
+            )
+            self.assertEqual(
+                bound.payload["creative_scene_policy"]["branch_count"],
+                5,
+            )
+
     def test_run_snapshot_freezes_bound_task_for_recovery_and_writeback(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
             root, store, _ = _active_revision(Path(temporary))
@@ -510,6 +599,7 @@ def _scene_task(root: Path) -> TaskPackage:
         "status": "opened",
         "route": "scene-development",
         "scene_id": "scene_0001",
+        "chapter_id": "chapter_01",
         "current_state": "roleplay-simulation",
         "task_type": "deterministic-cli",
         "prompt_asset_id": "route.scene-development.roleplay.prepare.v1",
@@ -527,6 +617,68 @@ def _scene_task(root: Path) -> TaskPackage:
         encoding="utf-8",
     )
     return TaskPackage(root, task_json, task_markdown, payload)
+
+
+def _write_production_chapter_facts(root: Path) -> None:
+    scenes = root / "scenes"
+    scenes.mkdir(parents=True, exist_ok=True)
+    (scenes / "scene_0001.yaml").write_text(
+        "scene_id: scene_0001\n"
+        "chapter_id: chapter_01\n"
+        "word_count_target: 1800\n"
+        "time: {timeline_order: 1}\n"
+        "new_asset_risk: 2\n",
+        encoding="utf-8",
+    )
+    plot = root / "plot"
+    plot.mkdir(exist_ok=True)
+    (plot / "rhythm_plan.json").write_text(
+        json.dumps(
+            {
+                "revision": 1,
+                "digest": "active-plan-runtime-rhythm",
+                "entries": [
+                    {
+                        "scene_id": "scene_0001",
+                        "pace": "slow_to_fast",
+                        "scene_function": ["推进主线"],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    budget = plot / "word_budget"
+    budget.mkdir()
+    (budget / "word_budget.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "chapter_budgets": [
+                    {
+                        "chapter_id": "chapter_01",
+                        "target_words": 1800,
+                        "target_scene_count": 1,
+                        "avg_scene_words": 1800,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    obligations = plot / "chapter_obligations"
+    obligations.mkdir()
+    (obligations / "chapter_01.json").write_text(
+        json.dumps(
+            {
+                "schema": "literary-engineering-workbench/chapter-obligation-contract/v1",
+                "chapter_id": "chapter_01",
+                "obligation_ids": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _engine_scene_task(root: Path, state: str) -> TaskPackage:

@@ -1879,3 +1879,77 @@ Q4.5 文学链收敛结论：
 7. SSE 关闭、断线续传和背压必须有确定性测试。
 
 下一步：先实现最窄的 Q5-B——production chapter projection 与串行 Bundle Executor。该批只建立消费者和强制边界，不同时引入并发、跨任务 session reuse 或 Campaign，以便在真实调用路径测试中证明行为等价后再逐层放开。
+
+### Q5-B 执行前闭环计划：章节事实与串行 Bundle
+
+本批只允许以下调用链：
+
+```text
+active_plan + formal chapter facts
+  -> production facts validation
+  -> current-scene risk/window minimum policy
+  -> existing scene task binding
+  -> whitelisted ExecutionBundle
+  -> Serial Bundle Executor
+  -> AgentWorker.run_once(task_id=...)
+  -> existing sandbox/preflight/writeback/Engine lifecycle
+```
+
+实现拆分：
+
+1. 扩展 `OrchestrationSettings`，加入默认关闭的 `production_chapter_horizon` 与 `bundle_execution`，并限制 horizon 为 2-4；
+2. 在现有 `chapter_facts_io` 上增加 production policy 加载函数，复用 `ChapterPlanningFacts`、`project_chapter_horizon` 与 `ChapterWindowPolicy`，不新增 Chapter Manager；
+3. scene binding 只把 chapter policy 作为最低深度/分支数约束，并把事实 digest 写入 task payload；Agent plan 可以比最低要求更深，不能降级机器风险结论；
+4. 新增一个有真实生命周期的 `SerialBundleExecutor` collaborator；它不拥有任务、文件或 Runtime，只验证 bundle identity/role/stop boundary 并逐项回调既有 Worker；
+5. `AgentWorker.run_once` 仅在未指定 task id、active plan 存在且 feature flag 开启时进入 Bundle；Bundle 内部执行显式 task id，因此不会递归；
+6. Bundle 发生版本漂移、未知 node、重复 task、角色不匹配或无结果时 fail closed 并记录 fixed fallback；已经完成的正式任务不回滚，下一轮继续固定路线；
+7. 测试必须覆盖 stop-before 发生在执行前、非完成状态立即停止、重复 task 防空转、feature-off 行为不变、chapter facts 缺失时固定回退、Writer/Reviewer 不混用。
+
+回滚边界：两个 flag 分别关闭即可恢复当前行为；不得修改 task schema、SQLite schema、Engine route 或项目正式文件格式。
+
+#### Q5-B 阶段审查记录：第一次实现未通过架构门禁
+
+针对性功能测试 36 项通过后，扩大验证到 Worker、Autopilot、Architecture Audit 与依赖方向，发现三处新增实现超过既有函数预算：
+
+- `scene_binding.bind_scene_task`：88 行，超过 80 行预算；
+- `runtime.bundle_executor.dispatch_serial_bundle`：119 行、复杂度 17，超过 80 行/复杂度 15 预算；
+- `AgentWorker.run_once`：146 行、复杂度 19，超过 130 行/复杂度 14 预算。
+
+该失败不能通过提高 baseline 解决。修正策略：
+
+1. `bind_scene_task` 提炼统一的 binding result 构造函数，保留现有 `SceneTaskPlanBinding`，不新增 Binding Manager；
+2. Bundle 分发拆成“选择并验证执行计划”“串行执行”“结果审计封装”三个窄职责，`SerialBundleExecutor` 仍是唯一 Bundle 生命周期 collaborator；
+3. `AgentWorker.run_once` 只负责编排 Bundle 尝试、prepare 与单任务执行；deterministic task、Agent runtime 和 runtime result 投影下沉到私有方法；
+4. 拆分后重新运行 Architecture Audit，不修改 `architecture-baseline.json`；
+5. 补生产路径测试，证明无显式 task id 时才尝试 Bundle，显式 task id 永远沿用单任务生命周期，production chapter policy 确实进入 task payload。
+
+#### Q5-B 完成记录
+
+状态：完成。
+
+完成内容：
+
+- `OrchestrationSettings` 增加默认关闭的 production chapter horizon、2-4 场滚动窗口与 serial bundle flags；配置关闭时行为保持不变；
+- `chapter_facts_io` 复用正式场景 YAML、rhythm plan、word budget 与 chapter obligations，生成通过 production validation 的 `ChapterWindowPolicy` 及 canonical digest；
+- scene task binding 将章节风险策略作为最低 RP 深度与分支数：Agent 计划可以更深，不能降低机器最低要求；政策及 digest 写入冻结的 task snapshot；
+- 新增 `runtime.bundle_executor.SerialBundleExecutor`：只验证 active plan、scope、node、Agent role、stop boundary 与无进展，不拥有 task lifecycle、sandbox、writeback 或项目写入；
+- `AgentWorker` 仅在无显式 task id、scene-development、非 fixed/shadow 且 flag 开启时尝试 Bundle；Bundle 每一步仍递归调用带显式 task id 的既有单任务生命周期，因此不会再次进入 Bundle；
+- Bundle 选择失败、身份漂移、角色不匹配、重复任务或步数耗尽均发出 fixed fallback 证据；已完成正式任务不回滚；
+- `AgentWorker.run_once`、Bundle dispatcher 与 scene binding 已按 Architecture Audit 反馈拆成窄方法，未提高 baseline；
+- 全量回归顺带发现并修复了维护/实验用 `allow_unselected_composition` 与强制 prose execution contract 的内部矛盾；正式默认路径仍 fail closed，实验产物明确标记为不可晋升/发布。
+
+阶段验证：
+
+- Chapter/Bundle/Active Plan 合同：36 tests passed；
+- 生产 Worker dispatch、显式 task bypass、章节策略 payload、恢复与架构组合：37 tests passed；
+- 文风挂载场景链、正式场景命令、Architecture Audit 与 Dependency Direction：7 tests passed；
+- Architecture baseline 未修改；
+- 全量 897 tests passed，1 skipped；首次运行定位到的旧兼容断层已经独立提交修复；
+- `compileall`、Architecture Audit、Dependency Direction 与 `git diff --check` 共同作为本批收敛门禁。
+
+Q5-B 结论：
+
+- Chapter Facts/Horizon 与 ExecutionBundle 已从合同/影子能力升级为默认关闭、可固定回退的生产消费者；
+- 正式 task identity、Agent role、stop boundary、sandbox、preflight、writeback 与 Engine lifecycle 没有被旁路；
+- 本批没有新增多余父类/子类。`SerialBundleExecutor` 是有独立生命周期语义的 collaborator；章节事实、风险最低要求和 payload 投影保持纯函数/既有 dataclass；
+- 下一批进入 Q5-C：先组合现有项目执行协调器、持久锁和 `ResourceClaim`，再引入角色隔离的 session lease 与只缓存可重建上下文的 cache；不得把它们发展成第二 RuntimePool 或第二项目状态机。

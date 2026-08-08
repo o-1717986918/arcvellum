@@ -13,6 +13,11 @@ from literary_engineering_studio.orchestration import (
     chapter_window_policy,
     evaluate_chapter_plan_shadow,
     project_chapter_candidate_parameters,
+    project_chapter_horizon,
+)
+from literary_engineering_studio.orchestration.chapter_binding import (
+    chapter_scene_minimums,
+    stronger_roleplay_depth,
 )
 
 from tests.orchestration.fixtures import freedom_budget, scene_plan_candidate
@@ -97,6 +102,29 @@ def _shadow_contexts():
 
 
 class ChapterWindowPolicyProjectionTests(unittest.TestCase):
+    def test_runtime_minimums_only_raise_plan_depth(self):
+        projection = project_chapter_horizon(
+            _facts(),
+            active_scene_id="scene_0001",
+            horizon_size=2,
+        )
+        self.assertTrue(projection.passed)
+        assert projection.window is not None
+        policy = chapter_window_policy(
+            projection.window,
+            projection.risk_profiles,
+        )
+
+        minimum_depth, minimum_branches = chapter_scene_minimums(
+            policy,
+            "scene_0001",
+        )
+        self.assertEqual(
+            stronger_roleplay_depth("full", minimum_depth),
+            "full",
+        )
+        self.assertGreaterEqual(minimum_branches, 2)
+
     def test_candidate_parameters_follow_risk_profiles(self):
         projection = project_chapter_candidate_parameters(
             _two_scene_candidate(),

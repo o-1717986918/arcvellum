@@ -10,12 +10,14 @@ from collections.abc import Callable
 from ..application.config import load_config
 from ..contracts import TaskPackage, load_task_package
 from ..core_bridge import CoreBridge, task_command_parameters
-from ..orchestration.active_plan import ActivePlanLoader
+from ..orchestration.active_plan import ActivePlanLoader, ActiveScenePlan
+from ..orchestration.chapter_facts_io import load_production_chapter_policy
 from ..orchestration.project_fingerprint import planning_project_fingerprint
 from ..orchestration.scene_binding import bind_scene_task
 from ..orchestration.settings import OrchestrationMode, orchestration_settings
 from ..persistence.job_store import JobStore
 from ..runtimes import build_runtime
+from .bundle_executor import dispatch_serial_bundle
 from .context_budget import resolve_task_context_budget
 from .repair_context import RepairContextCoordinator
 from .sandbox import (
@@ -99,27 +101,25 @@ class AgentWorker:
         self.observer.reset_context_ledger()
         project = _validate_project(project_root)
         self.observer.emit("task.selecting", {"project_root": str(project), "route": route})
-        selected_task_id = task_id.strip()
-        if not selected_task_id:
-            issued = self.bridge.task_next(project, route, scene=scene)
-            if issued.fields.get("status") == "ready" or not issued.fields.get("task_id"):
-                return None, None, WorkerRunResult(
-                    "route_ready",
-                    project,
-                    route,
-                    "",
-                    runtime_id,
-                    None,
-                    None,
-                    issued.fields.get("message", "route has no pending task"),
-                    audit_fields={"status": "route-ready", "scope": "route-terminal-scan"},
-                )
-            selected_task_id = issued.fields["task_id"]
-
-        opened = self.bridge.task_open(project, selected_task_id)
-        task_json_path = _resolve_task_json_path(project, selected_task_id, opened.fields.get("task_json", ""))
-        task = load_task_package(project, task_json_path)
-        task = self._bind_active_scene_plan(task)
+        task, ready_message = self._select_task_package(
+            project,
+            route=route,
+            task_id=task_id,
+            scene=scene,
+            emit_binding_events=True,
+        )
+        if task is None:
+            return None, None, WorkerRunResult(
+                "route_ready",
+                project,
+                route,
+                "",
+                runtime_id,
+                None,
+                None,
+                ready_message or "route has no pending task",
+                audit_fields={"status": "route-ready", "scope": "route-terminal-scan"},
+            )
         context_budget = resolve_task_context_budget(task, self.config.get("worker"))
         self.observer.emit("task.opened", _task_opened_payload(task))
         if task.human_gate_reasons:
@@ -208,7 +208,52 @@ class AgentWorker:
         self.observer.publish_context_ready(task, sandbox, active_runtime)
         return task, sandbox, None
 
-    def _bind_active_scene_plan(self, task: TaskPackage) -> TaskPackage:
+    def _select_task_package(
+        self,
+        project: Path,
+        *,
+        route: str,
+        task_id: str = "",
+        scene: str = "",
+        emit_binding_events: bool,
+    ) -> tuple[TaskPackage | None, str]:
+        selected_task_id = task_id.strip()
+        if not selected_task_id:
+            issued = self.bridge.task_next(project, route, scene=scene)
+            if issued.fields.get("status") == "ready" or not issued.fields.get("task_id"):
+                return None, str(
+                    issued.fields.get("message") or "route has no pending task"
+                )
+            selected_task_id = str(issued.fields["task_id"])
+        opened = self.bridge.task_open(project, selected_task_id)
+        task_json_path = _resolve_task_json_path(
+            project,
+            selected_task_id,
+            opened.fields.get("task_json", ""),
+        )
+        task = load_task_package(project, task_json_path)
+        return (
+            self._bind_active_scene_plan(task, emit_events=emit_binding_events),
+            "",
+        )
+
+    def _active_scene_plan(self, project_root: Path) -> ActiveScenePlan | None:
+        store = self.plan_store
+        if store is None:
+            application = self.config.get("application")
+            payload = application if isinstance(application, dict) else {}
+            store = JobStore(Path(str(payload.get("database_path") or "studio.sqlite3")))
+        return ActivePlanLoader(
+            store,
+            fingerprint_provider=self.orchestration_fingerprint_provider,
+        ).load(project_root)
+
+    def _bind_active_scene_plan(
+        self,
+        task: TaskPackage,
+        *,
+        emit_events: bool = True,
+    ) -> TaskPackage:
         settings = orchestration_settings(self.config)
         if settings.effective_mode in {
             OrchestrationMode.FIXED,
@@ -219,45 +264,59 @@ class AgentWorker:
             task.payload.get("scene_id") or ""
         ).strip():
             return task
-        store = self.plan_store
-        if store is None:
-            application = self.config.get("application")
-            payload = application if isinstance(application, dict) else {}
-            store = JobStore(Path(str(payload.get("database_path") or "studio.sqlite3")))
         try:
-            active = ActivePlanLoader(
-                store,
-                fingerprint_provider=self.orchestration_fingerprint_provider,
-            ).load(task.project_root)
+            active = self._active_scene_plan(task.project_root)
             if active is None:
-                self.observer.emit(
-                    "orchestration.fixed_fallback",
-                    {"task_id": task.task_id, "reason": "no-active-plan"},
-                )
+                if emit_events:
+                    self.observer.emit(
+                        "orchestration.fixed_fallback",
+                        {"task_id": task.task_id, "reason": "no-active-plan"},
+                    )
                 return task
+            chapter_policy = None
+            chapter_policy_digest = ""
+            if settings.production_chapter_horizon:
+                chapter_id = str(task.payload.get("chapter_id") or "").strip()
+                scene_id = str(task.payload.get("scene_id") or "").strip()
+                if not chapter_id:
+                    raise ValueError(
+                        "production chapter horizon requires task chapter_id"
+                    )
+                chapter_policy, chapter_policy_digest = (
+                    load_production_chapter_policy(
+                        task.project_root,
+                        chapter_id,
+                        active_scene_id=scene_id,
+                        horizon_size=settings.chapter_horizon_size,
+                    )
+                )
             binding = bind_scene_task(
                 task,
                 plan=active.plan,
                 graph=active.graph,
                 current_project_fingerprint=active.project_fingerprint,
+                chapter_policy=chapter_policy,
+                chapter_policy_digest=chapter_policy_digest,
             )
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
-            self.observer.emit(
-                "orchestration.fixed_fallback",
-                {"task_id": task.task_id, "reason": str(exc)},
-            )
+            if emit_events:
+                self.observer.emit(
+                    "orchestration.fixed_fallback",
+                    {"task_id": task.task_id, "reason": str(exc)},
+                )
             return task
-        self.observer.emit(
-            "orchestration.plan_bound",
-            {
-                "task_id": task.task_id,
-                "plan_id": binding.plan_id,
-                "plan_revision": binding.plan_revision,
-                "node_id": binding.node_id,
-                "node_kind": binding.node_kind,
-                "binding_status": binding.status,
-            },
-        )
+        if emit_events:
+            self.observer.emit(
+                "orchestration.plan_bound",
+                {
+                    "task_id": task.task_id,
+                    "plan_id": binding.plan_id,
+                    "plan_revision": binding.plan_revision,
+                    "node_id": binding.node_id,
+                    "node_kind": binding.node_kind,
+                    "binding_status": binding.status,
+                },
+            )
         return binding.task
 
     def run_once(
@@ -269,6 +328,15 @@ class AgentWorker:
         task_id: str = "",
         scene: str = "",
     ) -> WorkerRunResult:
+        bundled = self._try_bundle_dispatch(
+            project_root,
+            route=route,
+            runtime_id=runtime_id,
+            task_id=task_id,
+            scene=scene,
+        )
+        if bundled is not None:
+            return bundled
         task, sandbox, terminal = self.prepare(
             project_root,
             route=route,
@@ -279,58 +347,89 @@ class AgentWorker:
         if terminal is not None:
             return terminal
         assert task is not None and sandbox is not None
+        return self._run_prepared_task(task, sandbox, runtime_id=runtime_id)
+
+    def _try_bundle_dispatch(
+        self,
+        project_root: Path,
+        *,
+        route: str,
+        runtime_id: str,
+        task_id: str,
+        scene: str,
+    ) -> WorkerRunResult | None:
+        settings = orchestration_settings(self.config)
+        enabled = (
+            not task_id.strip()
+            and route == "scene-development"
+            and settings.bundle_execution
+            and settings.effective_mode
+            not in {OrchestrationMode.FIXED, OrchestrationMode.SHADOW}
+        )
+        if not enabled:
+            return None
+        return dispatch_serial_bundle(
+            self,
+            project_root,
+            route=route,
+            runtime_id=runtime_id,
+            scene=scene,
+        )
+
+    def _run_prepared_task(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        *,
+        runtime_id: str,
+    ) -> WorkerRunResult:
         active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
-
         if task.execution_contract.execution_policy == "deterministic":
-            self.observer.emit("runner.skipped", {"reason": "deterministic-cli", "task_id": task.task_id})
-            update_run_manifest(
-                sandbox.manifest_path,
-                status="deterministic_outputs_ready",
-                runtime_message="core deterministic command completed in the isolated workspace",
-                runtime_returncode=0,
-            )
-            return self.writeback.complete_outputs(task, sandbox, active_runtime)
-
+            return self._complete_deterministic_task(task, sandbox, active_runtime)
         if self.cancel_event.is_set():
-            self.observer.emit("run.cancelled", {"stage": "before-runner"})
-            return WorkerRunResult(
-                "cancelled",
-                task.project_root,
-                task.route,
-                task.task_id,
-                runtime_id,
-                sandbox.run_root,
-                sandbox.workspace,
-                "run cancelled before Agent Runner execution",
-            )
+            return self._cancelled_result(task, sandbox, runtime_id, "before-runner")
+        runtime_result = self._execute_agent_runtime(task, sandbox, runtime_id)
+        terminal = self._runtime_terminal_result(
+            task,
+            sandbox,
+            runtime_id,
+            runtime_result,
+        )
+        if terminal is not None:
+            return terminal
+        if self.cancel_event.is_set():
+            return self._cancelled_result(task, sandbox, runtime_id, "before-writeback")
+        return self.writeback.complete_outputs(task, sandbox, runtime_id)
 
+    def _complete_deterministic_task(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        active_runtime: str,
+    ) -> WorkerRunResult:
+        self.observer.emit(
+            "runner.skipped",
+            {"reason": "deterministic-cli", "task_id": task.task_id},
+        )
+        update_run_manifest(
+            sandbox.manifest_path,
+            status="deterministic_outputs_ready",
+            runtime_message="core deterministic command completed in the isolated workspace",
+            runtime_returncode=0,
+        )
+        return self.writeback.complete_outputs(task, sandbox, active_runtime)
+
+    def _execute_agent_runtime(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        runtime_id: str,
+    ):
         runtime = build_runtime(runtime_id, self.config, runtime_pool=self.runtime_pool)
         timeout = int(self.config.get("worker", {}).get("timeout_seconds") or 1800)
         self.observer.emit("runner.started", {"runner_id": runtime_id, "task_id": task.task_id})
-        runtime_kwargs = {
-            "timeout": timeout,
-            "event_sink": self.observer.emit,
-            "cancel_event": self.cancel_event,
-        }
-        if runtime_id == "opencode":
-            repair_context = RepairContextCoordinator(task, sandbox)
-
-            def validate_outputs():
-                return self.writeback.validate_outputs(
-                    task,
-                    sandbox,
-                    runtime_id=runtime_id,
-                )
-
-            runtime_kwargs.update(
-                {
-                    "output_validator": validate_outputs,
-                    "max_repairs": int(self.config.get("worker", {}).get("max_repair_attempts") or 2),
-                    "repair_prompt_builder": repair_context.prepare,
-                    "repair_turn_finalizer": repair_context.finalize,
-                }
-            )
-        runtime_result = runtime.execute(
+        runtime_kwargs = self._runtime_kwargs(task, sandbox, runtime_id, timeout)
+        result = runtime.execute(
             sandbox.workspace,
             sandbox.prompt_path,
             sandbox.run_root,
@@ -340,55 +439,99 @@ class AgentWorker:
             "runner.completed",
             {
                 "runner_id": runtime_id,
-                "status": runtime_result.status,
-                "returncode": runtime_result.returncode,
+                "status": result.status,
+                "returncode": result.returncode,
             },
         )
         update_run_manifest(
             sandbox.manifest_path,
-            status=runtime_result.status,
-            runtime_message=runtime_result.message,
-            runtime_returncode=runtime_result.returncode,
-            runtime_output=str(runtime_result.output_path) if runtime_result.output_path else "",
-            runtime_metadata=runtime_result.metadata or {},
+            status=result.status,
+            runtime_message=result.message,
+            runtime_returncode=result.returncode,
+            runtime_output=str(result.output_path) if result.output_path else "",
+            runtime_metadata=result.metadata or {},
         )
-        if runtime_result.status == "waiting_host_agent":
-            return WorkerRunResult(
-                runtime_result.status,
-                task.project_root,
-                task.route,
-                task.task_id,
-                runtime_id,
-                sandbox.run_root,
-                sandbox.workspace,
-                runtime_result.message,
-            )
-        if runtime_result.status != "completed":
-            return WorkerRunResult(
-                "runtime_failed",
-                task.project_root,
-                task.route,
-                task.task_id,
-                runtime_id,
-                sandbox.run_root,
-                sandbox.workspace,
-                runtime_result.message,
-            )
+        return result
 
-        if self.cancel_event.is_set():
-            self.observer.emit("run.cancelled", {"stage": "before-writeback"})
-            return WorkerRunResult(
-                "cancelled",
-                task.project_root,
-                task.route,
-                task.task_id,
-                runtime_id,
-                sandbox.run_root,
-                sandbox.workspace,
-                "run cancelled before formal writeback",
-            )
+    def _runtime_kwargs(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        runtime_id: str,
+        timeout: int,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "timeout": timeout,
+            "event_sink": self.observer.emit,
+            "cancel_event": self.cancel_event,
+        }
+        if runtime_id != "opencode":
+            return kwargs
+        repair_context = RepairContextCoordinator(task, sandbox)
+        kwargs.update(
+            {
+                "output_validator": lambda: self.writeback.validate_outputs(
+                    task,
+                    sandbox,
+                    runtime_id=runtime_id,
+                ),
+                "max_repairs": int(
+                    self.config.get("worker", {}).get("max_repair_attempts") or 2
+                ),
+                "repair_prompt_builder": repair_context.prepare,
+                "repair_turn_finalizer": repair_context.finalize,
+            }
+        )
+        return kwargs
 
-        return self.writeback.complete_outputs(task, sandbox, runtime_id)
+    def _runtime_terminal_result(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        runtime_id: str,
+        runtime_result,
+    ) -> WorkerRunResult | None:
+        if runtime_result.status == "completed":
+            return None
+        status = (
+            runtime_result.status
+            if runtime_result.status == "waiting_host_agent"
+            else "runtime_failed"
+        )
+        return WorkerRunResult(
+            status,
+            task.project_root,
+            task.route,
+            task.task_id,
+            runtime_id,
+            sandbox.run_root,
+            sandbox.workspace,
+            runtime_result.message,
+        )
+
+    def _cancelled_result(
+        self,
+        task: TaskPackage,
+        sandbox: SandboxManifest,
+        runtime_id: str,
+        stage: str,
+    ) -> WorkerRunResult:
+        self.observer.emit("run.cancelled", {"stage": stage})
+        message = (
+            "run cancelled before Agent Runner execution"
+            if stage == "before-runner"
+            else "run cancelled before formal writeback"
+        )
+        return WorkerRunResult(
+            "cancelled",
+            task.project_root,
+            task.route,
+            task.task_id,
+            runtime_id,
+            sandbox.run_root,
+            sandbox.workspace,
+            message,
+        )
 
     def resume_from_run(self, run_root: Path) -> WorkerRunResult:
         """Resume a timed-out run only when it contains fresh valid Agent output."""

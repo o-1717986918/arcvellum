@@ -30,6 +30,30 @@ class OrchestrationFoundationTests(unittest.TestCase):
         self.assertFalse(settings.enabled)
         self.assertEqual(settings.configured_mode, OrchestrationMode.FIXED)
         self.assertEqual(settings.effective_mode, OrchestrationMode.FIXED)
+        self.assertFalse(settings.production_chapter_horizon)
+        self.assertFalse(settings.bundle_execution)
+        self.assertEqual(settings.chapter_horizon_size, 3)
+
+    def test_production_rollout_flags_are_explicit_and_horizon_is_bounded(self):
+        config = default_config()
+        config["orchestration"].update(
+            {
+                "enabled": True,
+                "mode": "assisted",
+                "production_chapter_horizon": True,
+                "chapter_horizon_size": 4,
+                "bundle_execution": True,
+            }
+        )
+        settings = orchestration_settings(config)
+
+        self.assertTrue(settings.production_chapter_horizon)
+        self.assertTrue(settings.bundle_execution)
+        self.assertEqual(settings.chapter_horizon_size, 4)
+
+        config["orchestration"]["chapter_horizon_size"] = 5
+        with self.assertRaisesRegex(ValueError, "between 2 and 4"):
+            orchestration_settings(config)
 
     def test_partial_or_empty_config_safely_defaults_to_fixed(self):
         settings = orchestration_settings({})

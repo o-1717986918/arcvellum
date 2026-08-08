@@ -167,6 +167,9 @@ def _default_orchestration_config() -> dict[str, Any]:
         "mode": "fixed",
         "strategy_preset": "balanced",
         "constitution_version": "1",
+        "production_chapter_horizon": False,
+        "chapter_horizon_size": 3,
+        "bundle_execution": False,
     }
 
 

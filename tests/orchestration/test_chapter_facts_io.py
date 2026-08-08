@@ -14,6 +14,9 @@ from literary_engineering_studio.orchestration import (
     evaluate_chapter_plan_shadow_from_project,
     load_chapter_planning_facts,
 )
+from literary_engineering_studio.orchestration.chapter_facts_io import (
+    load_production_chapter_policy,
+)
 
 from tests.orchestration.fixtures import freedom_budget, scene_plan_candidate
 from tests.orchestration.plan_persistence_support import (
@@ -108,6 +111,55 @@ def _scaffold_project(root: Path, *, with_plot: bool = True) -> None:
 
 
 class ChapterFactsIoAdapterTests(unittest.TestCase):
+    def test_production_policy_is_bound_to_current_formal_facts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _scaffold_project(root)
+
+            first, first_digest = load_production_chapter_policy(
+                root,
+                "chapter_01",
+                active_scene_id="scene_0002",
+                horizon_size=2,
+            )
+            second, second_digest = load_production_chapter_policy(
+                root,
+                "chapter_01",
+                active_scene_id="scene_0002",
+                horizon_size=2,
+            )
+
+            self.assertEqual(first, second)
+            self.assertEqual(first_digest, second_digest)
+            self.assertEqual(len(first_digest), 64)
+            self.assertEqual(first.active_scene_id, "scene_0002")
+
+            scene = root / "scenes" / "scene_0002.yaml"
+            scene.write_text(
+                scene.read_text(encoding="utf-8") + "style_novelty: 3\n",
+                encoding="utf-8",
+            )
+            _, changed_digest = load_production_chapter_policy(
+                root,
+                "chapter_01",
+                active_scene_id="scene_0002",
+                horizon_size=2,
+            )
+            self.assertNotEqual(first_digest, changed_digest)
+
+    def test_production_policy_rejects_missing_formal_contracts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _scaffold_project(root, with_plot=False)
+
+            with self.assertRaisesRegex(ValueError, "production chapter facts"):
+                load_production_chapter_policy(
+                    root,
+                    "chapter_01",
+                    active_scene_id="scene_0002",
+                    horizon_size=2,
+                )
+
     def test_loader_orders_scenes_by_timeline_and_carries_budget_facts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

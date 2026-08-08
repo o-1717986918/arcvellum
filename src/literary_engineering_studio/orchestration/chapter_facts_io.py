@@ -9,12 +9,17 @@ project facts, and never activates a plan.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from ruamel.yaml import YAML
 
+from ..protocols.canonical_json import canonical_json_digest
+from .chapter_binding import ChapterWindowPolicy, chapter_window_policy
 from .chapter_facts import ChapterPlanningFacts, ScenePlanningFact
+from .chapter_facts import ChapterFactsValidationMode, chapter_facts_violations
+from .chapter_horizon import project_chapter_horizon
 from .project_fingerprint import planning_project_fingerprint
 
 _YAML = YAML(typ="safe")
@@ -57,6 +62,43 @@ def load_chapter_planning_facts(
         obligation_contract_present=obligation_contract_present,
         base_project_revision=planning_project_fingerprint(root),
     )
+
+
+def load_production_chapter_policy(
+    root: Path,
+    chapter_id: str,
+    *,
+    active_scene_id: str,
+    horizon_size: int,
+) -> tuple[ChapterWindowPolicy, str]:
+    """Load and seal the current chapter facts used by formal task binding."""
+
+    facts = load_chapter_planning_facts(root, chapter_id)
+    violations = chapter_facts_violations(
+        facts,
+        mode=ChapterFactsValidationMode.PRODUCTION,
+    )
+    if violations:
+        raise ValueError(
+            "production chapter facts are incomplete: "
+            + "; ".join(item.message for item in violations[:8])
+        )
+    projection = project_chapter_horizon(
+        facts,
+        active_scene_id=active_scene_id,
+        horizon_size=horizon_size,
+        base_project_revision=facts.base_project_revision,
+    )
+    if not projection.passed or projection.window is None:
+        raise ValueError(
+            "production chapter horizon is invalid: "
+            + "; ".join(item.message for item in projection.violations[:8])
+        )
+    policy = chapter_window_policy(projection.window, projection.risk_profiles)
+    digest = canonical_json_digest(
+        {"facts": asdict(facts), "policy": policy.as_dict()}
+    )
+    return policy, digest
 
 
 def _chapter_scene_paths(root: Path, chapter_id: str) -> list[Path]:

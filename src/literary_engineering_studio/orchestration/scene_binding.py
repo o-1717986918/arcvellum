@@ -10,6 +10,11 @@ from literary_engineering_studio_engine.orchestration import (
 )
 
 from ..contracts import TaskPackage
+from .chapter_binding import (
+    ChapterWindowPolicy,
+    chapter_scene_minimums,
+    stronger_roleplay_depth,
+)
 from .compiler import compiled_graph_digest
 from .contracts import (
     CompiledTaskGraph,
@@ -56,6 +61,8 @@ def bind_scene_task(
     plan: CreativeExecutionPlan,
     graph: CompiledTaskGraph,
     current_project_fingerprint: str,
+    chapter_policy: ChapterWindowPolicy | None = None,
+    chapter_policy_digest: str = "",
 ) -> SceneTaskPlanBinding:
     """Project strategy onto one formal task without replacing its lifecycle."""
 
@@ -65,17 +72,23 @@ def bind_scene_task(
     _validate_chain(plan, graph, current_project_fingerprint)
     if scene_id not in _scene_refs(plan):
         raise ValueError("formal task scene is outside the active plan scope")
-    policy = _scene_policy(plan, graph, scene_id)
+    policy = _scene_policy(
+        plan,
+        graph,
+        scene_id,
+        chapter_policy=chapter_policy,
+    )
     node_kind = scene_plan_node_kind(task.current_state)
     if node_kind is None:
-        return SceneTaskPlanBinding(
-            task=_bind_payload(task, plan, None, policy, "formal_lifecycle_passthrough"),
-            status="formal_lifecycle_passthrough",
-            plan_id=plan.plan_id,
-            plan_revision=plan.revision,
-            node_id="",
-            node_kind="",
+        return _binding_result(
+            task,
+            plan=plan,
+            node=None,
             policy=policy,
+            status="formal_lifecycle_passthrough",
+            node_kind="",
+            chapter_policy=chapter_policy,
+            chapter_policy_digest=chapter_policy_digest,
         )
     node = _resolve_node(task, graph, scene_id, node_kind)
     if node is None:
@@ -84,33 +97,59 @@ def bind_scene_task(
                 "active scene plan lacks the node required by the formal task: "
                 f"{node_kind.value}"
             )
-        return SceneTaskPlanBinding(
-            task=_bind_payload(
-                task,
-                plan,
-                None,
-                policy,
-                "formal_conditional_policy",
-            ),
-            status="formal_conditional_policy",
-            plan_id=plan.plan_id,
-            plan_revision=plan.revision,
-            node_id="",
-            node_kind=node_kind.value,
+        return _binding_result(
+            task,
+            plan=plan,
+            node=None,
             policy=policy,
+            status="formal_conditional_policy",
+            node_kind=node_kind.value,
+            chapter_policy=chapter_policy,
+            chapter_policy_digest=chapter_policy_digest,
         )
     if task.task_type not in node.binding.allowed_task_types:
         raise RuntimeError(
             "formal task type does not match the active scene plan binding: "
             f"{task.task_type}"
         )
-    return SceneTaskPlanBinding(
-        task=_bind_payload(task, plan, node, policy, "bound"),
+    return _binding_result(
+        task,
+        plan=plan,
+        node=node,
+        policy=policy,
         status="bound",
+        node_kind=node.kind.value,
+        chapter_policy=chapter_policy,
+        chapter_policy_digest=chapter_policy_digest,
+    )
+
+
+def _binding_result(
+    task: TaskPackage,
+    *,
+    plan: CreativeExecutionPlan,
+    node: CompiledTaskNode | None,
+    policy: SceneExecutionPolicy,
+    status: str,
+    node_kind: str,
+    chapter_policy: ChapterWindowPolicy | None,
+    chapter_policy_digest: str,
+) -> SceneTaskPlanBinding:
+    return SceneTaskPlanBinding(
+        task=_bind_payload(
+            task,
+            plan,
+            node,
+            policy,
+            status,
+            chapter_policy=chapter_policy,
+            chapter_policy_digest=chapter_policy_digest,
+        ),
+        status=status,
         plan_id=plan.plan_id,
         plan_revision=plan.revision,
-        node_id=node.node_id,
-        node_kind=node.kind.value,
+        node_id=node.node_id if node is not None else "",
+        node_kind=node_kind,
         policy=policy,
     )
 
@@ -152,6 +191,8 @@ def _scene_policy(
     plan: CreativeExecutionPlan,
     graph: CompiledTaskGraph,
     scene_id: str,
+    *,
+    chapter_policy: ChapterWindowPolicy | None,
 ) -> SceneExecutionPolicy:
     scene_strategy = next(
         (item for item in plan.strategy.scene_inventory if item.scene_ref == scene_id),
@@ -165,6 +206,13 @@ def _scene_policy(
     )
     branch_node = _single_node(graph, scene_id, PlanNodeKind.BRANCH_SIMULATION)
     branch_count = int(_parameters(branch_node).get("branch_count") or plan.strategy.branch_count)
+    if chapter_policy is not None:
+        minimum_depth, minimum_branches = chapter_scene_minimums(
+            chapter_policy,
+            scene_id,
+        )
+        depth = stronger_roleplay_depth(depth, minimum_depth)
+        branch_count = max(branch_count, minimum_branches)
     if depth not in {"light", "targeted", "full"}:
         raise RuntimeError("compiled roleplay depth is invalid")
     if not 2 <= branch_count <= 5:
@@ -244,6 +292,9 @@ def _bind_payload(
     node: CompiledTaskNode | None,
     policy: SceneExecutionPolicy,
     status: str,
+    *,
+    chapter_policy: ChapterWindowPolicy | None,
+    chapter_policy_digest: str,
 ) -> TaskPackage:
     payload = dict(task.payload)
     payload.update(
@@ -258,6 +309,12 @@ def _bind_payload(
         payload["creative_plan_node_id"] = node.node_id
         payload["creative_plan_node_kind"] = node.kind.value
         payload["creative_plan_required_gates"] = list(node.binding.required_gate_ids)
+        payload["creative_plan_agent_role"] = node.binding.agent_role
+    if chapter_policy is not None:
+        if not chapter_policy_digest:
+            raise ValueError("chapter policy digest is required for production binding")
+        payload["creative_chapter_policy"] = chapter_policy.as_dict()
+        payload["creative_chapter_policy_digest"] = chapter_policy_digest
     constraints = [
         *[str(item) for item in payload.get("hard_constraints") or []],
         *_policy_constraints(task.current_state, policy),

@@ -24,6 +24,7 @@ _BRANCH_BY_LEVEL = {
     SceneRiskLevel.STANDARD: 3,
     SceneRiskLevel.DEEP: 5,
 }
+_DEPTH_RANK = {"light": 0, "targeted": 1, "full": 2}
 _ROLEPLAY_KIND = "roleplay_simulation"
 _BRANCH_KIND = "scene_branch_simulation"
 
@@ -53,6 +54,28 @@ class ChapterWindowPolicy:
             "branch_count": self.branch_count,
             "rebase_after": list(self.rebase_after),
         }
+
+
+def chapter_scene_minimums(
+    policy: ChapterWindowPolicy,
+    scene_id: str,
+) -> tuple[str, int]:
+    """Return the machine-owned minimum RP depth and branch count."""
+
+    level_by_scene = dict(policy.scene_risk_levels)
+    raw_level = level_by_scene.get(scene_id)
+    if raw_level is None:
+        raise ValueError(f"chapter policy does not cover scene: {scene_id}")
+    level = SceneRiskLevel(raw_level)
+    return _DEPTH_BY_LEVEL[level], _BRANCH_BY_LEVEL[level]
+
+
+def stronger_roleplay_depth(left: str, right: str) -> str:
+    """Keep the deeper valid policy without allowing a machine downgrade."""
+
+    if left not in _DEPTH_RANK or right not in _DEPTH_RANK:
+        raise ValueError("roleplay depth must be light, targeted, or full")
+    return max((left, right), key=_DEPTH_RANK.__getitem__)
 
 
 def chapter_window_policy(
