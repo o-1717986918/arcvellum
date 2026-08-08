@@ -858,3 +858,34 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - 固定中文 payload 的 canonical bytes 与已知 SHA-256 回归；
 - 非 JSON dataclass 拒绝测试；
 - 计划、持久化、上下文、Mutation、考古相关回归共 60 tests passed。
+
+### 2026-08-08：Q2-A Autopilot 持久化组合化
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- 新增 `SqliteUnitOfWork`，集中持有 SQLite 连接参数、WAL/外键/busy timeout、事务提交回滚和进程内写锁；
+- 新增显式构造注入的 `AutopilotRepository`；
+- `JobStore` 不再继承 Autopilot 领域实现，而是组合 `autopilot_runs` 仓储；
+- `JobStore` 保留全部历史公开方法，并以明确签名委托，避免破坏 Controller、API 和测试调用方；
+- 租约抢占使用 `write(immediate=True)`，其余读写保持原有事务语义；
+- `_connect/_connection` 暂时委托 Unit of Work，供尚未迁移的旧领域使用，避免一次性重写九个持久化模块；
+- 保留 `AutopilotStoreMixin` 导入别名作为第三方过渡兼容，但生产 `JobStore` 已不再继承它。
+
+批判性审查：
+
+- 没有使用 `__getattr__` 或动态绑定隐藏委托关系；
+- 初稿的通用 `*args/**kwargs` 门面会损失 IDE 签名与静态检查，提交前已改为明确签名；
+- 本批只迁移 Autopilot，未同时改 Session、数据库 schema 与应用服务，符合“小步替换，不把事务/API/schema 变更混在一批”的约束；
+- Unit of Work 不是新增空抽象：Autopilot 已成为首个真实生产消费者，旧领域也共享其连接策略。
+
+验证证据：
+
+- 新增组合关系与事务回滚测试；
+- `tests.test_persistence_composition`、`tests.test_modular_runtime_imports`、`tests.test_autopilot`：32 tests passed；
+- 覆盖全自动三章、授权续期、租约恢复、进度防空转与重启持久化；
+- `python -m compileall -q src/literary_engineering_studio/persistence`：通过；
+- `git diff --check`：通过。
+
+下一批入口：把 Session/Advisor/Reader 持久化迁到同一 Unit of Work 与显式仓储，再评估剩余七个 Store Mixin 的优先级；不直接开始数据库大改。

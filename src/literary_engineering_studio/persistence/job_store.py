@@ -8,13 +8,12 @@ import json
 from pathlib import Path
 import shutil
 import sqlite3
-import threading
 import uuid
 from typing import Any
 
 from .asset_revisions import ASSET_REVISION_SCHEMA_SQL, AssetRevisionStoreMixin
 from .asset_transactions import ASSET_TRANSACTION_SCHEMA_SQL, AssetTransactionStoreMixin
-from .autopilot_runs import AutopilotStoreMixin
+from .autopilot_runs import AutopilotRepository
 from .creative_plans import CREATIVE_PLAN_SCHEMA_SQL, CreativePlanStoreMixin
 from .creative_plan_events import (
     CREATIVE_PLAN_EVENT_SCHEMA_SQL,
@@ -25,6 +24,7 @@ from .migrations import ensure_additive_columns
 from .mutation_receipts import MUTATION_RECEIPT_SCHEMA_SQL, MutationReceiptStoreMixin
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
 from .sessions import SessionStoreMixin
+from .sqlite_uow import SqliteUnitOfWork
 from .primitives import (
     ACTIVE_STATUSES,
     DATABASE_SCHEMA_VERSION,
@@ -50,14 +50,15 @@ class JobStore(
     RecycleBinStoreMixin,
     AssetTransactionStoreMixin,
     AssetRevisionStoreMixin,
-    AutopilotStoreMixin,
     SessionStoreMixin,
 ):
     def __init__(self, location: Path):
         resolved = location.expanduser().resolve()
         self.path = resolved if resolved.suffix in {".db", ".sqlite", ".sqlite3"} else resolved / "studio.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._write_lock = threading.RLock()
+        self._uow = SqliteUnitOfWork(self.path)
+        self._write_lock = self._uow.write_lock
+        self.autopilot_runs = AutopilotRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -87,6 +88,68 @@ class JobStore(
             row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
             assert row is not None
             return self._job_row(row)
+
+    # Autopilot persistence remains available through the historical JobStore
+    # facade while the domain implementation lives in an explicit repository.
+    def create_autopilot_run(
+        self,
+        project_root: str,
+        *,
+        mode: str,
+        runtime: str,
+        policy: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self.autopilot_runs.create_autopilot_run(
+            project_root,
+            mode=mode,
+            runtime=runtime,
+            policy=policy,
+        )
+
+    def read_autopilot_run(self, run_id: str) -> dict[str, Any]:
+        return self.autopilot_runs.read_autopilot_run(run_id)
+
+    def latest_autopilot_run(self, project_root: str) -> dict[str, Any] | None:
+        return self.autopilot_runs.latest_autopilot_run(project_root)
+
+    def update_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]:
+        return self.autopilot_runs.update_autopilot_run(run_id, **changes)
+
+    def update_autopilot_run_policy(self, run_id: str, policy: dict[str, Any]) -> dict[str, Any]:
+        return self.autopilot_runs.update_autopilot_run_policy(run_id, policy)
+
+    def advance_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]:
+        return self.autopilot_runs.advance_autopilot_run(run_id, **changes)
+
+    def acquire_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool:
+        return self.autopilot_runs.acquire_autopilot_lease(run_id, owner_id, lease_seconds=lease_seconds)
+
+    def renew_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool:
+        return self.autopilot_runs.renew_autopilot_lease(run_id, owner_id, lease_seconds=lease_seconds)
+
+    def release_autopilot_lease(self, run_id: str, owner_id: str) -> None:
+        self.autopilot_runs.release_autopilot_lease(run_id, owner_id)
+
+    def append_autopilot_event(self, run_id: str, event: str, data: dict[str, Any]) -> dict[str, Any]:
+        return self.autopilot_runs.append_autopilot_event(run_id, event, data)
+
+    def autopilot_events_since(
+        self,
+        run_id: str,
+        after: int = 0,
+        *,
+        limit: int = 300,
+    ) -> list[dict[str, Any]]:
+        return self.autopilot_runs.autopilot_events_since(run_id, after, limit=limit)
+
+    def record_delegated_decision(self, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.autopilot_runs.record_delegated_decision(run_id, payload)
+
+    def delegated_decisions(self, run_id: str) -> list[dict[str, Any]]:
+        return self.autopilot_runs.delegated_decisions(run_id)
+
+    def recover_autopilot_runs(self) -> int:
+        return self.autopilot_runs.recover_autopilot_runs()
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)
@@ -529,24 +592,12 @@ class JobStore(
             connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30, isolation_level="DEFERRED")
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 30000")
-        return connection
+        return self._uow.connect()
 
     @contextmanager
     def _connection(self):
-        connection = self._connect()
-        try:
+        with self._uow.connection() as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
     def _append_event_tx(
         self,
