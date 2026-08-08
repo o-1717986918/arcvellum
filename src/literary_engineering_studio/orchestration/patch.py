@@ -5,11 +5,10 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-import hashlib
-import json
 from pathlib import PurePosixPath
 from typing import Any, Callable, Mapping
 
+from ..protocols.canonical_json import canonical_json_digest
 from .candidate import parse_plan_candidate, parse_task_node_candidate
 from .contracts import (
     PLAN_PATCH_SCHEMA,
@@ -362,10 +361,4 @@ def _is_sha256(value: str) -> bool:
 
 
 def _digest(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_digest(value)

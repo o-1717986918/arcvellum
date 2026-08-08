@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-import hashlib
-import json
 import re
 from typing import Mapping
 
 from literary_engineering_studio_engine.orchestration import mandatory_gates_for
 
+from ..protocols.canonical_json import canonical_json_digest
 from .constitution import constitution_v1
 from .contracts import (
     PLAN_SCHEMA,
@@ -187,13 +186,7 @@ def _node_slug(value: str) -> str:
 
 
 def _digest(payload: object) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_digest(payload)
 
 
 def candidate_digest(candidate: CreativeExecutionPlanCandidate) -> str:

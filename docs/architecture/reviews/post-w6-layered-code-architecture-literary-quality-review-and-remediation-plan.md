@@ -832,3 +832,29 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - 新增 6 个共享合同/图算法测试；
 - 相关策略、Compiler、Simulator、Runtime 定向回归共 62 tests passed；
 - `tests/orchestration`：185 tests passed。
+
+### 2026-08-08：Q1-C Canonical JSON 单一实现
+
+状态：完成，待独立提交。
+
+已完成：
+
+- 新增 `protocols/canonical_json.py`；
+- 统一持久计划、审计完整性、Context Ledger、Mutation Receipt、Context Rollout、Execution Context 与考古投影的完整 SHA-256 实现；
+- Compiler/Lint 在 `to_primitive()` 后使用同一实现；
+- 原有 `audit_integrity.canonical_json_digest` 导入表面保持兼容；
+- 非 JSON 值继续 fail closed，不用 `default=str` 掩盖类型错误。
+
+刻意保留：
+
+- 前端投影和 observability 的 12/16/20 位短 ID；
+- 使用默认 JSON 空格格式的历史 revision 摘要；
+- 明确允许 `default=str` 的非正式展示摘要。
+
+这些摘要具有不同持久化或展示语义，强行改成 canonical full digest 会造成历史身份变化。
+
+验证证据：
+
+- 固定中文 payload 的 canonical bytes 与已知 SHA-256 回归；
+- 非 JSON dataclass 拒绝测试；
+- 计划、持久化、上下文、Mutation、考古相关回归共 60 tests passed。

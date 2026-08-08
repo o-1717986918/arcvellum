@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-import hashlib
-import json
 import re
 from typing import Any, Mapping
 
+from ..protocols.canonical_json import canonical_json_digest
 
 MUTATION_RECEIPT_SCHEMA = "arcvellum/worker-mutation-receipt/v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -272,5 +271,4 @@ def _integer(payload: Mapping[str, Any], key: str) -> int:
 
 
 def _digest(value: object) -> str:
-    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    return canonical_json_digest(value)

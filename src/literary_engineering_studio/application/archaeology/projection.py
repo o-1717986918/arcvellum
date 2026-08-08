@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ from literary_engineering_studio_engine.agent_tasks import (
 from literary_engineering_studio_engine.literary.ingest import reconstruction_paths
 from literary_engineering_studio_engine.workflow_state import build_workflow_state
 
+from ...protocols.canonical_json import canonical_json_digest
 from .contracts import MODE_PRESENTATION
 
 
@@ -442,10 +442,4 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _digest(payload: object) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_digest(payload)

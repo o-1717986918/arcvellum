@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import hashlib
-import json
 from typing import Any, Mapping
 
+from ..protocols.canonical_json import canonical_json_digest
 from ..contracts import TaskPackage
 
 
@@ -196,13 +195,7 @@ def _mapping(value: object) -> Mapping[str, Any]:
 
 
 def _digest(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_digest(value)
 
 
 __all__ = [

@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import hashlib
-import json
 from pathlib import Path
 import re
 from typing import Any, Iterable, Mapping
 
 from ..contracts import TaskPackage
+from ..protocols.canonical_json import canonical_json_digest
 from .context_budget import TaskContextBudget
 from .context_selection import AgentContextSelection
 from .prompt_context import PreparedPromptContext
@@ -465,8 +465,7 @@ def _normalize(value: object) -> str:
 
 
 def _digest(value: object) -> str:
-    rendered = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return _sha256(rendered.encode("utf-8"))
+    return canonical_json_digest(value)
 
 
 def _sha256(value: bytes) -> str:

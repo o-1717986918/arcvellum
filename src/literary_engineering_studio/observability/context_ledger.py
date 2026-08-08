@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
-import json
 import re
 from typing import Any, Literal
 
+from ..protocols.canonical_json import canonical_json_digest
 
 CONTEXT_LEDGER_SCHEMA = "arcvellum/context-ledger/v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -225,5 +224,4 @@ def _parse_entry(item: Any) -> ContextLedgerEntry:
 
 
 def _digest(value: object) -> str:
-    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    return canonical_json_digest(value)

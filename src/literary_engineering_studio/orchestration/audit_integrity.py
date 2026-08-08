@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from typing import Any
 
+from ..protocols.canonical_json import canonical_json_digest
 from .agent_protocol import OrchestrationReviewReceipt
 from .candidate import parse_plan_candidate
 from .compiler import compiled_graph_digest
@@ -90,16 +89,6 @@ def verify_semantic_chain(
         graph_digest=graph_digest,
     )
     _verify_provenance(provenance, identity, plan_digest, graph_digest)
-
-
-def canonical_json_digest(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _validate_simulation(

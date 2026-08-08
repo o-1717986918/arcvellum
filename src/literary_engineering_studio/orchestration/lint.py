@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-import hashlib
-import json
 
 from literary_engineering_studio_engine.orchestration import (
     PlanNodeKind,
@@ -13,6 +11,7 @@ from literary_engineering_studio_engine.orchestration import (
     mandatory_gates_for,
 )
 
+from ..protocols.canonical_json import canonical_json_digest
 from .budget_policy import budget_range_errors
 from .constitution import constitution_v1
 from .contracts import CreativeExecutionPlan, FreedomBudget, PlanTaskNode, to_primitive
@@ -307,6 +306,4 @@ def _severity_order(value: PlanIssueSeverity) -> int:
 
 
 def _digest(value: object) -> str:
-    payload = to_primitive(value)
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_digest(to_primitive(value))

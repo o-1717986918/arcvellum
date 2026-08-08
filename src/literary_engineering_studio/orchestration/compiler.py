@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import hashlib
-import json
 
 from literary_engineering_studio_engine.orchestration import (
     PlanNodeKind,
     check_default_plan_compatibility,
 )
 
+from ..protocols.canonical_json import canonical_json_digest
 from .compiler_registry import CompilerRegistry
 from .contracts import (
     COMPILED_GRAPH_SCHEMA,
@@ -159,11 +158,4 @@ def _serialized_dependencies(
 
 
 def _digest(value: object) -> str:
-    payload = to_primitive(value)
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_digest(to_primitive(value))
