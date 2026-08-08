@@ -23,7 +23,7 @@ from .context_ledgers import CONTEXT_LEDGER_SCHEMA_SQL, ContextLedgerStoreMixin
 from .migrations import ensure_additive_columns
 from .mutation_receipts import MUTATION_RECEIPT_SCHEMA_SQL, MutationReceiptStoreMixin
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
-from .sessions import SessionStoreMixin
+from .sessions import SessionRepository
 from .sqlite_uow import SqliteUnitOfWork
 from .primitives import (
     ACTIVE_STATUSES,
@@ -50,7 +50,6 @@ class JobStore(
     RecycleBinStoreMixin,
     AssetTransactionStoreMixin,
     AssetRevisionStoreMixin,
-    SessionStoreMixin,
 ):
     def __init__(self, location: Path):
         resolved = location.expanduser().resolve()
@@ -59,6 +58,7 @@ class JobStore(
         self._uow = SqliteUnitOfWork(self.path)
         self._write_lock = self._uow.write_lock
         self.autopilot_runs = AutopilotRepository(self._uow)
+        self.sessions = SessionRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -150,6 +150,134 @@ class JobStore(
 
     def recover_autopilot_runs(self) -> int:
         return self.autopilot_runs.recover_autopilot_runs()
+
+    # Session, advisor, inbox, delegation, and reader APIs remain stable while
+    # their implementation is composed rather than inherited.
+    def create_advisor_session(
+        self,
+        project_root: str,
+        snapshot_digest: str,
+        *,
+        title: str = "项目问答",
+    ) -> dict[str, Any]:
+        return self.sessions.create_advisor_session(project_root, snapshot_digest, title=title)
+
+    def read_advisor_session(self, session_id: str) -> dict[str, Any]:
+        return self.sessions.read_advisor_session(session_id)
+
+    def list_advisor_sessions(self, project_root: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        return self.sessions.list_advisor_sessions(project_root, limit=limit)
+
+    def upsert_agent_session(
+        self,
+        session_id: str,
+        *,
+        project_root: str,
+        role: str,
+        runtime: str,
+        model: str = "",
+        status: str = "running",
+        task_id: str = "",
+        route: str = "",
+        controller_id: str = "",
+        last_event: str = "",
+        last_message: str = "",
+        retry_count: int = 0,
+        context_ledger_id: str = "",
+        context_ledger_digest: str = "",
+    ) -> dict[str, Any]:
+        return self.sessions.upsert_agent_session(
+            session_id,
+            project_root=project_root,
+            role=role,
+            runtime=runtime,
+            model=model,
+            status=status,
+            task_id=task_id,
+            route=route,
+            controller_id=controller_id,
+            last_event=last_event,
+            last_message=last_message,
+            retry_count=retry_count,
+            context_ledger_id=context_ledger_id,
+            context_ledger_digest=context_ledger_digest,
+        )
+
+    def read_agent_session(self, session_id: str) -> dict[str, Any]:
+        return self.sessions.read_agent_session(session_id)
+
+    def list_agent_sessions(
+        self,
+        project_root: str,
+        *,
+        include_finished: bool = True,
+        limit: int = 60,
+    ) -> list[dict[str, Any]]:
+        return self.sessions.list_agent_sessions(
+            project_root,
+            include_finished=include_finished,
+            limit=limit,
+        )
+
+    def append_advisor_message(self, session_id: str, role: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.sessions.append_advisor_message(session_id, role, payload)
+
+    def save_advisor_memory(
+        self,
+        session_id: str,
+        *,
+        summary: str,
+        preferences: list[str],
+    ) -> dict[str, Any]:
+        return self.sessions.save_advisor_memory(session_id, summary=summary, preferences=preferences)
+
+    def save_delegation_policy(self, project_root: str, policy: dict[str, Any]) -> dict[str, Any]:
+        return self.sessions.save_delegation_policy(project_root, policy)
+
+    def read_delegation_policy(self, project_root: str) -> dict[str, Any] | None:
+        return self.sessions.read_delegation_policy(project_root)
+
+    def upsert_advisor_inbox(
+        self,
+        project_root: str,
+        *,
+        dedupe_key: str,
+        kind: str,
+        severity: str,
+        title: str,
+        message: str,
+        action: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self.sessions.upsert_advisor_inbox(
+            project_root,
+            dedupe_key=dedupe_key,
+            kind=kind,
+            severity=severity,
+            title=title,
+            message=message,
+            action=action,
+        )
+
+    def advisor_inbox(
+        self,
+        project_root: str,
+        *,
+        unread_only: bool = False,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        return self.sessions.advisor_inbox(project_root, unread_only=unread_only, limit=limit)
+
+    def mark_advisor_inbox_read(self, item_id: str, *, read: bool = True) -> dict[str, Any]:
+        return self.sessions.mark_advisor_inbox_read(item_id, read=read)
+
+    def reader_state(self, project_root: str) -> dict[str, Any]:
+        return self.sessions.reader_state(project_root)
+
+    def save_reader_position(self, project_root: str, unit_id: str, scroll_ratio: float) -> dict[str, Any]:
+        return self.sessions.save_reader_position(project_root, unit_id, scroll_ratio)
+
+    def set_reader_bookmark(self, project_root: str, unit_id: str, enabled: bool) -> dict[str, Any]:
+        return self.sessions.set_reader_bookmark(project_root, unit_id, enabled)
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)

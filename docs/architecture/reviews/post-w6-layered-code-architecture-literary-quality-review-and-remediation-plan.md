@@ -889,3 +889,31 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `git diff --check`：通过。
 
 下一批入口：把 Session/Advisor/Reader 持久化迁到同一 Unit of Work 与显式仓储，再评估剩余七个 Store Mixin 的优先级；不直接开始数据库大改。
+
+### 2026-08-08：Q2-B Session/Advisor/Reader 持久化组合化
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- `SessionRepository` 通过 `SqliteUnitOfWork` 显式获得读写事务；
+- `JobStore` 不再继承 Session 领域实现，而是组合 `sessions` 仓储；
+- Advisor 对话、Agent 会话、主动通知、授权策略和阅读进度的历史公开 API 保持不变；
+- Advisor 消息序号分配继续使用 `BEGIN IMMEDIATE`，避免并发序号冲突；
+- 保留 `SessionStoreMixin` 导入别名作为迁移期兼容，生产 `JobStore` 已不继承它；
+- 新增组合关系和持久化消息回读测试。
+
+批判性审查：
+
+- `JobStore` 因显式兼容委托增加了低复杂度代码；这是可搜索、可类型检查的迁移成本，优于 `__getattr__`、运行时方法注入或继续隐式共享私有状态；
+- 该门面长度不能成为永久状态。后续核心 Job/Event/Lock 自身仓储化后，应让 `JobStore` 只负责仓储装配与兼容委托，并单独审查 API 退役策略；
+- 没有借迁移修改 schema、Advisor 文案、Reader 投影或 Agent 状态语义，避免架构重构与产品行为混批。
+
+验证证据：
+
+- `tests.test_persistence_composition`、`tests.test_advisor`、`tests.test_advisor_inbox`、`tests.test_agent_session_tracking`、`tests.test_reader`：23 tests passed；
+- 覆盖项目快照预算、会话重启恢复、通知去重、上下文账本绑定和大体量阅读缓存；
+- `python -m compileall -q src/literary_engineering_studio/persistence`：通过；
+- `git diff --check`：通过。
+
+下一批入口：审计其余 Store Mixin 的领域耦合与收益，不按文件数量机械迁移；优先选择能减少跨模块私有调用的边界，然后转入 Worker 组合化。

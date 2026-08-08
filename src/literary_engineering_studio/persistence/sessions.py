@@ -1,4 +1,4 @@
-"""Advisor, Agent-session, inbox, delegation, and reader persistence for JobStore."""
+"""Advisor, Agent-session, inbox, delegation, and reader persistence."""
 
 from __future__ import annotations
 
@@ -8,15 +8,19 @@ import uuid
 from typing import Any
 
 from .primitives import _json, _now, _validate_advisor_id, _validate_agent_session_id
+from .sqlite_uow import SqliteUnitOfWork
 
 
-class SessionStoreMixin:
-    """Methods require the host JobStore connection and write-lock protocol."""
+class SessionRepository:
+    """Persist user and Agent sessions through an explicit unit of work."""
+
+    def __init__(self, uow: SqliteUnitOfWork):
+        self._uow = uow
 
     def create_advisor_session(self, project_root: str, snapshot_digest: str, *, title: str = "项目问答") -> dict[str, Any]:
         session_id = f"advisor-{uuid.uuid4().hex[:16]}"
         now = _now()
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             connection.execute(
                 """
                 INSERT INTO advisor_sessions (
@@ -29,7 +33,7 @@ class SessionStoreMixin:
 
     def read_advisor_session(self, session_id: str) -> dict[str, Any]:
         _validate_advisor_id(session_id)
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             row = connection.execute("SELECT * FROM advisor_sessions WHERE session_id = ?", (session_id,)).fetchone()
             messages = connection.execute(
                 """
@@ -70,7 +74,7 @@ class SessionStoreMixin:
         }
 
     def list_advisor_sessions(self, project_root: str, *, limit: int = 30) -> list[dict[str, Any]]:
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             rows = connection.execute(
                 """
                 SELECT session_id, project_root, snapshot_digest, title, created_at, updated_at
@@ -110,7 +114,7 @@ class SessionStoreMixin:
             raise ValueError(f"unsupported Agent session status: {status}")
         now = _now()
         terminal = normalized_status in {"complete", "failed", "cancelled", "stopped"}
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             existing = connection.execute(
                 "SELECT * FROM agent_sessions WHERE session_id = ?",
                 (session,),
@@ -146,7 +150,7 @@ class SessionStoreMixin:
 
     def read_agent_session(self, session_id: str) -> dict[str, Any]:
         session = _validate_agent_session_id(session_id)
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             row = connection.execute(
                 "SELECT * FROM agent_sessions WHERE session_id = ?",
                 (session,),
@@ -163,7 +167,7 @@ class SessionStoreMixin:
         limit: int = 60,
     ) -> list[dict[str, Any]]:
         finished_clause = "" if include_finished else "AND status NOT IN ('complete','failed','cancelled','stopped')"
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             rows = connection.execute(
                 f"""
                 SELECT * FROM agent_sessions
@@ -182,8 +186,7 @@ class SessionStoreMixin:
         if role not in {"user", "advisor"}:
             raise ValueError("advisor message role must be user or advisor")
         now = _now()
-        with self._write_lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self._uow.write(immediate=True) as connection:
             existing = connection.execute("SELECT 1 FROM advisor_sessions WHERE session_id = ?", (session_id,)).fetchone()
             if existing is None:
                 raise FileNotFoundError(f"Advisor session not found: {session_id}")
@@ -207,7 +210,7 @@ class SessionStoreMixin:
         safe_preferences = list(
             dict.fromkeys(str(item).strip()[:500] for item in preferences if str(item).strip())
         )[:30]
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             existing = connection.execute("SELECT 1 FROM advisor_sessions WHERE session_id = ?", (session_id,)).fetchone()
             if existing is None:
                 raise FileNotFoundError(f"Advisor session not found: {session_id}")
@@ -229,7 +232,7 @@ class SessionStoreMixin:
 
     def save_delegation_policy(self, project_root: str, policy: dict[str, Any]) -> dict[str, Any]:
         now = _now()
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             connection.execute(
                 """
                 INSERT INTO delegation_policies (project_root, policy_json, updated_at)
@@ -253,7 +256,7 @@ class SessionStoreMixin:
     ) -> dict[str, Any]:
         now = _now()
         item_id = f"notice-{uuid.uuid4().hex[:16]}"
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             existing = connection.execute(
                 "SELECT item_id FROM advisor_inbox WHERE project_root = ? AND dedupe_key = ?",
                 (project_root, dedupe_key),
@@ -282,7 +285,7 @@ class SessionStoreMixin:
 
     def advisor_inbox(self, project_root: str, *, unread_only: bool = False, limit: int = 100) -> list[dict[str, Any]]:
         unread_clause = "AND read_at = ''" if unread_only else ""
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             rows = connection.execute(
                 f"SELECT * FROM advisor_inbox WHERE project_root = ? {unread_clause} ORDER BY created_at DESC LIMIT ?",
                 (project_root, max(1, min(500, int(limit)))),
@@ -290,7 +293,7 @@ class SessionStoreMixin:
         return [self._advisor_inbox_row(row) for row in rows]
 
     def mark_advisor_inbox_read(self, item_id: str, *, read: bool = True) -> dict[str, Any]:
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             connection.execute("UPDATE advisor_inbox SET read_at = ? WHERE item_id = ?", (_now() if read else "", item_id))
             row = connection.execute("SELECT * FROM advisor_inbox WHERE item_id = ?", (item_id,)).fetchone()
         if row is None:
@@ -298,7 +301,7 @@ class SessionStoreMixin:
         return self._advisor_inbox_row(row)
 
     def reader_state(self, project_root: str) -> dict[str, Any]:
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             position = connection.execute("SELECT * FROM reader_positions WHERE project_root = ?", (project_root,)).fetchone()
             bookmarks = connection.execute(
                 "SELECT unit_id, created_at FROM reader_bookmarks WHERE project_root = ? ORDER BY created_at ASC",
@@ -317,7 +320,7 @@ class SessionStoreMixin:
     def save_reader_position(self, project_root: str, unit_id: str, scroll_ratio: float) -> dict[str, Any]:
         ratio = max(0.0, min(1.0, float(scroll_ratio)))
         now = _now()
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             connection.execute(
                 """
                 INSERT INTO reader_positions (project_root, unit_id, scroll_ratio, updated_at) VALUES (?, ?, ?, ?)
@@ -329,7 +332,7 @@ class SessionStoreMixin:
         return self.reader_state(project_root)
 
     def set_reader_bookmark(self, project_root: str, unit_id: str, enabled: bool) -> dict[str, Any]:
-        with self._write_lock, self._connection() as connection:
+        with self._uow.write() as connection:
             if enabled:
                 connection.execute(
                     "INSERT OR IGNORE INTO reader_bookmarks (project_root, unit_id, created_at) VALUES (?, ?, ?)",
@@ -356,7 +359,7 @@ class SessionStoreMixin:
         }
 
     def read_delegation_policy(self, project_root: str) -> dict[str, Any] | None:
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             row = connection.execute(
                 "SELECT project_root, policy_json, updated_at FROM delegation_policies WHERE project_root = ?",
                 (project_root,),
@@ -371,6 +374,10 @@ class SessionStoreMixin:
         payload["event_count"] = int(payload.get("event_count") or 0)
         payload["retry_count"] = int(payload.get("retry_count") or 0)
         return payload
+
+
+# Kept as an import alias for third-party code during the repository migration.
+SessionStoreMixin = SessionRepository
 
 
 def _merged_session_values(existing, **values: Any) -> dict[str, Any]:

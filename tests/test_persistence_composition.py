@@ -6,6 +6,7 @@ import unittest
 
 from literary_engineering_studio.persistence.autopilot_runs import AutopilotRepository
 from literary_engineering_studio.persistence.job_store import JobStore
+from literary_engineering_studio.persistence.sessions import SessionRepository
 from literary_engineering_studio.persistence.sqlite_uow import SqliteUnitOfWork
 
 
@@ -25,6 +26,18 @@ class PersistenceCompositionTests(unittest.TestCase):
 
             self.assertEqual(run["status"], "running")
             self.assertEqual(store.read_autopilot_run(run["run_id"])["runtime"], "test-runtime")
+
+    def test_job_store_composes_session_repository(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+
+            self.assertIsInstance(store.sessions, SessionRepository)
+            self.assertNotIsInstance(store, SessionRepository)
+            session = store.create_advisor_session(temporary, "snapshot-01")
+            store.append_advisor_message(session["session_id"], "user", {"text": "继续"})
+
+            restored = store.read_advisor_session(session["session_id"])
+            self.assertEqual(restored["messages"][0]["payload"]["text"], "继续")
 
     def test_unit_of_work_rolls_back_failed_write(self):
         with tempfile.TemporaryDirectory() as temporary:
