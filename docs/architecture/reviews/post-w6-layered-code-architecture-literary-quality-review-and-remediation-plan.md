@@ -2262,7 +2262,7 @@ Q6 边界：不删除 shim；不把 Campaign 默认改为开启；不新增第�
 
 #### Q6 完成记录：能力成熟度、真实入口与兼容表面
 
-状态：实现完成，进入最终全量验证。
+状态：完成。
 
 完成内容：
 
@@ -2296,3 +2296,10 @@ Q6 边界：不删除 shim；不把 Campaign 默认改为开启；不新增第�
 - Vue TypeScript 检查、Vite production build、desktop frontend sync 与 v0.9 build verification 最终通过。
 
 Q6 结论：前端现在只开放后端真实存在的策略与观测能力，并明确成熟度；兼容层从“散落的历史文件”变为有发行窗口、有生产默认、有构建门禁的受控表面。跨任务 session 复用仍明确不可用，Chapter Horizon、Bundle 与 Campaign 仍保持预览且默认关闭。
+
+### 本轮最终收敛结论
+
+- 分层复审、Q5 生产接线与 Q6 产品开放均已完成；修正过程没有提高 Architecture baseline，也没有增加第二状态机、第二 SSE 总线、第二 feature registry 或不具备真实替代实现的基类；
+- 文学流程继续坚持正文主创角色隔离、字数/节奏/读者体验/Canon/连续性/Review/晋升硬门禁；Q5 的吞吐优化只复用可重建上下文、无状态策略与受控串行任务束，不以删除文学步骤换速度；
+- 有意保留的限制包括：跨任务 Agent session 复用 no-go；Chapter Horizon、Bundle、Prepared Context Cache 与 Campaign 默认关闭；顶层 compatibility aliases 至少保留一个稳定发行窗口；这些均已有机器可读成熟度或兼容证据，不属于未完成接线；
+- 最终证据为 Python 916 tests passed（1 skipped）、Vue 159 tests passed、生产前端构建通过，以及 Architecture、Dependency Direction、Compatibility、compileall 和 diff 门禁通过。
