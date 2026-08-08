@@ -251,6 +251,51 @@ class RouteLocalChoiceTests(unittest.TestCase):
             self.assertEqual(payload["summary"]["scene_scope"]["mode"], "active-frontier")
             self.assertTrue(payload["summary"]["scene_scope"]["truncated"])
 
+    def test_workflow_state_preserves_stable_payload_and_summary_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: State Contract\n", encoding="utf-8")
+            result = workflow_state.build_workflow_state(root, route="overall")
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(
+                list(payload),
+                [
+                    "schema",
+                    "generated_at",
+                    "project_root",
+                    "route",
+                    "summary",
+                    "scenes",
+                    "longform",
+                    "source_ingests",
+                    "styles",
+                    "assets",
+                    "audits",
+                    "exports",
+                    "rules",
+                ],
+            )
+            self.assertEqual(
+                list(payload["summary"]),
+                [
+                    "route",
+                    "scene_count",
+                    "scene_detail_count",
+                    "scene_scope",
+                    "source_ingest_count",
+                    "style_profile_count",
+                    "asset_count",
+                    "audit_count",
+                    "export_count",
+                    "ready_count",
+                    "blocked_count",
+                    "next_action_count",
+                    "longform_status",
+                ],
+            )
+            self.assertEqual(len(payload["rules"]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

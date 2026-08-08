@@ -1198,3 +1198,39 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - `workflow/state.py::build_workflow_state` 仍是下一项列名热点；应拆 route projector，而不是把状态字段搬进 Audit 或前端。
 
 下一批入口：Q3-F 审查并拆分 `workflow/state.py::build_workflow_state`。先固化顶层 payload schema、route 顺序、dashboard/full scope 差异和 choices 投影；只拆 route projector，不改变 task-next 或 route-audit 的正式真值。
+
+### 2026-08-08：Q3-F Workflow State 聚合器拆分
+
+状态：完成，准备独立提交。
+
+实际审查结论：
+
+- route-specific 状态早已分别位于 `state_scene.py`、`state_longform.py`、`state_source_ingest.py`、`state_style.py`、`state_assets.py`、`state_review_audit.py` 和 `state_export_release.py`；
+- 因而本批没有再造 Projector 类或复制 route 模块，只拆解 facade 中剩余的选择、聚合、计数和序列化职责；
+- `workflow_state.py` 兼容别名仍指向 `workflow/state.py`，历史私有导出和测试 patch 接缝保持可用。
+
+已完成：
+
+- `build_workflow_state` 收敛为：解析 root/route -> `_project_scenes` -> `_project_route_state` -> `_build_summary` -> `_build_payload` -> 原子写出；
+- `_project_scenes` 明确区分单场景、full route、overall dashboard 与非场景 route，不扩大 dashboard 的 active-frontier 扫描；
+- `_project_route_state` 只调用现有 route-specific projector，不拥有文学 Gate 或 task 生命周期；
+- `_build_summary` 统一 ready、blocked 和 next-action 计数，保持 longform 单对象与其他 route 列表的既有差异；
+- `STATE_RULES` 固化现有三条“状态账本只读、命令 Gate 权威、禁用 debug bypass”声明；
+- `build_workflow_state` 原 complexity 61 债务清零，所有新增函数均低于 Architecture Ratchet。
+
+兼容与验证证据：
+
+- 对 Git 中 Q3-F 前实现和当前实现分别构造独立项目，规范化时间戳与 root 后比较完整 JSON；`scene-development/full`、`overall/dashboard`、`style-engineering/full`、`source-ingest/full` 均逐对象完全一致；
+- 新增顶层 payload 13 字段与 summary 13 字段顺序回归，避免 UI、CLI Markdown 和外部消费者因重构发生静默漂移；
+- Route Local Choices、Task Contract Transport、Archive Assets 与 Project Archaeology：62 tests passed，另 1 项 Windows symlink 环境跳过；
+- Route Local Choices 最终 8 tests passed，覆盖 single-scene 不全扫、dashboard active-frontier 和 payload schema；
+- Architecture Audit：31 file debts、208 function debts、0 cycles；相较 Q3-E 再净减少 1 个 function debt；
+- compileall 与 `git diff --check`：通过。
+
+批判性审查：
+
+- `route_state: dict[str, object]` 是 facade 内部短生命周期聚合值，目前没有第二个消费者，不值得新增 `WorkflowProjection` 类；若未来多个输出层复用并出现字段漂移，再升级为明确值对象；
+- `build_workflow_state` 仍会按请求调用各 route projector，`overall/full` 本身就是重操作；实时前端应继续使用 dashboard scope 和 read-model cache，不能把本批重构误解为全量状态可高频轮询；
+- `_delegate_choice` 仍是 Q3 中剩余的列名复杂函数，但它属于人类决策物化，不应与只读状态投影混批。
+
+下一批入口：先运行当前热点与调用关系审计。若 `_delegate_choice` 仍同时承担选择解析、动作分派和持久化，则以 Q3-G 独立收敛；否则结束 Q3，进入 Q4 分支多样性、可变 Composition 节拍与跨题材黄金语料。
