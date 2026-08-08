@@ -25,6 +25,12 @@ class OpenCodeRoleClient:
     component_id: str
 
 
+@dataclass(frozen=True)
+class SessionTimeoutPolicy:
+    first_event_seconds: int
+    inter_event_seconds: int
+
+
 def configured_role(settings: dict[str, object]) -> OpenCodeRole:
     return OpenCodeRole(
         str(settings.get("role") or OpenCodeRole.WORKER.value).strip().lower()
@@ -59,6 +65,32 @@ def execution_identity(
     if "/" not in model:
         raise RuntimeError("OpenCode requires an explicit provider/model-id connection")
     return role, model, agent_id_for_role(role)
+
+
+def session_timeout_policy(
+    settings: dict[str, object],
+    role: OpenCodeRole,
+) -> SessionTimeoutPolicy:
+    """Resolve role-aware silence limits without trusting stale legacy values."""
+
+    profiles = (
+        settings.get("session_timeout_profiles")
+        if isinstance(settings.get("session_timeout_profiles"), dict)
+        else {}
+    )
+    default = profiles.get("default") if isinstance(profiles.get("default"), dict) else {}
+    selected = profiles.get(role.value) if isinstance(profiles.get(role.value), dict) else {}
+    if profiles:
+        first = selected.get("first_event_seconds") or default.get("first_event_seconds") or 180
+        inter = selected.get("inter_event_seconds") or default.get("inter_event_seconds") or 300
+    else:
+        legacy = settings.get("session_idle_timeout_seconds") or 120
+        first = legacy
+        inter = legacy
+    return SessionTimeoutPolicy(
+        first_event_seconds=max(30, int(first)),
+        inter_event_seconds=max(30, int(inter)),
+    )
 
 
 def cross_task_session_reuse_assessment() -> dict[str, object]:

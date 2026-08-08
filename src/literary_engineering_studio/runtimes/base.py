@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from enum import Enum
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,21 @@ class RuntimeAvailability:
     available: bool
     executable: str
     detail: str
+
+
+class RuntimeFailureKind(str, Enum):
+    """Stable failure classes shared by runners, Workers, and Autopilot."""
+
+    PROVIDER_QUOTA = "provider_quota"
+    AUTHENTICATION_FAILURE = "authentication_failure"
+    TRANSIENT_NETWORK = "transient_network"
+    FIRST_EVENT_TIMEOUT = "first_event_timeout"
+    IDLE_TIMEOUT = "idle_timeout"
+    TOTAL_TIMEOUT = "total_timeout"
+    MODEL_ERROR = "model_error"
+    PROCESS_CRASH = "process_crash"
+    VALIDATION_FAILURE = "validation_failure"
+    WRITEBACK_FAILURE = "writeback_failure"
 
 
 @dataclass(frozen=True)

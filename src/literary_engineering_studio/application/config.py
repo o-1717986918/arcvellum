@@ -83,6 +83,36 @@ def _default_worker_config() -> dict[str, Any]:
     }
 
 
+def _default_opencode_config() -> dict[str, Any]:
+    return {
+        "enabled": True,
+        "executable": "",
+        "model": "opencode/big-pickle",
+        "models": {
+            "worker": "opencode/big-pickle",
+            "advisor": "opencode/big-pickle",
+            "steward": "opencode/big-pickle",
+        },
+        # Public endpoint/model definitions only. API keys remain in
+        # OpenCode's credential store, never in this file.
+        "custom_providers": [],
+        "data_root": str(default_data_root()),
+        "idle_timeout_seconds": 900,
+        # Legacy reader compatibility. New runtimes use role-aware profiles.
+        "session_idle_timeout_seconds": 120,
+        "session_timeout_profiles": {
+            "default": {"first_event_seconds": 180, "inter_event_seconds": 300},
+            "worker": {"first_event_seconds": 180, "inter_event_seconds": 360},
+            "reviewer": {"first_event_seconds": 240, "inter_event_seconds": 360},
+            "planner": {"first_event_seconds": 240, "inter_event_seconds": 360},
+            "advisor": {"first_event_seconds": 120, "inter_event_seconds": 180},
+            "steward": {"first_event_seconds": 120, "inter_event_seconds": 180},
+        },
+        # Repair turns are concise file fixes rather than long-form generation.
+        "repair_idle_timeout_seconds": 75,
+    }
+
+
 def default_config() -> dict[str, Any]:
     return {
         "schema": CONFIG_SCHEMA,
@@ -102,30 +132,7 @@ def default_config() -> dict[str, Any]:
         "worker": _default_worker_config(),
         "orchestration": _default_orchestration_config(),
         "agent_runners": {
-            "opencode": {
-                "enabled": True,
-                "executable": "",
-                "model": "opencode/big-pickle",
-                "models": {
-                    "worker": "opencode/big-pickle",
-                    "advisor": "opencode/big-pickle",
-                    "steward": "opencode/big-pickle",
-                },
-                # Public endpoint/model definitions only.  API keys remain
-                # in OpenCode's own credential store, never in this file.
-                "custom_providers": [],
-                "data_root": str(default_data_root()),
-                "idle_timeout_seconds": 900,
-                # A busy model session that stops emitting activity should not
-                # reserve the creative Worker indefinitely.  This is separate
-                # from the larger per-task timeout used for genuinely long
-                # prose generation.
-                "session_idle_timeout_seconds": 120,
-                # Repair prompts should be concise file fixes.  A silent
-                # repair turn is almost always a stalled tool invocation,
-                # not legitimate long-form generation.
-                "repair_idle_timeout_seconds": 75,
-            },
+            "opencode": _default_opencode_config(),
             "host-agent": {"enabled": True},
             "claude-code": {
                 "enabled": True,
@@ -190,7 +197,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         raise ValueError(f"invalid Studio config: {target}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"Studio config must be a JSON object: {target}")
-    payload = _migrate_config(payload)
+    payload = _without_machine_local_engine_path(_migrate_config(payload))
     payload.pop("core", None)
     merged = _deep_merge(base, payload)
     merged["schema"] = CONFIG_SCHEMA
@@ -199,8 +206,10 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 
 def save_config(data: dict[str, Any], path: Path | None = None) -> Path:
     target = (path or default_config_path()).resolve()
-    payload = _deep_merge(default_config(), _migrate_config(dict(data)))
+    migrated = _without_machine_local_engine_path(_migrate_config(dict(data)))
+    payload = _deep_merge(default_config(), migrated)
     payload.pop("core", None)
+    payload = _without_machine_local_engine_path(payload)
     payload["schema"] = CONFIG_SCHEMA
     _assert_no_model_credentials(payload)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -237,6 +246,16 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
             runners["opencode"] = opencode
             migrated["agent_runners"] = runners
     return migrated
+
+
+def _without_machine_local_engine_path(payload: dict[str, Any]) -> dict[str, Any]:
+    """Discard an obsolete executable path that cannot survive reinstall or relocation."""
+
+    normalized = dict(payload)
+    engine = normalized.get("engine")
+    if isinstance(engine, dict):
+        normalized["engine"] = {key: value for key, value in engine.items() if key != "python"}
+    return normalized
 
 
 def _assert_no_model_credentials(payload: dict[str, Any]) -> None:

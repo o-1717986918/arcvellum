@@ -33,6 +33,38 @@ _LADDER: dict[str, tuple[RecoveryStep, ...]] = {
         RecoveryStep.BOUNDED_REPLAN,
         RecoveryStep.STOP_WITH_EVIDENCE,
     ),
+    "transient_network": (
+        RecoveryStep.RETRY,
+        RecoveryStep.SESSION_RENEW,
+        RecoveryStep.STOP_WITH_EVIDENCE,
+    ),
+    "first_event_timeout": (
+        RecoveryStep.RETRY,
+        RecoveryStep.SESSION_RENEW,
+        RecoveryStep.STOP_WITH_EVIDENCE,
+    ),
+    "idle_timeout": (
+        RecoveryStep.RETRY,
+        RecoveryStep.SESSION_RENEW,
+        RecoveryStep.STOP_WITH_EVIDENCE,
+    ),
+    "total_timeout": (
+        RecoveryStep.RETRY,
+        RecoveryStep.STOP_WITH_EVIDENCE,
+    ),
+    "provider_quota": (RecoveryStep.STOP_WITH_EVIDENCE,),
+    "authentication_failure": (RecoveryStep.STOP_WITH_EVIDENCE,),
+    "model_error": (RecoveryStep.STOP_WITH_EVIDENCE,),
+    "validation_failure": (
+        RecoveryStep.CHECKPOINT_RESTORE,
+        RecoveryStep.BOUNDED_REPLAN,
+        RecoveryStep.STOP_WITH_EVIDENCE,
+    ),
+    "writeback_failure": (
+        RecoveryStep.CHECKPOINT_RESTORE,
+        RecoveryStep.BOUNDED_REPLAN,
+        RecoveryStep.STOP_WITH_EVIDENCE,
+    ),
     "authorization_expired": (
         RecoveryStep.SESSION_RENEW,
         RecoveryStep.STOP_WITH_EVIDENCE,

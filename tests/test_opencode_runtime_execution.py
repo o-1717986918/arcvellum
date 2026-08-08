@@ -95,6 +95,22 @@ class _StreamingFailureClient(_Client):
         ]
 
 
+class _QuotaFailureClient(_Client):
+    def messages(self, _session_id):
+        return [
+            {
+                "info": {
+                    "role": "assistant",
+                    "error": {
+                        "name": "ProviderError",
+                        "data": {"statusCode": 402, "message": "Insufficient Balance"},
+                    },
+                },
+                "parts": [],
+            }
+        ]
+
+
 class _PreparedRepair:
     prompt = "# Bounded Repair"
 
@@ -347,9 +363,35 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
 
             self.assertEqual(result.status, "failed")
             self.assertTrue(result.metadata["retryable"])
+            self.assertEqual(result.metadata["failure_kind"], "transient_network")
             self.assertIn("自动重试", result.message)
             finished = [data for event, data in events if event == "runner.session.finished"]
-            self.assertEqual(finished[-1]["reason"], "streaming_interrupted")
+            self.assertEqual(finished[-1]["reason"], "transient_network")
+
+    def test_provider_quota_is_non_retryable_and_actionable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = root / "prompt.md"
+            prompt.write_text("执行正式任务", encoding="utf-8")
+            runtime = OpenCodeRuntime(
+                {"model": "fixture/model", "models": {"worker": "fixture/model"}}
+            )
+            runtime.runtime_pool = _Pool(_QuotaFailureClient())
+
+            with patch(
+                "literary_engineering_studio.runtimes.opencode.locate_opencode",
+                return_value=Path("opencode.exe"),
+            ):
+                result = runtime.execute(workspace, prompt, run_root, timeout=10)
+
+            self.assertEqual(result.status, "failed")
+            self.assertEqual(result.metadata["failure_kind"], "provider_quota")
+            self.assertFalse(result.metadata["retryable"])
+            self.assertIn("余额或额度不足", result.message)
 
     def test_planner_role_uses_an_isolated_profile_and_worker_model_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:

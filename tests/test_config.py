@@ -1,5 +1,7 @@
+import json
 import tempfile
 from pathlib import Path
+import sys
 import unittest
 
 from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, load_config, repository_root, save_config
@@ -51,6 +53,32 @@ class ConfigTests(unittest.TestCase):
                     "steward": "deepseek/deepseek-chat",
                 },
             )
+
+    def test_load_ignores_machine_local_engine_path_from_an_old_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            target.write_text(
+                '{"engine":{"python":"D:/removed/ArcVellum/literary-engineering-studio-sidecar.exe",'
+                '"module":"literary_engineering_studio_engine"}}',
+                encoding="utf-8",
+            )
+
+            loaded = load_config(target)
+
+            self.assertEqual(loaded["engine"]["python"], sys.executable)
+            self.assertEqual(loaded["engine"]["module"], "literary_engineering_studio_engine")
+
+    def test_save_does_not_persist_machine_local_engine_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            config = default_config()
+            config["engine"]["python"] = "D:/ArcVellum/literary-engineering-studio-sidecar.exe"
+
+            save_config(config, target)
+            persisted = json.loads(target.read_text(encoding="utf-8"))
+
+            self.assertNotIn("python", persisted["engine"])
+            self.assertEqual(load_config(target)["engine"]["python"], sys.executable)
 
     def test_rejects_api_key_fields(self):
         with tempfile.TemporaryDirectory() as temporary:

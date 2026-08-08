@@ -224,8 +224,10 @@ def _unquote(value: str) -> str:
 
 
 def _source_checkout_python(working_dir: Path, module: str, configured_python: str) -> str:
-    """Avoid executing a stale installed sidecar while the Studio runs from source."""
+    """Use the active runtime when a persisted executable path can be stale."""
 
+    if getattr(sys, "frozen", False):
+        return sys.executable
     module_dir = working_dir / "src" / module.replace(".", os.sep)
     if (working_dir / "pyproject.toml").is_file() and module_dir.is_dir() and configured_python.lower().endswith(".exe"):
         return sys.executable

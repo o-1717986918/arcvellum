@@ -15,6 +15,7 @@ from ...agent_tasks import agent_task_completion_status
 from ...longform_materializer import longform_materialization_status, planned_longform_outputs
 from ...story_architecture import story_architecture_status, story_architecture_task_status
 from ...task_paths import TASK_SCHEMA, normalize_relative_path, now, relative_path, resolve_project_path, task_id
+from .context_policy import agent_context_payload, apply_agent_context_policy
 
 
 def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict[str, object]:
@@ -61,7 +62,7 @@ def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict
         "validation_gates": blueprint["validation_gates"],
         "forbidden_shortcuts": [
             "Do not treat word_budget.json as final plot or sufficient narrative inventory by itself.",
-            "Do not bypass word_budget.agent_tasks.md or scene_inventory_expansion.agent_tasks.md.",
+            "Do not bypass the semantic requirements compiled into the current budget, scene-inventory, or chapter-obligation task package.",
             "Do not start bulk scene generation while longform-planning is blocked.",
             "Do not satisfy target length by making each scene verbose; expand narrative inventory instead.",
             "Do not overwrite formal plot/outline.md or scenes/ before candidate review and user approval.",
@@ -69,6 +70,7 @@ def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict
         ],
         "next_allowed_states": blueprint["next_allowed_states"],
     }
+    payload.update(agent_context_payload(blueprint))
     repair_targets = [str(item) for item in blueprint.get("repair_targets", [])]
     if repair_targets:
         payload["repair_targets"] = repair_targets
@@ -161,10 +163,16 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
             "task_type": "platform-agent-judgment",
             "prompt_asset_id": "route.longform-planning.budget-expansion.execute.v1",
             "command": "",
-            "source_paths": ["project.yaml", "plot/outline.md", "plot/word_budget/word_budget.md", "plot/word_budget/word_budget.json", "plot/word_budget/word_budget.agent_tasks.md"],
+            "source_paths": [
+                "project.yaml",
+                "plot/outline.md",
+                "plot/word_budget/word_budget.md",
+                "plot/word_budget/word_budget.json",
+                "plot/word_budget/word_budget.agent_tasks.md",
+            ],
             "expected_outputs": ["plot/candidates/outlines/word_budget_expansion.md", "reviews/word_budget/word_budget_review.md", "plot/word_budget/word_budget.agent_completion.json"],
             "hard_constraints": [
-                "Read word_budget.agent_tasks.md and write the budgeted outline candidate plus review.",
+                "Write only the budgeted outline candidate and its semantic review; Studio owns lifecycle completion receipts.",
                 "Judge whether the narrative inventory can support target length; do not solve shortfall by padding scenes.",
                 "Keep expanded outline as candidate material until review and user approval.",
             ],
@@ -196,7 +204,7 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
             "source_paths": ["plot/word_budget/word_budget.json", "plot/word_budget/scene_inventory_expansion.agent_tasks.md", "plot/candidates/outlines/word_budget_expansion.md"],
             "expected_outputs": ["plot/candidates/scenes/word_budget_scene_inventory.md", "reviews/word_budget/scene_inventory_review.md", "plot/word_budget/scene_inventory_expansion.agent_completion.json"],
             "hard_constraints": [
-                "Read scene_inventory_expansion.agent_tasks.md and create budgeted scene inventory candidates.",
+                "Follow the exact scene-inventory prompt contract and create budgeted scene inventory candidates; Studio owns the lifecycle sidecar and receipt.",
                 "The inventory is a machine-readable materialization contract: use the required chapter heading and 11-column scene table, not free-form scene cards or prose summaries.",
                 "Each added scene candidate needs target Chinese-content characters, function, participants, conflict, information release, consequence, and setup/payoff role.",
                 "Scene inventory remains candidate material until review and user approval.",
@@ -229,7 +237,7 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
             "source_paths": ["project.yaml", "plot/outline.md", "plot/word_budget/word_budget.json", "plot/chapter_obligations/chapter_obligations.agent_tasks.md", "plot/candidates/scenes/word_budget_scene_inventory.md"],
             "expected_outputs": ["plot/candidates/chapters/chapter_obligation_plan.md", "reviews/word_budget/chapter_obligation_review.md", "plot/chapter_obligations/chapter_obligations.agent_completion.json"],
             "hard_constraints": [
-                "Read chapter_obligations.agent_tasks.md and build a chapter-level promise/payoff plan.",
+                "Follow the exact chapter-obligation prompt contract and build a chapter-level promise/payoff plan; Studio owns the lifecycle sidecar and receipt.",
                 "Each chapter must map target Chinese-content characters to reader questions, promised rewards, withheld information, payoff/delay, and anti-summary requirements.",
                 "Per-scene chapter-obligation JSON files remain platform-agent contracts; create them with chapter-obligation before scene prose generation.",
             ],
@@ -281,7 +289,18 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
             "next_allowed_states": ["ready"],
         },
     }
-    return table.get(current_state, {
+    blueprint = table.get(current_state) or _fallback_blueprint(
+        next_action, target_words, common_sources
+    )
+    return apply_agent_context_policy(current_state, blueprint)
+
+
+def _fallback_blueprint(
+    next_action: str,
+    target_words: int,
+    common_sources: list[str],
+) -> dict[str, object]:
+    return {
         "task_type": "manual-route-repair",
         "prompt_asset_id": "route.longform-planning.repair.v1",
         "command": next_action,
@@ -292,7 +311,7 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
         "word_count_target": target_words,
         "validation_gates": ["longform-planning gate resolved"],
         "next_allowed_states": [],
-    })
+    }
 
 
 def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[str]]:

@@ -10,9 +10,10 @@ import hashlib
 import json
 from pathlib import Path
 from .context_contract import CONTEXT_CONTRACT_FINGERPRINT_FIELDS, normalize_context_contract as _normalize_context_contract
-from .markdown_renderer import AGENT_OUTPUT_CONTRACT, render_task_markdown
+from .markdown_renderer import render_task_markdown
+from .prompt_projection import project_prompt_asset
 from ..prompt_registry import resolve_prompt_asset
-TASK_CONTRACT_REVISION = "2026-07-28.28"
+TASK_CONTRACT_REVISION = "2026-08-09.30"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 RECHECK_REQUIRED_STATES = {
     "asset-review-pass",
@@ -55,16 +56,6 @@ HIGH_IMPACT_OUTPUT_PREFIXES = (
     "manuscript/",
     "releases/",
     "state/",
-)
-PROMPT_METADATA_LIST_FIELDS = (
-    "required_inputs",
-    "optional_inputs",
-    "context_groups",
-    "hard_constraints",
-    "style_constraints",
-    "output_contract",
-    "review_requirements",
-    "forbidden_shortcuts",
 )
 EXPLICIT_TASK_CONTRACT_FIELDS = {
     "execution_policy",
@@ -131,27 +122,7 @@ def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
     if preview.asset is None:
         raise ValueError(f"formal task prompt asset is not registered: {prompt_id}")
 
-    asset = preview.asset
-    prompt_asset: dict[str, object] = {
-        "requested_id": prompt_id,
-        "resolved_id": asset.prompt_asset_id,
-        "exact": preview.exact,
-        "match": asset.match,
-        "version": asset.version,
-        "route": asset.route,
-        "task_type": str(asset.metadata.get("task_type") or ""),
-        "title": asset.title,
-        "body": asset.body.strip(),
-    }
-    for field in PROMPT_METADATA_LIST_FIELDS:
-        prompt_asset[field] = [str(item) for item in asset.metadata.get(field) or []]
-    # Prompt assets are shared with the standalone Skill, where a platform
-    # Agent may own a completion marker.  Inside Studio, lifecycle evidence
-    # and CLI scaffolds are Worker-owned.  Project the Studio-specific output
-    # boundary into every sandboxed task so the model never receives two
-    # contradictory write instructions.
-    prompt_asset["output_contract"] = [AGENT_OUTPUT_CONTRACT]
-    enriched["prompt_asset"] = prompt_asset
+    enriched["prompt_asset"] = project_prompt_asset(preview, prompt_id)
 
     expected_outputs = [str(item) for item in enriched.get("expected_outputs") or []]
     core_managed_outputs = {str(item) for item in enriched.get("core_managed_outputs") or []}

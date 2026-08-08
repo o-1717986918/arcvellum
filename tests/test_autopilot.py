@@ -760,6 +760,62 @@ class AutopilotTests(unittest.TestCase):
             self.assertTrue(any(event["event"] == "task.recovery_rejected" for event in events))
             self.assertTrue(any(event["event"] == "task.failed" for event in events))
 
+    def test_provider_quota_pauses_once_without_checkpoint_recovery(self):
+        class QuotaWorker:
+            run_calls = 0
+            resume_calls = 0
+
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                self.__class__.run_calls += 1
+                run_root = project.parent / "run-quota"
+                return WorkerRunResult(
+                    "runtime_failed",
+                    project,
+                    route,
+                    "budget-task",
+                    runtime_id,
+                    run_root,
+                    run_root / "workspace",
+                    "模型供应商余额或额度不足。",
+                    failure_kind="provider_quota",
+                    retryable=False,
+                )
+
+            def resume_from_run(self, run_root):
+                self.__class__.resume_calls += 1
+                raise AssertionError("quota failures must not restore a sandbox checkpoint")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            run = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="full_auto",
+                runtime="opencode",
+                policy=policy,
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", QuotaWorker),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            paused = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(paused["status"], "paused")
+            self.assertEqual(paused["stop_reason"], "provider-billing-required")
+            self.assertEqual(QuotaWorker.run_calls, 1)
+            self.assertEqual(QuotaWorker.resume_calls, 0)
+
     def test_structured_approval_choice_materializes_core_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "project"

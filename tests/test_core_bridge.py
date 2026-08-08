@@ -30,6 +30,18 @@ class CoreBridgeTests(unittest.TestCase):
                 bridge = CoreBridge(config)
             self.assertEqual(bridge.python, sys.executable)
 
+    def test_frozen_sidecar_does_not_use_stale_path_after_reinstall(self):
+        config = default_config()
+        config["engine"]["python"] = "D:/removed/ArcVellum/literary-engineering-studio-sidecar.exe"
+        current_sidecar = "C:/current/ArcVellum/literary-engineering-studio-sidecar.exe"
+        with (
+            patch("literary_engineering_studio.core_bridge.repository_root", return_value=Path("C:/installed")),
+            patch("literary_engineering_studio.core_bridge.sys.frozen", True, create=True),
+            patch("literary_engineering_studio.core_bridge.sys.executable", current_sidecar),
+        ):
+            bridge = CoreBridge(config)
+        self.assertEqual(bridge.python, current_sidecar)
+
     def test_project_placeholder_is_not_treated_as_shell_redirection(self):
         config = default_config()
         bridge = CoreBridge(config)

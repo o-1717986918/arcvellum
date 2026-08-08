@@ -38,7 +38,7 @@ from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
     validate_project as _validate_project,
 )
-from .worker_results import WorkerRunResult
+from .worker_results import WorkerRunResult, runtime_failure_fields
 from .worker_writeback import WritebackCoordinator
 
 
@@ -505,11 +505,7 @@ class AgentWorker:
     ) -> WorkerRunResult | None:
         if runtime_result.status == "completed":
             return None
-        status = (
-            runtime_result.status
-            if runtime_result.status == "waiting_host_agent"
-            else "runtime_failed"
-        )
+        status = runtime_result.status if runtime_result.status == "waiting_host_agent" else "runtime_failed"
         return WorkerRunResult(
             status,
             task.project_root,
@@ -519,6 +515,7 @@ class AgentWorker:
             sandbox.run_root,
             sandbox.workspace,
             runtime_result.message,
+            **runtime_failure_fields(runtime_result),
         )
 
     def _cancelled_result(

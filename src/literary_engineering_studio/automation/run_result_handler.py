@@ -151,9 +151,16 @@ class ClaimedRunResultHandler:
             or self.stop.is_set()
         ):
             return result
+        failure_kind = result.failure_kind or "process_crash"
+        if result.retryable is False or failure_kind not in {
+            "process_crash",
+            "validation_failure",
+            "writeback_failure",
+        }:
+            return result
         task_key = result.task_id or f"{cycle.route}:unknown"
         attempt = self.failure_by_task.get(task_key, 0) + 1
-        if not self._checkpoint_restore_allowed(task_key, attempt):
+        if not self._checkpoint_restore_allowed(task_key, attempt, failure_kind):
             return result
         self.host.store.append_autopilot_event(
             self.run_id,
@@ -188,10 +195,12 @@ class ClaimedRunResultHandler:
         evidence = self.campaign.progress_evidence()
         return evidence.progress.fingerprint, evidence
 
-    def _checkpoint_restore_allowed(self, task_id: str, attempt: int) -> bool:
+    def _checkpoint_restore_allowed(
+        self, task_id: str, attempt: int, failure_kind: str = "process_crash"
+    ) -> bool:
         if self.campaign is None:
             return True
-        decision = self._recovery_decision("process_crash", attempt, task_id)
+        decision = self._recovery_decision(failure_kind, attempt, task_id)
         if decision.step is not RecoveryStep.CHECKPOINT_RESTORE:
             return False
         allowed, reason = self.campaign.restore_allowed()
@@ -406,11 +415,25 @@ class ClaimedRunResultHandler:
                 "task_id": task_key,
                 "status": result.status,
                 "message": result.message,
+                "failure_kind": result.failure_kind,
+                "retryable": result.retryable,
             },
         )
+        if result.retryable is False:
+            pause_reason = {
+                "provider_quota": "provider-billing-required",
+                "authentication_failure": "model-authentication-required",
+                "model_error": "model-connection-failed",
+                "total_timeout": "task-runtime-limit-exceeded",
+            }.get(result.failure_kind, "non-retryable-runtime-failure")
+            self.host._pause_for(self.run_id, pause_reason, result.message)
+            return True
         if self.campaign is not None:
             recovery_outcome = self._apply_recovery_step(
-                cycle, task_key, failure_count
+                cycle,
+                task_key,
+                failure_count,
+                result.failure_kind or "process_crash",
             )
             if recovery_outcome is not None:
                 return recovery_outcome
@@ -424,9 +447,13 @@ class ClaimedRunResultHandler:
         return False
 
     def _apply_recovery_step(
-        self, cycle: RouteCycle, task_id: str, attempt: int
+        self,
+        cycle: RouteCycle,
+        task_id: str,
+        attempt: int,
+        failure_kind: str = "process_crash",
     ) -> bool | None:
-        decision = self._recovery_decision("process_crash", attempt, task_id)
+        decision = self._recovery_decision(failure_kind, attempt, task_id)
         if decision.step is RecoveryStep.BOUNDED_REPLAN:
             self.host.store.update_autopilot_run(
                 self.run_id, current_task_id="", last_recovery_at=_now()
@@ -434,7 +461,7 @@ class ClaimedRunResultHandler:
             self.host.store.append_autopilot_event(
                 self.run_id,
                 "campaign.replan.requested",
-                {"task_id": task_id, "route": cycle.route, "reason": "process-crash"},
+                {"task_id": task_id, "route": cycle.route, "reason": failure_kind},
             )
             return False
         if decision.step is RecoveryStep.STOP_WITH_EVIDENCE:

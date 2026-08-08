@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 from typing import Any, Callable
 
-from .base import RuntimeResult
+from .base import RuntimeFailureKind, RuntimeResult
 
 
 @dataclass(frozen=True)
@@ -177,6 +177,8 @@ def repair_failure_result(
                 "session_id": session_id,
                 "repairs": result.repairs,
                 "preflight": result.payload,
+                "failure_kind": RuntimeFailureKind.VALIDATION_FAILURE.value,
+                "retryable": True,
             },
         )
     client.abort(session_id)
@@ -199,6 +201,15 @@ def repair_failure_result(
         command,
         output_path,
         f"repair {status}",
+        {
+            "session_id": session_id,
+            "failure_kind": (
+                RuntimeFailureKind.IDLE_TIMEOUT.value
+                if result.status in {"idle_timeout", "first_event_timeout"}
+                else RuntimeFailureKind.TOTAL_TIMEOUT.value
+            ),
+            "retryable": True,
+        },
     )
 
 

@@ -20,6 +20,8 @@ class WorkerRunResult:
     imported_outputs: tuple[str, ...] = ()
     audit_fields: dict[str, str] | None = None
     writeback_preview: dict[str, object] | None = None
+    failure_kind: str = ""
+    retryable: bool | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -34,4 +36,18 @@ class WorkerRunResult:
             "imported_outputs": list(self.imported_outputs),
             "audit": self.audit_fields or {},
             "writeback_preview": self.writeback_preview or {},
+            "failure_kind": self.failure_kind,
+            "retryable": self.retryable,
         }
+
+
+def runtime_failure_fields(runtime_result: Any) -> dict[str, Any]:
+    metadata = (
+        runtime_result.metadata
+        if isinstance(runtime_result.metadata, dict)
+        else {}
+    )
+    return {
+        "failure_kind": str(metadata.get("failure_kind") or ""),
+        "retryable": bool(metadata["retryable"]) if "retryable" in metadata else None,
+    }
