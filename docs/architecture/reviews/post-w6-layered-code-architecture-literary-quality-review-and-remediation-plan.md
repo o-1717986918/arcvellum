@@ -1567,3 +1567,45 @@ Q2 修正后的退出结论：
 - SQL、transaction ownership、application file lifecycle 三层边界已由测试证明，Q2 现在才可正式标记完成。
 
 下一批入口：从类谱系转入确定性控制逻辑。优先修复 `_renew_or_reclaim_lease()` 的静默异常，建立不改变容错与重领策略的 typed failure evidence；随后审查控制路径 broad catch、错误分类、幂等与状态转换，不把清理路径的善意容错误改成系统失败。
+
+### 2026-08-08：Q4.5-F Controller Lease 错误语义与心跳存活
+
+状态：完成，准备独立提交。
+
+实际缺陷：
+
+1. `_renew_or_reclaim_lease()` 在 renew 与 reclaim 异常时均直接 `pass`，最终只返回 `lost`；运维层无法区分“租约被其他控制器合法持有”“SQLite 续租暂时失败后已重领”“续租和重领都异常”。
+2. 重领成功之后直接写 `controller_lease_reclaimed` 事件；若仅 observability 写入短暂失败，heartbeat 线程会异常退出，但主创线程继续运行，租约随后过期，形成界面仍显示运行、实际已失去持续控制的隐性风险。
+3. 失去租约后不能由旧控制器直接把 run 改为 paused/blocked；此时可能已有新控制器合法接管，旧 owner 的状态写会覆盖新 owner，因此修复必须保持 lease authority 高于 run projection。
+
+已完成：
+
+- 新增 `LeaseRenewalResult`，显式区分 `renewed/reclaimed/lost`，并以 typed failure evidence 保留 `stage/error_type/message`；不再静默丢失异常；
+- 将 lease renewal 与 heartbeat 提取到窄模块 `automation/lease_heartbeat.py`；Controller 仍拥有线程启动、停止和 lease 生命周期，模块不拥有 Autopilot route 或正式作品状态；
+- `controller_lease_reclaimed` 与 `controller_lease_lost` 事件携带 failure evidence；正常 `renew=False` 仍按 ownership refusal 处理，不伪装成异常；
+- observability 事件写失败时保留有界内存 backlog，并在下一 heartbeat 周期先重试；不因事件表短暂繁忙而停止续租；若租约确实丢失且事件仍无法落盘，将 backlog 绑定到 stop event 供进程内诊断；
+- 新增“renew 异常后 reclaim 成功”“双阶段异常”“事件首次写失败后重试且 heartbeat 不自停”回归。
+
+Broad catch 分层复核：
+
+| 类型 | 代表位置 | 判定 |
+| --- | --- | --- |
+| rollback 后原样重抛 | Asset creation/owner transaction/recycle、Style transaction、SQLite UoW、sandbox writeback | 保留；捕获范围必须覆盖任意中途失败，且不吞异常 |
+| 不可信扩展边界结构化失败 | Capability Broker、OpenCode runtime、Worker Supervisor | 保留；异常已变成 typed result/event，不会报告成功 |
+| 明确的 shadow/fixed fallback | Orchestration shadow service | 保留；正式执行仍走 fixed route，fallback reason 可审计 |
+| 启动与只读投影降级 | Bootstrap、Advisor inbox、application info | 保留；不写正式项目事实，失败转为 degraded/empty projection |
+| 控制路径静默吞错 | 原 lease renew/reclaim | 已修复；错误进入 typed evidence，heartbeat 不因 telemetry 故障退出 |
+
+批判性边界：
+
+- 没有把所有 `except Exception` 机械替换成若干猜测的异常类型；对于文件事务回滚、第三方 Agent runtime 和插件 capability，这会漏掉真正需要回滚/归一化的未知失败；
+- `LeaseRenewalResult` 不是为减少条件分支新增的空类，而是跨 renew/reclaim 两阶段传递状态与证据的不可变值对象；
+- 初版把修复继续写入 Controller，使 Architecture file debt 从 29 回升到 30；随后提取窄 heartbeat 模块，并将 Controller 收敛到 498 行，债务恢复到 29，未修改 baseline。
+
+验证证据：
+
+- Autopilot、Architecture 与依赖方向：33 tests passed；
+- Architecture Audit：29 file debts、205 function debts、0 cycles；
+- `compileall` 与 `git diff --check`：通过。
+
+下一批入口：审查确定性状态转换和错误投影的跨层一致性，重点核对 task/preflight/writeback/recovery 的失败是否保持原状态、是否有“返回 complete 但未增加正式证据”或“重试造成重复 mutation”的路径；完成后进入文学逻辑复核。

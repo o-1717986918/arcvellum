@@ -11,6 +11,11 @@ import uuid
 
 from ..observability.agent_session_tracking import track_agent_session_event
 from .decision_delegation import DecisionDelegator
+from .lease_heartbeat import (
+    LeaseRenewalResult,
+    renew_or_reclaim_lease,
+    run_lease_heartbeat,
+)
 from .policy import (
     DECISION_ALIASES,
     DelegationPolicy,
@@ -44,11 +49,8 @@ ROUTE_ORDER = (
     "export-and-release",
 )
 PROACTIVE_DECISIONS = {
-    "branch_selection",
-    "style_mount",
-    "revision_direction",
-    "word_budget_direction",
-    "canon_patch_approval",
+    "branch_selection", "style_mount", "revision_direction",
+    "word_budget_direction", "canon_patch_approval",
 }
 TERMINAL_STATUSES = {"complete", "paused", "blocked", "cancelled", "failed"}
 NO_PROGRESS_LIMIT = 3
@@ -216,28 +218,12 @@ class AutopilotService:
             return
         renew_stop = threading.Event()
 
-        def renew() -> None:
-            while not renew_stop.wait(20):
-                renewal = self._renew_or_reclaim_lease(run_id, lease_owner)
-                if renewal == "renewed":
-                    continue
-                if renewal == "reclaimed":
-                    self.store.append_autopilot_event(
-                        run_id,
-                        "autopilot.controller_lease_reclaimed",
-                        {"controller_id": self._controller_id},
-                    )
-                    continue
-                setattr(stop, "_arcvellum_lease_lost", True)
-                stop.set()
-                self.store.append_autopilot_event(
-                    run_id,
-                    "autopilot.controller_lease_lost",
-                    {"controller_id": self._controller_id},
-                )
-                return
-
-        heartbeat = threading.Thread(target=renew, name=f"arcvellum-lease-{run_id}", daemon=True)
+        heartbeat = threading.Thread(
+            target=self._lease_heartbeat,
+            args=(run_id, lease_owner, stop, renew_stop),
+            name=f"arcvellum-lease-{run_id}",
+            daemon=True,
+        )
         heartbeat.start()
         try:
             self._run_claimed(run_id, stop)
@@ -250,7 +236,11 @@ class AutopilotService:
         application = self.config.get("application") if isinstance(self.config.get("application"), dict) else {}
         return max(30, min(900, int(application.get("lease_seconds") or 90)))
 
-    def _renew_or_reclaim_lease(self, run_id: str, lease_owner: str) -> str:
+    def _renew_or_reclaim_lease(
+        self,
+        run_id: str,
+        lease_owner: str,
+    ) -> LeaseRenewalResult:
         """Renew a controller lease, reclaiming only a lease no controller owns.
 
         A worker can be busy in a long streamed model turn while another
@@ -261,21 +251,29 @@ class AutopilotService:
         this controller recover an expired or unexpectedly removed lease.
         """
 
-        lease_seconds = self._lease_seconds()
-        try:
-            if self.store.renew_autopilot_lease(run_id, lease_owner, lease_seconds=lease_seconds):
-                return "renewed"
-        except Exception:
-            # A transient SQLite contention should not turn a healthy Agent
-            # session into a cancelled run.  The guarded re-claim below still
-            # refuses a lease owned by another controller.
-            pass
-        try:
-            if self.store.acquire_autopilot_lease(run_id, lease_owner, lease_seconds=lease_seconds):
-                return "reclaimed"
-        except Exception:
-            pass
-        return "lost"
+        return renew_or_reclaim_lease(
+            self.store,
+            run_id,
+            lease_owner,
+            lease_seconds=self._lease_seconds(),
+        )
+
+    def _lease_heartbeat(
+        self,
+        run_id: str,
+        lease_owner: str,
+        stop: threading.Event,
+        renew_stop: threading.Event,
+    ) -> None:
+        run_lease_heartbeat(
+            self.store,
+            run_id=run_id,
+            lease_owner=lease_owner,
+            controller_id=self._controller_id,
+            stop=stop,
+            renew_stop=renew_stop,
+            renew=self._renew_or_reclaim_lease,
+        )
 
     def _worker(
         self, run_id: str, *, cancel_event: threading.Event | None = None,

@@ -14,6 +14,7 @@ from literary_engineering_studio.autopilot import (
     next_revision_count,
     normalize_policy,
 )
+from literary_engineering_studio.automation.lease_heartbeat import LeaseRenewalResult
 from literary_engineering_studio.creative_steward import (
     _decision_evidence_packet,
     _decision_prompt,
@@ -279,8 +280,99 @@ class AutopilotTests(unittest.TestCase):
             self.assertTrue(store.acquire_autopilot_lease(run["run_id"], owner))
             store.release_autopilot_lease(run["run_id"], owner)
 
-            self.assertEqual(service._renew_or_reclaim_lease(run["run_id"], owner), "reclaimed")
+            renewal = service._renew_or_reclaim_lease(run["run_id"], owner)
+            self.assertEqual(renewal.state, "reclaimed")
+            self.assertEqual(renewal.failures, ())
             self.assertTrue(store.renew_autopilot_lease(run["run_id"], owner))
+
+    def test_lease_renewal_retains_typed_failures_across_reclaim(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = JobStore(root / "studio.sqlite3")
+            service = AutopilotService(
+                {"application": {"data_root": str(root)}},
+                store,
+            )
+
+            with (
+                patch.object(
+                    store,
+                    "renew_autopilot_lease",
+                    side_effect=RuntimeError("renew busy"),
+                ),
+                patch.object(store, "acquire_autopilot_lease", return_value=True),
+            ):
+                result = service._renew_or_reclaim_lease("run-evidence", "owner-a")
+
+            self.assertEqual(result.state, "reclaimed")
+            self.assertEqual(
+                result.failures,
+                ({"stage": "renew", "error_type": "RuntimeError", "message": "renew busy"},),
+            )
+
+            with (
+                patch.object(
+                    store,
+                    "renew_autopilot_lease",
+                    side_effect=RuntimeError("renew unavailable"),
+                ),
+                patch.object(
+                    store,
+                    "acquire_autopilot_lease",
+                    side_effect=OSError("reclaim unavailable"),
+                ),
+            ):
+                lost = service._renew_or_reclaim_lease("run-evidence", "owner-a")
+
+            self.assertEqual(lost.state, "lost")
+            self.assertEqual(
+                [item["stage"] for item in lost.failures],
+                ["renew", "reclaim"],
+            )
+            self.assertEqual(lost.failures[-1]["error_type"], "OSError")
+
+    def test_lease_heartbeat_retries_observability_without_losing_renewal(self):
+        class TwoCycleStop:
+            def __init__(self):
+                self.calls = 0
+
+            def wait(self, timeout):
+                self.calls += 1
+                return self.calls >= 2
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = JobStore(root / "studio.sqlite3")
+            service = AutopilotService(
+                {"application": {"data_root": str(root)}},
+                store,
+            )
+            stop = threading.Event()
+
+            with (
+                patch.object(
+                    service,
+                    "_renew_or_reclaim_lease",
+                    return_value=LeaseRenewalResult(
+                        "reclaimed",
+                        ({"stage": "renew", "error_type": "OSError", "message": "busy"},),
+                    ),
+                ),
+                patch.object(
+                    store,
+                    "append_autopilot_event",
+                    side_effect=[OSError("event store busy"), {}],
+                ) as append_event,
+            ):
+                service._lease_heartbeat(
+                    "run-heartbeat",
+                    "owner-a",
+                    stop,
+                    TwoCycleStop(),
+                )
+
+            self.assertEqual(append_event.call_count, 2)
+            self.assertFalse(stop.is_set())
 
     def test_repeated_complete_without_formal_change_pauses_instead_of_spinning(self):
         class EmptyCompleteWorker:
