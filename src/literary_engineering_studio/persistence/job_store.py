@@ -225,6 +225,45 @@ class JobStore:
             if cursor.rowcount != 1:
                 raise RuntimeError(f"job lease is not owned by {worker_id}: {job_id}")
 
+    def heartbeat_execution(
+        self,
+        job_id: str,
+        worker_id: str,
+        lock_key: str,
+        *,
+        lease_seconds: int = 60,
+    ) -> None:
+        """Renew job and project-write leases in one transaction."""
+
+        _validate_job_id(job_id)
+        if not lock_key.strip():
+            raise ValueError("lock key must not be empty")
+        now = datetime.now(timezone.utc)
+        job_expires = (now + timedelta(seconds=max(10, lease_seconds))).isoformat()
+        lock_expires = (now + timedelta(seconds=max(30, lease_seconds * 2))).isoformat()
+        with self._write_lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            job = connection.execute(
+                """
+                UPDATE jobs SET heartbeat_at = ?, lease_expires_at = ?, updated_at = ?
+                WHERE job_id = ? AND lease_owner = ? AND status IN ('running', 'stopping')
+                """,
+                (now.isoformat(), job_expires, now.isoformat(), job_id, worker_id),
+            )
+            if job.rowcount != 1:
+                raise RuntimeError(f"job lease is not owned by {worker_id}: {job_id}")
+            lock = connection.execute(
+                """
+                UPDATE project_locks SET lease_expires_at = ?, updated_at = ?
+                WHERE lock_key = ? AND job_id = ? AND lease_owner = ?
+                """,
+                (lock_expires, now.isoformat(), lock_key, job_id, worker_id),
+            )
+            if lock.rowcount != 1:
+                raise RuntimeError(
+                    f"project execution lease is not owned by {worker_id}: {lock_key}"
+                )
+
     def append_event(self, job_id: str, event_type: str, data: dict[str, Any]) -> dict[str, Any]:
         _validate_job_id(job_id)
         if not isinstance(data, dict):

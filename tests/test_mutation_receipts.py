@@ -30,6 +30,39 @@ from literary_engineering_studio.worker import AgentWorker
 
 
 class MutationReceiptTests(unittest.TestCase):
+    def test_observability_sink_failure_cannot_split_formal_writeback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project, config = _project_and_config(Path(temporary))
+
+            def unavailable_sink(event: str, data: dict) -> None:
+                raise OSError("event projection unavailable")
+
+            with patch(
+                "literary_engineering_studio.worker.build_runtime",
+                side_effect=AssertionError("deterministic task must not run an Agent"),
+            ):
+                result = AgentWorker(config, event_sink=unavailable_sink).run_once(
+                    project,
+                    route="longform-planning",
+                    runtime_id="opencode",
+                )
+
+            self.assertEqual(result.status, "complete")
+            assert result.run_root is not None
+            self.assertTrue(load_worker_mutation_receipts(result.run_root))
+            failures = [
+                json.loads(line)
+                for line in (result.run_root / "observability-errors.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            self.assertTrue(failures)
+            self.assertTrue(
+                all(item["error_type"] == "OSError" for item in failures)
+            )
+            self.assertTrue(all("data" not in item for item in failures))
+
     def test_repository_uses_explicit_unit_of_work_without_job_store_inheritance(self):
         with tempfile.TemporaryDirectory() as temporary:
             uow = SqliteUnitOfWork(Path(temporary) / "studio.sqlite3")

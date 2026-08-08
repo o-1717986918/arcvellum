@@ -142,6 +142,7 @@ class AgentWorker:
             materialize_agent_view=_materialize_agent_view_immediately(task),
             context_budget=context_budget,
         )
+        self.observer.bind_run_root(sandbox.run_root)
         self.observer.emit(
             "sandbox.prepared",
             {

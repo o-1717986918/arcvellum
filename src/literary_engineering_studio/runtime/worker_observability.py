@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ class WorkerObserver:
         self.event_sink = event_sink
         self._context_ledger_fields: dict[str, str] = {}
         self._agent_session_id = ""
+        self._run_root: Path | None = None
+        self._pending_sink_failures: list[dict[str, str]] = []
 
     @property
     def agent_session_id(self) -> str:
@@ -22,6 +25,12 @@ class WorkerObserver:
     def reset_context_ledger(self) -> None:
         self._context_ledger_fields = {}
         self._agent_session_id = ""
+        self._run_root = None
+        self._pending_sink_failures = []
+
+    def bind_run_root(self, run_root: Path) -> None:
+        self._run_root = run_root.expanduser().resolve()
+        self._flush_sink_failures()
 
     def bind_context_ledger(self, run: dict[str, Any]) -> None:
         ledger_id = str(run.get("context_ledger_id") or "")
@@ -37,6 +46,9 @@ class WorkerObserver:
             if ledger_id and ledger_digest and ledger_path
             else {}
         )
+        run_root = str(run.get("run_root") or "").strip()
+        if run_root:
+            self.bind_run_root(Path(run_root))
 
     def publish_context_ready(self, task, sandbox, runtime_id: str) -> None:
         if task.execution_contract.execution_policy != "agent-required":
@@ -73,4 +85,30 @@ class WorkerObserver:
             if session_id:
                 self._agent_session_id = session_id
         if self.event_sink is not None:
-            self.event_sink(event, {**data, **self._context_ledger_fields})
+            try:
+                self.event_sink(event, {**data, **self._context_ledger_fields})
+            except Exception as exc:
+                self._pending_sink_failures.append(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "event": event,
+                        "error_type": type(exc).__name__,
+                        "message": str(exc)[:500],
+                    }
+                )
+                self._flush_sink_failures()
+
+    def _flush_sink_failures(self) -> None:
+        if self._run_root is None or not self._pending_sink_failures:
+            return
+        path = self._run_root / "observability-errors.jsonl"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as stream:
+                for failure in self._pending_sink_failures:
+                    stream.write(
+                        json.dumps(failure, ensure_ascii=False, sort_keys=True) + "\n"
+                    )
+        except OSError:
+            return
+        self._pending_sink_failures.clear()

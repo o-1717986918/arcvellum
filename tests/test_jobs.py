@@ -1,6 +1,7 @@
 from pathlib import Path
 import sqlite3
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -310,6 +311,90 @@ class DurableJobTests(unittest.TestCase):
             self.assertIn("lock.acquired", event_names)
             self.assertIn("run.complete", event_names)
             self.assertIn("lock.released", event_names)
+
+    def test_execution_heartbeat_renews_job_and_project_lock_atomically(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            job = store.create({"project_root": "work"})
+            worker = "worker-one"
+            lock_key = "project:test:execution"
+            self.assertTrue(store.claim(job["job_id"], worker, lease_seconds=30))
+            self.assertTrue(
+                store.acquire_lock(lock_key, job["job_id"], worker, lease_seconds=30)
+            )
+            before = store.read(job["job_id"])["lease_expires_at"]
+
+            store.heartbeat_execution(
+                job["job_id"], worker, lock_key, lease_seconds=90
+            )
+
+            after = store.read(job["job_id"])["lease_expires_at"]
+            self.assertGreater(after, before)
+            with store._connection() as connection:
+                lock = connection.execute(
+                    "SELECT lease_expires_at FROM project_locks WHERE lock_key = ?",
+                    (lock_key,),
+                ).fetchone()
+            self.assertIsNotNone(lock)
+            self.assertGreater(str(lock["lease_expires_at"]), after)
+
+            with store._connection() as connection:
+                connection.execute(
+                    "DELETE FROM project_locks WHERE lock_key = ?", (lock_key,)
+                )
+            unchanged = store.read(job["job_id"])["heartbeat_at"]
+            with self.assertRaisesRegex(RuntimeError, "project execution lease"):
+                store.heartbeat_execution(
+                    job["job_id"], worker, lock_key, lease_seconds=90
+                )
+            self.assertEqual(store.read(job["job_id"])["heartbeat_at"], unchanged)
+
+    def test_supervisor_rejects_missing_status_instead_of_reporting_complete(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            job = store.create({"project_root": "work"})
+            supervisor = WorkerSupervisor(store, max_workers=1, lease_seconds=30)
+            supervisor.submit(
+                job["job_id"],
+                lambda _cancel: {"message": "forgot status"},
+                lock_key="project:test:missing-status",
+            )
+            deadline = time.time() + 5
+            while time.time() < deadline and store.read(job["job_id"])["status"] in {"queued", "running"}:
+                time.sleep(0.02)
+            failed = store.read(job["job_id"])
+            supervisor.shutdown()
+
+            self.assertEqual(failed["status"], "failed")
+            self.assertIn("must declare status", failed["error"])
+
+    def test_supervisor_cancels_execution_when_project_lease_is_lost(self):
+        class ImmediateHeartbeat:
+            def wait(self, timeout):
+                return False
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            supervisor = WorkerSupervisor(store, max_workers=1, lease_seconds=30)
+            cancel = threading.Event()
+            with patch.object(
+                store,
+                "heartbeat_execution",
+                side_effect=RuntimeError("project lease lost"),
+            ):
+                supervisor._heartbeat_loop(
+                    "job-lease-test",
+                    "project:test:execution",
+                    ImmediateHeartbeat(),
+                    cancel,
+                )
+            supervisor.shutdown()
+
+            self.assertTrue(cancel.is_set())
+            self.assertIn(
+                "project lease lost",
+                str(getattr(cancel, "_arcvellum_execution_lease_error", "")),
+            )
 
 
 if __name__ == "__main__":

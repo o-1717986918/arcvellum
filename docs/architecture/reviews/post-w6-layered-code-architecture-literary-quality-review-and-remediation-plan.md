@@ -1609,3 +1609,56 @@ Broad catch 分层复核：
 - `compileall` 与 `git diff --check`：通过。
 
 下一批入口：审查确定性状态转换和错误投影的跨层一致性，重点核对 task/preflight/writeback/recovery 的失败是否保持原状态、是否有“返回 complete 但未增加正式证据”或“重试造成重复 mutation”的路径；完成后进入文学逻辑复核。
+
+### 2026-08-08：Q4.5-G Observability 与正式写回隔离
+
+状态：完成。
+
+实际缺陷：
+
+- `WorkerObserver.emit()` 直接传播 event sink 异常；而 `WritebackCoordinator._finalize()` 在导入正式文件后会依次记录 mutation receipt、发送 `file.imported`、再调用 core submit/complete；
+- 如果 SQLite event projection 或 SSE/job event sink 在“正式文件已导入、core gate 尚未提交”之间失败，调用会越过 `_rollback_core_gate()`，留下已经改变的项目文件、未提交的 task 和失败 job；
+- Mutation receipt 已先写入 run-root JSONL，SQLite 只是读模型投影，但旧代码把投影可用性错误提升成正式写回事务的一部分。
+
+已完成：
+
+- `WorkerObserver` 明确为 fail-soft projection boundary：事件 sink 失败不再打断 Worker 控制流；
+- `stage_task()` 后立即绑定 run root；在上下文账本尚未建立的 deterministic task 中也能记录观察错误；
+- sink failure 写入 run-root `observability-errors.jsonl`，仅含时间、事件名、异常类型和截断消息，不复制作品正文、task payload 或密钥；绑定 run root 前的失败先暂存，绑定后刷盘；
+- mutation receipt 的本地 immutable ledger 继续作为本次运行事实，SQLite projection 可从事件/ledger 重建；没有放宽 preflight、writeback preview、core submit/complete 或 rollback gate；
+- 新增全 event sink 抛 `OSError` 的 deterministic Worker 回归：任务仍正式 complete，mutation receipts 完整，错误账本存在且不包含 `data` payload。
+
+### 2026-08-08：Q4.5-H Supervisor 双租约与结果 fail-closed
+
+状态：完成。
+
+实际缺陷：
+
+1. Supervisor heartbeat 只续 job lease，不续 `project_locks`；默认 90 秒 lease 下，跨进程项目写锁约 180 秒后过期，长模型任务仍运行时另一进程可取得同项目执行权。
+2. 被监督函数若漏掉 `status`，Supervisor 使用 `complete` 作为默认值，形成没有正式结果合同也能被记为成功的入口。
+3. 若只增加分支，`WorkerSupervisor._run` 会超过 80 行 function budget；状态归一化需要成为明确职责，而不是继续膨胀生命周期方法。
+
+已完成：
+
+- 新增 `JobStore.heartbeat_execution()`，在一个 `BEGIN IMMEDIATE` transaction 中同时续 job lease 与 project lock；任一 ownership 条件不满足则整笔回滚，避免 job heartbeat 成功但项目锁丢失；
+- Supervisor heartbeat 使用双租约；任何异常都意味着无法证明独占写权限，立即设置 cancel event，并附 `_arcvellum_execution_lease_error`；
+- 租约丢失后，即使不合作的执行函数返回 `complete`，Supervisor 也将结果归一为 `failed`，不接受失去项目写权后的成功宣称；
+- 监督结果必须是 object 且显式声明非空 `status`；移除缺省 `complete`；
+- 提炼 `_normalize_result()`，使 `_run` 保持生命周期协调职责。初次 Architecture test 精确拒绝 82/80 行，修正后 Ratchet 恢复通过；
+- 新增双租约续期、锁缺失导致整笔 heartbeat 回滚、缺 status 失败、项目 lease 丢失触发取消四类回归。
+
+验证证据：
+
+- Jobs、Mutation receipts、task submission rollback、sandbox、Architecture 与依赖方向：48 tests passed；
+- Worker API、API route surface、Context A/B、writeback/recovery 回归：52 tests passed；
+- Architecture Audit：29 file debts、205 function debts、0 cycles；
+- `compileall` 与 `git diff --check`：通过。
+
+确定性控制层结论：
+
+- task output 在 preflight 前仅存在 sandbox；正式文件导入失败会恢复；core submit/complete 失败会恢复文件并 revert submission；
+- mutation/observability projection 故障不再把已导入文件悬在 core gate 之前；
+- 同一项目跨进程写权现在随 job heartbeat 原子续期；不能证明租约则取消，不能以漏 status 获得成功；
+- 已审查的回滚型 broad catch 继续重抛，read-model 降级继续 fail-soft，没有用统一异常策略破坏边界。
+
+下一批入口：进入文学逻辑链复核。依次验证 branch proposal 的真实消费链、Composition 可变 beats 的义务覆盖、revision 对“换一种生硬转折”的拒绝、chapter/longform 宏观节奏与承诺兑现、fallback provenance；每一项都以实现消费者和反例测试为证据。

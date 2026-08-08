@@ -113,7 +113,7 @@ class WorkerSupervisor:
         heartbeat_stop = threading.Event()
         heartbeat = threading.Thread(
             target=self._heartbeat_loop,
-            args=(job_id, heartbeat_stop),
+            args=(job_id, lock_key, heartbeat_stop, cancel_event),
             name=f"les-heartbeat-{job_id}",
             daemon=True,
         )
@@ -123,14 +123,12 @@ class WorkerSupervisor:
                 self.store.update(job_id, status="cancelled", finished_at=_now_from_store())
                 return
             result = function(cancel_event)
-            status = str(result.get("status") or "complete")
-            if cancel_event.is_set() and status not in {"complete", "route_ready", "waiting_human"}:
-                status = "cancelled"
+            status, result, lease_error = self._normalize_result(result, cancel_event)
             self.store.update(
                 job_id,
                 status=status,
                 result=result,
-                error="",
+                error=lease_error,
                 finished_at=_now_from_store(),
                 lease_owner="",
                 lease_expires_at="",
@@ -152,12 +150,48 @@ class WorkerSupervisor:
             with self._lock:
                 self._cancel.pop(job_id, None)
 
-    def _heartbeat_loop(self, job_id: str, stop: threading.Event) -> None:
+    @staticmethod
+    def _normalize_result(
+        result: object,
+        cancel_event: threading.Event,
+    ) -> tuple[str, dict[str, Any], str]:
+        if not isinstance(result, dict):
+            raise TypeError("supervised worker must return a result object")
+        status = str(result.get("status") or "").strip()
+        if not status:
+            raise ValueError("supervised worker result must declare status")
+        lease_error = str(
+            getattr(cancel_event, "_arcvellum_execution_lease_error", "")
+        )
+        if lease_error:
+            return "failed", {**result, "status": "failed", "message": lease_error}, lease_error
+        if cancel_event.is_set() and status not in {"complete", "route_ready", "waiting_human"}:
+            status = "cancelled"
+        return status, result, ""
+
+    def _heartbeat_loop(
+        self,
+        job_id: str,
+        lock_key: str,
+        stop: threading.Event,
+        cancel_event: threading.Event,
+    ) -> None:
         interval = max(5.0, self.lease_seconds / 3)
         while not stop.wait(interval):
             try:
-                self.store.heartbeat(job_id, self.worker_id, lease_seconds=self.lease_seconds)
-            except (FileNotFoundError, RuntimeError):
+                self.store.heartbeat_execution(
+                    job_id,
+                    self.worker_id,
+                    lock_key,
+                    lease_seconds=self.lease_seconds,
+                )
+            except Exception as exc:
+                setattr(
+                    cancel_event,
+                    "_arcvellum_execution_lease_error",
+                    f"{type(exc).__name__}: {exc}",
+                )
+                cancel_event.set()
                 return
 
 
