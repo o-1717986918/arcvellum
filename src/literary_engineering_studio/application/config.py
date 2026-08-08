@@ -174,6 +174,8 @@ def _default_orchestration_config() -> dict[str, Any]:
         "production_chapter_horizon": False,
         "chapter_horizon_size": 3,
         "bundle_execution": False,
+        "campaign_runtime": False,
+        "campaign_checkpoint_interval_steps": 5,
     }
 
 

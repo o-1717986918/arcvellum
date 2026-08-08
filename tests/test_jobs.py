@@ -13,6 +13,35 @@ from literary_engineering_studio.runtime.resources import ResourceClaim, project
 
 
 class DurableJobTests(unittest.TestCase):
+    def test_latest_autopilot_event_filters_type_and_returns_latest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            run = store.create_autopilot_run(
+                "C:/work",
+                mode="full_auto",
+                runtime="opencode",
+                policy={"mode": "full_auto"},
+            )
+            store.append_autopilot_event(
+                run["run_id"], "campaign.checkpoint.created", {"step": 1}
+            )
+            store.append_autopilot_event(
+                run["run_id"], "progress.advanced", {"step": 2}
+            )
+            store.append_autopilot_event(
+                run["run_id"], "campaign.checkpoint.created", {"step": 3}
+            )
+
+            latest = store.latest_autopilot_event(
+                run["run_id"], "campaign.checkpoint.created"
+            )
+
+            self.assertIsNotNone(latest)
+            self.assertEqual(latest["data"], {"step": 3})
+            self.assertIsNone(
+                store.latest_autopilot_event(run["run_id"], "missing.event")
+            )
+
     def test_create_rolls_back_job_when_initial_event_write_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")

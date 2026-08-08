@@ -302,6 +302,36 @@ class ApiServerTests(unittest.TestCase):
         self.assertNotIn(f"id: {first['sequence']}\n", response.text)
         self.assertIn(f"id: {second['sequence']}\n", response.text)
         self.assertIn("第二段", response.text)
+        self.assertIn("event: stream.terminal", response.text)
+        terminal_cursor = store.events_since(job["job_id"])[-1]["sequence"]
+        self.assertIn(f'"cursor": {terminal_cursor}', response.text)
+
+    def test_autopilot_stream_resumes_and_emits_explicit_terminal(self):
+        store = self.client.app.state.lifecycle.store
+        run = store.create_autopilot_run(
+            "C:/test",
+            mode="full_auto",
+            runtime="opencode",
+            policy={"mode": "full_auto"},
+        )
+        first = store.append_autopilot_event(
+            run["run_id"], "progress.advanced", {"task_id": "first"}
+        )
+        second = store.append_autopilot_event(
+            run["run_id"], "progress.advanced", {"task_id": "second"}
+        )
+        store.update_autopilot_run(run["run_id"], status="paused")
+
+        response = self.client.get(
+            f"/autopilot/runs/{run['run_id']}/stream",
+            headers={"Last-Event-ID": str(first["sequence"])},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(f"id: {first['sequence']}\n", response.text)
+        self.assertIn(f"id: {second['sequence']}\n", response.text)
+        self.assertIn("event: stream.terminal", response.text)
+        self.assertIn('"status": "paused"', response.text)
 
     def test_delivery_center_lists_and_downloads_formal_files(self):
         with tempfile.TemporaryDirectory() as temporary:

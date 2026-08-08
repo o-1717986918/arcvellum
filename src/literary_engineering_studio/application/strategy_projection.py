@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -49,8 +51,15 @@ def typed_plan_events(
             item = _parse_event_line(line)
             if item is not None:
                 parsed.append(item)
-    parsed.sort(key=lambda item: str(item.get("created_at") or ""))
-    return parsed[-limit:]
+    unique = {str(item["event_id"]): item for item in parsed}
+    ordered = sorted(
+        unique.values(),
+        key=lambda item: (
+            str(item.get("created_at") or ""),
+            str(item.get("event_id") or ""),
+        ),
+    )
+    return ordered[-limit:]
 
 
 def _active_plan_summary(root: Path) -> dict[str, Any] | None:
@@ -58,8 +67,6 @@ def _active_plan_summary(root: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        import json
-
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
@@ -81,14 +88,12 @@ def _parse_event_line(line: str) -> dict[str, Any] | None:
     if not line.strip():
         return None
     try:
-        import json
-
         payload = json.loads(line)
     except ValueError:
         return None
     if not isinstance(payload, dict):
         return None
-    event_id = str(payload.get("event_id") or "")
+    event_id = str(payload.get("event_id") or _fallback_event_id(payload))
     return {
         "event_id": event_id,
         "event_type": str(payload.get("type") or payload.get("event_type") or ""),
@@ -97,3 +102,13 @@ def _parse_event_line(line: str) -> dict[str, Any] | None:
         "created_at": str(payload.get("created_at") or ""),
         "scope_key": str(payload.get("scope_key") or ""),
     }
+
+
+def _fallback_event_id(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"plan-{hashlib.sha256(serialized.encode('utf-8')).hexdigest()[:20]}"

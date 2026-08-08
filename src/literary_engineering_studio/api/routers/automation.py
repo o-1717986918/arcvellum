@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+from ..streaming import numeric_resume_cursor, sse_headers, stream_terminal
 
 from ..common import call_handler, project_root as resolve_project_root
 from ..models import AutopilotControlRequest, AutopilotPolicyRequest, AutopilotStartRequest
@@ -37,6 +38,47 @@ def _observability_payload(deps: AutomationRouterDependencies, root: Path) -> tu
         deps.lifecycle.opencode_pool.status(),
     )
     return payload, run
+
+
+def _autopilot_stream_response(
+    deps: AutomationRouterDependencies,
+    run_id: str,
+    resume_after: int,
+) -> StreamingResponse:
+    def stream():
+        cursor = resume_after
+        previous_status_revision = ""
+        last_heartbeat = time.monotonic()
+        while True:
+            items = deps.jobs.autopilot_events_since(run_id, cursor, limit=200)
+            for item in items:
+                cursor = max(cursor, int(item["sequence"]))
+                yield deps.sse(str(item["event"]), item, item["sequence"])
+            run = deps.jobs.read_autopilot_run(run_id)
+            status_revision = ":".join(
+                str(run.get(key) or "")
+                for key in ("updated_at", "status", "current_task_id")
+            )
+            if status_revision != previous_status_revision:
+                yield deps.sse(
+                    "autopilot.status", {"run": run, "cursor": cursor}, None
+                )
+                previous_status_revision = status_revision
+            if run["status"] in {
+                "complete", "paused", "blocked", "cancelled", "failed"
+            }:
+                yield stream_terminal(f"autopilot:{run_id}", run["status"], cursor)
+                break
+            if time.monotonic() - last_heartbeat >= 10:
+                yield ": autopilot heartbeat\n\n"
+                last_heartbeat = time.monotonic()
+            time.sleep(0.7)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers=sse_headers(),
+    )
 
 
 def build_automation_router(deps: AutomationRouterDependencies) -> APIRouter:
@@ -117,22 +159,13 @@ def build_automation_router(deps: AutomationRouterDependencies) -> APIRouter:
         return call_handler(lambda: {"ok": True, "items": deps.jobs.autopilot_events_since(run_id, after, limit=limit)})
 
     @router.get("/autopilot/runs/{run_id}/stream")
-    def autopilot_stream(run_id: str, after: int = 0):
+    def autopilot_stream(run_id: str, request: Request, after: int = 0):
         deps.jobs.read_autopilot_run(run_id)
+        resume_after = numeric_resume_cursor(
+            after,
+            request.headers.get("Last-Event-ID") or "",
+        )
 
-        def stream():
-            cursor = max(0, int(after))
-            while True:
-                items = deps.jobs.autopilot_events_since(run_id, cursor)
-                for item in items:
-                    cursor = max(cursor, int(item["sequence"]))
-                    yield deps.sse(str(item["event"]), item, None)
-                run = deps.jobs.read_autopilot_run(run_id)
-                yield deps.sse("autopilot.status", {"run": run, "cursor": cursor}, None)
-                if run["status"] in {"complete", "paused", "blocked", "cancelled", "failed"}:
-                    break
-                time.sleep(0.7)
-
-        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        return _autopilot_stream_response(deps, run_id, resume_after)
 
     return router

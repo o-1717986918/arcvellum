@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from ..streaming import numeric_resume_cursor, sse_headers, stream_terminal
 
 from ...observability.context_ledger_tracking import persist_prepared_context
 from ...observability.mutation_receipt_tracking import (
@@ -236,43 +237,65 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
     @router.get("/worker/jobs/{job_id}/stream")
     def worker_job_stream(job_id: str, request: Request, interval_seconds: float = 0.5, after: int = 0):
         interval = max(0.1, min(10.0, float(interval_seconds or 0.5)))
-        try:
-            resume_after = max(int(after), int(request.headers.get("Last-Event-ID") or 0))
-        except ValueError:
-            resume_after = max(0, int(after))
+        resume_after = numeric_resume_cursor(
+            after,
+            request.headers.get("Last-Event-ID") or "",
+        )
 
-        def stream():
-            cursor = max(0, resume_after)
-            live_cursor = 0
-            previous_revision = -1
-            last_heartbeat = time.monotonic()
-            while True:
-                payload = deps.jobs.read(job_id)
-                for item in deps.jobs.events_since(job_id, cursor):
-                    cursor = int(item["sequence"])
-                    yield f"id: {cursor}\n"
-                    yield f"event: {item['event']}\n"
-                    yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
-                revision = int(payload.get("revision") or 0)
-                if revision != previous_revision:
-                    yield "event: worker\n"
-                    yield "data: " + json.dumps({"ok": True, **payload}, ensure_ascii=False) + "\n\n"
-                    previous_revision = revision
-                live = deps.lifecycle.live_events.wait_since(f"worker:{job_id}", live_cursor, timeout=0.1)
-                for item in deps.coalesce_live_events(live):
-                    live_cursor = max(live_cursor, int(item.get("sequence") or 0))
-                    yield f"event: {item['event']}\n"
-                    yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
-                if payload.get("status") not in {"queued", "running", "stopping"}:
-                    break
-                if time.monotonic() - last_heartbeat >= 10:
-                    yield ": worker heartbeat\n\n"
-                    last_heartbeat = time.monotonic()
-                deps.lifecycle.live_events.wait_since(f"worker:{job_id}", live_cursor, timeout=interval)
-
-        return StreamingResponse(stream(), media_type="text/event-stream")
+        return _worker_stream_response(
+            deps, job_id, resume_after=resume_after, interval=interval
+        )
 
     return router
+
+
+def _worker_stream_response(
+    deps: WorkerRouterDependencies,
+    job_id: str,
+    *,
+    resume_after: int,
+    interval: float,
+) -> StreamingResponse:
+    def stream():
+        cursor = max(0, resume_after)
+        live_cursor = 0
+        previous_revision = -1
+        last_heartbeat = time.monotonic()
+        while True:
+            payload = deps.jobs.read(job_id)
+            for item in deps.jobs.events_since(job_id, cursor, limit=200):
+                cursor = int(item["sequence"])
+                yield f"id: {cursor}\nevent: {item['event']}\n"
+                yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
+            revision = int(payload.get("revision") or 0)
+            if revision != previous_revision:
+                yield "event: worker\n"
+                yield "data: " + json.dumps({"ok": True, **payload}, ensure_ascii=False) + "\n\n"
+                previous_revision = revision
+            live = deps.lifecycle.live_events.wait_since(
+                f"worker:{job_id}", live_cursor, timeout=0.1
+            )
+            for item in deps.coalesce_live_events(live):
+                live_cursor = max(live_cursor, int(item.get("sequence") or 0))
+                yield f"event: {item['event']}\n"
+                yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
+            if payload.get("status") not in {"queued", "running", "stopping"}:
+                yield stream_terminal(
+                    f"worker:{job_id}",
+                    str(payload.get("status") or "unknown"),
+                    cursor,
+                )
+                break
+            if time.monotonic() - last_heartbeat >= 10:
+                yield ": worker heartbeat\n\n"
+                last_heartbeat = time.monotonic()
+            deps.lifecycle.live_events.wait_since(
+                f"worker:{job_id}", live_cursor, timeout=interval
+            )
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream", headers=sse_headers()
+    )
 
 
 def _prepared_worker_response(deps, payload, task, sandbox) -> dict[str, Any]:

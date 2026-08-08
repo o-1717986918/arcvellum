@@ -96,6 +96,7 @@ class JobStore:
     release_autopilot_lease = RepositoryMethod("autopilot_runs")
     append_autopilot_event = RepositoryMethod("autopilot_runs")
     autopilot_events_since = RepositoryMethod("autopilot_runs")
+    latest_autopilot_event = RepositoryMethod("autopilot_runs")
     record_delegated_decision = RepositoryMethod("autopilot_runs")
     delegated_decisions = RepositoryMethod("autopilot_runs")
     recover_autopilot_runs = RepositoryMethod("autopilot_runs")

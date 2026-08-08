@@ -32,7 +32,9 @@ class OrchestrationFoundationTests(unittest.TestCase):
         self.assertEqual(settings.effective_mode, OrchestrationMode.FIXED)
         self.assertFalse(settings.production_chapter_horizon)
         self.assertFalse(settings.bundle_execution)
+        self.assertFalse(settings.campaign_runtime)
         self.assertEqual(settings.chapter_horizon_size, 3)
+        self.assertEqual(settings.campaign_checkpoint_interval_steps, 5)
 
     def test_production_rollout_flags_are_explicit_and_horizon_is_bounded(self):
         config = default_config()
@@ -43,16 +45,25 @@ class OrchestrationFoundationTests(unittest.TestCase):
                 "production_chapter_horizon": True,
                 "chapter_horizon_size": 4,
                 "bundle_execution": True,
+                "campaign_runtime": True,
+                "campaign_checkpoint_interval_steps": 8,
             }
         )
         settings = orchestration_settings(config)
 
         self.assertTrue(settings.production_chapter_horizon)
         self.assertTrue(settings.bundle_execution)
+        self.assertTrue(settings.campaign_runtime)
         self.assertEqual(settings.chapter_horizon_size, 4)
+        self.assertEqual(settings.campaign_checkpoint_interval_steps, 8)
 
         config["orchestration"]["chapter_horizon_size"] = 5
         with self.assertRaisesRegex(ValueError, "between 2 and 4"):
+            orchestration_settings(config)
+
+        config["orchestration"]["chapter_horizon_size"] = 4
+        config["orchestration"]["campaign_checkpoint_interval_steps"] = 101
+        with self.assertRaisesRegex(ValueError, "between 1 and 100"):
             orchestration_settings(config)
 
     def test_partial_or_empty_config_safely_defaults_to_fixed(self):

@@ -31,6 +31,8 @@ class OrchestrationSettings:
     production_chapter_horizon: bool = False
     chapter_horizon_size: int = 3
     bundle_execution: bool = False
+    campaign_runtime: bool = False
+    campaign_checkpoint_interval_steps: int = 5
 
 
 def orchestration_settings(config: dict[str, Any]) -> OrchestrationSettings:
@@ -55,6 +57,13 @@ def orchestration_settings(config: dict[str, Any]) -> OrchestrationSettings:
     chapter_horizon_size = int(payload.get("chapter_horizon_size") or 3)
     if not 2 <= chapter_horizon_size <= 4:
         raise ValueError("chapter_horizon_size must be between 2 and 4")
+    checkpoint_interval = int(
+        payload.get("campaign_checkpoint_interval_steps") or 5
+    )
+    if not 1 <= checkpoint_interval <= 100:
+        raise ValueError(
+            "campaign_checkpoint_interval_steps must be between 1 and 100"
+        )
     return OrchestrationSettings(
         enabled=enabled,
         configured_mode=configured_mode,
@@ -66,4 +75,6 @@ def orchestration_settings(config: dict[str, Any]) -> OrchestrationSettings:
         ),
         chapter_horizon_size=chapter_horizon_size,
         bundle_execution=bool(payload.get("bundle_execution", False)),
+        campaign_runtime=bool(payload.get("campaign_runtime", False)),
+        campaign_checkpoint_interval_steps=checkpoint_interval,
     )

@@ -191,6 +191,36 @@ class AutopilotRepository:
             for row in rows
         ]
 
+    def latest_autopilot_event(
+        self,
+        run_id: str,
+        event: str,
+    ) -> dict[str, Any] | None:
+        """Return the latest typed event without replaying a bounded history."""
+
+        _validate_autopilot_id(run_id)
+        if not event or any(char.isspace() for char in event):
+            raise ValueError(f"invalid autopilot event: {event}")
+        with self._uow.read() as connection:
+            row = connection.execute(
+                """
+                SELECT sequence, run_id, event_type, at, data_json
+                FROM autopilot_events
+                WHERE run_id = ? AND event_type = ?
+                ORDER BY sequence DESC LIMIT 1
+                """,
+                (run_id, event),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "sequence": int(row["sequence"]),
+            "run_id": row["run_id"],
+            "event": row["event_type"],
+            "at": row["at"],
+            "data": json.loads(row["data_json"]),
+        }
+
     def record_delegated_decision(self, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         _validate_autopilot_id(run_id)
         decision_id = f"decision-{uuid.uuid4().hex[:16]}"

@@ -28,6 +28,7 @@ from .policy import (
     normalize_policy,
 )
 from .run_loop import ClaimedRunLoop
+from .campaign_runtime import CampaignRuntimeCoordinator
 from .support import (
     _choice_fingerprint,
     _now,
@@ -42,6 +43,8 @@ from ..persistence.job_store import JobStore
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
 from ..runtime.prepared_context_cache import PreparedContextCache
+from ..orchestration import orchestration_settings
+from ..orchestration import recovery_step
 
 
 ROUTE_ORDER = (
@@ -292,6 +295,20 @@ class AutopilotService:
         run = self.store.read_autopilot_run(run_id)
         project = Path(run["project_root"])
         policy = DelegationPolicy(run["policy"])
+        settings = orchestration_settings(self.config)
+        campaign = (
+            CampaignRuntimeCoordinator(
+                self.store,
+                project,
+                run_id,
+                max_autonomous_steps=int(policy.payload["limits"]["max_tasks"]),
+                checkpoint_interval_steps=(
+                    settings.campaign_checkpoint_interval_steps
+                ),
+            )
+            if settings.enabled and settings.campaign_runtime
+            else None
+        )
         steward = (
             CreativeSteward(self.config, runtime_pool=self.runtime_pool)
             if self.runtime_pool is not None
@@ -312,6 +329,7 @@ class AutopilotService:
                 stop=stop,
                 route_order=ROUTE_ORDER,
                 dependency_probe=_pending_asset_dependency,
+                campaign=campaign,
             ).run()
         except Exception as exc:
             self.store.update_autopilot_run(run_id, status="blocked", last_error=str(exc), stop_reason="controller-error", finished_at=_now())
@@ -466,6 +484,8 @@ class AutopilotService:
         }
         if stalled_cycles == 2:
             changes["last_recovery_at"] = _now()
+            if self._campaign_runtime_enabled():
+                changes["current_task_id"] = ""
         self.store.update_autopilot_run(run_id, **changes)
         self.store.append_autopilot_event(
             run_id,
@@ -487,6 +507,20 @@ class AutopilotService:
                     "strategy": "re-open-current-formal-task",
                 },
             )
+        if self._campaign_runtime_enabled() and stalled_cycles >= 2:
+            attempt = 1 if stalled_cycles < NO_PROGRESS_LIMIT else 2
+            decision = recovery_step("no_progress", attempt)
+            self.store.append_autopilot_event(
+                run_id,
+                "campaign.recovery.selected",
+                {
+                    "task_id": task_id,
+                    "failure_code": "no_progress",
+                    "attempt": attempt,
+                    "step": decision.step.value,
+                    "reasons": list(decision.reasons),
+                },
+            )
         if stalled_cycles >= NO_PROGRESS_LIMIT:
             self._pause_for(
                 run_id,
@@ -496,6 +530,10 @@ class AutopilotService:
             return True
         time.sleep(0.15 * stalled_cycles)
         return False
+
+    def _campaign_runtime_enabled(self) -> bool:
+        settings = orchestration_settings(self.config)
+        return settings.enabled and settings.campaign_runtime
 
     def _pause_for(self, run_id: str, reason: str, message: str) -> None:
         self.store.update_autopilot_run(run_id, status="paused", stop_reason=reason, last_error=message)

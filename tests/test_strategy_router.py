@@ -130,6 +130,30 @@ class StrategyProjectionTests(unittest.TestCase):
             )
             self.assertEqual(events[1]["event_type"], "plan.candidate.completed")
 
+    def test_missing_event_id_gets_stable_content_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _work_project(Path(temporary))
+            run = root / "workflow" / "orchestration" / "runs" / "run-1"
+            run.mkdir(parents=True)
+            payload = {
+                "type": "plan.review.completed",
+                "plan_id": "plan-1",
+                "revision": 2,
+                "created_at": "2026-07-30T02:00:00+00:00",
+            }
+            (run / "events.jsonl").write_text(
+                json.dumps(payload, ensure_ascii=False) + "\n"
+                + json.dumps(payload, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+
+            first = typed_plan_events(root)
+            second = typed_plan_events(root)
+
+            self.assertEqual(len(first), 1)
+            self.assertEqual(first, second)
+            self.assertTrue(first[0]["event_id"].startswith("plan-"))
+
 
 class StrategyApiTests(unittest.TestCase):
     def test_strategy_endpoint_returns_read_only_projection(self):
@@ -183,6 +207,44 @@ class StrategyApiTests(unittest.TestCase):
             self.assertIn("event: plan-event", response.text)
             self.assertIn("plan.candidate.completed", response.text)
             self.assertIn("stream complete", response.text)
+            self.assertIn("event: stream.terminal", response.text)
+
+    def test_events_follow_mode_resets_unknown_cursor_and_stops_at_limit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _work_project(Path(temporary))
+            run = root / "workflow" / "orchestration" / "runs" / "run-1"
+            run.mkdir(parents=True)
+            (run / "events.jsonl").write_text(
+                json.dumps(
+                    {
+                        "event_id": "e1",
+                        "type": "plan.candidate.completed",
+                        "plan_id": "plan-1",
+                        "revision": 1,
+                        "created_at": "2026-07-30T01:00:00+00:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            from fastapi.testclient import TestClient
+
+            with TestClient(_app(root)) as client:
+                response = client.get(
+                    "/project/strategy/events",
+                    params={
+                        "project_root": str(root),
+                        "follow": "true",
+                        "max_events": 1,
+                    },
+                    headers={"Last-Event-ID": "unknown-event"},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("event: stream.reset", response.text)
+            self.assertIn("id: e1", response.text)
+            self.assertIn('"status": "max-events"', response.text)
 
     def test_route_surface_includes_strategy_endpoints(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -2135,3 +2135,95 @@ Q5-C2 结论：缓存命中可以减少重复 UTF-8 解码、逐文件渲染与�
 验证：OpenCode Runtime/Pool、Session 合同与 Architecture 组合 26 tests passed；全量 908 tests passed，1 skipped；`compileall`、Architecture Audit、Dependency Direction 与 `git diff --check` 通过。
 
 Q5-C 总结：C1 交付角色隔离和只读资源租约准入；C2 交付默认关闭、安全失效的 Prepared Context cache；C3 明确拒绝不安全的跨任务 session 复用。下一步进入 Q5-D：检查 checkpoint/recovery、Campaign 与事件流的现有实现，优先补调用链和恢复语义，不创建第二 Autopilot 或第二 SSE 总线。
+
+#### Q5-D 实施前复审：唯一长跑循环、正式进度证据与安全点
+
+状态：生产行为改动前审查完成。
+
+真实调用链结论：
+
+1. `ClaimedRunLoop` 已是唯一自动创作长跑循环，拥有 route 推进、正式 Worker 调用、写回审批、人工决策暂停、失败计数和无进度暂停；不得新增 `CampaignService`、`CampaignManager`、第二 run 表或第二后台线程；
+2. `autopilot_runs` 已持久化任务数、route index、粗粒度 progress fingerprint、stall/recovery 时间，`autopilot_events` 已提供有序 sequence；Checkpoint 应作为该 run 的安全点证据写入现有事件流，不复制项目文件，也不创建平行 checkpoint truth；
+3. `CampaignPolicy`、`CampaignState`、`campaign_step_allowed`、`checkpoint_due`、`ProgressFingerprint`、`ChapterCheckpoint` 与 `recovery_step` 均只有纯合同测试，没有生产消费者；
+4. 旧 P0-2 已修复：Checkpoint 时间会解析带时区 ISO-8601 并统一到 UTC；旧 P0-3 已修复：`checkpoint_due` 使用 `completed_steps - last_checkpoint_step`，并拒绝 checkpoint 超前；
+5. 当前 `_project_progress_fingerprint` 只哈希路径、size 和 mtime。它可能把 touch 当成正式推进，也可能在同 size、mtime 被保留时漏掉内容变化；文学上也无法明确区分“流程噪声变化”和 Canon/正文/Review 的正式推进；
+6. 当前无进度处理在第二轮只发出 `task.recovery_requested`，但没有消费 `RecoveryStep.BOUNDED_REPLAN`；Runtime failure 会直接尝试一次 sandbox resume，也没有先验证最近安全点；
+7. 安全恢复不能把 Checkpoint 理解为文件快照回滚。正式项目只允许 Engine/Worker 写回；Checkpoint 只证明“上一个已验证状态是什么”，恢复动作仍是重新领取/重开正式任务或恢复同一隔离 run；
+8. ChapterCheckpoint 只适用于可从 scene task 与 scene YAML 证明章节身份的阶段。非 scene route 只记录 Campaign 级安全点，不应伪造 `chapter_id`；
+9. Worker 与 Autopilot SSE 已有持续 tail 和 sequence cursor；Strategy SSE 仍是有限列表重放。Q5-D 先收敛 Campaign/Checkpoint/Recovery，SSE 作为独立 D2 批次，避免一次同时修改执行状态和传输语义。
+
+类、继承与模块边界结论：
+
+- `CampaignState` 不应继承持久化 autopilot row；前者是纯策略输入，后者是数据库记录。通过窄 projection function 组合；
+- `ChapterCheckpoint` 不应成为 Repository entity 或文件快照。完整 payload 存在 typed autopilot event，最新安全点由 Repository 的窄查询读取；
+- `ProgressFingerprint` 与现有 read-model revision 语义不同，不能继承或复用 `ReadModelCache` 的 count/size/newest fingerprint；前者必须基于正式内容摘要，后者只服务短 TTL UI 缓存；
+- Recovery ladder 是纯决策表，不新增拥有 retry loop 的 Recovery Manager；动作由 `ClaimedRunLoop` 解释，Worker/Engine 继续拥有实际恢复；
+- 只允许新增一个无持久化所有权的 Campaign runtime collaborator 或一组窄纯函数。若实现开始保存线程、任务、正式文件或第二份 run 状态，应立即停止并回退设计。
+
+#### Q5-D1 闭环实施计划
+
+1. 增加默认关闭的 `campaign_runtime` feature flag 与 1-100 的 checkpoint interval；关闭时 Autopilot 行为和事件保持不变；
+2. 建立正式进度投影：只遍历既有正式根，排除 run/dashboard/log 等派生产物，以文件内容 SHA-256 构造 `ProgressFingerprintInput`；清洗后正文中文内容字符作为文学进度维度，但不单独决定“推进”；
+3. 在每轮 Worker 前后生成正式 progress fingerprint，替换 feature-on 路径的 mtime/size 判断；旧粗粒度函数保留给 flag-off 兼容路径；
+4. `ClaimedRunLoop` 每轮开始把持久 run 投影为 CampaignState，并调用现有 Campaign 合同；授权上限仍由 `DelegationPolicy` 拥有，不复制规则；
+5. 正式推进后按间隔写入 `campaign.checkpoint.created` 事件。能证明 scene/chapter identity 时附带合法 `ChapterCheckpoint`；其他 route 写 Campaign scope evidence，不伪造章节；
+6. Runtime recovery 在 feature-on 时先读取最近 checkpoint、复算正式进度并验证匹配；匹配后才能恢复同一 sandbox。无安全点或已漂移时拒绝“恢复”并走有界失败策略；
+7. 无进度与 runtime failure 使用 `recovery_step` 产生 typed `campaign.recovery.selected` 证据；`bounded-replan` 只清除当前任务选择并让既有 Engine 重新计算 next task，不直接编辑计划或项目文件；`stop-with-evidence` 必须暂停；
+8. 测试覆盖：flag-off 等价、内容变更敏感、touch 不制造推进、checkpoint 不重复、章节身份不可证明时不伪造、漂移 checkpoint 不恢复、bounded replan 有界、终止后不再循环；
+9. 定向、Autopilot、Persistence、Architecture 与全量测试通过后单独提交，再进入 Q5-D2 SSE。
+
+#### Q5-D2 SSE 实施前复审：统一线协议，不统一事件所有权
+
+状态：执行前审查完成。
+
+- Worker stream 已能用 `Last-Event-ID`/`after` 续传持久 job events，并混合应用内 ephemeral live events；缺少显式 terminal event，live event 不具备可恢复 id；
+- Autopilot stream 会持续读取 `autopilot_events`，但忽略 `Last-Event-ID`，持久事件虽有 sequence 却没有写入 SSE `id`，终态只靠连接关闭表达；
+- Agent observability 是状态投影流，不是事件日志；按 revision 去重并在 run terminal 时关闭是合理语义，不应伪装成可逐事件重放；
+- Strategy events 当前来自项目内 `events.jsonl` 只读审计文件，endpoint 是有限列表重放；它不是 SQLite `creative_plan_events` 的第二消费者，也不能在本批改为新 truth；
+- Strategy event id 允许为空或重复，无法提供可靠 cursor。先在只读 projection 中生成稳定 fallback id 并去重，再增加显式 follow 模式；旧的有限响应保持兼容；
+- 所有持久流应限制单批读取数量，由生成器自然形成 socket backpressure；断线后只重放持久事件，ephemeral delta 明确为 best-effort，不制造伪 cursor；
+- terminal 必须是显式 `stream.terminal` 事件，携带 source/status/cursor，随后关闭；heartbeat 只使用 SSE comment，不污染 typed event history；
+- 不建立全局 SSE event bus，不把 Narrative、Advisor 或 UI read-model 流迁入 Autopilot truth，也不新增持久表。
+
+实施顺序：先增加共享的 cursor/terminal/header helper；再补 Worker 与 Autopilot；最后让 Strategy 在 `follow=true` 时持续 tail，并保留默认有限列表兼容。测试必须覆盖 header 优先级、未知 Strategy cursor reset、事件 id、终态和有限 max-events 关闭。
+
+#### Q5-D1 完成记录：正式进度、Campaign 安全点与有界恢复
+
+状态：完成；默认关闭。
+
+完成内容：
+
+- `OrchestrationSettings` 增加 `campaign_runtime=false` 与 1-100 的 checkpoint interval；只有 orchestration 总开关与本 flag 同时启用才接入正式 Autopilot；
+- 新增 `FormalProgressEvidence`，以正式根内文件内容 SHA-256、清洗后已晋升正文中文内容字符构造既有 `ProgressFingerprint`；同内容 touch 不再制造推进，同长度内容替换可被识别；
+- 新增唯一 `CampaignRuntimeCoordinator`。它无线程、无 retry loop、无正式文件写入，只把现有 run/project 投影到 Campaign、Checkpoint 与恢复合同；
+- 基线和间隔安全点写入现有 `autopilot_events` 的 `campaign.checkpoint.created`，未新增表；Repository 只增加按 event type 查询最近事件的窄方法；
+- scene task 只有在 task id、scene YAML 的 `scene_id` 与 `chapter_id` 均可证明时才附加合法 `ChapterCheckpoint`；其他路线只写 book scope checkpoint；
+- Runtime failure 的 checkpoint restore 会重算正式内容摘要；项目漂移、缺安全点或不匹配时拒绝恢复同一 sandbox；
+- `process_crash` 按既有 ladder 执行 checkpoint restore、一次 bounded replan、stop-with-evidence；`no_progress` 执行一次 bounded replan 后暂停。Replan 只清空当前选择，让 Engine 重新计算 next task，不修改项目或 plan；
+- 结果处理从 623 行的 `run_loop.py` 拆到 `run_result_handler.py`：loop 现为 188 行，handler 为 465 行。Handler 不拥有线程或持久状态，只处理当前 Worker result；Architecture baseline 未提高。
+
+边审查边修复：
+
+1. 初次接线使 `run_loop.py` 超过 500 行架构预算；通过职责拆分解决；
+2. 拆分复核发现 bounded-replan 的 `False` 与“未处理”语义冲突，可能继续落入普通失败上限。已改为 `bool | None` 三态，并用三步 runtime failure 集成测试证明只 replan 一次后携证据停止；
+3. 内容摘要刻意没有复用 UI `ReadModelCache` 的 stat revision，避免 touch 假推进和相同长度内容漏检；这增加少量本地哈希成本，但只在 feature-on 生效，可靠性优先。
+
+#### Q5-D2 完成记录：typed SSE cursor、终态与持续 Strategy tail
+
+状态：完成。
+
+- 共享 SSE helper 统一 no-cache headers、数值 cursor、`stream.terminal` 与 typed audit tail；
+- Worker 持久事件继续用 sequence id 续传，单批上限 200；ephemeral live delta 保持 best-effort、不伪造可恢复 id；终态显式发送 source/status/cursor；
+- Autopilot 正式读取 `Last-Event-ID`，持久事件写入 SSE id，状态只在 revision 变化时发送，空闲使用 comment heartbeat，终态显式关闭；
+- Strategy endpoint 默认仍做兼容的有限 replay；`follow=true` 时持续读取项目审计事件，支持 header/query cursor、未知 cursor reset、heartbeat、max-events 和 terminal；
+- 缺失 Strategy event id 时按规范化 payload 生成稳定 content id，重复 id 去重；未建立新 truth 或全局 SSE 总线；
+- router 嵌套流实现最初令 `build_automation_router`/`build_worker_router` 超预算，已提炼为模块级 response helper；Architecture baseline 未提高。
+
+验证证据：
+
+- Campaign/Autopilot/Recovery 定向：36 tests passed；
+- SSE/Strategy/API/Architecture 定向：16 tests passed；
+- 全量回归（加入最后一条三步恢复测试前）：912 tests passed，1 skipped；最后一条三步恢复测试与 Architecture/Dependency 门禁单独通过；
+- `compileall -q src tests`、Architecture Audit、Module Dependency Direction、`git diff --check` 通过。
+
+Q5-D 结论：Campaign 不再是第二状态机候选，而成为现有 Autopilot 的可验证策略/安全点层；每轮正式推进由内容证据证明，失败有界，事件流可恢复并明确关闭。下一步进入 Q6：只开放真实成熟度，收敛前端 Strategy/Observatory 与 compatibility manifest；不把默认关闭能力展示成已启用。
