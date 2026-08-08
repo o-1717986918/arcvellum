@@ -12,6 +12,8 @@ import hashlib
 import json
 from typing import Sequence
 
+from ..protocols.violations import ContractViolation
+
 
 @dataclass(frozen=True)
 class ProgressFingerprintInput:
@@ -30,10 +32,7 @@ class ProgressFingerprint:
     fingerprint: str
 
 
-@dataclass(frozen=True)
-class ProgressFingerprintViolation:
-    code: str
-    message: str
+ProgressFingerprintViolation = ContractViolation
 
 
 def progress_fingerprint(

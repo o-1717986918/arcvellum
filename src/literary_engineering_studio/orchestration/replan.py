@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..protocols.violations import ContractViolation
+
 from .contracts import ReplanTrigger
 
 
@@ -24,10 +26,7 @@ class ReplanDecision:
     reasons: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class ReplanBudgetViolation:
-    code: str
-    message: str
+ReplanBudgetViolation = ContractViolation
 
 
 def replan_allowed(

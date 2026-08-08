@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from ..protocols.violations import ContractViolation
+
 _RISK_FEATURE_NAMES = (
     "canon_change",
     "character_state_change",
@@ -54,10 +56,7 @@ class ChapterPlanningFacts:
     base_project_revision: str = ""
 
 
-@dataclass(frozen=True)
-class ChapterFactViolation:
-    code: str
-    message: str
+ChapterFactViolation = ContractViolation
 
 
 def scene_order(facts: ChapterPlanningFacts) -> tuple[str, ...]:

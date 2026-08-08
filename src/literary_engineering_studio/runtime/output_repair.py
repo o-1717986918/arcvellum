@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..protocols.violations import ContractViolation
+
 
 @dataclass(frozen=True)
 class OutputRepairRequest:
@@ -20,10 +22,7 @@ class OutputRepairRequest:
     attempt: int
 
 
-@dataclass(frozen=True)
-class RepairViolation:
-    code: str
-    message: str
+RepairViolation = ContractViolation
 
 
 @dataclass(frozen=True)

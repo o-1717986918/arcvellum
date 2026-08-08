@@ -14,6 +14,7 @@ from typing import Literal, Sequence
 
 from literary_engineering_studio_engine.orchestration import PlanNodeKind
 
+from ..protocols.violations import ContractViolation
 from .contracts import CompiledTaskGraph
 
 
@@ -45,10 +46,7 @@ class ExecutionBundle:
     stop_before: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class BundleViolation:
-    code: str
-    message: str
+BundleViolation = ContractViolation
 
 
 def bundle_template_catalog() -> tuple[BundleTemplate, ...]:

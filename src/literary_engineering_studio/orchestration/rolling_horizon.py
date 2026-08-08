@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from ..protocols.violations import ContractViolation
+
 MIN_HORIZON_SIZE = 2
 MAX_HORIZON_SIZE = 4
 
@@ -26,10 +28,7 @@ class RollingHorizonWindow:
     rebase_after: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class RollingHorizonViolation:
-    code: str
-    message: str
+RollingHorizonViolation = ContractViolation
 
 
 def build_rolling_horizon(

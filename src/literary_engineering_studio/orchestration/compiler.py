@@ -20,6 +20,7 @@ from .contracts import (
     PlanTaskNode,
     to_primitive,
 )
+from .graph_algorithms import graph_ancestors
 from .lint import PlanLintResult
 
 
@@ -148,22 +149,13 @@ def _serialized_dependencies(
     for node in nodes:
         if node.kind not in _SERIAL_MUTATION_KINDS:
             continue
-        if previous_mutation and previous_mutation not in _ancestors(node.node_id, effective):
+        if previous_mutation and previous_mutation not in graph_ancestors(
+            node.node_id,
+            effective,
+        ):
             effective[node.node_id].append(previous_mutation)
         previous_mutation = node.node_id
     return {node_id: tuple(dict.fromkeys(values)) for node_id, values in effective.items()}
-
-
-def _ancestors(node_id: str, dependencies: dict[str, list[str]]) -> set[str]:
-    found: set[str] = set()
-    pending = list(dependencies.get(node_id, ()))
-    while pending:
-        current = pending.pop()
-        if current in found:
-            continue
-        found.add(current)
-        pending.extend(dependencies.get(current, ()))
-    return found
 
 
 def _digest(value: object) -> str:

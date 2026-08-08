@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
+from ..protocols.violations import ContractViolation
+
 
 class CampaignPauseReason(str, Enum):
     HUMAN_DECISION = "human-decision"
@@ -45,10 +47,7 @@ class CampaignStepDecision:
     reasons: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class CampaignViolation:
-    code: str
-    message: str
+CampaignViolation = ContractViolation
 
 
 def campaign_step_allowed(

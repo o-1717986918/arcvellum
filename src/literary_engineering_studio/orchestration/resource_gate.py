@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from ..protocols.violations import ContractViolation
+
 from literary_engineering_studio.runtime.resources import (
     ResourceClaim,
     claims_conflict,
@@ -21,10 +23,7 @@ class ParallelGroup:
     task_node_ids: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class ResourceGateViolation:
-    code: str
-    message: str
+ResourceGateViolation = ContractViolation
 
 
 @dataclass(frozen=True)

@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from literary_engineering_studio_engine.orchestration import PlanNodeKind
 
+from ..protocols.violations import RelatedContractViolation
 from .contracts import PlanTaskNode
+from .graph_algorithms import graph_ancestors, graph_descendants
 
 
-@dataclass(frozen=True)
-class LiteraryPolicyViolation:
-    code: str
-    message: str
-    related: tuple[str, ...]
+LiteraryPolicyViolation = RelatedContractViolation
 
 
 def literary_policy_violations(
@@ -22,10 +18,10 @@ def literary_policy_violations(
 ) -> tuple[LiteraryPolicyViolation, ...]:
     node_map = {node.node_id: node for node in nodes}
     ancestors = {
-        node_id: _ancestors(node_id, dependencies)
+        node_id: graph_ancestors(node_id, dependencies)
         for node_id in node_map
     }
-    descendants = _descendants(dependencies)
+    descendants = graph_descendants(dependencies)
     violations: list[LiteraryPolicyViolation] = []
     for node in nodes:
         ancestor_kinds = _kinds(ancestors[node.node_id], node_map)
@@ -129,31 +125,6 @@ def _kinds(
     node_map: dict[str, PlanTaskNode],
 ) -> set[PlanNodeKind]:
     return {node_map[node_id].kind for node_id in node_ids if node_id in node_map}
-
-
-def _ancestors(
-    node_id: str,
-    dependencies: dict[str, tuple[str, ...]],
-) -> set[str]:
-    found: set[str] = set()
-    pending = list(dependencies.get(node_id, ()))
-    while pending:
-        current = pending.pop()
-        if current in found:
-            continue
-        found.add(current)
-        pending.extend(dependencies.get(current, ()))
-    return found
-
-
-def _descendants(
-    dependencies: dict[str, tuple[str, ...]],
-) -> dict[str, set[str]]:
-    result = {node_id: set() for node_id in dependencies}
-    for node_id in dependencies:
-        for ancestor in _ancestors(node_id, dependencies):
-            result.setdefault(ancestor, set()).add(node_id)
-    return result
 
 
 def _violation(

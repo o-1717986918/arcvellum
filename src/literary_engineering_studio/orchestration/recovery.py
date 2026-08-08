@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from ..protocols.violations import ContractViolation
+
 
 class RecoveryStep(str, Enum):
     RETRY = "retry"
@@ -54,10 +56,7 @@ class RecoveryDecision:
     reasons: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class RecoveryViolation:
-    code: str
-    message: str
+RecoveryViolation = ContractViolation
 
 
 def recovery_step(

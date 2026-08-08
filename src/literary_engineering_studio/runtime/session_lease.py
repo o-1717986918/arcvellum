@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from ..protocols.violations import ContractViolation
+
 
 class SessionRole(str, Enum):
     PLANNER = "planner"
@@ -42,10 +44,7 @@ class SessionReuseDecision:
     reasons: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class SessionLeaseViolation:
-    code: str
-    message: str
+SessionLeaseViolation = ContractViolation
 
 
 def session_reusable(

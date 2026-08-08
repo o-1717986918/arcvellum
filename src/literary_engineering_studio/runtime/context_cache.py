@@ -12,6 +12,8 @@ import hashlib
 import json
 from typing import Literal
 
+from ..protocols.violations import ContractViolation
+
 CONTEXT_CACHE_KEY_SCHEMA = "arcvellum/context-cache-key/v1"
 
 
@@ -44,10 +46,7 @@ class ContextCacheKey:
         }
 
 
-@dataclass(frozen=True)
-class CacheKeyViolation:
-    code: str
-    message: str
+CacheKeyViolation = ContractViolation
 
 
 def context_cache_key_fingerprint(key: ContextCacheKey) -> str:

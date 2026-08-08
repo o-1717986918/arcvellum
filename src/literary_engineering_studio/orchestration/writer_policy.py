@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from literary_engineering_studio_engine.orchestration import PlanNodeKind
 
+from ..protocols.violations import RelatedContractViolation
 from .contracts import PlanTaskNode
+from .graph_algorithms import nodes_are_ordered
 
 
-@dataclass(frozen=True)
-class WriterPolicyViolation:
-    code: str
-    message: str
-    related: tuple[str, ...]
+WriterPolicyViolation = RelatedContractViolation
 
 
 def writer_policy_violations(
@@ -59,22 +55,4 @@ def _unordered(
     right: str,
     dependencies: dict[str, tuple[str, ...]],
 ) -> bool:
-    return (
-        left not in _ancestors(right, dependencies)
-        and right not in _ancestors(left, dependencies)
-    )
-
-
-def _ancestors(
-    node_id: str,
-    dependencies: dict[str, tuple[str, ...]],
-) -> set[str]:
-    found: set[str] = set()
-    pending = list(dependencies.get(node_id, ()))
-    while pending:
-        current = pending.pop()
-        if current in found:
-            continue
-        found.add(current)
-        pending.extend(dependencies.get(current, ()))
-    return found
+    return not nodes_are_ordered(left, right, dependencies)

@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from ..protocols.violations import ContractViolation
+
 
 class SceneRiskLevel(str, Enum):
     COMPACT = "compact"
@@ -78,10 +80,7 @@ class SceneRiskProfile:
     reasons: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class SceneRiskViolation:
-    code: str
-    message: str
+SceneRiskViolation = ContractViolation
 
 
 def machine_minimum_risk_level(facts: SceneRiskFacts) -> SceneRiskLevel:

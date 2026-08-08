@@ -806,3 +806,29 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `python -m compileall -q src`：通过。
 
 架构判断：这里采用单一值对象而非父类/子类，因为两处代码描述的是完全相同的文学事实；继承只会保留双解析与语义漂移。
+
+### 2026-08-08：Q1-B 共享 Violation 与图算法
+
+状态：完成，待独立提交。
+
+已完成：
+
+- 新增 `ContractViolation(code, message)`；
+- 14 个完全同构的领域 Violation 改为兼容别名，不再保留空壳类；
+- 新增 `RelatedContractViolation`，仅为确实携带 `related` 证据的计划策略问题扩展字段；
+- `LiteraryPolicyViolation` 与 `WriterPolicyViolation` 统一到该扩展值对象；
+- 新增共享 `graph_ancestors`、`graph_descendants`、`nodes_are_ordered`；
+- Compiler、Simulator、Literary Policy 与 Writer Policy 删除四份重复传递遍历；
+- 图算法在意外循环输入下终止，并且不把起点误算成自己的祖先。
+
+保留决策：
+
+- `SceneStrategyViolation` 仍保留，因为它携带 `node_ids`，不是两字段重复类；
+- Replan/Repair decision 继续分离；
+- Studio/Engine API DTO 继续保持传输边界隔离。
+
+验证证据：
+
+- 新增 6 个共享合同/图算法测试；
+- 相关策略、Compiler、Simulator、Runtime 定向回归共 62 tests passed；
+- `tests/orchestration`：185 tests passed。

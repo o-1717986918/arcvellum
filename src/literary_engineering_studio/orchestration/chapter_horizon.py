@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Mapping, Sequence
 
+from ..protocols.violations import ContractViolation
 from .chapter_facts import (
     ChapterPlanningFacts,
     chapter_facts_violations,
@@ -31,10 +32,7 @@ from .rolling_horizon import (
 )
 
 
-@dataclass(frozen=True)
-class ChapterHorizonViolation:
-    code: str
-    message: str
+ChapterHorizonViolation = ContractViolation
 
 
 @dataclass(frozen=True)

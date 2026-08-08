@@ -12,6 +12,7 @@ from literary_engineering_studio.runtime.resources import (
 
 from .compiler import compiled_graph_digest
 from .contracts import CompiledTaskGraph, CompiledTaskNode
+from .graph_algorithms import nodes_are_ordered
 from .lint import PlanIssue, PlanIssueSeverity
 
 
@@ -245,19 +246,7 @@ def _ordered(
     right: str,
     dependencies: dict[str, tuple[str, ...]],
 ) -> bool:
-    return left in _ancestors(right, dependencies) or right in _ancestors(left, dependencies)
-
-
-def _ancestors(node_id: str, dependencies: dict[str, tuple[str, ...]]) -> set[str]:
-    found: set[str] = set()
-    pending = list(dependencies.get(node_id, ()))
-    while pending:
-        current = pending.pop()
-        if current in found:
-            continue
-        found.add(current)
-        pending.extend(dependencies.get(current, ()))
-    return found
+    return nodes_are_ordered(left, right, dependencies)
 
 
 def _expected_artifacts(

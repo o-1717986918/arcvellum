@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from ..protocols.violations import ContractViolation
+
 
 @dataclass(frozen=True)
 class ChapterCheckpoint:
@@ -23,10 +25,7 @@ class ChapterCheckpoint:
     created_at: str
 
 
-@dataclass(frozen=True)
-class CheckpointViolation:
-    code: str
-    message: str
+CheckpointViolation = ContractViolation
 
 
 def checkpoint_violations(
