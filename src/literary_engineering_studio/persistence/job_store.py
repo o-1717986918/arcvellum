@@ -18,7 +18,7 @@ from .creative_plans import CreativePlanRepository
 from .context_ledgers import ContextLedgerRepository
 from .facade import RepositoryMethod
 from .mutation_receipts import MutationReceiptRepository
-from .recycle_bin import RecycleBinStoreMixin
+from .recycle_bin import RecycleBinRepository
 from .schema import initialize_schema
 from .sessions import SessionRepository
 from .sqlite_uow import SqliteUnitOfWork
@@ -39,11 +39,7 @@ from .primitives import (
 )
 
 
-class JobStore(
-    RecycleBinStoreMixin,
-    AssetTransactionStoreMixin,
-    AssetRevisionStoreMixin,
-):
+class JobStore(AssetTransactionStoreMixin, AssetRevisionStoreMixin):
     def __init__(self, location: Path):
         resolved = location.expanduser().resolve()
         self.path = resolved if resolved.suffix in {".db", ".sqlite", ".sqlite3"} else resolved / "studio.sqlite3"
@@ -55,6 +51,7 @@ class JobStore(
         self.context_ledgers = ContextLedgerRepository(self._uow)
         self.mutation_receipts = MutationReceiptRepository(self._uow)
         self.creative_plans = CreativePlanRepository(self._uow)
+        self.recycle_bin = RecycleBinRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -134,6 +131,10 @@ class JobStore(
     authorize_creative_plan_revision = RepositoryMethod("creative_plans")
     activate_creative_plan = RepositoryMethod("creative_plans")
     creative_plan_events = RepositoryMethod("creative_plans")
+
+    record_recycle_entry = RepositoryMethod("recycle_bin")
+    read_recycle_entry = RepositoryMethod("recycle_bin")
+    list_recycle_entries = RepositoryMethod("recycle_bin")
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)

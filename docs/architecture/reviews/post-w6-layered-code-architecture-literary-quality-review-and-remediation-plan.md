@@ -1503,3 +1503,28 @@ Q4 退出结论：
 - `compileall` 与 `git diff --check`：通过。
 
 下一批入口：先迁移 `RecycleBinStoreMixin` 为独立 Repository；随后把 Asset Transaction 与 Asset Revision 作为同一资产历史聚合审查和迁移，避免跨 Repository 双写。三者完成后重新判定 Q2 退出条件，而不是仅按类名数量宣布完成。
+
+### 2026-08-08：Q4.5-D Recycle Bin Index Repository 组合化
+
+状态：完成，准备独立提交。
+
+边界审查：
+
+- `RecycleBinService` 拥有正式引用阻断、快照写入、归档/恢复回执和文件系统回滚；这些是 application 层资产生命周期，不属于 SQLite index；
+- 原 `RecycleBinStoreMixin` 只记录可由项目文件重建的 entry/status 索引，既不与 Asset Transaction/Revision 同事务，也不拥有文件补偿，因此可以安全迁移为独立 Repository；
+- 不能仅因二者都叫 recycle bin 就合并，否则持久化层会反向依赖文件资产服务，破坏依赖方向。
+
+已完成：
+
+- 以 `RecycleBinRepository(SqliteUnitOfWork)` 替换单宿主 Mixin；写入使用 immediate transaction，读取使用 repository 自有 read boundary；
+- `JobStore` 显式组合 `self.recycle_bin`，三个旧公开方法通过 `RepositoryMethod` 绑定到真实仓储；
+- 新增独立空索引查询、facade bound-method 与 MRO 回归；既有 archive/restore service、索引幂等与 schema migration 回归保持通过；
+- 未改变 active/restored 状态合同、entry identity、路径校验或恢复回执要求。
+
+验证证据：
+
+- Persistence composition、Archive persistence、Archive recycle-bin、Architecture 与依赖方向：20 tests passed；
+- Architecture Audit：29 file debts、205 function debts、0 cycles；
+- `git diff --check`：通过。
+
+下一批入口：把 `AssetTransactionStoreMixin` 与 `AssetRevisionStoreMixin` 合并为一个 `AssetHistoryRepository`。Transaction 插入及 before/after revision 索引必须继续共享同一个 SQLite transaction；revision helper 不建立可被外部误用的独立提交入口。

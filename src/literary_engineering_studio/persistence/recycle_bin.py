@@ -7,6 +7,7 @@ from typing import Any
 from .asset_revisions import _project_key, _validate_asset_key
 from .asset_transactions import _relative_path
 from .primitives import _now
+from .sqlite_uow import SqliteUnitOfWork
 
 
 RECYCLE_BIN_SCHEMA_SQL = """
@@ -33,13 +34,15 @@ CREATE INDEX IF NOT EXISTS archive_recycle_entries_project_asset_idx
 """
 
 
-class RecycleBinStoreMixin:
-    """Methods require the host JobStore connection and write-lock protocol."""
+class RecycleBinRepository:
+    """Persist the rebuildable index of archived and restored assets."""
+
+    def __init__(self, uow: SqliteUnitOfWork):
+        self._uow = uow
 
     def record_recycle_entry(self, record: dict[str, Any]) -> dict[str, Any]:
         normalized = _normalize_record(record)
-        with self._write_lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self._uow.write(immediate=True) as connection:
             existing = connection.execute(
                 "SELECT * FROM archive_recycle_entries WHERE entry_id = ?",
                 (normalized["entry_id"],),
@@ -70,7 +73,7 @@ class RecycleBinStoreMixin:
     def read_recycle_entry(self, project_root: str, entry_id: str) -> dict[str, Any]:
         project = _project_key(project_root)
         _validate_entry_id(entry_id)
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             row = connection.execute(
                 """
                 SELECT * FROM archive_recycle_entries
@@ -99,7 +102,7 @@ class RecycleBinStoreMixin:
             parameters.append(normalized_status)
         query += " ORDER BY archived_at DESC, entry_id DESC LIMIT ?"
         parameters.append(bounded_limit)
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             rows = connection.execute(query, tuple(parameters)).fetchall()
         return [dict(row) for row in rows]
 

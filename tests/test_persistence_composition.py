@@ -9,12 +9,31 @@ from literary_engineering_studio.persistence.context_ledgers import ContextLedge
 from literary_engineering_studio.persistence.creative_plans import CreativePlanRepository
 from literary_engineering_studio.persistence.facade import RepositoryMethod
 from literary_engineering_studio.persistence.job_store import JobStore
+from literary_engineering_studio.persistence.recycle_bin import RecycleBinRepository
 from literary_engineering_studio.persistence.sessions import SessionRepository
 from literary_engineering_studio.persistence.schema import initialize_schema
 from literary_engineering_studio.persistence.sqlite_uow import SqliteUnitOfWork
 
 
 class PersistenceCompositionTests(unittest.TestCase):
+    def test_recycle_bin_repository_is_an_independent_rebuildable_index(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            uow = SqliteUnitOfWork(Path(temporary) / "studio.sqlite3")
+            with uow.write() as connection:
+                initialize_schema(connection)
+            repository = RecycleBinRepository(uow)
+
+            self.assertEqual(repository.list_recycle_entries("C:/work"), [])
+
+            store = JobStore(Path(temporary) / "facade.sqlite3")
+            self.assertIsInstance(store.recycle_bin, RecycleBinRepository)
+            self.assertIs(store.record_recycle_entry.__self__, store.recycle_bin)
+            self.assertIs(store.list_recycle_entries.__self__, store.recycle_bin)
+            self.assertNotIn(
+                "RecycleBinStoreMixin",
+                {base.__name__ for base in JobStore.__mro__},
+            )
+
     def test_creative_plan_repository_owns_plan_and_event_queries(self):
         with tempfile.TemporaryDirectory() as temporary:
             uow = SqliteUnitOfWork(Path(temporary) / "studio.sqlite3")
