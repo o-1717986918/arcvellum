@@ -1,0 +1,107 @@
+{
+  "schema": "arcvellum/literary-cross-genre-composition-fixture/v1",
+  "required_obligations": ["incoming_bridge", "goal", "turn", "cost", "reader_effect", "outgoing_hook"],
+  "cases": [
+    {
+      "id": "historical-duty-evidence",
+      "genre": "historical",
+      "scene_function": "在制度压力中迫使人物选择是否公开证据",
+      "expected_beat_range": [4, 6],
+      "beat_plan": [
+        {"beat_id": "h1", "function": "接令", "visible_action": "驿卒接到立即封存军报的口令。", "causal_change": "调查窗口开始关闭。", "pace": "compressed", "detail_level": "lean", "serves": ["incoming_bridge"]},
+        {"beat_id": "h2", "function": "核印", "visible_action": "他以旧印痕核对封泥。", "causal_change": "怀疑从直觉变成可举证异常。", "pace": "measured", "detail_level": "standard", "serves": ["goal"]},
+        {"beat_id": "h3", "function": "恩义阻拦", "visible_action": "老吏要求他按旧例沉默。", "causal_change": "制度冲突变成人情债。", "pace": "slow", "detail_level": "expanded", "serves": ["turn"]},
+        {"beat_id": "h4", "function": "留证", "visible_action": "他不公开指控，只留下可复核的拓印。", "causal_change": "证据被保存，他也违背了恩人的要求。", "pace": "suspended", "detail_level": "expanded", "serves": ["cost", "reader_effect"]},
+        {"beat_id": "h5", "function": "追查启动", "visible_action": "封存官发现案台少了一张废纸。", "causal_change": "下一场从证据判断转为追查证人。", "pace": "accelerating", "detail_level": "lean", "serves": ["outgoing_hook"]}
+      ]
+    },
+    {
+      "id": "mystery-key-chain",
+      "genre": "mystery",
+      "scene_function": "改变嫌疑排序而不提前解释谜底",
+      "expected_beat_range": [3, 5],
+      "beat_plan": [
+        {"beat_id": "m1", "function": "承接停电", "visible_action": "住户在电梯里发现一把仍温热的钥匙。", "causal_change": "封闭空间获得新的时间证据。", "pace": "compressed", "detail_level": "standard", "serves": ["incoming_bridge", "goal"]},
+        {"beat_id": "m2", "function": "错误归属", "visible_action": "钥匙能打开最先报警者的储物柜。", "causal_change": "看似可靠的人进入嫌疑中心。", "pace": "accelerating", "detail_level": "expanded", "serves": ["turn", "reader_effect"]},
+        {"beat_id": "m3", "function": "代价性试探", "visible_action": "主角当众谎称钥匙已经送检。", "causal_change": "说谎者暴露反应，主角也失去程序正当性。", "pace": "slow", "detail_level": "expanded", "serves": ["cost"]},
+        {"beat_id": "m4", "function": "新问题", "visible_action": "监控恢复后只缺失电梯外的十七秒。", "causal_change": "线索指向能控制局部供电的人。", "pace": "decelerating", "detail_level": "lean", "serves": ["outgoing_hook"]}
+      ]
+    },
+    {
+      "id": "realism-shift-meeting",
+      "genre": "realism",
+      "scene_function": "用制度选择改变同事关系而非制造夸张反转",
+      "expected_beat_range": [2, 4],
+      "beat_plan": [
+        {"beat_id": "r1", "function": "会上说明", "visible_action": "护士长把排班漏洞写在白板上，却不写犯错者姓名。", "causal_change": "问题被承认，责任暂时没有落到个人。", "pace": "measured", "detail_level": "standard", "serves": ["incoming_bridge", "goal", "turn"]},
+        {"beat_id": "r2", "function": "承担追问", "visible_action": "她承认自己批准过那张排班表。", "causal_change": "年轻护士得到修正机会，护士长失去晋升优势。", "pace": "slow", "detail_level": "expanded", "serves": ["cost", "reader_effect"]},
+        {"beat_id": "r3", "function": "关系余波", "visible_action": "散会后，年轻护士没有道谢，只把下一周表格放回她桌上。", "causal_change": "保护没有立即换来亲近，责任转入下一轮工作。", "pace": "decelerating", "detail_level": "lean", "serves": ["outgoing_hook"]}
+      ]
+    },
+    {
+      "id": "ensemble-vote-fracture",
+      "genre": "ensemble",
+      "scene_function": "让同一事件同时改变三组人物联盟",
+      "expected_beat_range": [5, 7],
+      "beat_plan": [
+        {"beat_id": "e1", "function": "议题入场", "visible_action": "临时委员会收到撤离名单。", "causal_change": "每个人必须公开优先保护的对象。", "pace": "compressed", "detail_level": "lean", "serves": ["incoming_bridge", "goal"]},
+        {"beat_id": "e2", "function": "第一联盟", "visible_action": "医生主张先撤病人，司机要求先撤儿童。", "causal_change": "资源冲突切开原有合作。", "pace": "accelerating", "detail_level": "standard", "serves": []},
+        {"beat_id": "e3", "function": "隐瞒暴露", "visible_action": "会计拿出少报的一辆车。", "causal_change": "争论从分配转为谁有权隐瞒。", "pace": "slow", "detail_level": "expanded", "serves": ["turn"]},
+        {"beat_id": "e4", "function": "交叉选择", "visible_action": "司机把自己的名额让给病人，却拒绝替会计作证。", "causal_change": "道德同盟和政治同盟分离。", "pace": "measured", "detail_level": "expanded", "serves": ["cost"]},
+        {"beat_id": "e5", "function": "暂时表决", "visible_action": "名单通过，但会计被排除在下一轮会议外。", "causal_change": "行动得以继续，信息能力却受损。", "pace": "accelerating", "detail_level": "standard", "serves": ["reader_effect"]},
+        {"beat_id": "e6", "function": "新联盟", "visible_action": "散会时医生把备用钥匙交给会计。", "causal_change": "被公开排斥的人获得秘密合作入口。", "pace": "decelerating", "detail_level": "lean", "serves": ["outgoing_hook"]}
+      ]
+    },
+    {
+      "id": "comedy-mistaken-toast",
+      "genre": "comedy",
+      "scene_function": "让误会通过人物补救升级而非靠随机巧合",
+      "expected_beat_range": [4, 6],
+      "beat_plan": [
+        {"beat_id": "c1", "function": "错误祝词", "visible_action": "主持人把辞职宴念成订婚宴。", "causal_change": "宾客开始按错误关系重新站队。", "pace": "fast", "detail_level": "lean", "serves": ["incoming_bridge", "goal"]},
+        {"beat_id": "c2", "function": "遮掩", "visible_action": "主角抢过话筒，声称这是公司团建游戏。", "causal_change": "一个口误变成需要全桌配合的谎言。", "pace": "accelerating", "detail_level": "standard", "serves": []},
+        {"beat_id": "c3", "function": "认真配合", "visible_action": "最古板的经理开始主持求婚流程。", "causal_change": "补救者成为误会最坚定的维护者。", "pace": "fast", "detail_level": "expanded", "serves": ["turn", "reader_effect"]},
+        {"beat_id": "c4", "function": "真实代价", "visible_action": "辞职者只好当众说出真正离职原因。", "causal_change": "笑料打开了原本会被掩盖的管理问题。", "pace": "slow", "detail_level": "expanded", "serves": ["cost"]},
+        {"beat_id": "c5", "function": "余波", "visible_action": "经理仍坚持把订婚蛋糕切完。", "causal_change": "尴尬关系被保留到第二天的正式谈判。", "pace": "decelerating", "detail_level": "lean", "serves": ["outgoing_hook"]}
+      ]
+    },
+    {
+      "id": "stream-memory-trigger",
+      "genre": "stream-of-consciousness",
+      "scene_function": "让联想改变当下选择，而不是堆叠无后果意象",
+      "expected_beat_range": [2, 4],
+      "beat_plan": [
+        {"beat_id": "s1", "function": "感官触发", "visible_action": "水壶鸣响时，她停下即将拨出的电话。", "causal_change": "当下动作被一段未处理记忆截断。", "pace": "suspended", "detail_level": "expanded", "serves": ["incoming_bridge", "goal"]},
+        {"beat_id": "s2", "function": "联想回返", "visible_action": "她在沸水、候车室广播和母亲旧围巾之间反复辨认同一个词。", "causal_change": "记忆中的责备被重新理解为求助。", "pace": "slow", "detail_level": "expanded", "serves": ["turn", "reader_effect"]},
+        {"beat_id": "s3", "function": "当下选择", "visible_action": "她没有拨给原定的人，改为给多年未联系的妹妹留言。", "causal_change": "内在重释产生可观察行动，也打开新的关系风险。", "pace": "decelerating", "detail_level": "standard", "serves": ["cost", "outgoing_hook"]}
+      ]
+    },
+    {
+      "id": "screenplay-backstage-cue",
+      "genre": "screenplay",
+      "scene_function": "用可拍摄行动和场面调度完成权力转向",
+      "expected_beat_range": [3, 5],
+      "beat_plan": [
+        {"beat_id": "p1", "function": "错误提示", "visible_action": "后台监视器亮起本不该播出的三号机位。", "causal_change": "导播意识到有人改了直播顺序。", "pace": "compressed", "detail_level": "lean", "serves": ["incoming_bridge", "goal"]},
+        {"beat_id": "p2", "function": "封锁通道", "visible_action": "制片人关掉对讲总线，只留下舞台经理的耳返。", "causal_change": "公开指挥权转成一对一控制。", "pace": "accelerating", "detail_level": "standard", "serves": ["turn"]},
+        {"beat_id": "p3", "function": "反向播出", "visible_action": "舞台经理把备用信号切到大厅屏幕。", "causal_change": "她保住证据，同时在所有人面前违抗制片人。", "pace": "fast", "detail_level": "expanded", "serves": ["cost", "reader_effect"]},
+        {"beat_id": "p4", "function": "黑场留人", "visible_action": "主舞台熄灯，只有后台出口的红灯仍亮。", "causal_change": "直播中断，追责对象开始向出口移动。", "pace": "decelerating", "detail_level": "lean", "serves": ["outgoing_hook"]}
+      ]
+    }
+  ],
+  "blind_review_rubric": {
+    "scale": {"minimum": 1, "maximum": 5},
+    "hidden_metadata": ["model_id", "runtime_id", "branch_origin", "expected_beat_range", "fixture_id"],
+    "dimensions": [
+      {"id": "causal_necessity", "weight": 20, "blocking_floor": 3, "question": "每一拍是否由前一状态和人物选择推出，并真实改变后一状态？"},
+      {"id": "character_fidelity", "weight": 15, "blocking_floor": 3, "question": "关键选择是否符合人物欲望、恐惧、认知边界和道德底线？"},
+      {"id": "rhythm_fitness", "weight": 15, "blocking_floor": 2, "question": "速度、详略和节拍数量是否服务该场功能，而非平均铺陈或模板化五拍？"},
+      {"id": "bridge_continuity", "weight": 15, "blocking_floor": 3, "question": "场景是否接住既有压力，并把具体问题、代价或行动交给下一场？"},
+      {"id": "irreversible_cost", "weight": 10, "blocking_floor": 2, "question": "选择是否产生可追踪且不能被一句话撤销的代价？"},
+      {"id": "reader_effect", "weight": 10, "blocking_floor": 2, "question": "读者的认知、期待或情绪是否因场景发生可说明的变化？"},
+      {"id": "form_suitability", "weight": 10, "blocking_floor": 2, "question": "叙事材料是否适合题材与媒介，同时没有把类型惯例当作固定模板？"},
+      {"id": "anti_template", "weight": 5, "blocking_floor": 2, "question": "方案是否避免仅替换名词、机械反转、统一高潮和无后果气氛描写？"}
+    ],
+    "pass_policy": {"weighted_minimum": 3.5, "no_blocking_dimension_below_floor": true, "require_written_rationale": true}
+  }
+}

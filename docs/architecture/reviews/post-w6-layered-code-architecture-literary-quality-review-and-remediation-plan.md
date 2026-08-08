@@ -1338,3 +1338,32 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - compileall 与 `git diff --check`：通过。
 
 下一批入口：Q4-C 跨题材文学质量夹具。使用历史、悬疑、现实主义、群像、喜剧、意识流、剧本七类结构样本，验证“允许不同节拍形状但不遗漏固定义务”；再增加不依赖外部模型的盲审 rubric，避免测试锁死具体中文句子或某一网文风格。
+
+### 2026-08-08：Q4-C 跨题材结构夹具与盲审量表
+
+状态：完成，Q4 收口。
+
+已完成：
+
+- 新增 `tests/fixtures/literary/cross_genre_composition_cases.json`，覆盖历史、悬疑、现实主义、群像、喜剧、意识流和剧本七类场景；
+- 夹具不提供“标准正文”，只提供可观察行动、因果变化、节奏、详略与义务标签，避免用字面相似度把系统训练成另一套模板；
+- 七类结构分别采用 3-6 拍，测试要求至少四种不同节拍数量，并逐案验证入场承接、目标、转向、代价、读者效果和出场钩子全部覆盖；
+- 新增 `docs/quality/literary-branch-composition-blind-review-rubric.md` 与同源机器量表，权重覆盖因果必然性、人物可信度、节奏适配、场景衔接、不可逆代价、读者效果、题材/媒介适配与反模板性；
+- 盲审协议隐藏 model/runtime、branch origin、fixture identity 与预期拍数，要求逐维度书面依据；任一 blocking 维度低于 floor 时不能由总分抵消；
+- 明确盲审只评价文学结构判断，不把 schema、字段齐全或字数达标冒充文学质量，也不让同一生成会话靠看见预期答案自证通过。
+
+验证证据：
+
+- Cross-genre fixture、variable/fallback beats 与 semantic proposal contracts：10 tests passed；
+- Architecture Audit：30 file debts、205 function debts、0 cycles；
+- compileall 与 `git diff --check`：通过。
+
+Q4 退出结论：
+
+- 固定五类分支只作回退；
+- Agent 场景特定分支进入正式 schema/Worker/Gate/Composition 链；
+- Composition 节拍数量可变但文学义务不可删；
+- RP 深度、分支数和修订策略继续由 Creative Policy Graph 约束；
+- 跨题材质量检查不依赖固定范文。
+
+下一批入口：进入 Q5-Q6。重新读取本计划对应章节和当前代码，先盘点尚未完成的文档/结构/兼容项，再按最小批次执行；不得把“剩余架构债务清零”误当成目标，也不得跳过最终全量测试、生产构建和 Git 交付审计。
