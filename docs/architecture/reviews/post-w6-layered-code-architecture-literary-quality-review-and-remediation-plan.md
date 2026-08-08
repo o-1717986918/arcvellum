@@ -1839,3 +1839,43 @@ Q4.5 文学链收敛结论：
 - 本阶段没有发现应由已有父类/子类替代的新多余类；新增模块均为纯函数合同或投影，未获得任务生命周期、持久化或正式写回所有权。
 
 下一批入口：进入 Q5。先复读自适应编排与统一工程方案，核对已有 Chapter Facts/Horizon、Plan Compiler、Capability Broker、Supervisor/lease 与 SSE 基础，再只补文档要求的 production bundle executor、资源冲突控制、session lease 回收、checkpoint/no-spin 和 typed continuous event 缺口；所有新行为必须 feature-flagged，并保留 fixed route fallback。
+
+### 2026-08-08：Q5-A 生产接线前再审查——能力事实矩阵
+
+状态：审查完成，尚未开始生产行为改动。
+
+本批重新读取了统一实施方案、自适应编排方案、W6-7/W6-8 专项计划与退出审计，并从 `AgentWorker`、`ClaimedRunLoop`、`WorkerSupervisor`、`OpenCodeRuntimePool`、active-plan binding、ResourceClaim、Strategy SSE 的真实消费者反向追踪。结论如下：
+
+| 能力 | 合同/测试 | 当前真实消费者 | 成熟度 | 本阶段最小修正 |
+| --- | --- | --- | --- | --- |
+| Chapter Facts/Horizon | 已有 production validation、risk/window projection、shadow tests | 只被 `chapter_shadow.py` 消费 | 影子能力 | 在计划候选进入 Normalize/Lint/Compile 前建立 production projection；失败必须固定路线回退并记录来源 |
+| Active scene plan binding | 已有完整 identity、授权、fingerprint、node binding | `AgentWorker.prepare()` 正式消费 | 生产能力 | 保持为唯一策略覆盖入口，不建立第二任务生命周期 |
+| ExecutionBundle | 白名单模板、单角色、稳定 identity、`stop_before` 均有测试 | 无生产消费者 | 合同能力 | 增加串行 Bundle Executor，逐项委托现有 Worker，并在每步执行前验证绑定 node、角色、版本与 stop boundary |
+| ResourceClaim/Resource Gate | 路径冲突、barrier、只读分组有测试 | 单任务 sandbox 生成 claim；`admission_plan` 无生产消费者 | 部分生产 | 在现有 `ProjectExecutionCoordinator`/持久锁外增加资源读写租约；第一阶段仍串行，随后只放开只读机械任务 |
+| OpenCode 服务进程复用 | 按角色持久服务、健康检查、idle reaper | OpenCode runtime 正式使用 | 生产能力 | 继续复用，不创建第二套进程池 |
+| 同任务修复会话复用 | repair turn 保持同一 OpenCode session | OpenCode runtime 正式使用 | 生产能力 | 保持不变 |
+| 跨任务 SessionLease | identity、预算和耗尽边界有测试 | 无生产消费者 | 合同能力 | 在现有 RuntimePool 内增加角色隔离的 session lease registry；不得跨 Writer/Reviewer、项目、模型、文风或 Context Ledger 复用 |
+| ContextCacheKey | 精确失效合同有测试 | 无缓存存储与读取者 | 合同能力 | 只缓存可重建的 prompt/context materialization，绝不缓存正式项目事实 |
+| Checkpoint/Recovery | timestamp/fingerprint/ladder/replan 合同有测试 | Autopilot 只有 run sandbox 恢复，没有 ChapterCheckpoint 消费 | 合同能力 | 由 Campaign coordinator 持久化最新安全点；恢复仍调用现有 Worker/Engine，不直接复制正式文件 |
+| Campaign/no-spin | policy、pause、checkpoint_due、ProgressFingerprint 有测试 | Autopilot 有自己的步数/指纹/暂停循环，但不消费 Campaign 合同 | 重复风险 | 不建立第二个自动创作循环；把 Campaign 决策与证据组合进 `ClaimedRunLoop` |
+| typed SSE | Worker/Autopilot 已有持续 stream 与 cursor；Strategy 使用有限列表 | 多个 router，各自语义不同 | 部分生产 | 提炼共享持续 tail 合同；保留事件来源，不把所有 SSE 强塞成一个总线 |
+
+类与继承再审查结论：
+
+- `OpenCodeLease` 表示服务进程借用，`SessionLease` 表示模型会话复用条件，两者不是父子关系；强行继承会混淆生命周期，应组合而非继承。
+- `CampaignState` 与持久化 `autopilot_run` 是同一长跑状态的不同表达；若新增 `CampaignService`/`CampaignManager` 会形成第二状态机。本阶段只允许一个无持久化所有权的 coordinator/decision collaborator。
+- `ExecutionBundle` 是编译产物，`TaskPackage` 是正式 Engine 生命周期产物；两者不能继承，也不能由 Bundle 直接写项目。Executor 只能把 Bundle 约束投影到既有 TaskPackage 执行。
+- `ResourceGate` 是纯准入算法，`ProjectExecutionCoordinator` 是进程内项目所有权，SQLite lock 是跨执行持久租约。三者语义不同，但应由一个执行协调入口组合，避免调用者各自挑一套锁。
+- 当前未发现应通过“已有父类/子类”替换的 Q5 类型；主要问题是合同没有消费者，以及现有 Autopilot/RuntimePool 与未来 Campaign/Session 层存在重复所有权风险。
+
+执行约束：
+
+1. Q5 所有行为默认关闭，且固定路线为唯一降级路径；
+2. Bundle Executor 不批量伪造 task complete，不绕过 task-open/preflight/writeback/route-audit；
+3. 正文 Writer 永远串行，Reviewer/机械分析只有在读写集证明无冲突时才可并发；
+4. Session 复用不得改变 Writer/Reviewer 独立审查证据；
+5. Campaign 只增强现有 Autopilot，不新建第二 API、第二 run 表或第二自动推进线程；
+6. 每轮执行必须形成 ProgressFingerprint 或明确 terminal/decision 证据，禁止空转重试；
+7. SSE 关闭、断线续传和背压必须有确定性测试。
+
+下一步：先实现最窄的 Q5-B——production chapter projection 与串行 Bundle Executor。该批只建立消费者和强制边界，不同时引入并发、跨任务 session reuse 或 Campaign，以便在真实调用路径测试中证明行为等价后再逐层放开。
