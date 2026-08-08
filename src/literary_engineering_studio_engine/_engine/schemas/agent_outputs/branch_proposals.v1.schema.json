@@ -1,0 +1,15 @@
+{
+  "schema_id": "branch_proposals.v1",
+  "schema_value": "literary-engineering-workbench/branch-proposals/v1",
+  "required": ["schema", "scene_id", "status", "source_artifact", "evidence_paths", "findings", "proposals"],
+  "types": {
+    "schema": "str",
+    "scene_id": "str",
+    "status": "str",
+    "source_artifact": "str",
+    "evidence_paths": "list",
+    "findings": "list",
+    "proposals": "list"
+  },
+  "enums": {"status": ["complete", "needs_revision", "blocked"]}
+}

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..agent_schema import validate_payload
+from ..literary.scene.branching.proposals import branch_option_ids, branch_proposal_options, branch_proposal_quality_errors
 
 
 SEMANTIC_ARTIFACTS: dict[str, dict[str, str]] = {
@@ -22,6 +23,12 @@ SEMANTIC_ARTIFACTS: dict[str, dict[str, str]] = {
         "kind": "roleplay-result",
         "filename": "roleplay_result.json",
         "consumed_by": "branch-manifest",
+    },
+    "branch-agent-task": {
+        "schema_name": "branch_proposals.v1",
+        "kind": "branch-proposals",
+        "filename": "branch_proposals.json",
+        "consumed_by": "branch-selection",
     },
     "composition-agent-task": {
         "schema_name": "composition_review.v1",
@@ -56,7 +63,7 @@ def semantic_artifact_relative_path(current_state: str, scene_id: str) -> str:
     if definition is None:
         return ""
     filename = definition["filename"].format(scene_id=scene_id)
-    if current_state == "roleplay-agent-task":
+    if current_state in {"roleplay-agent-task", "branch-agent-task"}:
         return f"branches/{scene_id}/{filename}"
     if current_state == "composition-agent-task":
         return f"drafts/compositions/{filename}"
@@ -103,6 +110,12 @@ def semantic_artifact_template(current_state: str, scene_id: str, *, source: str
             "branch_pressures": [],
             "canon_risks": [],
             "writeback_candidates": [],
+        }
+    if current_state == "branch-agent-task":
+        return {
+            "schema": "literary-engineering-workbench/branch-proposals/v1",
+            **common,
+            "proposals": [],
         }
     if current_state == "composition-agent-task":
         return {
@@ -188,6 +201,28 @@ def read_semantic_artifact(root: Path, current_state: str, scene_id: str) -> dic
     return payload if isinstance(payload, dict) else {}
 
 
+def validated_branch_proposals(
+    root: Path,
+    scene_id: str,
+    manifest: dict[str, Any],
+) -> tuple[list[dict[str, Any]], Path | None]:
+    """Load the declared proposal artifact, or return an empty legacy fallback."""
+
+    relative = str(manifest.get("agent_proposals") or "").replace("\\", "/")
+    if not relative:
+        return [], None
+    expected = semantic_artifact_relative_path("branch-agent-task", scene_id)
+    if relative != expected:
+        raise ValueError(f"branch manifest declares an invalid Agent proposal path: {relative}")
+    payload = read_semantic_artifact(root, "branch-agent-task", scene_id)
+    return branch_proposal_options(payload), root.resolve() / relative
+
+
+def validated_branch_proposal_ids(root: Path, scene_id: str, manifest: dict[str, Any]) -> set[str]:
+    proposals, _path = validated_branch_proposals(root, scene_id, manifest)
+    return branch_option_ids(proposals)
+
+
 def _semantic_quality_errors(
     root: Path,
     current_state: str,
@@ -205,12 +240,12 @@ def _semantic_quality_errors(
     evidence = payload.get("evidence_paths")
     if not isinstance(evidence, list) or not [item for item in evidence if str(item).strip()]:
         errors.append(f"semantic artifact must cite at least one evidence path: {relative}")
-    if current_state == "roleplay-agent-task":
-        for field in ("character_actions", "world_consequences", "branch_pressures"):
-            values = payload.get(field)
-            if not isinstance(values, list) or not values:
-                errors.append(f"roleplay semantic artifact requires a non-empty {field}: {relative}")
-        return errors
+    special_handler = {
+        "roleplay-agent-task": _roleplay_semantic_errors,
+        "branch-agent-task": _branch_semantic_errors,
+    }.get(current_state)
+    if special_handler is not None:
+        return [*errors, *special_handler(payload, scene_id, relative)]
 
     source_rel = str(payload.get("source_artifact") or "").replace("\\", "/").strip()
     expected = {
@@ -237,4 +272,22 @@ def _semantic_quality_errors(
         errors.append(f"semantic artifact verdict must be pass before route advance: {relative}")
     if current_state == "composition-agent-task" and payload.get("ready_for_generation") is not True:
         errors.append(f"composition semantic artifact must set ready_for_generation=true: {relative}")
+    return errors
+
+
+def _branch_semantic_errors(payload: dict[str, Any], scene_id: str, relative: str) -> list[str]:
+    expected = f"branches/{scene_id}/branch_manifest.json"
+    errors: list[str] = []
+    if str(payload.get("source_artifact") or "").replace("\\", "/").strip() != expected:
+        errors.append(f"semantic artifact source_artifact must be {expected}: {relative}")
+    errors.extend(branch_proposal_quality_errors(payload, relative))
+    return errors
+
+
+def _roleplay_semantic_errors(payload: dict[str, Any], _scene_id: str, relative: str) -> list[str]:
+    errors: list[str] = []
+    for field in ("character_actions", "world_consequences", "branch_pressures"):
+        values = payload.get(field)
+        if not isinstance(values, list) or not values:
+            errors.append(f"roleplay semantic artifact requires a non-empty {field}: {relative}")
     return errors

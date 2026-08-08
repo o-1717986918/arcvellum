@@ -26,7 +26,11 @@ from ....flow_gates import FlowGateError, branch_selection_status, ensure_agent_
 from ....narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from ....reader_experience import reader_experience_contract
 from ....roleplay_lab import CharacterCard, _load_characters
-from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
+from ....semantic_task_contracts import (
+    semantic_artifact_relative_path,
+    validated_branch_proposals,
+    write_semantic_artifact_template,
+)
 from ....word_budget import scene_word_budget_contract
 from ...style.snapshot import (
     active_style_mount_snapshot_bytes,
@@ -201,6 +205,7 @@ def composition_input_digest(project_root: Path, scene_path: Path) -> str:
         root / "memory" / "context_packets" / f"{facts.scene_id}.md",
         root / "memory" / "context_packets" / f"{facts.scene_id}.trace.json",
         root / "branches" / facts.scene_id / "branch_manifest.json",
+        root / semantic_artifact_relative_path("branch-agent-task", facts.scene_id),
         root / "branches" / facts.scene_id / "branch_selection.md",
         root / "plot" / "word_budget" / "word_budget.json",
         root / "plot" / "chapter_obligations" / f"{facts.chapter_id}.json",
@@ -327,7 +332,9 @@ def _load_branch_choice(
             "writeback_candidates": _fallback_writeback_by_id(scene_id),
         }
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    branches = data.get("branches", [])
+    fallback_branches = data.get("branches", [])
+    proposal_branches, proposal_path = _proposal_branch_inputs(root, scene_id, data)
+    branches = [*proposal_branches, *fallback_branches]
     recommended = str(data.get("recommended_branch") or "")
     if not selected and not allow_recommended_branch:
         raise FlowGateError(
@@ -359,12 +366,37 @@ def _load_branch_choice(
             "risks": ["branch_manifest.json 无分支。"],
             "writeback_candidates": data.get("writeback_candidates", _fallback_writeback_by_id(scene_id)),
         }
+    return _selected_branch_result(chosen, selected, manifest_path, selection_path, selection_gate, recommended, proposal_path)
+
+
+def _proposal_branch_inputs(root: Path, scene_id: str, manifest: dict[str, Any]) -> tuple[list[dict[str, Any]], Path | None]:
+    try:
+        return validated_branch_proposals(root, scene_id, manifest)
+    except ValueError as exc:
+        raise FlowGateError(str(exc)) from exc
+
+
+def _selected_branch_result(
+    chosen: dict[str, Any],
+    selected: str,
+    manifest_path: Path,
+    selection_path: Path,
+    selection_gate: dict[str, str],
+    recommended: str,
+    proposal_path: Path | None,
+) -> dict[str, Any]:
     result = dict(chosen)
-    result["source"] = "selection" if selected else "recommended"
-    result["manifest_path"] = manifest_path
-    result["selection_path"] = selection_path if selection_path.exists() else None
-    result["selection_gate"] = selection_gate
-    result["recommended_branch"] = recommended
+    result.update(
+        {
+            "branch_origin": str(chosen.get("branch_origin") or "deterministic-fallback"),
+            "source": "selection" if selected else "recommended",
+            "manifest_path": manifest_path,
+            "selection_path": selection_path if selection_path.exists() else None,
+            "selection_gate": selection_gate,
+            "recommended_branch": recommended,
+            "proposal_path": proposal_path,
+        }
+    )
     return result
 
 

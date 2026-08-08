@@ -12,7 +12,11 @@ from ....context_broker import context_trace_status, default_context_trace_path
 from ....context_packet import build_context_packet
 from ....flow_gates import ensure_agent_task_completed, selected_branch_from
 from ....roleplay_lab import CharacterCard, _load_characters
-from ....semantic_task_contracts import read_semantic_artifact, semantic_artifact_relative_path
+from ....semantic_task_contracts import (
+    read_semantic_artifact,
+    semantic_artifact_relative_path,
+    write_semantic_artifact_template,
+)
 from ..facts import SceneFacts, load_scene_facts
 
 
@@ -136,6 +140,7 @@ def build_branch_simulation(
         "branch_count": len(candidates),
         "recommended_branch": recommended,
         "selection_record": _rel(selection_path, root),
+        "agent_proposals": _proposal_relative(scene_facts.scene_id, agent_tasks),
         "score_keys": SCORE_KEYS,
         "scene_facts": asdict(scene_facts),
         "characters": [_character_payload(card, root) for card in active_cards],
@@ -153,7 +158,7 @@ def build_branch_simulation(
         selection_path.write_text(_render_selection(scene_facts, payload), encoding="utf-8")
     agent_tasks_path = None
     if agent_tasks:
-        agent_tasks_path = _write_branch_agent_tasks(root, scene_path, context_path, output_path, manifest_path, selection_path, payload)
+        agent_tasks_path = _prepare_branch_agent_task(root, scene_path, context_path, output_path, manifest_path, selection_path, payload)
 
     return BranchSimulationResult(
         project_root=root,
@@ -168,6 +173,32 @@ def build_branch_simulation(
     )
 
 
+def _proposal_relative(scene_id: str, enabled: bool) -> str:
+    return semantic_artifact_relative_path("branch-agent-task", scene_id) if enabled else ""
+
+
+def _prepare_branch_agent_task(
+    root: Path,
+    scene_path: Path,
+    context_path: Path,
+    output_path: Path,
+    manifest_path: Path,
+    selection_path: Path,
+    payload: dict[str, object],
+) -> Path:
+    scene_id = str(payload["scene_id"])
+    write_semantic_artifact_template(
+        root,
+        "branch-agent-task",
+        scene_id,
+        source=manifest_path.relative_to(root).as_posix(),
+        overwrite=False,
+    )
+    return _write_branch_agent_tasks(
+        root, scene_path, context_path, output_path, manifest_path, selection_path, payload
+    )
+
+
 def _write_branch_agent_tasks(
     root: Path,
     scene_path: Path,
@@ -178,6 +209,7 @@ def _write_branch_agent_tasks(
     payload: dict[str, object],
 ) -> Path:
     context_trace_path = default_context_trace_path(context_path)
+    proposal_path = root / semantic_artifact_relative_path("branch-agent-task", str(payload["scene_id"]))
     return write_agent_tasks(
         default_agent_tasks_path(manifest_path),
         title=f"branch-simulate {payload['scene_id']}",
@@ -189,24 +221,26 @@ def _write_branch_agent_tasks(
             root / semantic_artifact_relative_path("roleplay-agent-task", str(payload["scene_id"])),
             report_path,
             manifest_path,
+            proposal_path,
             selection_path,
         ],
         notes=[
             "branch_manifest.json 是机器契约，不能写入 AGENT_TASK 标记。",
+            "固定五类候选只是确定性回退；正式创意判断必须写入 branch_proposals.json。",
             "推荐分支只是启发式建议，平台 agent 必须独立审查后再决定是否询问用户。",
         ],
         tasks=[
             (
                 "审查分支候选",
-                """读取 context trace、roleplay_result.json、branch_simulation.md 和 branch_manifest.json。先确认分支候选实际消费了 RP 的角色行动、世界后果、分支压力与 Canon 风险，再逐条检查每个分支是否符合 scene_goal、participants、canon_refs、next_hooks 与人物 BDI。指出每个分支最强处、最弱处和需要补证据的地方。""",
+                """读取 context trace、roleplay_result.json、branch_simulation.md 和 branch_manifest.json。固定候选只用于防止流程无路可走，不能直接换名后提交。根据本场人物行动、世界后果、分支压力、Canon 风险、scene_goal、next_hooks 与人物 BDI，提出 2-5 条场景特定分支。""",
             ),
             (
-                "复核评分偏置",
-                """复核每个分支的人物逻辑、Canon 安全、戏剧张力、文学潜力和长线收益评分。若启发式评分与平台 agent 的判断不同，写出修正理由。""",
+                "写入正式分支提案",
+                f"""把提案写入 `{proposal_path.relative_to(root).as_posix()}`。每条使用唯一 `agent_branch_<slug>` id，并填写 title、strategy、causal_premise、至少两步 action_chain、不可回避的 cost、reader_effect 和具体 state_writeback。不同提案必须在因果、行动链、代价、读者效果和写回上都真实不同。设置 status=complete，引用实际 evidence_paths，并在 findings 说明差异依据。""",
             ),
             (
                 "决定选择策略",
-                """不要自动接受 recommended_branch。基于用户方向、人物压力和 longform 结构，决定：选择一个分支、融合多个分支、退回重做，或向用户提出一个高价值选择题。把决定写入 branch_selection.md 或作为候选审查意见提交。""",
+                """不要自动接受 recommended_branch。优先从已验证的 Agent 提案中选择；只有提案无法成立时才使用确定性回退。基于用户方向、人物压力和 longform 结构，决定选择、融合、退回重做或提出高价值选择题，并把精确 branch_id 写入 branch_selection.md。""",
             ),
             (
                 "检查写回风险",

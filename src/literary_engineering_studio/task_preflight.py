@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from .contracts import TaskPackage
 from .preflight.assets import _validate_asset_candidate, _validate_asset_review_contract
@@ -31,6 +32,7 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_definition,
     semantic_artifact_errors,
     semantic_artifact_relative_path,
+    validated_branch_proposal_ids,
 )
 from literary_engineering_studio_engine.continuity_ledger import continuity_ledger_status
 from literary_engineering_studio_engine.flow_gates import branch_selection_status
@@ -244,19 +246,28 @@ def _validate_branch_selection_contract(
             )
         )
         return
-    branches = payload.get("branches") if isinstance(payload, dict) else None
-    branch_ids = {
-        str(item.get("branch_id") or item.get("id") or "").strip()
-        for item in branches
-        if isinstance(item, dict)
-    } if isinstance(branches, list) else set()
+    branch_ids = _selectable_branch_ids(sandbox.workspace, scene_id, payload)
     selected = str(status.get("selected_branch") or "").strip()
     if not branch_ids or selected not in branch_ids:
         issues.append(
             PreflightIssue(
                 "branch-selection-membership",
                 relative,
-                f"selected_branch `{selected}` is not an id in {manifest_relative}",
-                "使用 branch_manifest.json 的一个精确 branch_id，并保留选择理由与被拒绝分支说明。",
+                f"selected_branch `{selected}` is not an id in validated Agent proposals or {manifest_relative}",
+                "使用 branch_proposals.json 或 branch_manifest.json 中的一个精确 branch_id，并保留选择理由与被拒绝分支说明。",
             )
         )
+
+
+def _selectable_branch_ids(root: Path, scene_id: str, manifest: dict[str, object]) -> set[str]:
+    branches = manifest.get("branches") if isinstance(manifest, dict) else None
+    ids = {
+        str(item.get("branch_id") or item.get("id") or "").strip()
+        for item in branches
+        if isinstance(item, dict)
+    } if isinstance(branches, list) else set()
+    try:
+        ids.update(validated_branch_proposal_ids(root, scene_id, manifest))
+    except ValueError:
+        pass
+    return ids

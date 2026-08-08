@@ -24,6 +24,15 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
 from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELDS
 
 
+SEMANTIC_SOURCE_PATTERNS = {
+    "roleplay-agent-task": "branches/{scene_id}/roleplay_simulation.md",
+    "branch-agent-task": "branches/{scene_id}/branch_manifest.json",
+    "composition-agent-task": "drafts/compositions/{scene_id}_composition.json",
+    "state-agent-task": "characters/state_patches/{scene_id}_state_patch.json",
+    "canon-agent-task": "canon/patches/{scene_id}_canon_patch.json",
+}
+
+
 def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
     """Normalize semantically identical machine markers without changing a review verdict."""
 
@@ -120,13 +129,7 @@ def _canonicalize_semantic_artifact_metadata(task: TaskPackage, sandbox: Sandbox
         "schema": str(schema_spec.get("schema_value") or payload.get("schema") or ""),
         "scene_id": scene_id,
     }
-    source_by_state = {
-        "roleplay-agent-task": f"branches/{scene_id}/roleplay_simulation.md",
-        "composition-agent-task": f"drafts/compositions/{scene_id}_composition.json",
-        "state-agent-task": f"characters/state_patches/{scene_id}_state_patch.json",
-        "canon-agent-task": f"canon/patches/{scene_id}_canon_patch.json",
-    }
-    expected_source = source_by_state.get(current_state, "")
+    expected_source = SEMANTIC_SOURCE_PATTERNS.get(current_state, "").format(scene_id=scene_id)
     if expected_source:
         expected["source_artifact"] = expected_source
         source_path = sandbox.workspace / Path(expected_source)

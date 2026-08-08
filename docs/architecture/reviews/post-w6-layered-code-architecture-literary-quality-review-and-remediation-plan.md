@@ -1266,3 +1266,39 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - 当前剩余热点中还有 contract audit、longform CLI、longform audit、preflight 与前端 projection 等历史债务，但它们不属于本轮列名 Q3 执行核心。后续只在 Q4-Q6 实际触碰相应能力时按 Ratchet 收敛，不开展无边界“清零运动”。
 
 下一批入口：进入 Q4 文学策略质量。先审查当前 branch lab、composition scaffold、prompt assets 与测试 fixture，建立“固定原型仅作 fallback、可变节拍不削弱文学义务、跨题材只检结构性质”的最小闭环，再分批实现。
+
+### 2026-08-08：Q4-A 场景特定分支提案正式接线
+
+状态：完成，准备独立提交。
+
+实际审查结论：
+
+- `branch-simulate` 虽消费 RP 证据，但 `_build_candidates` 仍只产生五个固定原型；原 `branch-agent-task` 只能改 `branch_selection.md`，没有可供 Agent 写入、CLI 验证并由 Composition 消费的正式提案产物；
+- `branch-selection`、Worker preflight 和 `_load_branch_choice` 均只承认 `branch_manifest.json.branches`，因此单纯增强 Prompt 不会改变正式创作路线；
+- 固定候选不能直接删除：它们仍是模型失败、旧项目和非 Agent 调试路径所需的确定性恢复面。
+
+已完成：
+
+- 新增 `branch_proposals.v1` 语义产物与 schema；正式 `branch-agent-task` 现在必须写 `branches/<scene>/branch_proposals.json`，再写选择，不再把机器 manifest 当作 Agent 输出；
+- 每条提案必须包含场景特定因果前提、至少两步行动链、不可回避的代价、读者效果和具体状态写回，并使用不与 fallback 冲突的 `agent_branch_<slug>` 标识；
+- 新增纯合同模块 `literary/scene/branching/proposals.py`，确定性拒绝重复 ID、空提案，以及在因果、行动链、代价、读者效果或写回上只是改名的候选；
+- `branch_manifest.json` 在 Agent 模式下声明精确 proposal path，并保留原五类候选为 `deterministic-fallback`；历史 manifest 未声明 proposal contract 时继续兼容原选择；
+- 新增 `routes/scene/branch_contract.py`，统一 manifest provenance、RP 消费、proposal 语义完整性和选择 membership；Route Gate 不再自行解释嵌套提案；
+- Studio Worker preflight、正式 route gate 与 Composition 现在消费同一份已验证 proposal 集；Composition 优先查找 Agent 提案，只有明确选择 fallback ID 时才消费旧候选；
+- Composition input digest 与任务 source boundary 纳入 proposal artifact，提案改变会使下游旧编排失效；
+- Prompt Asset 明确固定候选是回退，不允许 Agent 对原型换名、轻量润色后伪装成场景特定分支。
+
+架构审查：
+
+- 没有新增路线、Controller、Provider 或第二套分支服务；Agent 判断仍在既有 `branch-agent-task`，机器 manifest 仍由 CLI 独占；
+- 首轮实现使旧热点继续增肥且让 Studio 直接依赖文学子包，被 Architecture Ratchet 拒绝；最终把 proposal 读取提升到 Engine semantic contract，把 Gate 提炼成 route-owned 模块，并将 lab/Composition/Worker 收敛为薄调用；
+- 不修改 `architecture/quality-baseline.json`，Architecture Audit 最终通过：30 file debts、205 function debts、0 cycles；相较 Q3-G 再净减少 2 个 function debts。
+
+验证证据：
+
+- 新增 schema/多样性、正式 Gate、Composition 消费和历史 fallback 回归：7 tests passed；
+- Semantic Contract、Worker Preflight、Task Contract Transport 组合回归：70 tests passed；
+- 额外任务合同、场景上下文、文风挂载与 route-local choices 回归：82 tests passed；
+- compileall 与 `git diff --check`：通过。
+
+下一批入口：Q4-B 可变 Composition 节拍。先把 Agent proposal 的可选 `beat_plan` 定义成结构化创作策略，并建立固定文学义务校验；只有有效 plan 才替换五拍 fallback，不能把“可变”实现为取消目标、转向、桥接、代价、读者效果或字数契约。

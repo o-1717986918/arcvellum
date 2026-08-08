@@ -18,12 +18,14 @@ context_groups:
   - canon
 hard_constraints:
   - Produce materially different causal branches rather than cosmetic variants.
+  - Treat deterministic manifest branches as fallbacks; write 2-5 scene-specific proposals with agent_branch_<slug> ids.
+  - Every proposal must differ in causal premise, action chain, irreversible cost, reader effect, and concrete state writeback.
   - Score character consistency canon safety dramatic yield future cost and reader promise.
   - Preserve losing branches and their useful elements for formal selection.
 style_constraints:
   - Branch notes are engineering evidence and never enter prose.
 output_contract:
-  - Write the branch manifest and completion marker only at declared paths.
+  - Write branch_proposals.json and branch_selection.md only at declared paths; lifecycle completion is Worker-owned.
 review_requirements:
   - Every branch identifies its irreversible cost and next-scene pressure.
 forbidden_shortcuts:
@@ -32,4 +34,4 @@ forbidden_shortcuts:
 
 # Branch Simulation
 
-Explore causally distinct futures. A branch is valid only when it changes a choice, cost, relationship, revealed fact, or future obligation.
+Explore causally distinct futures. A branch is valid only when it changes a choice, cost, relationship, revealed fact, or future obligation. Do not rename, paraphrase, or lightly decorate the deterministic fallback archetypes.

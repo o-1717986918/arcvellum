@@ -10,6 +10,7 @@ from literary_engineering_studio_engine.agent_tasks import write_agent_completio
 from literary_engineering_studio_engine.branch_lab import build_branch_simulation
 from literary_engineering_studio_engine.roleplay_lab import build_roleplay_simulation
 from literary_engineering_studio_engine.semantic_task_contracts import (
+    read_semantic_artifact,
     semantic_artifact_errors,
     semantic_artifact_relative_path,
     semantic_artifact_template,
@@ -126,6 +127,68 @@ class SemanticTaskContractTests(unittest.TestCase):
             artifact.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             self.assertTrue(semantic_artifact_errors(root, "composition-agent-task", "scene_0001"))
 
+    def test_branch_proposals_require_distinct_causality_cost_and_writeback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self._project(Path(temporary))
+            source = root / "branches" / "scene_0001" / "branch_manifest.json"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('{"branches": []}\n', encoding="utf-8")
+            relative = semantic_artifact_relative_path("branch-agent-task", "scene_0001")
+            artifact = root / relative
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            payload = semantic_artifact_template(
+                "branch-agent-task",
+                "scene_0001",
+                source="branches/scene_0001/branch_manifest.json",
+            )
+            proposal = {
+                "branch_id": "agent_branch_verify",
+                "title": "先核验再公开",
+                "strategy": "让核验延迟警告并损伤信任",
+                "causal_premise": "林选择核验信号，因此错过即时警告。",
+                "action_chain": ["复核日志", "延迟警告", "盟友独自行动"],
+                "cost": "盟友不再相信林会优先保护自己。",
+                "reader_effect": "短暂安心转为关系焦虑。",
+                "state_writeback": {
+                    "relationship_changes": ["林与盟友的信任下降"],
+                    "next_scene_inputs": ["盟友绕开林调查"],
+                },
+            }
+            payload.update(
+                {
+                    "status": "complete",
+                    "evidence_paths": [
+                        "branches/scene_0001/roleplay_result.json",
+                        "branches/scene_0001/branch_manifest.json",
+                    ],
+                    "findings": ["两个方向必须改变不同的因果链和关系代价。"],
+                    "proposals": [proposal, {**proposal, "branch_id": "agent_branch_repeat", "title": "换名复核"}],
+                }
+            )
+            artifact.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            errors = semantic_artifact_errors(root, "branch-agent-task", "scene_0001")
+            self.assertTrue(any("distinct action chains" in item for item in errors))
+            self.assertTrue(any("distinct costs" in item for item in errors))
+            self.assertTrue(any("distinct state writebacks" in item for item in errors))
+
+            payload["proposals"][1].update(
+                {
+                    "strategy": "立即公开，但把来源保持为未证实",
+                    "causal_premise": "林立即发出警告，因此暴露自己掌握了禁区日志。",
+                    "action_chain": ["发送有限警告", "拒绝解释来源", "调查者锁定林"],
+                    "cost": "林成为调查对象并失去秘密取证空间。",
+                    "reader_effect": "行动紧迫感转为身份暴露压力。",
+                    "state_writeback": {
+                        "new_facts": ["调查者知道林接触过禁区日志"],
+                        "next_scene_inputs": ["林必须解释信息来源"],
+                    },
+                }
+            )
+            artifact.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            self.assertEqual(semantic_artifact_errors(root, "branch-agent-task", "scene_0001"), [])
+            loaded = read_semantic_artifact(root, "branch-agent-task", "scene_0001")
+            self.assertEqual(len(loaded["proposals"]), 2)
+
     def test_task_blueprint_declares_typed_semantic_output_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = self._project(Path(temporary))
@@ -141,6 +204,23 @@ class SemanticTaskContractTests(unittest.TestCase):
             semantic_contract = next(item for item in task["output_contracts"] if item["path"] == semantic["path"])
             self.assertEqual(semantic_contract["consumed_by"], "branch-manifest")
             self.assertEqual(semantic_contract["schema_name"], "roleplay_result.v1")
+
+            branch_task = task_registry._enrich_task_payload(
+                task_registry._build_task_payload(
+                    root,
+                    "scene-development",
+                    {
+                        "scene_id": "scene_0001",
+                        "scene": "scenes/scene_0001.yaml",
+                        "current_step": "branch-agent-task",
+                        "next_action": "",
+                    },
+                )
+            )
+            branch_semantic = branch_task["semantic_artifact"]
+            self.assertEqual(branch_semantic["schema_name"], "branch_proposals.v1")
+            self.assertIn(branch_semantic["path"], branch_task["expected_outputs"])
+            self.assertIn(branch_semantic["path"], branch_task["agent_source_paths"])
 
 
 if __name__ == "__main__":

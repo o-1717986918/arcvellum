@@ -17,7 +17,7 @@ from ...flow_gates import FlowGateError, branch_selection_status, ensure_composi
 from ...narrative_rhythm import narrative_rhythm_contract
 from ...reader_experience import ensure_reader_experience_ready, reader_experience_adherence_for_body
 from ...scene_character_assets import scene_character_asset_requirements
-from ...semantic_task_contracts import semantic_artifact_errors, semantic_artifact_relative_path
+from ...semantic_task_contracts import semantic_artifact_errors
 from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
 from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from ...word_budget import ensure_scene_word_budget_ready, word_budget_adherence_for_body
@@ -25,6 +25,8 @@ from ...scene_route_support import (
     _file_sha256, _parse_datetime, _read_optional_json, _read_text,
     _static_review_conclusion,
 )
+from .branch_contract import branch_manifest_gate_errors as _branch_manifest_gate_errors
+from .branch_contract import branch_selection_gate as _branch_selection_gate
 def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[str], list[str]]:
     """Run current-state-specific gates after expected outputs exist."""
 
@@ -43,7 +45,7 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
         errors.extend(_roleplay_gate_errors(root, scene_id))
         errors.extend(semantic_artifact_errors(root, current_state, scene_id))
     if current_state in {"branch-manifest", "branch-agent-task"}:
-        errors.extend(_branch_manifest_gate_errors(root, scene_id))
+        errors.extend(_branch_manifest_gate_errors(root, scene_id, require_agent_proposals=current_state == "branch-agent-task"))
     if current_state == "branch-selection":
         branch_errors, branch_notes = _branch_selection_gate(root, scene_id)
         errors.extend(branch_errors)
@@ -134,54 +136,6 @@ def _roleplay_gate_errors(root: Path, scene_id: str) -> list[str]:
             "manual RP files are exploratory/debug-only for the formal route"
         ]
     return []
-
-
-def _branch_manifest_gate_errors(root: Path, scene_id: str) -> list[str]:
-    path = root / "branches" / scene_id / "branch_manifest.json"
-    payload, error = _read_optional_json(path)
-    if error:
-        return [error]
-    if not payload:
-        return [f"branch manifest is missing or empty: {_rel(path, root)}"]
-    provenance = payload.get("formal_cli_provenance") if isinstance(payload.get("formal_cli_provenance"), dict) else {}
-    created_by = str(provenance.get("created_by") or "")
-    if created_by != "branch-simulate":
-        return [
-            "branch manifest lacks formal_cli_provenance.created_by=branch-simulate; "
-            "run branch-simulate --agent instead of hand-writing the manifest"
-        ]
-    if provenance.get("agent_tasks_requested") is not True:
-        return ["branch manifest was not created with --agent; branch sidecar is required for formal route"]
-    roleplay_result = semantic_artifact_relative_path("roleplay-agent-task", scene_id)
-    if str(payload.get("roleplay_result") or "").replace("\\", "/") != roleplay_result:
-        return ["branch manifest does not declare the exact roleplay_result consumed by branch-simulate"]
-    evidence = payload.get("roleplay_evidence")
-    if not isinstance(evidence, dict) or str(evidence.get("status") or "") != "complete":
-        return ["branch manifest does not contain completed roleplay semantic evidence"]
-    return []
-
-
-def _branch_selection_gate(root: Path, scene_id: str) -> tuple[list[str], list[str]]:
-    selection = root / "branches" / scene_id / "branch_selection.md"
-    branch_state = branch_selection_status(selection)
-    if branch_state.get("status") != "selected":
-        return [str(branch_state.get("message") or "branch selection is not selected")], []
-    manifest = root / "branches" / scene_id / "branch_manifest.json"
-    payload, error = _read_optional_json(manifest)
-    if error:
-        return [error], []
-    branches = payload.get("branches") if isinstance(payload, dict) else None
-    branch_ids = {
-        str(item.get("branch_id") or item.get("id") or "").strip()
-        for item in branches
-        if isinstance(item, dict)
-    } if isinstance(branches, list) else set()
-    selected = str(branch_state.get("selected_branch") or "").strip()
-    if not branch_ids:
-        return [f"branch manifest has no selectable branches: {_rel(manifest, root)}"], []
-    if selected not in branch_ids:
-        return [f"selected_branch `{selected}` is not present in {_rel(manifest, root)}"], []
-    return [], [f"branch selection: {selected}"]
 
 
 def _composition_gate_errors(root: Path, scene_id: str) -> list[str]:

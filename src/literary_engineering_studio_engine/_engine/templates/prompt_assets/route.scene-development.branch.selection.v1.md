@@ -8,6 +8,7 @@ task_type: main-platform-agent-decision
 title: Branch Selection Exact Prompt Asset
 required_inputs:
   - completed branch manifest
+  - validated Agent branch proposals when declared by the manifest
   - roleplay simulation
   - scene and longform obligations
 context_groups:
@@ -23,7 +24,7 @@ style_constraints:
   - Decision rationale stays outside prose.
 output_contract:
   - Write a formal branch selection with rationale retained elements and risks.
-  - Put `decision: selected` and `selected_branch: <exact branch_id from branch_manifest.json>` on separate plain-text lines; headings, tables, bold prose, and translated labels do not satisfy the CLI handoff.
+  - Put `decision: selected` and `selected_branch: <exact validated branch_id>` on separate plain-text lines; headings, tables, bold prose, and translated labels do not satisfy the CLI handoff.
 review_requirements:
   - The selected branch exists in the manifest and preserves canon and character causality.
 forbidden_shortcuts:
@@ -34,7 +35,7 @@ forbidden_shortcuts:
 
 Choose the branch that makes later writing more causally inevitable while keeping meaningful future pressure. Explain why apparently easier alternatives were rejected.
 
-Start the file with this machine-readable handoff, replacing the placeholder with an exact `branch_id` from `branch_manifest.json`:
+Start the file with this machine-readable handoff, replacing the placeholder with an exact `branch_id` from validated `branch_proposals.json`, or from `branch_manifest.json` only when the fallback is deliberately required:
 
 ```text
 decision: selected
