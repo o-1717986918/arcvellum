@@ -1026,3 +1026,38 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - compileall 与 `git diff --check`：通过。
 
 下一批入口：继续 Q3 Candidate Generation/Review Gate 拆分；每笔改动后都运行 Architecture Audit，不再等阶段末才发现 Ratchet 回归。
+
+### 2026-08-08：Q3-A Candidate Generation/Review Gate 拆分
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- `candidate.py` 从 926 行收敛为 341 行，仅保留 promotion 编排、正式错误提示、草稿/报告渲染与兼容导出；
+- 新增 `gate_support.py`，统一候选正文、Canon 声明、路径、JSON 与挂载文风事实；
+- 新增 `generation_gate.py`，按 identity、标准/修订合同、Creative Quality、Narrative Rhythm、时序新鲜度和 Reader Experience 分层验证；
+- 新增 `review_gate.py`，把证据收集、审查 assessment、失败优先级和投影分离；
+- 用有序 `GateCheck` 保留 schema -> task -> context -> exact source -> style -> word budget -> reader -> rhythm -> quality -> canon -> revision -> session -> human/new-character/notes 的诊断顺序；
+- 正式 import 面 `candidate_generation_gate`、`candidate_review_gate`、`_review_session_independence`、`_candidate_review_content_match`、`_human_decision_notes`、`_unresolved_review_notes` 保持可用；
+- promotion manifest、历史 seal、Style Lint 提示和 bypass 边界不变。
+
+有意修复的旧逻辑漏洞：
+
+- 旧 `passed` 总条件未显式包含 `human_decision_notes`；当人工决策只出现在不计入 unresolved 的 style evidence 中时，可能提前判 pass；
+- 新有序 resolution checks 将 `human_decision_required` 置于 new-character 与 generic notes 之前；
+- 新增回归证明人工 Canon/资产决策不能被普通 prose revision 吞掉。
+
+批判性审查：
+
+- 首轮 helper 仍有两个 complexity 17/18 的新债，Architecture Audit 拒绝后继续拆为修订合同、标准合同、节奏合同、候选新鲜度和读者合同；未申请 baseline 豁免；
+- 只新增一个有真实语义的 `GateCheck` 值对象，没有为每个 validator 创建类；
+- Gate 分层没有引入第二套 scene lifecycle，所有调用仍通过原 candidate promotion 入口。
+
+验证证据：
+
+- Promotion、Style Mount、Review Session、Revision Loop、Reader Experience、Task Preflight、Historical Promotion 与有序决策：51 tests passed；
+- Architecture Audit：33 file debts、215 function debts、0 cycles；
+- 相较本阶段前净消减 1 个 file debt、4 个 function debts；
+- compileall 与 `git diff --check`：通过。
+
+下一批入口：审查并拆分 `AutopilotService._run_claimed`。重点是把循环推进、授权暂停、runtime 失败分类、重试恢复和终止收尾拆成命名阶段，同时保持当前防空转与租约语义。

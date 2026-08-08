@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
-import json
-import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import json
 from pathlib import Path
 
-from ....agent_schema import validate_payload
-from ....agent_tasks import agent_task_completion_status
-from ....anti_ai_style import style_lint_gate, style_lint_gate_message
-from ....creative_quality import creative_quality_profile_exists, load_creative_quality_profile
-from ....context_broker import context_trace_status
+from ....anti_ai_style import style_lint_gate_message
 from ....flow_gates import FlowGateError
-from ....new_character_register import new_character_register_issues
-from ....narrative_rhythm import narrative_rhythm_contract
-from ....reader_experience import reader_experience_adherence_for_body
-from ....word_budget import word_budget_adherence_for_body
+from .gate_support import (
+    candidate_body as _candidate_body,
+    canon_writeback_declaration as _canon_writeback_declaration,
+    read_text as _read,
+    relative_path as _rel,
+    section as _section,
+)
+from .generation_gate import candidate_generation_gate
 from .historical import seal_historical_promotion
-from .style_gate import candidate_style_snapshot, generation_style_snapshot_errors, review_style_snapshot_projection, review_style_state
+from .review_gate import (
+    _candidate_review_content_match,
+    _human_decision_notes,
+    _review_session_independence,
+    _unresolved_review_notes,
+    candidate_review_gate,
+)
+from .style_gate import candidate_style_snapshot
 
 
 @dataclass(frozen=True)
@@ -47,10 +53,10 @@ def promote_scene_candidate(
     allow_review_notes: bool = False,
 ) -> CandidatePromotionResult:
     """Convert a provider candidate into a standard scene draft workspace."""
+
     root = project_root.resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"project root not found: {root}")
-
     scene_path = root / "scenes" / "scene_0001.yaml" if scene is None else _resolve(root, scene)
     if not scene_path.exists():
         raise FileNotFoundError(f"scene file not found: {scene_path}")
@@ -59,12 +65,10 @@ def promote_scene_candidate(
     candidate_text = _read(candidate_path)
     if not candidate_text:
         raise FileNotFoundError(f"candidate not found or empty: {candidate_path}")
-
     draft_path = _resolve(root, output, root / "drafts" / "scenes" / f"{scene_id}.md")
     if draft_path.exists() and not overwrite:
         raise FileExistsError(f"draft already exists: {draft_path}. pass overwrite=True to replace it")
     draft_path.parent.mkdir(parents=True, exist_ok=True)
-
     body = _candidate_body(candidate_text)
     if not body:
         raise ValueError(f"candidate has no usable body: {candidate_path}")
@@ -74,13 +78,7 @@ def promote_scene_candidate(
     review_gate = candidate_review_gate(root, scene_id, candidate_path)
     if not allow_unreviewed:
         _ensure_candidate_reviewed(review_gate, allow_review_notes=allow_review_notes)
-    sections = {
-        "new_facts": _candidate_bullets(candidate_text, "新增事实候选"),
-        "character_changes": _candidate_bullets(candidate_text, "人物状态变化"),
-        "relationship_changes": _candidate_bullets(candidate_text, "关系变化"),
-        "foreshadowing_changes": _candidate_bullets(candidate_text, "伏笔变化"),
-        "approval_items": _candidate_bullets(candidate_text, "需要人工确认"),
-    }
+    sections = _candidate_writeback_sections(candidate_text)
     generated_at = _now()
     draft = _render_draft(
         scene_id=scene_id,
@@ -91,20 +89,76 @@ def promote_scene_candidate(
         sections=sections,
     )
     draft_path.write_text(draft, encoding="utf-8")
-    candidate_sha256 = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
-    draft_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
     manifest_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
     report_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.md"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest = {
+    manifest = _promotion_manifest(
+        root=root,
+        scene_path=scene_path,
+        candidate_path=candidate_path,
+        draft_path=draft_path,
+        scene_id=scene_id,
+        generated_at=generated_at,
+        approval_run_id=approval_run_id,
+        selection_note=selection_note,
+        review_gate=review_gate,
+        generation_gate=generation_gate,
+        allow_unreviewed=allow_unreviewed,
+        allow_review_notes=allow_review_notes,
+        draft=draft,
+        sections=sections,
+    )
+    manifest = seal_historical_promotion(root, manifest, candidate_path, draft_path)
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    report_path.write_text(_render_report(manifest), encoding="utf-8")
+    return CandidatePromotionResult(
+        project_root=root,
+        candidate_path=candidate_path,
+        draft_path=draft_path,
+        manifest_path=manifest_path,
+        report_path=report_path,
+        scene_id=scene_id,
+        chars=len(draft),
+        approval_run_id=approval_run_id,
+    )
+
+
+def _candidate_writeback_sections(candidate_text: str) -> dict[str, list[str]]:
+    return {
+        "new_facts": _candidate_bullets(candidate_text, "新增事实候选"),
+        "character_changes": _candidate_bullets(candidate_text, "人物状态变化"),
+        "relationship_changes": _candidate_bullets(candidate_text, "关系变化"),
+        "foreshadowing_changes": _candidate_bullets(candidate_text, "伏笔变化"),
+        "approval_items": _candidate_bullets(candidate_text, "需要人工确认"),
+    }
+
+
+def _promotion_manifest(
+    *,
+    root: Path,
+    scene_path: Path,
+    candidate_path: Path,
+    draft_path: Path,
+    scene_id: str,
+    generated_at: str,
+    approval_run_id: str,
+    selection_note: str,
+    review_gate: dict[str, object],
+    generation_gate: dict[str, object],
+    allow_unreviewed: bool,
+    allow_review_notes: bool,
+    draft: str,
+    sections: dict[str, list[str]],
+) -> dict[str, object]:
+    return {
         "schema": "literary-engineering-workbench/candidate-promotion/v0.1",
         "promoted_at": generated_at,
         "scene_id": scene_id,
         "scene": _rel(scene_path, root),
         "candidate": _rel(candidate_path, root),
-        "candidate_sha256": candidate_sha256,
+        "candidate_sha256": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
         "draft": _rel(draft_path, root),
-        "draft_sha256": draft_sha256,
+        "draft_sha256": hashlib.sha256(draft_path.read_bytes()).hexdigest(),
         "approval_run_id": approval_run_id,
         "selection_note": selection_note,
         "candidate_review": review_gate,
@@ -125,19 +179,6 @@ def promote_scene_candidate(
             "人物、关系和 canon 写回仍必须走单独审批链路。",
         ],
     }
-    manifest = seal_historical_promotion(root, manifest, candidate_path, draft_path)
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    report_path.write_text(_render_report(manifest), encoding="utf-8")
-    return CandidatePromotionResult(
-        project_root=root,
-        candidate_path=candidate_path,
-        draft_path=draft_path,
-        manifest_path=manifest_path,
-        report_path=report_path,
-        scene_id=scene_id,
-        chars=len(draft),
-        approval_run_id=approval_run_id,
-    )
 
 
 def _resolve_candidate(root: Path, scene_id: str, candidate: Path | None) -> Path:
@@ -151,374 +192,6 @@ def _resolve_candidate(root: Path, scene_id: str, candidate: Path | None) -> Pat
     if not candidates:
         raise FileNotFoundError(f"no candidate found for scene: {scene_id}")
     return candidates[0]
-
-
-def candidate_generation_gate(root: Path, scene_id: str, candidate_path: Path) -> dict[str, object]:
-    """Check that a prose candidate came from the formal CLI sidecar handoff."""
-    rel_candidate = _rel(candidate_path, root)
-    manifest_path = candidate_path.with_suffix(".json")
-    prompt_manifest_path = candidate_path.with_suffix(".prompt.json")
-    task_path = candidate_path.with_suffix(".agent_tasks.md")
-    gate: dict[str, object] = {
-        "required": True,
-        "candidate": rel_candidate,
-        "manifest": _rel(manifest_path, root),
-        "prompt_manifest": _rel(prompt_manifest_path, root),
-        "agent_tasks": _rel(task_path, root),
-        "agent_task_completion": agent_task_completion_status(task_path, root=root),
-        "status": "missing",
-        "message": "candidate generation provenance is missing",
-        "missing": [],
-        "invalid": [],
-        "revision_candidate": _is_revision_candidate_path(root, candidate_path),
-    }
-    missing: list[str] = []
-    invalid: list[str] = []
-    if not candidate_path.exists():
-        missing.append(rel_candidate)
-    if not manifest_path.exists():
-        missing.append(_rel(manifest_path, root))
-    if not prompt_manifest_path.exists():
-        missing.append(_rel(prompt_manifest_path, root))
-    if not task_path.exists():
-        missing.append(_rel(task_path, root))
-    completion = agent_task_completion_status(task_path, root=root)
-    context_trace = context_trace_status(root, scene_id)
-    if task_path.exists() and completion.get("complete") is not True:
-        invalid.append(f"generation agent task incomplete: {completion.get('message')}")
-    if not context_trace.passed:
-        invalid.append(f"context trace is stale: {context_trace.message}")
-    payload = _read_json(manifest_path)
-    if manifest_path.exists() and not payload:
-        invalid.append("manifest is not valid JSON")
-    if payload:
-        generated_by = str(payload.get("generated_by") or "").strip()
-        provider = str(payload.get("provider") or "").strip()
-        manifest_candidate = str(payload.get("candidate") or "").strip()
-        if generated_by != "platform-agent":
-            invalid.append(f"generated_by={generated_by or 'missing'}")
-        if str(payload.get("formal_contract_revision") or "").strip() >= "2026-07-23.3" and not str(payload.get("writer_session_id") or "").strip():
-            invalid.append("writer_session_id is required for current formal candidate contracts")
-        if provider in {"dry-run", "http-chat"}:
-            invalid.append(f"legacy provider candidate: {provider}")
-        if manifest_candidate and _normalize_review_path(manifest_candidate) != _normalize_review_path(rel_candidate):
-            invalid.append(f"manifest candidate mismatch: {manifest_candidate}")
-        if gate["revision_candidate"]:
-            if payload.get("anti_evasion_protocol_applied") is not True:
-                invalid.append("anti_evasion_protocol_applied is not true")
-            unresolved = payload.get("evasion_risks_unresolved")
-            if not _empty_unresolved(unresolved):
-                invalid.append("evasion_risks_unresolved is not clean")
-        else:
-            for key in ("style_generation_standard_applied", "hard_constraints_applied", "anti_evasion_protocol_applied"):
-                if payload.get(key) is not True:
-                    invalid.append(f"{key} is not true")
-            if payload.get("narrative_rhythm_standard_applied") is not True:
-                invalid.append("narrative_rhythm_standard_applied is not true")
-            for key in ("word_budget_standard_applied", "pass_with_notes_actions_applied"):
-                if key not in payload or not isinstance(payload.get(key), bool):
-                    invalid.append(f"{key} must be a boolean")
-            if not str(payload.get("prompt_manifest") or "").strip() and not prompt_manifest_path.exists():
-                invalid.append("prompt_manifest is missing")
-            canon_decl = _canon_writeback_declaration(root, candidate_path)
-            canon_change = _canon_change_value(canon_decl.get("canon_change"))
-            if canon_change is None:
-                invalid.append("canon_change declaration is missing")
-            if canon_change is False and not str(canon_decl.get("no_canon_change_reason") or "").strip():
-                invalid.append("canon_change=false requires no_canon_change_reason")
-        invalid.extend(new_character_register_issues(payload, root, mode="generation"))
-        prompt_payload = _read_json(prompt_manifest_path)
-        standards = prompt_payload.get("generation_standards") if isinstance(prompt_payload.get("generation_standards"), dict) else {}
-        invalid.extend(generation_style_snapshot_errors(root, scene_id, candidate=payload, prompt=prompt_payload))
-        if creative_quality_profile_exists(root):
-            current_digest = str(load_creative_quality_profile(root).get("digest") or "")
-            prompt_digest = str(standards.get("creative_quality_profile_digest") or "") if isinstance(standards, dict) else ""
-            candidate_digest = str(payload.get("creative_quality_profile_digest") or "")
-            if not prompt_digest:
-                invalid.append("prompt manifest missing creative_quality_profile_digest")
-            elif prompt_digest != current_digest:
-                invalid.append("prompt manifest creative quality profile is stale")
-            if not candidate_digest:
-                invalid.append("candidate manifest missing creative_quality_profile_digest")
-            elif candidate_digest != prompt_digest:
-                invalid.append("candidate manifest creative quality profile digest mismatch")
-        rhythm_standard = standards.get("narrative_rhythm_contract") if isinstance(standards, dict) else {}
-        if not isinstance(rhythm_standard, dict) or rhythm_standard.get("status") not in {"pass", "defaulted"}:
-            invalid.append("prompt manifest missing ready generation_standards.narrative_rhythm_contract")
-        scene_path = root / "scenes" / f"{scene_id}.yaml"
-        composition_path = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
-        if composition_path.is_file() and candidate_path.is_file() and candidate_path.stat().st_mtime_ns < composition_path.stat().st_mtime_ns:
-            invalid.append("candidate predates the current composition packet")
-        current_rhythm = narrative_rhythm_contract(root, scene_path)
-        current_plan_digest = str(current_rhythm.get("plan_digest") or "")
-        prompt_plan_digest = str(rhythm_standard.get("plan_digest") or "") if isinstance(rhythm_standard, dict) else ""
-        if current_plan_digest and prompt_plan_digest != current_plan_digest:
-            invalid.append("prompt manifest narrative rhythm plan is stale")
-        candidate_body = _candidate_body(_read(candidate_path)) if candidate_path.exists() else ""
-        reader = reader_experience_adherence_for_body(root, scene_path, candidate_body)
-        if reader.get("status") != "not_required":
-            reader_standard = standards.get("reader_experience_contract") if isinstance(standards, dict) else {}
-            if not isinstance(reader_standard, dict) or reader_standard.get("status") not in {"pass", "not_required"}:
-                invalid.append("prompt manifest missing ready generation_standards.reader_experience_contract")
-            if not isinstance(payload.get("reader_experience_contract"), dict):
-                invalid.append("candidate manifest missing reader_experience_contract")
-    if missing:
-        gate.update({"status": "missing", "missing": missing, "invalid": invalid, "message": "formal candidate generation files are missing"})
-    elif invalid:
-        gate.update({"status": "invalid", "missing": missing, "invalid": invalid, "message": "formal candidate generation provenance is invalid"})
-    else:
-        gate.update({"status": "pass", "missing": [], "invalid": [], "message": "formal candidate generation provenance passed"})
-    return gate
-
-
-def _canon_writeback_declaration(root: Path, candidate_path: Path) -> dict[str, object]:
-    payload = _read_json(candidate_path.with_suffix(".json"))
-    nested = payload.get("canon_writeback") if isinstance(payload.get("canon_writeback"), dict) else {}
-    canon_change = nested.get("canon_change") if isinstance(nested, dict) and "canon_change" in nested else payload.get("canon_change")
-    no_change_reason = (
-        str(nested.get("no_canon_change_reason") or "").strip()
-        if isinstance(nested, dict)
-        else ""
-    ) or str(payload.get("no_canon_change_reason") or "").strip()
-    return {
-        "canon_change": canon_change,
-        "no_canon_change_reason": no_change_reason,
-        "candidate_patch": str(nested.get("candidate_patch") or "") if isinstance(nested, dict) else "",
-        "source": _rel(candidate_path.with_suffix(".json"), root),
-        "note": "promotion carries declaration only; canon-evolve creates/applies no canon automatically.",
-    }
-
-
-def candidate_review_gate(root: Path, scene_id: str, candidate_path: Path) -> dict[str, object]:
-    review_path = root / "reviews" / "agent" / f"{scene_id}_scene_review.json"
-    review_task = review_path.with_suffix(".agent_tasks.md")
-    scene_path = root / "scenes" / f"{scene_id}.yaml"
-    rel_candidate = _rel(candidate_path, root)
-    candidate_text = _read(candidate_path)
-    candidate_body = _candidate_body(candidate_text) or candidate_text
-    quality_profile = load_creative_quality_profile(root)
-    lint_gate = style_lint_gate(candidate_body, profile=quality_profile, scope=scene_id)
-    # A promotion Worker receives the active scene and its trusted
-    # materialization manifest, not every unrelated scene file.  Validate the
-    # scene's registration and budget here; full-inventory completeness stays
-    # enforced by route-audit/export on the canonical project root.
-    word_budget = word_budget_adherence_for_body(root, scene_path, candidate_body, materialization_scope="scene")
-    reader_experience = reader_experience_adherence_for_body(root, scene_path, candidate_body)
-    review_completion = agent_task_completion_status(review_task, root=root)
-    context_trace = context_trace_status(root, scene_id)
-    gate: dict[str, object] = {
-        "required": True,
-        "review": _rel(review_path, root),
-        "agent_tasks": _rel(review_task, root),
-        "agent_task_completion": review_completion,
-        "candidate": rel_candidate,
-        "style_lint": lint_gate,
-        "word_budget_adherence": word_budget,
-        "reader_experience_adherence": reader_experience,
-        "context_trace": {"status": context_trace.status, "message": context_trace.message},
-        "creative_quality_profile": {
-            "required": creative_quality_profile_exists(root),
-            "revision": quality_profile.get("revision"),
-            "digest": quality_profile.get("digest"),
-            "name": quality_profile.get("name"),
-        },
-        "mounted_style_required": _mounted_style_exists(root),
-        "status": "missing",
-        "conclusion": "",
-        "style_adherence": "",
-        "word_budget_status": str(word_budget.get("status") or ""),
-        "reader_experience_status": str(reader_experience.get("status") or ""),
-        "schema_errors": [],
-        "unresolved_notes": [],
-        "human_decision_notes": [],
-        "source_match": False,
-        "message": "candidate review is missing",
-    }
-    if not review_path.exists():
-        return gate
-    payload = _read_json(review_path)
-    errors, _warnings = validate_payload(payload, "scene_review.v1") if payload else ([{"path": "review", "message": "invalid json", "actual": ""}], [])
-    conclusion = str(payload.get("conclusion") or "").strip().lower()
-    style = payload.get("style_adherence") if isinstance(payload.get("style_adherence"), dict) else {}
-    style_status = str(style.get("status") or "").strip().lower() if isinstance(style, dict) else ""
-    source_match = _review_mentions_candidate(payload, rel_candidate, candidate_path)
-    content_match = _candidate_review_content_match(payload, candidate_path)
-    unresolved = _unresolved_review_notes(payload)
-    human_decision_notes = _human_decision_notes(payload)
-    new_character_issues = new_character_register_issues(payload, root, mode="review") if payload else ["new_character_register is missing"]
-    style_required = _mounted_style_exists(root)
-    style_snapshot_gate, style_snapshot_errors, style_failure, style_passed = review_style_state(root, candidate_path, payload, style_required=style_required, style_status=style_status)
-    style_lint_passed = lint_gate.get("status") != "blocking"
-    review_budget = payload.get("word_budget_adherence") if isinstance(payload.get("word_budget_adherence"), dict) else {}
-    review_budget_status = str(review_budget.get("status") or "").strip().lower()
-    review_reader = payload.get("reader_experience_adherence") if isinstance(payload.get("reader_experience_adherence"), dict) else {}
-    review_reader_status = str(review_reader.get("status") or "").strip().lower()
-    review_rhythm = payload.get("narrative_rhythm_adherence") if isinstance(payload.get("narrative_rhythm_adherence"), dict) else {}
-    review_rhythm_status = str(review_rhythm.get("status") or "").strip().lower()
-    review_quality = payload.get("creative_quality_profile") if isinstance(payload.get("creative_quality_profile"), dict) else {}
-    quality_required = creative_quality_profile_exists(root)
-    quality_digest = str(quality_profile.get("digest") or "")
-    review_quality_passed = (not quality_required) or str(review_quality.get("digest") or "") == quality_digest
-    review_canon = payload.get("canon_writeback") if isinstance(payload.get("canon_writeback"), dict) else {}
-    canon_review_ok, canon_review_status, canon_review_message = _canon_writeback_review_gate(review_canon)
-    revision_integrity_ok, revision_integrity_status, revision_integrity_message = _revision_integrity_review_gate(
-        payload.get("revision_integrity") if isinstance(payload.get("revision_integrity"), dict) else {}
-    )
-    review_session_ok, review_session_message = _review_session_independence(root, candidate_path, payload)
-    budget_status = str(word_budget.get("status") or "").strip().lower()
-    reader_status = str(reader_experience.get("status") or "").strip().lower()
-    budget_passed = budget_status in {"pass", "not_required"}
-    review_budget_passed = review_budget_status in {"pass", "not_required"} and review_budget.get("narrative_load_satisfied") is not False
-    reader_required = reader_status != "not_required"
-    reader_passed = reader_status in {"pass", "not_required"}
-    review_reader_passed = (not reader_required) or (
-        review_reader_status in {"pass", "not_required"} and review_reader.get("reader_promise_satisfied") is not False
-    )
-    review_rhythm_passed = review_rhythm_status in {"pass", "not_applicable"} and review_rhythm.get("rhythm_executed") is not False and review_rhythm.get("bridge_executed") is not False
-    task_completed = review_completion.get("complete") is True
-    review_fresh = review_path.stat().st_mtime_ns >= candidate_path.stat().st_mtime_ns
-    passed = (
-        not errors
-        and task_completed
-        and context_trace.passed
-        and review_fresh
-        and source_match
-        and content_match
-        and conclusion == "pass"
-        and style_passed
-        and not unresolved
-        and style_lint_passed
-        and budget_passed
-        and review_budget_passed
-        and reader_passed
-        and review_reader_passed
-        and review_rhythm_passed
-        and review_quality_passed
-        and canon_review_ok
-        and revision_integrity_ok
-        and review_session_ok
-        and not new_character_issues
-    )
-    if passed:
-        status = "pass"
-        message = "candidate review passed"
-    elif errors:
-        status = "schema_failed"
-        message = "candidate review JSON does not satisfy scene_review.v1"
-    elif not task_completed:
-        status = "task_incomplete"
-        message = f"scene review agent task is incomplete: {review_completion.get('message')}"
-    elif not context_trace.passed:
-        status = "context_trace_stale"
-        message = f"candidate must be regenerated from a fresh context trace: {context_trace.message}"
-    elif not review_fresh:
-        status = "stale_or_wrong_source"
-        message = "scene review predates the current candidate; rerun independent AgentReview"
-    elif not source_match:
-        status = "stale_or_wrong_source"
-        message = "scene review does not cite this candidate in source_paths/candidate"
-    elif not content_match:
-        status = "stale_or_wrong_source"
-        message = "scene review candidate_sha256 does not match the current candidate content"
-    elif conclusion not in {"pass", "pass_with_notes"}:
-        status = "failed"
-        message = f"candidate review conclusion is {conclusion or 'missing'}"
-    elif style_failure:
-        status, message = style_failure
-    elif not style_lint_passed:
-        status = "style_lint_failed"
-        message = f"candidate failed Style Lint Gate: {style_lint_gate_message(lint_gate)}"
-    elif not budget_passed:
-        status = "word_budget_failed"
-        message = f"candidate failed scene word-budget gate: {word_budget.get('message')}"
-    elif not review_budget_passed:
-        status = "word_budget_review_failed"
-        message = f"AgentReview did not pass word_budget_adherence: {review_budget_status or 'missing'}"
-    elif not reader_passed:
-        status = "reader_experience_failed"
-        message = f"candidate failed reader-experience gate: {reader_experience.get('message')}"
-    elif not review_reader_passed:
-        status = "reader_experience_review_failed"
-        message = f"AgentReview did not pass reader_experience_adherence: {review_reader_status or 'missing'}"
-    elif not review_rhythm_passed:
-        status = "narrative_rhythm_review_failed"
-        message = f"AgentReview did not pass narrative_rhythm_adherence: {review_rhythm_status or 'missing'}"
-    elif not review_quality_passed:
-        status = "creative_quality_review_stale"
-        message = "AgentReview was produced with a different creative quality profile; run formal review again"
-    elif not canon_review_ok:
-        status = "canon_writeback_review_failed"
-        message = f"AgentReview did not resolve canon_writeback declaration: {canon_review_message}"
-    elif not revision_integrity_ok:
-        status = "revision_integrity_review_failed"
-        message = f"AgentReview did not pass revision_integrity: {revision_integrity_message}"
-    elif not review_session_ok:
-        status = "review_session_independence_failed"
-        message = review_session_message
-    elif human_decision_notes:
-        status = "human_decision_required"
-        message = "candidate review requires a recorded human or delegated decision before prose can be revised: " + "; ".join(human_decision_notes)
-    elif new_character_issues:
-        status = "new_character_unresolved"
-        message = "AgentReview did not resolve new_character_register: " + "; ".join(new_character_issues)
-    elif unresolved:
-        status = "notes_unresolved"
-        message = "candidate review has pass_with_notes/warnings/revision/style notes that must be revised or explicitly waived"
-    else:
-        status = "failed"
-        message = "candidate review did not pass"
-    gate.update(
-        {
-            "status": status,
-            "conclusion": conclusion,
-            "style_adherence": style_status,
-            **review_style_snapshot_projection(style_snapshot_gate),
-            "word_budget_status": budget_status,
-            "reader_experience_status": reader_status,
-            "narrative_rhythm_status": review_rhythm_status,
-            "canon_writeback_review_status": canon_review_status,
-            "revision_integrity_status": revision_integrity_status,
-            "review_session_independent": review_session_ok,
-            "review_session_message": review_session_message,
-            "schema_errors": errors,
-            "unresolved_notes": unresolved,
-            "human_decision_notes": human_decision_notes,
-            "candidate_sha256": str(payload.get("candidate_sha256") or "").strip().lower(),
-            "new_character_register_issues": new_character_issues,
-            "source_match": source_match,
-            "message": message,
-        }
-    )
-    return gate
-def _review_session_independence(root: Path, candidate_path: Path, review: dict[str, object]) -> tuple[bool, str]:
-    """Enforce a separate reviewer only for post-contract candidates.
-
-    Older projects have no stable writer identity in their immutable candidate
-    manifests.  They remain reviewable during migration; newly generated
-    contracts bind both identities so a clean pass cannot be self-certified.
-    """
-
-    candidate_manifest = _read_json(candidate_path.with_suffix(".json"))
-    revision = str(candidate_manifest.get("formal_contract_revision") or "").strip()
-    if revision < "2026-07-23.3":
-        return True, "legacy candidate contract has no session identity requirement"
-    writer = str(candidate_manifest.get("writer_session_id") or "").strip()
-    reviewer = str(review.get("reviewer_session_id") or "").strip()
-    if not writer:
-        return False, "current formal candidate manifest is missing writer_session_id"
-    if not reviewer:
-        return False, "scene_review.v1 is missing reviewer_session_id for the current formal contract"
-    if writer == reviewer:
-        return False, "reviewer_session_id must differ from the candidate writer_session_id"
-    return True, "writer and reviewer session identities are independent"
-
-
-def _candidate_review_content_match(payload: dict[str, object], candidate_path: Path) -> bool:
-    if not candidate_path.is_file():
-        return False
-    actual = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
-    recorded = str(payload.get("candidate_sha256") or "").strip().lower()
-    return bool(recorded) and recorded == actual
 
 
 def _ensure_candidate_generation_provenance(gate: dict[str, object]) -> None:
@@ -561,231 +234,6 @@ def _ensure_candidate_reviewed(gate: dict[str, object], *, allow_review_notes: b
     )
 
 
-def _review_mentions_candidate(payload: dict[str, object], rel_candidate: str, candidate_path: Path) -> bool:
-    expected = _normalize_review_path(rel_candidate)
-    absolute = _normalize_review_path(str(candidate_path.resolve()))
-    direct_values = [
-        payload.get("candidate"),
-        payload.get("reviewed_candidate"),
-        payload.get("draft"),
-        payload.get("source_candidate"),
-    ]
-    source_paths = payload.get("source_paths")
-    if isinstance(source_paths, list):
-        direct_values.extend(source_paths)
-    for value in direct_values:
-        normalized = _normalize_review_path(str(value or ""))
-        if normalized in {expected, absolute}:
-            return True
-    return False
-
-
-def _unresolved_review_notes(payload: dict[str, object]) -> list[str]:
-    """Return findings that still require another prose decision.
-
-    ``style_notes`` is deliberately not included here.  The review schema keeps
-    it as an evidence ledger: a passing reviewer may record why a retained
-    image, rhythm choice, or punctuation pattern is justified.  Treating every
-    such observation as an unresolved finding makes a clean ``pass`` select a
-    new revision task, which changes the reviewed candidate and creates an
-    artificial review/revision loop.  Actual style defects belong in warnings,
-    revision actions, or ``style_adherence.deviations`` and remain blocking.
-    """
-
-    notes: list[str] = []
-    conclusion = str(payload.get("conclusion") or "").strip().lower()
-    if conclusion in {"pass_with_notes", "revise_required", "reject"}:
-        notes.append(f"conclusion={conclusion}")
-    for key in ("blocking_issues", "revision_actions"):
-        value = payload.get(key)
-        if isinstance(value, list) and value:
-            notes.append(key)
-    warnings = payload.get("warnings")
-    if isinstance(warnings, list) and any(_warning_requires_followup(item) for item in warnings):
-        notes.append("warnings")
-    style = payload.get("style_adherence")
-    if isinstance(style, dict):
-        style_status = str(style.get("status") or "").strip().lower()
-        if style_status in {"pass_with_notes", "revise_required", "reject"}:
-            notes.append(f"style_adherence.status={style_status}")
-        for key in ("deviations", "revision_actions"):
-            value = style.get(key)
-            if isinstance(value, list) and value:
-                notes.append(f"style_adherence.{key}")
-    budget = payload.get("word_budget_adherence")
-    if isinstance(budget, dict):
-        budget_status = str(budget.get("status") or "").strip().lower()
-        if budget_status not in {"", "pass", "not_required"}:
-            notes.append(f"word_budget_adherence.status={budget_status}")
-        if budget_status in {"pass", "not_required"} and budget.get("narrative_load_satisfied") is False:
-            notes.append("word_budget_adherence.narrative_load_satisfied=false")
-    reader = payload.get("reader_experience_adherence")
-    if isinstance(reader, dict):
-        reader_status = str(reader.get("status") or "").strip().lower()
-        if reader_status not in {"", "pass", "not_required"}:
-            notes.append(f"reader_experience_adherence.status={reader_status}")
-        if reader_status in {"pass", "not_required"} and reader.get("reader_promise_satisfied") is False:
-            notes.append("reader_experience_adherence.reader_promise_satisfied=false")
-    rhythm = payload.get("narrative_rhythm_adherence")
-    if isinstance(rhythm, dict):
-        rhythm_status = str(rhythm.get("status") or "").strip().lower()
-        if rhythm_status not in {"", "pass", "not_applicable"}:
-            notes.append(f"narrative_rhythm_adherence.status={rhythm_status}")
-        if rhythm_status in {"pass", "not_applicable"} and rhythm.get("rhythm_executed") is False:
-            notes.append("narrative_rhythm_adherence.rhythm_executed=false")
-        if rhythm_status in {"pass", "not_applicable"} and rhythm.get("bridge_executed") is False:
-            notes.append("narrative_rhythm_adherence.bridge_executed=false")
-    canon_ok, canon_status, canon_message = _canon_writeback_review_gate(
-        payload.get("canon_writeback") if isinstance(payload.get("canon_writeback"), dict) else {}
-    )
-    if not canon_ok:
-        notes.append(f"canon_writeback.{canon_status}:{canon_message}")
-    revision_ok, revision_status, revision_message = _revision_integrity_review_gate(
-        payload.get("revision_integrity") if isinstance(payload.get("revision_integrity"), dict) else {}
-    )
-    if not revision_ok:
-        notes.append(f"revision_integrity.{revision_status}:{revision_message}")
-    return notes
-
-
-def _warning_requires_followup(value: object) -> bool:
-    """Distinguish an unresolved warning from recorded low-risk evidence.
-
-    A pass gate stays strict by default: strings and unclassified warnings are
-    unresolved.  A review may, however, retain a below-threshold lint result
-    or an already-recorded waiver as useful evidence.  Those observations are
-    non-blocking only when the reviewer explicitly marks them so, or when a
-    structured low/info record uses one of the narrow, auditable resolutions
-    below.  This prevents a completed pass from re-entering revision merely
-    because the reviewer explained why it is safe to pass.
-    """
-
-    if not isinstance(value, dict):
-        return True
-    if value.get("blocks_pass") is False:
-        return False
-    severity = str(value.get("severity") or "").strip().lower()
-    resolution = str(value.get("resolution") or "").strip().lower()
-    if severity not in {"info", "low", "note"}:
-        return True
-    if resolution in {"noted_below_threshold", "waived", "not_required", "non_blocking", "non-blocking"}:
-        return False
-    text = " ".join(str(value.get(key) or "") for key in ("message", "detail", "description")).lower()
-    nonblocking_markers = ("不作为阻塞", "不阻塞", "低于阈值", "已登记豁免", "not blocking", "below threshold", "waived")
-    return not any(marker in text for marker in nonblocking_markers)
-
-
-def _human_decision_notes(payload: dict[str, object]) -> list[str]:
-    """Return review findings that must not be silently converted into prose edits.
-
-    These are usually cross-asset facts such as a canonical age, relationship, or
-    world rule.  A revision agent may execute a *recorded* direction, but it must
-    never choose which formal fact wins simply because it is editing prose.
-    """
-
-    notes: list[str] = []
-    for key in ("blocking_issues", "warnings", "revision_actions", "style_notes"):
-        value = payload.get(key)
-        if not isinstance(value, list):
-            continue
-        for item in value:
-            if not isinstance(item, dict):
-                continue
-            resolution = str(item.get("resolution") or item.get("status") or "").strip().lower()
-            blocks_pass = item.get("blocks_pass") is True
-            if resolution in {"needs_human_review", "human_decision_required", "pending_user_decision"} or (
-                blocks_pass and "human" in resolution
-            ):
-                item_id = str(item.get("id") or key)
-                description = str(item.get("description") or item.get("note") or "requires a formal decision")
-                notes.append(f"{item_id}: {description}")
-    return notes
-
-
-def _revision_integrity_review_gate(value: dict[str, object]) -> tuple[bool, str, str]:
-    if not value:
-        return False, "missing", "revision_integrity object is missing"
-    status = str(value.get("status") or "").strip().lower()
-    if status not in {"pass", "not_applicable"}:
-        return False, status or "missing_status", f"status={status or 'missing'}"
-    if value.get("anti_evasion_checked") is not True:
-        return False, "unchecked", "anti_evasion_checked must be true"
-    unresolved = value.get("evasion_risks_unresolved")
-    if not _empty_unresolved(unresolved):
-        return False, "unresolved", "evasion_risks_unresolved must be empty/false"
-    return True, status, "revision integrity reviewed"
-
-
-def _canon_writeback_review_gate(value: dict[str, object]) -> tuple[bool, str, str]:
-    if not value:
-        return False, "missing", "canon_writeback object is missing"
-    status = str(value.get("status") or "").strip().lower()
-    change = _canon_change_value(value.get("canon_change"))
-    if status not in {"pass", "not_required", "pending_canon_evolve", "unknown"}:
-        return False, status or "missing_status", f"status={status or 'missing'}"
-    if change is False:
-        reason = str(value.get("no_canon_change_reason") or "").strip()
-        if not reason:
-            return False, "missing_reason", "canon_change=false requires no_canon_change_reason"
-        return True, "no_change", "canon no-change declaration is explicit"
-    if change in {True, "unknown"}:
-        return True, "needs_canon_evolve" if change is True else "unknown", "canon writeback requires canon-evolve route gate"
-    return False, "missing_change", "canon_change must be true, false, or unknown"
-
-
-def _canon_change_value(value: object) -> bool | str | None:
-    if isinstance(value, bool):
-        return value
-    text = str(value or "").strip().lower()
-    if text in {"true", "yes", "1", "changed", "change"}:
-        return True
-    if text in {"false", "no", "0", "none", "no_change", "not_required"}:
-        return False
-    if text in {"unknown", "pending", "todo", "needs_review"}:
-        return "unknown"
-    return None
-
-
-def _normalize_review_path(value: str) -> str:
-    return value.replace("\\", "/").strip().strip("`").lstrip("./")
-
-
-def _is_revision_candidate_path(root: Path, candidate_path: Path) -> bool:
-    try:
-        rel = candidate_path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
-        rel = str(candidate_path)
-    return rel.startswith("drafts/revisions/") or candidate_path.name.endswith("_revision.md")
-
-
-def _empty_unresolved(value: object) -> bool:
-    if isinstance(value, bool):
-        return not value
-    if isinstance(value, list):
-        return len(value) == 0
-    if isinstance(value, str):
-        return value.strip().lower() in {"", "false", "none", "no", "[]", "无"}
-    return value in (None, 0)
-
-
-def _mounted_style_exists(root: Path) -> bool:
-    active = root / "style" / "active_style_skill.json"
-    if active.exists():
-        return True
-    mounted = root / "style" / "mounted"
-    return mounted.exists() and any(mounted.iterdir())
-
-
-def _candidate_body(text: str) -> str:
-    body = _section(text, "正文候选", stop_heading="状态变化候选")
-    if body:
-        return body
-    body = _section(text, "修订正文候选", stop_heading="状态变化候选")
-    if body:
-        return body
-    return _section(text, "正文草稿", stop_heading="状态变化")
-
-
 def _candidate_bullets(text: str, heading: str) -> list[str]:
     section = _section(text, heading, level=3)
     items = []
@@ -797,18 +245,6 @@ def _candidate_bullets(text: str, heading: str) -> list[str]:
         if item and item not in {"无。", "待真实 provider 补全。"}:
             items.append(item)
     return items or ["无。"]
-
-
-def _section(text: str, heading: str, level: int = 2, stop_heading: str = "") -> str:
-    marks = "#" * level
-    if stop_heading:
-        pattern = rf"(?ms)^{marks}\s*{re.escape(heading)}\s*\n(.*?)(?=^{marks}\s*{re.escape(stop_heading)}\s*$|\Z)"
-    else:
-        pattern = rf"(?ms)^{marks}\s*{re.escape(heading)}\s*\n(.*?)(?=^###\s+|^##\s+|\Z)"
-    match = re.search(pattern, text)
-    if not match:
-        return ""
-    return match.group(1).strip()
 
 
 def _render_draft(
@@ -893,33 +329,12 @@ def _md_list(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items) if items else "- 无。"
 
 
-def _read(path: Path) -> str:
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8", errors="ignore").strip()
-
-
-def _read_json(path: Path) -> dict[str, object]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
 def _resolve(root: Path, value: Path | None, default: Path | None = None) -> Path:
     if value is None:
         if default is None:
             raise ValueError("default path is required when value is None")
         return default
     return value if value.is_absolute() else root / value
-
-
-def _rel(path: Path, root: Path) -> str:
-    try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
-        return str(path)
 
 
 def _now() -> str:
