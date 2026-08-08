@@ -38,6 +38,7 @@ from ...style.snapshot import (
 )
 from ..facts import SceneFacts, load_scene_facts
 from .beats import build_beats as _build_beats, composition_obligations
+from .execution_contract import build_prose_execution_contract, render_prose_execution_contract
 
 @dataclass(frozen=True)
 class SceneCompositionResult:
@@ -166,6 +167,7 @@ def build_scene_composition(
         "writeback_candidates": branch.get("writeback_candidates", _fallback_writeback(facts)),
         "guardrails": guardrails,
     }
+    _attach_prose_execution_contract(payload, allow_incomplete=allow_missing_branch)
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     output_path.write_text(_render_markdown(root, scene_path, context_path, context_trace_path, payload), encoding="utf-8")
     agent_tasks_path = None
@@ -629,7 +631,7 @@ def _render_markdown(root: Path, scene_path: Path, context_path: Path, context_t
                 "",
             ]
         )
-    lines.extend(["## 人物潜台词", ""])
+    lines.extend([*_execution_contract_markdown(payload), "## 人物潜台词", ""])
     for item in payload["subtext_map"]:
         lines.extend(
             [
@@ -723,6 +725,17 @@ def _active_cards(cards: list[CharacterCard], participants: list[str]) -> list[C
         return cards
     wanted = set(participants)
     return [card for card in cards if card.character_id in wanted or card.name in wanted]
+
+
+def _attach_prose_execution_contract(payload: dict[str, Any], *, allow_incomplete: bool) -> None:
+    contract = build_prose_execution_contract(payload)
+    payload["prose_execution_contract"] = contract
+    if contract["errors"] and not allow_incomplete:
+        raise FlowGateError("composition prose execution contract is incomplete: " + "; ".join(contract["errors"]))
+
+
+def _execution_contract_markdown(payload: dict[str, Any]) -> list[str]:
+    return [render_prose_execution_contract(payload["prose_execution_contract"]).strip(), ""]
 
 
 def _sensory_sound(facts: SceneFacts) -> list[str]:

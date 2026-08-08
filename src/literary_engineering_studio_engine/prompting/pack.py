@@ -19,6 +19,10 @@ from ..creative_quality import (
     render_creative_quality_prompt,
 )
 from ..flow_gates import ensure_composition_ready_for_generation
+from ..literary.scene.composition.execution_contract import (
+    load_prose_execution_contract,
+    render_prose_execution_contract,
+)
 from ..narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from ..new_character_register import render_new_character_register_contract
 from ..prompt_compiler import compile_active_constraints, render_compiled_constraints
@@ -196,7 +200,7 @@ def build_scene_prompt_pack(
         "scene_text": _read(scene_path),
         "context_text": _limit(_read(context_path), DEFAULT_CONTEXT_LIMIT),
         "context_trace_text": _limit(_read(context_trace_path), DEFAULT_CONTEXT_LIMIT),
-        "composition_text": _limit(_read(composition_path), DEFAULT_COMPOSITION_LIMIT) if composition_path else "内部实验模式：未加载场景创作编排包。正式生成必须先运行 simulate-scene --agent、branch-simulate --agent、记录 branch_selection.md，并重建 compose-scene。",
+        "composition_text": _composition_prompt_text(composition_path, _execution_contract_text(composition_path)),
         "style_profile": style_context.constraint,
         "style_generation_standard": _render_style_generation_standard(root, style_profile_path),
         "word_budget_generation_standard": render_word_budget_generation_standard(root),
@@ -429,6 +433,7 @@ def _sources(
     paths = [scene_path, context_path, context_trace_path]
     if composition_path:
         paths.append(composition_path)
+        paths.append(_composition_json_path(composition_path))
     if style_profile_path:
         paths.append(style_profile_path)
     if word_budget_path:
@@ -450,6 +455,28 @@ def _sources(
         }
         for path in paths
     ]
+
+
+def _composition_json_path(composition_path: Path | None) -> Path | None:
+    if composition_path is None:
+        return None
+    path = composition_path if composition_path.suffix.lower() == ".json" else composition_path.with_suffix(".json")
+    if not path.is_file():
+        raise FileNotFoundError(f"composition JSON not found: {path}")
+    return path
+
+
+def _composition_prompt_text(composition_path: Path | None, execution_contract_text: str) -> str:
+    if composition_path is None:
+        return "内部实验模式：未加载场景创作编排包。正式生成必须先运行 simulate-scene --agent、branch-simulate --agent、记录 branch_selection.md，并重建 compose-scene。"
+    markdown = _limit(_read(composition_path), DEFAULT_COMPOSITION_LIMIT)
+    return markdown.rstrip() + "\n\n" + execution_contract_text.strip() + "\n"
+
+
+def _execution_contract_text(composition_path: Path | None) -> str:
+    if composition_path is None:
+        return ""
+    return render_prose_execution_contract(load_prose_execution_contract(_composition_json_path(composition_path)))
 
 
 def _reader_obligation_source_path(root: Path, scene_path: Path) -> Path | None:

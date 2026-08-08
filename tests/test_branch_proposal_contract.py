@@ -7,8 +7,14 @@ import unittest
 
 from literary_engineering_studio_engine.literary.scene.composition.composer import _build_beats, _load_branch_choice
 from literary_engineering_studio_engine.literary.scene.composition.beats import composition_obligations
+from literary_engineering_studio_engine.literary.scene.composition.execution_contract import (
+    build_prose_execution_contract,
+    load_prose_execution_contract,
+    render_prose_execution_contract,
+)
 from literary_engineering_studio_engine.literary.scene.facts import SceneFacts
 from literary_engineering_studio_engine.routes.scene.gates import _branch_selection_gate
+from literary_engineering_studio_engine.prompting.pack import _sources
 from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_relative_path,
     semantic_artifact_template,
@@ -185,6 +191,100 @@ class BranchProposalContractTests(unittest.TestCase):
         self.assertEqual(obligations["word_target_hanzi"], 1800)
         self.assertEqual(obligations["turn"], "警告变成暴露证据")
         self.assertEqual(obligations["cost"], "林失去秘密调查空间。")
+
+        composition = {
+            "scene_id": facts.scene_id,
+            "selected_branch": "agent_branch_warn",
+            "selection_source": "selection",
+            "formal_cli_provenance": {"input_contract_digest": "abc123"},
+            "branch": {
+                **agent_branch,
+                "branch_id": "agent_branch_warn",
+                "branch_origin": "agent-proposal",
+                "title": "有限警告",
+                "strategy": "以信息暴露换取同伴生存窗口",
+                "causal_premise": agent_branch["premise"],
+                "action_chain": ["发送警告", "调查者追索来源"],
+            },
+            "beats": agent_beats,
+            "composition_obligations": obligations,
+            "writeback_candidates": {"next_scene_inputs": ["调查者锁定林"]},
+        }
+        contract = build_prose_execution_contract(composition)
+
+        self.assertEqual(contract["status"], "pass")
+        self.assertEqual(contract["errors"], [])
+        self.assertEqual(contract["selection"]["branch_origin"], "agent-proposal")
+        self.assertEqual(contract["obligations"]["reader_effect"], "安全感转为追索压力")
+        self.assertIn("incoming_bridge", contract["beats"][0]["serves"])
+        rendered = render_prose_execution_contract(contract)
+        self.assertIn("正文执行契约", rendered)
+        self.assertIn('"word_target_hanzi": 1800', rendered)
+
+    def test_prose_execution_contract_rejects_missing_causal_obligation(self) -> None:
+        contract = build_prose_execution_contract(
+            {
+                "scene_id": "scene_0001",
+                "selected_branch": "agent_branch_warn",
+                "selection_source": "selection",
+                "formal_cli_provenance": {"input_contract_digest": "abc123"},
+                "branch": {
+                    "branch_origin": "agent-proposal",
+                    "causal_premise": "警告暴露了信息来源。",
+                    "action_chain": ["发送警告", "调查者追索来源"],
+                },
+                "beats": self._beats("warn", 3),
+                "composition_obligations": {
+                    "goal": "保护盟友",
+                    "turn": "",
+                    "incoming_bridge": "盟友等待答复",
+                    "outgoing_hook": "调查者锁定林",
+                    "cost": "林失去秘密调查空间",
+                    "reader_effect": "安全感转为追索压力",
+                    "word_target_hanzi": 1800,
+                },
+                "writeback_candidates": {},
+            }
+        )
+
+        self.assertEqual(contract["status"], "incomplete")
+        self.assertIn("missing obligations.turn", contract["errors"])
+
+    def test_loading_legacy_composition_requires_recompose(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "scene_0001_composition.json"
+            path.write_text(json.dumps({"scene_id": "scene_0001"}), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "rerun compose-scene"):
+                load_prose_execution_contract(path)
+
+    def test_prompt_sources_include_human_and_machine_composition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scene = root / "scenes" / "scene_0001.yaml"
+            context = root / "memory" / "context_packets" / "scene_0001.md"
+            trace = context.with_suffix(".trace.json")
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.md"
+            composition_json = composition.with_suffix(".json")
+            for path in (scene, context, trace, composition, composition_json):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}", encoding="utf-8")
+
+            sources = _sources(
+                root,
+                scene,
+                context,
+                trace,
+                composition,
+                None,
+                None,
+                None,
+                None,
+            )
+
+            paths = {item["path"] for item in sources}
+            self.assertIn("drafts/compositions/scene_0001_composition.md", paths)
+            self.assertIn("drafts/compositions/scene_0001_composition.json", paths)
 
 
 if __name__ == "__main__":

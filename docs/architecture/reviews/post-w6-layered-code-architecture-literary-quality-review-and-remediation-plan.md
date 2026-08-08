@@ -1662,3 +1662,55 @@ Broad catch 分层复核：
 - 已审查的回滚型 broad catch 继续重抛，read-model 降级继续 fail-soft，没有用统一异常策略破坏边界。
 
 下一批入口：进入文学逻辑链复核。依次验证 branch proposal 的真实消费链、Composition 可变 beats 的义务覆盖、revision 对“换一种生硬转折”的拒绝、chapter/longform 宏观节奏与承诺兑现、fallback provenance；每一项都以实现消费者和反例测试为证据。
+
+### 2026-08-08：Q4.5-I 文学逻辑复核第一批——分支到正文的消费链
+
+状态：完成。
+
+已确认的有效链路：
+
+- `branch-agent-task` 不只是自由文本：提案必须满足 2-5 个真实不同的选项、唯一 `agent_branch_*` id、因果前提、至少两步行动链、不可回避代价、读者效果、状态写回和 2-8 拍计划；每拍必须覆盖 `incoming_bridge / goal / turn / cost / reader_effect / outgoing_hook` 六类义务；
+- `branch_selection.md` 必须精确选择 manifest 中存在的 branch id；推荐分支只是评分提示，不能在正式路径代替用户或被授权 Agent 的选择；
+- `compose-scene` 会读取并验证 Agent 提案，将选中提案编译为可变 beats，并把选中分支、人物潜台词、读者体验、叙事节奏、字数预算和写回候选写入 composition；
+- composition semantic artifact 必须绑定当前 composition JSON 的 SHA-256 且 `ready_for_generation=true`，旧审查不能覆盖新编排。
+
+发现的真实断点：
+
+1. 正文 prompt 当前只嵌入 `composition.md`；`composition.json` 未进入 prompt source manifest。
+2. `composition.md` 的分支摘要没有呈现 `branch_origin / cost / reader_effect`，节拍只呈现可见动作、潜台词和 craft note，没有显式呈现 `pace / detail_level / serves`。
+3. 最关键的 `composition_obligations` 只存在于 JSON，没有进入正文 prompt；因此系统能证明“编排 JSON 完整”，却不能证明主创 Agent 在下笔时看见 goal、turn、入场桥、出场钩子、代价、读者效果和权威字数目标的统一契约。
+4. 直接把整份 composition JSON 再塞入 prompt 会重复人物、场景和品质档案，扩大 token 消耗；正确修复应是由代码生成窄而完整的 `prose execution contract` 投影，并把原 JSON 作为审计 source，而不是复制所有字段。
+
+修复约束：
+
+- 投影必须从当前 composition JSON 生成，不能由 Agent 再摘要；
+- 必须包含 selection identity/origin、branch causal fields、每拍完整执行字段、六类 composition obligations、writeback candidates 和相关 digest；
+- 正文 prompt、prompt manifest sources 与后续测试必须引用同一个 projection；
+- 不新增第二套 Branch/Beat class，不让 prompt 层重新解释文学领域规则；领域编译仍归 `literary.scene.composition`，prompt 层只消费已编译契约；
+- 旧 composition 如缺新字段应 fail closed 或明确标记 legacy/incomplete，不得无声补成“已执行”。
+
+已完成：
+
+- 新增纯函数型 `prose_execution_contract` 投影；它不拥有文件生命周期，也不重复 Branch/Beat class，只把 composition 已编译的文学义务压缩为正文可执行契约；
+- 契约显式携带选中分支、selection source、branch origin、因果前提、行动链、2-8 拍完整字段、六类文学义务、权威字数目标、写回候选和 composition input digest；
+- `compose-scene` 在写文件前构造并验证契约；正式路径缺少任何义务立即阻塞，内部实验路径只能保留 `incomplete` 证据；
+- composition Markdown 显式嵌入同一确定性契约，避免人读摘要把机器义务静默丢失；
+- prompt pack 从 companion composition JSON 读取并重新验证契约，再把紧凑投影附加到正文 prompt；Markdown 与 JSON 同时进入 prompt manifest source list；
+- 历史 composition 若没有新契约，不会被猜测性迁移成 ready，而是要求重跑 `compose-scene`。
+
+验证证据：
+
+- Branch proposal / variable beats / contract projection：6 tests passed；
+- Scene command runtime：1 test passed；
+- Cross-genre composition rubric：2 tests passed；
+- Scene context/contract transport：10 tests passed；
+- Architecture Audit：通过，未修改 baseline；
+- Dependency Direction：2 tests passed；
+- `compileall` 与 `git diff --check`：通过。
+
+批判性结论：
+
+- 原链路的 schema、选择和 composition semantic gate 是真的，但正文输入边界发生了有损投影；修复后“有编排”与“主创 Agent 看见完整编排”成为同一条可验证链；
+- 没有把完整 composition JSON 重复塞入 prompt，控制了 token 增量；新增内容只保留正文必须执行的因果和节奏义务。
+
+下一步：复核 revision 的 exact-source、anti-evasion 复检与晋升门禁；随后检查 chapter/longform 宏观节奏、承诺兑现和 fallback provenance。
