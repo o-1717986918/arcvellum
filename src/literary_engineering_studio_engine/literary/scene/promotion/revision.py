@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -104,7 +105,7 @@ def build_scene_revision_task(
         manifest,
     )
     prompt_manifest.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    _write_revision_task(root, scene_id, task_path, prompt_manifest, sources, candidate, report, manifest)
+    _write_revision_task(root, scene_id, task_path, prompt_manifest, sources, draft_path, candidate, report, manifest)
     return SceneRevisionTaskResult(
         project_root=root,
         scene_id=scene_id,
@@ -145,6 +146,7 @@ def _prompt_manifest(
         "scene_id": scene_id,
         "scene": _rel(scene_path, root),
         "draft": _rel(draft_path, root),
+        "source_candidate_sha256": _sha256(draft_path),
         "context": _rel(context_path, root) if context_path.exists() else "",
         "context_trace": _rel(context_trace_path, root) if context_trace_path.exists() else "",
         "review": _rel(review_path, root) if review_path else "",
@@ -187,6 +189,7 @@ def _write_revision_task(
     task_path: Path,
     prompt_manifest: Path,
     sources: list[Path],
+    source_candidate: Path,
     candidate: Path,
     report: Path,
     manifest: Path,
@@ -230,7 +233,9 @@ def _write_revision_task(
             ),
             (
                 "写入修订 manifest",
-                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema=`literary-engineering-workbench/scene-revision/v0.1`、scene_id、candidate、report、source_paths、revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、style_mount_snapshot（从 prompt manifest 精确复制，不得切换版本）、creative_quality_profile_digest=`{load_creative_quality_profile(root).get('digest')}`、reader_experience_contract（从 prompt manifest 精确复制）、narrative_rhythm_contract（从 prompt manifest 精确复制）、anti_evasion_protocol_applied=true、anti_evasion_rows、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers、ready_for_review=false、generated_by=`platform-agent`。
+                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema=`literary-engineering-workbench/scene-revision/v0.1`、scene_id、source_candidate=`{_rel(source_candidate, root)}`、source_candidate_sha256（从 prompt manifest 精确复制）、candidate=`{_rel(candidate, root)}`、candidate_sha256（修订候选文件的精确 SHA-256）、report、source_paths、revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、style_mount_snapshot（从 prompt manifest 精确复制，不得切换版本）、creative_quality_profile_digest=`{load_creative_quality_profile(root).get('digest')}`、reader_experience_contract（从 prompt manifest 精确复制）、narrative_rhythm_contract（从 prompt manifest 精确复制）、anti_evasion_protocol_applied=true、anti_evasion_rows、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers、ready_for_review=false、generated_by=`platform-agent`。
+
+anti_evasion_rows 每项固定填写 source_excerpt、issue、revised_excerpt、still_uses_explicit_transition（布尔）、suspected_rephrase（布尔）、critical_objection、verdict（resolved 或 retained_with_proof）。摘录必须逐字存在于精确源正文和修订候选正文。若源文没有机械对照/换皮转折风险且列表为空，必须填写 anti_evasion_not_applicable_reason；不得只写布尔值宣称完成。
 
 {render_new_character_register_contract()}""",
             ),
@@ -341,3 +346,7 @@ def _rel(path: Path | None, root: Path) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()

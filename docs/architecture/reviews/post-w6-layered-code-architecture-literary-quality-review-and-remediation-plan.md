@@ -1714,3 +1714,58 @@ Broad catch 分层复核：
 - 没有把完整 composition JSON 重复塞入 prompt，控制了 token 增量；新增内容只保留正文必须执行的因果和节奏义务。
 
 下一步：复核 revision 的 exact-source、anti-evasion 复检与晋升门禁；随后检查 chapter/longform 宏观节奏、承诺兑现和 fallback provenance。
+
+### 2026-08-08：Q4.5-J 修订闭环与反规避证据复核
+
+状态：完成。
+
+已确认的有效防线：
+
+- 修订任务 prompt 明确要求逐条处理 review notes，建立反规避表，并禁止把一种显式转折换成另一种；
+- revision candidate 在 sandbox preflight 会重新运行确定性 Style Lint、正文清洗字数和 reader contract；机械对照与已登记换皮变体会在写回前阻塞；
+- 修订候选不能直接晋升：必须重新生成绑定当前候选 SHA-256 的独立 AgentReview；Reviewer session 不能等于 Writer session；
+- promotion 和 longform audit 会再次检查当前 revision manifest、exact-candidate review、Style Lint、节奏/桥接和未解决 notes。
+
+发现的真实缺口：
+
+1. 修订 preflight 只比较“修订候选摘要不等于旧摘要”，没有验证任务中的 `candidate_sha256_before_revision` 仍等于当前 revision source；源文件在任务领取后变化时，旧任务仍可能写回。
+2. revision manifest 没有被要求绑定 source path/source digest 和 candidate path/candidate digest；报告与 manifest 可声称修复了另一版本。
+3. `anti_evasion_rows` 与 `retained_transition_proofs` 只出现在任务文字中，Studio preflight、Engine route gate 与 workflow audit 都不读取其结构；当前实际机器判断只有布尔 `anti_evasion_protocol_applied` 和空 `evasion_risks_unresolved`。
+4. Studio preflight 与 Engine route gate 各自维护一套相近但不完全相同的 revision manifest 检查，后续增强容易再次漂移。
+
+修复边界：
+
+- 新增一份 Engine canonical revision contract validator，Studio sandbox preflight 和 Engine route gate 共同调用；
+- 先证明 revision source 的当前 SHA-256 与 task package 完全一致，再接受任何输出；
+- revision manifest 必须精确绑定 source/candidate path 与 SHA-256；
+- 若原文确定性 lint 命中机械对照/换皮转折，必须提交结构化 `anti_evasion_rows`，每行绑定原问题、修订文本、是否仍使用转折、是否疑似换皮、批判性反驳和结论；
+- 输出候选仍必须通过 deterministic Style Lint，结构化表不能豁免正文；
+- 没有相关转折风险时允许空表，但必须给出 `anti_evasion_not_applicable_reason`，避免制造无意义填表；
+- 不引入 RevisionService/Manager 子类；这是纯合同校验，不拥有任务或文件生命周期。
+
+已完成：
+
+- 新增纯校验模块 `revision_contract.py`，集中定义 exact-source identity、revision output identity、anti-evasion row 和 unresolved risk 合同；Studio preflight 与 Engine route gate 使用同一实现；
+- revision prompt manifest 固定记录源候选 SHA-256；Agent 输出 manifest 必须精确复制 source path/hash，并记录 revision candidate path/hash；
+- preflight 与正式 route gate 都会重算当前 source digest；任务领取后源文件变化时直接判为 stale，必须领取新任务；
+- 修订候选摘要必须与源摘要不同，且 manifest candidate digest 必须精确匹配输出；
+- 原文命中 `mechanical-contrast-frame` 或 `contrast-evasion-frame` 时，结构化 `anti_evasion_rows` 成为必填；每行前后摘录必须逐字存在于 exact source/candidate body；仍含显式转折或疑似换皮的行不能声明 `resolved`；
+- 没有相关风险时允许空表，但必须记录不适用理由；保留显式转折时必须同时给出 `retained_transition_proofs`；
+- 修订输出仍会在 writeback 前重跑 Style Lint/字数/读者契约，随后进入不同 session 的 exact-candidate AgentReview；证据表没有获得任何豁免权。
+
+验证证据：
+
+- Scene review/revision loop：12 tests passed；
+- Task preflight repair/writeback：27 tests passed；
+- Scene contract order：3 tests passed；
+- Candidate gate decisions、deterministic promotion E2E、historical promotion：8 tests passed；
+- Architecture Audit：通过，未修改 baseline；
+- Dependency Direction：2 tests passed；
+- `compileall` 与 `git diff --check`：通过。
+
+批判性结论：
+
+- 原系统最终晋升是安全的，但 revision writeback 自身证据偏软，错误只能等到下一轮 review 暴露；修复后 stale-source 和 manifest 自报会在最早可判定位置失败；
+- “不能换一种转折”现在同时存在生成指令、结构化修订证据、确定性输出 lint 和独立语义复核四层约束，不再只依赖同一个 Agent 对自己的文字解释。
+
+下一步：检查 chapter/longform 是否真正把宏观节奏、承诺兑现、视角与字数库存聚合为阻塞门禁，并复核 deterministic fallback 是否拥有明确 provenance、适用边界与不可伪装规则。

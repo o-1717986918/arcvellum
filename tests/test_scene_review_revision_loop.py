@@ -13,6 +13,7 @@ import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.candidate_promotion import _candidate_review_content_match, _human_decision_notes, _unresolved_review_notes
 from literary_engineering_studio_engine.review_ci import review_scene_draft
 from literary_engineering_studio_engine.scene_revision import _prompt_manifest
+from literary_engineering_studio_engine.literary.scene.promotion.revision_contract import revision_manifest_errors
 from literary_engineering_studio_engine.workflow_state import _current_scene_candidate, _static_review_step
 from literary_engineering_studio_engine.workflow_state import _review_step
 
@@ -210,7 +211,20 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                 if relative.endswith("_revision.md"):
                     path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
                 elif relative.endswith("_revision.json"):
-                    path.write_text(json.dumps({"schema": "literary-engineering-workbench/scene-revision/v0.1", "scene_id": "scene_0001", "revision_actions_applied": ["修正动作"], "anti_evasion_protocol_applied": True, "evasion_risks_unresolved": [], "ready_for_review": False}, ensure_ascii=False), encoding="utf-8")
+                    path.write_text(json.dumps({
+                        "schema": "literary-engineering-workbench/scene-revision/v0.1",
+                        "scene_id": "scene_0001",
+                        "source_candidate": source_rel,
+                        "source_candidate_sha256": before,
+                        "candidate": candidate_rel,
+                        "candidate_sha256": before,
+                        "revision_actions_applied": ["修正动作"],
+                        "anti_evasion_protocol_applied": True,
+                        "anti_evasion_rows": [],
+                        "anti_evasion_not_applicable_reason": "源正文未检出机械对照或换皮转折。",
+                        "evasion_risks_unresolved": [],
+                        "ready_for_review": False,
+                    }, ensure_ascii=False), encoding="utf-8")
                 elif relative.endswith("agent_completion.json"):
                     path.write_text(json.dumps({"schema": COMPLETION_SCHEMA, "source_task": "drafts/revisions/scene_0001_revision.agent_tasks.md", "status": "complete", "handled_by": "main-agent", "completed_at": "2026-07-21T00:00:00Z", "expected_artifacts_checked": True, "notes": []}, ensure_ascii=False), encoding="utf-8")
                 elif relative.endswith(".json"):
@@ -222,9 +236,56 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             self.assertFalse(rejected.passed)
             self.assertTrue(any(issue.code == "scene-revision-invalid" for issue in rejected.issues))
 
-            (sandbox.workspace / candidate_rel).write_text("## 修订正文候选\n\n她没有停。门已经从里面打开。\n", encoding="utf-8")
+            revised = sandbox.workspace / candidate_rel
+            revised.write_text("## 修订正文候选\n\n她没有停。门已经从里面打开。\n", encoding="utf-8")
+            revision_manifest = sandbox.workspace / "drafts/revisions/scene_0001_revision.json"
+            revision_payload = json.loads(revision_manifest.read_text(encoding="utf-8"))
+            revision_payload["candidate_sha256"] = hashlib.sha256(revised.read_bytes()).hexdigest()
+            revision_manifest.write_text(json.dumps(revision_payload, ensure_ascii=False), encoding="utf-8")
             accepted = validate_task_outputs(task, sandbox)
             self.assertTrue(accepted.passed, accepted.as_dict())
+
+    def test_revision_manifest_requires_bound_anti_evasion_rows_for_contrast_source(self):
+        source_body = "这不是警告，是最后通牒。"
+        candidate_body = "他把日志推到桌上。对方终于抬头。"
+        base = {
+            "schema": "literary-engineering-workbench/scene-revision/v0.1",
+            "scene_id": "scene_0001",
+            "source_candidate": "drafts/candidates/scene_0001.md",
+            "source_candidate_sha256": "source-digest",
+            "candidate": "drafts/revisions/scene_0001_revision.md",
+            "candidate_sha256": "candidate-digest",
+            "revision_actions_applied": ["把显式对照改为动作和事实顺序"],
+            "anti_evasion_protocol_applied": True,
+            "evasion_risks_unresolved": [],
+            "ready_for_review": False,
+        }
+        kwargs = {
+            "scene_id": "scene_0001",
+            "source_rel": "drafts/candidates/scene_0001.md",
+            "source_sha256": "source-digest",
+            "source_body": source_body,
+            "candidate_rel": "drafts/revisions/scene_0001_revision.md",
+            "candidate_sha256": "candidate-digest",
+            "candidate_body": candidate_body,
+            "anti_evasion_rows_required": True,
+        }
+
+        missing = revision_manifest_errors(base, **kwargs)
+        self.assertIn("revision manifest requires anti_evasion_rows for detected contrast/evasion risks", missing)
+
+        base["anti_evasion_rows"] = [
+            {
+                "source_excerpt": source_body,
+                "issue": "机械对照直接替读者下判断",
+                "revised_excerpt": candidate_body,
+                "still_uses_explicit_transition": False,
+                "suspected_rephrase": False,
+                "critical_objection": "动作是否真正传达威胁，而非仅删除句式？当前物证和对方反应共同承担该功能。",
+                "verdict": "resolved",
+            }
+        ]
+        self.assertEqual(revision_manifest_errors(base, **kwargs), [])
 
     def test_revision_prompt_and_manifest_preserve_reader_and_rhythm_contracts(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -252,6 +313,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                 [scene, draft, context, trace, review], candidate, report, manifest,
             )
             standards = prompt["generation_standards"]
+            self.assertEqual(prompt["source_candidate_sha256"], hashlib.sha256(draft.read_bytes()).hexdigest())
             self.assertIn("reader_experience_contract", standards)
             self.assertIn("narrative_rhythm_contract", standards)
             self.assertIn(standards["reader_experience_contract"]["status"], {"not_required", "pass", "blocked", "incomplete"})

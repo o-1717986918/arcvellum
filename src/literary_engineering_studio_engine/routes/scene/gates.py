@@ -297,6 +297,9 @@ def _scene_revision_gate_errors(root: Path, task: dict[str, object], candidate: 
     previous_hash = str(task.get("candidate_sha256_before_revision") or "").strip().lower()
     if not source_rel or not previous_hash:
         errors.append("scene revision task is missing exact source candidate hash provenance")
+    source = _resolve_project_path(root, source_rel) if source_rel else root / "__missing_revision_source__"
+    if source_rel and source.is_file() and previous_hash and _file_sha256(source) != previous_hash:
+        errors.append("scene revision source changed after task issuance; acquire a fresh revision task")
     elif not candidate.is_file():
         errors.append(f"scene revision candidate is missing: {_rel(candidate, root)}")
     elif _file_sha256(candidate) == previous_hash:
@@ -315,25 +318,42 @@ def _scene_revision_gate_errors(root: Path, task: dict[str, object], candidate: 
     payload, error = _read_optional_json(manifest_path)
     if error:
         errors.append(error)
-    else:
-        if payload.get("schema") != "literary-engineering-workbench/scene-revision/v0.1":
-            errors.append("scene revision manifest has wrong or missing schema")
-        if str(payload.get("scene_id") or "") != scene_id:
-            errors.append(f"scene revision manifest scene_id mismatch: {payload.get('scene_id') or 'missing'}")
-        if payload.get("ready_for_review") is not False:
-            errors.append("scene revision manifest ready_for_review must remain false until independent AgentReview")
-        if payload.get("anti_evasion_protocol_applied") is not True:
-            errors.append("scene revision manifest must record anti_evasion_protocol_applied=true")
-        applied_fields = ("revision_actions_applied", "warnings_addressed", "style_notes_addressed", "style_adherence_addressed")
-        if not any(payload.get(field) for field in applied_fields):
-            errors.append("scene revision manifest must record at least one applied review repair")
-        unresolved = payload.get("evasion_risks_unresolved")
-        if unresolved not in (None, False, "", [], {}):
-            errors.append("scene revision manifest has unresolved anti-evasion risks")
+    elif source.is_file() and candidate.is_file():
+        errors.extend(_revision_manifest_gate_errors(root, scene_id, source_rel, previous_hash, source, candidate, payload))
     completion_state = agent_task_completion_status(sidecar, root=root)
     if completion_state.get("complete") is not True:
         errors.append(f"scene revision sidecar is incomplete: {completion_state.get('message')}")
     return errors
+
+
+def _revision_manifest_gate_errors(
+    root: Path,
+    scene_id: str,
+    source_rel: str,
+    source_sha256: str,
+    source: Path,
+    candidate: Path,
+    payload: dict[str, object],
+) -> list[str]:
+    from ...literary.scene.promotion.revision_contract import (
+        revision_manifest_errors,
+        revision_source_requires_anti_evasion_rows,
+    )
+
+    profile = load_creative_quality_profile(root)
+    return revision_manifest_errors(
+        payload,
+        scene_id=scene_id,
+        source_rel=source_rel,
+        source_sha256=source_sha256,
+        source_body=final_body_from_draft_path(source),
+        candidate_rel=_rel(candidate, root),
+        candidate_sha256=_file_sha256(candidate),
+        candidate_body=final_body_from_draft_path(candidate),
+        anti_evasion_rows_required=revision_source_requires_anti_evasion_rows(
+            source, quality_profile=profile, scene_id=scene_id
+        ),
+    )
 
 
 def _promotion_gate_errors(root: Path, task: dict[str, object]) -> list[str]:

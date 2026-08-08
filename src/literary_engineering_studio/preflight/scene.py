@@ -225,17 +225,10 @@ def _validate_scene_revision_contract(
     if task.current_state not in {"candidate-revision", "static-revision"}:
         return
 
-    def add(path: str, message: str, repair: str) -> None:
-        issues.append(PreflightIssue("scene-revision-invalid", path, message, repair))
-
     candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
     if not candidate_rel:
         candidate_rel = next((item for item in task.expected_outputs if item.endswith("_revision.md") and "report" not in item), "")
     candidate = sandbox.workspace / Path(candidate_rel)
-    previous = str(task.payload.get("candidate_sha256_before_revision") or "").strip().lower()
-    if candidate.is_file() and previous and hashlib.sha256(candidate.read_bytes()).hexdigest() == previous:
-        add(candidate_rel, "修订正文与被审查候选完全相同。", "对正文落实真实语义修改；不能只更新报告和 manifest。")
-
     manifest_rel = next((item for item in task.expected_outputs if item.endswith("_revision.json")), "")
     if not manifest_rel:
         return
@@ -248,12 +241,62 @@ def _validate_scene_revision_contract(
         return
     if not isinstance(payload, dict):
         return
-    if payload.get("schema") != "literary-engineering-workbench/scene-revision/v0.1":
-        add(manifest_rel + "#schema", "scene revision schema 不正确。", "使用固定 schema literary-engineering-workbench/scene-revision/v0.1。")
-    if payload.get("ready_for_review") is not False:
-        add(manifest_rel + "#ready_for_review", "修订任务不能自行声明已审查通过。", "设为 false，并交给新的 exact-candidate AgentReview。")
-    if payload.get("anti_evasion_protocol_applied") is not True:
-        add(manifest_rel + "#anti_evasion_protocol_applied", "未记录反规避修订协议。", "执行语义级反规避检查并设为 true。")
-    applied_fields = ("revision_actions_applied", "warnings_addressed", "style_notes_addressed", "style_adherence_addressed")
-    if not any(payload.get(field) for field in applied_fields):
-        add(manifest_rel, "没有记录任何已落实的审查修复。", "逐项记录 review finding 对应的正文改动。")
+    for path, message, repair in _revision_preflight_errors(task, sandbox, candidate_rel, candidate, payload):
+        issues.append(PreflightIssue("scene-revision-invalid", path, message, repair))
+
+
+def _revision_preflight_errors(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    candidate_rel: str,
+    candidate: Path,
+    payload: dict[str, object],
+) -> list[tuple[str, str, str]]:
+    from literary_engineering_studio_engine.creative_quality import load_creative_quality_profile
+    from literary_engineering_studio_engine.draft_text import final_body_from_draft_path
+    from literary_engineering_studio_engine.literary.scene.promotion.revision_contract import (
+        revision_manifest_errors,
+        revision_source_requires_anti_evasion_rows,
+    )
+
+    previous = str(task.payload.get("candidate_sha256_before_revision") or "").strip().lower()
+    source_rel = str(task.payload.get("revision_source") or "").replace("\\", "/").strip()
+    source = sandbox.workspace / Path(source_rel)
+    if not (source.is_file() and candidate.is_file()):
+        return []
+    errors = _revision_file_errors(source_rel, source, candidate_rel, candidate, previous)
+    contract_errors = revision_manifest_errors(
+        payload,
+        scene_id=str(task.payload.get("scene_id") or task.scene_id or candidate.stem.replace("_revision", "")),
+        source_rel=source_rel,
+        source_sha256=previous,
+        source_body=final_body_from_draft_path(source),
+        candidate_rel=candidate_rel,
+        candidate_sha256=hashlib.sha256(candidate.read_bytes()).hexdigest(),
+        candidate_body=final_body_from_draft_path(candidate),
+        anti_evasion_rows_required=revision_source_requires_anti_evasion_rows(source,
+            quality_profile=load_creative_quality_profile(sandbox.workspace),
+            scene_id=str(task.payload.get("scene_id") or task.scene_id or ""),
+        ),
+    )
+    manifest_rel = next((item for item in task.expected_outputs if item.endswith("_revision.json")), "")
+    errors.extend(
+        (manifest_rel, message, "按 revision prompt 的 exact-source 与 anti_evasion_rows 契约修正 manifest；不得伪造摘要或换皮修订。")
+        for message in contract_errors
+    )
+    return errors
+
+
+def _revision_file_errors(
+    source_rel: str,
+    source: Path,
+    candidate_rel: str,
+    candidate: Path,
+    previous: str,
+) -> list[tuple[str, str, str]]:
+    errors: list[tuple[str, str, str]] = []
+    if previous and hashlib.sha256(source.read_bytes()).hexdigest() != previous:
+        errors.append((source_rel, "修订源文件已变化，当前任务包的源摘要已过期。", "重新领取 candidate-revision 任务，不能修订旧版本。"))
+    if previous and hashlib.sha256(candidate.read_bytes()).hexdigest() == previous:
+        errors.append((candidate_rel, "修订正文与被审查候选完全相同。", "对正文落实真实语义修改；不能只更新报告和 manifest。"))
+    return errors
