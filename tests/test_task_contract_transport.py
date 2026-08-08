@@ -744,6 +744,82 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertEqual(gates["scene_0001:promotion-manifest"]["status"], "waiting")
             self.assertGreater(payload["summary"]["waiting_count"], 0)
 
+    def test_scene_route_audit_preserves_formal_gate_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: Audit Order\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text("scene_id: scene_0001\n", encoding="utf-8")
+            context = root / "memory" / "context_packets" / "scene_0001.md"
+            context.parent.mkdir(parents=True)
+            context.write_text("# started\n", encoding="utf-8")
+
+            result = build_route_audit(root, route="scene-development")
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+            keys = [
+                str(item["key"]).split(":", 1)[1]
+                for item in payload["gates"]
+                if str(item["key"]).startswith("scene_0001:")
+            ]
+            self.assertEqual(
+                keys,
+                [
+                    "context-packet",
+                    "context-trace",
+                    "roleplay-simulation",
+                    "roleplay-cli-provenance",
+                    "roleplay-reading-receipt",
+                    "roleplay-agent-tasks-resolved",
+                    "roleplay-agent-task-complete",
+                    "branch-manifest",
+                    "branch-cli-provenance",
+                    "branch-agent-task-complete",
+                    "branch-selection",
+                    "composition-json",
+                    "composition-ready",
+                    "composition-cli-provenance",
+                    "composition-agent-task-complete",
+                    "scene-word-budget-contract",
+                    "scene-word-budget-alignment",
+                    "reader-experience-contract",
+                    "narrative-rhythm-contract",
+                    "narrative-rhythm-explicit",
+                    "prose-candidate",
+                    "candidate-generation-provenance",
+                    "agent-review-json",
+                    "agent-review-task-complete",
+                    "candidate-review-pass",
+                    "agent-review-word-budget",
+                    "agent-review-new-character-register",
+                    "agent-review-narrative-rhythm",
+                    "agent-review-canon-writeback",
+                    "promotion-manifest",
+                    "promoted-draft",
+                    "static-review-pass",
+                    "state-patch-json",
+                    "state-patch-report",
+                    "state-agent-task-complete",
+                    "canon-writeback",
+                ],
+            )
+
+    def test_scene_route_audit_treats_candidate_only_scene_as_started(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: Candidate Scope\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text("scene_id: scene_0001\n", encoding="utf-8")
+            candidate = root / "drafts" / "candidates" / "scene_0001-platform-agent.md"
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("正文。\n", encoding="utf-8")
+
+            result = build_route_audit(root, route="scene-development")
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["summary"]["scene_scope"]["started_scene_count"], 1)
+            self.assertTrue(any(str(item["key"]).startswith("scene_0001:") for item in payload["gates"]))
+
     def test_reopening_an_explicit_future_task_preserves_its_contract(self):
         task = _enrich_task_payload(
             {

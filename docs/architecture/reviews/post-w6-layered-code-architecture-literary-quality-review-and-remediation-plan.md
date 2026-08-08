@@ -1159,3 +1159,42 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - compileall 与 `git diff --check`：通过。
 
 下一批入口：Q3-E 拆分 `workflow/audit/scene.py::_add_scene_development_gates`。必须先固定 gate 顺序、等待态与 blocking/warning 分类；不在结构重构中新增或放宽文学 Gate。
+
+### 2026-08-08：Q3-E Scene Route Audit 投影拆分
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- `workflow/audit/scene.py` 从 650 行收敛为只负责场景范围、Gate 阶段顺序、waiting 投影和三段审计协调的薄模块；
+- 新增 `scene_planning.py`，拥有 context、RP、branch、composition、word budget、reader experience 和 narrative rhythm 的只读审计投影；
+- 新增 `scene_candidate.py`，拥有候选生成 provenance、Style Lint、字数、exact-candidate AgentReview、修订反规避、promotion 与 static review 投影；
+- 新增 `scene_completion.py`，拥有人物状态、Canon 写回和挂载文风遵循投影；
+- `_add_scene_development_gates` 从约 417 行、complexity 51 收敛为 13 行协调函数；
+- 新增 `workflow/scene_scope.py`，统一 workflow state 与 route audit 的 started-scene 文件索引，并保留 Audit 原有的 candidate-only 场景识别；
+- 删除 Audit 内未被调用的 `_promotion_candidate_path`、`_latest_scene_candidate`，没有新增类、继承层或第二套状态机。
+
+语义边界审查：
+
+- 正式 `routes/scene/gates.py` 继续判断“当前 task 能否提交”；`workflow/audit/*` 继续只读投影“整条路线目前处于什么状态”，没有让 Audit 成为可写执行入口；
+- 两层继续复用既有 `context_trace_status`、`candidate_generation_gate`、`candidate_review_gate`、word budget、reader experience、narrative rhythm 和 canon contract；本批不搬迁或改写文学判定；
+- 固化最小已启动场景的 36 项 Gate 顺序，覆盖 context -> RP -> branch -> composition/contracts -> candidate/review -> promotion/static review -> state/canon；
+- 保留当前候选存在时才出现 generation completion、lint、candidate budget，修订候选才出现 anti-evasion，promotion manifest 存在时才出现 promotion-candidate-review，挂载文风时才出现 style-adherence 的条件投影；
+- 保留“最早阻塞阶段仍 blocking，后续不可达 Gate 转为 waiting/info，warning 不被吞掉”的语义。
+
+验证证据：
+
+- Task Contract Transport、Task Paths 与 Route Local Choices：46 tests passed；
+- 全部 `test_scene*.py`：43 tests passed；全部 `test_route*.py`：13 tests passed；
+- Style Mount、Historical Promotion 与 Task Contract Transport 组合回归：40 tests passed；
+- 新增 candidate-only started scene 回归，防止共享查询把已有候选误判为未启动计划；
+- Architecture Audit：31 file debts、209 function debts、0 cycles；相较 Q3-D 净减少 1 个 file debt、2 个 function debts；
+- compileall 与 `git diff --check`：通过。
+
+批判性审查：
+
+- 本批只消除了 Audit 聚合函数和 started-scene 查询的结构重复；正式 Gate 与 Audit 的用户消息仍有部分措辞重复。它们服务于不同输出合同，不能为了 DRY 强行合并为一套可写逻辑；未来若继续收敛，只能提取无副作用的 evidence facts；
+- `scene_planning.py` 和 `scene_candidate.py` 仍较长，但函数已经按文学阶段划分且均低于 Ratchet，不继续拆成一文件一 Gate；
+- `workflow/state.py::build_workflow_state` 仍是下一项列名热点；应拆 route projector，而不是把状态字段搬进 Audit 或前端。
+
+下一批入口：Q3-F 审查并拆分 `workflow/state.py::build_workflow_state`。先固化顶层 payload schema、route 顺序、dashboard/full scope 差异和 choices 投影；只拆 route projector，不改变 task-next 或 route-audit 的正式真值。

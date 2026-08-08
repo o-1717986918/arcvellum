@@ -18,6 +18,7 @@ from ..scene_composer import composition_input_digest
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..word_budget import scene_word_budget_contract
 from .historical_truth import preserve_current_historical_style_steps
+from .scene_scope import started_scene_ids
 from .state_common import (
     _file_step, _read, _read_json, _rel, _semantic_task_step,
     _static_review_conclusion, _task_step,
@@ -42,7 +43,7 @@ def _scene_paths_for_scope(root: Path, scope: str) -> tuple[list[Path], dict[str
     if scope != "dashboard":
         return paths, _scene_scope_summary(root, paths, mode="full")
 
-    started = _started_scene_ids(root)
+    started = started_scene_ids(root)
     started_paths = [path for path in paths if _scene_id(path) in started]
     planned_paths = [path for path in paths if _scene_id(path) not in started]
     active_scene_id = _latest_scene_task_id(root)
@@ -66,7 +67,7 @@ def _scene_scope_summary(
     started_count: int | None = None,
 ) -> dict[str, object]:
     all_paths = [path for path in (root / "scenes").glob("*.yaml") if not path.name.startswith("_")]
-    known_started = len(_started_scene_ids(root)) if started_count is None else started_count
+    known_started = len(started_scene_ids(root)) if started_count is None else started_count
     total = len(all_paths)
     return {
         "mode": mode,
@@ -76,32 +77,6 @@ def _scene_scope_summary(
         "observed_scene_count": len(selected),
         "truncated": len(selected) < total,
     }
-
-
-def _started_scene_ids(root: Path) -> set[str]:
-    """Derive started scene ids without reading every planned scene contract."""
-
-    started: set[str] = set()
-    for folder, pattern, transform in (
-        (root / "memory" / "context_packets", "scene_*.md", lambda path: path.stem),
-        (root / "drafts" / "compositions", "scene_*_composition.json", lambda path: path.stem.removesuffix("_composition")),
-        (root / "reviews" / "agent", "scene_*_scene_review.json", lambda path: path.stem.removesuffix("_scene_review")),
-        (root / "drafts" / "promotions", "scene_*_promotion.json", lambda path: path.stem.removesuffix("_promotion")),
-        (root / "drafts" / "scenes", "scene_*.md", lambda path: path.stem),
-        (root / "characters" / "state_patches", "scene_*_state_patch.json", lambda path: path.stem.removesuffix("_state_patch")),
-    ):
-        if folder.is_dir():
-            started.update(transform(path) for path in folder.glob(pattern))
-    branch_root = root / "branches"
-    if branch_root.is_dir():
-        started.update(path.name for path in branch_root.iterdir() if path.is_dir() and path.name.startswith("scene_"))
-    task_root = root / "workflow" / "tasks"
-    if task_root.is_dir():
-        for path in task_root.glob("scene-development-scene_*-*.task.json"):
-            match = re.match(r"scene-development-(scene_[^-]+)-", path.name)
-            if match:
-                started.add(match.group(1))
-    return {scene_id for scene_id in started if scene_id.startswith("scene_")}
 
 
 def next_scene_workflow_state(root: Path, scene: Path | str | None = None) -> dict[str, object] | None:
