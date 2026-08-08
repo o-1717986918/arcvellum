@@ -6,12 +6,22 @@ import unittest
 
 from literary_engineering_studio.persistence.autopilot_runs import AutopilotRepository
 from literary_engineering_studio.persistence.context_ledgers import ContextLedgerRepository
+from literary_engineering_studio.persistence.facade import RepositoryMethod
 from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.persistence.sessions import SessionRepository
 from literary_engineering_studio.persistence.sqlite_uow import SqliteUnitOfWork
 
 
 class PersistenceCompositionTests(unittest.TestCase):
+    def test_job_store_facade_exposes_repository_bound_methods_without_wrapper_bloat(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+
+            self.assertIsInstance(JobStore.__dict__["create_autopilot_run"], RepositoryMethod)
+            self.assertIs(store.create_autopilot_run.__self__, store.autopilot_runs)
+            self.assertIs(store.create_advisor_session.__self__, store.sessions)
+            self.assertIs(store.record_context_ledger.__self__, store.context_ledgers)
+
     def test_job_store_composes_autopilot_repository(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")

@@ -17,6 +17,7 @@ from .autopilot_runs import AutopilotRepository
 from .creative_plans import CreativePlanStoreMixin
 from .creative_plan_events import CreativePlanEventStoreMixin
 from .context_ledgers import ContextLedgerRepository
+from .facade import RepositoryMethod
 from .mutation_receipts import MutationReceiptRepository
 from .recycle_bin import RecycleBinStoreMixin
 from .schema import initialize_schema
@@ -86,220 +87,46 @@ class JobStore(
             assert row is not None
             return self._job_row(row)
 
-    # Autopilot persistence remains available through the historical JobStore
-    # facade while the domain implementation lives in an explicit repository.
-    def create_autopilot_run(
-        self,
-        project_root: str,
-        *,
-        mode: str,
-        runtime: str,
-        policy: dict[str, Any],
-    ) -> dict[str, Any]:
-        return self.autopilot_runs.create_autopilot_run(
-            project_root,
-            mode=mode,
-            runtime=runtime,
-            policy=policy,
-        )
+    # Compatibility API stays explicit while calls bind to real repositories.
+    create_autopilot_run = RepositoryMethod("autopilot_runs")
+    read_autopilot_run = RepositoryMethod("autopilot_runs")
+    latest_autopilot_run = RepositoryMethod("autopilot_runs")
+    update_autopilot_run = RepositoryMethod("autopilot_runs")
+    update_autopilot_run_policy = RepositoryMethod("autopilot_runs")
+    advance_autopilot_run = RepositoryMethod("autopilot_runs")
+    acquire_autopilot_lease = RepositoryMethod("autopilot_runs")
+    renew_autopilot_lease = RepositoryMethod("autopilot_runs")
+    release_autopilot_lease = RepositoryMethod("autopilot_runs")
+    append_autopilot_event = RepositoryMethod("autopilot_runs")
+    autopilot_events_since = RepositoryMethod("autopilot_runs")
+    record_delegated_decision = RepositoryMethod("autopilot_runs")
+    delegated_decisions = RepositoryMethod("autopilot_runs")
+    recover_autopilot_runs = RepositoryMethod("autopilot_runs")
 
-    def read_autopilot_run(self, run_id: str) -> dict[str, Any]:
-        return self.autopilot_runs.read_autopilot_run(run_id)
+    create_advisor_session = RepositoryMethod("sessions")
+    read_advisor_session = RepositoryMethod("sessions")
+    list_advisor_sessions = RepositoryMethod("sessions")
+    upsert_agent_session = RepositoryMethod("sessions")
+    read_agent_session = RepositoryMethod("sessions")
+    list_agent_sessions = RepositoryMethod("sessions")
+    append_advisor_message = RepositoryMethod("sessions")
+    save_advisor_memory = RepositoryMethod("sessions")
+    save_delegation_policy = RepositoryMethod("sessions")
+    read_delegation_policy = RepositoryMethod("sessions")
+    upsert_advisor_inbox = RepositoryMethod("sessions")
+    advisor_inbox = RepositoryMethod("sessions")
+    mark_advisor_inbox_read = RepositoryMethod("sessions")
+    reader_state = RepositoryMethod("sessions")
+    save_reader_position = RepositoryMethod("sessions")
+    set_reader_bookmark = RepositoryMethod("sessions")
 
-    def latest_autopilot_run(self, project_root: str) -> dict[str, Any] | None:
-        return self.autopilot_runs.latest_autopilot_run(project_root)
+    record_context_ledger = RepositoryMethod("context_ledgers")
+    read_context_ledger = RepositoryMethod("context_ledgers")
+    list_context_ledgers = RepositoryMethod("context_ledgers")
 
-    def update_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]:
-        return self.autopilot_runs.update_autopilot_run(run_id, **changes)
-
-    def update_autopilot_run_policy(self, run_id: str, policy: dict[str, Any]) -> dict[str, Any]:
-        return self.autopilot_runs.update_autopilot_run_policy(run_id, policy)
-
-    def advance_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]:
-        return self.autopilot_runs.advance_autopilot_run(run_id, **changes)
-
-    def acquire_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool:
-        return self.autopilot_runs.acquire_autopilot_lease(run_id, owner_id, lease_seconds=lease_seconds)
-
-    def renew_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool:
-        return self.autopilot_runs.renew_autopilot_lease(run_id, owner_id, lease_seconds=lease_seconds)
-
-    def release_autopilot_lease(self, run_id: str, owner_id: str) -> None:
-        self.autopilot_runs.release_autopilot_lease(run_id, owner_id)
-
-    def append_autopilot_event(self, run_id: str, event: str, data: dict[str, Any]) -> dict[str, Any]:
-        return self.autopilot_runs.append_autopilot_event(run_id, event, data)
-
-    def autopilot_events_since(
-        self,
-        run_id: str,
-        after: int = 0,
-        *,
-        limit: int = 300,
-    ) -> list[dict[str, Any]]:
-        return self.autopilot_runs.autopilot_events_since(run_id, after, limit=limit)
-
-    def record_delegated_decision(self, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.autopilot_runs.record_delegated_decision(run_id, payload)
-
-    def delegated_decisions(self, run_id: str) -> list[dict[str, Any]]:
-        return self.autopilot_runs.delegated_decisions(run_id)
-
-    def recover_autopilot_runs(self) -> int:
-        return self.autopilot_runs.recover_autopilot_runs()
-
-    # Session, advisor, inbox, delegation, and reader APIs remain stable while
-    # their implementation is composed rather than inherited.
-    def create_advisor_session(
-        self,
-        project_root: str,
-        snapshot_digest: str,
-        *,
-        title: str = "项目问答",
-    ) -> dict[str, Any]:
-        return self.sessions.create_advisor_session(project_root, snapshot_digest, title=title)
-
-    def read_advisor_session(self, session_id: str) -> dict[str, Any]:
-        return self.sessions.read_advisor_session(session_id)
-
-    def list_advisor_sessions(self, project_root: str, *, limit: int = 30) -> list[dict[str, Any]]:
-        return self.sessions.list_advisor_sessions(project_root, limit=limit)
-
-    def upsert_agent_session(
-        self,
-        session_id: str,
-        *,
-        project_root: str,
-        role: str,
-        runtime: str,
-        model: str = "",
-        status: str = "running",
-        task_id: str = "",
-        route: str = "",
-        controller_id: str = "",
-        last_event: str = "",
-        last_message: str = "",
-        retry_count: int = 0,
-        context_ledger_id: str = "",
-        context_ledger_digest: str = "",
-    ) -> dict[str, Any]:
-        return self.sessions.upsert_agent_session(
-            session_id,
-            project_root=project_root,
-            role=role,
-            runtime=runtime,
-            model=model,
-            status=status,
-            task_id=task_id,
-            route=route,
-            controller_id=controller_id,
-            last_event=last_event,
-            last_message=last_message,
-            retry_count=retry_count,
-            context_ledger_id=context_ledger_id,
-            context_ledger_digest=context_ledger_digest,
-        )
-
-    def read_agent_session(self, session_id: str) -> dict[str, Any]:
-        return self.sessions.read_agent_session(session_id)
-
-    def list_agent_sessions(
-        self,
-        project_root: str,
-        *,
-        include_finished: bool = True,
-        limit: int = 60,
-    ) -> list[dict[str, Any]]:
-        return self.sessions.list_agent_sessions(
-            project_root,
-            include_finished=include_finished,
-            limit=limit,
-        )
-
-    def append_advisor_message(self, session_id: str, role: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.sessions.append_advisor_message(session_id, role, payload)
-
-    def save_advisor_memory(
-        self,
-        session_id: str,
-        *,
-        summary: str,
-        preferences: list[str],
-    ) -> dict[str, Any]:
-        return self.sessions.save_advisor_memory(session_id, summary=summary, preferences=preferences)
-
-    def save_delegation_policy(self, project_root: str, policy: dict[str, Any]) -> dict[str, Any]:
-        return self.sessions.save_delegation_policy(project_root, policy)
-
-    def read_delegation_policy(self, project_root: str) -> dict[str, Any] | None:
-        return self.sessions.read_delegation_policy(project_root)
-
-    def upsert_advisor_inbox(
-        self,
-        project_root: str,
-        *,
-        dedupe_key: str,
-        kind: str,
-        severity: str,
-        title: str,
-        message: str,
-        action: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return self.sessions.upsert_advisor_inbox(
-            project_root,
-            dedupe_key=dedupe_key,
-            kind=kind,
-            severity=severity,
-            title=title,
-            message=message,
-            action=action,
-        )
-
-    def advisor_inbox(
-        self,
-        project_root: str,
-        *,
-        unread_only: bool = False,
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        return self.sessions.advisor_inbox(project_root, unread_only=unread_only, limit=limit)
-
-    def mark_advisor_inbox_read(self, item_id: str, *, read: bool = True) -> dict[str, Any]:
-        return self.sessions.mark_advisor_inbox_read(item_id, read=read)
-
-    def reader_state(self, project_root: str) -> dict[str, Any]:
-        return self.sessions.reader_state(project_root)
-
-    def save_reader_position(self, project_root: str, unit_id: str, scroll_ratio: float) -> dict[str, Any]:
-        return self.sessions.save_reader_position(project_root, unit_id, scroll_ratio)
-
-    def set_reader_bookmark(self, project_root: str, unit_id: str, enabled: bool) -> dict[str, Any]:
-        return self.sessions.set_reader_bookmark(project_root, unit_id, enabled)
-
-    def record_context_ledger(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.context_ledgers.record_context_ledger(project_root, payload)
-
-    def read_context_ledger(self, ledger_id: str) -> dict[str, Any]:
-        return self.context_ledgers.read_context_ledger(ledger_id)
-
-    def list_context_ledgers(self, project_root: str, *, limit: int = 100) -> list[dict[str, Any]]:
-        return self.context_ledgers.list_context_ledgers(project_root, limit=limit)
-
-    def record_mutation_receipt(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.mutation_receipts.record_mutation_receipt(project_root, payload)
-
-    def read_mutation_receipt(self, receipt_id: str) -> dict[str, Any]:
-        return self.mutation_receipts.read_mutation_receipt(receipt_id)
-
-    def list_mutation_receipts(
-        self, project_root: str, *, task_id: str = "", run_id: str = "",
-        session_id: str = "", plan_id: str = "", change_group_id: str = "",
-        limit: int = 500,
-    ) -> list[dict[str, Any]]:
-        return self.mutation_receipts.list_mutation_receipts(
-            project_root, task_id=task_id, run_id=run_id, session_id=session_id,
-            plan_id=plan_id, change_group_id=change_group_id, limit=limit,
-        )
+    record_mutation_receipt = RepositoryMethod("mutation_receipts")
+    read_mutation_receipt = RepositoryMethod("mutation_receipts")
+    list_mutation_receipts = RepositoryMethod("mutation_receipts")
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)

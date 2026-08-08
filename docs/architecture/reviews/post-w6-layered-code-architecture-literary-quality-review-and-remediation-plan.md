@@ -1438,3 +1438,35 @@ Q4 退出结论：
 - `JobStore` 保持既有 file budget，没有用调高基线掩盖新增委托代码。
 
 下一批入口：Creative Plan 与 Creative Plan Event 视为同一事务聚合迁移。事件查询进入 `CreativePlanRepository`，事务内 append helper 继续由同一 SQLite transaction 调用；不得拆成互相提交的两个 repository。
+
+### 2026-08-08：Q4.5-B JobStore Repository Facade 收敛
+
+状态：完成，准备独立提交。
+
+实际问题：
+
+- Autopilot、Session、ContextLedger 与 Mutation Receipt 虽已组合化，但 `JobStore` 为保持旧 API 手写了约 200 行纯转发函数；上一批新增三个委托后文件达到 619/620 行，继续迁移会立即突破 Ratchet；
+- 改用开放式 `__getattr__` 虽能省行，却会让拼写错误和未声明方法也进入隐式分派，不符合正式 facade 的可审计要求；
+- 重新建立 facade 基类或 Mixin 只会把已消除的继承耦合换一个名字。
+
+已完成：
+
+- 新增私有用途明确的 `RepositoryMethod` descriptor；每个公开方法在 `JobStore` 类体中以一行显式声明目标 repository；
+- descriptor 不拦截未知属性，不拥有业务逻辑；实例访问返回真实 repository bound method，因此调用签名、默认值、异常和事务行为来自唯一实现；
+- 将 Autopilot、Session/Advisor/Reader、ContextLedger、Mutation Receipt 四组纯 wrapper 全部替换为显式 descriptor 映射；
+- 新增回归测试，证明类体公开项是 `RepositoryMethod`，而实例方法分别绑定 `store.autopilot_runs`、`store.sessions`、`store.context_ledgers`；
+- `JobStore` 从 619 行降至 446 行，未改变数据库和外部调用方式。
+
+批判性边界：
+
+- `RepositoryMethod` 是减少真实重复的 facade 机制，不是新的 Repository、Service 或任务生命周期；
+- 需要参数转换、跨 repository 事务或额外策略的方法不得使用该 descriptor；它只允许“同名、原样转发”；
+- 保留 `JobStore` 自己拥有的 job/event/lock/resource 核心方法，未为了追求小文件继续机械拆解。
+
+验证证据：
+
+- Persistence composition、Autopilot、Jobs/migration、Mutation Receipt、Context Ledger、Architecture 与依赖方向：56 tests passed；
+- Architecture Audit：29 file debts、205 function debts、0 cycles；file debt 净减少 1；
+- `git diff --check`：通过。
+
+下一批入口：迁移 Creative Plan/Event 聚合；新 Repository 复用 descriptor 暴露旧 API，并保持激活时“数据库事务 + active projection 文件回滚”的原子补偿边界。
