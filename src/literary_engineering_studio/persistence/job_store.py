@@ -19,7 +19,7 @@ from .creative_plan_events import (
     CREATIVE_PLAN_EVENT_SCHEMA_SQL,
     CreativePlanEventStoreMixin,
 )
-from .context_ledgers import CONTEXT_LEDGER_SCHEMA_SQL, ContextLedgerStoreMixin
+from .context_ledgers import CONTEXT_LEDGER_SCHEMA_SQL, ContextLedgerRepository
 from .migrations import ensure_additive_columns
 from .mutation_receipts import MUTATION_RECEIPT_SCHEMA_SQL, MutationReceiptStoreMixin
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL, RecycleBinStoreMixin
@@ -44,7 +44,6 @@ from .primitives import (
 
 class JobStore(
     MutationReceiptStoreMixin,
-    ContextLedgerStoreMixin,
     CreativePlanEventStoreMixin,
     CreativePlanStoreMixin,
     RecycleBinStoreMixin,
@@ -59,6 +58,7 @@ class JobStore(
         self._write_lock = self._uow.write_lock
         self.autopilot_runs = AutopilotRepository(self._uow)
         self.sessions = SessionRepository(self._uow)
+        self.context_ledgers = ContextLedgerRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -278,6 +278,15 @@ class JobStore(
 
     def set_reader_bookmark(self, project_root: str, unit_id: str, enabled: bool) -> dict[str, Any]:
         return self.sessions.set_reader_bookmark(project_root, unit_id, enabled)
+
+    def record_context_ledger(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.context_ledgers.record_context_ledger(project_root, payload)
+
+    def read_context_ledger(self, ledger_id: str) -> dict[str, Any]:
+        return self.context_ledgers.read_context_ledger(ledger_id)
+
+    def list_context_ledgers(self, project_root: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        return self.context_ledgers.list_context_ledgers(project_root, limit=limit)
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)

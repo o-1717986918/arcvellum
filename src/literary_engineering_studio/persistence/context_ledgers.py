@@ -6,6 +6,7 @@ from typing import Any
 
 from ..observability.context_ledger import CONTEXT_LEDGER_SCHEMA, parse_context_ledger
 from .primitives import _now
+from .sqlite_uow import SqliteUnitOfWork
 
 
 CONTEXT_LEDGER_SCHEMA_SQL = """
@@ -56,8 +57,11 @@ CREATE INDEX IF NOT EXISTS context_ledger_entries_source_idx
 """
 
 
-class ContextLedgerStoreMixin:
+class ContextLedgerRepository:
     """Persist bounded ledger metadata without copying source text into SQLite."""
+
+    def __init__(self, uow: SqliteUnitOfWork):
+        self._uow = uow
 
     def record_context_ledger(
         self,
@@ -68,8 +72,7 @@ class ContextLedgerStoreMixin:
         project = str(project_root or "").strip()
         if not project:
             raise ValueError("context ledger project_root is required")
-        with self._write_lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self._uow.write(immediate=True) as connection:
             existing = connection.execute(
                 "SELECT digest, project_root FROM context_ledgers WHERE ledger_id = ?",
                 (ledger.ledger_id,),
@@ -141,7 +144,7 @@ class ContextLedgerStoreMixin:
             return self._read_context_ledger_tx(connection, ledger.ledger_id)
 
     def read_context_ledger(self, ledger_id: str) -> dict[str, Any]:
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             return self._read_context_ledger_tx(connection, _validate_ledger_id(ledger_id))
 
     def list_context_ledgers(
@@ -150,7 +153,7 @@ class ContextLedgerStoreMixin:
         *,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             rows = connection.execute(
                 """
                 SELECT * FROM context_ledgers
@@ -193,6 +196,10 @@ class ContextLedgerStoreMixin:
             "digest": metadata["digest"],
             "created_at": metadata["created_at"],
         }
+
+
+# Kept as an import alias for third-party code during the repository migration.
+ContextLedgerStoreMixin = ContextLedgerRepository
 
 
 def _validate_ledger_id(value: str) -> str:

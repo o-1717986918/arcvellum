@@ -917,3 +917,26 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `git diff --check`：通过。
 
 下一批入口：审计其余 Store Mixin 的领域耦合与收益，不按文件数量机械迁移；优先选择能减少跨模块私有调用的边界，然后转入 Worker 组合化。
+
+### 2026-08-08：Q2-C Context Ledger 持久化组合化
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- `ContextLedgerRepository` 通过 `SqliteUnitOfWork` 显式持有事务能力；
+- `JobStore` 不再继承 Context Ledger 实现，而是组合 `context_ledgers` 仓储；
+- 记录、读取、列表三个历史 API 以明确签名兼容；
+- 同一 ledger identity 的冲突检测继续在 `BEGIN IMMEDIATE` 事务中完成；
+- Context Ledger 仍只保存元数据和摘要，不把 Agent 可见原文复制到 SQLite；
+- 保留迁移期 `ContextLedgerStoreMixin` 导入别名。
+
+验证证据：
+
+- 组合关系测试通过；
+- `tests.orchestration.test_context_ledger_runtime`：4 tests passed；
+- 覆盖上下文变化摘要、同一运行重物化 identity、沙箱资料一致性及 SQLite 脱敏持久化；
+- 初次测试命令误写了两个不存在的模块，实际测试未失败；按 `rg --files tests` 校正后重跑通过；
+- `python -m compileall -q src/literary_engineering_studio/persistence` 与 `git diff --check`：通过。
+
+下一批入口：将 Worker 上下文绑定和事件投影从 `WorkerObservabilityMixin` 收敛为可独立测试的 `WorkerObserver`，不改变事件名或 payload schema。

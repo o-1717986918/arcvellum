@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.persistence.autopilot_runs import AutopilotRepository
+from literary_engineering_studio.persistence.context_ledgers import ContextLedgerRepository
 from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.persistence.sessions import SessionRepository
 from literary_engineering_studio.persistence.sqlite_uow import SqliteUnitOfWork
@@ -38,6 +39,13 @@ class PersistenceCompositionTests(unittest.TestCase):
 
             restored = store.read_advisor_session(session["session_id"])
             self.assertEqual(restored["messages"][0]["payload"]["text"], "继续")
+
+    def test_job_store_composes_context_ledger_repository(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+
+            self.assertIsInstance(store.context_ledgers, ContextLedgerRepository)
+            self.assertNotIsInstance(store, ContextLedgerRepository)
 
     def test_unit_of_work_rolls_back_failed_write(self):
         with tempfile.TemporaryDirectory() as temporary:
