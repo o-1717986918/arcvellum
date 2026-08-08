@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio_engine.command_line.commands import scene
+from literary_engineering_studio_engine.command_line.commands import scene_prose
 
 
 class SceneCommandRuntimeTests(unittest.TestCase):
@@ -47,13 +48,13 @@ class SceneCommandRuntimeTests(unittest.TestCase):
                 expected_json_path = candidate.with_suffix(".json")
 
             with (
-                patch.object(scene, "build_context_packet", return_value=_ContextResult()) as build_context,
-                patch.object(scene, "ensure_scene_pre_generation_tasks_completed"),
-                patch.object(scene, "build_scene_prompt_pack", return_value=_PromptPack()),
-                patch.object(scene, "write_prompt_manifest"),
-                patch.object(scene, "write_platform_scene_generation_task", return_value=_GenerationResult()),
-                patch.object(scene, "ensure_scene_character_asset_tasks", return_value=[]),
-                patch.object(scene, "_print_agent_task_notice"),
+                patch.object(scene_prose, "build_context_packet", return_value=_ContextResult()) as build_context,
+                patch.object(scene_prose, "ensure_scene_pre_generation_tasks_completed"),
+                patch.object(scene_prose, "build_scene_prompt_pack", return_value=_PromptPack()),
+                patch.object(scene_prose, "write_prompt_manifest"),
+                patch.object(scene_prose, "write_platform_scene_generation_task", return_value=_GenerationResult()),
+                patch.object(scene_prose, "ensure_scene_character_asset_tasks", return_value=[]),
+                patch.object(scene_prose, "print_agent_task_notice"),
             ):
                 self.assertEqual(scene.handle(args, parser=None), 0)
 

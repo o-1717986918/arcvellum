@@ -10,6 +10,8 @@ import argparse
 import unittest
 
 from literary_engineering_studio_engine.cli import FORMAL_HELP_COMMANDS, build_parser
+from literary_engineering_studio_engine.command_line.commands.formal import FORMAL_HANDLERS
+from literary_engineering_studio_engine.command_line.commands.scene import SCENE_HANDLERS
 
 
 def _subparser_action(parser: argparse.ArgumentParser) -> argparse._SubParsersAction:
@@ -40,6 +42,49 @@ class EngineCliSurfaceTests(unittest.TestCase):
             self.assertIn(command, compact_help)
         self.assertNotIn("compose-scene", compact_help)
         self.assertNotIn("agent-run", compact_help)
+
+    def test_formal_and_scene_dispatch_tables_cover_their_owned_commands(self):
+        self.assertEqual(
+            set(FORMAL_HANDLERS),
+            {
+                "protocol",
+                "agent-task-status",
+                "route-audit",
+                "workflow-state",
+                "workflow-events",
+                "workflow-dashboard",
+                "workflow-validate",
+                "task-next",
+                "task-open",
+                "task-contract-replay",
+                "task-submit",
+                "task-complete",
+                "task-revert-submission",
+                "task-contract-audit",
+                "workflow-advance",
+                "prompt-registry-list",
+                "prompt-registry-validate",
+                "prompt-preview",
+            },
+        )
+        self.assertEqual(
+            set(SCENE_HANDLERS),
+            {
+                "draft-scene",
+                "review-scene",
+                "generate-scene",
+                "revise-scene",
+                "promote-candidate",
+                "state-evolve",
+                "canon-evolve",
+                "canon-backlog",
+                "canon-apply",
+                "state-apply",
+                "simulate-scene",
+                "branch-simulate",
+                "compose-scene",
+            },
+        )
 
 
 if __name__ == "__main__":

@@ -1093,3 +1093,39 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - dependency route 完成时现在明确清空 `current_task_id` 并持久化原 route index，避免 UI 在返回 scene route 前继续展示已完成的资产任务。
 
 下一批入口：进入 Q3-C，先审查并拆分 `command_line/commands/formal.py::handle` 与 `scene.py::handle` 的子命令分派；若拆分需要触碰 Agent 决策物化，则先独立收敛 `_delegate_choice`，不得把两类变更混成大提交。
+
+### 2026-08-08：Q3-C Formal/Scene CLI 命令分组
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- `formal.py` 从 362 行收敛为 39 行，只保留 formal help、完整 help、debug bypass 拒绝和确定性分派；
+- 新增 `formal_tasks.py`，拥有 task-next/open/replay/submit/complete/revert、task contract audit 与 workflow advance；
+- 新增 `formal_workflow.py`，拥有 protocol、Agent task status、route audit、workflow state/events/dashboard/validate；
+- 新增 `formal_prompts.py`，拥有 Prompt Registry list/validate/preview 及 JSON 投影；
+- `formal.handle` 从 309 行、complexity 83 降为 22 行、低于 complexity 10；
+- `scene.py` 从 346 行收敛为 19 行，只执行命令表分派；
+- 新增 `scene_prose.py`，拥有草稿、确定性 review、平台正文生成任务、修订任务和候选晋升；
+- 新增 `scene_continuity.py`，拥有人物状态与 Canon patch 的 evolve/backlog/apply；
+- 新增 `scene_simulation.py`，拥有 RP、分支推演与编剧态 composition；
+- `scene.handle` 从 322 行、complexity 74 降为 3 行、complexity 2；
+- 把 context freshness 判定提炼为 `_generation_context`，保持 trace 缺失、过期或显式 rebuild 时重建的原语义。
+
+设计审查：
+
+- 分组依据是任务所有权和文学阶段，不按行数平均切文件；
+- 使用静态 `HANDLERS` 字典，不使用反射、动态 import 或类层级；每个 handler 保留原 parser.error 类型和 stdout 字段；
+- Formal 入口仍在执行任何低层命令前统一检查 bypass 参数，拆分没有产生绕过 formal policy 的侧门；
+- Scene 入口没有新增第二套正文生成路径，平台正文任务、revision、promotion、state/canon 和 RP/branch/composition 仍调用原领域函数；
+- 生成命令的内部函数 patch 点迁移到 `scene_prose`，这是私有测试接缝而非公开 CLI 合同；新增命令集合回归防止 parser 与 dispatch 漂移。
+
+验证证据：
+
+- Formal host surface、CoreBridge、Task Contract Transport：46 tests passed；
+- Scene runtime、确定性正文晋升 E2E、Task Contract Transport、Scene Rhythm Contract：41 tests passed；
+- Architecture Audit：33 file debts、212 function debts、0 cycles；相较 Q3-B 再净减少 2 个 function debts；
+- 所有新命令模块低于 200 行，所有新增函数均低于 architecture 函数预算；
+- compileall 与 `git diff --check`：通过。
+
+下一批入口：继续 Q3-D，按风险顺序处理 `tasking/package_contract.py::render_task_markdown` 与 `workflow/audit/scene.py::_add_scene_development_gates`；先用输出快照和 gate 顺序测试固定合同，不把 Markdown 美化与审查语义修改混批。
