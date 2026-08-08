@@ -284,11 +284,11 @@ class ActivePlanRuntimeTests(unittest.TestCase):
 
             passing = type("PassingPreflight", (), {"passed": True, "as_dict": lambda self: {}})()
             with (
-                patch.object(worker, "_validate_outputs", return_value=passing),
-                patch.object(worker, "_complete_outputs", side_effect=completed),
+                patch.object(worker.writeback, "validate_outputs", return_value=passing),
+                patch.object(worker.writeback, "complete_outputs", side_effect=completed),
             ):
                 worker.resume_from_run(sandbox.run_root)
-            _run, writeback_task, _sandbox = worker._writeback_context(
+            _run, writeback_task, _sandbox = worker.writeback._writeback_context(
                 sandbox.run_root
             )
 

@@ -9,9 +9,16 @@ from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_read_models import install_core_import_path
 from literary_engineering_studio.project_manager import record_direction
 from literary_engineering_studio.worker import AgentWorker, _resolve_task_json_path
+from literary_engineering_studio.runtime.worker_writeback import WritebackCoordinator
 
 
 class WorkerIntegrationTests(unittest.TestCase):
+    def test_worker_composes_writeback_coordinator(self):
+        worker = AgentWorker(default_config())
+
+        self.assertIsInstance(worker.writeback, WritebackCoordinator)
+        self.assertNotIsInstance(worker, WritebackCoordinator)
+
     def test_archaeology_fan_in_runs_in_deterministic_control_workspace(self):
         config = default_config()
         install_core_import_path(config)

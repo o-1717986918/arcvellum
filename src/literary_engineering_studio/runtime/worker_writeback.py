@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..contracts import TaskPackage
+from ..core_bridge import CoreBridge
 from ..preflight.common import PreflightIssue, PreflightResult
 from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
 from .mutation_tracking import WorkerMutationTracker
@@ -26,12 +27,17 @@ from .sandbox_hygiene import restore_unexpected_agent_changes
 from .worker_paths import validate_project
 from .task_snapshot import load_run_task_snapshot
 from .worker_results import WorkerRunResult
+from .worker_observability import WorkerObserver
 
 
-class WorkerWritebackMixin:
-    """Requires ``bridge`` and an explicit ``observer`` from AgentWorker."""
+class WritebackCoordinator:
+    """Validate, preview, import, and either promote or roll back one task."""
 
-    def _complete_outputs(
+    def __init__(self, bridge: CoreBridge, observer: WorkerObserver):
+        self.bridge = bridge
+        self.observer = observer
+
+    def complete_outputs(
         self,
         task: TaskPackage,
         sandbox: SandboxManifest,
@@ -39,7 +45,7 @@ class WorkerWritebackMixin:
     ) -> WorkerRunResult:
         if not task.expected_outputs:
             return self._empty_submission(task, sandbox, runtime_id)
-        preflight = self._validate_outputs(task, sandbox, runtime_id=runtime_id)
+        preflight = self.validate_outputs(task, sandbox, runtime_id=runtime_id)
         if not preflight.passed:
             update_run_manifest(
                 sandbox.manifest_path,
@@ -271,7 +277,7 @@ class WorkerWritebackMixin:
             preview.as_dict(),
         )
 
-    def _validate_outputs(
+    def validate_outputs(
         self,
         task: TaskPackage,
         sandbox: SandboxManifest,

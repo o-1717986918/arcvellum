@@ -35,7 +35,7 @@ from .worker_paths import (
     validate_project as _validate_project,
 )
 from .worker_results import WorkerRunResult
-from .worker_writeback import WorkerWritebackMixin
+from .worker_writeback import WritebackCoordinator
 
 
 def _materialize_agent_view_immediately(task: TaskPackage) -> bool:
@@ -53,7 +53,7 @@ def _task_opened_payload(task: TaskPackage) -> dict[str, Any]:
     }
 
 
-class AgentWorker(WorkerWritebackMixin):
+class AgentWorker:
     def __init__(
         self,
         config: dict[str, Any] | None = None,
@@ -68,11 +68,28 @@ class AgentWorker(WorkerWritebackMixin):
         self.bridge = CoreBridge(self.config)
         self.event_sink = event_sink
         self.observer = WorkerObserver(event_sink)
+        self.writeback = WritebackCoordinator(self.bridge, self.observer)
         self.cancel_event = cancel_event or threading.Event()
         self.runtime_pool = runtime_pool
         self.plan_store = plan_store
         self.orchestration_fingerprint_provider = (
             orchestration_fingerprint_provider or planning_project_fingerprint
+        )
+
+    def approve_writeback(self, run_root: Path, *, approved_by: str) -> WorkerRunResult:
+        return self.writeback.approve_writeback(run_root, approved_by=approved_by)
+
+    def reject_writeback(
+        self,
+        run_root: Path,
+        *,
+        rejected_by: str,
+        reason: str = "",
+    ) -> WorkerRunResult:
+        return self.writeback.reject_writeback(
+            run_root,
+            rejected_by=rejected_by,
+            reason=reason,
         )
 
     def prepare(
@@ -271,7 +288,7 @@ class AgentWorker(WorkerWritebackMixin):
                 runtime_message="core deterministic command completed in the isolated workspace",
                 runtime_returncode=0,
             )
-            return self._complete_outputs(task, sandbox, active_runtime)
+            return self.writeback.complete_outputs(task, sandbox, active_runtime)
 
         if self.cancel_event.is_set():
             self.observer.emit("run.cancelled", {"stage": "before-runner"})
@@ -298,7 +315,7 @@ class AgentWorker(WorkerWritebackMixin):
             repair_context = RepairContextCoordinator(task, sandbox)
 
             def validate_outputs():
-                return self._validate_outputs(
+                return self.writeback.validate_outputs(
                     task,
                     sandbox,
                     runtime_id=runtime_id,
@@ -370,7 +387,7 @@ class AgentWorker(WorkerWritebackMixin):
                 "run cancelled before formal writeback",
             )
 
-        return self._complete_outputs(task, sandbox, runtime_id)
+        return self.writeback.complete_outputs(task, sandbox, runtime_id)
 
     def resume_from_run(self, run_root: Path) -> WorkerRunResult:
         """Resume a timed-out run only when it contains fresh valid Agent output."""
@@ -396,7 +413,7 @@ class AgentWorker(WorkerWritebackMixin):
             )
             self.observer.emit("run.resume_rejected", {"reason": "no-fresh-agent-output", "task_id": task.task_id})
             raise ValueError(message)
-        preflight = self._validate_outputs(
+        preflight = self.writeback.validate_outputs(
             task,
             sandbox,
             runtime_id=str(run.get("runtime") or "opencode"),
@@ -415,4 +432,8 @@ class AgentWorker(WorkerWritebackMixin):
             recovery={"status": "accepted", "fresh_outputs": list(changed_outputs), "preflight": preflight.as_dict()},
         )
         self.observer.emit("validation.passed", {"kind": "recovery-preflight", **preflight.as_dict()})
-        return self._complete_outputs(task, sandbox, str(run.get("runtime") or "opencode"))
+        return self.writeback.complete_outputs(
+            task,
+            sandbox,
+            str(run.get("runtime") or "opencode"),
+        )

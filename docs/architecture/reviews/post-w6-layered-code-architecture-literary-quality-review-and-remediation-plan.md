@@ -967,3 +967,31 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `python -m compileall -q src/literary_engineering_studio/runtime` 与 `git diff --check`：通过。
 
 下一批入口：把写回预检、预览、审批、导入、回滚和 core gate 协调从继承关系迁入 `WritebackCoordinator`；`AgentWorker` 只负责 prepare/run/resume 编排。
+
+### 2026-08-08：Q2-E Worker Writeback 组合化
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- `WritebackCoordinator` 通过构造函数显式接收 `CoreBridge` 和 `WorkerObserver`；
+- `AgentWorker` 不再继承任何 Worker Mixin；
+- 预检、规范化、差异预览、人工审批、正式导入、core task submit/complete、失败回滚和 Mutation Receipt 全部由协调器封装；
+- `AgentWorker.approve_writeback/reject_writeback` 保持为公开兼容入口；
+- Worker 内部运行和恢复路径显式调用 `writeback.validate_outputs/complete_outputs`；
+- Active Plan 冻结快照测试改为针对真实协调器边界，不再 patch 已删除的 Worker 私有方法。
+
+批判性审查：
+
+- 协调器不是“所有写回逻辑再包一层”的空壳：它现在可以独立持有并测试全部写回状态转换，而 Worker 不需要知道回滚细节；
+- `approve/reject` 兼容委托保留用户/API 合同，其他原私有方法不保留虚假兼容；
+- 本批不改变 preflight 顺序、自动/人工写回策略或 core gate 行为。
+
+验证证据：
+
+- Worker integration/recovery、Mutation Receipt、OpenCode runtime 和 Active Plan runtime：27 tests passed；
+- 覆盖同会话修复、provider 中断重试、任务快照冻结、core gate 回滚和正式场景闭环；
+- `python -m compileall -q src/literary_engineering_studio/runtime` 与 `git diff --check`：通过；
+- 静态扫描确认旧 `WorkerWritebackMixin`、`_complete_outputs`、`_validate_outputs` 引用清零。
+
+Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Writeback 已从隐式继承迁为显式组合。下一步转入 Q3 高复杂度函数拆分；其余 Store Mixin 仅在能带来清晰领域边界时迁移，不为“数量清零”制造样板代码。
