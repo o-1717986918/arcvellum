@@ -32,16 +32,7 @@ from ...route_audit_scene import (
 
 def build_route_gates(root: Path, route: str, records: list[AgentTaskRecord]) -> list[dict[str, str]]:
     gates: list[dict[str, str]] = []
-    pending = [record for record in records if record.status in {"pending", "partial", "unknown"}]
-    missing_expected = sum(len(record.missing_expected_paths) for record in records)
-    debug_waivers = _debug_waiver_hits(root)
-    _add_gate(gates, "project-root", (root / "project.yaml").exists(), "blocking", "project.yaml exists", "不是标准 work project；若扫描 skill root，可忽略本项。")
-    _add_gate(gates, "agent-sidecars-handled", not pending, "blocking", "all .agent_tasks.md sidecars handled", f"仍有 {len(pending)} 个 sidecar 未完整处理。")
-    _add_gate(gates, "expected-artifacts-exist", missing_expected == 0, "blocking", "all expected artifacts exist", f"仍缺 {missing_expected} 个预期产物。")
-    _add_gate(
-        gates, "debug-waiver-flags", not debug_waivers, "blocking", "no debug waiver flags found",
-        f"检测到正式 Skill 宿主禁用的调试/跳审字段：{'; '.join(debug_waivers[:8])}。不要用 allow/unreview/include-blocked 类参数跳过 review；补齐正式门禁。",
-    )
+    pending = _add_common_route_gates(gates, root, records)
     if route == "longform-planning":
         _add_longform_budget_gates(gates, root, force=True)
     if route == "character-and-world-assets":
@@ -62,6 +53,7 @@ def build_route_gates(root: Path, route: str, records: list[AgentTaskRecord]) ->
         unresolved_reviews = _unresolved_scene_review_count(root)
         _add_gate(gates, "scene-review-notes-resolved", unresolved_reviews == 0, "blocking", "scene review notes resolved", f"仍有 {unresolved_reviews} 个场景 review notes 未进入 revise-scene 修订闭环或缺修订报告。")
     if route == "export-and-release":
+        _add_review_audit_route_gates(gates, root)
         chapter_jsons = list((root / "plot" / "chapters").glob("*.json")) if (root / "plot" / "chapters").exists() else []
         _add_gate(gates, "chapter-workspace-json", bool(chapter_jsons), "blocking", "chapter workspace JSON exists", "先运行 chapter-workspace。")
         non_ready = _non_ready_scene_count(chapter_jsons)
@@ -75,6 +67,24 @@ def build_route_gates(root: Path, route: str, records: list[AgentTaskRecord]) ->
         _add_gate(gates, "canon-patches-applied", unapplied_canon == 0, "blocking", "canon patches have been applied to the canon ledger", f"仍有 {unapplied_canon} 个 canon patch 未进入 canon-apply 账本；最终发布前需审批并运行 canon-apply，或明确改回 no_canon_change_reason。")
         _add_export_release_route_gates(gates, root, chapter_jsons)
     return gates
+
+
+def _add_common_route_gates(
+    gates: list[dict[str, str]],
+    root: Path,
+    records: list[AgentTaskRecord],
+) -> list[AgentTaskRecord]:
+    pending = [record for record in records if record.status in {"pending", "partial", "unknown"}]
+    missing_expected = sum(len(record.missing_expected_paths) for record in records)
+    debug_waivers = _debug_waiver_hits(root)
+    _add_gate(gates, "project-root", (root / "project.yaml").exists(), "blocking", "project.yaml exists", "不是标准 work project；若扫描 skill root，可忽略本项。")
+    _add_gate(gates, "agent-sidecars-handled", not pending, "blocking", "all .agent_tasks.md sidecars handled", f"仍有 {len(pending)} 个 sidecar 未完整处理。")
+    _add_gate(gates, "expected-artifacts-exist", missing_expected == 0, "blocking", "all expected artifacts exist", f"仍缺 {missing_expected} 个预期产物。")
+    _add_gate(
+        gates, "debug-waiver-flags", not debug_waivers, "blocking", "no debug waiver flags found",
+        f"检测到正式 Skill 宿主禁用的调试/跳审字段：{'; '.join(debug_waivers[:8])}。不要用 allow/unreview/include-blocked 类参数跳过 review；补齐正式门禁。",
+    )
+    return pending
 
 
 def scene_audit_scope(root: Path) -> dict[str, int]:

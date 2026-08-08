@@ -148,6 +148,35 @@ class BranchProposalContractTests(unittest.TestCase):
             branch = _load_branch_choice(root, "scene_0001", None, None, False, False)
             self.assertEqual(branch["branch_id"], "branch_fallback")
             self.assertEqual(branch["branch_origin"], "deterministic-fallback")
+            self.assertEqual(branch["fallback_reason"], "no-validated-agent-proposal")
+
+    def test_valid_agent_proposals_require_reason_before_fixed_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = self._write_manifest(root, declare_proposals=True)
+            self._write_proposals(root)
+            selection = manifest.parent / "branch_selection.md"
+            selection.write_text(
+                "decision: selected\nselected_branch: branch_fallback\n",
+                encoding="utf-8",
+            )
+
+            errors, _notes = _branch_selection_gate(root, "scene_0001")
+            self.assertIn("requires a concrete fallback_reason", errors[0])
+            with self.assertRaisesRegex(RuntimeError, "fallback_reason"):
+                _load_branch_choice(root, "scene_0001", None, None, False, False)
+
+            reason = "两个 Agent 提案都会提前泄露核心身份，本场只能保守维持观察窗口。"
+            selection.write_text(
+                f"decision: selected\nselected_branch: branch_fallback\nfallback_reason: {reason}\n",
+                encoding="utf-8",
+            )
+            errors, notes = _branch_selection_gate(root, "scene_0001")
+            self.assertEqual(errors, [])
+            self.assertIn(reason, notes[0])
+            branch = _load_branch_choice(root, "scene_0001", None, None, False, False)
+            self.assertEqual(branch["fallback_reason"], reason)
+            self.assertTrue(branch["validated_agent_proposals_available"])
 
     def test_agent_plan_controls_variable_beats_while_fallback_keeps_five(self) -> None:
         facts = SceneFacts(

@@ -1769,3 +1769,73 @@ Broad catch 分层复核：
 - “不能换一种转折”现在同时存在生成指令、结构化修订证据、确定性输出 lint 和独立语义复核四层约束，不再只依赖同一个 Agent 对自己的文字解释。
 
 下一步：检查 chapter/longform 是否真正把宏观节奏、承诺兑现、视角与字数库存聚合为阻塞门禁，并复核 deterministic fallback 是否拥有明确 provenance、适用边界与不可伪装规则。
+
+### 2026-08-08：Q4.5-K 宏观文学门禁与确定性回退复核
+
+状态：完成。
+
+已确认的有效机制：
+
+- `longform-audit` 已经聚合场景 ready 状态、字数预算、场景库存、上下文 trace、章节工作台、伏笔表、场景节奏契约和章节内节奏序列；它不是只有文件清单的空审计；
+- 章节节奏分析能够发现缺失张力曲线、连续同速、连续同类场景、窄幅平坦张力、持续高压和相邻场景 handoff 缺口；
+- reader question 与 promise/payoff 已有独立的 scene delta、不同 session 的语义复核、exact draft SHA 绑定和确定性 apply；下一场 Context 不能由正文静默改写长期承诺；
+- 长篇规划已经要求 word budget、chapter obligation、scene inventory expansion 及各自 Agent completion/review；现有剧情库存 Gate 应继续作为唯一规划来源；
+- branch fallback 已有 `branch_origin=deterministic-fallback`，正文执行契约也会携带 origin，不会在 composition JSON 内伪装成 Agent proposal。
+
+发现的真实断点：
+
+1. `review-and-audit` 的确定性 Gate 只检查 longform JSON/Markdown/graph 存在和 schema，不读取 `issues` 严重度；即使存在 high 级场景、节奏或上下文问题，委员会仍可误给 approve。
+2. `export-and-release` 只复核 chapter workspace 的场景级 ready/review/word/reader/flow 字段，没有显式要求 fresh longform audit 或 clean longform blocking summary；项目级文学审计没有在发布边界二次闭合。
+3. `longform-audit` 只读取旧式 `plot/foreshadowing.csv`；已正式 apply 的 `plot/reader_questions/ledger.json` 和 `plot/promises/ledger.json` 没有进入跨章节拖欠、兑现或异常关闭审计。
+4. 现有节奏曲线只按 chapter 分组；没有全书/分卷宏观序列，因此可以出现“每章内部有起伏、整卷却重复同一种高潮结构”的假通过。
+5. Scene 合同没有稳定的 viewpoint 字段，长篇审计无法统计视角连续性、过度集中或无计划跳转。该缺口应以可选显式合同补齐；不能把单一 POV 偏好强加给多视角、全知或实验性作品。
+6. Agent proposals 存在时，`branch_selection.md` 仍可无理由选择固定 fallback。虽然 provenance 保留，但当前 Gate 没有证明 fallback 是因 Agent 提案不可用而启用，确定性模板可能被当作正式创意判断捷径。
+7. Longform audit 带 `generated_at`，但没有绑定当前场景/草稿/账本/预算输入 digest；旧报告可在正文或账本变化后继续满足“文件存在”门禁。
+
+修复边界：
+
+- 扩展现有 `longform-audit` 的输入快照和 summary，不创建第二个 MacroAudit service；
+- 将 high issue 和明确的结构性 medium issue 转为 blocking summary；纯进度提示、可选工作台缺失和类型允许的视角分布不得误阻塞；
+- 增加全书与分卷级节奏聚合、正式 continuity ledger 债务摘要和可选 viewpoint 分布；这些结论仍来自现有 scene/ledger/budget 资产；
+- longform report 写入确定性 `input_digest`，review route 与 export route 均重算并要求 fresh；
+- committee 可对非阻塞文学问题做语义判断，但不能覆盖 deterministic blocking issue；
+- fallback 继续保留，保证 Agent proposal 失败时状态机有路可走；若当前存在通过验证的 Agent proposal，选择 fallback 必须在 selection 中记录具体 `fallback_reason`，且 provenance 贯穿 composition/prose contract；
+- 不新增 LongformIssue 子类层级、ViewpointManager、FallbackService 或重复 ledger class；使用纯函数、现有 dataclass 和窄 Gate helper。
+
+拟定验证：
+
+- high longform issue 阻塞 review/committee/export；纯 low progress issue不阻塞；
+- scene、draft、预算或 continuity ledger 变化后旧 longform audit 失效；
+- promise/question ledger 的开放、异常关闭、逾期窗口进入 summary 和 issue；
+- 全书/分卷节奏可发现章节间重复峰值模式；
+- viewpoint 未配置时不误报，配置后可识别意外跳转或极端集中；
+- 有有效 Agent proposal 时 fallback 无理由选择失败，有明确理由时保留并贯穿正文执行契约；历史 manifest 没有 Agent proposal 时继续兼容。
+
+已完成：
+
+- 新增 canonical `longform_input_snapshot`：对项目、场景、正文、composition、promotion、context trace、chapter workspace、word budget、rhythm plan、场景 review、伏笔表和 continuity ledgers 生成排序后的 path/digest manifest；任何被审计输入变化都会使旧报告失效；
+- `longform-audit` 直接消费已经存在的 `rhythm-plan` 全书/分卷/章节结果，不再自己维护第二套宏观节奏算法；跨章节分卷问题与全书 profile 漂移进入报告；
+- 正式 reader-question / promise ledger 进入长篇审计：开放条目缺目标窗口、越过 scene due window、关闭但无正文兑现证据、schema/状态无效均形成可追踪 issue；
+- scene template 与 `SceneFacts` 增加可选 `viewpoint`；未启用显式 POV 的作品不受影响，一旦部分场景启用则要求元数据完整，并把视角分布写入长篇摘要和正文执行输入；
+- Review route、Committee approval 与 Export route 共同调用同一个 longform quality contract；委员会可以接收有 blocker 的报告并给出 revise，但不能在 deterministic blocker 存在时提交 approve；导出不能绕过 fresh/clean 项目级审计；
+- blocking 分类保持文学判断边界：缺失契约、剧情库存不足、账本债务、视角合同断裂与 high issue 是硬阻塞；平坦节奏、高压连续、宏观 profile 偏差等启发式 warning 进入 attention，由委员会判断是否为有意设计，不被算法直接宣布为错误；
+- `branch_selection.md` 增加 `fallback_reason`；有效 Agent proposals 存在却选择固定 fallback 时，Route Gate 与直接 Composer 调用都会要求具体理由；历史 manifest 没有 proposal contract 时记录 `no-validated-agent-proposal`；reason/origin 贯穿 composition 和 prose execution contract；
+- 新增逻辑最初使旧 `longform_audit.py` 超出 architecture baseline 117 行；没有修改 baseline，而是拆成 `longform_contract.py`（freshness/Gate/ledger）和 `longform_analysis.py`（宏观文学投影），并把 route common gate 提炼为组合函数，最终 Ratchet 恢复通过。
+
+验证证据：
+
+- Longform quality/freshness/ledger/committee/export：4 tests passed；
+- Branch proposal/fallback/prose contract：7 tests passed；
+- Rhythm plan 与 review revision：6 tests passed；
+- API、task contract transport、CLI surface、route catalog：62 tests passed；
+- Architecture Audit：29 file debts、205 function debts、0 cycles，未修改 baseline；
+- Dependency Direction：2 tests passed；
+- `compileall` 与 `git diff --check`：通过。
+
+Q4.5 文学链收敛结论：
+
+- 分支、编排、正文、修订、晋升、连续性账本、宏观节奏和最终审计现在有一条可验证的消费链；
+- 确定性代码负责事实身份、完整性、freshness、预算和硬缺口，Agent 委员会负责对节奏警告、审美取舍和有意例外作语义判断；两者不再互相冒充；
+- 本阶段没有发现应由已有父类/子类替代的新多余类；新增模块均为纯函数合同或投影，未获得任务生命周期、持久化或正式写回所有权。
+
+下一批入口：进入 Q5。先复读自适应编排与统一工程方案，核对已有 Chapter Facts/Horizon、Plan Compiler、Capability Broker、Supervisor/lease 与 SSE 基础，再只补文档要求的 production bundle executor、资源冲突控制、session lease 回收、checkpoint/no-spin 和 typed continuous event 缺口；所有新行为必须 feature-flagged，并保留 fixed route fallback。

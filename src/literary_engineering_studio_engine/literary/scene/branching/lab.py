@@ -618,6 +618,7 @@ def _render_selection(scene: SceneFacts, payload: dict[str, object]) -> str:
 
 - decision: pending
 - selected_branch:
+- fallback_reason: <!-- 仅当已有有效 Agent 提案却选择固定回退时，具体说明提案为何不成立 -->
 - reviewer:
 - selected_at:
 

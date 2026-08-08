@@ -22,7 +22,13 @@ from ....creative_quality import (
     load_creative_quality_profile,
     render_creative_quality_prompt,
 )
-from ....flow_gates import FlowGateError, branch_selection_status, ensure_agent_task_completed, selected_branch_from
+from ....flow_gates import (
+    FlowGateError,
+    branch_selection_status,
+    ensure_agent_task_completed,
+    fallback_selection_reason_error,
+    selected_branch_from,
+)
 from ....narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from ....reader_experience import reader_experience_contract
 from ....roleplay_lab import CharacterCard, _load_characters
@@ -371,6 +377,7 @@ def _load_branch_choice(
             "risks": ["branch_manifest.json 无分支。"],
             "writeback_candidates": data.get("writeback_candidates", _fallback_writeback_by_id(scene_id)),
         }
+    _ensure_fallback_selection_allowed(selection_gate, target_id, proposal_branches, fallback_branches)
     return _selected_branch_result(chosen, selected, manifest_path, selection_path, selection_gate, recommended, proposal_path)
 
 
@@ -379,6 +386,19 @@ def _proposal_branch_inputs(root: Path, scene_id: str, manifest: dict[str, Any])
         return validated_branch_proposals(root, scene_id, manifest)
     except ValueError as exc:
         raise FlowGateError(str(exc)) from exc
+
+
+def _ensure_fallback_selection_allowed(
+    selection: dict[str, str],
+    selected: str,
+    proposals: list[dict[str, Any]],
+    fallbacks: list[Any],
+) -> None:
+    proposal_ids = {str(item.get("branch_id") or "") for item in proposals}
+    fallback_ids = {str(item.get("branch_id") or "") for item in fallbacks if isinstance(item, dict)}
+    error = fallback_selection_reason_error(selection, selected, proposal_ids, fallback_ids)
+    if error:
+        raise FlowGateError(error)
 
 
 def _selected_branch_result(
@@ -391,9 +411,15 @@ def _selected_branch_result(
     proposal_path: Path | None,
 ) -> dict[str, Any]:
     result = dict(chosen)
+    origin = str(chosen.get("branch_origin") or "deterministic-fallback")
+    reason = str(selection_gate.get("fallback_reason") or "").strip()
+    if origin == "deterministic-fallback" and proposal_path is None:
+        reason = "no-validated-agent-proposal"
     result.update(
         {
-            "branch_origin": str(chosen.get("branch_origin") or "deterministic-fallback"),
+            "branch_origin": origin,
+            "fallback_reason": reason if origin == "deterministic-fallback" else "",
+            "validated_agent_proposals_available": proposal_path is not None,
             "source": "selection" if selected else "recommended",
             "manifest_path": manifest_path,
             "selection_path": selection_path if selection_path.exists() else None,
@@ -599,9 +625,7 @@ def _render_markdown(root: Path, scene_path: Path, context_path: Path, context_t
         "",
         "## 输入摘要",
         "",
-        f"- 章节：`{facts['chapter_id'] or 'n/a'}`",
-        f"- 地点：{facts['location'] or '未填写'}",
-        f"- 参与者：{', '.join(facts['participants']) if facts['participants'] else '未填写'}",
+        *_scene_identity_lines(facts),
         f"- 场景目标：{facts['scene_goal'] or '未填写'}",
         f"- 外部冲突：{facts['external_conflict'] or '未填写'}",
         f"- 内部冲突：{facts['internal_conflict'] or '未填写'}",
@@ -610,6 +634,7 @@ def _render_markdown(root: Path, scene_path: Path, context_path: Path, context_t
         "",
         f"- 标题：{branch.get('title') or '未填写'}",
         f"- 策略：{branch.get('strategy') or '未填写'}",
+        *_branch_identity_lines(branch),
         f"- 状态：`{branch.get('status') or 'n/a'}`",
         f"- 前提：{branch.get('premise') or '未填写'}",
         "",
@@ -718,6 +743,23 @@ def _render_markdown(root: Path, scene_path: Path, context_path: Path, context_t
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def _branch_identity_lines(branch: dict[str, Any]) -> list[str]:
+    return [
+        f"- 来源：`{branch.get('branch_origin') or 'missing'}`",
+        f"- 固定回退理由：{branch.get('fallback_reason') or '不适用'}",
+    ]
+
+
+def _scene_identity_lines(facts: dict[str, Any]) -> list[str]:
+    participants = ", ".join(facts["participants"]) if facts["participants"] else "未填写"
+    return [
+        f"- 章节：`{facts['chapter_id'] or 'n/a'}`",
+        f"- 地点：{facts['location'] or '未填写'}",
+        f"- 叙事视角：{facts.get('viewpoint') or '未显式配置'}",
+        f"- 参与者：{participants}",
+    ]
 
 
 def _active_cards(cards: list[CharacterCard], participants: list[str]) -> list[CharacterCard]:

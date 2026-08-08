@@ -39,12 +39,14 @@ def branch_selection_status(path: Path) -> dict[str, str]:
             "decision": "",
             "selected_branch": "",
             "reviewer": "",
+            "fallback_reason": "",
             "message": "branch_selection.md does not exist",
         }
     text = path.read_text(encoding="utf-8", errors="ignore")
     decision = _field(text, "decision").lower()
     selected = _field(text, "selected_branch")
     reviewer = _field(text, "reviewer")
+    fallback_reason = _field(text, "fallback_reason")
     if selected.lower() in PENDING_BRANCH_VALUES:
         selected = ""
     if decision in PENDING_BRANCH_VALUES:
@@ -63,6 +65,7 @@ def branch_selection_status(path: Path) -> dict[str, str]:
         "decision": decision,
         "selected_branch": selected,
         "reviewer": reviewer,
+        "fallback_reason": fallback_reason,
         "message": message,
     }
 
@@ -70,6 +73,27 @@ def branch_selection_status(path: Path) -> dict[str, str]:
 def selected_branch_from(path: Path) -> str:
     status = branch_selection_status(path)
     return status["selected_branch"] if status["status"] == "selected" else ""
+
+
+def fallback_selection_reason_error(
+    selection: dict[str, str],
+    selected: str,
+    proposal_ids: set[str],
+    fallback_ids: set[str],
+) -> str:
+    """Require explicit literary provenance when a fixed fallback wins."""
+
+    if not proposal_ids or selected not in fallback_ids:
+        return ""
+    reason = str(selection.get("fallback_reason") or "").strip()
+    compact = "".join(reason.split())
+    placeholders = ("<!--", "todo", "pending", "待填写", "提案不好", "不合适")
+    if len(compact) >= 12 and not any(token in compact.lower() for token in placeholders):
+        return ""
+    return (
+        "deterministic fallback selected while validated Agent proposals exist; "
+        "branch_selection.md requires a concrete fallback_reason"
+    )
 
 
 def ensure_agent_task_completed(root: Path, task_path: Path, *, label: str) -> dict[str, object]:

@@ -15,6 +15,7 @@ import re
 
 from ...agent_schema import validate_payload
 from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
+from ...literary.review.longform_contract import longform_audit_gate_errors
 from ...task_paths import (
     TASK_SCHEMA,
     normalize_relative_path as _normalize_rel,
@@ -632,7 +633,7 @@ def _project_review_revision_gate_errors(
     return errors
 
 
-def _longform_audit_file_gate_errors(root: Path) -> list[str]:
+def _longform_audit_file_gate_errors(root: Path, *, require_clean: bool = False) -> list[str]:
     json_path = root / "reviews" / "longform" / "longform_audit.json"
     report_path = json_path.with_suffix(".md")
     graph_path = root / "plot" / "longform_graph.json"
@@ -644,10 +645,7 @@ def _longform_audit_file_gate_errors(root: Path) -> list[str]:
     if error:
         errors.append(error)
         return errors
-    if payload.get("schema") != "literary-engineering-workbench/longform-audit/v0.1":
-        errors.append("longform_audit.json has wrong or missing schema")
-    if not isinstance(payload.get("summary"), dict):
-        errors.append("longform_audit.json must contain summary")
+    errors.extend(longform_audit_gate_errors(root, payload, require_clean=require_clean))
     return errors
 
 
@@ -668,8 +666,10 @@ def _committee_review_gate_errors(root: Path, *, require_approve: bool) -> list[
         return errors
     schema_errors, _warnings = validate_payload(payload, "committee_review.v1")
     errors.extend(f"committee_review.v1 schema error at {item.get('path')}: {item.get('message')}" for item in schema_errors)
+    recommendation = str(payload.get("final_recommendation") or "").strip().lower()
+    if recommendation == "approve":
+        errors.extend(_longform_audit_file_gate_errors(root, require_clean=True))
     if require_approve:
-        recommendation = str(payload.get("final_recommendation") or "").strip().lower()
         action_items = payload.get("action_items") if isinstance(payload.get("action_items"), list) else []
         disagreements = payload.get("disagreements") if isinstance(payload.get("disagreements"), list) else []
         if recommendation != "approve":

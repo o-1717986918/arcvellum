@@ -11,9 +11,20 @@ from pathlib import Path
 
 from ...context_broker import context_trace_status
 from ...draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
-from ...narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract
+from ...narrative_rhythm import narrative_rhythm_contract
 from ...scene_readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
 from ...word_budget import load_word_budget_summary
+from .longform_analysis import (
+    collect_expanded_evidence,
+    extended_summary,
+    scene_identity,
+    summary_markdown_lines,
+    viewpoint_label,
+)
+from .longform_contract import (
+    LONGFORM_AUDIT_SCHEMA,
+    longform_input_snapshot,
+)
 
 
 RESOLVED_FORESHADOW_STATUSES = {
@@ -33,10 +44,12 @@ RESOLVED_FORESHADOW_STATUSES = {
 @dataclass(frozen=True)
 class LongformSceneRecord:
     scene_id: str
+    volume_id: str
     chapter_id: str
     scene_path: str
     location: str
     participants: tuple[str, ...]
+    viewpoint: str
     scene_goal: str
     draft_path: str
     review_path: str
@@ -104,10 +117,12 @@ def build_longform_audit(
     foreshadowing = _scan_foreshadowing(root)
     chapter_files = sorted((root / "plot" / "chapters").glob("*.json")) if (root / "plot" / "chapters").exists() else []
     word_budget = load_word_budget_summary(root)
-    rhythm_curves = _rhythm_curves(scenes)
+    rhythm_plan, rhythm_curves, continuity, expanded_issues = collect_expanded_evidence(root, scenes)
     issues = _audit_issues(root, scenes, characters, foreshadowing, chapter_files, target_length, word_budget)
     issues.extend(_rhythm_curve_issues(rhythm_curves))
+    issues.extend(LongformIssue(**item) for item in expanded_issues)
     graph = _build_graph(scenes, characters, foreshadowing)
+    input_snapshot = longform_input_snapshot(root)
 
     markdown_path = _resolve_output(root, output, "reviews", "longform", "longform_audit.md")
     json_path = _resolve_output(root, json_output, "reviews", "longform", "longform_audit.json")
@@ -117,13 +132,21 @@ def build_longform_audit(
     graph_path.parent.mkdir(parents=True, exist_ok=True)
 
     summary = _summary(scenes, characters, foreshadowing, chapter_files, issues, target_length, word_budget)
+    summary.update(extended_summary(scenes, issues, rhythm_plan, continuity))
     payload = {
-        "schema": "literary-engineering-workbench/longform-audit/v0.1",
+        "schema": LONGFORM_AUDIT_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "project_root": str(root),
         "summary": summary,
+        "input_snapshot": input_snapshot,
         "word_budget": word_budget,
         "rhythm_curves": rhythm_curves,
+        "macro_rhythm": {
+            "book_profile": rhythm_plan.get("book_profile", {}),
+            "volumes": rhythm_plan.get("volumes", {}),
+            "book": rhythm_plan.get("book", {}),
+        },
+        "continuity_ledgers": continuity,
         "scenes": [asdict(scene) for scene in scenes],
         "characters": characters,
         "foreshadowing": foreshadowing,
@@ -156,7 +179,7 @@ def _scan_scenes(root: Path) -> list[LongformSceneRecord]:
         if scene_path.name.startswith("_"):
             continue
         text = _read(scene_path)
-        scene_id = _scalar(text, "scene_id") or scene_path.stem
+        scene_id, volume_id, chapter_id, viewpoint = scene_identity(text, scene_path)
         draft_path = root / "drafts" / "scenes" / f"{scene_id}.md"
         review_path = root / "reviews" / f"{scene_id}-review.md"
         agent_review_path = root / "reviews" / "agent" / f"{scene_id}_scene_review.md"
@@ -183,11 +206,9 @@ def _scan_scenes(root: Path) -> list[LongformSceneRecord]:
         bridge_payload = rhythm_contract.get("scene_bridge") if isinstance(rhythm_contract.get("scene_bridge"), dict) else {}
         records.append(
             LongformSceneRecord(
-                scene_id=scene_id,
-                chapter_id=_scalar(text, "chapter_id") or "unassigned",
+                scene_id=scene_id, volume_id=volume_id, chapter_id=chapter_id,
                 scene_path=_rel_str(scene_path, root),
-                location=_scalar(text, "location"),
-                participants=tuple(_list_after(text, "participants")),
+                location=_scalar(text, "location"), participants=tuple(_list_after(text, "participants")), viewpoint=viewpoint,
                 scene_goal=_scalar(text, "scene_goal"),
                 draft_path=_existing_rel(draft_path, root),
                 review_path=_existing_rel(review_path, root),
@@ -550,20 +571,20 @@ def _render_markdown(root: Path, payload: dict, graph_path: Path) -> str:
         f"- 阻塞场景：{summary['blocked_scene_count']}",
         f"- 节奏契约通过场景：{summary.get('rhythm_pass_count', 0)}",
         f"- 节奏契约缺口场景：{summary.get('rhythm_gap_count', 0)}",
-        f"- 问题数：{summary['issue_count']}",
+        *summary_markdown_lines(summary),
         "",
         "## 场景状态矩阵",
         "",
-        "| 章节 | 场景 | 地点 | 参与者 | 正文中文内容字符 | 静态审查 | Agent审查 | 状态 |",
-        "| --- | --- | --- | --- | ---: | --- | --- | --- |",
+        "| 章节 | 场景 | 地点 | 视角 | 参与者 | 正文中文内容字符 | 静态审查 | Agent审查 | 状态 |",
+        "| --- | --- | --- | --- | --- | ---: | --- | --- | --- |",
     ]
     for scene in scenes:
         lines.append(
-            "| {chapter} | {scene} | {location} | {participants} | {chars} | {review} | {agent_review} | {status} |".format(
+            "| {chapter} | {scene} | {location} | {viewpoint} | {participants} | {chars} | {review} | {agent_review} | {status} |".format(
                 chapter=scene["chapter_id"],
                 scene=scene["scene_id"],
                 location=scene["location"] or "未填写",
-                participants="、".join(scene["participants"]) or "未填写",
+                viewpoint=viewpoint_label(scene), participants="、".join(scene["participants"]) or "未填写",
                 chars=scene["draft_chars"],
                 review=scene["review_conclusion"] or "missing",
                 agent_review=f"{scene.get('agent_review_conclusion') or 'missing'}/{scene.get('agent_review_schema_status') or 'missing'}",
@@ -645,7 +666,6 @@ def _summary(
     locations = {scene.location for scene in scenes if scene.location}
     totals = word_budget.get("totals", {}) if word_budget else {}
     totals = totals if isinstance(totals, dict) else {}
-    rhythm_curves = _rhythm_curves(scenes)
     return {
         "chapter_count": max(len(chapter_ids), len(chapter_files)),
         "scene_count": len(scenes),
@@ -660,31 +680,10 @@ def _summary(
         "blocked_scene_count": sum(1 for scene in scenes if scene.status != "ready"),
         "rhythm_pass_count": sum(1 for scene in scenes if scene.narrative_rhythm_status == "pass"),
         "rhythm_gap_count": sum(1 for scene in scenes if scene.narrative_rhythm_status in {"", "defaulted", "incomplete"}),
-        "rhythm_curve_pass_count": sum(1 for curve in rhythm_curves.values() if curve.get("status") == "pass"),
-        "rhythm_curve_attention_count": sum(1 for curve in rhythm_curves.values() if curve.get("status") != "pass"),
         "issue_count": len(issues),
         "word_budget_status": str(word_budget.get("status") or "missing") if word_budget else "missing",
         "word_budget_scene_count": _to_int(totals.get("scene_count")),
         "word_budget_chapter_count": _to_int(totals.get("chapter_count")),
-    }
-
-
-def _rhythm_curves(scenes: list[LongformSceneRecord]) -> dict[str, dict[str, object]]:
-    chapters: dict[str, list[LongformSceneRecord]] = {}
-    for scene in scenes:
-        chapters.setdefault(scene.chapter_id, []).append(scene)
-    return {
-        chapter_id: analyze_narrative_rhythm_sequence([
-            {
-                "scene_id": scene.scene_id,
-                "pace": scene.pace,
-                "rhythm_role": scene.rhythm_role,
-                "scene_function": list(scene.scene_function),
-                "tension_curve": scene.tension_curve,
-            }
-            for scene in chapter_scenes
-        ])
-        for chapter_id, chapter_scenes in chapters.items()
     }
 
 
@@ -695,9 +694,10 @@ def _rhythm_curve_issues(curves: dict[str, dict[str, object]]) -> list[LongformI
             if not isinstance(issue, dict):
                 continue
             severity = "high" if issue.get("severity") == "blocking" else "medium"
+            category = "narrative_rhythm_curve" if severity == "high" else "narrative_rhythm_attention"
             issues.append(LongformIssue(
                 severity,
-                "narrative_rhythm_curve",
+                category,
                 chapter_id,
                 str(issue.get("message") or "章节叙事节奏曲线需要复核。"),
                 "回到场景编排，调整场景功能、推进速度或 entry/peak/exit 张力交接；不要只靠正文修辞制造假高潮。",

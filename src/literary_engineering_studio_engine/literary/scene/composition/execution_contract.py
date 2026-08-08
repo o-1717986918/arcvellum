@@ -33,6 +33,7 @@ def build_prose_execution_contract(composition: dict[str, Any]) -> dict[str, Any
 
     branch = _mapping(composition.get("branch"))
     provenance = _mapping(composition.get("formal_cli_provenance"))
+    scene_facts = _mapping(composition.get("scene_facts"))
     contract = {
         "schema": CONTRACT_SCHEMA,
         "scene_id": str(composition.get("scene_id") or ""),
@@ -40,6 +41,7 @@ def build_prose_execution_contract(composition: dict[str, Any]) -> dict[str, Any
             "selected_branch": str(composition.get("selected_branch") or ""),
             "selection_source": str(composition.get("selection_source") or ""),
             "branch_origin": str(branch.get("branch_origin") or ""),
+            "fallback_reason": str(branch.get("fallback_reason") or ""),
             "title": str(branch.get("title") or ""),
             "strategy": str(branch.get("strategy") or ""),
             "causal_premise": str(branch.get("causal_premise") or branch.get("premise") or ""),
@@ -51,6 +53,7 @@ def build_prose_execution_contract(composition: dict[str, Any]) -> dict[str, Any
             for key in OBLIGATION_KEYS
         },
         "writeback_candidates": _mapping(composition.get("writeback_candidates")),
+        "viewpoint": str(scene_facts.get("viewpoint") or ""),
         "input_contract_digest": str(provenance.get("input_contract_digest") or ""),
     }
     errors = prose_execution_contract_errors(contract)
@@ -83,6 +86,8 @@ def _selection_errors(selection: dict[str, Any]) -> list[str]:
             errors.append(f"missing selection.{key}")
     if selection.get("selection_source") != "selection":
         errors.append("selection.selection_source must be selection")
+    if selection.get("branch_origin") == "deterministic-fallback" and not str(selection.get("fallback_reason") or "").strip():
+        errors.append("selection.fallback_reason is required for deterministic fallback")
     if not _string_list(selection.get("action_chain")):
         errors.append("selection.action_chain must not be empty")
     return errors

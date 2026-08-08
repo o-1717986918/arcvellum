@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...flow_gates import branch_selection_status
+from ...flow_gates import branch_selection_status, fallback_selection_reason_error
 from ...semantic_task_contracts import (
     semantic_artifact_errors,
     semantic_artifact_relative_path,
@@ -47,17 +47,25 @@ def branch_selection_gate(root: Path, scene_id: str) -> tuple[list[str], list[st
     payload, error = _read_optional_json(manifest)
     if error:
         return [error], []
-    branch_ids = _fallback_branch_ids(payload)
+    fallback_ids = _fallback_branch_ids(payload)
     try:
-        branch_ids.update(validated_branch_proposal_ids(root, scene_id, payload))
+        proposal_ids = validated_branch_proposal_ids(root, scene_id, payload)
     except ValueError as exc:
         return [str(exc)], []
+    branch_ids = fallback_ids | proposal_ids
     selected = str(branch_state.get("selected_branch") or "").strip()
     if not branch_ids:
         return [f"branch manifest has no selectable branches: {_rel(manifest, root)}"], []
     if selected not in branch_ids:
         return [f"selected_branch `{selected}` is not present in validated Agent proposals or {_rel(manifest, root)}"], []
-    return [], [f"branch selection: {selected}"]
+    fallback_error = fallback_selection_reason_error(branch_state, selected, proposal_ids, fallback_ids)
+    if fallback_error:
+        return [fallback_error], []
+    if proposal_ids and selected in fallback_ids:
+        reason = str(branch_state.get("fallback_reason") or "").strip()
+        return [], [f"branch selection: {selected} (deterministic fallback: {reason})"]
+    origin = "agent-proposal" if selected in proposal_ids else "deterministic-fallback"
+    return [], [f"branch selection: {selected} ({origin})"]
 
 
 def _fallback_branch_ids(payload: dict[str, Any]) -> set[str]:

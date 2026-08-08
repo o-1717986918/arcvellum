@@ -26,6 +26,7 @@ class SceneFacts:
     internal_conflict: str
     style_constraints: list[str]
     next_hooks: list[str]
+    viewpoint: str = ""
 
 
 def load_scene_facts(scene_path: Path) -> SceneFacts:
@@ -65,6 +66,7 @@ def load_scene_facts(scene_path: Path) -> SceneFacts:
         next_hooks=_text_list(
             _canonical_or_legacy(payload, ("output_state", "next_hooks"), "next_hooks")
         ),
+        viewpoint=_text(payload.get("viewpoint") or payload.get("pov")),
     )
 
 

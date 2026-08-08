@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ...agent_schema import validate_payload
 from ...agent_tasks import agent_task_completion_status
+from ...literary.review.longform_contract import longform_audit_gate_errors
 from ...route_audit_common import _add_gate, _read_json
 def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> None:
     canon_lint = root / "reviews" / "canon_lint.json"
@@ -51,16 +52,14 @@ def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> No
 
     longform = root / "reviews" / "longform" / "longform_audit.json"
     longform_payload = _read_json(longform)
+    longform_errors = longform_audit_gate_errors(root, longform_payload, require_clean=True)
     _add_gate(
         gates,
         "review:longform-audit",
-        longform.exists()
-        and (root / "reviews" / "longform" / "longform_audit.md").exists()
-        and (root / "plot" / "longform_graph.json").exists()
-        and longform_payload.get("schema") == "literary-engineering-workbench/longform-audit/v0.1",
+        _longform_artifacts_clean(root, longform, longform_errors),
         "blocking",
         "longform audit and graph exist",
-        "缺少 reviews/longform/longform_audit.* 或 plot/longform_graph.json，或 longform audit schema 无效。",
+        "长篇审计缺失、过期或仍有确定性阻塞：" + ("；".join(longform_errors[:4]) or "检查审计产物与图谱。"),
     )
 
     committee_task = root / "reviews" / "agent" / "committee_project-final-audit.agent_tasks.md"
@@ -86,4 +85,13 @@ def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> No
         "blocking",
         "committee approved with no open action items",
         "committee_project-final-audit 未通过：需要 sidecar completion、schema pass、final_recommendation=approve，且 action_items/disagreements 全空。",
+    )
+
+
+def _longform_artifacts_clean(root: Path, json_path: Path, errors: list[str]) -> bool:
+    return (
+        json_path.exists()
+        and (root / "reviews" / "longform" / "longform_audit.md").exists()
+        and (root / "plot" / "longform_graph.json").exists()
+        and not errors
     )
