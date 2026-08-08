@@ -29,6 +29,7 @@ from literary_engineering_studio.runtime.context_budget import (
 )
 from literary_engineering_studio.runtime.task_program import build_task_context, render_worker_program
 from literary_engineering_studio.runtime.execution_boundaries import execution_boundary_paths
+from literary_engineering_studio.runtime.prepared_context_cache import PreparedContextCache
 from literary_engineering_studio.task_preflight import validate_task_outputs
 
 
@@ -62,6 +63,89 @@ class SandboxTests(unittest.TestCase):
         task_json = task_dir / "demo.task.json"
         task_json.write_text(json.dumps(payload), encoding="utf-8")
         return load_task_package(root, task_json)
+
+    def _cacheable_task(self, root: Path):
+        task = self._task(root)
+        trace = root / "memory" / "context_packets" / "scene_0001.trace.json"
+        trace.parent.mkdir(parents=True)
+        trace.write_text(
+            json.dumps(
+                {
+                    "scene_id": "scene_0001",
+                    "project_revision": "project-revision-1",
+                    "canon_revision": "canon-revision-1",
+                    "state_revision": "state-revision-1",
+                    "style_mount_revision": "style-revision-1",
+                    "word_budget_revision": "budget-revision-1",
+                    "rhythm_plan_revision": "rhythm-revision-1",
+                    "previous_promoted_scene_sha": "previous-scene-1",
+                }
+            ),
+            encoding="utf-8",
+        )
+        payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+        payload["scene_id"] = "scene_0001"
+        payload["context_trace"] = (
+            "memory/context_packets/scene_0001.trace.json"
+        )
+        payload["source_paths"].append(payload["context_trace"])
+        task.task_json_path.write_text(json.dumps(payload), encoding="utf-8")
+        return load_task_package(root, task.task_json_path)
+
+    def test_prepared_context_cache_reuses_only_exact_declared_content(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            task = self._cacheable_task(Path(temporary))
+            cache = PreparedContextCache(enabled=True, max_entries=2)
+            budget = resolve_task_context_budget(task)
+
+            first = stage_task(
+                task,
+                Path(runs),
+                runtime="host-agent",
+                run_id="cache-first",
+                context_budget=budget,
+                prepared_context_cache=cache,
+            )
+            second = stage_task(
+                task,
+                Path(runs),
+                runtime="host-agent",
+                run_id="cache-second",
+                context_budget=budget,
+                prepared_context_cache=cache,
+            )
+            first_run = json.loads(first.manifest_path.read_text(encoding="utf-8"))
+            second_run = json.loads(second.manifest_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(first_run["prepared_context_cache"]["status"], "miss")
+            self.assertEqual(second_run["prepared_context_cache"]["status"], "hit")
+            self.assertEqual(
+                first_run["prepared_context_sha256"],
+                second_run["prepared_context_sha256"],
+            )
+            self.assertEqual(
+                first_run["context_budget"],
+                second_run["context_budget"],
+            )
+            self.assertNotEqual(
+                first_run["context_ledger_id"],
+                second_run["context_ledger_id"],
+            )
+
+            (task.project_root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nchanged: true\n",
+                encoding="utf-8",
+            )
+            third = stage_task(
+                task,
+                Path(runs),
+                runtime="host-agent",
+                run_id="cache-third",
+                context_budget=budget,
+                prepared_context_cache=cache,
+            )
+            third_run = json.loads(third.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(third_run["prepared_context_cache"]["status"], "miss")
 
     def test_imports_only_expected_output(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:

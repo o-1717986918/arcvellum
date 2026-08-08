@@ -41,6 +41,7 @@ from ..advisor.creative_steward import CreativeSteward
 from ..persistence.job_store import JobStore
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
+from ..runtime.prepared_context_cache import PreparedContextCache
 
 
 ROUTE_ORDER = (
@@ -64,12 +65,14 @@ class AutopilotService:
         runtime_pool=None,
         execution_coordinator=None,
         style_mount_service: StyleMountApplicationService | None = None,
+        prepared_context_cache: PreparedContextCache | None = None,
     ):
         self.config = config
         self.store = store
         self.runtime_pool = runtime_pool
         self.execution_coordinator = execution_coordinator
         self.style_mount_service = style_mount_service or StyleMountApplicationService()
+        self.prepared_context_cache = prepared_context_cache
         self._choice_delegator = DecisionDelegator(
             config,
             store,
@@ -282,6 +285,7 @@ class AutopilotService:
             self.config, plan_store=self.store,
             event_sink=lambda event, data: self._worker_event(run_id, event, data),
             cancel_event=cancel_event, runtime_pool=self.runtime_pool,
+            prepared_context_cache=self.prepared_context_cache,
         )
 
     def _run_claimed(self, run_id: str, stop: threading.Event) -> None:

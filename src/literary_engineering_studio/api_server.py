@@ -189,6 +189,7 @@ def _narrative_dependencies(
 def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any) -> WorkerRouterDependencies:
     def worker_factory(*args, **kwargs):
         kwargs.setdefault("plan_store", jobs)
+        kwargs.setdefault("prepared_context_cache", lifecycle.prepared_context_cache)
         return AgentWorker(*args, **kwargs)
 
     return WorkerRouterDependencies(
@@ -220,7 +221,7 @@ def create_app(config_override: dict[str, Any] | None = None):
         jobs,
         runtime_pool=lifecycle.opencode_pool,
         execution_coordinator=lifecycle.execution_coordinator,
-        style_mount_service=_STYLE_MOUNTS,
+        style_mount_service=_STYLE_MOUNTS, prepared_context_cache=lifecycle.prepared_context_cache,
     )
     narrative_stream_state: dict[str, dict[str, Any]] = {}
     narrative_v3_stream_state: dict[str, dict[str, Any]] = {}

@@ -16,12 +16,17 @@ from .context_budget import (
 )
 from .context_ledger import materialize_runtime_context_ledger
 from .context_selection import AgentContextSelection
+from .context_cache import (
+    build_context_cache_key,
+    context_cache_key_fingerprint,
+)
 from .execution_boundaries import materialize_execution_boundaries
 from .execution_context import (
     ExecutionContextEnvelope,
     build_execution_context_envelope,
 )
 from .prompt_context import PreparedPromptContext, build_prepared_prompt_context
+from .prepared_context_cache import PreparedContextCache
 from .task_program import render_worker_program, write_task_context
 
 
@@ -32,6 +37,9 @@ class MaterializedContextContract:
     ledger: ContextLedger
     prepared_context: PreparedPromptContext
     execution_context: ExecutionContextEnvelope
+    context_cache_status: str = "disabled"
+    context_cache_key: str = ""
+    context_cache_reason: str = ""
 
 
 def materialize_agent_context_contract(
@@ -45,25 +53,22 @@ def materialize_agent_context_contract(
     selection: AgentContextSelection,
     copied_paths: Iterable[str],
     context_budget: TaskContextBudget | None = None,
+    prepared_context_cache: PreparedContextCache | None = None,
 ) -> MaterializedContextContract:
     sources, references = selection.copied_prompt_paths(copied_paths)
     mandatory_paths = _mandatory_context_paths(task, context_budget)
-    exact_on_demand_paths = _exact_on_demand_context_paths(
-        task,
-        context_budget,
-    )
+    exact_on_demand_paths = _exact_on_demand_context_paths(task, context_budget)
     _validate_review_context(task, workspace, context_budget)
     direction = _user_direction(task)
-    prepared_context = build_prepared_prompt_context(
+    context_paths = (*task.core_managed_outputs, *sources, *references)
+    prepared_context, cache_status, cache_key, cache_reason = _prepared_context(
+        task,
         workspace,
-        (
-            *task.core_managed_outputs,
-            *sources,
-            *references,
-        ),
-        budget=context_budget,
+        context_paths,
+        context_budget=context_budget,
         mandatory_paths=mandatory_paths,
         exact_on_demand_paths=exact_on_demand_paths,
+        cache=prepared_context_cache,
     )
     execution_context = build_execution_context_envelope(
         task,
@@ -111,7 +116,57 @@ def materialize_agent_context_contract(
         ledger,
         prepared_context,
         execution_context,
+        cache_status,
+        cache_key,
+        cache_reason,
     )
+
+
+def _prepared_context(
+    task: TaskPackage,
+    workspace: Path,
+    paths: tuple[str, ...],
+    *,
+    context_budget: TaskContextBudget | None,
+    mandatory_paths: tuple[str, ...],
+    exact_on_demand_paths: tuple[str, ...],
+    cache: PreparedContextCache | None,
+) -> tuple[PreparedPromptContext, str, str, str]:
+    key = None
+    reason = ""
+    if cache is not None and cache.enabled:
+        key, reason = build_context_cache_key(
+            task,
+            workspace,
+            paths,
+            budget=context_budget,
+            mandatory_paths=mandatory_paths,
+            exact_on_demand_paths=exact_on_demand_paths,
+        )
+        if key is None:
+            cache.record_bypass(reason)
+        else:
+            cached = cache.get(key)
+            if cached is not None:
+                return (
+                    cached,
+                    "hit",
+                    context_cache_key_fingerprint(key),
+                    "",
+                )
+    prepared = build_prepared_prompt_context(
+        workspace,
+        paths,
+        budget=context_budget,
+        mandatory_paths=mandatory_paths,
+        exact_on_demand_paths=exact_on_demand_paths,
+    )
+    if cache is None or not cache.enabled:
+        return prepared, "disabled", "", "cache-disabled"
+    if key is None:
+        return prepared, "bypass", "", reason
+    cache.put(key, prepared)
+    return prepared, "miss", context_cache_key_fingerprint(key), ""
 
 
 def _user_direction(task: TaskPackage) -> str:

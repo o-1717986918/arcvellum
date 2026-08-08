@@ -16,6 +16,7 @@ from ..model_connections import model_connection_status
 from ..opencode_runtime_pool import OpenCodeRuntimePool
 from ..process_manager import ProcessManager, ProcessRecord, ProcessSpec
 from ..read_model_cache import ReadModelCache
+from ..runtime.prepared_context_cache import PreparedContextCache
 from ..runtimes import RUNTIME_TYPES, agent_runner_status
 from ..supervisor import WorkerSupervisor
 
@@ -44,6 +45,14 @@ class ApplicationLifecycleManager:
         self.store = JobStore(database)
         self.live_events = LiveEventBus()
         self.read_models = ReadModelCache()
+        worker_config = config.get("worker")
+        worker_config = worker_config if isinstance(worker_config, dict) else {}
+        cache_value = worker_config.get("prepared_context_cache")
+        cache_config = cache_value if isinstance(cache_value, dict) else {}
+        self.prepared_context_cache = PreparedContextCache(
+            enabled=bool(cache_config.get("enabled", False)),
+            max_entries=int(cache_config.get("max_entries") or 32),
+        )
         self.process_manager = ProcessManager(data_root / "logs" / "sidecars")
         self.opencode_pool = OpenCodeRuntimePool(config, self.process_manager)
         self.execution_coordinator = ProjectExecutionCoordinator()
@@ -112,6 +121,7 @@ class ApplicationLifecycleManager:
             "agent_runner_error": runner_error,
             "model_connections": model_connection_status(self.config),
             "opencode_runtime_pool": self.opencode_pool.status(),
+            "prepared_context_cache": self.prepared_context_cache.status(),
             "managed_processes": processes,
         }
 
@@ -159,6 +169,7 @@ class ApplicationLifecycleManager:
         self.opencode_pool.shutdown()
         self.live_events.close()
         self.read_models.clear()
+        self.prepared_context_cache.clear()
         self.process_manager.shutdown()
 
 

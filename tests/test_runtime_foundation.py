@@ -49,6 +49,7 @@ class RuntimeFoundationTests(unittest.TestCase):
             self.assertIn("worker_id", health["worker_supervisor"])
             self.assertIn("agent_runners", health)
             self.assertIn("model_connections", health)
+            self.assertFalse(health["prepared_context_cache"]["enabled"])
 
     def test_lifecycle_health_never_waits_for_slow_runner_probe(self):
         with tempfile.TemporaryDirectory() as temporary:

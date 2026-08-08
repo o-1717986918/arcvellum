@@ -18,6 +18,7 @@ from ..contracts import TaskPackage
 from .context_budget import TaskContextBudget
 from .context_materialization import materialize_agent_context_contract
 from .context_selection import select_agent_context
+from .prepared_context_cache import PreparedContextCache
 from .execution_boundaries import prepare_execution_boundaries
 from .run_manifest_factory import build_run_manifest_payload
 from .task_snapshot import materialize_task_snapshot
@@ -50,6 +51,7 @@ def stage_task(
     run_id: str | None = None,
     materialize_agent_view: bool = True,
     context_budget: TaskContextBudget | None = None,
+    prepared_context_cache: PreparedContextCache | None = None,
 ) -> SandboxManifest:
     identifier = run_id or _run_id(task.task_id)
     run_root = runs_root.expanduser().resolve() / _project_key(task.project_root) / identifier
@@ -130,7 +132,10 @@ def stage_task(
         agent_workspace=workspace,
     )
     if materialize_agent_view:
-        materialize_agent_workspace(task, sandbox, context_budget=context_budget)
+        materialize_agent_workspace(
+            task, sandbox, context_budget=context_budget,
+            prepared_context_cache=prepared_context_cache,
+        )
     else:
         workspace.mkdir(parents=True, exist_ok=False)
         baseline_path.write_text("{}\n", encoding="utf-8")
@@ -140,6 +145,7 @@ def stage_task(
 
 def materialize_agent_workspace(
     task: TaskPackage, sandbox: SandboxManifest, *, context_budget: TaskContextBudget | None = None,
+    prepared_context_cache: PreparedContextCache | None = None,
 ) -> tuple[str, ...]:
     """Build the bounded Agent view from the fully reproducible control view."""
 
@@ -186,6 +192,7 @@ def materialize_agent_workspace(
         selection=selection,
         copied_paths=copied,
         context_budget=context_budget,
+        prepared_context_cache=prepared_context_cache,
     )
     refresh_sandbox_baseline(sandbox)
     update_run_manifest(
@@ -204,6 +211,7 @@ def materialize_agent_workspace(
         prepared_context_characters=context.prepared_context.character_count,
         prepared_context_sha256=context.prepared_context.sha256,
         context_budget=context.prepared_context.budget_report_dict(),
+        prepared_context_cache={"status": context.context_cache_status, "key": context.context_cache_key, "reason": context.context_cache_reason},
         execution_context=context.execution_context.safe_projection(),
     )
     return tuple(copied)

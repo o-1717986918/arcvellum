@@ -20,6 +20,7 @@ from ..runtimes import build_runtime
 from .bundle_executor import dispatch_serial_bundle
 from .context_budget import resolve_task_context_budget
 from .repair_context import RepairContextCoordinator
+from .prepared_context_cache import PreparedContextCache
 from .sandbox import (
     SandboxManifest,
     capture_core_managed_outputs,
@@ -65,6 +66,7 @@ class AgentWorker:
         cancel_event: threading.Event | None = None,
         runtime_pool=None,
         plan_store=None,
+        prepared_context_cache: PreparedContextCache | None = None,
         orchestration_fingerprint_provider: Callable[[Path], str] | None = None,
     ):
         self.config = config or load_config()
@@ -75,6 +77,7 @@ class AgentWorker:
         self.cancel_event = cancel_event or threading.Event()
         self.runtime_pool = runtime_pool
         self.plan_store = plan_store
+        self.prepared_context_cache = prepared_context_cache
         self.orchestration_fingerprint_provider = (
             orchestration_fingerprint_provider or planning_project_fingerprint
         )
@@ -142,6 +145,7 @@ class AgentWorker:
             task, runs_root, runtime=active_runtime,
             materialize_agent_view=_materialize_agent_view_immediately(task),
             context_budget=context_budget,
+            prepared_context_cache=self.prepared_context_cache,
         )
         self.observer.bind_run_root(sandbox.run_root)
         self.observer.emit(
@@ -203,7 +207,9 @@ class AgentWorker:
             if protected:
                 self.observer.emit("core.outputs_protected", {"task_id": task.task_id, "paths": list(protected)})
             if task.execution_contract.execution_policy == "agent-required":
-                visible = materialize_agent_workspace(task, sandbox, context_budget=context_budget)
+                visible = materialize_agent_workspace(
+                    task, sandbox, context_budget=context_budget, prepared_context_cache=self.prepared_context_cache,
+                )
                 self.observer.emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
             self.observer.emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
         self.observer.publish_context_ready(task, sandbox, active_runtime)

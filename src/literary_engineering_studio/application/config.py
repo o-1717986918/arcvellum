@@ -65,6 +65,10 @@ def _default_worker_config() -> dict[str, Any]:
         "max_repair_attempts": 2,
         "auto_run_task_command": True,
         "pause_on_human_gate": True,
+        "prepared_context_cache": {
+            "enabled": False,
+            "max_entries": 32,
+        },
         "context_budget": {
             "mode": "shadow",
             "legacy_max_inline_characters": 180000,

@@ -2034,3 +2034,65 @@ Q5-B 结论：
 - 数据库 schema version 从 15 升至 16，迁移/重开数据库测试通过；Architecture baseline 未修改。
 
 Q5-C1 结论：角色权限隔离已进入真实 Runtime 调用链；资源准入拥有进程内与持久化双层生命周期，并保持旧路径默认串行。下一批进入 Q5-C2，只缓存可重建的 `PreparedPromptContext`；不得缓存正式项目事实、Agent 消息、输出或审查结论，也不得为了提高命中率扩大上下文读取范围。
+
+#### Q5-C2 实施前复审：安全命中身份与生命周期
+
+状态：实施中。
+
+调用链复核：
+
+```text
+AgentWorker.prepare
+  -> stage_task / materialize_agent_workspace
+  -> select_agent_context
+  -> materialize_agent_context_contract
+  -> build_prepared_prompt_context
+  -> build_execution_context_envelope
+  -> render_worker_program / TASK_CONTEXT / boundaries / Context Ledger
+```
+
+关键修正：原十字段 `ContextCacheKey` 只表达文学修订身份仍不充分。Context trace 的 project/canon/state/style/budget/rhythm revision 不一定覆盖同一场景后续生成的 RP、分支、composition、候选稿与 review 资料；如果只依赖 trace，可能把旧分支或旧候选的 Prepared Context 复用给新任务。
+
+本批安全方案：
+
+1. 缓存只在应用生命周期显式启用；默认关闭。CLI 单次 Worker 没有共享 cache 时自然 bypass；
+2. key 仍保留 Canon、人物状态、文风、字数预算、节奏/前场衔接、角色与任务类型等文学身份，同时把“任务明确授权的 source/reference/core-managed 路径内容清单摘要、顺序、上下文 tier、Prompt/任务状态、预算策略摘要”合入 `project_revision` 的复合身份；
+3. 内容摘要只遍历 task package 已授权并已复制到 sandbox workspace 的路径；不得向项目根目录扩展搜索，也不得把未授权资产加入上下文；
+4. 缺 `context_trace`、trace 字段、scene identity、合法 source path 或预算身份时记录 bypass，不猜测默认值；
+5. cache 内部存储 `PreparedPromptContext` 的 JSON 可序列化投影；不持有 TaskPackage、workspace Path、Agent message、ExecutionContext、Context Ledger、Canon 对象、输出或审查结论；
+6. hit 后仍重新构造 ExecutionContext、Prompt、TASK_CONTEXT、execution boundaries、Context Ledger 和 sandbox baseline；因此审计证据、run identity 与上下文账本不会复用；
+7. cache 为有界线程安全 LRU，由 `ApplicationLifecycleManager` 唯一持有并注入 API Worker 与 Autopilot Worker；不继承 Repository，不落 SQLite，不创建第二 ReadModelCache；
+8. run manifest 必须记录 `disabled/bypass/miss/hit`、key fingerprint 与 bypass reason；生命周期 health 只暴露容量和命中统计，不暴露正文内容。
+
+实施顺序：先完成 cache contract/key builder/LRU 单测；再接 context materialization；再接 lifecycle、API worker factory、Autopilot；最后运行 Sandbox/Context/Worker/Autopilot/API/Architecture 组合与全量回归。任何命中导致 prompt、Context Ledger 摘要或预算报告与冷构建不一致，均视为本批失败。
+
+#### Q5-C2 完成记录：可重建 Prepared Context Cache
+
+状态：完成。默认关闭。
+
+完成内容：
+
+- `context_cache.py` 在既有 `ContextCacheKey` 上新增生产 key builder：只使用 task package 明确声明、已复制到 Agent workspace 的路径，组合 task/Prompt/预算/tier 内容清单与 Context Broker trace 的 project/canon/state/style/word-budget/rhythm/previous-scene revisions；
+- 缺 trace、缺文学 revision、scene identity 不一致或授权路径摘要失败时 fail-safe bypass；不扫描项目根目录，不补猜角色、场景或 Canon；
+- 新增 `PreparedContextCache`：应用级、线程安全、有界 LRU，容量限制 1-256；内部只保留 `PreparedPromptContext` 的 JSON 投影与 key，不持有项目对象、文件句柄、模型消息或 Agent 结论；
+- cache hit 只替代 `build_prepared_prompt_context`。ExecutionContext、Prompt、TASK_CONTEXT、boundaries、Context Ledger、sandbox baseline 与 run manifest 每次重新生成；
+- `AgentWorker`、API Worker factory 和 Autopilot Worker 共享 `ApplicationLifecycleManager` 唯一持有的 cache；CLI 单次 Worker 和未注入 cache 的测试/兼容调用自然 disabled；
+- 默认配置 `worker.prepared_context_cache.enabled=false`、`max_entries=32`；生命周期 health 只报告 entries/hits/misses/evictions/bypasses 与原因计数；shutdown 清空内存；
+- run manifest 为每次上下文物化记录 `disabled/bypass/miss/hit`、key fingerprint 和 reason，未向前端或日志泄露正文缓存内容。
+
+审查与验证发现：
+
+1. 初版接线使 `api_server.py`、`sandbox.py`、`worker.py` 和 `materialize_agent_context_contract` 超过既有文件/函数预算；通过压缩注入接线与提炼 cache resolver 收敛，未修改 Architecture baseline；
+2. 冷/热集成测试证明：同一 task、trace、预算和授权内容第一次为 miss，第二次为 hit；修改一个授权场景文件后重新 miss；热构建与冷构建的 prepared SHA 和 Context Budget Report 完全一致；
+3. 两次命中关联 run 的 Context Ledger ID 明确不同，证明账本与审计身份没有随缓存复用；
+4. LRU 容量与 disabled 模式有独立单测；默认生命周期 health 证明旧配置不启用缓存；
+5. 非场景路线目前因无同等级 Context trace 而 bypass。这是安全限制，不是未声明的全路线加速；以后扩展前必须先让对应 Context Broker 产出可验证 revision identity。
+
+阶段验证：
+
+- Cache/Sandbox/Context/Worker/Autopilot/Lifecycle/Architecture 组合：72 tests passed；
+- API、Autopilot、Worker、Lifecycle 与缓存回归：69 tests passed；
+- 全量回归：908 tests passed，1 skipped；
+- `compileall -q src tests`、Architecture Audit、Dependency Direction 与 `git diff --check` 通过；Architecture baseline 未修改。
+
+Q5-C2 结论：缓存命中可以减少重复 UTF-8 解码、逐文件渲染与预算选择，但不会减少安全所需的授权内容摘要读取，也不会跨不完整文学身份复用。下一批进入 Q5-C3，先验证 OpenCode session 的 workspace rebinding、消息增量和 diff 边界；不满足时只交付可观察的 reuse eligibility/invalidation registry，保持真实跨任务 session reuse 关闭。
