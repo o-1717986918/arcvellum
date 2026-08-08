@@ -995,3 +995,34 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - 静态扫描确认旧 `WorkerWritebackMixin`、`_complete_outputs`、`_validate_outputs` 引用清零。
 
 Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Writeback 已从隐式继承迁为显式组合。下一步转入 Q3 高复杂度函数拆分；其余 Store Mixin 仅在能带来清晰领域边界时迁移，不为“数量清零”制造样板代码。
+
+### 2026-08-08：Q2-F Architecture Ratchet 修正
+
+状态：完成，准备独立提交。
+
+触发原因：
+
+- Q2 显式委托把 `JobStore` 从基线 620 行推到 801 行；
+- Q0 严格 Lease 边界使 `session_lease_violations` complexity 从 15 增到 16；
+- 功能测试虽通过，但违反“被修改的旧债不得上升”的 Architecture Ratchet。
+
+修正：
+
+- 新增 `persistence/schema.py`，集中 DDL 拼接与 additive migration 入口；
+- `JobStore` 只保留备份策略、初始化时机和 `initialize_schema()` 调用，降到 603 行；
+- Session Lease 的 identity/counter/duration/budget limit 验证拆成四个小型纯函数；
+- 未修改 architecture baseline，也未给新增债务加白名单。
+
+审查插曲：
+
+- `schema.py` 初版 docstring 使用了 `facades`，被审计器正确识别成兼容门面并阻止新增依赖；改为准确的 DDL/migration 职责描述后通过；
+- 初次测试命令误猜不存在的 Session Lease 模块，按 `rg` 定位真实 `tests.runtime.test_context_cache_session_lease` 后重跑。
+
+验证证据：
+
+- Architecture Audit：passed，34 file debts、219 function debts、0 cycles；
+- 函数债务相较本轮起点净减少 1；
+- 持久化、Autopilot、Advisor、Reader、Session Lease 与共享 Violation：64 tests passed；
+- compileall 与 `git diff --check`：通过。
+
+下一批入口：继续 Q3 Candidate Generation/Review Gate 拆分；每笔改动后都运行 Architecture Audit，不再等阶段末才发现 Ratchet 回归。

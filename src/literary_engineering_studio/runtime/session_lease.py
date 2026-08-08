@@ -96,28 +96,28 @@ def session_reusable(
 
 def session_lease_violations(lease: SessionLease) -> tuple[SessionLeaseViolation, ...]:
     """Return deterministic structural violations for a session lease."""
+    issues = _identity_violations(lease)
+    issues.extend(_counter_violations(lease))
+    issues.extend(_duration_violations(lease))
+    issues.extend(_budget_limit_violations(lease))
+    return tuple(issues)
+
+
+def _identity_violations(lease: SessionLease) -> list[SessionLeaseViolation]:
+    required = (
+        ("session_id", "missing-session-id"),
+        ("project_id", "missing-project-id"),
+        ("model_id", "missing-model-id"),
+    )
+    return [
+        SessionLeaseViolation(code=code, message=f"{name} must not be empty")
+        for name, code in required
+        if not getattr(lease, name)
+    ]
+
+
+def _counter_violations(lease: SessionLease) -> list[SessionLeaseViolation]:
     issues: list[SessionLeaseViolation] = []
-    if not lease.session_id:
-        issues.append(
-            SessionLeaseViolation(
-                code="missing-session-id",
-                message="session_id must not be empty",
-            )
-        )
-    if not lease.project_id:
-        issues.append(
-            SessionLeaseViolation(
-                code="missing-project-id",
-                message="project_id must not be empty",
-            )
-        )
-    if not lease.model_id:
-        issues.append(
-            SessionLeaseViolation(
-                code="missing-model-id",
-                message="model_id must not be empty",
-            )
-        )
     for name in ("token_used", "max_tokens", "failure_count", "max_failures"):
         value = getattr(lease, name)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -127,6 +127,11 @@ def session_lease_violations(lease: SessionLease) -> tuple[SessionLeaseViolation
                     message=f"{name} must be a non-negative integer",
                 )
             )
+    return issues
+
+
+def _duration_violations(lease: SessionLease) -> list[SessionLeaseViolation]:
+    issues: list[SessionLeaseViolation] = []
     for name in ("elapsed_seconds", "max_seconds"):
         value = getattr(lease, name)
         if (
@@ -140,6 +145,11 @@ def session_lease_violations(lease: SessionLease) -> tuple[SessionLeaseViolation
                     message=f"{name} must be a non-negative number",
                 )
             )
+    return issues
+
+
+def _budget_limit_violations(lease: SessionLease) -> list[SessionLeaseViolation]:
+    issues: list[SessionLeaseViolation] = []
     for name in ("max_tokens", "max_seconds", "max_failures"):
         value = getattr(lease, name)
         if (
@@ -153,4 +163,4 @@ def session_lease_violations(lease: SessionLease) -> tuple[SessionLeaseViolation
                     message=f"{name} must be greater than zero",
                 )
             )
-    return tuple(issues)
+    return issues
