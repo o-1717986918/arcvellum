@@ -200,7 +200,7 @@ def build_scene_prompt_pack(
         "scene_text": _read(scene_path),
         "context_text": _limit(_read(context_path), DEFAULT_CONTEXT_LIMIT),
         "context_trace_text": _limit(_read(context_trace_path), DEFAULT_CONTEXT_LIMIT),
-        "composition_text": _composition_prompt_text(composition_path, _execution_contract_text(composition_path)),
+        "composition_text": _composition_contract_prompt_text(composition_path, allow_incomplete=allow_unselected_composition or allow_missing_composition),
         "style_profile": style_context.constraint,
         "style_generation_standard": _render_style_generation_standard(root, style_profile_path),
         "word_budget_generation_standard": render_word_budget_generation_standard(root),
@@ -473,10 +473,39 @@ def _composition_prompt_text(composition_path: Path | None, execution_contract_t
     return markdown.rstrip() + "\n\n" + execution_contract_text.strip() + "\n"
 
 
-def _execution_contract_text(composition_path: Path | None) -> str:
+def _execution_contract_text(
+    composition_path: Path | None,
+    *,
+    allow_incomplete: bool = False,
+) -> str:
     if composition_path is None:
         return ""
-    return render_prose_execution_contract(load_prose_execution_contract(_composition_json_path(composition_path)))
+    try:
+        contract = load_prose_execution_contract(
+            _composition_json_path(composition_path)
+        )
+    except ValueError:
+        if not allow_incomplete:
+            raise
+        return (
+            "[MAINTAINER_EXPERIMENT: formal prose execution contract is incomplete; "
+            "this prompt pack is not eligible for formal promotion or release.]"
+        )
+    return render_prose_execution_contract(contract)
+
+
+def _composition_contract_prompt_text(
+    composition_path: Path | None,
+    *,
+    allow_incomplete: bool,
+) -> str:
+    return _composition_prompt_text(
+        composition_path,
+        _execution_contract_text(
+            composition_path,
+            allow_incomplete=allow_incomplete,
+        ),
+    )
 
 
 def _reader_obligation_source_path(root: Path, scene_path: Path) -> Path | None:
