@@ -374,12 +374,6 @@ class SessionRepository:
         payload["event_count"] = int(payload.get("event_count") or 0)
         payload["retry_count"] = int(payload.get("retry_count") or 0)
         return payload
-
-
-# Kept as an import alias for third-party code during the repository migration.
-SessionStoreMixin = SessionRepository
-
-
 def _merged_session_values(existing, **values: Any) -> dict[str, Any]:
     limits = {
         "project_root": None,

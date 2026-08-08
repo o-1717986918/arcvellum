@@ -257,7 +257,3 @@ class AutopilotRepository:
         payload["route_index"] = int(payload.get("route_index") or 0)
         payload["stalled_cycles"] = int(payload.get("stalled_cycles") or 0)
         return payload
-
-
-# Kept as an import alias for third-party code during the repository migration.
-AutopilotStoreMixin = AutopilotRepository

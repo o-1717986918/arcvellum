@@ -7,16 +7,23 @@ from pathlib import Path
 from typing import Any
 
 
-class WorkerObservabilityMixin:
-    event_sink: Any
-    _context_ledger_fields: dict[str, str]
-    _agent_session_id: str
+class WorkerObserver:
+    """Attach one worker run's context identity to emitted lifecycle events."""
 
-    def _reset_context_ledger(self) -> None:
+    def __init__(self, event_sink: Any = None):
+        self.event_sink = event_sink
+        self._context_ledger_fields: dict[str, str] = {}
+        self._agent_session_id = ""
+
+    @property
+    def agent_session_id(self) -> str:
+        return self._agent_session_id
+
+    def reset_context_ledger(self) -> None:
         self._context_ledger_fields = {}
         self._agent_session_id = ""
 
-    def _bind_context_ledger(self, run: dict[str, Any]) -> None:
+    def bind_context_ledger(self, run: dict[str, Any]) -> None:
         ledger_id = str(run.get("context_ledger_id") or "")
         ledger_digest = str(run.get("context_ledger_digest") or "")
         ledger_path = str(run.get("context_ledger") or "")
@@ -31,18 +38,18 @@ class WorkerObservabilityMixin:
             else {}
         )
 
-    def _publish_context_ready(self, task, sandbox, runtime_id: str) -> None:
+    def publish_context_ready(self, task, sandbox, runtime_id: str) -> None:
         if task.execution_contract.execution_policy != "agent-required":
             return
         run = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
-        self._bind_context_ledger(run)
+        self.bind_context_ledger(run)
         budget = run.get("context_budget") if isinstance(run.get("context_budget"), dict) else {}
         execution_context = (
             run.get("execution_context")
             if isinstance(run.get("execution_context"), dict)
             else {}
         )
-        self._emit(
+        self.emit(
             "sandbox.context_ready",
             {
                 "run_id": sandbox.run_id,
@@ -56,7 +63,7 @@ class WorkerObservabilityMixin:
             },
         )
 
-    def _emit(self, event: str, data: dict[str, Any]) -> None:
+    def emit(self, event: str, data: dict[str, Any]) -> None:
         if event in {
             "runner.session.started",
             "runner.session.finished",

@@ -196,12 +196,6 @@ class ContextLedgerRepository:
             "digest": metadata["digest"],
             "created_at": metadata["created_at"],
         }
-
-
-# Kept as an import alias for third-party code during the repository migration.
-ContextLedgerStoreMixin = ContextLedgerRepository
-
-
 def _validate_ledger_id(value: str) -> str:
     ledger_id = str(value or "").strip()
     if (

@@ -871,7 +871,7 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `JobStore` 保留全部历史公开方法，并以明确签名委托，避免破坏 Controller、API 和测试调用方；
 - 租约抢占使用 `write(immediate=True)`，其余读写保持原有事务语义；
 - `_connect/_connection` 暂时委托 Unit of Work，供尚未迁移的旧领域使用，避免一次性重写九个持久化模块；
-- 保留 `AutopilotStoreMixin` 导入别名作为第三方过渡兼容，但生产 `JobStore` 已不再继承它。
+- 删除内部 `AutopilotStoreMixin` 类型；正式兼容面是 `JobStore` 的公开方法，不提供无法兑现继承行为的虚假别名。
 
 批判性审查：
 
@@ -900,7 +900,7 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `JobStore` 不再继承 Session 领域实现，而是组合 `sessions` 仓储；
 - Advisor 对话、Agent 会话、主动通知、授权策略和阅读进度的历史公开 API 保持不变；
 - Advisor 消息序号分配继续使用 `BEGIN IMMEDIATE`，避免并发序号冲突；
-- 保留 `SessionStoreMixin` 导入别名作为迁移期兼容，生产 `JobStore` 已不继承它；
+- 删除内部 `SessionStoreMixin` 类型；正式兼容面继续由 `JobStore` 公开方法承担；
 - 新增组合关系和持久化消息回读测试。
 
 批判性审查：
@@ -929,7 +929,7 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - 记录、读取、列表三个历史 API 以明确签名兼容；
 - 同一 ledger identity 的冲突检测继续在 `BEGIN IMMEDIATE` 事务中完成；
 - Context Ledger 仍只保存元数据和摘要，不把 Agent 可见原文复制到 SQLite；
-- 保留迁移期 `ContextLedgerStoreMixin` 导入别名。
+- 删除内部 `ContextLedgerStoreMixin` 类型，模块化测试改为验证新仓储注解。
 
 验证证据：
 
@@ -940,3 +940,30 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `python -m compileall -q src/literary_engineering_studio/persistence` 与 `git diff --check`：通过。
 
 下一批入口：将 Worker 上下文绑定和事件投影从 `WorkerObservabilityMixin` 收敛为可独立测试的 `WorkerObserver`，不改变事件名或 payload schema。
+
+### 2026-08-08：Q2-D Worker Observer 组合化
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- `WorkerObserver` 独立持有 event sink、Context Ledger 投影字段和当前 Agent session identity；
+- `AgentWorker` 不再继承 `WorkerObservabilityMixin`，而是构造并显式调用 `observer`；
+- `WorkerWritebackMixin` 也显式依赖 `observer`，不再假设宿主拥有 `_emit` 与 `_agent_session_id` 私有成员；
+- Runner、恢复、验证、写回和 Mutation Receipt 继续共享同一事件投影；
+- 删除不能兑现继承兼容的旧 Mixin 别名。
+
+批判性审查：
+
+- 本批没有改事件名、payload schema、Context Ledger 附加条件或 Agent 会话识别规则；
+- `WorkerWritebackMixin` 仍是下一步遗留：它现在的依赖更明确，但仍通过继承获得 bridge/config/observer；下一批应把它收敛为 `WritebackCoordinator`，而不是再添加更多 Worker Mixin；
+- 保留 `AgentWorker.event_sink` 只为当前实例兼容，实际事件写入由 Observer 所有。
+
+验证证据：
+
+- Worker 集成、恢复、Mutation Receipt、Agent observability 与 Context Ledger：21 tests passed；
+- OpenCode runtime 执行：7 tests passed；
+- 覆盖确定性执行、host-agent 准备、乱码路径恢复、无新产物恢复拒绝、三阶段 Mutation 证据和隐藏推理保护；
+- `python -m compileall -q src/literary_engineering_studio/runtime` 与 `git diff --check`：通过。
+
+下一批入口：把写回预检、预览、审批、导入、回滚和 core gate 协调从继承关系迁入 `WritebackCoordinator`；`AgentWorker` 只负责 prepare/run/resume 编排。

@@ -29,7 +29,7 @@ from .sandbox import (
 )
 from .run_manifest import load_run
 from .task_snapshot import load_run_task_snapshot
-from .worker_observability import WorkerObservabilityMixin
+from .worker_observability import WorkerObserver
 from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
     validate_project as _validate_project,
@@ -53,7 +53,7 @@ def _task_opened_payload(task: TaskPackage) -> dict[str, Any]:
     }
 
 
-class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
+class AgentWorker(WorkerWritebackMixin):
     def __init__(
         self,
         config: dict[str, Any] | None = None,
@@ -67,21 +67,21 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         self.config = config or load_config()
         self.bridge = CoreBridge(self.config)
         self.event_sink = event_sink
+        self.observer = WorkerObserver(event_sink)
         self.cancel_event = cancel_event or threading.Event()
         self.runtime_pool = runtime_pool
         self.plan_store = plan_store
         self.orchestration_fingerprint_provider = (
             orchestration_fingerprint_provider or planning_project_fingerprint
         )
-        self._reset_context_ledger()
 
     def prepare(
         self, project_root: Path, *, route: str, runtime_id: str,
         task_id: str = "", scene: str = "",
     ) -> tuple[TaskPackage | None, SandboxManifest | None, WorkerRunResult | None]:
-        self._reset_context_ledger()
+        self.observer.reset_context_ledger()
         project = _validate_project(project_root)
-        self._emit("task.selecting", {"project_root": str(project), "route": route})
+        self.observer.emit("task.selecting", {"project_root": str(project), "route": route})
         selected_task_id = task_id.strip()
         if not selected_task_id:
             issued = self.bridge.task_next(project, route, scene=scene)
@@ -104,9 +104,9 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         task = load_task_package(project, task_json_path)
         task = self._bind_active_scene_plan(task)
         context_budget = resolve_task_context_budget(task, self.config.get("worker"))
-        self._emit("task.opened", _task_opened_payload(task))
+        self.observer.emit("task.opened", _task_opened_payload(task))
         if task.human_gate_reasons:
-            self._emit("human.required", {"reasons": list(task.human_gate_reasons), "task_id": task.task_id})
+            self.observer.emit("human.required", {"reasons": list(task.human_gate_reasons), "task_id": task.task_id})
             return task, None, WorkerRunResult(
                 "waiting_human",
                 project,
@@ -125,7 +125,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             materialize_agent_view=_materialize_agent_view_immediately(task),
             context_budget=context_budget,
         )
-        self._emit(
+        self.observer.emit(
             "sandbox.prepared",
             {
                 "run_id": sandbox.run_id,
@@ -141,7 +141,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             unresolved = task_command_parameters(task.command)
             if unresolved:
                 message = "当前任务需要先确定：" + "、".join(unresolved)
-                self._emit(
+                self.observer.emit(
                     "task.parameters_required",
                     {"task_id": task.task_id, "parameters": list(unresolved), "message": message},
                 )
@@ -155,7 +155,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
                     None,
                     message,
                 )
-            self._emit("core.command_started", {"task_id": task.task_id})
+            self.observer.emit("core.command_started", {"task_id": task.task_id})
             try:
                 command_result = self.bridge.execute_task_command(task.command, sandbox.control_workspace or sandbox.workspace)
             except (RuntimeError, ValueError, FileNotFoundError) as exc:
@@ -164,7 +164,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
                     status="core_command_failed",
                     core_command_error=str(exc),
                 )
-                self._emit("core.command_failed", {"task_id": task.task_id, "error": str(exc)})
+                self.observer.emit("core.command_failed", {"task_id": task.task_id, "error": str(exc)})
                 return task, sandbox, WorkerRunResult(
                     "core_command_failed",
                     project,
@@ -182,12 +182,12 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             )
             protected = capture_core_managed_outputs(task, sandbox)
             if protected:
-                self._emit("core.outputs_protected", {"task_id": task.task_id, "paths": list(protected)})
+                self.observer.emit("core.outputs_protected", {"task_id": task.task_id, "paths": list(protected)})
             if task.execution_contract.execution_policy == "agent-required":
                 visible = materialize_agent_workspace(task, sandbox, context_budget=context_budget)
-                self._emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
-            self._emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
-        self._publish_context_ready(task, sandbox, active_runtime)
+                self.observer.emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
+            self.observer.emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
+        self.observer.publish_context_ready(task, sandbox, active_runtime)
         return task, sandbox, None
 
     def _bind_active_scene_plan(self, task: TaskPackage) -> TaskPackage:
@@ -212,7 +212,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
                 fingerprint_provider=self.orchestration_fingerprint_provider,
             ).load(task.project_root)
             if active is None:
-                self._emit(
+                self.observer.emit(
                     "orchestration.fixed_fallback",
                     {"task_id": task.task_id, "reason": "no-active-plan"},
                 )
@@ -224,12 +224,12 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
                 current_project_fingerprint=active.project_fingerprint,
             )
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
-            self._emit(
+            self.observer.emit(
                 "orchestration.fixed_fallback",
                 {"task_id": task.task_id, "reason": str(exc)},
             )
             return task
-        self._emit(
+        self.observer.emit(
             "orchestration.plan_bound",
             {
                 "task_id": task.task_id,
@@ -264,7 +264,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
 
         if task.execution_contract.execution_policy == "deterministic":
-            self._emit("runner.skipped", {"reason": "deterministic-cli", "task_id": task.task_id})
+            self.observer.emit("runner.skipped", {"reason": "deterministic-cli", "task_id": task.task_id})
             update_run_manifest(
                 sandbox.manifest_path,
                 status="deterministic_outputs_ready",
@@ -274,7 +274,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             return self._complete_outputs(task, sandbox, active_runtime)
 
         if self.cancel_event.is_set():
-            self._emit("run.cancelled", {"stage": "before-runner"})
+            self.observer.emit("run.cancelled", {"stage": "before-runner"})
             return WorkerRunResult(
                 "cancelled",
                 task.project_root,
@@ -288,10 +288,10 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
 
         runtime = build_runtime(runtime_id, self.config, runtime_pool=self.runtime_pool)
         timeout = int(self.config.get("worker", {}).get("timeout_seconds") or 1800)
-        self._emit("runner.started", {"runner_id": runtime_id, "task_id": task.task_id})
+        self.observer.emit("runner.started", {"runner_id": runtime_id, "task_id": task.task_id})
         runtime_kwargs = {
             "timeout": timeout,
-            "event_sink": self._emit,
+            "event_sink": self.observer.emit,
             "cancel_event": self.cancel_event,
         }
         if runtime_id == "opencode":
@@ -318,7 +318,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             sandbox.run_root,
             **runtime_kwargs,
         )
-        self._emit(
+        self.observer.emit(
             "runner.completed",
             {
                 "runner_id": runtime_id,
@@ -358,7 +358,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             )
 
         if self.cancel_event.is_set():
-            self._emit("run.cancelled", {"stage": "before-writeback"})
+            self.observer.emit("run.cancelled", {"stage": "before-writeback"})
             return WorkerRunResult(
                 "cancelled",
                 task.project_root,
@@ -375,7 +375,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
     def resume_from_run(self, run_root: Path) -> WorkerRunResult:
         """Resume a timed-out run only when it contains fresh valid Agent output."""
         run = load_run(run_root)
-        self._bind_context_ledger(run)
+        self.observer.bind_context_ledger(run)
         project = _validate_project(Path(str(run.get("project_root") or "")))
         task = load_run_task_snapshot(
             run_root,
@@ -386,7 +386,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
         if str(run.get("task_id") or "") != task.task_id:
             raise ValueError("recovery sandbox task identity does not match its task package")
 
-        self._emit("run.resume_started", {"run_root": str(sandbox.run_root), "task_id": task.task_id})
+        self.observer.emit("run.resume_started", {"run_root": str(sandbox.run_root), "task_id": task.task_id})
         changed_outputs = changed_agent_outputs(sandbox)
         if not changed_outputs:
             message = "recovery requires fresh Agent-authored expected outputs; the sandbox only contains staged or stale files"
@@ -394,7 +394,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
                 sandbox.manifest_path,
                 recovery={"status": "rejected", "reason": "no-fresh-agent-output"},
             )
-            self._emit("run.resume_rejected", {"reason": "no-fresh-agent-output", "task_id": task.task_id})
+            self.observer.emit("run.resume_rejected", {"reason": "no-fresh-agent-output", "task_id": task.task_id})
             raise ValueError(message)
         preflight = self._validate_outputs(
             task,
@@ -406,7 +406,7 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
                 sandbox.manifest_path,
                 recovery={"status": "rejected", "preflight": preflight.as_dict()},
             )
-            self._emit("run.resume_rejected", preflight.as_dict())
+            self.observer.emit("run.resume_rejected", preflight.as_dict())
             raise ValueError("existing sandbox is not safe to resume: " + "; ".join(item.message for item in preflight.issues[:5]))
 
         update_run_manifest(
@@ -414,5 +414,5 @@ class AgentWorker(WorkerWritebackMixin, WorkerObservabilityMixin):
             status="recovery_preflight_passed",
             recovery={"status": "accepted", "fresh_outputs": list(changed_outputs), "preflight": preflight.as_dict()},
         )
-        self._emit("validation.passed", {"kind": "recovery-preflight", **preflight.as_dict()})
+        self.observer.emit("validation.passed", {"kind": "recovery-preflight", **preflight.as_dict()})
         return self._complete_outputs(task, sandbox, str(run.get("runtime") or "opencode"))

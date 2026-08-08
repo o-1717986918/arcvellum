@@ -8,7 +8,7 @@ import tempfile
 import typing
 import unittest
 
-from literary_engineering_studio.persistence.autopilot_runs import AutopilotStoreMixin
+from literary_engineering_studio.persistence.autopilot_runs import AutopilotRepository
 from literary_engineering_studio_engine.director.records import _append_project_direction_memory
 from literary_engineering_studio_engine.projections.interaction.choices import _latest_approval_record
 from literary_engineering_studio_engine.projections.interaction.editing import record_ui_note
@@ -20,7 +20,7 @@ from literary_engineering_studio_engine.workflow.state_assets import _asset_stat
 
 class ModularRuntimeImportTests(unittest.TestCase):
     def test_autopilot_type_annotations_resolve(self):
-        hints = typing.get_type_hints(AutopilotStoreMixin._append_autopilot_event_tx)
+        hints = typing.get_type_hints(AutopilotRepository._append_autopilot_event_tx)
         self.assertIn("connection", hints)
 
     def test_director_memory_fallback_writes_a_digest(self):

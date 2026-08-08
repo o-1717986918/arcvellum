@@ -29,7 +29,7 @@ from .worker_results import WorkerRunResult
 
 
 class WorkerWritebackMixin:
-    """Requires ``bridge``, ``_emit``, and ``_agent_session_id`` from AgentWorker."""
+    """Requires ``bridge`` and an explicit ``observer`` from AgentWorker."""
 
     def _complete_outputs(
         self,
@@ -57,10 +57,10 @@ class WorkerWritebackMixin:
                 "; ".join(item.message for item in preflight.issues[:5]),
             )
 
-        self._emit("validation.started", {"kind": "expected-output-preview"})
+        self.observer.emit("validation.started", {"kind": "expected-output-preview"})
         preview = inspect_expected_outputs(task, sandbox)
         self._mutation_tracker(task, sandbox, runtime_id).previewed(preview)
-        self._emit("writeback.preview_ready", preview.as_dict())
+        self.observer.emit("writeback.preview_ready", preview.as_dict())
         if preview.policy != "automatic":
             update_run_manifest(
                 sandbox.manifest_path,
@@ -97,7 +97,7 @@ class WorkerWritebackMixin:
             sandbox.manifest_path,
             writeback_decision={"decision": "approve", "approved_by": actor},
         )
-        self._emit("writeback.approved", {"approved_by": actor})
+        self.observer.emit("writeback.approved", {"approved_by": actor})
         return self._finalize(task, sandbox, preview, approved_by=actor)
 
     def reject_writeback(
@@ -126,7 +126,7 @@ class WorkerWritebackMixin:
             sandbox,
             str(run.get("runtime") or ""),
         ).rejected(preview)
-        self._emit("writeback.rejected", {"reason": reason.strip()})
+        self.observer.emit("writeback.rejected", {"reason": reason.strip()})
         return WorkerRunResult(
             "writeback_rejected",
             Path(str(run["project_root"])),
@@ -151,7 +151,7 @@ class WorkerWritebackMixin:
         mutations = self._mutation_tracker(task, sandbox, runtime_id)
         imported = apply_expected_outputs(task, sandbox, preview)
         mutations.applied(preview)
-        self._emit(
+        self.observer.emit(
             "file.imported",
             {"paths": list(imported), "approved_by": approved_by},
         )
@@ -196,7 +196,7 @@ class WorkerWritebackMixin:
         mutations,
         error,
     ) -> WorkerRunResult:
-        self._emit(
+        self.observer.emit(
             "validation.blocked",
             {"kind": "core-task-gate", "error": str(error)},
         )
@@ -249,7 +249,7 @@ class WorkerWritebackMixin:
             "route": task.route,
             "task_id": task.task_id,
         }
-        self._emit("validation.passed", {"kind": "exact-task-gate", "audit": audit})
+        self.observer.emit("validation.passed", {"kind": "exact-task-gate", "audit": audit})
         mutations.promoted(preview)
         update_run_manifest(
             sandbox.manifest_path,
@@ -280,7 +280,7 @@ class WorkerWritebackMixin:
     ):
         restored_unexpected = restore_unexpected_agent_changes(sandbox)
         if restored_unexpected:
-            self._emit(
+            self.observer.emit(
                 "sandbox.unexpected_changes_restored",
                 {
                     "task_id": task.task_id,
@@ -290,16 +290,16 @@ class WorkerWritebackMixin:
             )
         restored = restore_core_managed_outputs(sandbox)
         if restored:
-            self._emit(
+            self.observer.emit(
                 "core.outputs_restored",
                 {"task_id": task.task_id, "paths": list(restored)},
             )
         normalized = canonicalize_task_outputs(task, sandbox)
         if normalized:
-            self._emit("validation.canonicalized", {"changes": normalized})
+            self.observer.emit("validation.canonicalized", {"changes": normalized})
         synced = sync_agent_outputs_to_control(task, sandbox)
         if synced:
-            self._emit(
+            self.observer.emit(
                 "agent.outputs_staged",
                 {"task_id": task.task_id, "paths": list(synced)},
             )
@@ -340,7 +340,7 @@ class WorkerWritebackMixin:
     ) -> WorkerMutationTracker:
         run = load_run(sandbox.run_root)
         session_id = (
-            self._agent_session_id
+            self.observer.agent_session_id
             or str(run.get("mutation_session_id") or "")
             or _fallback_session(runtime_id, sandbox.run_id)
         )
@@ -350,7 +350,7 @@ class WorkerWritebackMixin:
             task,
             sandbox,
             session_id=session_id,
-            event_sink=self._emit,
+            event_sink=self.observer.emit,
         )
 
     @staticmethod
