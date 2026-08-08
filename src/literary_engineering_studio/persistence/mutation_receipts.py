@@ -9,6 +9,7 @@ from ..observability.mutation_receipts import (
     MUTATION_RECEIPT_SCHEMA,
     parse_mutation_receipt,
 )
+from .sqlite_uow import SqliteUnitOfWork
 
 
 MUTATION_RECEIPT_SCHEMA_SQL = """
@@ -48,7 +49,12 @@ CREATE INDEX IF NOT EXISTS mutation_receipts_group_idx
 """
 
 
-class MutationReceiptStoreMixin:
+class MutationReceiptRepository:
+    """Persist machine-owned mutation evidence through an explicit UoW."""
+
+    def __init__(self, uow: SqliteUnitOfWork):
+        self._uow = uow
+
     def record_mutation_receipt(
         self,
         project_root: str,
@@ -59,8 +65,7 @@ class MutationReceiptStoreMixin:
         if not project:
             raise ValueError("mutation receipt project_root is required")
         canonical = receipt.as_dict()
-        with self._write_lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self._uow.write(immediate=True) as connection:
             existing = connection.execute(
                 "SELECT project_root, digest, receipt_json FROM mutation_receipts WHERE receipt_id = ?",
                 (receipt.receipt_id,),
@@ -108,7 +113,7 @@ class MutationReceiptStoreMixin:
         return canonical
 
     def read_mutation_receipt(self, receipt_id: str) -> dict[str, Any]:
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             row = connection.execute(
                 "SELECT receipt_json FROM mutation_receipts WHERE receipt_id = ?",
                 (_validate_receipt_id(receipt_id),),
@@ -141,7 +146,7 @@ class MutationReceiptStoreMixin:
                 clauses.append(f"{column} = ?")
                 values.append(str(value).strip())
         values.append(max(1, min(2000, int(limit))))
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             rows = connection.execute(
                 f"""
                 SELECT receipt_json FROM mutation_receipts

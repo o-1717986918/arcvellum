@@ -17,7 +17,7 @@ from .autopilot_runs import AutopilotRepository
 from .creative_plans import CreativePlanStoreMixin
 from .creative_plan_events import CreativePlanEventStoreMixin
 from .context_ledgers import ContextLedgerRepository
-from .mutation_receipts import MutationReceiptStoreMixin
+from .mutation_receipts import MutationReceiptRepository
 from .recycle_bin import RecycleBinStoreMixin
 from .schema import initialize_schema
 from .sessions import SessionRepository
@@ -40,7 +40,6 @@ from .primitives import (
 
 
 class JobStore(
-    MutationReceiptStoreMixin,
     CreativePlanEventStoreMixin,
     CreativePlanStoreMixin,
     RecycleBinStoreMixin,
@@ -56,6 +55,7 @@ class JobStore(
         self.autopilot_runs = AutopilotRepository(self._uow)
         self.sessions = SessionRepository(self._uow)
         self.context_ledgers = ContextLedgerRepository(self._uow)
+        self.mutation_receipts = MutationReceiptRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -284,6 +284,22 @@ class JobStore(
 
     def list_context_ledgers(self, project_root: str, *, limit: int = 100) -> list[dict[str, Any]]:
         return self.context_ledgers.list_context_ledgers(project_root, limit=limit)
+
+    def record_mutation_receipt(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.mutation_receipts.record_mutation_receipt(project_root, payload)
+
+    def read_mutation_receipt(self, receipt_id: str) -> dict[str, Any]:
+        return self.mutation_receipts.read_mutation_receipt(receipt_id)
+
+    def list_mutation_receipts(
+        self, project_root: str, *, task_id: str = "", run_id: str = "",
+        session_id: str = "", plan_id: str = "", change_group_id: str = "",
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        return self.mutation_receipts.list_mutation_receipts(
+            project_root, task_id=task_id, run_id=run_id, session_id=session_id,
+            plan_id=plan_id, change_group_id=change_group_id, limit=limit,
+        )
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)

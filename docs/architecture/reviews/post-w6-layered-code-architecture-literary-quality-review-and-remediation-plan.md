@@ -1367,3 +1367,74 @@ Q4 退出结论：
 - 跨题材质量检查不依赖固定范文。
 
 下一批入口：进入 Q5-Q6。重新读取本计划对应章节和当前代码，先盘点尚未完成的文档/结构/兼容项，再按最小批次执行；不得把“剩余架构债务清零”误当成目标，也不得跳过最终全量测试、生产构建和 Git 交付审计。
+
+### 2026-08-08：Q4.5 二次分层审查入口与类谱系复核
+
+状态：进行中。按用户要求，Q5-Q6 暂停；先重新审查类层次、重复抽象、确定性逻辑和文学逻辑，边审查边修正并阶段性提交证据。
+
+本轮基线证据：
+
+- 当前分支为 `release/v0.97.0`，工作树在审查开始时干净；
+- Architecture Audit 通过：30 file debts、205 function debts、0 cycles；
+- AST 类谱系扫描覆盖 Studio/Engine 全部 Python 源码，并以 `src/`、`tests/` 文本消费者复核低行为类；
+- 字段同构扫描只发现五组，其中 `ReplanDecision`/`RepairDecision`、Studio/Engine DTO、Selection DTO 均语义不同；`AIStyleIssue`/`PunctuationIssue` 已由共享合同承载，不应再建立错误继承树；
+- 精确函数体扫描显示大量 `_rel`、JSON 读取、hash、路径和 route-local projection 小函数仍有同构实现；只有在失败语义和依赖方向一致时才迁移到已有 canonical module，不创建无边界 `utils.py`。
+
+首批类决策：
+
+| 对象 | 二次判定 | 处置 |
+| --- | --- | --- |
+| `ArchiveStructuredContentRequest` | 保留 | 虽为空子类，但为结构化编辑 API 提供独立 OpenAPI 语义名称；与普通内容校验请求不是同一个传输概念 |
+| `ArchiveStructuredRenderRequest` | 保留 | 在内容请求上增加 source revision 与结构化 fields，是真实扩展关系 |
+| `AgentRuntime` 的 OpenCode/Claude/Codex/Host 子类 | 保留 | `build_command`、能力投影、认证、流事件和执行生命周期存在真实多态，不应用条件分派替代 |
+| 领域冲突/取消/过期异常子类 | 保留 | 调用方依靠稳定异常边界决定 409、取消、回滚或重试 |
+| 单实现 Protocol | 暂不机械删除 | 逐个按替换边界、测试注入和跨包依赖价值复核；“只有一个实现”本身不足以证明多余 |
+| `JobStore` 六个剩余 `*StoreMixin` | 必须继续收敛 | 它们只有一个宿主，并依赖宿主私有锁/连接和兄弟 Mixin；Q2 原退出条件尚未满足 |
+| `SceneGenerationProvider`/`DryRunProvider`/`HttpChatProvider` | Q6 兼容清理候选 | 当前生产代码没有调用者，仅旧回归测试和历史文档消费；不能继续作为默认模型通道 |
+
+对既有阶段结论的纠正：
+
+- Q2 的阶段记录证明 Autopilot、Session、ContextLedger、Worker Observer 和 Writeback 已组合化，但 `JobStore` 仍继承 Mutation Receipt、Creative Plan/Event、Recycle Bin、Asset Transaction/Revision 六个 Mixin；因此 Q2 不能视为完整退出，只能视为“关键边界已完成、Store 剩余边界待闭环”。
+- 剩余 Store 迁移必须复用现有 `SqliteUnitOfWork`；`JobStore` 继续作为兼容 facade，SQL 只能存在于 repository 一侧，事务内协作通过显式 collaborator 完成。
+
+已发现但尚未在本批修正的逻辑风险：
+
+1. `_renew_or_reclaim_lease()` 在续租和重领两次异常时都静默吞掉原因，只留下通用 `controller_lease_lost`；这不满足控制路径可观察性，需保留原容错语义并附 typed failure evidence。
+2. `generation_provider.py` 的 provider 族是第二模型调用通道，且 `generate_scene_candidate()` 无生产调用者；需要在 Q6 做兼容表面与 wheel/installer 审计，不能在本轮仓储迁移中顺手删除。
+3. 精确重复扫描发现 canonical path/JSON/digest helper 的消费者迁移仍不彻底；应按依赖方向逐组处理，不能为了减少重复把不同 fail-open/fail-closed 语义合并。
+
+文学逻辑复核清单（待逐项以实现和测试证明）：
+
+- Agent branch proposal 是否真正进入选择、Composition、Review 和 candidate digest，而不只是 schema 存在；
+- 可变 beats 是否同时约束因果、节奏、详略、桥接、代价、读者效果和权威字数，而不是把固定五拍换成任意列表；
+- AgentReview 与 revision 是否能拒绝“换一种转折继续违规”、模板化分支和只有词面差异的候选；
+- Chapter/longform 层是否能审计局部节拍对宏观节奏、承诺兑现、视角分配和篇幅库存的影响；
+- fallback 是否只在 Agent 产物无效时恢复确定性路线，且不会被误记为 Agent 文学判断。
+
+下一批入口：先完成剩余 Store 组合化的失败先行/characterization tests，再迁移一个 repository 边界；每批保持 `JobStore` 公共方法、SQLite schema、事务原子性和异常语义不变，Architecture Ratchet 不允许新增债务。
+
+### 2026-08-08：Q4.5-A Mutation Receipt Repository 组合化
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- 将只有 `JobStore` 一个宿主的 `MutationReceiptStoreMixin` 替换为显式 `MutationReceiptRepository`；
+- Repository 构造时注入既有 `SqliteUnitOfWork`，读写分别使用 `read()` 与 `write(immediate=True)`，不再依赖宿主 `_write_lock`、`_connection`；
+- `JobStore` 保留原 `record/read/list_mutation_receipt(s)` 公共签名，并通过 `self.mutation_receipts` 委托；调用方和 schema 无迁移成本；
+- 新增独立 Repository characterization test，覆盖 schema 初始化、重复写幂等、精确读取、按 run 筛选，以及 `JobStore.__mro__` 不再含该 Mixin；
+- 测试初次使用了不存在的 `sandbox-only` writeback 状态并被正式 receipt contract 拒绝，修正为合同允许的 `pending`，未放宽生产枚举。
+
+批判性边界：
+
+- 本批没有把每张表包装成空 class；Mutation Receipt Repository 同时拥有规范化、身份冲突、幂等写和多维筛选，是完整持久化边界；
+- 没有在 facade 复制 SQL，也没有修改 `architecture/quality-baseline.json`；
+- 其余五个 Store Mixin 仍存在，Q2 尚未完全退出。
+
+验证证据：
+
+- Mutation Receipt、Worker rollback/three-stage evidence、Architecture Audit 和依赖方向：9 tests passed；
+- Architecture Audit：30 file debts、205 function debts、0 cycles；
+- `JobStore` 保持既有 file budget，没有用调高基线掩盖新增委托代码。
+
+下一批入口：Creative Plan 与 Creative Plan Event 视为同一事务聚合迁移。事件查询进入 `CreativePlanRepository`，事务内 append helper 继续由同一 SQLite transaction 调用；不得拆成互相提交的两个 repository。

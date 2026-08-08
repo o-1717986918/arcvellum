@@ -9,6 +9,11 @@ from unittest.mock import patch
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_read_models import install_core_import_path
 from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.mutation_receipts import (
+    MutationReceiptRepository,
+)
+from literary_engineering_studio.persistence.schema import initialize_schema
+from literary_engineering_studio.persistence.sqlite_uow import SqliteUnitOfWork
 from literary_engineering_studio.observability.mutation_receipt_tracking import (
     persist_mutation_receipt_event,
 )
@@ -25,6 +30,43 @@ from literary_engineering_studio.worker import AgentWorker
 
 
 class MutationReceiptTests(unittest.TestCase):
+    def test_repository_uses_explicit_unit_of_work_without_job_store_inheritance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            uow = SqliteUnitOfWork(Path(temporary) / "studio.sqlite3")
+            with uow.write() as connection:
+                initialize_schema(connection)
+            repository = MutationReceiptRepository(uow)
+            receipt = build_mutation_receipt(
+                change_group_id="change-" + "a" * 24,
+                project_key="work-a1b2c3d4e5",
+                plan_id="fixed-route",
+                plan_revision=0,
+                node_id="task-one",
+                task_id="task-one",
+                run_id="run-one",
+                session_id="worker-run:run-one",
+                context_ledger_id="context-one",
+                action=MutationAction.CANDIDATE_CREATED,
+                target="plot/outline.md",
+                base_sha256="",
+                result_sha256="b" * 64,
+                preflight_status="pending",
+                writeback_status="pending",
+                formal_effect=FormalEffect.NONE,
+                created_at="2026-07-26T00:00:00+00:00",
+            )
+
+            first = repository.record_mutation_receipt("C:/work", receipt.as_dict())
+            repeated = repository.record_mutation_receipt("C:/work", receipt.as_dict())
+
+            self.assertEqual(first, repeated)
+            self.assertEqual(repository.read_mutation_receipt(receipt.receipt_id), first)
+            self.assertEqual(
+                repository.list_mutation_receipts("C:/work", run_id="run-one"),
+                [first],
+            )
+            self.assertNotIn("MutationReceiptStoreMixin", {base.__name__ for base in JobStore.__mro__})
+
     def test_contract_rejects_forged_identity_and_rollback_effect(self):
         receipt = build_mutation_receipt(
             change_group_id="change-" + "a" * 24,
