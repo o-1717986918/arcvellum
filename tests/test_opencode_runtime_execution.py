@@ -160,7 +160,25 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
             self.assertIn("Studio Preflight Repair 1/2", client.prompts[1]["text"])
             self.assertEqual(result.metadata["repairs"], 1)
             self.assertTrue(result.metadata["service_reused"])
+            self.assertFalse(
+                result.metadata["cross_task_session_reuse"]["eligible"]
+            )
+            self.assertEqual(
+                result.metadata["cross_task_session_reuse"]["reasons"],
+                [
+                    "workspace-rebind-unverified",
+                    "message-cursor-unavailable",
+                    "diff-cursor-unavailable",
+                ],
+            )
             self.assertFalse(client.aborted)
+            assessment = [
+                data
+                for event, data in events
+                if event == "runner.session.reuse_assessed"
+            ]
+            self.assertEqual(assessment[-1]["session_id"], "session-fixed")
+            self.assertTrue(assessment[-1]["same_task_repair_allowed"])
             finished = [data for event, data in events if event == "runner.session.finished"]
             self.assertEqual(finished[-1]["session_id"], "session-fixed")
             self.assertEqual(finished[-1]["status"], "complete")

@@ -24,7 +24,12 @@ from .opencode_repair import (
     repair_failure_result,
     run_open_code_repairs,
 )
-from .opencode_session import execution_identity, open_role_client, selected_model
+from .opencode_session import (
+    cross_task_session_reuse_assessment,
+    execution_identity,
+    open_role_client,
+    selected_model,
+)
 
 
 class OpenCodeRuntime(AgentRuntime):
@@ -118,6 +123,7 @@ class OpenCodeRuntime(AgentRuntime):
             raise RuntimeError("pinned OpenCode binary is not installed")
         ensure_opencode_integrity(executable)
         role, model, agent_id = execution_identity(self.settings)
+        session_reuse = cross_task_session_reuse_assessment()
         cancellation = cancel_event or threading.Event()
         data_root = Path(str(self.settings.get("data_root") or default_data_root())).expanduser().resolve()
         manager = ProcessManager(run_root / "sidecar-logs") if self.runtime_pool is None else None
@@ -196,6 +202,10 @@ class OpenCodeRuntime(AgentRuntime):
             emit(
                 "runner.session.created",
                 {"session_id": session_id, "elapsed_ms": round((time.monotonic() - execution_started) * 1000)},
+            )
+            emit(
+                "runner.session.reuse_assessed",
+                {"session_id": session_id, **session_reuse},
             )
 
             def consume_events() -> None:
@@ -384,6 +394,8 @@ class OpenCodeRuntime(AgentRuntime):
                 {
                     "session_id": session_id,
                     "role": role.value,
+                    "model": model,
+                    "cross_task_session_reuse": session_reuse,
                     "component_id": component_id,
                     "service_reused": bool(lease.reused) if lease is not None else False,
                     "generation": lease.generation if lease is not None else 1,

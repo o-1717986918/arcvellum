@@ -2096,3 +2096,42 @@ AgentWorker.prepare
 - `compileall -q src tests`、Architecture Audit、Dependency Direction 与 `git diff --check` 通过；Architecture baseline 未修改。
 
 Q5-C2 结论：缓存命中可以减少重复 UTF-8 解码、逐文件渲染与预算选择，但不会减少安全所需的授权内容摘要读取，也不会跨不完整文学身份复用。下一批进入 Q5-C3，先验证 OpenCode session 的 workspace rebinding、消息增量和 diff 边界；不满足时只交付可观察的 reuse eligibility/invalidation registry，保持真实跨任务 session reuse 关闭。
+
+#### Q5-C3 传输边界复审：跨任务 Session 复用 No-Go
+
+状态：实现正式 no-go 证据，不启用跨任务 session reuse。
+
+实际代码证据：
+
+1. `OpenCodeClient` 在请求 query 中携带当前 `directory`，但没有 session workspace rebind、确认或读取 API；不能由“新 client 使用新 directory”推断既有 session 已切换目录；
+2. `create_session` 在当前目录语境下创建 session；后续 `prompt_async/messages/diff/abort` 都以同一 session id 操作；
+3. `messages(session_id, limit)` 只返回累计消息列表，没有 before/after cursor、message baseline 或 turn id；
+4. `diff(session_id)` 返回累计 diff 列表，没有 workspace revision、turn cursor 或 clean baseline；
+5. Context access telemetry 会遍历返回的全部消息，并相对当前 workspace 解释路径；跨 workspace 复用可能把旧工具读取错误归属到新任务；
+6. 当前 repair loop 在同一 session、同一 sandbox、同一 expected outputs 与同一 preflight 内追加修复回合，这是安全且有真实收益的复用；它不能证明跨任务复用安全；
+7. RuntimePool 已复用角色隔离的 OpenCode 服务进程。服务复用减少启动成本，但 session 每任务新建；两者不应混淆。
+
+架构修正：原计划中的 Session Registry 只有在能 checkout 一个安全 session 时才具备生命周期价值。当前传输层不存在该能力，新增 checkout/commit/reap Manager 会成为无消费者的伪抽象，也可能诱导未来开发者绕过边界。因此本批改为：
+
+- 在 OpenCode adapter 中提供确定性的 cross-task reuse assessment，明确记录 workspace rebind、message cursor、diff cursor 三项缺失；
+- 每个 OpenCode session 创建后发出 `runner.session.reuse_assessed`，最终 RuntimeResult metadata 保留同一 assessment；
+- assessment 必须明确 same-task repair 仍允许、cross-task reuse 为 false；
+- 不保存可复用 session id，不把 SessionLease 注入 RuntimePool，不新增 feature flag 或 SQLite 表；
+- 已有 `SessionLease/session_reusable` 继续作为领域合同与未来适配器能力测试，不冒充生产消费者；
+- 未来只有当 OpenCode/其他 adapter 同时提供可验证 workspace rebind、增量 messages 和增量 diff，且 integration test 证明旧任务路径/输出不会出现于新任务时，才重新评估 Registry。
+
+本批门禁：assessment 事件和 metadata 测试；同任务 repair 行为不变；OpenCode Runtime/Pool/Worker/Architecture 组合通过；全量回归通过。
+
+#### Q5-C3 完成记录
+
+状态：完成；结论为受证据约束的 no-go。
+
+- `opencode_session.cross_task_session_reuse_assessment()` 成为适配器能力的单一机器可读声明；
+- OpenCode session 创建后立即发出 `runner.session.reuse_assessed`；成功 RuntimeResult metadata 同步保存 assessment、实际 model 与 role；
+- assessment 固定声明 `eligible=false`，原因是 workspace rebind、message cursor、diff cursor 均不可验证；同时声明 `same_task_repair_allowed=true`；
+- 现有 same-session repair 回归证明同一 session id 承载原任务与有界修复回合；服务池复用行为未变化；
+- 未新增 Session Registry/Manager、持久表、session id cache 或危险 feature flag；已有领域 `SessionLease` 合同保留，等待未来传输适配器真正满足能力门槛。
+
+验证：OpenCode Runtime/Pool、Session 合同与 Architecture 组合 26 tests passed；全量 908 tests passed，1 skipped；`compileall`、Architecture Audit、Dependency Direction 与 `git diff --check` 通过。
+
+Q5-C 总结：C1 交付角色隔离和只读资源租约准入；C2 交付默认关闭、安全失效的 Prepared Context cache；C3 明确拒绝不安全的跨任务 session 复用。下一步进入 Q5-D：检查 checkpoint/recovery、Campaign 与事件流的现有实现，优先补调用链和恢复语义，不创建第二 Autopilot 或第二 SSE 总线。

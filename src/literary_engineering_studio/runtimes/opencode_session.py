@@ -9,6 +9,14 @@ from typing import Any
 from ..opencode_profiles import OpenCodeRole, agent_id_for_role
 
 
+SESSION_REUSE_ASSESSMENT_SCHEMA = "arcvellum/session-reuse-assessment/v1"
+_CROSS_TASK_REUSE_BLOCKERS = (
+    "workspace-rebind-unverified",
+    "message-cursor-unavailable",
+    "diff-cursor-unavailable",
+)
+
+
 @dataclass(frozen=True)
 class OpenCodeRoleClient:
     lease: Any
@@ -51,6 +59,17 @@ def execution_identity(
     if "/" not in model:
         raise RuntimeError("OpenCode requires an explicit provider/model-id connection")
     return role, model, agent_id_for_role(role)
+
+
+def cross_task_session_reuse_assessment() -> dict[str, object]:
+    """Describe the current adapter boundary without implying unsafe reuse."""
+
+    return {
+        "schema": SESSION_REUSE_ASSESSMENT_SCHEMA,
+        "eligible": False,
+        "reasons": list(_CROSS_TASK_REUSE_BLOCKERS),
+        "same_task_repair_allowed": True,
+    }
 
 
 def open_role_client(
