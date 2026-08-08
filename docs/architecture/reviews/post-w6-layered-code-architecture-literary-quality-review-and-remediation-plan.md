@@ -1129,3 +1129,33 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - compileall 与 `git diff --check`：通过。
 
 下一批入口：继续 Q3-D，按风险顺序处理 `tasking/package_contract.py::render_task_markdown` 与 `workflow/audit/scene.py::_add_scene_development_gates`；先用输出快照和 gate 顺序测试固定合同，不把 Markdown 美化与审查语义修改混批。
+
+### 2026-08-08：Q3-D Task Package Markdown Renderer 拆分
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- 新增 `tasking/markdown_renderer.py`，只负责 executable task package 的只读 Markdown 投影；
+- 渲染顺序固定为 header/metadata -> required reading -> Agent sources -> command -> constraints -> outputs/receipts/protected metadata -> validation -> execution boundary；
+- Agent source boundary、未暂存操作手册过滤、Expected Outputs、Studio 生命周期回执、CLI protected outputs、system-owned semantic metadata、人类决策边界分别由命名纯渲染器承担；
+- `package_contract.py` 继续独占 payload enrichment、执行策略、output contract、machine-owned fields 和 fingerprint，不把合同判断移入视图；
+- `package_contract.py` 从 570 行降至 343 行，`render_task_markdown` 原 153 行、complexity 67 债务清零；
+- 新模块 335 行，无超预算函数，未引入 Renderer 类或模板 DSL。
+
+安全与兼容审查：
+
+- 以 Git 中 Q3-C 前实现动态加载旧 renderer，对一份包含 curated Agent sources/Prompt Asset/lifecycle receipt 的 Agent task 和一份 human-required task 做逐字符比较；两份结果均 exact match；
+- `AGENT_OUTPUT_CONTRACT` 由 renderer 定义并被 enrichment 复用，避免 Prompt Asset 投影和 Expected Outputs 边界产生两份措辞；
+- `resolve_prompt_asset` 仍由 package enrichment 使用；首轮误清理该 import 被回归测试立即发现并恢复，没有改测试规避；
+- 新 `_outputs` 首轮 complexity 17，被 Architecture Ratchet 拒绝后拆为事实提取与 section 呈现，未增加 baseline 豁免。
+
+验证证据：
+
+- Task Contract Transport、Task Lifecycle、Task Contract Audit 与 Task Paths：41 tests passed；
+- 覆盖精确 Prompt Asset 元数据、human boundary、curated sources、操作手册过滤、生命周期回执隔离、任务刷新和 machine-owned lifecycle；
+- 新旧 Agent task：5532 字符逐字符一致；新旧 human task：2956 字符逐字符一致；
+- Architecture Audit：32 file debts、211 function debts、0 cycles；相较 Q3-C 净减少 1 个 file debt、1 个 function debt；
+- compileall 与 `git diff --check`：通过。
+
+下一批入口：Q3-E 拆分 `workflow/audit/scene.py::_add_scene_development_gates`。必须先固定 gate 顺序、等待态与 blocking/warning 分类；不在结构重构中新增或放宽文学 Gate。
