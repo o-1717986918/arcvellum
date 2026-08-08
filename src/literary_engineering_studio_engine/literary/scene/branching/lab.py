@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,8 +11,9 @@ from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
 from ....context_broker import context_trace_status, default_context_trace_path
 from ....context_packet import build_context_packet
 from ....flow_gates import ensure_agent_task_completed, selected_branch_from
-from ....roleplay_lab import CharacterCard, _load_characters, _read
+from ....roleplay_lab import CharacterCard, _load_characters
 from ....semantic_task_contracts import read_semantic_artifact, semantic_artifact_relative_path
+from ..facts import SceneFacts, load_scene_facts
 
 
 SCORE_KEYS = [
@@ -54,21 +54,6 @@ class BranchSimulationResult:
     recommended_branch: str
 
 
-@dataclass(frozen=True)
-class SceneFacts:
-    scene_id: str
-    chapter_id: str
-    location: str
-    participants: list[str]
-    canon_refs: list[str]
-    active_foreshadowing: list[str]
-    scene_goal: str
-    external_conflict: str
-    internal_conflict: str
-    style_constraints: list[str]
-    next_hooks: list[str]
-
-
 def build_branch_simulation(
     project_root: Path,
     scene: Path | None = None,
@@ -94,8 +79,7 @@ def build_branch_simulation(
     if not scene_path.exists():
         raise FileNotFoundError(f"scene file not found: {scene_path}")
 
-    scene_text = _read(scene_path)
-    scene_facts = _scene_facts(scene_path, scene_text)
+    scene_facts = load_scene_facts(scene_path)
     context_path = context if context and context.is_absolute() else (
         root / context if context else root / "memory" / "context_packets" / f"{scene_facts.scene_id}.md"
     )
@@ -229,23 +213,6 @@ def _write_branch_agent_tasks(
                 """检查每个分支的 writeback_candidates，标出哪些新增事实、人物状态、关系变化和伏笔变化需要用户批准。不得直接写入 canon 或 characters/*.yaml。""",
             ),
         ],
-    )
-
-
-def _scene_facts(scene_path: Path, text: str) -> SceneFacts:
-    scene_id = _scalar(text, "scene_id") or scene_path.stem or "scene"
-    return SceneFacts(
-        scene_id=scene_id,
-        chapter_id=_scalar(text, "chapter_id"),
-        location=_scalar(text, "location"),
-        participants=_list_value(text, "participants"),
-        canon_refs=_list_value(text, "canon_refs"),
-        active_foreshadowing=_list_value(text, "active_foreshadowing"),
-        scene_goal=_scalar(text, "scene_goal"),
-        external_conflict=_scalar(text, "external"),
-        internal_conflict=_scalar(text, "internal"),
-        style_constraints=_list_value(text, "style_constraints"),
-        next_hooks=_list_value(text, "next_hooks"),
     )
 
 
@@ -654,37 +621,6 @@ def _writeback_markdown(data: dict[str, list[str]]) -> str:
         for value in values:
             lines.append(f"  - {value}")
     return "\n".join(lines)
-
-
-def _scalar(text: str, key: str) -> str:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    if not match:
-        return ""
-    value = match.group(1).strip().strip("\"'")
-    return "" if value in {"", "null", "[]", "{}"} else value
-
-
-def _list_value(text: str, key: str) -> list[str]:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    if not match:
-        return []
-    inline = match.group(1).strip()
-    if inline.startswith("[") and inline.endswith("]"):
-        return [item.strip().strip("\"'") for item in inline.strip("[]").split(",") if item.strip()]
-    values: list[str] = []
-    base_indent = len(match.group(0)) - len(match.group(0).lstrip())
-    for line in text[match.end() :].splitlines():
-        if not line.strip():
-            continue
-        indent = len(line) - len(line.lstrip())
-        stripped = line.strip()
-        if indent <= base_indent and re.match(r"^[A-Za-z_][A-Za-z0-9_]*:", stripped):
-            break
-        if stripped.startswith("-"):
-            item = stripped.strip("- ").strip("\"'")
-            if item:
-                values.append(item)
-    return values
 
 
 def _names(cards: list[CharacterCard]) -> list[str]:

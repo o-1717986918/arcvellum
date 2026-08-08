@@ -783,3 +783,26 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 - `git diff --check`：通过。
 
 审查修正：初始测试曾把“缺少 plot 文件”错误解释为“缺少 scene function”；实际场景 YAML 已提供该事实，因此修正测试而未降低生产验证标准。
+
+### 2026-08-08：Q1-A SceneFacts 单一事实入口
+
+状态：完成，待独立提交。
+
+已完成：
+
+- 新增 `literary/scene/facts.py`，成为唯一 `SceneFacts` 定义；
+- 分支推演与 Composition 统一调用 `load_scene_facts()`；
+- 删除两份重复 dataclass、两份 `_scene_facts` 和两组正则 `_scalar/_list_value`；
+- 使用 `ruamel.yaml` 读取正式嵌套结构；
+- Canon refs、active foreshadowing、冲突和 next hooks 按模板真实路径解析；
+- 保留旧顶层字段回退，避免破坏既有项目；
+- 新增中文逗号、引号、折叠多行、嵌套列表、旧格式和非法 YAML 测试。
+
+验证证据：
+
+- 失败先行测试先以缺少共享模块失败；
+- `tests.test_scene_facts`：3 tests passed；
+- 分支、Composition、场景合同相关回归：8 tests passed；
+- `python -m compileall -q src`：通过。
+
+架构判断：这里采用单一值对象而非父类/子类，因为两处代码描述的是完全相同的文学事实；继承只会保留双解析与语义漂移。

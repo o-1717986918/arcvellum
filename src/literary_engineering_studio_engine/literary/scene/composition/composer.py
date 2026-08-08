@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,28 +25,14 @@ from ....creative_quality import (
 from ....flow_gates import FlowGateError, branch_selection_status, ensure_agent_task_completed, selected_branch_from
 from ....narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
 from ....reader_experience import reader_experience_contract
-from ....roleplay_lab import CharacterCard, _load_characters, _read
+from ....roleplay_lab import CharacterCard, _load_characters
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
 from ....word_budget import scene_word_budget_contract
 from ...style.snapshot import (
     active_style_mount_snapshot_bytes,
     active_style_mount_snapshot_payload,
 )
-
-@dataclass(frozen=True)
-class SceneFacts:
-    scene_id: str
-    chapter_id: str
-    location: str
-    participants: list[str]
-    canon_refs: list[str]
-    active_foreshadowing: list[str]
-    scene_goal: str
-    external_conflict: str
-    internal_conflict: str
-    style_constraints: list[str]
-    next_hooks: list[str]
-
+from ..facts import SceneFacts, load_scene_facts
 
 @dataclass(frozen=True)
 class SceneCompositionResult:
@@ -87,8 +72,7 @@ def build_scene_composition(
     if not scene_path.exists():
         raise FileNotFoundError(f"scene file not found: {scene_path}")
 
-    scene_text = _read(scene_path)
-    facts = _scene_facts(scene_path, scene_text)
+    facts = load_scene_facts(scene_path)
     context_path = _resolve(
         root,
         context,
@@ -210,8 +194,7 @@ def composition_input_digest(project_root: Path, scene_path: Path) -> str:
 
     root = project_root.resolve()
     scene = scene_path if scene_path.is_absolute() else root / scene_path
-    scene_text = _read(scene)
-    facts = _scene_facts(scene, scene_text)
+    facts = load_scene_facts(scene)
     input_paths = [
         scene,
         root / "project.yaml",
@@ -306,23 +289,6 @@ def _write_composition_agent_tasks(
                 """审查 writeback_candidates，标出哪些新增事实、人物状态、关系变化和伏笔变化必须在正文和 review 后再次确认。不要直接写入 canon 或 characters/*.yaml。""",
             ),
         ],
-    )
-
-
-def _scene_facts(scene_path: Path, text: str) -> SceneFacts:
-    scene_id = _scalar(text, "scene_id") or scene_path.stem or "scene"
-    return SceneFacts(
-        scene_id=scene_id,
-        chapter_id=_scalar(text, "chapter_id"),
-        location=_scalar(text, "location"),
-        participants=_list_value(text, "participants"),
-        canon_refs=_list_value(text, "canon_refs"),
-        active_foreshadowing=_list_value(text, "active_foreshadowing"),
-        scene_goal=_scalar(text, "scene_goal"),
-        external_conflict=_scalar(text, "external"),
-        internal_conflict=_scalar(text, "internal"),
-        style_constraints=_list_value(text, "style_constraints"),
-        next_hooks=_list_value(text, "next_hooks"),
     )
 
 
@@ -772,37 +738,6 @@ def _active_cards(cards: list[CharacterCard], participants: list[str]) -> list[C
         return cards
     wanted = set(participants)
     return [card for card in cards if card.character_id in wanted or card.name in wanted]
-
-
-def _scalar(text: str, key: str) -> str:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    if not match:
-        return ""
-    value = match.group(1).strip().strip("\"'")
-    return "" if value in {"", "null", "[]", "{}"} else value
-
-
-def _list_value(text: str, key: str) -> list[str]:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    if not match:
-        return []
-    inline = match.group(1).strip()
-    if inline.startswith("[") and inline.endswith("]"):
-        return [item.strip().strip("\"'") for item in inline.strip("[]").split(",") if item.strip()]
-    values: list[str] = []
-    base_indent = len(match.group(0)) - len(match.group(0).lstrip())
-    for line in text[match.end() :].splitlines():
-        if not line.strip():
-            continue
-        indent = len(line) - len(line.lstrip())
-        stripped = line.strip()
-        if indent <= base_indent and re.match(r"^[A-Za-z_][A-Za-z0-9_]*:", stripped):
-            break
-        if stripped.startswith("-"):
-            item = stripped.strip("- ").strip("\"'")
-            if item:
-                values.append(item)
-    return values
 
 
 def _sensory_sound(facts: SceneFacts) -> list[str]:
