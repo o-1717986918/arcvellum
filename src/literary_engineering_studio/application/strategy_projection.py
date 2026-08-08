@@ -9,6 +9,8 @@ from typing import Any
 
 from literary_engineering_studio.orchestration import OrchestrationSettings
 
+from .capability_maturity import orchestration_capabilities
+
 STRATEGY_PROJECTION_SCHEMA = "arcvellum/strategy-projection/v1"
 
 
@@ -27,6 +29,7 @@ def strategy_projection(
         },
         "active_plan": _active_plan_summary(root),
         "rolling_horizon": None,
+        "capabilities": orchestration_capabilities(settings),
     }
 
 

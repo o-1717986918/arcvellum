@@ -42,7 +42,7 @@ def _validate_scene_review_contract(
     if not isinstance(payload, dict):
         return
 
-    from literary_engineering_studio_engine.agent_schema import validate_payload
+    from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
 
     schema_errors, _warnings = validate_payload(payload, "scene_review.v1")
     for error in schema_errors:
@@ -125,40 +125,25 @@ def _validate_scene_candidate_generation_contract(
     if not candidate_rel or not candidate.is_file():
         return
 
-    from literary_engineering_studio_engine.anti_ai_style import style_lint_gate, style_lint_gate_message
-    from literary_engineering_studio_engine.agent_schema import validate_payload
-    from literary_engineering_studio_engine.asset_workshop import ASSET_SCHEMA_NAMES
-    from literary_engineering_studio_engine.candidate_promotion import candidate_generation_gate
-    from literary_engineering_studio_engine.creative_quality import load_creative_quality_profile
-    from literary_engineering_studio_engine.draft_text import final_body_from_draft_path
-    from literary_engineering_studio_engine.reader_experience import reader_experience_adherence_for_body
-    from literary_engineering_studio_engine.word_budget import word_budget_adherence_for_body
+    from literary_engineering_studio_engine.literary.style.anti_ai import (
+        style_lint_gate,
+        style_lint_gate_message,
+    )
+    from literary_engineering_studio_engine.literary.planning.contracts import (
+        word_budget_adherence_for_body,
+    )
+    from literary_engineering_studio_engine.foundation.draft_text import final_body_from_draft_path
+    from literary_engineering_studio_engine.literary.review.creative_quality import (
+        load_creative_quality_profile,
+    )
+    from literary_engineering_studio_engine.literary.review.reader_experience import (
+        reader_experience_adherence_for_body,
+    )
+    from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
+        candidate_generation_gate,
+    )
 
-    scene_assets = task.payload.get("scene_character_assets")
-    if isinstance(scene_assets, list):
-        for item in scene_assets:
-            if not isinstance(item, dict):
-                continue
-            asset_rel = str(item.get("candidate_path") or "").replace("\\", "/").strip()
-            if not asset_rel:
-                continue
-            asset_path = sandbox.workspace / Path(asset_rel)
-            if not asset_path.is_file():
-                continue
-            try:
-                asset_payload = json.loads(asset_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                continue
-            errors, _warnings = validate_payload(asset_payload, ASSET_SCHEMA_NAMES["character"])
-            if errors:
-                issues.append(
-                    PreflightIssue(
-                        "scene-character-candidate-invalid",
-                        asset_rel,
-                        "角色候选未通过 character_profile.v1 schema：" + "; ".join(str(error) for error in errors[:5]),
-                        "按该角色候选 sidecar 的 schema 合同补齐候选 JSON；不得把角色档案写入正式 characters/。",
-                    )
-                )
+    _validate_scene_character_candidates(task, sandbox, issues)
 
     scene_id = str(task.payload.get("scene_id") or task.scene_id or Path(candidate_rel).stem.split("-")[0])
     provenance = candidate_generation_gate(sandbox.workspace, scene_id, candidate)
@@ -217,6 +202,43 @@ def _validate_scene_candidate_generation_contract(
         )
 
 
+def _validate_scene_character_candidates(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    issues: list[PreflightIssue],
+) -> None:
+    from literary_engineering_studio_engine.literary.assets.registry import (
+        ASSET_SCHEMA_NAMES,
+    )
+    from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+
+    scene_assets = task.payload.get("scene_character_assets")
+    if not isinstance(scene_assets, list):
+        return
+    for item in scene_assets:
+        if not isinstance(item, dict):
+            continue
+        asset_rel = str(item.get("candidate_path") or "").replace("\\", "/").strip()
+        asset_path = sandbox.workspace / Path(asset_rel)
+        if not asset_rel or not asset_path.is_file():
+            continue
+        try:
+            payload = json.loads(asset_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        errors, _warnings = validate_payload(payload, ASSET_SCHEMA_NAMES["character"])
+        if errors:
+            issues.append(
+                PreflightIssue(
+                    "scene-character-candidate-invalid",
+                    asset_rel,
+                    "角色候选未通过 character_profile.v1 schema："
+                    + "; ".join(str(error) for error in errors[:5]),
+                    "按该角色候选 sidecar 的 schema 合同补齐候选 JSON；不得把角色档案写入正式 characters/。",
+                )
+            )
+
+
 def _validate_scene_revision_contract(
     task: TaskPackage,
     sandbox: SandboxManifest,
@@ -252,8 +274,10 @@ def _revision_preflight_errors(
     candidate: Path,
     payload: dict[str, object],
 ) -> list[tuple[str, str, str]]:
-    from literary_engineering_studio_engine.creative_quality import load_creative_quality_profile
-    from literary_engineering_studio_engine.draft_text import final_body_from_draft_path
+    from literary_engineering_studio_engine.foundation.draft_text import final_body_from_draft_path
+    from literary_engineering_studio_engine.literary.review.creative_quality import (
+        load_creative_quality_profile,
+    )
     from literary_engineering_studio_engine.literary.scene.promotion.revision_contract import (
         revision_manifest_errors,
         revision_source_requires_anti_evasion_rows,
@@ -300,3 +324,152 @@ def _revision_file_errors(
     if previous and hashlib.sha256(candidate.read_bytes()).hexdigest() == previous:
         errors.append((candidate_rel, "修订正文与被审查候选完全相同。", "对正文落实真实语义修改；不能只更新报告和 manifest。"))
     return errors
+
+
+def _validate_continuity_ledger_contract(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    issues: list[PreflightIssue],
+) -> None:
+    """Reject pending continuity records before formal writeback."""
+
+    from literary_engineering_studio_engine.literary.assets.continuity.ledger import (
+        continuity_ledger_status,
+    )
+
+    state = str(task.current_state or task.payload.get("current_state") or "")
+    if state not in {"continuity-ledger-agent-task", "continuity-ledger-review"}:
+        return
+    scene_id = str(task.payload.get("scene_id") or "").strip()
+    if not scene_id:
+        return
+    review = state == "continuity-ledger-review"
+    passed, message, _payload = continuity_ledger_status(
+        sandbox.workspace,
+        scene_id,
+        require_review=review,
+    )
+    if passed:
+        return
+    relative = (
+        f"reviews/continuity/{scene_id}_ledger_review.json"
+        if review
+        else f"plot/ledger_deltas/{scene_id}.json"
+    )
+    issues.append(
+        PreflightIssue(
+            "continuity-ledger-contract",
+            relative,
+            message,
+            _continuity_ledger_repair_instruction(scene_id, review=review),
+        )
+    )
+
+
+def _continuity_ledger_repair_instruction(scene_id: str, *, review: bool) -> str:
+    if review:
+        return (
+            f"重写 `reviews/continuity/{scene_id}_ledger_review.json` 的 pending 模板。保留 schema、scene_id、"
+            "delta_path 和精确 delta_sha256；以独立审查会话写入 `status=complete`、`verdict=pass`、非空 "
+            "findings、`required_changes=[]`。若 delta 有实质缺陷，不得伪造 pass，应写入可执行的 "
+            "required_changes；不要创建 completion receipt。"
+        )
+    return (
+        f"重写 `plot/ledger_deltas/{scene_id}.json`，不能保留 pending 初始化模板。保留 schema、scene_id 和 "
+        "source_draft；以已晋升正文为唯一证据。若新增/更新读者问题或承诺，写入非空 evidence_paths 与具体 "
+        "changes；若确实无变化，两个 changes 列表可为空，但必须写出具体 no_change_reason。完成后设置 "
+        "`status=complete`；不要编辑正式账本或创建 completion receipt。"
+    )
+
+
+def _validate_branch_selection_contract(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    issues: list[PreflightIssue],
+) -> None:
+    """Validate the machine handoff of a creative branch decision."""
+
+    from literary_engineering_studio_engine.tasking.gates import branch_selection_status
+
+    state = str(task.current_state or task.payload.get("current_state") or "")
+    if state not in {"branch-agent-task", "branch-selection"}:
+        return
+    scene_id = str(task.payload.get("scene_id") or "").strip()
+    if not scene_id:
+        return
+    relative = f"branches/{scene_id}/branch_selection.md"
+    status = branch_selection_status(sandbox.workspace / relative)
+    if status.get("status") != "selected":
+        issues.append(
+            PreflightIssue(
+                "branch-selection-contract",
+                relative,
+                str(status.get("message") or "branch selection is incomplete"),
+                "在 branch_selection.md 的独立行写入 `decision: selected` 和 "
+                "`selected_branch: <branch_id>`；不要只在标题、表格或自然语言中声明选择。",
+            )
+        )
+        return
+    _validate_selected_branch_membership(
+        sandbox,
+        scene_id,
+        relative,
+        str(status.get("selected_branch") or "").strip(),
+        issues,
+    )
+
+
+def _validate_selected_branch_membership(
+    sandbox: SandboxManifest,
+    scene_id: str,
+    selection_relative: str,
+    selected: str,
+    issues: list[PreflightIssue],
+) -> None:
+    manifest_relative = f"branches/{scene_id}/branch_manifest.json"
+    try:
+        payload = json.loads(
+            (sandbox.workspace / manifest_relative).read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        issues.append(
+            PreflightIssue(
+                "branch-manifest-invalid",
+                manifest_relative,
+                f"cannot validate selected branch against manifest: {exc}",
+                "保留当前选择，读取正式 branch_manifest.json 后使用其中存在的 branch_id。",
+            )
+        )
+        return
+    branch_ids = _selectable_branch_ids(sandbox.workspace, scene_id, payload)
+    if not branch_ids or selected not in branch_ids:
+        issues.append(
+            PreflightIssue(
+                "branch-selection-membership",
+                selection_relative,
+                f"selected_branch `{selected}` is not an id in validated Agent proposals or {manifest_relative}",
+                "使用 branch_proposals.json 或 branch_manifest.json 中的一个精确 branch_id，并保留选择理由与被拒绝分支说明。",
+            )
+        )
+
+
+def _selectable_branch_ids(
+    root: Path,
+    scene_id: str,
+    manifest: dict[str, object],
+) -> set[str]:
+    from literary_engineering_studio_engine.semantic_task_contracts import (
+        validated_branch_proposal_ids,
+    )
+
+    branches = manifest.get("branches") if isinstance(manifest, dict) else None
+    ids = {
+        str(item.get("branch_id") or item.get("id") or "").strip()
+        for item in branches
+        if isinstance(item, dict)
+    } if isinstance(branches, list) else set()
+    try:
+        ids.update(validated_branch_proposal_ids(root, scene_id, manifest))
+    except ValueError:
+        pass
+    return ids

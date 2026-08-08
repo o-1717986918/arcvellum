@@ -9,8 +9,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-from literary_engineering_studio_engine.docx_export import export_markdown_to_docx
-from literary_engineering_studio_engine.draft_text import final_body_from_workbench_text
+from literary_engineering_studio_engine.literary.export.docx import export_markdown_to_docx
+from literary_engineering_studio_engine.foundation.draft_text import final_body_from_workbench_text
 
 from ..advisor_snapshot import project_hashes
 from ..core_bridge import CoreBridge

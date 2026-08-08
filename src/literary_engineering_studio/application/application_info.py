@@ -12,6 +12,7 @@ from typing import Any
 
 from .. import __version__
 from .config import default_config_path, default_data_root
+from .compatibility import compatibility_summary
 from ..model_connections import model_connection_status
 from ..opencode_binary import locate_opencode, verify_opencode
 from .project_manager import list_projects
@@ -55,6 +56,7 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
             "verified": bool(verification.get("verified")),
         },
         "current_model": _selected_model(config),
+        "compatibility": compatibility_summary(),
         "paths": {
             "projects_root": str(application.get("projects_root") or ""),
             "configuration": str(default_config_path()),

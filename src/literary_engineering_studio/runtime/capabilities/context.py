@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from literary_engineering_studio_engine.resources import engine_root
+from literary_engineering_studio_engine.foundation.resources import engine_root
 
 from ...contracts import TaskPackage, normalize_relative_path
 from .contracts import CapabilityManifest

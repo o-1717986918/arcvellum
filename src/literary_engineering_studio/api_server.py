@@ -116,13 +116,13 @@ from .project_manager import (
 from .reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
 from .supervisor import project_lock_key
 from .worker import AgentWorker
-from literary_engineering_studio_engine.anti_ai_style import style_lint_gate
-from literary_engineering_studio_engine.creative_quality import (
+from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     load_creative_quality_profile,
     save_creative_quality_profile,
 )
-from literary_engineering_studio_engine.punctuation_standard import lint_punctuation
-from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan, save_rhythm_plan
+from literary_engineering_studio_engine.literary.style.punctuation import lint_punctuation
+from literary_engineering_studio_engine.literary.planning.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 
 _STYLE_MOUNTS = StyleMountApplicationService()
 

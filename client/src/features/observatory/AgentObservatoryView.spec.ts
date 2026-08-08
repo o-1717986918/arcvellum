@@ -78,6 +78,8 @@ describe("AgentObservatoryView", () => {
     expect(wrapper.text()).toContain("task-1");
     expect(wrapper.text()).toContain("writer");
     expect(wrapper.text()).toContain("task.started");
+    expect(wrapper.text()).toContain("主创 Agent");
+    expect(wrapper.text()).toContain("任务已开始");
   });
 
   it("explains missing observability without fabricating data", async () => {

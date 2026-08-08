@@ -1,0 +1,69 @@
+{
+  "schema": "arcvellum/compatibility-manifest/v1",
+  "manifest_version": 1,
+  "release_line": "0.97",
+  "minimum_compatibility_window": "one-stable-release",
+  "runtime_defaults": {
+    "agent_runtime": "opencode",
+    "model_invocation": "runner-managed",
+    "scene_generation": "platform-agent-task"
+  },
+  "alias_policy": {
+    "scope": "literary_engineering_studio_engine top-level compatibility modules",
+    "studio_internal_imports_allowed": false,
+    "external_imports_supported": true,
+    "removal_requires": "one published deprecation window and a fresh external-consumer audit"
+  },
+  "deprecated_aliases": [
+    {
+      "module": "literary_engineering_studio_engine.generation_provider",
+      "canonical_module": "literary_engineering_studio_engine.literary.scene.generation_provider",
+      "status": "deprecated",
+      "remove_not_before": "1.0.0"
+    },
+    {
+      "module": "literary_engineering_studio_engine.cli_legacy_commands",
+      "canonical_module": "literary_engineering_studio_engine.command_line.commands.legacy",
+      "status": "deprecated",
+      "remove_not_before": "1.0.0"
+    },
+    {
+      "module": "literary_engineering_studio_engine.model_config",
+      "canonical_module": "literary_engineering_studio_engine.foundation.model_config",
+      "status": "deprecated",
+      "remove_not_before": "1.0.0"
+    },
+    {
+      "module": "literary_engineering_studio_engine.agent_provider",
+      "canonical_module": "literary_engineering_studio_engine.prompting.agents.provider",
+      "status": "deprecated",
+      "remove_not_before": "1.0.0"
+    },
+    {
+      "module": "literary_engineering_studio_engine.workflow_state",
+      "canonical_module": "literary_engineering_studio_engine.workflow.state",
+      "status": "deprecated",
+      "remove_not_before": "1.0.0"
+    },
+    {
+      "module": "literary_engineering_studio_engine.init_project",
+      "canonical_module": "literary_engineering_studio_engine.projects.init",
+      "status": "deprecated",
+      "remove_not_before": "1.0.0"
+    }
+  ],
+  "legacy_providers": [
+    {
+      "id": "http-chat",
+      "module": "literary_engineering_studio_engine.literary.scene.generation_provider.HttpChatProvider",
+      "status": "legacy-manual-only",
+      "production_default": false
+    },
+    {
+      "id": "dry-run",
+      "module": "literary_engineering_studio_engine.literary.scene.generation_provider.DryRunProvider",
+      "status": "test-only",
+      "production_default": false
+    }
+  ]
+}

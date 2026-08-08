@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from literary_engineering_studio_engine.style_lab import (
+from literary_engineering_studio_engine.literary.style.lab import (
     active_project_style,
     default_style_library_root,
 )

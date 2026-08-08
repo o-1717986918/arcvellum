@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     agent_task_completion_status,
 )
 from literary_engineering_studio_engine.literary.ingest import reconstruction_paths
-from literary_engineering_studio_engine.workflow_state import build_workflow_state
+from literary_engineering_studio_engine.workflow.state import build_workflow_state
 
 from ...protocols.canonical_json import canonical_json_digest
 from .contracts import MODE_PRESENTATION

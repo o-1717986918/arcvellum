@@ -78,6 +78,8 @@ try {
     }
     python (Join-Path $Root "scripts\verify_version_sync.py")
     Assert-NativeSuccess "Version synchronization check"
+    python (Join-Path $Root "scripts\verify_compatibility_surface.py") --root $Root
+    Assert-NativeSuccess "Compatibility surface audit"
     if (-not $SkipNodeInstall -or -not (Test-Path (Join-Path $Root "node_modules"))) {
         cmd /c npm install
         Assert-NativeSuccess "Node dependency installation"

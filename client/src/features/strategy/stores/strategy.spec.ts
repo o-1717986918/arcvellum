@@ -35,6 +35,7 @@ function projectionFixture() {
       scope_key: "chapter_01",
     },
     rolling_horizon: null,
+    capabilities: [],
   };
 }
 
@@ -49,7 +50,7 @@ describe("Creation Strategy store", () => {
   });
 
   it("loads the read-only strategy projection and starts the typed stream", async () => {
-    apiMock.mockResolvedValue(projectionFixture());
+    apiMock.mockResolvedValue({ ok: true, strategy: projectionFixture() });
     const { useAppStore } = await import("@/stores/app");
     useAppStore().setCurrentProject("C:\\ArcVellum\\潮线", false);
     const { useStrategyStore } = await import("./strategy");
@@ -63,10 +64,14 @@ describe("Creation Strategy store", () => {
       expect.stringContaining("project_root=C%3A%5CArcVellum%5C%E6%BD%AE%E7%BA%BF"),
     );
     expect(connectEventStreamMock).toHaveBeenCalledTimes(1);
+    expect(connectEventStreamMock).toHaveBeenCalledWith(
+      expect.stringContaining("follow=true"),
+      expect.any(Function),
+    );
   });
 
   it("appends only typed plan events and closes the stream on reload", async () => {
-    apiMock.mockResolvedValue(projectionFixture());
+    apiMock.mockResolvedValue({ ok: true, strategy: projectionFixture() });
     const { useAppStore } = await import("@/stores/app");
     useAppStore().setCurrentProject("C:\\ArcVellum\\潮线", false);
     const { useStrategyStore } = await import("./strategy");

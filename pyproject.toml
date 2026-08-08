@@ -31,6 +31,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 literary_engineering_studio = [
+    "application/*.json",
     "frontend/dist/**/*.html",
     "frontend/dist/**/*.css",
     "frontend/dist/**/*.js",

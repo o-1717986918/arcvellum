@@ -16,12 +16,12 @@ from .scene_review_metadata import canonicalize_scene_review_metadata
 from .style_snapshot import prompt_style_snapshot
 from .style_metadata import canonicalize_style_machine_metadata
 from ..sandbox import SandboxManifest
-from literary_engineering_studio_engine.agent_schema import load_schema_spec
+from literary_engineering_studio_engine.prompting.agents.schema import load_schema_spec
 from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_definition,
     semantic_artifact_relative_path,
 )
-from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELDS
+from literary_engineering_studio_engine.literary.assets.continuity.architecture import REQUIRED_FIELDS
 
 
 SEMANTIC_SOURCE_PATTERNS = {

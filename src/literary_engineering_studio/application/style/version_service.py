@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from literary_engineering_studio_engine.style_prompt import style_prompt_quality_report
+from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
 
 from .contracts import StyleVersionState
 from .evaluation_projection import project_evaluations

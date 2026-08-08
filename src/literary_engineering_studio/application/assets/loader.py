@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from literary_engineering_studio_engine.display_cleaner import scalar_from_yaml_text
+from literary_engineering_studio_engine.foundation.display_cleaner import scalar_from_yaml_text
 
 from .contracts import AssetRecord, AssetViewDefinition
 from .registry import AssetViewRegistry

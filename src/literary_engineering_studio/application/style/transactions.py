@@ -11,7 +11,7 @@ import threading
 from typing import Any
 import uuid
 
-from literary_engineering_studio_engine.style_lab import (
+from literary_engineering_studio_engine.literary.style.lab import (
     create_author_project,
     create_author_work,
     ensure_style_library,

@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.asset_workshop import ASSET_CANDIDATE_DIRS
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_CANDIDATE_DIRS
 from literary_engineering_studio_engine.literary.assets.promotion import (
     file_sha256,
     latest_approval,

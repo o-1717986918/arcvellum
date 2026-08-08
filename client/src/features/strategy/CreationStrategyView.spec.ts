@@ -30,6 +30,11 @@ function projectionFixture(activePlan: unknown) {
     settings: { enabled: false, mode: "fixed", preset: "balanced" },
     active_plan: activePlan,
     rolling_horizon: null,
+    capabilities: [
+      { id: "fixed-route", label: "固定正式路线", maturity: "production", state: "active", detail: "正式任务状态机始终可回退。", user_visible: true },
+      { id: "chapter-horizon", label: "章节前瞻", maturity: "preview", state: "available", detail: "能力已接线，当前未启用。", user_visible: true },
+      { id: "cross-task-session-reuse", label: "跨任务会话复用", maturity: "contract", state: "unavailable", detail: "当前不开放。", user_visible: false },
+    ],
   };
 }
 
@@ -43,15 +48,16 @@ describe("CreationStrategyView", () => {
   });
 
   it("renders real strategy settings and active plan summary", async () => {
-    apiMock.mockResolvedValue(
-      projectionFixture({
+    apiMock.mockResolvedValue({
+      ok: true,
+      strategy: projectionFixture({
         plan_id: "plan-1",
         revision: 3,
         status: "active",
         scope_kind: "chapter",
         scope_key: "chapter_01",
       }),
-    );
+    });
     const pinia = createPinia();
     setActivePinia(pinia);
     const { useAppStore } = await import("@/stores/app");
@@ -66,10 +72,15 @@ describe("CreationStrategyView", () => {
     expect(wrapper.text()).toContain("balanced");
     expect(wrapper.text()).toContain("plan-1");
     expect(wrapper.text()).toContain("chapter_01");
+    expect(wrapper.text()).toContain("固定正式路线");
+    expect(wrapper.text()).toContain("正式运行");
+    expect(wrapper.text()).toContain("章节前瞻");
+    expect(wrapper.text()).toContain("可用，尚未启用");
+    expect(wrapper.text()).not.toContain("跨任务会话复用");
   });
 
   it("explains an empty active plan without fabricating data", async () => {
-    apiMock.mockResolvedValue(projectionFixture(null));
+    apiMock.mockResolvedValue({ ok: true, strategy: projectionFixture(null) });
     const pinia = createPinia();
     setActivePinia(pinia);
     const { useAppStore } = await import("@/stores/app");
@@ -84,7 +95,7 @@ describe("CreationStrategyView", () => {
   });
 
   it("renders typed plan events from the live stream", async () => {
-    apiMock.mockResolvedValue(projectionFixture(null));
+    apiMock.mockResolvedValue({ ok: true, strategy: projectionFixture(null) });
     const pinia = createPinia();
     setActivePinia(pinia);
     const { useAppStore } = await import("@/stores/app");

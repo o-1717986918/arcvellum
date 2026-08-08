@@ -8,6 +8,7 @@ function strategy(activePlan: unknown): StrategyProjection {
     settings: { enabled: false, mode: "fixed", preset: "balanced" },
     active_plan: activePlan as never,
     rolling_horizon: null,
+    capabilities: [],
   };
 }
 

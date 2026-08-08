@@ -7,7 +7,9 @@ import {
 import type { StrategyProjection, TypedPlanEvent } from "../types";
 
 export function fetchStrategy(projectRoot: string): Promise<StrategyProjection> {
-  return api(`/project/strategy?${query({ project_root: projectRoot })}`);
+  return api<{ ok: boolean; strategy: StrategyProjection }>(
+    `/project/strategy?${query({ project_root: projectRoot })}`,
+  ).then((response) => response.strategy);
 }
 
 export function observeStrategyEvents(
@@ -15,7 +17,7 @@ export function observeStrategyEvents(
   onEvent: (event: TypedPlanEvent) => void,
 ): EventStreamConnection {
   return connectEventStream(
-    `/project/strategy/events?${query({ project_root: projectRoot })}`,
+    `/project/strategy/events?${query({ project_root: projectRoot, follow: "true" })}`,
     (eventName, data) => {
       if (eventName === "plan-event") {
         onEvent(parseTypedPlanEvent(data));

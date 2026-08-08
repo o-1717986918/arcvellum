@@ -9,6 +9,39 @@ const store = useStrategyStore();
 const overlay = computed(() =>
   projectPlanOverlay(store.projection, store.events),
 );
+const visibleCapabilities = computed(() =>
+  (store.projection?.capabilities || []).filter((item) => item.user_visible),
+);
+
+const modeLabels: Record<string, string> = {
+  fixed: "固定正式路线",
+  shadow: "影子评估",
+  assisted: "辅助编排",
+  supervised_adaptive: "监督式自适应",
+  full_adaptive: "全自适应",
+};
+const presetLabels: Record<string, string> = {
+  conservative: "审慎",
+  balanced: "均衡",
+  exploratory: "探索",
+};
+
+function maturityLabel(value: string): string {
+  return { production: "正式能力", preview: "预览能力", contract: "合同阶段" }[value] || value;
+}
+
+function stateLabel(value: string): string {
+  return { active: "正式运行", available: "可用，尚未启用", disabled: "当前关闭", unavailable: "暂未开放" }[value] || value;
+}
+
+function eventLabel(value: string): string {
+  return {
+    "plan.candidate.started": "开始形成计划候选",
+    "plan.candidate.completed": "计划候选已完成",
+    "plan.review.completed": "计划审查已完成",
+    "plan.activated": "计划已正式激活",
+  }[value] || value;
+}
 
 onMounted(() => void store.load());
 onUnmounted(() => store.stopStream());
@@ -50,8 +83,9 @@ onUnmounted(() => store.stopStream());
           <h2>当前模式</h2>
         </header>
         <dl>
-          <div><dt>模式</dt><dd>{{ store.settings?.mode }}</dd></div>
-          <div><dt>预设</dt><dd>{{ store.settings?.preset }}</dd></div>
+          <div><dt>模式</dt><dd>{{ modeLabels[store.settings?.mode || ""] || store.settings?.mode }}</dd></div>
+          <div><dt>内部标识</dt><dd><code>{{ store.settings?.mode }}</code></dd></div>
+          <div><dt>策略倾向</dt><dd>{{ presetLabels[store.settings?.preset || ""] || store.settings?.preset }} <small>({{ store.settings?.preset }})</small></dd></div>
           <div><dt>开关</dt><dd>{{ store.settings?.enabled ? "开启" : "关闭" }}</dd></div>
         </dl>
       </article>
@@ -69,6 +103,25 @@ onUnmounted(() => store.stopStream());
         </dl>
         <p v-else class="strategy-empty">还没有激活的创作计划。计划经独立审查与授权后才会出现在这里。</p>
       </article>
+    </section>
+
+    <section class="strategy-capabilities" aria-label="创作能力成熟度">
+      <header>
+        <span class="eyebrow">能力实况</span>
+        <h2>哪些能力现在真的生效</h2>
+        <p>“正式能力”说明生产链已经使用；“预览能力”仍需明确开启。支持程度与当前开关分别显示。</p>
+      </header>
+      <div class="strategy-capability-grid">
+        <article v-for="capability in visibleCapabilities" :key="capability.id" :data-state="capability.state" :data-maturity="capability.maturity">
+          <div class="capability-signal" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div>
+            <span>{{ maturityLabel(capability.maturity) }}</span>
+            <h3>{{ capability.label }}</h3>
+            <p>{{ capability.detail }}</p>
+          </div>
+          <strong>{{ stateLabel(capability.state) }}</strong>
+        </article>
+      </div>
     </section>
 
     <section class="strategy-card strategy-overlay">
@@ -117,8 +170,9 @@ onUnmounted(() => store.stopStream());
       <div class="strategy-event-log">
         <article v-for="event in store.events" :key="`${event.event_id}-${event.created_at}`">
           <span class="event-dot" aria-hidden="true"></span>
-          <strong>{{ event.event_type }}</strong>
+          <strong>{{ eventLabel(event.event_type) }}</strong>
           <code>{{ event.plan_id }}</code>
+          <small>{{ event.event_type }}</small>
           <small v-if="event.revision !== undefined">r{{ event.revision }}</small>
           <time>{{ event.created_at || "—" }}</time>
         </article>

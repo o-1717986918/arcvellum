@@ -2227,3 +2227,72 @@ Q5-C 总结：C1 交付角色隔离和只读资源租约准入；C2 交付默认
 - `compileall -q src tests`、Architecture Audit、Module Dependency Direction、`git diff --check` 通过。
 
 Q5-D 结论：Campaign 不再是第二状态机候选，而成为现有 Autopilot 的可验证策略/安全点层；每轮正式推进由内容证据证明，失败有界，事件流可恢复并明确关闭。下一步进入 Q6：只开放真实成熟度，收敛前端 Strategy/Observatory 与 compatibility manifest；不把默认关闭能力展示成已启用。
+
+### 2026-08-08：Q6 实施前复审——真实能力开放与兼容表面
+
+状态：生产行为改动前审查完成。
+
+#### 实际前端与后端接线
+
+1. Strategy 后端 `/project/strategy`、typed event stream、Vue store 和 `CreationStrategyView` 均已存在；Q5-D 已补齐 cursor、持续 tail、heartbeat 和 terminal。普通 Vue Router 与主导航仍未开放该页面；
+2. Agent Observatory 后端、workspace snapshot、应用级 SSE 和 `AgentObservatoryView` 均已存在；当前页面可以展示正式 Worker 会话与审计事件，但普通 Router/导航同样未开放；
+3. 两个页面都直接显示较多内部枚举、role、stage 与 event type，且没有机器可读 maturity。若直接开放，用户会把默认关闭的 Chapter Horizon、Bundle、Campaign 与合同能力误认为正在执行；
+4. `OrchestrationSettings` 已能准确证明总开关、effective mode、Chapter Horizon、Bundle 和 Campaign 的真实启用状态；成熟度投影应从这些设置产生，不能由前端猜测；
+5. Strategy/Observatory 的视觉应延续当前“叙事观测仪器”体系，但本批不重构星仪、不新增装饰性主视觉。唯一新增视觉语义是小型能力铭牌：成熟度与当前启用状态必须分开展示。
+
+#### 兼容层与打包事实
+
+1. Engine 保留大量顶层 compatibility aliases；Studio 生产代码仍有 29 处 import 经过其中 20 余个 alias。虽然行为正确，但 canonical 模块重构后仍让应用层依赖旧表面，削弱边界可读性；
+2. `generation_provider.py` 顶层模块只是 canonical scene provider 的兼容别名；`HttpChatProvider` 没有 Studio 生产消费者；正式 `generate-scene` 命令明确生成 `platform-agent` task，不调用该 HTTP provider；
+3. `DryRunProvider` 仍被文风挂载场景链集成测试使用，因此 scene provider 模块不是零消费者，不能在本发行窗口删除；
+4. PyInstaller 通过 `collect_submodules` 收集整个 Studio 与 Engine。Legacy provider 会进入 sidecar，但“被打包”不等于“成为默认入口”；发行门禁必须验证正式命令仍走 platform-agent/Runner，并禁止 Studio 生产代码 import legacy provider；
+5. 当前没有 compatibility manifest，也没有构建期兼容表面审计。删除 shim 的最早时机应在 manifest 记录至少一个发行窗口后，并另行验证外部消费者；Q6 不删除任何 alias。
+
+#### Q6 最小闭环计划
+
+1. 增加纯函数 maturity projection：只表达 `production`、`preview`、`contract` 三种成熟度，以及 `active`、`available`、`disabled`、`unavailable` 四种当前状态；maturity 不随开关伪装变化；
+2. 把成熟度投影加入 Strategy API；前端以中文铭牌展示固定路线、Chapter Horizon、Bundle、Campaign、typed events 与 Observability，并明确“可用但未启用”和“正在生效”的差异；
+3. 正式注册 `/strategy` 与 `/observatory` 路由和主导航入口；两个页面继续只读，不添加绕过 CLI/审批的写按钮；
+4. 新增单一 JSON compatibility manifest，记录 canonical module、deprecated alias、legacy provider、生产默认与最早移除版本；运行时和构建审计读取同一文件，不复制常量；
+5. 把 Studio 包内所有可识别的 Engine 顶层 alias import 迁移到 canonical modules；测试对 alias 的兼容覆盖保留；
+6. 新增发行审计脚本并接入 `build_desktop.ps1`：拒绝 Studio 生产代码重新 import 已登记 alias，拒绝正式 scene command 接回 legacy provider，并验证 manifest 会进入 Python package；
+7. 先跑 Strategy/Observatory/API/compatibility 定向测试和 Vue build，再跑 Python 全量、Vue 全量、Architecture/Dependency、compileall 与 diff check；本批单独提交。
+
+Q6 边界：不删除 shim；不把 Campaign 默认改为开启；不新增第二 feature registry class；不把 API maturity 当作配置写回入口；不为兼容审计扫描用户作品或运行目录。
+
+#### Q6 完成记录：能力成熟度、真实入口与兼容表面
+
+状态：实现完成，进入最终全量验证。
+
+完成内容：
+
+- Strategy API 在原投影内增加单一能力清单，没有另造 feature registry、Manager 或第二设置源；成熟度固定为 `production/preview/contract`，当前状态独立表达为 `active/available/unavailable`，开关不会把预览能力伪装成正式能力；
+- `/strategy` 与 `/observatory` 已进入正式 Vue Router 和主导航。页面保持只读，只展示现有正式设置、计划、Worker 会话和审计事件，不提供跳过 CLI、审批或写回门禁的按钮；
+- Strategy 前端修复两个生产缺陷：正确解包 API 的 `{ok, strategy}` 响应；事件连接显式使用 `follow=true`，不再把有限 replay 误当作持续观测；
+- Strategy 与 Observatory 增加面向用户的中文状态语义，同时保留小号内部枚举作为可核验信息；新增紧凑矿物玻璃能力信号面，区分“已经正式运行”和“已接线但尚未启用”，没有把页面扩张为第二总控台；
+- 新增唯一 `compatibility_manifest.json`，记录生产默认、deprecated aliases、legacy providers、兼容窗口和最早移除版本；运行时详情接口与构建审计读取同一文件，不复制默认值；
+- Studio 生产代码已从 Engine 顶层 compatibility aliases 迁移到 canonical modules；旧 alias 文件和面向外部消费者的兼容测试保留，本发行窗口不做破坏性删除；
+- `verify_compatibility_surface.py` 通过 AST 扫描阻止 Studio 重新依赖顶层 alias，并检查正式 scene command 仍生成 `platform-agent` task、未接回 `HttpChatProvider`，同时验证 manifest 进入 package data；桌面构建在收集 sidecar 前强制运行该审计；
+- 能力成熟度仅由一个纯函数生成；实施中删除了没有消费者的二次 projection 包装函数，没有引入继承层次、Repository、持久表或运行线程。
+
+边审查边发现并修复：
+
+1. 初次 alias 迁移后，`preflight/scene.py` 与 `preflight/assets.py` 仍有 schema、Style Lint、候选晋升、读者体验和字数合同等延迟导入经过旧入口；发行审计逐项定位后已全部迁移到领域内 canonical modules；
+2. Strategy Vue store 原先把 API 包装对象当作投影本身，真实页面会得到空设置；单测此前也复刻了错误响应。测试先改为真实响应合同，再修复 client 解包；
+3. Strategy SSE 后端默认是有限 replay，而前端没有传 `follow=true`。现已用 store 测试锁定持续连接参数；
+4. TypeScript 生产构建发现一个旧星仪投影测试夹具缺少新增 `capabilities` 字段；已统一夹具，不把字段改成可选来掩盖契约漂移；
+5. compatibility manifest 只声明真正承诺跨发行保留的公开别名；构建审计则动态发现全部顶层 shim 并禁止 Studio 内部依赖，避免把历史内部文件逐个升级为新的永久兼容承诺。
+6. 第一次 Python 全量回归的 916 项行为用例中 915 项通过、1 项跳过，但 Architecture Audit 拒绝 `task_preflight` 兼容门面新增领域依赖，并拒绝 134 行的候选预检主函数。没有提高 baseline：连续性账本与分支选择 validator 已归入既有 `preflight.scene`，候选角色资产检查提炼为同模块私有函数；兼容门面恢复为只编排既有 validator，后续 55 项预检回归与架构门禁通过。
+
+阶段验证：
+
+- Compatibility/Strategy/API 定向：36 tests passed；
+- Strategy/Observatory/Router 前端定向：9 tests passed；
+- Vue TypeScript 检查、Vite production build、desktop frontend sync 与 v0.9 build verification 通过；
+- compatibility surface audit 与 `git diff --check` 通过；
+- Python 全量：916 tests passed，1 skipped；
+- Vue 全量：53 files、159 tests passed；
+- `compileall -q src tests`、Architecture Audit、Module Dependency Direction、compatibility surface audit 与 `git diff --check` 通过；
+- Vue TypeScript 检查、Vite production build、desktop frontend sync 与 v0.9 build verification 最终通过。
+
+Q6 结论：前端现在只开放后端真实存在的策略与观测能力，并明确成熟度；兼容层从“散落的历史文件”变为有发行窗口、有生产默认、有构建门禁的受控表面。跨任务 session 复用仍明确不可用，Chapter Horizon、Bundle 与 Campaign 仍保持预览且默认关闭。

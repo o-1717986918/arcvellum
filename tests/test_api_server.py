@@ -104,6 +104,10 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(details.status_code, 200)
         self.assertEqual(details.json()["product_name"], "ArcVellum")
         self.assertTrue(details.json()["repository_url"].endswith("/arcvellum"))
+        self.assertEqual(
+            details.json()["compatibility"]["model_invocation"],
+            "runner-managed",
+        )
 
         help_center = self.client.get("/help")
         self.assertEqual(help_center.status_code, 200)

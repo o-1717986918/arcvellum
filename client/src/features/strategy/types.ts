@@ -17,6 +17,16 @@ export interface StrategyProjection {
   settings: StrategySettings;
   active_plan: ActivePlanSummary | null;
   rolling_horizon: unknown;
+  capabilities: StrategyCapability[];
+}
+
+export interface StrategyCapability {
+  id: string;
+  label: string;
+  maturity: "production" | "preview" | "contract";
+  state: "active" | "available" | "disabled" | "unavailable";
+  detail: string;
+  user_visible: boolean;
 }
 
 export interface TypedPlanEvent {

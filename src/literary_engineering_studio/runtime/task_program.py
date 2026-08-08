@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ..contracts import TaskPackage
-from literary_engineering_studio_engine.agent_schema import load_schema_spec
+from literary_engineering_studio_engine.prompting.agents.schema import load_schema_spec
 from .context_selection import compact_task_references
 from .context_access_policy import protected_output_read_rule
 from .creative_plan_context import creative_plan_task_context

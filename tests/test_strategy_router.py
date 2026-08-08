@@ -60,6 +60,42 @@ class StrategyProjectionTests(unittest.TestCase):
             self.assertEqual(projection["settings"]["mode"], "fixed")
             self.assertFalse(projection["settings"]["enabled"])
             self.assertIsNone(projection["active_plan"])
+            capabilities = {
+                item["id"]: item for item in projection["capabilities"]
+            }
+            self.assertEqual(capabilities["fixed-route"]["maturity"], "production")
+            self.assertEqual(capabilities["fixed-route"]["state"], "active")
+            self.assertEqual(capabilities["chapter-horizon"]["maturity"], "preview")
+            self.assertEqual(capabilities["chapter-horizon"]["state"], "available")
+            self.assertEqual(
+                capabilities["cross-task-session-reuse"]["state"],
+                "unavailable",
+            )
+
+    def test_enabled_feature_flags_are_reported_as_active_not_more_mature(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _work_project(Path(temporary))
+            settings = _settings(
+                enabled=True,
+                configured_mode=OrchestrationMode.ASSISTED,
+                effective_mode=OrchestrationMode.ASSISTED,
+                production_chapter_horizon=True,
+                bundle_execution=True,
+                campaign_runtime=True,
+            )
+
+            projection = strategy_projection(root, settings)
+
+            capabilities = {
+                item["id"]: item for item in projection["capabilities"]
+            }
+            for capability_id in (
+                "chapter-horizon",
+                "serial-bundle-execution",
+                "campaign-runtime",
+            ):
+                self.assertEqual(capabilities[capability_id]["state"], "active")
+                self.assertEqual(capabilities[capability_id]["maturity"], "preview")
 
     def test_active_plan_summary_is_read_from_projection(self):
         with tempfile.TemporaryDirectory() as temporary:

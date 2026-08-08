@@ -11,7 +11,7 @@ import re
 import tempfile
 from typing import Any
 
-from literary_engineering_studio_engine.prompt_registry import resolve_prompt_asset
+from literary_engineering_studio_engine.prompting.registry import resolve_prompt_asset
 
 from ..runtimes import build_runtime
 

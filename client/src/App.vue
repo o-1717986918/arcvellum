@@ -13,10 +13,12 @@ import {
   PackageCheck,
   Info,
   Orbit,
+  RadioTower,
   RefreshCw,
   ScanSearch,
   Settings2,
   SlidersHorizontal,
+  Waypoints,
 } from "lucide-vue-next";
 import StartupScene from "@/components/StartupScene.vue";
 import AdvisorDock from "@/components/AdvisorDock.vue";
@@ -41,6 +43,8 @@ const nav = [
   { to: "/archaeology", label: "作品考古", icon: ScanSearch, needsProject: true },
   { to: "/style", label: "文风工坊", icon: Fingerprint, needsProject: true },
   { to: "/quality", label: "创作规则", icon: SlidersHorizontal, needsProject: true },
+  { to: "/strategy", label: "创作策略", icon: Waypoints, needsProject: true },
+  { to: "/observatory", label: "Agent 观测", icon: RadioTower, needsProject: true },
   { to: "/delivery", label: "交付", icon: PackageCheck, needsProject: true },
   { to: "/settings", label: "设置", icon: Settings2, needsProject: false },
 ];
@@ -98,7 +102,7 @@ watch(showStartup, (visible) => {
 watch(
   () => store.currentProjectPath,
   (path) => {
-    if (!path && ["overview", "reader", "library", "archive", "archaeology", "style", "quality", "delivery"].includes(String(route.name))) void router.push("/projects");
+    if (!path && ["overview", "reader", "library", "archive", "archaeology", "style", "quality", "strategy", "observatory", "delivery"].includes(String(route.name))) void router.push("/projects");
   },
 );
 

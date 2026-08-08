@@ -10,6 +10,29 @@ onMounted(() => {
     void app.loadAgentObservability().catch(() => undefined);
   }
 });
+
+function roleLabel(value: string): string {
+  return {
+    "main-creative-agent": "主创 Agent",
+    "main-review-agent": "审读 Agent",
+    reviewer: "审读 Agent",
+    writer: "主创 Agent",
+    planner: "规划 Agent",
+  }[value] || value || "等待分派";
+}
+
+function statusLabel(value: string): string {
+  return { active: "正在执行", idle: "当前待命", stalled: "推进停滞" }[value] || value;
+}
+
+function eventLabel(value: string): string {
+  return {
+    "task.started": "任务已开始",
+    "task.completed": "任务已完成",
+    "task.failed": "任务未通过",
+    "runner.session.reuse_assessed": "会话边界已检查",
+  }[value] || value;
+}
 </script>
 
 <template>
@@ -35,10 +58,10 @@ onMounted(() => {
         <article class="strategy-card">
           <header>
             <span class="eyebrow">运行状态</span>
-            <h2>{{ app.agentObservability.status }}</h2>
+            <h2>{{ statusLabel(app.agentObservability.status) }}</h2>
           </header>
           <dl v-if="app.agentObservability.active_task">
-            <div><dt>角色</dt><dd>{{ app.agentObservability.active_task.role }}</dd></div>
+            <div><dt>角色</dt><dd>{{ roleLabel(app.agentObservability.active_task.role) }} <small>{{ app.agentObservability.active_task.role }}</small></dd></div>
             <div><dt>路线</dt><dd>{{ app.agentObservability.active_task.route }}</dd></div>
             <div><dt>任务</dt><dd>{{ app.agentObservability.active_task.task_id }}</dd></div>
             <div><dt>阶段</dt><dd>{{ app.agentObservability.active_task.stage }}</dd></div>
@@ -53,9 +76,9 @@ onMounted(() => {
           </header>
           <ul class="observatory-sessions">
             <li v-for="session in app.agentObservability.sessions ?? []" :key="session.session_id">
-              <strong>{{ session.role }}</strong>
+              <strong>{{ roleLabel(session.role) }}</strong>
               <span>{{ session.status }}</span>
-              <small>{{ session.route }}</small>
+              <small>{{ session.role }} · {{ session.route }}</small>
             </li>
           </ul>
           <p v-if="!(app.agentObservability.sessions ?? []).length" class="strategy-empty">
@@ -74,8 +97,9 @@ onMounted(() => {
         <div class="strategy-event-log">
           <article v-for="event in app.agentObservability.recent_events" :key="`${event.sequence}-${event.task_id}`">
             <span class="event-dot" aria-hidden="true"></span>
-            <strong>{{ event.event }}</strong>
+            <strong>{{ eventLabel(event.event) }}</strong>
             <code>{{ event.route }}</code>
+            <small>{{ event.event }}</small>
             <small>{{ event.stage }}</small>
             <time>{{ event.at }}</time>
           </article>
