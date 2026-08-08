@@ -13,9 +13,10 @@ from .creative_plan_activation import (
 )
 from .creative_plan_artifacts import verify_indexed_plan_artifacts
 from .creative_plan_authorization import prepare_revision_authorization
-from .creative_plan_events import append_creative_plan_event_tx
+from .creative_plan_events import append_creative_plan_event_tx, read_creative_plan_events
 from .creative_plan_primitives import positive_revision, project_key, validate_plan_id
 from .primitives import _json, _now
+from .sqlite_uow import SqliteUnitOfWork
 from ..orchestration.plan_events import CreativePlanEventType
 
 
@@ -54,13 +55,15 @@ CREATE TABLE IF NOT EXISTS creative_plan_revisions (
 """
 
 
-class CreativePlanStoreMixin:
-    """Methods require the host JobStore connection and write-lock protocol."""
+class CreativePlanRepository:
+    """Persist plan revisions, activation, and their append-only events."""
+
+    def __init__(self, uow: SqliteUnitOfWork):
+        self._uow = uow
 
     def reserve_creative_plan_revision(self, record: dict[str, Any]) -> dict[str, Any]:
         normalized = _normalize_revision_record(record)
-        with self._write_lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self._uow.write(immediate=True) as connection:
             plan = connection.execute(
                 "SELECT * FROM creative_plans WHERE plan_id = ?",
                 (normalized["plan_id"],),
@@ -103,8 +106,7 @@ class CreativePlanStoreMixin:
     ) -> dict[str, Any]:
         validate_plan_id(plan_id)
         revision = positive_revision(revision)
-        with self._write_lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self._uow.write(immediate=True) as connection:
             row = connection.execute(
                 """
                 SELECT revisions.*, plans.project_root
@@ -140,7 +142,7 @@ class CreativePlanStoreMixin:
 
     def read_creative_plan(self, plan_id: str) -> dict[str, Any]:
         validate_plan_id(plan_id)
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             row = connection.execute(
                 "SELECT * FROM creative_plans WHERE plan_id = ?",
                 (plan_id,),
@@ -156,7 +158,7 @@ class CreativePlanStoreMixin:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         project = project_key(project_root)
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             rows = connection.execute(
                 """
                 SELECT * FROM creative_plans
@@ -173,7 +175,7 @@ class CreativePlanStoreMixin:
         revision: int,
     ) -> dict[str, Any]:
         validate_plan_id(plan_id)
-        with self._connection() as connection:
+        with self._uow.read() as connection:
             row = connection.execute(
                 """
                 SELECT * FROM creative_plan_revisions
@@ -198,8 +200,7 @@ class CreativePlanStoreMixin:
 
         validate_plan_id(plan_id)
         requested_revision = positive_revision(revision)
-        with self._write_lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self._uow.write(immediate=True) as connection:
             row = connection.execute(
                 """
                 SELECT * FROM creative_plan_revisions
@@ -256,7 +257,7 @@ class CreativePlanStoreMixin:
     ) -> dict[str, Any]:
         validate_plan_id(plan_id)
         requested_revision = positive_revision(revision)
-        with self._write_lock:
+        with self._uow.write_lock:
             self._activate_creative_plan_transaction(
                 plan_id,
                 requested_revision,
@@ -279,7 +280,7 @@ class CreativePlanStoreMixin:
         active_plan_path: Path,
         active_plan_payload: dict[str, Any],
     ) -> None:
-        connection = self._connect()
+        connection = self._uow.connect()
         previous: str | None = None
         projection_touched = False
         try:
@@ -319,6 +320,21 @@ class CreativePlanStoreMixin:
             raise
         finally:
             connection.close()
+
+    def creative_plan_events(
+        self,
+        plan_id: str,
+        *,
+        after: int = 0,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        with self._uow.read() as connection:
+            return read_creative_plan_events(
+                connection,
+                plan_id,
+                after=after,
+                limit=limit,
+            )
 
 
 def _activation_records(

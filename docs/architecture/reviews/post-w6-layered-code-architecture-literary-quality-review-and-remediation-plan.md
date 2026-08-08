@@ -1470,3 +1470,36 @@ Q4 退出结论：
 - `git diff --check`：通过。
 
 下一批入口：迁移 Creative Plan/Event 聚合；新 Repository 复用 descriptor 暴露旧 API，并保持激活时“数据库事务 + active projection 文件回滚”的原子补偿边界。
+
+### 2026-08-08：Q4.5-C Creative Plan/Event Repository 聚合
+
+状态：完成，准备独立提交。
+
+实际问题：
+
+- `CreativePlanStoreMixin` 与 `CreativePlanEventStoreMixin` 只有 `JobStore` 一个宿主；前者还依赖宿主私有连接、写锁和后者提供的事件方法，形成顺序敏感的兄弟 Mixin 耦合；
+- Plan revision 的保留、就绪、授权和激活事件必须与所属计划事务原子提交，若把 Event 机械拆成独立 Repository 并在事务外追加，会产生“计划已变但审计事件缺失”的双写风险；
+- 激活流程同时更新 SQLite 活跃版本和 `active_plan_path` 文件投影，不能简单改写为普通 `UnitOfWork.write()`，否则文件写入成功、数据库提交失败时无法恢复旧投影。
+
+已完成：
+
+- 将两个 Mixin 收敛为 `CreativePlanRepository`：统一拥有计划、修订、授权、激活和事件查询；事务内事件追加继续接收当前 connection，不开启第二次提交；
+- 普通读写改用 `SqliteUnitOfWork.read()` 与 `write(immediate=True)`；激活则显式持有同一 `write_lock`，继续执行“捕获旧文件投影 -> 数据库事务与文件写入 -> 提交失败时恢复文件并回滚数据库”的补偿协议；
+- `JobStore` 仅显式组合 `self.creative_plans`，并通过 `RepositoryMethod` 保留八个既有公共入口，不复制 SQL、不暴露开放式动态分派；
+- 新增独立 Repository characterization test，覆盖空计划/事件查询、facade 真实绑定以及 MRO 不再包含两个旧 Mixin；
+- 原提交失败测试改为注入 `CreativePlanRepository` 的真实 `SqliteUnitOfWork.connect` 协作者，证明测试不再依赖已删除的宿主私有实现细节，同时仍验证数据库提交失败会恢复 active projection。
+
+批判性边界：
+
+- Event 没有被包装成独立空类，因为它是 Plan aggregate 的 append-only 审计组成，而不是独立生命周期；`read_creative_plan_events()` 保持为接受现有 transaction connection 的窄函数；
+- Repository 没有继承新的 facade 基类，也没有把跨文件补偿隐藏在通用 UoW 中；这类补偿是 Creative Plan 激活的领域特例；
+- 本批不顺手改动 plan schema、状态枚举或授权语义，避免把结构迁移与行为变化混在同一提交。
+
+验证证据：
+
+- Creative Plan persistence/events/activation/shadow service、Persistence composition、Architecture 与依赖方向：47 tests passed；
+- 提交失败补偿回归包含在同一测试集内；
+- Architecture Audit：29 file debts、205 function debts、0 cycles；
+- `compileall` 与 `git diff --check`：通过。
+
+下一批入口：先迁移 `RecycleBinStoreMixin` 为独立 Repository；随后把 Asset Transaction 与 Asset Revision 作为同一资产历史聚合审查和迁移，避免跨 Repository 双写。三者完成后重新判定 Q2 退出条件，而不是仅按类名数量宣布完成。

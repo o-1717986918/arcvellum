@@ -200,9 +200,9 @@ class CreativePlanStoreTests(unittest.TestCase):
             store = JobStore(Path(temporary) / "studio.sqlite3")
             plan_id = "plan-commit-rollback"
             persist_ready_record(store, root, plan_id)
-            connection = FailingCommitConnection(store._connect())
+            connection = FailingCommitConnection(store.creative_plans._uow.connect())
 
-            with patch.object(store, "_connect", return_value=connection):
+            with patch.object(store.creative_plans._uow, "connect", return_value=connection):
                 with self.assertRaisesRegex(sqlite3.OperationalError, "commit failed"):
                     _activate(store, root, plan_id)
 

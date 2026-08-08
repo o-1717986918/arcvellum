@@ -30,25 +30,25 @@ CREATE INDEX IF NOT EXISTS creative_plan_events_plan_idx
 """
 
 
-class CreativePlanEventStoreMixin:
-    def creative_plan_events(
-        self,
-        plan_id: str,
-        *,
-        after: int = 0,
-        limit: int = 200,
-    ) -> list[dict[str, Any]]:
-        validate_plan_id(plan_id)
-        with self._connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT * FROM creative_plan_events
-                WHERE plan_id = ? AND sequence > ?
-                ORDER BY sequence ASC LIMIT ?
-                """,
-                (plan_id, max(0, int(after)), max(1, min(1000, int(limit)))),
-            ).fetchall()
-        return [_event_row(row) for row in rows]
+def read_creative_plan_events(
+    connection,
+    plan_id: str,
+    *,
+    after: int = 0,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Read plan events using the repository-owned transaction boundary."""
+
+    validate_plan_id(plan_id)
+    rows = connection.execute(
+        """
+        SELECT * FROM creative_plan_events
+        WHERE plan_id = ? AND sequence > ?
+        ORDER BY sequence ASC LIMIT ?
+        """,
+        (plan_id, max(0, int(after)), max(1, min(1000, int(limit)))),
+    ).fetchall()
+    return [_event_row(row) for row in rows]
 
 
 def append_creative_plan_event_tx(

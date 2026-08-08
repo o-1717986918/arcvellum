@@ -14,8 +14,7 @@ from typing import Any
 from .asset_revisions import AssetRevisionStoreMixin
 from .asset_transactions import AssetTransactionStoreMixin
 from .autopilot_runs import AutopilotRepository
-from .creative_plans import CreativePlanStoreMixin
-from .creative_plan_events import CreativePlanEventStoreMixin
+from .creative_plans import CreativePlanRepository
 from .context_ledgers import ContextLedgerRepository
 from .facade import RepositoryMethod
 from .mutation_receipts import MutationReceiptRepository
@@ -41,8 +40,6 @@ from .primitives import (
 
 
 class JobStore(
-    CreativePlanEventStoreMixin,
-    CreativePlanStoreMixin,
     RecycleBinStoreMixin,
     AssetTransactionStoreMixin,
     AssetRevisionStoreMixin,
@@ -57,6 +54,7 @@ class JobStore(
         self.sessions = SessionRepository(self._uow)
         self.context_ledgers = ContextLedgerRepository(self._uow)
         self.mutation_receipts = MutationReceiptRepository(self._uow)
+        self.creative_plans = CreativePlanRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -127,6 +125,15 @@ class JobStore(
     record_mutation_receipt = RepositoryMethod("mutation_receipts")
     read_mutation_receipt = RepositoryMethod("mutation_receipts")
     list_mutation_receipts = RepositoryMethod("mutation_receipts")
+
+    reserve_creative_plan_revision = RepositoryMethod("creative_plans")
+    finalize_creative_plan_revision = RepositoryMethod("creative_plans")
+    read_creative_plan = RepositoryMethod("creative_plans")
+    list_creative_plans = RepositoryMethod("creative_plans")
+    read_creative_plan_revision = RepositoryMethod("creative_plans")
+    authorize_creative_plan_revision = RepositoryMethod("creative_plans")
+    activate_creative_plan = RepositoryMethod("creative_plans")
+    creative_plan_events = RepositoryMethod("creative_plans")
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)
