@@ -26,6 +26,8 @@ output_contract:
   - Write only the composition review JSON at the declared path. Studio materializes the lifecycle receipt after deterministic preflight succeeds.
 review_requirements:
   - Verify branch provenance, beat inventory, character causality, rhythm, bridge, reader contract, word budget and mounted style before allowing prose.
+  - Accept variable 2-8 beat plans when they cover goal turn incoming bridge outgoing hook cost and reader effect; never require five beats merely because the fallback has five.
+  - Verify composition_obligations.word_target_hanzi matches the authoritative scene budget and is carried into prose generation.
   - Every finding must be concrete enough to guide the following prose task or a revision task.
 forbidden_shortcuts:
   - Do not leave pending_agent_judgment or pending in the final JSON.

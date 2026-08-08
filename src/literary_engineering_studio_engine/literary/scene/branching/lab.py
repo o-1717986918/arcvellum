@@ -236,7 +236,7 @@ def _write_branch_agent_tasks(
             ),
             (
                 "写入正式分支提案",
-                f"""把提案写入 `{proposal_path.relative_to(root).as_posix()}`。每条使用唯一 `agent_branch_<slug>` id，并填写 title、strategy、causal_premise、至少两步 action_chain、不可回避的 cost、reader_effect 和具体 state_writeback。不同提案必须在因果、行动链、代价、读者效果和写回上都真实不同。设置 status=complete，引用实际 evidence_paths，并在 findings 说明差异依据。""",
+                f"""把恰好 {payload['branch_count']} 条提案写入 `{proposal_path.relative_to(root).as_posix()}`。每条使用唯一 `agent_branch_<slug>` id，并填写 title、strategy、causal_premise、至少两步 action_chain、不可回避的 cost、reader_effect、具体 state_writeback 和 2-8 拍 beat_plan。每拍填写 function、visible_action、causal_change、pace、detail_level、serves；整份计划必须覆盖 incoming_bridge、goal、turn、cost、reader_effect、outgoing_hook。不同提案必须在因果、行动链、代价、读者效果和写回上都真实不同。设置 status=complete，引用实际 evidence_paths，并在 findings 说明差异依据。""",
             ),
             (
                 "决定选择策略",

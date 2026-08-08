@@ -16,6 +16,20 @@ REQUIRED_PROPOSAL_FIELDS = (
     "cost",
     "reader_effect",
     "state_writeback",
+    "beat_plan",
+)
+
+REQUIRED_BEAT_OBLIGATIONS = frozenset(
+    {"incoming_bridge", "goal", "turn", "cost", "reader_effect", "outgoing_hook"}
+)
+REQUIRED_BEAT_FIELDS = (
+    "beat_id",
+    "function",
+    "visible_action",
+    "causal_change",
+    "pace",
+    "detail_level",
+    "serves",
 )
 
 
@@ -84,6 +98,32 @@ def _proposal_errors(proposal: dict[str, Any], index: int, relative: str) -> lis
     writeback = proposal.get("state_writeback")
     if not isinstance(writeback, dict) or not _has_writeback_change(writeback):
         errors.append(f"branch proposal `{label}` requires a concrete state writeback: {relative}")
+    errors.extend(_beat_plan_errors(proposal.get("beat_plan"), label, relative))
+    return errors
+
+
+def _beat_plan_errors(value: Any, label: str, relative: str) -> list[str]:
+    if not isinstance(value, list) or not 2 <= len(value) <= 8:
+        return [f"branch proposal `{label}` requires a 2-8 item beat_plan: {relative}"]
+    errors: list[str] = []
+    ids: list[str] = []
+    covered: set[str] = set()
+    for index, beat in enumerate(value):
+        if not isinstance(beat, dict):
+            errors.append(f"branch proposal `{label}` beat {index + 1} must be an object: {relative}")
+            continue
+        for field in REQUIRED_BEAT_FIELDS:
+            if field not in beat or not _meaningful_beat_value(beat.get(field)):
+                errors.append(f"branch proposal `{label}` beat {index + 1} requires {field}: {relative}")
+        ids.append(str(beat.get("beat_id") or "").strip())
+        serves = beat.get("serves")
+        if isinstance(serves, list):
+            covered.update(str(item).strip() for item in serves if str(item).strip())
+    if len(ids) != len(set(ids)):
+        errors.append(f"branch proposal `{label}` requires unique beat_id values: {relative}")
+    missing = sorted(REQUIRED_BEAT_OBLIGATIONS - covered)
+    if missing:
+        errors.append(f"branch proposal `{label}` beat_plan misses obligations {', '.join(missing)}: {relative}")
     return errors
 
 
@@ -113,6 +153,10 @@ def _has_writeback_change(writeback: dict[str, Any]) -> bool:
 
 def _nonempty_values(values: list[Any]) -> list[Any]:
     return [value for value in values if str(value).strip()]
+
+
+def _meaningful_beat_value(value: Any) -> bool:
+    return bool(_nonempty_values(value)) if isinstance(value, list) else bool(str(value or "").strip())
 
 
 def _signature(value: Any) -> str:

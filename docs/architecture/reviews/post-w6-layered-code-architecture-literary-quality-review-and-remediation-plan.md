@@ -1302,3 +1302,39 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - compileall 与 `git diff --check`：通过。
 
 下一批入口：Q4-B 可变 Composition 节拍。先把 Agent proposal 的可选 `beat_plan` 定义成结构化创作策略，并建立固定文学义务校验；只有有效 plan 才替换五拍 fallback，不能把“可变”实现为取消目标、转向、桥接、代价、读者效果或字数契约。
+
+### 2026-08-08：Q4-B 可变 Composition 节拍与固定文学义务
+
+状态：完成，准备独立提交。
+
+实际审查结论：
+
+- `CreativeExecutionPlan` 与 scene binding 已实际控制 `roleplay_depth`、`branch_count`、`revision_policy`、fallback level 和 narrative distance；这些策略无需在 Engine 再建一份配置；
+- Composition 原 `_build_beats` 无条件输出“开场压力 -> 接近目标 -> 阻碍升级 -> 人物选择 -> 后果落点”五拍，即使节奏契约和 Agent 分支判断不同也无法改变；
+- 正文 Prompt 已读取完整 composition JSON，因此只要把可变节拍和固定义务写入该正式产物，就能进入生成链，无需再建 Prompt HTTP 或旁路文件。
+
+已完成：
+
+- Agent branch proposal 现在必须携带 2-8 拍 `beat_plan`；每拍显式声明 function、visible action、causal change、pace、detail level 和所服务的文学义务；
+- 确定性校验要求每个 plan 覆盖 `incoming_bridge`、`goal`、`turn`、`cost`、`reader_effect`、`outgoing_hook`，可变节拍不能借“自由编排”删除长篇因果和读者体验义务；
+- Agent 提案数量必须精确匹配 manifest 中由 Creative Policy Graph 投影的 `branch_count`，防止 Worker 为节省成本少写分支，也防止无界扩张；
+- 新增 `composition/beats.py`，把节拍编译和固定义务投影从大体量 composer 中分离；Agent proposal 生成可变节拍，旧项目/确定性 branch 继续生成五拍 fallback；
+- 两类节拍统一携带 `source`、`pace`、`detail_level`、`serves`，正文生成和 Review 无需建立两套消费逻辑；
+- Composition 新增 `composition_obligations`：目标、转向、入场压力、出场钩子、选择代价、读者效果，以及来自权威字数合同的 `word_target_hanzi` 与计数单位；Agent 的创意节拍不能自行更改字数目标；
+- Composition Agent task 与 exact Prompt Asset 已明确：不因 fallback 是五拍而强迫所有作品五拍，Review 按义务完整性和场景因果判断。
+
+批判性边界：
+
+- 代码只验证结构完整和明显重复，不能把“节拍是否真正有文学价值”伪装成算法事实；该判断仍由正式 Composition Review Agent 完成；
+- `beat_plan` 依附于场景特定 branch proposal，而不是塞进全书策略；这让宏观策略负责自由预算和推演深度，局部 Agent 负责理解本场的实际戏剧形状；
+- fallback 五拍仍存在，但现在有显式 `deterministic-fallback` 来源，不能再被误认为 Agent 的场景判断。
+
+验证证据：
+
+- 可变 3/4 拍、五拍 fallback、义务缺失、策略分支数绑定、权威字数义务：8 tests passed；
+- Semantic Contract、Composition、Style Mount、Scene Context、Task Transport 与 Worker Preflight：82 tests passed；
+- Prompt Registry：54 assets、89 task prompt ids、0 error / 0 warning；
+- Architecture Audit：30 file debts、205 function debts、0 cycles；新增模块无超预算函数，未把复杂度从 composer 搬到新热点；
+- compileall 与 `git diff --check`：通过。
+
+下一批入口：Q4-C 跨题材文学质量夹具。使用历史、悬疑、现实主义、群像、喜剧、意识流、剧本七类结构样本，验证“允许不同节拍形状但不遗漏固定义务”；再增加不依赖外部模型的盲审 rubric，避免测试锁死具体中文句子或某一网文风格。

@@ -132,7 +132,7 @@ class SemanticTaskContractTests(unittest.TestCase):
             root = self._project(Path(temporary))
             source = root / "branches" / "scene_0001" / "branch_manifest.json"
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text('{"branches": []}\n', encoding="utf-8")
+            source.write_text('{"branch_count": 2, "branches": []}\n', encoding="utf-8")
             relative = semantic_artifact_relative_path("branch-agent-task", "scene_0001")
             artifact = root / relative
             artifact.parent.mkdir(parents=True, exist_ok=True)
@@ -153,6 +153,26 @@ class SemanticTaskContractTests(unittest.TestCase):
                     "relationship_changes": ["林与盟友的信任下降"],
                     "next_scene_inputs": ["盟友绕开林调查"],
                 },
+                "beat_plan": [
+                    {
+                        "beat_id": "verify_open",
+                        "function": "接住警报",
+                        "visible_action": "林先核对观测记录。",
+                        "causal_change": "即时警告被推迟。",
+                        "pace": "compressed",
+                        "detail_level": "lean",
+                        "serves": ["incoming_bridge", "goal"],
+                    },
+                    {
+                        "beat_id": "verify_cost",
+                        "function": "核验代价",
+                        "visible_action": "盟友在等待中独自离开。",
+                        "causal_change": "事实更清晰，关系却恶化。",
+                        "pace": "slow",
+                        "detail_level": "expanded",
+                        "serves": ["turn", "cost", "reader_effect", "outgoing_hook"],
+                    },
+                ],
             }
             payload.update(
                 {
@@ -182,12 +202,42 @@ class SemanticTaskContractTests(unittest.TestCase):
                         "new_facts": ["调查者知道林接触过禁区日志"],
                         "next_scene_inputs": ["林必须解释信息来源"],
                     },
+                    "beat_plan": [
+                        {
+                            "beat_id": "warn_open",
+                            "function": "发送警告",
+                            "visible_action": "林发出隐去来源的警告。",
+                            "causal_change": "盟友获得行动窗口。",
+                            "pace": "fast",
+                            "detail_level": "standard",
+                            "serves": ["incoming_bridge", "goal", "turn"],
+                        },
+                        {
+                            "beat_id": "warn_exposure",
+                            "function": "暴露来源",
+                            "visible_action": "调查者反查警告通道。",
+                            "causal_change": "林进入调查名单。",
+                            "pace": "decelerating",
+                            "detail_level": "expanded",
+                            "serves": ["cost", "reader_effect", "outgoing_hook"],
+                        },
+                    ],
                 }
             )
             artifact.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             self.assertEqual(semantic_artifact_errors(root, "branch-agent-task", "scene_0001"), [])
             loaded = read_semantic_artifact(root, "branch-agent-task", "scene_0001")
             self.assertEqual(len(loaded["proposals"]), 2)
+
+            source.write_text('{"branch_count": 3, "branches": []}\n', encoding="utf-8")
+            errors = semantic_artifact_errors(root, "branch-agent-task", "scene_0001")
+            self.assertTrue(any("Creative Policy Graph" in item and "exactly 3" in item for item in errors))
+            source.write_text('{"branch_count": 2, "branches": []}\n', encoding="utf-8")
+
+            payload["proposals"][1]["beat_plan"][1]["serves"] = ["cost"]
+            artifact.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            errors = semantic_artifact_errors(root, "branch-agent-task", "scene_0001")
+            self.assertTrue(any("reader_effect" in item and "outgoing_hook" in item for item in errors))
 
     def test_task_blueprint_declares_typed_semantic_output_contract(self):
         with tempfile.TemporaryDirectory() as temporary:

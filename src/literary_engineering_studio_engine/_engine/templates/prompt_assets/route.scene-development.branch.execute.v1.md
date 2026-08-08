@@ -20,6 +20,8 @@ hard_constraints:
   - Produce materially different causal branches rather than cosmetic variants.
   - Treat deterministic manifest branches as fallbacks; write 2-5 scene-specific proposals with agent_branch_<slug> ids.
   - Every proposal must differ in causal premise, action chain, irreversible cost, reader effect, and concrete state writeback.
+  - Give each proposal a 2-8 item beat_plan; vary the count when the scene's causal shape requires it rather than padding every plan to five beats.
+  - Across each beat_plan cover incoming_bridge goal turn cost reader_effect and outgoing_hook; each beat declares pace and detail_level.
   - Score character consistency canon safety dramatic yield future cost and reader promise.
   - Preserve losing branches and their useful elements for formal selection.
 style_constraints:
@@ -27,7 +29,7 @@ style_constraints:
 output_contract:
   - Write branch_proposals.json and branch_selection.md only at declared paths; lifecycle completion is Worker-owned.
 review_requirements:
-  - Every branch identifies its irreversible cost and next-scene pressure.
+  - Every branch identifies its irreversible cost, next-scene pressure, and a beat plan whose obligations are complete.
 forbidden_shortcuts:
   - Do not preselect a branch or collapse alternatives into one answer.
 ---

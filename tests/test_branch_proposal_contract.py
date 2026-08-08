@@ -5,7 +5,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.literary.scene.composition.composer import _load_branch_choice
+from literary_engineering_studio_engine.literary.scene.composition.composer import _build_beats, _load_branch_choice
+from literary_engineering_studio_engine.literary.scene.composition.beats import composition_obligations
+from literary_engineering_studio_engine.literary.scene.facts import SceneFacts
 from literary_engineering_studio_engine.routes.scene.gates import _branch_selection_gate
 from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_relative_path,
@@ -14,6 +16,22 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
 
 
 class BranchProposalContractTests(unittest.TestCase):
+    @staticmethod
+    def _beats(prefix: str, count: int) -> list[dict[str, object]]:
+        obligations = ["incoming_bridge", "goal", "turn", "cost", "reader_effect", "outgoing_hook"]
+        return [
+            {
+                "beat_id": f"{prefix}_{index + 1}",
+                "function": f"推进阶段 {index + 1}",
+                "visible_action": f"角色完成第 {index + 1} 个可观察行动。",
+                "causal_change": f"该行动把因果推进到状态 {index + 1}。",
+                "pace": "measured" if index == 0 else "accelerating",
+                "detail_level": "standard" if index == 0 else "expanded",
+                "serves": obligations[index::count],
+            }
+            for index in range(count)
+        ]
+
     def _write_manifest(self, root: Path, *, declare_proposals: bool) -> Path:
         directory = root / "branches" / "scene_0001"
         directory.mkdir(parents=True, exist_ok=True)
@@ -23,6 +41,7 @@ class BranchProposalContractTests(unittest.TestCase):
                 "agent_tasks_requested": True,
             },
             "recommended_branch": "branch_fallback",
+            "branch_count": 2,
             "branches": [
                 {
                     "branch_id": "branch_fallback",
@@ -66,6 +85,7 @@ class BranchProposalContractTests(unittest.TestCase):
                             "new_facts": ["调查者确认日志已经泄露"],
                             "next_scene_inputs": ["林被列为调查对象"],
                         },
+                        "beat_plan": self._beats("warn", 3),
                     },
                     {
                         "branch_id": "agent_branch_verify",
@@ -79,6 +99,7 @@ class BranchProposalContractTests(unittest.TestCase):
                             "relationship_changes": ["盟友对林的信任下降"],
                             "next_scene_inputs": ["盟友绕开林行动"],
                         },
+                        "beat_plan": self._beats("verify", 4),
                     },
                 ],
             }
@@ -105,6 +126,7 @@ class BranchProposalContractTests(unittest.TestCase):
             self.assertEqual(branch["premise"], "林发出有限警告，因此调查者确认日志已经泄露。")
             self.assertEqual(branch["branch_origin"], "agent-proposal")
             self.assertEqual(branch["proposal_path"], proposal_path)
+            self.assertEqual(len(branch["beat_plan"]), 3)
 
     def test_historical_manifest_without_proposal_contract_keeps_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -120,6 +142,49 @@ class BranchProposalContractTests(unittest.TestCase):
             branch = _load_branch_choice(root, "scene_0001", None, None, False, False)
             self.assertEqual(branch["branch_id"], "branch_fallback")
             self.assertEqual(branch["branch_origin"], "deterministic-fallback")
+
+    def test_agent_plan_controls_variable_beats_while_fallback_keeps_five(self) -> None:
+        facts = SceneFacts(
+            scene_id="scene_0001",
+            chapter_id="chapter_0001",
+            location="观测站",
+            participants=[],
+            canon_refs=[],
+            active_foreshadowing=[],
+            scene_goal="判断是否发出警告",
+            external_conflict="调查者正在监听频道",
+            internal_conflict="林不愿再次失去盟友信任",
+            style_constraints=[],
+            next_hooks=["调查者开始追索警告来源"],
+        )
+        agent_branch = {
+            "premise": "林发出有限警告，因此暴露掌握日志的事实。",
+            "cost": "林失去秘密调查空间。",
+            "reader_effect": "即时缓解转为身份暴露压力。",
+            "beat_plan": self._beats("warn", 3),
+        }
+
+        agent_beats = _build_beats(facts, [], agent_branch)
+        fallback_beats = _build_beats(facts, [], {"action_chain": []})
+
+        self.assertEqual(len(agent_beats), 3)
+        self.assertEqual(agent_beats[0]["source"], "agent-branch-plan")
+        self.assertIn("incoming_bridge", agent_beats[0]["serves"])
+        self.assertEqual(len(fallback_beats), 5)
+        self.assertTrue(all(item["source"] == "deterministic-fallback" for item in fallback_beats))
+
+        obligations = composition_obligations(
+            facts,
+            agent_branch,
+            {
+                "narrative_rhythm": {"scene_turn": "警告变成暴露证据", "reader_effect": "安全感转为追索压力"},
+                "scene_bridge": {"incoming_pressure": "盟友正在等待答复", "outgoing_hook": "调查者锁定林"},
+            },
+            {"target_chinese_chars": 1800, "count_unit": "chinese_content_chars"},
+        )
+        self.assertEqual(obligations["word_target_hanzi"], 1800)
+        self.assertEqual(obligations["turn"], "警告变成暴露证据")
+        self.assertEqual(obligations["cost"], "林失去秘密调查空间。")
 
 
 if __name__ == "__main__":

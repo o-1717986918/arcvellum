@@ -37,6 +37,7 @@ from ...style.snapshot import (
     active_style_mount_snapshot_payload,
 )
 from ..facts import SceneFacts, load_scene_facts
+from .beats import build_beats as _build_beats, composition_obligations
 
 @dataclass(frozen=True)
 class SceneCompositionResult:
@@ -112,6 +113,7 @@ def build_scene_composition(
     word_budget_contract = scene_word_budget_contract(root, scene_path)
     reader_contract = reader_experience_contract(root, scene_path)
     rhythm_contract = narrative_rhythm_contract(root, scene_path)
+    obligations = composition_obligations(facts, branch, rhythm_contract, word_budget_contract)
     quality_profile = load_creative_quality_profile(root)
     input_contract_digest = composition_input_digest(root, scene_path)
 
@@ -147,6 +149,7 @@ def build_scene_composition(
         "characters": [_character_payload(card, root) for card in active_cards or all_cards],
         "branch": branch_payload,
         "beats": beats,
+        "composition_obligations": obligations,
         "subtext_map": subtext_map,
         "dialogue_intents": dialogue_intents,
         "sensory_palette": sensory_palette,
@@ -267,7 +270,7 @@ def _write_composition_agent_tasks(
         tasks=[
             (
                 "审查场景编排",
-                f"""读取 composition.md 与 composition.json，检查 selected_branch、selection_source、flow_gate、beats、subtext_map、dialogue_intents、sensory_palette 和 prose_seed 是否互相一致。selection_source 必须是 selection 才能进入 generate-scene；否则先补 branch_selection.md 或重跑 branch-simulate。把每条发现写进 `{review_rel}` 的 findings。""",
+                f"""读取 composition.md 与 composition.json，检查 selected_branch、selection_source、flow_gate、beats、composition_obligations、subtext_map、dialogue_intents、sensory_palette 和 prose_seed 是否互相一致。Agent 分支可使用 2-8 个可变节拍，固定 fallback 才默认五拍；无论数量多少都必须覆盖 goal、turn、incoming_bridge、outgoing_hook、cost、reader_effect，并服从权威 word_target_hanzi。selection_source 必须是 selection 才能进入 generate-scene；否则先补 branch_selection.md 或重跑 branch-simulate。把每条发现写进 `{review_rel}` 的 findings。""",
             ),
             (
                 "检查人物隐性动因",
@@ -407,56 +410,6 @@ def _find_branch(branches: list[Any], branch_id: str) -> dict[str, Any] | None:
         if isinstance(branch, dict) and branch.get("branch_id") == branch_id:
             return branch
     return None
-
-
-def _build_beats(facts: SceneFacts, cards: list[CharacterCard], branch: dict[str, Any]) -> list[dict[str, str]]:
-    lead = _lead_name(cards)
-    location = facts.location or "未指定地点"
-    goal = facts.scene_goal or "完成当前场景目标"
-    external = facts.external_conflict or "外部阻碍尚未明确"
-    internal = facts.internal_conflict or "内部矛盾尚未明确"
-    hook = facts.next_hooks[0] if facts.next_hooks else "为下一场景留下可追踪后果"
-    action_chain = [str(item) for item in branch.get("action_chain", [])]
-    premise = str(branch.get("premise") or "保持人物逻辑优先。")
-    moral = _first_nonempty([card.moral_line for card in cards]) or "不突破既有人物边界"
-
-    return [
-        {
-            "beat_id": "beat_01",
-            "function": "开场压力",
-            "visible_action": f"以 `{location}` 中一个可观察异常切入，让 {lead} 在行动前先感到约束。",
-            "subtext": f"不要解释背景；让 `{external}` 成为动作节奏、停顿或视线选择上的压力。",
-            "craft_note": _pick(action_chain, 0, f"建立目标：{goal}"),
-        },
-        {
-            "beat_id": "beat_02",
-            "function": "接近目标",
-            "visible_action": f"{lead} 采取一个低声量、可执行的动作接近目标：{goal}。",
-            "subtext": f"内部矛盾 `{internal}` 通过犹豫、绕路、避开某个词或检查同伴安全体现。",
-            "craft_note": _pick(action_chain, 1, premise),
-        },
-        {
-            "beat_id": "beat_03",
-            "function": "阻碍升级",
-            "visible_action": f"外部阻碍推进一格，但不要让偶然性替角色做决定：{external}。",
-            "subtext": "让场景压力来自已登记信息、地点规则和人物选择，不用突然降临的便利转折。",
-            "craft_note": _pick(action_chain, 2, "把冲突写成行动上的具体障碍。"),
-        },
-        {
-            "beat_id": "beat_04",
-            "function": "人物选择",
-            "visible_action": f"{lead} 做出一个符合当前 BDI 的选择，并保留代价。",
-            "subtext": f"选择必须受 `{moral}` 约束；背景故事只能作为隐性动因，不得直白交代。",
-            "craft_note": _pick(action_chain, 3, "用选择暴露人物，而不是用旁白解释人物。"),
-        },
-        {
-            "beat_id": "beat_05",
-            "function": "后果落点",
-            "visible_action": f"场景结尾留下状态变化或下一场景输入：{hook}。",
-            "subtext": "只确认已经写进动作的后果；新增事实保持候选状态，等待审查写回。",
-            "craft_note": "结尾不要总结主题，让可追踪后果自己留下余音。",
-        },
-    ]
 
 
 def _build_subtext_map(facts: SceneFacts, cards: list[CharacterCard]) -> list[dict[str, Any]]:

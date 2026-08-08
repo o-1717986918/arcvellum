@@ -245,7 +245,7 @@ def _semantic_quality_errors(
         "branch-agent-task": _branch_semantic_errors,
     }.get(current_state)
     if special_handler is not None:
-        return [*errors, *special_handler(payload, scene_id, relative)]
+        return [*errors, *special_handler(root, payload, scene_id, relative)]
 
     source_rel = str(payload.get("source_artifact") or "").replace("\\", "/").strip()
     expected = {
@@ -275,19 +275,34 @@ def _semantic_quality_errors(
     return errors
 
 
-def _branch_semantic_errors(payload: dict[str, Any], scene_id: str, relative: str) -> list[str]:
+def _branch_semantic_errors(root: Path, payload: dict[str, Any], scene_id: str, relative: str) -> list[str]:
     expected = f"branches/{scene_id}/branch_manifest.json"
     errors: list[str] = []
     if str(payload.get("source_artifact") or "").replace("\\", "/").strip() != expected:
         errors.append(f"semantic artifact source_artifact must be {expected}: {relative}")
     errors.extend(branch_proposal_quality_errors(payload, relative))
+    errors.extend(_branch_count_errors(root, payload, expected, relative))
     return errors
 
 
-def _roleplay_semantic_errors(payload: dict[str, Any], _scene_id: str, relative: str) -> list[str]:
+def _roleplay_semantic_errors(_root: Path, payload: dict[str, Any], _scene_id: str, relative: str) -> list[str]:
     errors: list[str] = []
     for field in ("character_actions", "world_consequences", "branch_pressures"):
         values = payload.get(field)
         if not isinstance(values, list) or not values:
             errors.append(f"roleplay semantic artifact requires a non-empty {field}: {relative}")
     return errors
+
+
+def _branch_count_errors(root: Path, payload: dict[str, Any], source: str, relative: str) -> list[str]:
+    path = root / source
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return [f"branch semantic artifact source is missing or invalid: {source}"]
+    expected_count = int(manifest.get("branch_count") or 0) if isinstance(manifest, dict) else 0
+    proposals = payload.get("proposals")
+    actual_count = len(proposals) if isinstance(proposals, list) else 0
+    if expected_count and actual_count != expected_count:
+        return [f"branch semantic artifact requires exactly {expected_count} proposals from Creative Policy Graph: {relative}"]
+    return []
