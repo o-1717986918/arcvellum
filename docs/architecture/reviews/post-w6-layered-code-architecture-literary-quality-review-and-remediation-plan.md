@@ -1234,3 +1234,35 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - `_delegate_choice` 仍是 Q3 中剩余的列名复杂函数，但它属于人类决策物化，不应与只读状态投影混批。
 
 下一批入口：先运行当前热点与调用关系审计。若 `_delegate_choice` 仍同时承担选择解析、动作分派和持久化，则以 Q3-G 独立收敛；否则结束 Q3，进入 Q4 分支多样性、可变 Composition 节拍与跨题材黄金语料。
+
+### 2026-08-08：Q3-G Delegated Choice 事务收敛
+
+状态：完成，Q3 收口。
+
+实际审查结论：
+
+- `_delegate_choice` 仍同时承担 policy 授权、停止信号、Steward 调用、人工升级、正式选择物化、文风挂载回执、方向写入和 delegated decision 审计；
+- 这些职责共同构成一次有边界的代理决策事务，适合组合式 application service，不适合继续堆在 Autopilot Controller，也不需要建立类继承树。
+
+已完成：
+
+- 新增 `automation/decision_delegation.py::DecisionDelegator`，只拥有一次 policy-authorized Steward decision 的执行与审计落盘；
+- `AutopilotService` 在初始化时显式注入 config、Store、StyleMountApplicationService 与 pause callback；
+- `_delegate_choice` 保留原签名作为 `RunLoopHost` 和测试兼容入口，但已收敛为对 `DecisionDelegator.execute` 的薄包装；
+- 物化型决策和方向型决策分别由显式常量声明；选择路径、materialized artifact、style mount receipt 与 direction digest 继续汇总到 `choice_evidence`；
+- Steward 取消、stop event、policy 不授权和 requires-human 的返回值、事件和暂停语义保持不变；
+- Controller 从 506 行进一步收敛到 500 行，消除一个 file debt；原 `_delegate_choice` 91 行、complexity 23 债务清零；新 service 187 行且所有函数低于 Ratchet。
+
+验证证据：
+
+- Autopilot 全套 26 tests passed，覆盖取消不落盘、文风挂载仅执行一次、方向进入 Worker sandbox、完整跨路线创作、授权续期、租约恢复、runtime 恢复、no-progress 熔断与 release；
+- Architecture Audit：30 file debts、207 function debts、0 cycles；相较 Q3-F 净减少 1 个 file debt、1 个 function debt；
+- compileall 与 `git diff --check`：通过。
+
+批判性审查：
+
+- `DecisionDelegator` 有清晰事务状态和外部依赖，不是为了减少行数新增的空壳；但它不拥有 route loop、task lifecycle 或项目正式事实，未来也不得演化成第二个 Controller；
+- `record_choice` 仍是正式人类/代理选择物化入口，本批没有复制其 decision-type 分派；
+- 当前剩余热点中还有 contract audit、longform CLI、longform audit、preflight 与前端 projection 等历史债务，但它们不属于本轮列名 Q3 执行核心。后续只在 Q4-Q6 实际触碰相应能力时按 Ratchet 收敛，不开展无边界“清零运动”。
+
+下一批入口：进入 Q4 文学策略质量。先审查当前 branch lab、composition scaffold、prompt assets 与测试 fixture，建立“固定原型仅作 fallback、可变节拍不削弱文学义务、跨题材只检结构性质”的最小闭环，再分批实现。

@@ -10,6 +10,7 @@ from typing import Any
 import uuid
 
 from ..observability.agent_session_tracking import track_agent_session_event
+from .decision_delegation import DecisionDelegator
 from .policy import (
     DECISION_ALIASES,
     DelegationPolicy,
@@ -24,32 +25,22 @@ from .policy import (
 from .run_loop import ClaimedRunLoop
 from .support import (
     _choice_fingerprint,
-    _delegated_direction_message,
     _now,
     _parse_time,
     _pending_asset_dependency,
-    _project_direction,
-    _run_steward_decision,
     _validate_autopilot_project,
 )
-from ..projections.core_read_models import current_choices, record_choice
+from ..projections.core_read_models import current_choices
 from ..application.style.mount_service import StyleMountApplicationService
-from ..advisor.creative_steward import CreativeSteward, CreativeStewardCancelled
+from ..advisor.creative_steward import CreativeSteward
 from ..persistence.job_store import JobStore
-from ..application.project_manager import record_direction
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
 
 
-# This remains local so existing runtime tests and integrations can constrain
-# the controller's route iteration without mutating reusable policy defaults.
 ROUTE_ORDER = (
-    "source-ingest",
-    "longform-planning",
-    "style-engineering",
-    "character-and-world-assets",
-    "scene-development",
-    "review-and-audit",
+    "source-ingest", "longform-planning", "style-engineering",
+    "character-and-world-assets", "scene-development", "review-and-audit",
     "export-and-release",
 )
 PROACTIVE_DECISIONS = {
@@ -77,6 +68,12 @@ class AutopilotService:
         self.runtime_pool = runtime_pool
         self.execution_coordinator = execution_coordinator
         self.style_mount_service = style_mount_service or StyleMountApplicationService()
+        self._choice_delegator = DecisionDelegator(
+            config,
+            store,
+            self.style_mount_service,
+            self._pause_for,
+        )
         self.store.recover_autopilot_runs()
         self._lock = threading.RLock()
         self._threads: dict[str, threading.Thread] = {}
@@ -403,85 +400,16 @@ class AutopilotService:
         task_id: str = "",
         stop: threading.Event | None = None,
     ) -> bool:
-        decision_type = str(choice.get("decision_type") or "")
-        if not policy.permits(route, decision_type):
-            self._pause_for(run_id, "human-decision-required", "当前决定不在自动授权范围内。")
-            return False
-        if stop is not None and stop.is_set():
-            return False
-        self.store.append_autopilot_event(
+        return self._choice_delegator.execute(
             run_id,
-            "decision.started",
-            {
-                "route": route,
-                "task_id": task_id or str(choice.get("task_id") or ""),
-                "decision_type": decision_type,
-                "choice_id": str(choice.get("choice_id") or ""),
-            },
-        )
-        try:
-            decision = _run_steward_decision(steward, project, choice, _project_direction(project), stop)
-        except CreativeStewardCancelled:
-            self.store.append_autopilot_event(run_id, "decision.cancelled", {"decision_type": decision_type})
-            return False
-        if stop is not None and stop.is_set():
-            self.store.append_autopilot_event(run_id, "decision.cancelled", {"decision_type": decision_type})
-            return False
-        if decision["requires_human"]:
-            self._pause_for(run_id, "steward-escalation", decision["human_reason"] or "创作代理认为需要你来决定。")
-            return True
-
-        materialize = decision_type in {
-            "branch_selection",
-            "style_mount",
-            "asset_approval",
-            "release_approval",
-            "canon_patch_approval",
-            "state_patch_confirmation",
-        }
-        recorded = record_choice(
-            self.config,
             project,
-            {
-                **choice,
-                "task_id": task_id or str(choice.get("task_id") or ""),
-                "selected": decision["selected_option"],
-                "rationale": decision["rationale"],
-                "actor": "delegated-agent:creative-steward",
-                "materialize": materialize,
-            },
-            style_mount_service=self.style_mount_service,
+            route,
+            policy,
+            steward,
+            choice,
+            task_id=task_id,
+            stop=stop,
         )
-        applied_evidence: list[str] = [str(recorded.get("choice_path") or "")]
-        if recorded.get("materialized"):
-            applied_evidence.append(str(recorded["materialized"]))
-        style_mount = (
-            recorded.get("style_mount")
-            if isinstance(recorded.get("style_mount"), dict)
-            else {}
-        )
-        if style_mount.get("receipt"):
-            applied_evidence.append(str(style_mount["receipt"]))
-        if decision_type in {"revision_direction", "word_budget_direction"}:
-            direction = record_direction(
-                project,
-                _delegated_direction_message(choice, decision),
-                actor="delegated-agent:creative-steward",
-            )
-            applied_evidence.append(str(direction.get("digest") or ""))
-        decision_record = {
-            **decision,
-            "project_root": str(project),
-            "delegation_id": run_id,
-            "policy_version": policy.payload["version"],
-            "route": route,
-            "task_id": task_id,
-            "selected_option": decision["selected_option"],
-            "choice_fingerprint": _choice_fingerprint(choice),
-            "choice_evidence": [item for item in applied_evidence if item],
-        }
-        self.store.record_delegated_decision(run_id, decision_record)
-        return True
 
     def _worker_event(self, run_id: str, event: str, data: dict[str, Any]) -> None:
         run = self.store.read_autopilot_run(run_id)
