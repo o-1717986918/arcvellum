@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.orchestration import (
+    ChapterFactsValidationMode,
     FreedomBudget,
     NormalizationContext,
     PlanLintContext,
@@ -126,7 +127,16 @@ class ChapterFactsIoAdapterTests(unittest.TestCase):
                 facts.promise_obligation_ids,
                 ("promise_0001", "promise_0002"),
             )
+            self.assertTrue(facts.obligation_contract_present)
+            self.assertTrue(facts.base_project_revision)
             self.assertEqual(chapter_facts_violations(facts), ())
+            self.assertEqual(
+                chapter_facts_violations(
+                    facts,
+                    mode=ChapterFactsValidationMode.PRODUCTION,
+                ),
+                (),
+            )
 
     def test_risk_signals_come_from_yaml_and_tension_curve(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -153,8 +163,26 @@ class ChapterFactsIoAdapterTests(unittest.TestCase):
             self.assertEqual(facts.chapter_word_target, 0)
             self.assertEqual(facts.rhythm_contract_hash, "")
             self.assertEqual(facts.promise_obligation_ids, ())
+            self.assertFalse(facts.obligation_contract_present)
             self.assertEqual(facts.scenes[0].pace, "")
             self.assertEqual(chapter_facts_violations(facts), ())
+
+            strict_codes = {
+                item.code
+                for item in chapter_facts_violations(
+                    facts,
+                    mode=ChapterFactsValidationMode.PRODUCTION,
+                )
+            }
+            self.assertEqual(
+                strict_codes,
+                {
+                    "missing-chapter-word-target",
+                    "missing-rhythm-contract",
+                    "missing-obligation-contract",
+                    "missing-scene-pace",
+                },
+            )
 
     def test_missing_chapter_raises(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -17,6 +17,9 @@ from literary_engineering_studio_engine.orchestration import PlanNodeKind
 from .contracts import CompiledTaskGraph
 
 
+_BUNDLE_ID_CONTRACT = "execution-bundle-id/v2"
+
+
 @dataclass(frozen=True)
 class BundleTemplate:
     template_id: str
@@ -205,7 +208,13 @@ def _compile_for_scope(
             expected.extend(node.progress_contract.formal_artifact_delta)
     if not selected:
         return None
-    bundle_id = _bundle_id(graph.plan_id, template.template_id, scope_key, selected)
+    bundle_id = _bundle_id(
+        graph,
+        template.template_id,
+        scope_key,
+        selected,
+        context_snapshot_hash=context_snapshot_hash,
+    )
     return ExecutionBundle(
         bundle_id=bundle_id,
         plan_id=graph.plan_id,
@@ -249,12 +258,26 @@ def _ref_scope_kind(ref: str) -> str:
 
 
 def _bundle_id(
-    plan_id: str,
+    graph: CompiledTaskGraph,
     template_id: str,
     scope_key: str,
     node_ids: Sequence[str],
+    *,
+    context_snapshot_hash: str,
 ) -> str:
-    digest = hashlib.sha1(
-        "|".join((plan_id, template_id, scope_key, *node_ids)).encode("utf-8")
+    digest = hashlib.sha256(
+        "|".join(
+            (
+                _BUNDLE_ID_CONTRACT,
+                graph.plan_id,
+                str(graph.plan_revision),
+                graph.base_project_fingerprint,
+                graph.graph_digest,
+                context_snapshot_hash,
+                template_id,
+                scope_key,
+                *node_ids,
+            )
+        ).encode("utf-8")
     ).hexdigest()[:12]
     return f"{template_id}-{scope_key}-{digest}"

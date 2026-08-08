@@ -77,6 +77,39 @@ class CampaignTests(unittest.TestCase):
         self.assertTrue(checkpoint_due(_state(completed_steps=5), policy))
         self.assertTrue(checkpoint_due(_state(completed_steps=10), policy))
 
+    def test_checkpoint_is_not_reissued_for_the_same_progress(self):
+        policy = _policy()
+
+        self.assertFalse(
+            checkpoint_due(
+                _state(completed_steps=5, last_checkpoint_step=5),
+                policy,
+            )
+        )
+        self.assertFalse(
+            checkpoint_due(
+                _state(completed_steps=9, last_checkpoint_step=5),
+                policy,
+            )
+        )
+        self.assertTrue(
+            checkpoint_due(
+                _state(completed_steps=10, last_checkpoint_step=5),
+                policy,
+            )
+        )
+
+    def test_checkpoint_cannot_be_ahead_of_progress(self):
+        violations = campaign_violations(
+            _state(completed_steps=4, last_checkpoint_step=5),
+            _policy(),
+        )
+
+        self.assertIn(
+            "checkpoint-ahead-of-progress",
+            {item.code for item in violations},
+        )
+
     def test_campaign_violations(self):
         violations = campaign_violations(
             _state(

@@ -754,3 +754,32 @@ ArcVellum 当前最值得保留的是正式文学 Gate、CLI 任务权威、Engi
 按本计划执行后，目标不是把代码压缩到最少，而是实现：
 
 > **每个概念只有一个可信实现，每个运行能力都有真实调用证据，每个文学 Gate 都不可绕过，而创作策略本身仍保有足够自由。**
+
+## 17. 阶段执行记录
+
+### 2026-08-08：Q0-A 确定性合同修复
+
+状态：完成，待独立提交。
+
+已完成：
+
+- Session Lease 在 token、时间或失败预算恰好耗尽时拒绝复用；
+- 三类复用上限必须大于零，消除零值歧义；
+- Checkpoint 使用 timezone-aware UTC instant 比较，拒绝无效和无时区时间；
+- Campaign 按“距上次 checkpoint 的新增步数”判断到期，不再重复发放同一 checkpoint；
+- Campaign 拒绝 `last_checkpoint_step > completed_steps`；
+- Bundle ID 升级为 v2，纳入 plan revision、project fingerprint、graph digest 与 context snapshot；
+- Chapter Facts loader 写入真实 planning fingerprint；
+- Chapter Facts 增加 structural/production 两种验证模式；
+- production 模式要求章节/场景字数、节奏合同、显式义务合同、场景功能与 pace；
+- 义务列表为空不再等同于义务合同缺失。
+
+验证证据：
+
+- 定向失败先行测试先确认 7 failures + 1 import error；
+- 修复后 50 个定向测试通过；
+- `tests/orchestration`：181 tests passed；
+- `tests/runtime`：17 tests passed；
+- `git diff --check`：通过。
+
+审查修正：初始测试曾把“缺少 plot 文件”错误解释为“缺少 scene function”；实际场景 YAML 已提供该事实，因此修正测试而未降低生产验证标准。

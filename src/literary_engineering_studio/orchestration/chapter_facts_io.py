@@ -15,6 +15,7 @@ from typing import Any
 from ruamel.yaml import YAML
 
 from .chapter_facts import ChapterPlanningFacts, ScenePlanningFact
+from .project_fingerprint import planning_project_fingerprint
 
 _YAML = YAML(typ="safe")
 _EXPLICIT_RISK_FIELDS = (
@@ -39,6 +40,10 @@ def load_chapter_planning_facts(
     rhythm_entries = _rhythm_entries(root)
     rhythm_by_scene = {entry["scene_id"]: entry for entry in rhythm_entries}
     budget_row = _chapter_budget_row(root, chapter_id)
+    obligation_ids, obligation_contract_present = _obligation_contract(
+        root,
+        chapter_id,
+    )
     scenes = tuple(
         _scene_fact(path, chapter_id, rhythm_by_scene, budget_row)
         for path in scene_paths
@@ -48,7 +53,9 @@ def load_chapter_planning_facts(
         scenes=scenes,
         chapter_word_target=_int_value(budget_row.get("target_words")),
         rhythm_contract_hash=_rhythm_digest(root),
-        promise_obligation_ids=_obligation_ids(root, chapter_id),
+        promise_obligation_ids=obligation_ids,
+        obligation_contract_present=obligation_contract_present,
+        base_project_revision=planning_project_fingerprint(root),
     )
 
 
@@ -191,20 +198,29 @@ def _chapter_budget_row(root: Path, chapter_id: str) -> dict[str, Any]:
     return {}
 
 
-def _obligation_ids(root: Path, chapter_id: str) -> tuple[str, ...]:
-    payload = _read_json(root / "plot" / "chapter_obligations" / f"{chapter_id}.json")
+def _obligation_contract(
+    root: Path,
+    chapter_id: str,
+) -> tuple[tuple[str, ...], bool]:
+    path = root / "plot" / "chapter_obligations" / f"{chapter_id}.json"
+    if not path.is_file():
+        return (), False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return (), False
     if not isinstance(payload, dict):
-        return ()
+        return (), False
     for key in ("obligation_ids", "promise_ids"):
         ids = _string_list(payload.get(key))
         if ids:
-            return tuple(ids)
+            return tuple(ids), True
     contract = payload.get("contract")
     if isinstance(contract, dict):
         ids = _contract_obligation_ids(contract.get("obligations"))
         if ids:
-            return tuple(ids)
-    return ()
+            return tuple(ids), True
+    return (), True
 
 
 def _contract_obligation_ids(value: Any) -> list[str]:

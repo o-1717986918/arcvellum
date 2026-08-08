@@ -148,6 +148,26 @@ class ChapterCheckpointTests(unittest.TestCase):
         self.assertTrue(checkpoint_newer(newer, older))
         self.assertFalse(checkpoint_newer(older, newer))
 
+    def test_checkpoint_newer_compares_instants_across_offsets(self):
+        earlier_in_utc = _checkpoint(
+            created_at="2026-07-30T00:30:00+02:00"
+        )
+        later_in_utc = _checkpoint(
+            created_at="2026-07-29T23:00:00+00:00"
+        )
+
+        self.assertFalse(checkpoint_newer(earlier_in_utc, later_in_utc))
+        self.assertTrue(checkpoint_newer(later_in_utc, earlier_in_utc))
+
+    def test_checkpoint_rejects_invalid_or_naive_timestamp(self):
+        invalid = checkpoint_violations(_checkpoint(created_at="not-a-time"))
+        naive = checkpoint_violations(
+            _checkpoint(created_at="2026-07-30T00:00:00")
+        )
+
+        self.assertIn("invalid-created-at", {item.code for item in invalid})
+        self.assertIn("invalid-created-at", {item.code for item in naive})
+
     def test_checkpoint_violations(self):
         violations = checkpoint_violations(
             _checkpoint(

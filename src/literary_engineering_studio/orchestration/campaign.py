@@ -81,10 +81,13 @@ def checkpoint_due(
     state: CampaignState,
     policy: CampaignPolicy,
 ) -> bool:
-    """A checkpoint is due at a positive multiple of the interval."""
-    if state.completed_steps < 1:
+    """Return whether enough new steps elapsed since the last checkpoint."""
+    if policy.checkpoint_interval_steps < 1:
         return False
-    return state.completed_steps % policy.checkpoint_interval_steps == 0
+    progress_since_checkpoint = (
+        state.completed_steps - state.last_checkpoint_step
+    )
+    return progress_since_checkpoint >= policy.checkpoint_interval_steps
 
 
 def campaign_violations(
@@ -126,6 +129,13 @@ def campaign_violations(
             CampaignViolation(
                 code="invalid-checkpoint-step",
                 message="last_checkpoint_step must be a non-negative integer",
+            )
+        )
+    elif state.last_checkpoint_step > state.completed_steps:
+        issues.append(
+            CampaignViolation(
+                code="checkpoint-ahead-of-progress",
+                message="last_checkpoint_step must not exceed completed_steps",
             )
         )
     if not isinstance(policy.max_autonomous_steps, int) or policy.max_autonomous_steps < 1:

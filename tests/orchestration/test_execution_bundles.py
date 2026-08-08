@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from literary_engineering_studio.orchestration import (
@@ -110,6 +111,30 @@ class ExecutionBundleCompilerTests(unittest.TestCase):
 
         self.assertEqual(first[0].bundle_id, second[0].bundle_id)
         self.assertEqual(first[0].context_snapshot_hash, "snapshot-1")
+
+    def test_bundle_identity_includes_plan_revision_graph_and_context(self):
+        baseline = compile_bundles(
+            self.graph,
+            template_id="scene-analysis",
+            context_snapshot_hash="snapshot-1",
+        )[0]
+        revised = compile_bundles(
+            replace(
+                self.graph,
+                plan_revision=self.graph.plan_revision + 1,
+                graph_digest="f" * 64,
+            ),
+            template_id="scene-analysis",
+            context_snapshot_hash="snapshot-1",
+        )[0]
+        new_context = compile_bundles(
+            self.graph,
+            template_id="scene-analysis",
+            context_snapshot_hash="snapshot-2",
+        )[0]
+
+        self.assertNotEqual(baseline.bundle_id, revised.bundle_id)
+        self.assertNotEqual(baseline.bundle_id, new_context.bundle_id)
 
     def test_catalog_is_whitelisted_and_single_role(self):
         for template in bundle_template_catalog():

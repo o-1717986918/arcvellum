@@ -38,6 +38,7 @@ from .chapter_binding import (
 )
 from .chapter_facts import (
     ChapterFactViolation,
+    ChapterFactsValidationMode,
     ChapterPlanningFacts,
     ScenePlanningFact,
     chapter_facts_violations,
@@ -215,6 +216,7 @@ __all__ = [
     "CANDIDATE_SCHEMA",
     "COMPILED_GRAPH_SCHEMA",
     "ChapterFactViolation",
+    "ChapterFactsValidationMode",
     "ChapterCheckpoint",
     "ChapterHorizonProjection",
     "ChapterHorizonShadowEvaluation",

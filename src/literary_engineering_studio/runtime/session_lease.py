@@ -71,12 +71,24 @@ def session_reusable(
         reasons.append("context-ledger-invalidated")
     if not lease.previous_task_completed:
         reasons.append("previous-task-incomplete")
-    if lease.token_used > lease.max_tokens:
-        reasons.append("token-budget-exceeded")
-    if lease.elapsed_seconds > lease.max_seconds:
-        reasons.append("time-budget-exceeded")
-    if lease.failure_count > lease.max_failures:
-        reasons.append("failure-budget-exceeded")
+    if lease.token_used >= lease.max_tokens:
+        reasons.append(
+            "token-budget-exceeded"
+            if lease.token_used > lease.max_tokens
+            else "token-budget-exhausted"
+        )
+    if lease.elapsed_seconds >= lease.max_seconds:
+        reasons.append(
+            "time-budget-exceeded"
+            if lease.elapsed_seconds > lease.max_seconds
+            else "time-budget-exhausted"
+        )
+    if lease.failure_count >= lease.max_failures:
+        reasons.append(
+            "failure-budget-exceeded"
+            if lease.failure_count > lease.max_failures
+            else "failure-budget-exhausted"
+        )
     return SessionReuseDecision(
         reusable=not reasons,
         reasons=tuple(reasons),
@@ -118,11 +130,28 @@ def session_lease_violations(lease: SessionLease) -> tuple[SessionLeaseViolation
             )
     for name in ("elapsed_seconds", "max_seconds"):
         value = getattr(lease, name)
-        if not isinstance(value, (int, float)) or value < 0:
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or value < 0
+        ):
             issues.append(
                 SessionLeaseViolation(
                     code="invalid-duration",
                     message=f"{name} must be a non-negative number",
+                )
+            )
+    for name in ("max_tokens", "max_seconds", "max_failures"):
+        value = getattr(lease, name)
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or value <= 0
+        ):
+            issues.append(
+                SessionLeaseViolation(
+                    code="invalid-budget-limit",
+                    message=f"{name} must be greater than zero",
                 )
             )
     return tuple(issues)

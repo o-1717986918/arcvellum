@@ -153,6 +153,44 @@ class SessionLeaseTests(unittest.TestCase):
         ):
             self.assertIn(reason, decision.reasons)
 
+    def test_exhausted_budget_boundary_blocks_reuse(self):
+        decision = session_reusable(
+            _lease(
+                token_used=5000,
+                elapsed_seconds=600.0,
+                failure_count=2,
+            ),
+            role=SessionRole.WRITER,
+            project_id="project-test",
+            model_id="model-1",
+            style_mount_hash="style-1",
+            context_ledger_epoch="epoch-1",
+        )
+
+        self.assertFalse(decision.reusable)
+        self.assertEqual(
+            decision.reasons,
+            (
+                "token-budget-exhausted",
+                "time-budget-exhausted",
+                "failure-budget-exhausted",
+            ),
+        )
+
+    def test_zero_budget_limits_are_invalid(self):
+        violations = session_lease_violations(
+            _lease(max_tokens=0, max_seconds=0.0, max_failures=0)
+        )
+
+        self.assertEqual(
+            [item.code for item in violations],
+            [
+                "invalid-budget-limit",
+                "invalid-budget-limit",
+                "invalid-budget-limit",
+            ],
+        )
+
     def test_lease_structural_violations(self):
         violations = session_lease_violations(
             _lease(

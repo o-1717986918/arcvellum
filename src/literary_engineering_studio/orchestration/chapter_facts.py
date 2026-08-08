@@ -9,6 +9,7 @@ reads the filesystem, never creates tasks, and never writes project facts.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 _RISK_FEATURE_NAMES = (
     "canon_change",
@@ -19,6 +20,11 @@ _RISK_FEATURE_NAMES = (
     "continuity_debt",
     "style_novelty",
 )
+
+
+class ChapterFactsValidationMode(str, Enum):
+    STRUCTURAL = "structural"
+    PRODUCTION = "production"
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,7 @@ class ChapterPlanningFacts:
     chapter_word_target: int = 0
     rhythm_contract_hash: str = ""
     promise_obligation_ids: tuple[str, ...] = ()
+    obligation_contract_present: bool = False
     base_project_revision: str = ""
 
 
@@ -60,6 +67,8 @@ def scene_order(facts: ChapterPlanningFacts) -> tuple[str, ...]:
 
 def chapter_facts_violations(
     facts: ChapterPlanningFacts,
+    *,
+    mode: ChapterFactsValidationMode = ChapterFactsValidationMode.STRUCTURAL,
 ) -> tuple[ChapterFactViolation, ...]:
     """Return deterministic structural violations for planning facts."""
     issues: list[ChapterFactViolation] = []
@@ -117,7 +126,66 @@ def chapter_facts_violations(
                 message="chapter_word_target must be non-negative",
             )
         )
+    if mode is ChapterFactsValidationMode.PRODUCTION:
+        issues.extend(_production_violations(facts))
     return tuple(issues)
+
+
+def _production_violations(
+    facts: ChapterPlanningFacts,
+) -> list[ChapterFactViolation]:
+    issues: list[ChapterFactViolation] = []
+    if not facts.base_project_revision:
+        issues.append(
+            ChapterFactViolation(
+                code="missing-base-project-revision",
+                message="base_project_revision is required in production mode",
+            )
+        )
+    if facts.chapter_word_target <= 0:
+        issues.append(
+            ChapterFactViolation(
+                code="missing-chapter-word-target",
+                message="chapter_word_target must be positive in production mode",
+            )
+        )
+    if not facts.rhythm_contract_hash:
+        issues.append(
+            ChapterFactViolation(
+                code="missing-rhythm-contract",
+                message="rhythm_contract_hash is required in production mode",
+            )
+        )
+    if not facts.obligation_contract_present:
+        issues.append(
+            ChapterFactViolation(
+                code="missing-obligation-contract",
+                message="an explicit chapter obligation contract is required",
+            )
+        )
+    for scene in facts.scenes:
+        if scene.word_target <= 0:
+            issues.append(
+                ChapterFactViolation(
+                    code="missing-scene-word-target",
+                    message=f"scene word target is required: {scene.scene_ref}",
+                )
+            )
+        if not scene.function:
+            issues.append(
+                ChapterFactViolation(
+                    code="missing-scene-function",
+                    message=f"scene function is required: {scene.scene_ref}",
+                )
+            )
+        if not scene.pace:
+            issues.append(
+                ChapterFactViolation(
+                    code="missing-scene-pace",
+                    message=f"scene pace is required: {scene.scene_ref}",
+                )
+            )
+    return issues
 
 
 def scene_risk_values(
