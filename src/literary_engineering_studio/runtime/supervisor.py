@@ -9,6 +9,13 @@ import uuid
 from typing import Any, Callable
 
 from .execution_coordinator import ProjectExecutionCoordinator, project_execution_key
+from .execution_admission import (
+    ExecutionAdmission,
+    acquire_execution_admission,
+    heartbeat_execution_admission,
+    release_execution_admission,
+)
+from .resources import ResourceClaim
 from ..persistence.job_store import JobStore
 
 
@@ -37,6 +44,7 @@ class WorkerSupervisor:
         function: Callable[[threading.Event], dict[str, Any]],
         *,
         lock_key: str,
+        resource_claim: ResourceClaim | None = None,
     ) -> None:
         with self._lock:
             existing = self._futures.get(job_id)
@@ -50,6 +58,7 @@ class WorkerSupervisor:
                 function,
                 lock_key,
                 cancel_event,
+                resource_claim,
             )
 
     def stop(self, job_id: str) -> dict[str, Any]:
@@ -85,35 +94,31 @@ class WorkerSupervisor:
         function: Callable[[threading.Event], dict[str, Any]],
         lock_key: str,
         cancel_event: threading.Event,
+        resource_claim: ResourceClaim | None,
     ) -> None:
         if not self.store.claim(job_id, self.worker_id, lease_seconds=self.lease_seconds):
             return
         project_root = str(self.store.read(job_id).get("request", {}).get("project_root") or "")
-        if not self.execution_coordinator.acquire(project_root, job_id):
-            self.store.update(
-                job_id,
-                status="waiting_human",
-                error="another active task owns this project",
-                finished_at=_now_from_store(),
-                lease_owner="",
-                lease_expires_at="",
-            )
+        admission, admission_error = self._acquire_admission(
+            project_root,
+            job_id,
+            lock_key,
+            resource_claim,
+        )
+        if admission_error:
+            self._finish_unadmitted(job_id, "failed", admission_error)
             return
-        if not self.store.acquire_lock(lock_key, job_id, self.worker_id, lease_seconds=self.lease_seconds * 2):
-            self.execution_coordinator.release(project_root, job_id)
-            self.store.update(
+        if admission is None:
+            self._finish_unadmitted(
                 job_id,
-                status="waiting_human",
-                error="another active task owns this project route",
-                finished_at=_now_from_store(),
-                lease_owner="",
-                lease_expires_at="",
+                "waiting_human",
+                "another active task owns the required project resources",
             )
             return
         heartbeat_stop = threading.Event()
         heartbeat = threading.Thread(
             target=self._heartbeat_loop,
-            args=(job_id, lock_key, heartbeat_stop, cancel_event),
+            args=(admission, heartbeat_stop, cancel_event),
             name=f"les-heartbeat-{job_id}",
             daemon=True,
         )
@@ -145,10 +150,47 @@ class WorkerSupervisor:
         finally:
             heartbeat_stop.set()
             heartbeat.join(timeout=2)
-            self.store.release_lock(lock_key, job_id)
-            self.execution_coordinator.release(project_root, job_id)
-            with self._lock:
-                self._cancel.pop(job_id, None)
+            try:
+                release_execution_admission(
+                    self.store,
+                    self.execution_coordinator,
+                    admission,
+                )
+            finally:
+                with self._lock:
+                    self._cancel.pop(job_id, None)
+
+    def _acquire_admission(
+        self,
+        project_root: str,
+        job_id: str,
+        lock_key: str,
+        resource_claim: ResourceClaim | None,
+    ) -> tuple[ExecutionAdmission | None, str]:
+        try:
+            admission = acquire_execution_admission(
+                self.store,
+                self.execution_coordinator,
+                project_root=project_root,
+                job_id=job_id,
+                worker_id=self.worker_id,
+                lock_key=lock_key,
+                lease_seconds=self.lease_seconds,
+                resource_claim=resource_claim,
+            )
+        except (RuntimeError, ValueError) as exc:
+            return None, str(exc)
+        return admission, ""
+
+    def _finish_unadmitted(self, job_id: str, status: str, error: str) -> None:
+        self.store.update(
+            job_id,
+            status=status,
+            error=error,
+            finished_at=_now_from_store(),
+            lease_owner="",
+            lease_expires_at="",
+        )
 
     @staticmethod
     def _normalize_result(
@@ -171,18 +213,17 @@ class WorkerSupervisor:
 
     def _heartbeat_loop(
         self,
-        job_id: str,
-        lock_key: str,
+        admission: ExecutionAdmission,
         stop: threading.Event,
         cancel_event: threading.Event,
     ) -> None:
         interval = max(5.0, self.lease_seconds / 3)
         while not stop.wait(interval):
             try:
-                self.store.heartbeat_execution(
-                    job_id,
-                    self.worker_id,
-                    lock_key,
+                heartbeat_execution_admission(
+                    self.store,
+                    admission,
+                    worker_id=self.worker_id,
                     lease_seconds=self.lease_seconds,
                 )
             except Exception as exc:

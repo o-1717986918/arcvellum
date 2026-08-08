@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.supervisor import WorkerSupervisor
+from literary_engineering_studio.runtime.execution_admission import ExecutionAdmission
+from literary_engineering_studio.runtime.resources import ResourceClaim, project_identity
 
 
 class DurableJobTests(unittest.TestCase):
@@ -239,7 +241,7 @@ class DurableJobTests(unittest.TestCase):
 
             restarted = JobStore(database)
             self.assertIsNotNone(restarted.migration_backup)
-            self.assertEqual(restarted.health()["schema_version"], 15)
+            self.assertEqual(restarted.health()["schema_version"], 16)
             session = restarted.read_agent_session("session-before-ledger")
             self.assertEqual(session["context_ledger_id"], "")
             self.assertEqual(session["context_ledger_digest"], "")
@@ -273,7 +275,7 @@ class DurableJobTests(unittest.TestCase):
 
             restarted = JobStore(database)
 
-            self.assertEqual(restarted.health()["schema_version"], 15)
+            self.assertEqual(restarted.health()["schema_version"], 16)
             with restarted._connection() as connection:
                 ledger_columns = {
                     row["name"]
@@ -311,6 +313,79 @@ class DurableJobTests(unittest.TestCase):
             self.assertIn("lock.acquired", event_names)
             self.assertIn("run.complete", event_names)
             self.assertIn("lock.released", event_names)
+
+    def test_supervisor_allows_two_explicit_read_only_claims(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / "work"
+            project.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            first = store.create({"project_root": str(project)})
+            second = store.create({"project_root": str(project)})
+            supervisor = WorkerSupervisor(store, max_workers=2, lease_seconds=30)
+            first_started = threading.Event()
+            second_started = threading.Event()
+            release = threading.Event()
+
+            def run(first_event, other_event):
+                first_event.set()
+                if not other_event.wait(3):
+                    return {"status": "failed", "message": "peer did not start"}
+                release.wait(3)
+                return {"status": "complete", "message": "shared read complete"}
+
+            supervisor.submit(
+                first["job_id"],
+                lambda _cancel: run(first_started, second_started),
+                lock_key="legacy-project-lock",
+                resource_claim=_read_claim(project, "reader-a", "canon/a.yaml"),
+            )
+            supervisor.submit(
+                second["job_id"],
+                lambda _cancel: run(second_started, first_started),
+                lock_key="legacy-project-lock",
+                resource_claim=_read_claim(project, "reader-b", "canon/a.yaml"),
+            )
+
+            self.assertTrue(first_started.wait(3))
+            self.assertTrue(second_started.wait(3))
+            release.set()
+            _wait_for_jobs(store, (first["job_id"], second["job_id"]))
+            supervisor.shutdown()
+
+            self.assertEqual(store.read(first["job_id"])["status"], "complete")
+            self.assertEqual(store.read(second["job_id"])["status"], "complete")
+            self.assertEqual(store.list_resource_leases(), [])
+
+    def test_supervisor_read_only_fast_path_rejects_write_claim(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / "work"
+            project.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            job = store.create({"project_root": str(project)})
+            supervisor = WorkerSupervisor(store, max_workers=1, lease_seconds=30)
+            claim = ResourceClaim(
+                task_node_id="writer",
+                project_id=project_identity(project),
+                reads=(),
+                writes=("drafts/scenes/scene_0001.md",),
+                runtime_slot="agent-worker",
+                model_slot="default",
+                network="none",
+                exclusive_barriers=(),
+            )
+
+            supervisor.submit(
+                job["job_id"],
+                lambda _cancel: {"status": "complete"},
+                lock_key="legacy-project-lock",
+                resource_claim=claim,
+            )
+            _wait_for_jobs(store, (job["job_id"],))
+            supervisor.shutdown()
+
+            failed = store.read(job["job_id"])
+            self.assertEqual(failed["status"], "failed")
+            self.assertIn("read-only claims only", failed["error"])
 
     def test_execution_heartbeat_renews_job_and_project_lock_atomically(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -383,8 +458,12 @@ class DurableJobTests(unittest.TestCase):
                 side_effect=RuntimeError("project lease lost"),
             ):
                 supervisor._heartbeat_loop(
-                    "job-lease-test",
-                    "project:test:execution",
+                    ExecutionAdmission(
+                        project_root="work",
+                        coordinator_owner="job-lease-test",
+                        job_id="job-lease-test",
+                        lock_key="project:test:execution",
+                    ),
                     ImmediateHeartbeat(),
                     cancel,
                 )
@@ -395,6 +474,30 @@ class DurableJobTests(unittest.TestCase):
                 "project lease lost",
                 str(getattr(cancel, "_arcvellum_execution_lease_error", "")),
             )
+
+
+def _read_claim(project: Path, node_id: str, path: str) -> ResourceClaim:
+    return ResourceClaim(
+        task_node_id=node_id,
+        project_id=project_identity(project),
+        reads=(path,),
+        writes=(),
+        runtime_slot="agent-worker",
+        model_slot="default",
+        network="none",
+        exclusive_barriers=(),
+    )
+
+
+def _wait_for_jobs(store: JobStore, job_ids: tuple[str, ...]) -> None:
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if all(
+            store.read(job_id)["status"] not in {"queued", "running"}
+            for job_id in job_ids
+        ):
+            return
+        time.sleep(0.02)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ from .sandbox import (
 )
 from .run_manifest import load_run
 from .task_snapshot import load_run_task_snapshot
+from .task_roles import runtime_role_for_task
 from .worker_observability import WorkerObserver
 from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
@@ -425,7 +426,12 @@ class AgentWorker:
         sandbox: SandboxManifest,
         runtime_id: str,
     ):
-        runtime = build_runtime(runtime_id, self.config, runtime_pool=self.runtime_pool)
+        runtime = build_runtime(
+            runtime_id,
+            self.config,
+            runtime_pool=self.runtime_pool,
+            role=runtime_role_for_task(task),
+        )
         timeout = int(self.config.get("worker", {}).get("timeout_seconds") or 1800)
         self.observer.emit("runner.started", {"runner_id": runtime_id, "task_id": task.task_id})
         runtime_kwargs = self._runtime_kwargs(task, sandbox, runtime_id, timeout)

@@ -84,6 +84,24 @@ def derive_resource_claim(
     )
 
 
+def resource_claim_from_dict(payload: dict[str, object]) -> ResourceClaim:
+    """Parse a persisted claim without introducing a second claim model."""
+
+    schema = str(payload.get("schema") or "")
+    if schema and schema != RESOURCE_CLAIM_SCHEMA:
+        raise ValueError("resource claim schema is invalid")
+    return ResourceClaim(
+        task_node_id=_required_text(payload, "task_node_id"),
+        project_id=_required_text(payload, "project_id"),
+        reads=_string_tuple(payload.get("reads")),
+        writes=_string_tuple(payload.get("writes")),
+        runtime_slot=_required_text(payload, "runtime_slot"),
+        model_slot=_required_text(payload, "model_slot"),
+        network=_network_policy(payload),
+        exclusive_barriers=_string_tuple(payload.get("exclusive_barriers")),
+    )
+
+
 def claims_conflict(left: ResourceClaim, right: ResourceClaim) -> ResourceConflict:
     reasons: list[str] = []
     if left.project_id != right.project_id:
@@ -140,3 +158,23 @@ def _barriers(writes: list[object]) -> list[str]:
         if barrier and barrier not in result:
             result.append(barrier)
     return result
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        raise ValueError("resource claim path/barrier fields must be arrays")
+    return tuple(str(item) for item in value)
+
+
+def _required_text(payload: dict[str, object], field: str) -> str:
+    value = str(payload.get(field) or "").strip()
+    if not value:
+        raise ValueError(f"resource claim {field} is required")
+    return value
+
+
+def _network_policy(payload: dict[str, object]) -> str:
+    value = str(payload.get("network") or "")
+    if value not in {item.value for item in NetworkAccess}:
+        raise ValueError("resource claim network policy is invalid")
+    return value

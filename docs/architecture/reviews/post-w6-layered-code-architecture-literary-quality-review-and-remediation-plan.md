@@ -1953,3 +1953,84 @@ Q5-B 结论：
 - 正式 task identity、Agent role、stop boundary、sandbox、preflight、writeback 与 Engine lifecycle 没有被旁路；
 - 本批没有新增多余父类/子类。`SerialBundleExecutor` 是有独立生命周期语义的 collaborator；章节事实、风险最低要求和 payload 投影保持纯函数/既有 dataclass；
 - 下一批进入 Q5-C：先组合现有项目执行协调器、持久锁和 `ResourceClaim`，再引入角色隔离的 session lease 与只缓存可重建上下文的 cache；不得把它们发展成第二 RuntimePool 或第二项目状态机。
+
+### 2026-08-08：Q5-C 生产接线前复审——资源、角色、会话与缓存
+
+状态：执行前审查完成。
+
+真实调用链发现：
+
+1. `ResourceClaim` 已在 sandbox execution boundaries 中生成，`admission_plan` 已能计算只读并行组，但 `WorkerSupervisor` 在任务选择前先取得整项目 `ProjectExecutionCoordinator` 所有权和单一 SQLite `project_locks`，因此同项目任务必然串行，Resource Gate 没有生产消费者；
+2. `ProjectExecutionCoordinator` 是进程内 owner 表，`JobStore.project_locks` 是跨执行持久独占租约；两者目前都只有项目级写锁语义。直接删除其中任何一层都会损失并发进程/崩溃恢复防线；
+3. `AgentWorker._execute_agent_runtime` 调用 `build_runtime` 时未传入 task role。OpenCode RuntimePool 虽支持 worker/reviewer/planner 独立服务，但正式任务默认仍落入配置中的 worker role；Writer/Reviewer 独立审查在进程配置层没有闭合；
+4. `SessionLease` 只有纯判定函数，没有 registry、checkout、usage 更新或回收消费者；`OpenCodeRuntime.execute` 每项任务都创建新 session；
+5. OpenCode 服务复用与 session 复用必须继续分开。跨任务 session 若不能证明新 workspace、角色、model、style、Context Ledger epoch 和消息增量边界均可重绑定，就不得复用；
+6. `ContextCacheKey` 没有 key builder、cache store 或 materialization consumer。现有 `ContextLedger` 在 prompt 构建后才生成；直接拿它做前置 cache key 会形成“先完成昂贵工作，再查缓存”的伪优化；
+7. Context cache 所需 Canon/人物/文风/预算/节奏 digest 应由 Context Broker/正式 task payload 提供；cache 模块不得自行扫描项目并发明文学依赖；
+8. 当前同任务 OpenCode repair 已经复用同一 session，这是有效生产能力；跨任务 reuse 不应重复实现 repair loop。
+
+类与继承结论：
+
+- `OpenCodeLease` 与 `SessionLease` 仍不应继承；前者拥有服务进程借用，后者描述模型会话可复用身份；通过 RuntimePool 内部 registry 组合；
+- `ProjectExecutionCoordinator` 应扩展为 ResourceClaim-aware owner，不新增 `ResourceManager`/`LockManager` 与其争夺调用入口；
+- SQLite resource lease 使用独立 repository/表可以成立，因为它拥有持久化生命周期；不应把 SQL 和冲突算法塞入 `resource_gate.py`；
+- Context cache store 是可重建内容的应用生命周期 collaborator，不是 Repository，也不应继承 `JobStore`；
+- task role 到 runtime role 应由纯映射函数完成，不新增 RoleRouter class。
+
+#### Q5-C 分批实施计划
+
+**C1：角色与资源准入基础**
+
+- 新增 task agent role -> OpenCode role 的 fail-closed 映射；正式 reviewer 使用 reviewer profile，planner 使用 planner，创作/状态候选仍使用受限 worker profile；未知 agent role 不静默降级；
+- 扩展 `ProjectExecutionCoordinator.acquire_claim/release`，保留现有 `acquire` 作为项目独占兼容入口；claim 冲突只复用 `claims_conflict`；
+- 增加持久 resource lease repository：多读单写、lease/heartbeat/过期回收、owner/job identity；原 `project_locks` 继续保护未声明资源的兼容任务；
+- `WorkerSupervisor` 第一阶段仍默认项目独占；只有显式提供、通过 `admission_plan` 且 read-only 的 prebound claim 才进入资源租约路径。正文、修订、apply、promotion、export 永远不能通过只读并发入口；
+- 不在本批真正并行正文或修改正式项目。
+
+**C2：可重建 Context cache**
+
+- 建立容量有界、内容寻址、线程安全的 `PreparedContextCache`；仅存 `PreparedPromptContext` 的可序列化投影，不存 task outputs、Agent messages、Canon 或隐藏推理；
+- key 必须由 task/Context Broker 已提供的十字段身份构建，字段不足时发出 cache bypass 而不是扫描项目补猜；
+- 在 `materialize_agent_context_contract` 的 prompt-context 构建点接入；cache hit 后仍重建 ExecutionContext、prompt、Context Ledger 和 baseline，保证审计链不变；
+- 生命周期统一持有 cache；Worker/Autopilot 共享，CLI 单次 Worker 可不启用；默认 flag 关闭。
+
+**C3：角色隔离 session lease**
+
+- 先让 runtime result/usage 与 task identity 进入 RuntimePool registry；建立 checkout/commit/invalidate/reap，不复制 OpenCode 服务池；
+- 只有 serial Bundle 内、同 project/model/style/Context epoch、同 runtime role、上一任务 clean complete 且预算未耗尽时才候选复用；Writer/Reviewer 永不共用；
+- 若 OpenCode session 无法证明 workspace rebinding 与增量 message/diff 边界，生产实现只记录 `reuse_eligible=false` 原因，不启用真实 session id 复用；这是安全结论，不以文档目标强迫危险实现；
+- timeout、stream failure、repair failure、模型切换、style/canon/context epoch 改变立即 invalidate；默认 flag 关闭。
+
+每批门禁：新增行为均 feature-flagged；Architecture baseline 不提高；针对性测试、Worker/Autopilot 集成、全量测试、`compileall` 和 `git diff --check` 通过后才进入下一批。
+
+#### Q5-C1 完成记录：角色隔离与资源准入基础
+
+状态：完成。自动 DAG 并发尚未启用。
+
+完成内容：
+
+- 新增纯函数 `runtime_role_for_task`，把正式 Agent role fail-closed 地投影到既有 RuntimePool 的 `worker`、`reviewer`、`planner` profile；Worker 的真实 Runtime 构建入口已传入该 role；
+- 新增生产路径回归测试，直接证明 `main-review-agent` 调用 `AgentWorker._execute_agent_runtime` 时会以 `role=reviewer` 构建 Runtime，而不只是映射函数单测通过；
+- `ProjectExecutionCoordinator` 从单 owner 扩展为同项目多 claim owner；兼容 `acquire()` 仍保持项目独占，`acquire_claim()` 只复用既有 `claims_conflict`，没有产生第二套冲突算法；
+- SQLite schema 升级到 v16，新增独立 `resource_leases` repository，持久记录 project/task/job/owner/claim/expiry；租约心跳与 job 心跳在同一事务内更新；
+- 新增 `ExecutionAdmission` 组合入口，把进程内 ownership 与持久锁/资源租约统一为 acquire、heartbeat、release 三个生命周期动作；
+- `WorkerSupervisor.submit()` 支持显式 `ResourceClaim`。未提供 claim 的所有旧 API、Autopilot 与正式任务仍沿用项目级独占；第一阶段 claim fast path 只接受零 writes、零 exclusive barriers 的只读 claim，正文、修订、晋升、apply 与 export 不能借此并发；
+- 资源释放使用 `finally` 保证进程内 owner 必定清理；持久释放失败不会留下本进程“幽灵占用”；
+- repository、coordinator、supervisor、role projection 都复用现有 dataclass/RepositoryMethod/RuntimePool，没有新增无生命周期的 Manager 父类或平行状态机。
+
+边审查边修复记录：
+
+1. 初次差异复核发现 `resource_claim_from_dict()` 被插入 `derive_resource_claim()` 中部，导致派生函数的正式 `return ResourceClaim(...)` 落入不可达代码；原 31 项局部测试未覆盖该入口。已恢复函数边界，并把既有 `tests.test_runtime_resources` 纳入本批最小门禁；
+2. 初版释放顺序会在 SQLite release/event 抛错时跳过进程内 coordinator 清理，Supervisor 的 cancel registry 也可能残留。已改为嵌套 `finally`，并增加失败注入测试；
+3. `resource_claim_from_dict` 与 Supervisor `_run` 初版分别超过 Architecture Audit 的复杂度/行数预算；均通过提炼纯解析 helper 与 admission helper 收敛，未提高 baseline；
+4. 当前 API/Autopilot 尚未自动从 `admission_plan` 提交 claim，因此本批只交付“真实可用且受测的准入基础”，不宣称项目已获得自动同项目并行吞吐；后续调度消费者必须从已编译 DAG 和冻结 task snapshot 获取 claim，不能由调用方任意伪造。
+
+阶段验证：
+
+- 角色、资源合同、Coordinator、持久租约、Supervisor 与架构定向组合：36 tests passed；
+- Worker、恢复、Autopilot、API、JobStore、Architecture Audit 与 Dependency Direction：94 tests passed；
+- 全量回归：905 tests passed，1 skipped；
+- `compileall -q src tests`、Architecture Audit、Dependency Direction 与 `git diff --check` 通过；
+- 数据库 schema version 从 15 升至 16，迁移/重开数据库测试通过；Architecture baseline 未修改。
+
+Q5-C1 结论：角色权限隔离已进入真实 Runtime 调用链；资源准入拥有进程内与持久化双层生命周期，并保持旧路径默认串行。下一批进入 Q5-C2，只缓存可重建的 `PreparedPromptContext`；不得缓存正式项目事实、Agent 消息、输出或审查结论，也不得为了提高命中率扩大上下文读取范围。

@@ -8,6 +8,7 @@ from .contracts import (
     derive_resource_claim,
     paths_overlap,
     project_identity,
+    resource_claim_from_dict,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "derive_resource_claim",
     "paths_overlap",
     "project_identity",
+    "resource_claim_from_dict",
 ]

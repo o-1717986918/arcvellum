@@ -18,6 +18,7 @@ from .context_ledgers import ContextLedgerRepository
 from .facade import RepositoryMethod
 from .mutation_receipts import MutationReceiptRepository
 from .recycle_bin import RecycleBinRepository
+from .resource_leases import ResourceLeaseRepository
 from .schema import initialize_schema
 from .sessions import SessionRepository
 from .sqlite_uow import SqliteUnitOfWork
@@ -51,6 +52,7 @@ class JobStore:
         self.mutation_receipts = MutationReceiptRepository(self._uow)
         self.creative_plans = CreativePlanRepository(self._uow)
         self.recycle_bin = RecycleBinRepository(self._uow)
+        self.resource_leases = ResourceLeaseRepository(self._uow)
         self.asset_history = AssetHistoryRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
@@ -140,6 +142,12 @@ class JobStore:
     list_asset_transactions = RepositoryMethod("asset_history")
     read_asset_revision = RepositoryMethod("asset_history")
     list_asset_revisions = RepositoryMethod("asset_history")
+
+    acquire_resource_lease = RepositoryMethod("resource_leases")
+    renew_resource_lease = RepositoryMethod("resource_leases")
+    heartbeat_resource_execution = RepositoryMethod("resource_leases")
+    release_resource_lease = RepositoryMethod("resource_leases")
+    list_resource_leases = RepositoryMethod("resource_leases")
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)
