@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from .asset_revisions import _project_key, _validate_asset_key
-from .asset_transactions import _relative_path
+from .archive_primitives import (
+    archive_project_key,
+    archive_relative_path,
+    validate_archive_asset_key,
+)
 from .primitives import _now
 from .sqlite_uow import SqliteUnitOfWork
 
@@ -71,7 +74,7 @@ class RecycleBinRepository:
         return normalized
 
     def read_recycle_entry(self, project_root: str, entry_id: str) -> dict[str, Any]:
-        project = _project_key(project_root)
+        project = archive_project_key(project_root)
         _validate_entry_id(entry_id)
         with self._uow.read() as connection:
             row = connection.execute(
@@ -92,7 +95,7 @@ class RecycleBinRepository:
         status: str = "",
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
-        project = _project_key(project_root)
+        project = archive_project_key(project_root)
         normalized_status = _optional_status(status)
         bounded_limit = max(1, min(5000, int(limit)))
         query = "SELECT * FROM archive_recycle_entries WHERE project_root = ?"
@@ -144,19 +147,19 @@ def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     revision = str(record.get("revision") or "").strip()
     status = str(record.get("status") or "").strip()
     _validate_entry_id(entry_id)
-    _validate_asset_key(asset_id, revision)
+    validate_archive_asset_key(asset_id, revision)
     _validate_status(status)
     normalized = {
         "entry_id": entry_id,
-        "project_root": _project_key(str(record.get("project_root") or "")),
+        "project_root": archive_project_key(str(record.get("project_root") or "")),
         "asset_id": asset_id,
         "asset_type": str(record.get("asset_type") or "").strip(),
         "revision": revision,
         "status": status,
-        "original_path": _relative_path(record.get("original_path")),
-        "snapshot_path": _relative_path(record.get("snapshot_path")),
-        "entry_path": _relative_path(record.get("entry_path")),
-        "archive_receipt_path": _relative_path(record.get("archive_receipt_path")),
+        "original_path": archive_relative_path(record.get("original_path")),
+        "snapshot_path": archive_relative_path(record.get("snapshot_path")),
+        "entry_path": archive_relative_path(record.get("entry_path")),
+        "archive_receipt_path": archive_relative_path(record.get("archive_receipt_path")),
         "restore_receipt_path": _optional_relative_path(record.get("restore_receipt_path")),
         "reason": str(record.get("reason") or "").strip(),
         "archived_at": str(record.get("archived_at") or _now()),
@@ -171,7 +174,7 @@ def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
 
 def _optional_relative_path(value: object) -> str:
     raw = str(value or "").strip()
-    return _relative_path(raw) if raw else ""
+    return archive_relative_path(raw) if raw else ""
 
 
 def _optional_status(status: str) -> str:

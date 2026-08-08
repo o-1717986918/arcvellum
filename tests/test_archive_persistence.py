@@ -56,8 +56,8 @@ class ArchivePersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")
             with patch.object(
-                store,
-                "_record_asset_revision_tx",
+                store.asset_history,
+                "_record_revision",
                 side_effect=RuntimeError("revision write failed"),
             ):
                 with self.assertRaisesRegex(RuntimeError, "revision write failed"):

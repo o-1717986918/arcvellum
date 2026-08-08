@@ -1528,3 +1528,42 @@ Q4 退出结论：
 - `git diff --check`：通过。
 
 下一批入口：把 `AssetTransactionStoreMixin` 与 `AssetRevisionStoreMixin` 合并为一个 `AssetHistoryRepository`。Transaction 插入及 before/after revision 索引必须继续共享同一个 SQLite transaction；revision helper 不建立可被外部误用的独立提交入口。
+
+### 2026-08-08：Q4.5-E Asset History 聚合与 Q2 正式退出
+
+状态：完成，准备独立提交。
+
+实际问题：
+
+- `AssetTransactionStoreMixin.record_asset_transaction()` 依赖兄弟 `AssetRevisionStoreMixin._record_asset_revision_tx()`，类继承只是在替一次聚合事务提供隐式方法查找；
+- 一个 owner transaction 必须同时写入 transaction 行和 before/after 两条 revision index，不能拆成三个 independently committed repository calls；
+- Recycle Bin 为复用 project/asset/path 校验而反向进口两个表模块的私有 helper，暴露了持久化领域 primitive 没有明确归属的问题。
+
+已完成：
+
+- 新增 `AssetHistoryRepository`，以一次 `SqliteUnitOfWork.write(immediate=True)` 原子完成 transaction 与两条 revision index；同 transaction id 的幂等命中维持原返回语义；
+- `asset_transactions.py` 与 `asset_revisions.py` 收敛为各自表的 normalization/query/transaction helper，不再声明单宿主 Store class；
+- 新增窄域 `archive_primitives.py`，只承载 Archive project key、asset/revision key 和 index-relative-path 三项共同不变量；Recycle Bin 与两个历史表共同依赖该 canonical contract，不创建无边界 `utils.py`；
+- `JobStore` 显式组合 `self.asset_history`，四个既有公开方法通过 descriptor 绑定；MRO 现为 `JobStore -> object`，不再存在任何 Store Mixin；
+- 失败注入从已消失的宿主私有方法迁到真实 `AssetHistoryRepository._record_revision` 协作者；回归证明 revision 写入失败时 transaction row 与所有 revision rows 一并回滚。
+
+批判性边界：
+
+- `AssetRevisionService` 仍保留：它负责扫描项目回执、验证 snapshot 文件 digest 并同步 rebuildable index，和 SQLite Repository 不是重复类；
+- `AssetRevisionIndex` Protocol 仍有价值：application 层只依赖四个资产历史能力，不依赖 `JobStore` 或 SQLite，实现可在测试和后续本地存储替换；
+- Transaction 与 Revision 未被拆成两个 Repository；表分模块是 SQL/规范化组织，事务聚合只有一个 public owner。
+
+验证证据：
+
+- 首轮 Archive persistence/creation/recycle、Persistence composition、Architecture 与依赖方向：26 tests passed；
+- 扩展 Archive API/assets/authoring/promotion/structured editor/archaeology 回归：52 tests passed，1 skipped；
+- Architecture Audit：29 file debts、205 function debts、0 cycles；
+- `compileall`、`git diff --check`：通过。
+
+Q2 修正后的退出结论：
+
+- Autopilot、Session、Context Ledger、Mutation Receipt、Creative Plan/Event、Recycle Bin、Asset History 均由显式 Repository 组合；
+- `JobStore` 不再通过继承获得任何持久化能力，兼容 API 均显式列举且绑定到真实 repository；
+- SQL、transaction ownership、application file lifecycle 三层边界已由测试证明，Q2 现在才可正式标记完成。
+
+下一批入口：从类谱系转入确定性控制逻辑。优先修复 `_renew_or_reclaim_lease()` 的静默异常，建立不改变容错与重领策略的 typed failure evidence；随后审查控制路径 broad catch、错误分类、幂等与状态转换，不把清理路径的善意容错误改成系统失败。

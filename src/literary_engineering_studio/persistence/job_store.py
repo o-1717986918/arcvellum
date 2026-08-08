@@ -11,8 +11,7 @@ import sqlite3
 import uuid
 from typing import Any
 
-from .asset_revisions import AssetRevisionStoreMixin
-from .asset_transactions import AssetTransactionStoreMixin
+from .asset_history import AssetHistoryRepository
 from .autopilot_runs import AutopilotRepository
 from .creative_plans import CreativePlanRepository
 from .context_ledgers import ContextLedgerRepository
@@ -39,7 +38,7 @@ from .primitives import (
 )
 
 
-class JobStore(AssetTransactionStoreMixin, AssetRevisionStoreMixin):
+class JobStore:
     def __init__(self, location: Path):
         resolved = location.expanduser().resolve()
         self.path = resolved if resolved.suffix in {".db", ".sqlite", ".sqlite3"} else resolved / "studio.sqlite3"
@@ -52,6 +51,7 @@ class JobStore(AssetTransactionStoreMixin, AssetRevisionStoreMixin):
         self.mutation_receipts = MutationReceiptRepository(self._uow)
         self.creative_plans = CreativePlanRepository(self._uow)
         self.recycle_bin = RecycleBinRepository(self._uow)
+        self.asset_history = AssetHistoryRepository(self._uow)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -135,6 +135,11 @@ class JobStore(AssetTransactionStoreMixin, AssetRevisionStoreMixin):
     record_recycle_entry = RepositoryMethod("recycle_bin")
     read_recycle_entry = RepositoryMethod("recycle_bin")
     list_recycle_entries = RepositoryMethod("recycle_bin")
+
+    record_asset_transaction = RepositoryMethod("asset_history")
+    list_asset_transactions = RepositoryMethod("asset_history")
+    read_asset_revision = RepositoryMethod("asset_history")
+    list_asset_revisions = RepositoryMethod("asset_history")
 
     def read(self, job_id: str) -> dict[str, Any]:
         _validate_job_id(job_id)

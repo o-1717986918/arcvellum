@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.persistence.autopilot_runs import AutopilotRepository
+from literary_engineering_studio.persistence.asset_history import AssetHistoryRepository
 from literary_engineering_studio.persistence.context_ledgers import ContextLedgerRepository
 from literary_engineering_studio.persistence.creative_plans import CreativePlanRepository
 from literary_engineering_studio.persistence.facade import RepositoryMethod
@@ -16,6 +17,18 @@ from literary_engineering_studio.persistence.sqlite_uow import SqliteUnitOfWork
 
 
 class PersistenceCompositionTests(unittest.TestCase):
+    def test_asset_history_repository_owns_transaction_and_revision_index(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+
+            self.assertIsInstance(store.asset_history, AssetHistoryRepository)
+            self.assertIs(store.record_asset_transaction.__self__, store.asset_history)
+            self.assertIs(store.read_asset_revision.__self__, store.asset_history)
+            self.assertFalse(
+                {"AssetTransactionStoreMixin", "AssetRevisionStoreMixin"}
+                & {base.__name__ for base in JobStore.__mro__}
+            )
+
     def test_recycle_bin_repository_is_an_independent_rebuildable_index(self):
         with tempfile.TemporaryDirectory() as temporary:
             uow = SqliteUnitOfWork(Path(temporary) / "studio.sqlite3")
