@@ -21,15 +21,14 @@ from .policy import (
     next_revision_count,
     normalize_policy,
 )
+from .run_loop import ClaimedRunLoop
 from .support import (
     _choice_fingerprint,
     _delegated_direction_message,
     _now,
-    _operational_decision,
     _parse_time,
     _pending_asset_dependency,
     _project_direction,
-    _project_progress_fingerprint,
     _run_steward_decision,
     _validate_autopilot_project,
 )
@@ -304,222 +303,17 @@ class AutopilotService:
             "event_sink",
             lambda event, data: self._steward_event(run_id, event, data),
         )
-        route_index = max(0, int(run.get("route_index") or 0))
-        failure_by_task: dict[str, int] = {}
         try:
-            while not stop.is_set():
-                run = self.store.read_autopilot_run(run_id)
-                limit_reason = policy.limit_reason(run)
-                if limit_reason:
-                    self._pause_for(run_id, limit_reason, "自动创作已到达授权上限。")
-                    return
-                if route_index >= len(ROUTE_ORDER):
-                    if policy.payload["release_policy"] != "delegated":
-                        self._pause_for(run_id, "release-approval-required", "全书已经完成正式路线，等待你批准最终交付。")
-                        return
-                    release = WholeBookReleaseCoordinator(self.config).release(
-                        project,
-                        approved_by="delegated-agent:creative-steward",
-                        autopilot_run_id=run_id,
-                    )
-                    self.store.append_autopilot_event(run_id, "release.completed", release)
-                    self.store.update_autopilot_run(run_id, status="complete", finished_at=_now(), stop_reason="")
-                    self.store.append_autopilot_event(run_id, "autopilot.completed", {"tasks_completed": run["tasks_completed"]})
-                    return
-
-                planned_route = ROUTE_ORDER[route_index]
-                dependency_route = planned_route == "scene-development" and _pending_asset_dependency(project)
-                route = "character-and-world-assets" if dependency_route else planned_route
-                route_changed = str(run.get("current_route") or "") != route
-                self.store.update_autopilot_run(
-                    run_id,
-                    current_route=route,
-                    current_task_id="" if route_changed else str(run.get("current_task_id") or ""),
-                    route_index=route_index,
-                )
-                if route_changed:
-                    self.store.append_autopilot_event(
-                        run_id,
-                        "route.dependency_entered" if dependency_route else "route.entered",
-                        {"route": route, "resume_route": planned_route} if dependency_route else {"route": route},
-                    )
-                decision_handled = self._resolve_proactive_choice(run_id, project, route, policy, steward, stop=stop)
-                current_status = self.store.read_autopilot_run(run_id)
-                if stop.is_set() or (
-                    decision_handled
-                    and current_status["status"] in TERMINAL_STATUSES
-                    and current_status.get("stop_reason") != "application-restart"
-                ):
-                    return
-                owner = f"autopilot:{run_id}"
-                if self.execution_coordinator is not None and not self.execution_coordinator.acquire(project, owner):
-                    self._pause_for(run_id, "project-busy", "同一作品已有另一项正式任务正在执行，请稍后继续。")
-                    return
-                progress_before = _project_progress_fingerprint(project)
-                try:
-                    result = self._worker(run_id, cancel_event=stop).run_once(
-                        project, route=route, runtime_id=run["runtime"]
-                    )
-                finally:
-                    if self.execution_coordinator is not None:
-                        self.execution_coordinator.release(project, owner)
-                self.store.update_autopilot_run(run_id, current_task_id=result.task_id)
-
-                if result.status == "runtime_failed" and result.run_root is not None and not stop.is_set():
-                    self.store.append_autopilot_event(
-                        run_id,
-                        "task.recovery_started",
-                        {"task_id": result.task_id, "run_root": str(result.run_root)},
-                    )
-                    if self.execution_coordinator is None or self.execution_coordinator.acquire(project, owner):
-                        try:
-                            result = self._worker(run_id).resume_from_run(
-                                result.run_root
-                            )
-                            self.store.append_autopilot_event(
-                                run_id,
-                                "task.recovery_succeeded",
-                                {"task_id": result.task_id, "status": result.status},
-                            )
-                        except (FileNotFoundError, RuntimeError, ValueError) as exc:
-                            self.store.append_autopilot_event(
-                                run_id,
-                                "task.recovery_rejected",
-                                {"task_id": result.task_id, "message": str(exc)},
-                            )
-                        finally:
-                            if self.execution_coordinator is not None:
-                                self.execution_coordinator.release(project, owner)
-
-                if result.status == "route_ready":
-                    if dependency_route:
-                        if _pending_asset_dependency(project):
-                            if self._register_no_progress(
-                                run_id,
-                                result.task_id or f"{route}:dependency",
-                                route,
-                                "依赖路线报告完成，但候选资产门禁仍未解除。",
-                            ):
-                                return
-                            continue
-                        self.store.append_autopilot_event(
-                            run_id,
-                            "route.dependency_ready",
-                            {"route": route, "resume_route": planned_route},
-                        )
-                        self.store.update_autopilot_run(
-                            run_id,
-                            stalled_cycles=0,
-                            last_error="",
-                            progress_fingerprint=_project_progress_fingerprint(project),
-                            last_progress_at=_now(),
-                        )
-                        continue
-                    self.store.append_autopilot_event(run_id, "route.ready", {"route": route})
-                    route_index += 1
-                    self.store.update_autopilot_run(
-                        run_id,
-                        route_index=route_index,
-                        current_task_id="",
-                        stalled_cycles=0,
-                        last_error="",
-                        progress_fingerprint=_project_progress_fingerprint(project),
-                        last_progress_at=_now(),
-                    )
-                    continue
-                if result.status == "complete":
-                    progress_after = _project_progress_fingerprint(project)
-                    if progress_after == progress_before:
-                        if self._register_no_progress(
-                            run_id,
-                            result.task_id or f"{route}:unknown",
-                            route,
-                            "任务报告完成，但项目正式状态没有发生可验证变化。",
-                        ):
-                            return
-                        continue
-                    self.store.advance_autopilot_run(
-                        run_id,
-                        consecutive_revisions=next_revision_count(run, result.task_id),
-                        failures=0,
-                        last_error="",
-                        progress_fingerprint=progress_after,
-                        stalled_cycles=0,
-                        last_progress_at=_now(),
-                    )
-                    self.store.append_autopilot_event(
-                        run_id,
-                        "progress.advanced",
-                        {"route": route, "task_id": result.task_id, "fingerprint": progress_after},
-                    )
-                    continue
-                if result.status == "waiting_writeback":
-                    if not policy.permits_writeback(route):
-                        self._pause_for(run_id, "writeback-approval-required", result.message)
-                        return
-                    if self.execution_coordinator is not None and not self.execution_coordinator.acquire(project, owner):
-                        self._pause_for(run_id, "project-busy", "正式写回前发现另一项任务正在使用作品，请稍后继续。")
-                        return
-                    try:
-                        final = self._worker(run_id).approve_writeback(
-                            result.run_root,
-                            approved_by="delegated-agent:autopilot-controller",
-                        )
-                    finally:
-                        if self.execution_coordinator is not None:
-                            self.execution_coordinator.release(project, owner)
-                    self.store.record_delegated_decision(
-                        run_id,
-                        _operational_decision(run, route, result.task_id, "writeback_approval", "approve", "授权策略允许导入已校验的预期产物。"),
-                    )
-                    if final.status == "complete":
-                        progress_after = _project_progress_fingerprint(project)
-                        if progress_after == progress_before:
-                            if self._register_no_progress(
-                                run_id,
-                                result.task_id or f"{route}:writeback",
-                                route,
-                                "写回报告完成，但正式项目没有出现新的可验证产物。",
-                            ):
-                                return
-                            continue
-                        self.store.advance_autopilot_run(
-                            run_id,
-                            consecutive_revisions=next_revision_count(run, result.task_id),
-                            failures=0, last_error="",
-                            progress_fingerprint=progress_after,
-                            stalled_cycles=0,
-                            last_progress_at=_now(),
-                        )
-                        continue
-                    result = final
-                if result.status == "waiting_human":
-                    choices = current_choices(self.config, project, route=route).get("choices") or []
-                    choice = next((item for item in choices if isinstance(item, dict) and (not result.task_id or not item.get("task_id") or item.get("task_id") == result.task_id)), None)
-                    if not choice or not policy.permits(route, str(choice.get("decision_type") or "")):
-                        self._pause_for(run_id, "human-decision-required", result.message)
-                        return
-                    if not self._delegate_choice(run_id, project, route, policy, steward, choice, task_id=result.task_id, stop=stop):
-                        return
-                    continue
-
-                if result.status == "cancelled" or stop.is_set():
-                    if getattr(stop, "_arcvellum_lease_lost", False):
-                        return
-                    self._pause_for(run_id, "user-request", "自动创作已暂停。")
-                    return
-                task_key = result.task_id or f"{route}:unknown"
-                failure_by_task[task_key] = failure_by_task.get(task_key, 0) + 1
-                self.store.update_autopilot_run(
-                    run_id,
-                    failures=failure_by_task[task_key],
-                    last_error=result.message,
-                )
-                self.store.append_autopilot_event(run_id, "task.failed", {"task_id": task_key, "status": result.status, "message": result.message})
-                if failure_by_task[task_key] > int(policy.payload["limits"]["max_failures_per_task"]):
-                    self._pause_for(run_id, "repeated-task-failure", result.message)
-                    return
-                time.sleep(min(5, failure_by_task[task_key]))
+            ClaimedRunLoop(
+                self,
+                run_id=run_id,
+                project=project,
+                policy=policy,
+                steward=steward,
+                stop=stop,
+                route_order=ROUTE_ORDER,
+                dependency_probe=_pending_asset_dependency,
+            ).run()
         except Exception as exc:
             self.store.update_autopilot_run(run_id, status="blocked", last_error=str(exc), stop_reason="controller-error", finished_at=_now())
             self.store.append_autopilot_event(run_id, "autopilot.blocked", {"message": str(exc)})
@@ -527,6 +321,43 @@ class AutopilotService:
             with self._lock:
                 self._stops.pop(run_id, None)
                 self._threads.pop(run_id, None)
+
+    def _current_choices(self, project: Path, route: str) -> list[dict[str, Any]]:
+        payload = current_choices(self.config, project, route=route)
+        choices = payload.get("choices")
+        return [item for item in choices if isinstance(item, dict)] if isinstance(choices, list) else []
+
+    def _complete_release(
+        self,
+        run_id: str,
+        project: Path,
+        run: dict[str, Any],
+        policy: DelegationPolicy,
+    ) -> None:
+        if policy.payload["release_policy"] != "delegated":
+            self._pause_for(
+                run_id,
+                "release-approval-required",
+                "全书已经完成正式路线，等待你批准最终交付。",
+            )
+            return
+        release = WholeBookReleaseCoordinator(self.config).release(
+            project,
+            approved_by="delegated-agent:creative-steward",
+            autopilot_run_id=run_id,
+        )
+        self.store.append_autopilot_event(run_id, "release.completed", release)
+        self.store.update_autopilot_run(
+            run_id,
+            status="complete",
+            finished_at=_now(),
+            stop_reason="",
+        )
+        self.store.append_autopilot_event(
+            run_id,
+            "autopilot.completed",
+            {"tasks_completed": run["tasks_completed"]},
+        )
     def _resolve_proactive_choice(
         self,
         run_id: str,

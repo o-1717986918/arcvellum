@@ -566,6 +566,108 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(completed["tasks_completed"], 1)
             self.assertEqual(completed["last_error"], "")
 
+    def test_writeback_without_delegation_pauses_before_import(self):
+        class WaitingWorker:
+            approve_calls = 0
+
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                run_root = project.parent / "run-writeback"
+                return WorkerRunResult(
+                    "waiting_writeback",
+                    project,
+                    route,
+                    "budget-task",
+                    runtime_id,
+                    run_root,
+                    run_root / "workspace",
+                    "等待正式写回。",
+                )
+
+            def approve_writeback(self, run_root, *, approved_by):
+                self.__class__.approve_calls += 1
+                raise AssertionError("writeback must not run without delegation")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("collaborative")
+            run = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="collaborative",
+                runtime="opencode",
+                policy=policy,
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", WaitingWorker),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            paused = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(paused["status"], "paused")
+            self.assertEqual(paused["stop_reason"], "writeback-approval-required")
+            self.assertEqual(WaitingWorker.approve_calls, 0)
+
+    def test_rejected_runtime_recovery_falls_back_to_failure_policy(self):
+        class RejectedRecoveryWorker:
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                run_root = project.parent / "run-recovery"
+                return WorkerRunResult(
+                    "runtime_failed",
+                    project,
+                    route,
+                    "budget-task",
+                    runtime_id,
+                    run_root,
+                    run_root / "workspace",
+                    "provider disconnected",
+                )
+
+            def resume_from_run(self, run_root):
+                raise ValueError("sandbox is incomplete")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto")
+            policy["limits"]["max_failures_per_task"] = 0
+            run = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="full_auto",
+                runtime="opencode",
+                policy=policy,
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", RejectedRecoveryWorker),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            paused = store.read_autopilot_run(run["run_id"])
+            events = store.autopilot_events_since(run["run_id"])
+            self.assertEqual(paused["status"], "paused")
+            self.assertEqual(paused["stop_reason"], "repeated-task-failure")
+            self.assertTrue(any(event["event"] == "task.recovery_rejected" for event in events))
+            self.assertTrue(any(event["event"] == "task.failed" for event in events))
+
     def test_structured_approval_choice_materializes_core_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "project"

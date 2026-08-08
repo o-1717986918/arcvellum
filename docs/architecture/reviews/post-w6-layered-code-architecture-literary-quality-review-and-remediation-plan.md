@@ -1061,3 +1061,35 @@ Q2 小结：Autopilot、Session、Context Ledger、Worker Observer 与 Worker Wr
 - compileall 与 `git diff --check`：通过。
 
 下一批入口：审查并拆分 `AutopilotService._run_claimed`。重点是把循环推进、授权暂停、runtime 失败分类、重试恢复和终止收尾拆成命名阶段，同时保持当前防空转与租约语义。
+
+### 2026-08-08：Q3-B Autopilot 已领取运行循环拆分
+
+状态：完成，准备独立提交。
+
+已完成：
+
+- 新增 `automation/run_loop.py`，以 `ClaimedRunLoop` 承担控制器取得 durable lease 之后的循环推进；
+- `AutopilotService` 继续唯一拥有公开 API、线程启动/停止、lease 获取与续期、策略保存和 Controller 级异常收尾；
+- 运行循环按授权上限、路线进入、主动决策、Worker 执行、runtime 恢复、结果分类、写回、人工决策、失败退避形成命名阶段；
+- 新增 `RouteCycle` 值对象，统一一次循环中的 planned route、dependency route、route index 与项目锁 owner；
+- `RunLoopHost` 只声明循环实际需要的 Controller 能力，未开放第二套 Autopilot 服务或任务状态机；
+- `controller.py::_run_claimed` 从 237 行、complexity 64 收敛为 32 行、complexity 3；
+- `controller.py` 从 741 行降到 572 行；新运行循环模块保持在 500 行预算内，所有新增函数均低于 complexity 15 和 80 行。
+
+行为保持与新增证据：
+
+- 保留路线事件、dependency route 恢复、授权暂停、项目互斥锁、runtime sandbox 恢复、自动写回、Steward 决策、空转熔断、失败次数和 release 语义；
+- 保留 `literary_engineering_studio.autopilot` 历史模块别名的 patch/import 行为，包括 `next_revision_count` 公开兼容导出；
+- 新增“无写回授权时绝不调用 import”和“runtime 恢复被拒后进入正式失败策略”回归；
+- Autopilot 全套 26 tests passed，覆盖三章到 DOCX、跨路线推进、依赖资产让路、重启恢复、授权续期、writeback 和 no-progress；
+- Architecture Audit：33 file debts、214 function debts、0 cycles；相较 Q3-A 再净减少 1 个 function debt；
+- compileall 与 `git diff --check`：通过。
+
+批判性审查：
+
+- `ClaimedRunLoop` 是有真实生命周期与状态的协调对象，不是为减少行数新增的空壳；它拥有 route cycle 和 per-task failure window，但不拥有 API、lease 或正式项目事实；
+- `RunLoopHost` 当前仍调用 Controller 的内部协调方法，这是有意的迁移边界；若未来出现第二个 Host 实现，再把这些能力提升为正式 application port，在此之前不新增抽象层；
+- `_delegate_choice` 仍为 91 行、complexity 23，`controller.py` 仍超过 500 行；这是下一批可独立处理的决策物化债务，不能与本批运行循环语义混改；
+- dependency route 完成时现在明确清空 `current_task_id` 并持久化原 route index，避免 UI 在返回 scene route 前继续展示已完成的资产任务。
+
+下一批入口：进入 Q3-C，先审查并拆分 `command_line/commands/formal.py::handle` 与 `scene.py::handle` 的子命令分派；若拆分需要触碰 Agent 决策物化，则先独立收敛 `_delegate_choice`，不得把两类变更混成大提交。
