@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：已按实际仓库完成实施前审计；P0 已完成，P1-P5 待实施
+> 状态：已按实际仓库完成实施前审计；P0-P1 已完成，P2-P5 待实施
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -1212,6 +1212,8 @@ docs/benchmarks/runtime-live-smoke-*.json
 ### P1：运行时无关的 ExecutionProfile
 
 **目标**：先让现有 OpenCode 获得任务分型收益。
+
+**实施状态（2026-08-10）**：已完成。新增 `runtime/execution_profiles.py`，直接复用公开的 `classify_context_task()` 与 `classify_context_risk()`；`runtime/worker_execution_profile.py` 负责 profile 持久化、能力解析与执行参数投影，主 Worker 不承载策略细节。默认配置为 shadow，保留原 `1800s` 总超时与 `2` 次修复；显式 canary 只会应用 OpenCode 声明支持的 total/silence timeout 与 bounded repair。reasoning、turn、tool controls 均明确为 unsupported。prose 与非 `main-creative-agent` 的角色冲突会 fail closed，deterministic profile 不启动 Agent 预算。
 
 工作：
 

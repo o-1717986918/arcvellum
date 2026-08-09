@@ -19,7 +19,6 @@ from ..persistence.job_store import JobStore
 from ..runtimes import build_runtime
 from .bundle_executor import dispatch_serial_bundle
 from .context_budget import resolve_task_context_budget
-from .repair_context import RepairContextCoordinator
 from .prepared_context_cache import PreparedContextCache
 from .sandbox import (
     SandboxManifest,
@@ -34,6 +33,11 @@ from .run_manifest import load_run
 from .task_snapshot import load_run_task_snapshot
 from .task_roles import runtime_role_for_task
 from .worker_observability import WorkerObserver
+from .worker_execution_profile import (
+    activate_execution_profile,
+    build_runtime_kwargs,
+    persist_initial_execution_profile,
+)
 from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
     validate_project as _validate_project,
@@ -147,6 +151,7 @@ class AgentWorker:
             context_budget=context_budget,
             prepared_context_cache=self.prepared_context_cache,
         )
+        persist_initial_execution_profile(task, sandbox, self.config.get("worker", {}), runtime_id)
         self.observer.bind_run_root(sandbox.run_root)
         self.observer.emit(
             "sandbox.prepared",
@@ -438,9 +443,27 @@ class AgentWorker:
             runtime_pool=self.runtime_pool,
             role=runtime_role_for_task(task),
         )
-        timeout = int(self.config.get("worker", {}).get("timeout_seconds") or 1800)
+        worker_config = self.config.get("worker", {})
+        profile, timeout = activate_execution_profile(
+            task,
+            sandbox,
+            worker_config=worker_config,
+            runtime_id=runtime_id,
+            runtime=runtime,
+            observer=self.observer,
+        )
         self.observer.emit("runner.started", {"runner_id": runtime_id, "task_id": task.task_id})
-        runtime_kwargs = self._runtime_kwargs(task, sandbox, runtime_id, timeout)
+        runtime_kwargs = build_runtime_kwargs(
+            task,
+            sandbox,
+            runtime_id=runtime_id,
+            timeout=timeout,
+            profile=profile,
+            worker_config=worker_config,
+            observer=self.observer,
+            cancel_event=self.cancel_event,
+            writeback=self.writeback,
+        )
         result = runtime.execute(
             sandbox.workspace,
             sandbox.prompt_path,
@@ -464,37 +487,6 @@ class AgentWorker:
             runtime_metadata=result.metadata or {},
         )
         return result
-
-    def _runtime_kwargs(
-        self,
-        task: TaskPackage,
-        sandbox: SandboxManifest,
-        runtime_id: str,
-        timeout: int,
-    ) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {
-            "timeout": timeout,
-            "event_sink": self.observer.emit,
-            "cancel_event": self.cancel_event,
-        }
-        if runtime_id != "opencode":
-            return kwargs
-        repair_context = RepairContextCoordinator(task, sandbox)
-        kwargs.update(
-            {
-                "output_validator": lambda: self.writeback.validate_outputs(
-                    task,
-                    sandbox,
-                    runtime_id=runtime_id,
-                ),
-                "max_repairs": int(
-                    self.config.get("worker", {}).get("max_repair_attempts") or 2
-                ),
-                "repair_prompt_builder": repair_context.prepare,
-                "repair_turn_finalizer": repair_context.finalize,
-            }
-        )
-        return kwargs
 
     def _runtime_terminal_result(
         self,

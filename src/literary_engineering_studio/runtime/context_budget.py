@@ -135,9 +135,9 @@ def resolve_task_context_budget(
         raise ContextBudgetExceeded(str(exc)) from exc
     mode = ContextBudgetMode(rollout.effective_mode)
     requested_mode = ContextBudgetMode(rollout.requested_mode)
-    kind = _task_kind(task)
+    kind = classify_context_task(task)
     role = task.execution_contract.agent_role
-    risk = _risk_level(task, kind)
+    risk = classify_context_risk(task, kind)
     configured_limits = _mapping(config.get("inline_limits"))
     base = _positive_int(configured_limits.get(kind.value), _INLINE_LIMITS[kind])
     target = int(round(base * _RISK_MULTIPLIERS[risk]))
@@ -226,7 +226,9 @@ def build_context_budget_report(
     )
 
 
-def _task_kind(task: TaskPackage) -> ContextTaskKind:
+def classify_context_task(task: TaskPackage) -> ContextTaskKind:
+    """Return the canonical task kind shared by context and execution policy."""
+
     task_type = task.task_type.lower()
     route = task.route.lower()
     state = task.current_state.lower()
@@ -270,7 +272,9 @@ def _scene_task_kind(state: str) -> ContextTaskKind | None:
     return None
 
 
-def _risk_level(task: TaskPackage, kind: ContextTaskKind) -> ContextRiskLevel:
+def classify_context_risk(task: TaskPackage, kind: ContextTaskKind) -> ContextRiskLevel:
+    """Return the canonical risk level for a previously classified task."""
+
     scene_policy = task.payload.get("creative_scene_policy")
     if isinstance(scene_policy, dict):
         explicit = str(scene_policy.get("risk_level") or "").strip().lower()

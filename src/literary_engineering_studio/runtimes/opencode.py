@@ -36,6 +36,7 @@ from .opencode_failures import (
 )
 from .opencode_event_observer import OpenCodeEventObserver
 from .opencode_session import (
+    SessionTimeoutPolicy,
     cross_task_session_reuse_assessment,
     execution_identity,
     open_role_client,
@@ -117,7 +118,11 @@ class OpenCodeRuntime(AgentRuntime):
             retry=True,
             resume=False,
             detail=availability.detail + ("" if model else "; select a provider/model connection"),
+            capability_ids=self.execution_control_capabilities(),
         )
+
+    def execution_control_capabilities(self) -> tuple[str, ...]:
+        return ("bounded-repair", "silence-timeout-control")
 
     def execute(
         self,
@@ -132,6 +137,8 @@ class OpenCodeRuntime(AgentRuntime):
         max_repairs: int = 0,
         repair_prompt_builder: Callable[[Any, int, int], Any] | None = None,
         repair_turn_finalizer: Callable[[], dict[str, object]] | None = None,
+        first_event_timeout: int | None = None,
+        inter_event_timeout: int | None = None,
     ) -> RuntimeResult:
         executable = locate_opencode(self.settings)
         if executable is None:
@@ -244,7 +251,11 @@ class OpenCodeRuntime(AgentRuntime):
             emit("runner.prompt.submitted", {"session_id": session_id, "elapsed_ms": prompt_submitted_ms})
             emit("runner.session.started", {"runner_id": self.runtime_id, "session_id": session_id, "model": model})
             deadline = time.monotonic() + max(1, int(timeout))
-            timeout_policy = session_timeout_policy(self.settings, role)
+            configured_timeout = session_timeout_policy(self.settings, role)
+            timeout_policy = SessionTimeoutPolicy(
+                first_event_seconds=max(30, int(first_event_timeout or configured_timeout.first_event_seconds)),
+                inter_event_seconds=max(30, int(inter_event_timeout or configured_timeout.inter_event_seconds)),
+            )
             wait_status = _wait_for_session(
                 client,
                 session_id,

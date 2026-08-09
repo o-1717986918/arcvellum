@@ -158,6 +158,11 @@ class AgentRuntime:
             detail=availability.detail,
         )
 
+    def execution_control_capabilities(self) -> tuple[str, ...]:
+        """Return controls this adapter can consume without probing a provider."""
+
+        return ()
+
     def normalize_output_line(self, line: str) -> tuple[tuple[str, dict[str, Any]], ...]:
         return (("agent.message.delta", {"text": line.rstrip("\r\n")}),)
 

@@ -218,6 +218,7 @@ def _sample_execution(
     context: Mapping[str, object],
     model: str,
 ) -> dict[str, object]:
+    profile = _mapping(manifest.get("execution_profile"))
     return {
         "task_kind": str(context.get("task_kind") or "unknown"),
         "runtime": str(manifest.get("runtime") or ""),
@@ -225,6 +226,8 @@ def _sample_execution(
         "status": str(manifest.get("status") or "unknown"),
         "failure_kind": str(runtime_metadata.get("failure_kind") or ""),
         "retryable": _optional_bool(runtime_metadata.get("retryable")),
+        "execution_profile_mode": str(profile.get("mode") or "unavailable"),
+        "execution_profile_digest": str(profile.get("digest") or ""),
     }
 
 

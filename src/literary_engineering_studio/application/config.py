@@ -65,6 +65,16 @@ def _default_worker_config() -> dict[str, Any]:
         "max_repair_attempts": 2,
         "auto_run_task_command": True,
         "pause_on_human_gate": True,
+        "execution_profile": {
+            "mode": "shadow",
+            "enforcement": {
+                "enabled": False,
+                "runtimes": ["opencode"],
+                "routes": [],
+                "states": [],
+                "task_kinds": [],
+            },
+        },
         "prepared_context_cache": {
             "enabled": False,
             "max_entries": 32,
