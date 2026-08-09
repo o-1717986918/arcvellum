@@ -26,7 +26,6 @@ from .sandbox import (
     changed_agent_outputs,
     materialize_agent_workspace,
     sandbox_from_run,
-    stage_task,
     update_run_manifest,
 )
 from .run_manifest import load_run
@@ -36,7 +35,7 @@ from .worker_observability import WorkerObserver
 from .worker_execution_profile import (
     activate_execution_profile,
     build_runtime_kwargs,
-    persist_initial_execution_profile,
+    stage_profiled_task,
 )
 from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
@@ -144,14 +143,13 @@ class AgentWorker:
             )
 
         runs_root = Path(str(self.config.get("worker", {}).get("runs_root") or ""))
-        active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
-        sandbox = stage_task(
-            task, runs_root, runtime=active_runtime,
+        initial_profile, sandbox = stage_profiled_task(
+            task, runs_root,
+            worker_config=self.config.get("worker", {}), runtime_id=runtime_id,
             materialize_agent_view=_materialize_agent_view_immediately(task),
-            context_budget=context_budget,
-            prepared_context_cache=self.prepared_context_cache,
+            context_budget=context_budget, prepared_context_cache=self.prepared_context_cache,
         )
-        persist_initial_execution_profile(task, sandbox, self.config.get("worker", {}), runtime_id)
+        active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
         self.observer.bind_run_root(sandbox.run_root)
         self.observer.emit(
             "sandbox.prepared",
@@ -214,6 +212,7 @@ class AgentWorker:
             if task.execution_contract.execution_policy == "agent-required":
                 visible = materialize_agent_workspace(
                     task, sandbox, context_budget=context_budget, prepared_context_cache=self.prepared_context_cache,
+                    execution_profile=initial_profile.as_dict(),
                 )
                 self.observer.emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
             self.observer.emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})

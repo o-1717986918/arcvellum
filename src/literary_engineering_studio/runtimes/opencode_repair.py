@@ -25,6 +25,8 @@ class RepairLoopEnvironment:
     wait_for_session: Callable[..., str]
     prompt_builder: Callable[[Any, int, int], Any] | None
     turn_finalizer: Callable[[], dict[str, object]] | None
+    progress_digest_builder: Callable[[Any, dict[str, object]], dict[str, object]] | None
+    context_access_supplier: Callable[[], dict[str, object]] | None
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,7 @@ def run_preflight_repair_loop(
     repairs = 0
     final_preflight = None
     maximum = max(0, int(max_repairs))
+    previous_progress_digest = ""
     if output_validator is None:
         return RepairLoopResult("passed", repairs, None, {})
     while True:
@@ -68,6 +71,26 @@ def run_preflight_repair_loop(
                 final_preflight,
                 payload,
             )
+        progress = _progress_fields(environment, final_preflight)
+        current_progress_digest = str(progress.get("progress_digest") or "")
+        if current_progress_digest:
+            environment.emit(
+                "repair.progress.checked",
+                {"attempt": repairs, **progress},
+            )
+            if previous_progress_digest == current_progress_digest:
+                stalled_payload = {**payload, **progress, "reason": "identical-progress-digest"}
+                environment.emit(
+                    "repair.no_progress",
+                    {"attempt": repairs, **stalled_payload},
+                )
+                return RepairLoopResult(
+                    "no_progress",
+                    repairs,
+                    final_preflight,
+                    stalled_payload,
+                )
+            previous_progress_digest = current_progress_digest
         if repairs >= maximum:
             return RepairLoopResult(
                 "preflight_failed",
@@ -109,6 +132,8 @@ def run_open_code_repairs(
     max_repairs: int,
     repair_prompt_builder: Callable[[Any, int, int], Any] | None,
     repair_turn_finalizer: Callable[[], dict[str, object]] | None,
+    progress_digest_builder: Callable[[Any, dict[str, object]], dict[str, object]] | None = None,
+    context_access_supplier: Callable[[], dict[str, object]] | None = None,
 ) -> RepairLoopResult:
     environment = RepairLoopEnvironment(
         client=client,
@@ -124,6 +149,8 @@ def run_open_code_repairs(
         wait_for_session=wait_for_session,
         prompt_builder=repair_prompt_builder,
         turn_finalizer=repair_turn_finalizer,
+        progress_digest_builder=progress_digest_builder,
+        context_access_supplier=context_access_supplier,
     )
     return run_preflight_repair_loop(
         environment,
@@ -143,43 +170,27 @@ def repair_failure_result(
     output_path: Path,
     emit: Callable[[str, dict[str, Any]], None],
 ) -> RuntimeResult:
+    if result.status == "no_progress":
+        return _no_progress_failure_result(
+            result,
+            runtime_id=runtime_id,
+            command=command,
+            client=client,
+            session_id=session_id,
+            model=model,
+            output_path=output_path,
+            emit=emit,
+        )
     if result.status == "preflight_failed":
-        output_path.write_text(
-            _latest_assistant_text(client.messages(session_id)),
-            encoding="utf-8",
-        )
-        emit(
-            "runner.session.finished",
-            {
-                "session_id": session_id,
-                "model": model,
-                "status": "failed",
-                "reason": "preflight_failed",
-            },
-        )
-        emit(
-            "runner.process.completed",
-            {
-                "runner_id": runtime_id,
-                "session_id": session_id,
-                "model": model,
-                "status": "preflight_failed",
-            },
-        )
-        return RuntimeResult(
-            runtime_id,
-            "preflight_failed",
-            2,
-            command,
-            output_path,
-            "sandbox output still fails deterministic preflight",
-            {
-                "session_id": session_id,
-                "repairs": result.repairs,
-                "preflight": result.payload,
-                "failure_kind": RuntimeFailureKind.VALIDATION_FAILURE.value,
-                "retryable": True,
-            },
+        return _preflight_failure_result(
+            result,
+            runtime_id=runtime_id,
+            command=command,
+            client=client,
+            session_id=session_id,
+            model=model,
+            output_path=output_path,
+            emit=emit,
         )
     client.abort(session_id)
     status = (
@@ -208,6 +219,103 @@ def repair_failure_result(
                 if result.status in {"idle_timeout", "first_event_timeout"}
                 else RuntimeFailureKind.TOTAL_TIMEOUT.value
             ),
+            "retryable": True,
+        },
+    )
+
+
+def _no_progress_failure_result(
+    result: RepairLoopResult,
+    *,
+    runtime_id: str,
+    command: Any,
+    client: Any,
+    session_id: str,
+    model: str,
+    output_path: Path,
+    emit: Callable[[str, dict[str, Any]], None],
+) -> RuntimeResult:
+    output_path.write_text(
+        _latest_assistant_text(client.messages(session_id)),
+        encoding="utf-8",
+    )
+    emit(
+        "runner.session.finished",
+        {
+            "session_id": session_id,
+            "model": model,
+            "status": "failed",
+            "reason": "no_progress",
+        },
+    )
+    emit(
+        "runner.process.completed",
+        {
+            "runner_id": runtime_id,
+            "session_id": session_id,
+            "model": model,
+            "status": "no_progress",
+        },
+    )
+    return RuntimeResult(
+        runtime_id,
+        "no_progress",
+        2,
+        command,
+        output_path,
+        "repair made no deterministic progress; stopped before repeating the same turn",
+        {
+            "session_id": session_id,
+            "repairs": result.repairs,
+            "preflight": result.payload,
+            "failure_kind": RuntimeFailureKind.NO_PROGRESS.value,
+            "retryable": True,
+        },
+    )
+
+
+def _preflight_failure_result(
+    result: RepairLoopResult,
+    *,
+    runtime_id: str,
+    command: Any,
+    client: Any,
+    session_id: str,
+    model: str,
+    output_path: Path,
+    emit: Callable[[str, dict[str, Any]], None],
+) -> RuntimeResult:
+    output_path.write_text(_latest_assistant_text(client.messages(session_id)), encoding="utf-8")
+    emit(
+        "runner.session.finished",
+        {
+            "session_id": session_id,
+            "model": model,
+            "status": "failed",
+            "reason": "preflight_failed",
+        },
+    )
+    emit(
+        "runner.process.completed",
+        {
+            "runner_id": runtime_id,
+            "session_id": session_id,
+            "model": model,
+            "status": "preflight_failed",
+        },
+    )
+    return RuntimeResult(
+        runtime_id,
+        "preflight_failed",
+        2,
+        command,
+        output_path,
+        "sandbox output still fails deterministic preflight",
+        {
+            "session_id": session_id,
+            "repairs": result.repairs,
+            "preflight": result.payload,
+            "failure_kind": RuntimeFailureKind.VALIDATION_FAILURE.value,
             "retryable": True,
         },
     )
@@ -295,6 +403,23 @@ def _preflight_payload(
             "maximum_repairs": maximum,
         }
     )
+    return payload
+
+
+def _progress_fields(
+    environment: RepairLoopEnvironment,
+    preflight: Any,
+) -> dict[str, object]:
+    if environment.progress_digest_builder is None:
+        return {}
+    context_access = (
+        environment.context_access_supplier()
+        if environment.context_access_supplier is not None
+        else {}
+    )
+    payload = environment.progress_digest_builder(preflight, context_access)
+    if not isinstance(payload, dict):
+        raise ValueError("progress digest builder must return an object")
     return payload
 
 

@@ -137,6 +137,7 @@ class OpenCodeRuntime(AgentRuntime):
         max_repairs: int = 0,
         repair_prompt_builder: Callable[[Any, int, int], Any] | None = None,
         repair_turn_finalizer: Callable[[], dict[str, object]] | None = None,
+        progress_digest_builder: Callable[[Any, dict[str, object]], dict[str, object]] | None = None,
         first_event_timeout: int | None = None,
         inter_event_timeout: int | None = None,
     ) -> RuntimeResult:
@@ -309,6 +310,10 @@ class OpenCodeRuntime(AgentRuntime):
                 max_repairs=max_repairs,
                 repair_prompt_builder=repair_prompt_builder,
                 repair_turn_finalizer=repair_turn_finalizer,
+                progress_digest_builder=progress_digest_builder,
+                context_access_supplier=lambda: summarize_context_access(
+                    client.messages(session_id), workspace
+                ),
             )
             repairs = repair_result.repairs
             final_preflight = repair_result.preflight

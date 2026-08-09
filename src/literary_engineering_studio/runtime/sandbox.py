@@ -26,7 +26,6 @@ from .writeback_contracts import WritebackPreview
 
 IGNORED_RUNTIME_PATHS = {"AGENT_TASK.md", "_task", ".claude", ".codex", ".git"}
 
-
 @dataclass(frozen=True)
 class SandboxManifest:
     run_id: str
@@ -52,6 +51,7 @@ def stage_task(
     materialize_agent_view: bool = True,
     context_budget: TaskContextBudget | None = None,
     prepared_context_cache: PreparedContextCache | None = None,
+    execution_profile: dict[str, object] | None = None,
 ) -> SandboxManifest:
     identifier = run_id or _run_id(task.task_id)
     run_root = runs_root.expanduser().resolve() / _project_key(task.project_root) / identifier
@@ -135,6 +135,7 @@ def stage_task(
         materialize_agent_workspace(
             task, sandbox, context_budget=context_budget,
             prepared_context_cache=prepared_context_cache,
+            execution_profile=execution_profile,
         )
     else:
         workspace.mkdir(parents=True, exist_ok=False)
@@ -146,6 +147,7 @@ def stage_task(
 def materialize_agent_workspace(
     task: TaskPackage, sandbox: SandboxManifest, *, context_budget: TaskContextBudget | None = None,
     prepared_context_cache: PreparedContextCache | None = None,
+    execution_profile: dict[str, object] | None = None,
 ) -> tuple[str, ...]:
     """Build the bounded Agent view from the fully reproducible control view."""
 
@@ -193,6 +195,7 @@ def materialize_agent_workspace(
         copied_paths=copied,
         context_budget=context_budget,
         prepared_context_cache=prepared_context_cache,
+        execution_profile=execution_profile,
     )
     refresh_sandbox_baseline(sandbox)
     update_run_manifest(

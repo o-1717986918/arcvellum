@@ -7,7 +7,38 @@ from typing import Any, Mapping
 from ..contracts import TaskPackage
 from .execution_profiles import TaskExecutionProfile, resolve_task_execution_profile
 from .repair_context import RepairContextCoordinator
-from .sandbox import SandboxManifest, update_run_manifest
+from .progress_policy import build_runtime_progress_digest
+from .sandbox import SandboxManifest, stage_task, update_run_manifest
+
+
+def stage_profiled_task(
+    task: TaskPackage,
+    runs_root,
+    *,
+    worker_config: Mapping[str, Any],
+    runtime_id: str,
+    materialize_agent_view: bool,
+    context_budget,
+    prepared_context_cache,
+) -> tuple[TaskExecutionProfile, SandboxManifest]:
+    profile = resolve_task_execution_profile(task, worker_config, runtime_id=runtime_id)
+    sandbox = stage_task(
+        task,
+        runs_root,
+        runtime=(
+            "deterministic-engine"
+            if task.execution_contract.execution_policy == "deterministic"
+            else runtime_id
+        ),
+        materialize_agent_view=materialize_agent_view,
+        context_budget=context_budget,
+        prepared_context_cache=prepared_context_cache,
+        execution_profile=profile.as_dict(),
+    )
+    persist_initial_execution_profile(
+        task, sandbox, worker_config, runtime_id, profile=profile
+    )
+    return profile, sandbox
 
 
 def persist_initial_execution_profile(
@@ -15,10 +46,13 @@ def persist_initial_execution_profile(
     sandbox: SandboxManifest,
     worker_config: Mapping[str, Any],
     runtime_id: str,
-) -> None:
-    profile = resolve_task_execution_profile(task, worker_config, runtime_id=runtime_id)
+    *,
+    profile: TaskExecutionProfile | None = None,
+) -> TaskExecutionProfile:
+    resolved = profile or resolve_task_execution_profile(task, worker_config, runtime_id=runtime_id)
     if sandbox.manifest_path.is_file():
-        update_run_manifest(sandbox.manifest_path, execution_profile=profile.as_dict())
+        update_run_manifest(sandbox.manifest_path, execution_profile=resolved.as_dict())
+    return resolved
 
 
 def activate_execution_profile(
@@ -99,6 +133,12 @@ def build_runtime_kwargs(
             ),
             "repair_prompt_builder": repair_context.prepare,
             "repair_turn_finalizer": repair_context.finalize,
+            "progress_digest_builder": lambda preflight, context_access: build_runtime_progress_digest(
+                task,
+                sandbox,
+                preflight,
+                context_access=context_access,
+            ).event_fields(),
             **profile_runtime_kwargs(profile, worker_config),
         }
     )

@@ -40,6 +40,7 @@ class RuntimeFailureKind(str, Enum):
     MODEL_ERROR = "model_error"
     PROCESS_CRASH = "process_crash"
     VALIDATION_FAILURE = "validation_failure"
+    NO_PROGRESS = "no_progress"
     WRITEBACK_FAILURE = "writeback_failure"
 
 

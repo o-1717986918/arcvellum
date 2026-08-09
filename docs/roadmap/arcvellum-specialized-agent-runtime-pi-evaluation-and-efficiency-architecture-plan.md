@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：已按实际仓库完成实施前审计；P0-P1 已完成，P2-P5 待实施
+> 状态：已按实际仓库完成实施前审计；P0-P2 已完成，P3-P5 待实施
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -150,6 +150,9 @@ prepared_context_cache = disabled
 | 需要新建 `task_compiler.py` 和 `agent_task_envelope.py` | `runtime/task_program.py` 已把 `TaskPackage` 编译为 `TASK_CONTEXT.json` 与 Worker Program；`execution_context.py` 已有版本化上下文信封 | 升级既有 `task-context/v0.1` 为向后兼容的 v0.2 投影；不新增第二套编译权威 |
 | P1 需要让 deterministic 任务绕过 Agent | `runtime/worker.py` 已通过 `_complete_deterministic_task()` 绕过 Runtime | 只补回归测试和 profile 观测字段，不重写分支 |
 | repair 仍会重放全部原始任务 | `runtime/repair_context.py`、`repair_rendering.py`、`repair_snapshots.py` 已实现 digest 绑定、定向摘录、通过产物保护和差量修复 | P2 只修复实际遗漏的完成语义和错误聚合；不新增第二套 repair 系统 |
+| P2 需要新增首次错误聚合器 | `task_preflight.validate_task_outputs()` 已按固定顺序运行全部确定性 Gate，且不短路；`PreflightResult` 已一次返回全部 issue | 保留现有聚合器，只把聚合结果纳入 completion contract 和 progress digest，不建立平行 validator |
+| word-budget review 缺少正式结论 | `preflight/common.py` 已校验独占 `- 结论：` 机器行，`budget-review` 已要求 clean `pass` 且候选必须真实变化 | P2 只把既有结论 Gate 投影为 `review_machine_conclusion_is_pass`，不改文学路线真相 |
+| 已有任务内 repair 无进展检测 | 项目级 Campaign 有 progress fingerprint，但 OpenCode 同会话 repair loop 没有 task-local progress digest | 新增 `runtime/progress_policy.py`，以 Agent-owned 产物、issue、context access 和 task state 识别原地踏步 |
 | P2 可以立即为所有 Runtime 提供类型化提交工具 | OpenCode 当前通过受限文件写入、Studio preflight 和事务写回完成；它没有 ArcVellum 专用 tool RPC | P0-P5 保持文件兼容通道；真正的 `artifact.submit` 只属于 P6 专用 Worker |
 | benchmark 工具应放在 `tools/` | 仓库没有 `tools/`；所有维护和实验入口位于 `scripts/`，并已有 `context_ab_experiment.py` 与吞吐投影 | 新工具放在 `scripts/`，复用 `observability/throughput_metrics.py` 和现有 A/B 报告，不复制指标实现 |
 | Pi P5 一开始就需要 process pool | OpenCode 已有按角色常驻池、租约、健康检查和空闲回收；Pi 的价值尚未证明 | P5 先做短生命周期 RPC 适配器；只有启动成本和多任务数据支持时才设计 Pi 常驻池 |
@@ -1238,6 +1241,8 @@ docs/benchmarks/runtime-live-smoke-*.json
 
 **目标**：解决重复读取、提示词堆叠和遗漏产物。
 
+**实施状态（2026-08-10）**：完成。实际改造保持 `TaskPackage -> TASK_CONTEXT -> Worker Program` 为唯一编译链；已有首次 preflight 聚合和 word-budget 机器结论 Gate 经审查确认已经完整，因此没有重复实现。
+
 工作：
 
 - 将现有 `TASK_CONTEXT.json` 升级为向后兼容的 v0.2，投影 execution profile、Agent-owned completion checklist 和精确 semantic pass condition；
@@ -1256,6 +1261,14 @@ docs/benchmarks/runtime-live-smoke-*.json
 - pending scaffold 不得被判断为完成；
 - 相同错误与相同输出不允许进入第三个修复回合；
 - benchmark 的平均工具调用数、重复读取量或 repair 次数至少一项下降，其他项不显著恶化。
+
+实施证据：
+
+- `TASK_CONTEXT.json` 已升级为 v0.2，并显式声明兼容 v0.1；新增 execution profile、Agent-owned output checklist、精确 semantic pass condition 和 stop condition；
+- Worker Program 已把“必须读取、必须产出、通过条件、停止条件”前置，Studio completion receipt 仍由核心托管；
+- 同一 task state 下，Agent-owned 输出摘要、preflight issue 身份和 context access 摘要连续相同时，repair loop 在一次无效修复后以 `no_progress` 停止；默认两次修复预算下，相同错误的重复修复上限由 2 次降为 1 次；
+- 语义合同投影已从 `task_program.py` 拆到独立纯投影模块，`worker.py` 保持在架构基线以内；
+- 定向回归 83 项通过；完整回归 955 项通过（1 项按设计跳过）；架构审计通过。
 
 ### P3：上下文和 reasoning 可观测性
 

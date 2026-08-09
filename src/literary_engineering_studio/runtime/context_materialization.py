@@ -54,6 +54,7 @@ def materialize_agent_context_contract(
     copied_paths: Iterable[str],
     context_budget: TaskContextBudget | None = None,
     prepared_context_cache: PreparedContextCache | None = None,
+    execution_profile: dict[str, object] | None = None,
 ) -> MaterializedContextContract:
     sources, references = selection.copied_prompt_paths(copied_paths)
     mandatory_paths = _mandatory_context_paths(task, context_budget)
@@ -87,7 +88,7 @@ def materialize_agent_context_contract(
             prepared_context=prepared_context.rendered,
             prepared_context_paths=prepared_context.included_paths,
             omitted_context_paths=prepared_context.omitted_paths,
-            execution_context=execution_context,
+            execution_context=execution_context, execution_profile=execution_profile,
         ),
         encoding="utf-8",
     )
@@ -96,7 +97,7 @@ def materialize_agent_context_contract(
         workspace / "TASK_CONTEXT.json",
         reference_paths=references,
         source_paths=sources,
-        execution_context=execution_context,
+        execution_context=execution_context, execution_profile=execution_profile,
     )
     materialize_execution_boundaries(run_root, task_dir, task_context_path=context_path)
     ledger = materialize_runtime_context_ledger(

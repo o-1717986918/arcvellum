@@ -27,6 +27,29 @@ WORKER_PROGRAM_TEMPLATE = """# ArcVellum Studio Worker Program
 
 {task_body}
 
+## 必须读取
+
+{required_reading_lines}
+
+## Allowed Outputs
+
+{completion_checklist}
+
+## Semantic Evidence
+
+{semantic_line}
+{semantic_rules}
+
+## 精确通过条件
+
+{semantic_pass_conditions}
+
+## 停止条件
+
+{stop_conditions}
+
+{receipt_notice}
+
 ## Execution Context
 
 {context_identity}
@@ -49,17 +72,6 @@ WORKER_PROGRAM_TEMPLATE = """# ArcVellum Studio Worker Program
 ### Summary Reference
 
 {summary_reference_lines}
-
-## Allowed Outputs
-
-{output_lines}
-
-## Semantic Evidence
-
-{semantic_line}
-{semantic_rules}
-
-{receipt_notice}
 
 ## CLI Protected Outputs
 
@@ -90,5 +102,5 @@ WORKER_PROGRAM_TEMPLATE = """# ArcVellum Studio Worker Program
 
 {shortcuts}
 
-`TASK_CONTEXT.json` 保存了同一合同的机器可读版本。写完所有 Allowed Outputs 后，逐项核对 Output Contract 和 Validation Gates，再结束本次执行。
+`TASK_CONTEXT.json` 保存同一合同的机器可读 v0.2 投影。完成清单中的每个文件并逐项自检后，立即把控制权交还 Studio。
 """
