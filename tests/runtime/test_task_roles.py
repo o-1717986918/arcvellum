@@ -14,7 +14,27 @@ from literary_engineering_studio.runtime.worker import AgentWorker
 from literary_engineering_studio.runtimes.base import RuntimeResult
 
 
-def _task(root: Path, *, task_type: str, agent_role: str) -> TaskPackage:
+def _task(
+    root: Path,
+    *,
+    task_type: str,
+    agent_role: str,
+    agent_output: str = "",
+    agent_output_kind: str = "agent-authored",
+) -> TaskPackage:
+    capabilities = ["read-task-sources"]
+    output_contracts = []
+    expected_outputs = []
+    if agent_output:
+        capabilities.append("write-expected-outputs")
+        output_contracts.append(
+            {
+                "path": agent_output,
+                "kind": agent_output_kind,
+                "writeback_policy": "preview-required",
+            }
+        )
+        expected_outputs.append(agent_output)
     payload = {
         "schema": "literary-engineering-workbench/agent-task/v1",
         "task_id": f"task-{task_type}",
@@ -24,9 +44,9 @@ def _task(root: Path, *, task_type: str, agent_role: str) -> TaskPackage:
         "execution_policy": "agent-required",
         "agent_role": agent_role,
         "human_gate": {"required": False, "reasons": [], "source": "test"},
-        "runtime_capabilities_required": [],
-        "output_contracts": [],
-        "expected_outputs": [],
+        "runtime_capabilities_required": capabilities,
+        "output_contracts": output_contracts,
+        "expected_outputs": expected_outputs,
     }
     task_json = root / "task.json"
     task_md = root / "task.md"
@@ -36,7 +56,7 @@ def _task(root: Path, *, task_type: str, agent_role: str) -> TaskPackage:
 
 
 class TaskRuntimeRoleTests(unittest.TestCase):
-    def test_writer_reviewer_and_planner_roles_are_isolated(self):
+    def test_read_only_reviewer_and_planner_roles_are_isolated(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.assertEqual(
@@ -70,6 +90,53 @@ class TaskRuntimeRoleTests(unittest.TestCase):
                 "planner",
             )
 
+    def test_file_authoring_reviewer_uses_write_capable_worker_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task = _task(
+                Path(temporary),
+                task_type="platform-agent-review",
+                agent_role="main-review-agent",
+                agent_output="reviews/word_budget/word_budget_review.md",
+            )
+
+            self.assertEqual(runtime_role_for_task(task), "worker")
+
+    def test_semantic_file_authoring_reviewer_uses_write_capable_worker_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task = _task(
+                Path(temporary),
+                task_type="platform-agent-review",
+                agent_role="main-review-agent",
+                agent_output="drafts/compositions/scene_0001_composition_review.json",
+                agent_output_kind="composition-review",
+            )
+
+            self.assertEqual(runtime_role_for_task(task), "worker")
+
+    def test_file_authoring_planner_uses_write_capable_worker_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task = _task(
+                Path(temporary),
+                task_type="platform-agent",
+                agent_role="orchestration-planner",
+                agent_output="plans/creative_execution_plan.json",
+            )
+
+            self.assertEqual(runtime_role_for_task(task), "worker")
+
+    def test_inconsistent_write_contract_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task = _task(
+                Path(temporary),
+                task_type="platform-agent-review",
+                agent_role="main-review-agent",
+                agent_output="reviews/example.md",
+            )
+            task.payload["runtime_capabilities_required"] = ["read-task-sources"]
+
+            with self.assertRaisesRegex(ValueError, "write-expected-outputs"):
+                runtime_role_for_task(task)
+
     def test_unknown_role_fails_closed(self):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "unsupported formal Agent role"):
@@ -81,13 +148,14 @@ class TaskRuntimeRoleTests(unittest.TestCase):
                     )
                 )
 
-    def test_worker_passes_formal_reviewer_role_to_runtime_factory(self):
+    def test_worker_passes_write_capable_role_for_file_authoring_reviewer(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             task = _task(
                 root,
                 task_type="platform-agent-review",
                 agent_role="main-review-agent",
+                agent_output="reviews/example.md",
             )
             run_root = root / "run"
             workspace = run_root / "workspace"
@@ -126,7 +194,7 @@ class TaskRuntimeRoleTests(unittest.TestCase):
                 )
 
             self.assertEqual(result, runtime_result)
-            self.assertEqual(build_runtime.call_args.kwargs["role"], "reviewer")
+            self.assertEqual(build_runtime.call_args.kwargs["role"], "worker")
 
 
 if __name__ == "__main__":
