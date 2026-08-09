@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：已按实际仓库完成实施前审计；P0-P2 已完成，P3-P5 待实施
+> 状态：P0-P2 已完成；P3-P5 已于 2026-08-10 再次按实际代码审计，须按修正版顺序实施
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -130,16 +130,17 @@ prepared_context_cache = disabled
 
 所以近期最高性价比工作不是立即替换运行时，而是把已经验证的能力以可回滚 canary 方式推向正式执行。
 
-### 2.4 当前可观测性主动丢弃 reasoning
+### 2.4 当前可观测性已有 reasoning 活性，但尚未形成正确生命周期
 
-`src/literary_engineering_studio/observability/runtime_events.py` 对 OpenCode 的 `reasoning` part 直接返回空事件；`agent_observability.py` 也以“不保存模型推理”为旧边界。结果是：
+`src/literary_engineering_studio/observability/runtime_events.py` 已在 P0B 将 OpenCode 的 `reasoning` part 归一为不含内容的 `runner.reasoning.activity`；`opencode_event_observer.py` 也会据此刷新运行时活性并记录首次 reasoning 时间。尚未解决的是：
 
-- 用户只看到“等待处理”；
-- first-public-event timeout 不把真实思考活动视为存活；
-- 后台可能正在推理，前端和 watchdog 却认为它没有活动；
-- 无法区分模型思考慢、网络无数据、工具循环空转和门禁修复。
+- 事件没有 started/activity/completed 生命周期；
+- first-public-event timeout 仍不把真实思考活动视为首个运行时活动；
+- OpenCode run JSONL、Worker Job Store、Autopilot Event Store 和 session ledger 尚未共享同一持久化策略；
+- 前端只能看到持久安全快照，无法区分模型思考慢、网络无数据、工具循环空转和门禁修复；
+- 当前没有独立的 productive-progress timeout，不能声称已有实时空转 Gate。
 
-该边界应升级为可配置的可见性策略，而不是简单反转为“永久保存所有原始思考”。
+该边界应升级为 content-free 活性生命周期与统一持久化策略，而不是简单反转为“永久保存所有原始思考”。详细现实核对见 `docs/benchmarks/runtime-p3-p5-reality-audit-2026-08-10.md`。
 
 ### 2.5 规划-实现偏差矩阵
 
@@ -157,7 +158,7 @@ prepared_context_cache = disabled
 | benchmark 工具应放在 `tools/` | 仓库没有 `tools/`；所有维护和实验入口位于 `scripts/`，并已有 `context_ab_experiment.py` 与吞吐投影 | 新工具放在 `scripts/`，复用 `observability/throughput_metrics.py` 和现有 A/B 报告，不复制指标实现 |
 | Pi P5 一开始就需要 process pool | OpenCode 已有按角色常驻池、租约、健康检查和空闲回收；Pi 的价值尚未证明 | P5 先做短生命周期 RPC 适配器；只有启动成本和多任务数据支持时才设计 Pi 常驻池 |
 | bounded context 与 prepared cache 需要从零实现 | 两者均已实现，但生产默认分别为 `shadow` 和 `disabled` | P4 分开做 bounded canary 与 cache canary，禁止同时开启导致归因不清 |
-| reasoning 可直接加入现有观测 | `runtime_events.py` 会主动丢弃 reasoning；持久事件和前端读模型当前以“无隐藏推理”为安全合同 | P3 先增加 activity 事件与 watchdog 活性；原始片段只走有界内存流，默认不入数据库或运行文件 |
+| reasoning 可直接加入现有观测 | P0B 已有 content-free `runner.reasoning.activity`；但 run JSONL、Job Store、Autopilot 和 session ledger 有不同持久化路径 | P3 先统一事件持久化策略，再升级 activity 生命周期与 watchdog；P3 不输出或持久化原始 reasoning 文本 |
 | Studio 可新增 Provider 抽象和凭证解析器 | `AGENTS.md` 与 `application/config.py` 明确禁止 Provider 抽象、API-key store 和直接 HTTP 模型调用 | P0-P5 只调用 Runner；Pi 凭证由 Pi 自身或进程环境管理，Studio 不接触秘密值 |
 | 注册一个默认禁用的 Pi Runtime 不影响状态探测 | `agent_runner_status()` 会对每个注册项调用 `build_runtime()`；`enabled: false` 会抛错并使整批探测失败 | P5 先修正 Registry 的“注册、启用、探测”语义和测试，再注册 Pi |
 | 本机已具备可直接调用的 Pi | Node `v24.16.0` 满足要求，但没有 `pi` 命令；fork sparse checkout 也未包含 `packages/coding-agent` | P5 增加固定 commit 构建、安装收据、RPC 冒烟和认证可用性检查；条件不足时结论必须是“证据不足” |
@@ -1270,24 +1271,25 @@ docs/benchmarks/runtime-live-smoke-*.json
 - 语义合同投影已从 `task_program.py` 拆到独立纯投影模块，`worker.py` 保持在架构基线以内；
 - 定向回归 83 项通过；完整回归 955 项通过（1 项按设计跳过）；架构审计通过。
 
-### P3：上下文和 reasoning 可观测性
+### P3：上下文和 reasoning 活性可观测性
 
 **目标**：用户看得见真实活动，watchdog 不误判。
 
 工作：
 
-- `runtime_events.py` 将供应商 reasoning part 归一化为 `reasoning.started/delta/completed`，只在上游真实提供时产生；
-- `activity` 默认只持久化状态、长度、耗时、token 和 digest；raw delta 只进入有界 `LiveEventBus`，不进入持久 Event Store、run JSONL 或任务文件；
-- 扩充 `EPHEMERAL_WORKER_EVENTS` 与 coalescing，使 raw delta 不造成无界队列或 SSE 洪泛；
+- 先建立由 OpenCode run log、Worker API、Autopilot 和 session ledger 共用的事件持久化分类，消除分散名单；
+- 在已有 `runner.reasoning.activity` 基础上形成 content-free `reasoning.started/activity/completed`，只在上游真实提供 reasoning part 时产生；
+- `activity` 只包含事件数、字符计数、耗时、token 和不可逆 digest 等摘要；P3 不向任何 sink 发送原始 reasoning 文本；
+- 高频 activity 进入有界 `LiveEventBus` 或被节流为安全摘要，不造成无界队列、SQLite 写放大或 SSE 洪泛；
 - watchdog 把 reasoning/transport 计为 runtime liveness，把 text/tool/output 单独计为 productive progress；
 - 区分 transport/thinking/text/tool/output 时间；
-- Agent Observability v3 先提供 activity、上下文 tier/count/digest、重复读取和等待原因；
+- Agent Observability 在现有 v2 安全投影上增加真实 activity、上下文 tier/count/digest、已完成的重复读取摘要和等待原因；只有字段合同确实变化时才升级 v3；
 - 前端 P3 只补当前活动指示和诊断字段，不在此阶段重做完整观测台或实现 raw reasoning 历史阅读器。
 
 验收：
 
 - 有 thinking 的 180 秒任务不会因“无 text/tool”误报 first-event timeout；
-- 只有 heartbeat/reasoning 且长期无输出时，仍会被 progress policy 识别为空转；
+- 只有 heartbeat/reasoning 且长期无输出时，会产生 `no_productive_progress` 安全诊断并最终受 total timeout 约束；任务形成候选后仍由既有 progress digest 识别无效 repair；
 - 无 thinking 的模型不显示伪造内容；
 - 凭证扫描通过；
 - 默认配置下磁盘中无原始 reasoning 内容；
@@ -1299,10 +1301,12 @@ docs/benchmarks/runtime-live-smoke-*.json
 
 工作：
 
-- 先只运行 candidate-review 的 shadow/bounded A/B，使用现有 `context_ab` 和 `bounded-ready` 合同；
+- 先补齐可重建的 scene candidate-review benchmark；现有 catalog 中的 canon review 不能替代该样本；
+- 再只运行 candidate-review 的 shadow/bounded A/B，使用现有 `context_ab` 和 `bounded-ready` 合同；
 - bounded 达标后，才把 candidate-review 加入默认 canary allowlist；未达标则保持 shadow；
 - 再分别评估 structured 和 analysis，不在 P4 自动扩到 prose；
-- cache 作为第二个独立实验：在 bounded 决策冻结后才开启 prepared-context cache canary，避免无法判断收益来自哪一项；
+- cache 作为第二个独立实验：先为实验链正确注入共享 `PreparedContextCache`，在 bounded 决策冻结后才运行 cache micro-benchmark，避免无法判断收益来自哪一项；
+- prepared cache 只衡量上下文准备 CPU/IO 和延迟收益，不宣称减少模型输入 token；
 - UI/健康读模型展示 effective mode、匹配/回退原因、cache hit/miss/bypass；
 - 现有 fail-closed 语义保持：显式 bounded 且合同不 ready 时失败；shadow canary 不匹配时明确回退，不能静默少读证据。
 
@@ -1320,10 +1324,11 @@ docs/benchmarks/runtime-live-smoke-*.json
 
 工作：
 
-- 扩展 fork sparse checkout，构建锁定 commit 的 Pi coding-agent，生成本地实验收据；
+- 扩展 fork sparse checkout，物化 `coding-agent`、`tui`、`telemetry`、`client` 及固定提交真实要求的完整构建依赖闭包，再按 lockfile 和 package scripts 构建；
+- 生成不含用户绝对路径或凭证的本地实验收据，记录 fork、commit、版本、Node、相对命令、SHA-256 与许可证；
 - 运行不调用模型的严格 LF JSONL framing、request id、state、abort 和退出回收测试；
 - 修正 Runtime Registry，使“已注册、默认禁用、仍可安全探测”成为受测试的正式语义；
-- 实现短生命周期 `PiRpcRuntime`，支持 prompt、abort、get_state、stats 和 ArcVellum 事件归一化；
+- 实现短生命周期 `PiRpcRuntime`，使用真实入口 `pi --mode rpc`，支持 prompt、abort、get_state、get_session_stats 和 ArcVellum 事件归一化；
 - 运行在同一 ArcVellum 沙箱，复用相同 Worker Program、TASK_CONTEXT、preflight 和写回；
 - 默认关闭、仅实验命令可选择，不进入普通用户默认运行时；
 - 先证明额外 sandbox 文件不能被写回正式项目、取消后无残留进程；同时明确记录 P5 不具备 OS 级外部读取隔离；
