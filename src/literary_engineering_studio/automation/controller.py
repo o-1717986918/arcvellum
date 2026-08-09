@@ -10,6 +10,7 @@ from typing import Any
 import uuid
 
 from ..observability.agent_session_tracking import track_agent_session_event
+from ..observability.event_policy import is_ephemeral_runtime_event
 from .decision_delegation import DecisionDelegator
 from .lease_heartbeat import (
     LeaseRenewalResult,
@@ -450,7 +451,7 @@ class AutopilotService:
                 current_task_id=str(data.get("task_id") or ""),
                 current_route=str(data.get("route") or run.get("current_route") or ""),
             )
-        if event in {"agent.message.delta", "runner.session.status"}:
+        if is_ephemeral_runtime_event(event):
             return
         self.store.append_autopilot_event(run_id, f"worker.{event}", data)
         if event == "usage.updated":

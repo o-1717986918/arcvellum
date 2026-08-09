@@ -246,7 +246,7 @@ export interface AgentObservableEvent {
 
 export interface AgentObservability {
   ok: boolean;
-  schema: "arcvellum/agent-observability/v1" | "arcvellum/agent-observability/v2";
+  schema: "arcvellum/agent-observability/v1" | "arcvellum/agent-observability/v2" | "arcvellum/agent-observability/v3";
   project_root: string;
   status: "active" | "idle" | "stalled";
   active_task: {
@@ -272,6 +272,28 @@ export interface AgentObservability {
     stalled?: boolean;
     stale_after_seconds?: number;
   } | null;
+  activity?: {
+    phase: string;
+    label: string;
+    runtime_active: boolean;
+    productive_progress_observed: boolean;
+    waiting_reason: string;
+    last_event: string;
+  };
+  context_diagnostics?: {
+    available: boolean;
+    task_kind: string;
+    mode: string;
+    contract_status: string;
+    digest: string;
+    tiers: { must_inline: number; exact_on_demand: number; excluded: number };
+    access: {
+      available: boolean;
+      read_tool_calls: number;
+      unique_read_targets: number;
+      redundant_read_calls: number;
+    };
+  };
   services?: Array<{
     role: string;
     role_id?: string;

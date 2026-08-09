@@ -9,6 +9,8 @@ import threading
 import time
 from typing import Any
 
+from .event_policy import EPHEMERAL_RUNTIME_EVENTS
+
 
 @dataclass(frozen=True)
 class LiveEvent:
@@ -66,23 +68,37 @@ class LiveEventBus:
             self._condition.notify_all()
 
 
-EPHEMERAL_WORKER_EVENTS = {"agent.message.delta", "runner.session.status"}
+EPHEMERAL_WORKER_EVENTS = set(EPHEMERAL_RUNTIME_EVENTS)
 
 
 def coalesce_live_events(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for item in items:
-        if (
-            result
-            and item.get("event") == "agent.message.delta"
-            and result[-1].get("event") == "agent.message.delta"
-        ):
-            previous = result[-1]
-            previous_data = previous.get("data") if isinstance(previous.get("data"), dict) else {}
-            current_data = item.get("data") if isinstance(item.get("data"), dict) else {}
-            previous_data["text"] = str(previous_data.get("text") or "") + str(current_data.get("text") or "")
-            previous["sequence"] = item.get("sequence")
-            previous["at"] = item.get("at")
-        else:
-            result.append({**item, "data": dict(item.get("data") or {})})
+        if result and _merge_adjacent_event(result[-1], item):
+            continue
+        result.append({**item, "data": dict(item.get("data") or {})})
     return result
+
+
+def _merge_adjacent_event(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+    event = str(current.get("event") or "")
+    if event != str(previous.get("event") or ""):
+        return False
+    previous_data = previous.get("data") if isinstance(previous.get("data"), dict) else {}
+    current_data = current.get("data") if isinstance(current.get("data"), dict) else {}
+    if event == "agent.message.delta":
+        previous_data["text"] = str(previous_data.get("text") or "") + str(current_data.get("text") or "")
+    elif event == "runner.reasoning.activity":
+        _merge_reasoning_activity(previous_data, current_data)
+    else:
+        return False
+    previous["sequence"] = current.get("sequence")
+    previous["at"] = current.get("at")
+    return True
+
+
+def _merge_reasoning_activity(previous: dict[str, Any], current: dict[str, Any]) -> None:
+    for key in ("delta_events", "delta_characters"):
+        previous[key] = int(previous.get(key) or 0) + int(current.get(key) or 0)
+    for key in ("total_events", "total_characters", "elapsed_ms"):
+        previous[key] = max(int(previous.get(key) or 0), int(current.get(key) or 0))

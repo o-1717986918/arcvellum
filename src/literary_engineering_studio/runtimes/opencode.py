@@ -17,6 +17,7 @@ from ..opencode_binary import bundle_manifest, ensure_opencode_integrity, locate
 from ..opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
 from ..runtime.context_access import summarize_context_access
+from ..observability.event_policy import should_persist_runtime_event
 from ..subprocess_utils import run_hidden
 from .base import (
     AgentRunnerCapabilities,
@@ -45,7 +46,7 @@ from .opencode_session import (
 )
 from .opencode_timeout import timeout_runtime_result
 from .opencode_timing import OpenCodeTiming, attach_timing
-from .opencode_wait import wait_for_session as _wait_for_session
+from .opencode_wait import wait_for_observed_session, wait_for_session as _wait_for_session
 
 
 class OpenCodeRuntime(AgentRuntime):
@@ -181,7 +182,8 @@ class OpenCodeRuntime(AgentRuntime):
 
         def emit(name: str, data: dict[str, Any]) -> None:
             event_data = {"role": role.value, **data}
-            _append_event(events_path, name, event_data)
+            if should_persist_runtime_event(name):
+                _append_event(events_path, name, event_data)
             if event_sink:
                 event_sink(name, event_data)
 
@@ -257,17 +259,19 @@ class OpenCodeRuntime(AgentRuntime):
                 first_event_seconds=max(30, int(first_event_timeout or configured_timeout.first_event_seconds)),
                 inter_event_seconds=max(30, int(inter_event_timeout or configured_timeout.inter_event_seconds)),
             )
-            wait_status = _wait_for_session(
+            wait_status = wait_for_observed_session(
+                _wait_for_session,
                 client,
                 session_id,
                 deadline,
                 cancellation,
-                first_event_timeout=timeout_policy.first_event_seconds,
-                inter_event_timeout=timeout_policy.inter_event_seconds,
-                has_public_activity=lambda: observer.public_activity,
+                timeout_policy=timeout_policy,
+                observer=observer,
+                emit=emit,
                 started_at=execution_started,
                 last_activity=last_activity,
             )
+            observer.finish_reasoning(f"session-{wait_status}")
             if wait_status == "cancelled":
                 emit("run.stopped", {"session_id": session_id, "reason": "cancelled"})
                 emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "cancelled"})

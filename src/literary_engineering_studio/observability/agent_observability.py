@@ -13,10 +13,11 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from .event_policy import canonical_runtime_event
 from .throughput_metrics import build_throughput_projection
 
 
-SCHEMA = "arcvellum/agent-observability/v2"
+SCHEMA = "arcvellum/agent-observability/v3"
 STALE_AFTER_SECONDS = 300
 _LIVE_SESSION_STATUSES = {"queued", "running", "waiting", "waiting_human"}
 
@@ -34,11 +35,12 @@ def build_agent_observability(
     run = autopilot_status.get("run") if isinstance(autopilot_status.get("run"), dict) else {}
     current_task = dashboard.get("current_task") if isinstance(dashboard.get("current_task"), dict) else {}
     visible_events = [_visible_event(item) for item in events[-18:] if isinstance(item, dict)]
-    active = _active_task(run, current_task, visible_events)
     reference_time = now or datetime.now(timezone.utc)
     visible_sessions = _visible_sessions(sessions, now=reference_time)
     visible_services = [_visible_service(item) for item in (services or []) if isinstance(item, dict)]
     throughput = build_throughput_projection(events)
+    activity = _runtime_activity(visible_sessions, visible_events)
+    context_diagnostics = _context_diagnostics(throughput)
     last_activity_at = _last_activity_at(run, visible_events, visible_sessions)
     stalled = _is_stalled(run, last_activity_at, now=now)
     active = _active_task(run, current_task, visible_events, stalled=stalled)
@@ -49,12 +51,11 @@ def build_agent_observability(
         "sessions": [_revision_session(item) for item in visible_sessions],
         "services": visible_services,
         "throughput": throughput,
+        "activity": activity,
+        "context_diagnostics": context_diagnostics,
     }
     run_status = str(run.get("status") or "")
     has_live_session = any(item["status"] in _LIVE_SESSION_STATUSES for item in visible_sessions)
-    # A persisted session record can outlive its controller after a restart.
-    # When a formal run exists, its terminal/paused state is authoritative;
-    # otherwise the workbench would falsely advertise an old session as LIVE.
     status = "stalled" if stalled else "active" if run_status == "running" or (not run and has_live_session) else "idle"
     return {
         "ok": True,
@@ -67,7 +68,79 @@ def build_agent_observability(
         "sessions": visible_sessions,
         "recent_events": visible_events,
         "throughput": throughput,
+        "activity": activity,
+        "context_diagnostics": context_diagnostics,
         "revision": _digest(source),
+    }
+
+
+def _runtime_activity(
+    sessions: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    live = next(
+        (item for item in sessions if item.get("status") in _LIVE_SESSION_STATUSES),
+        None,
+    )
+    last_event = str(live.get("last_event") or "") if live else ""
+    if not last_event and events:
+        last_event = canonical_runtime_event(str(events[-1].get("event") or ""))
+    phase, label, productive, waiting_reason = _activity_meaning(last_event)
+    return {
+        "phase": phase,
+        "label": label,
+        "runtime_active": live is not None,
+        "productive_progress_observed": productive,
+        "waiting_reason": waiting_reason,
+        "last_event": last_event,
+    }
+
+
+def _activity_meaning(event: str) -> tuple[str, str, bool, str]:
+    normalized = canonical_runtime_event(event)
+    if normalized in {"runner.reasoning.started", "runner.reasoning.activity"}:
+        return "reasoning", "正在推演", False, "模型连接保持活动，正在组织判断，尚未形成文本、工具或文件产出。"
+    if normalized == "runner.reasoning.completed":
+        return "synthesizing", "正在整理结果", False, "推演已经结束，正在形成可验证产物。"
+    if normalized == "runner.no_productive_progress":
+        return "waiting_product", "等待首份产出", False, "运行时仍有活动，但暂未形成文本、工具或文件产出。"
+    if normalized in {"agent.message.delta", "agent.message.completed"}:
+        return "writing", "正在生成内容", True, ""
+    if normalized.startswith("tool."):
+        return "tool", "正在执行受控工具", True, ""
+    if normalized == "file.changed":
+        return "output", "正在写入候选产物", True, ""
+    if normalized in {"runner.session.finished", "runner.process.completed"}:
+        return "completed", "本轮执行已结束", True, ""
+    if normalized in {"runner.session.created", "runner.session.started"}:
+        return "starting", "正在建立主创会话", False, "执行器正在连接模型并准备首轮任务。"
+    return "idle", "等待运行时活动", False, "尚未收到可归类的运行时活动。"
+
+
+def _context_diagnostics(throughput: dict[str, Any]) -> dict[str, Any]:
+    tasks = throughput.get("tasks") if isinstance(throughput.get("tasks"), list) else []
+    task = tasks[-1] if tasks and isinstance(tasks[-1], dict) else {}
+    context = task.get("context") if isinstance(task.get("context"), dict) else {}
+    access = task.get("context_access") if isinstance(task.get("context_access"), dict) else {}
+    digest = str(task.get("context_digest") or context.get("digest") or "")
+    read_calls = _integer(access.get("read_tool_calls"))
+    return {
+        "available": bool(digest),
+        "task_kind": str(context.get("task_kind") or ""),
+        "mode": str(context.get("mode") or ""),
+        "contract_status": str(context.get("contract_status") or ""),
+        "digest": digest[:20],
+        "tiers": {
+            "must_inline": _integer(context.get("included_file_count")),
+            "exact_on_demand": _integer(context.get("on_demand_file_count")),
+            "excluded": _integer(context.get("excluded_file_count")),
+        },
+        "access": {
+            "available": read_calls > 0,
+            "read_tool_calls": read_calls,
+            "unique_read_targets": _integer(access.get("unique_read_targets")),
+            "redundant_read_calls": _integer(access.get("redundant_read_calls")),
+        },
     }
 
 
@@ -239,6 +312,9 @@ def _event_stage(event: str, data: dict[str, Any]) -> tuple[str, str]:
         "worker.core.command_started": ("运行正式步骤", "正在执行当前任务要求的正式 CLI 步骤。"),
         "worker.core.command_completed": ("验证步骤结果", "正式步骤已返回，正在继续核验产物。"),
         "worker.runner.started": ("主创正在工作", "主创执行者正在依据任务包创作、审查或整理候选。"),
+        "worker.runner.reasoning.started": ("正在推演", "模型连接已经活动，正在组织判断。"),
+        "worker.runner.reasoning.completed": ("推演完成", "正在把判断整理为可验证产物。"),
+        "worker.runner.no_productive_progress": ("等待首份产出", "运行时仍有活动，但尚未形成文本、工具或文件产出。"),
         "worker.human.required": ("等待你的决定", "这一步需要由你确认，系统不会替你伪造批准。"),
         "task.recovery_started": ("恢复上次任务", "正在从已保存的任务状态恢复。"),
         "task.recovery_succeeded": ("恢复完成", "已恢复可验证产物，继续执行前仍会检查门禁。"),

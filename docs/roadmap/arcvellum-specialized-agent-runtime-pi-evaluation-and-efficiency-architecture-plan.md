@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：P0-P2 已完成；P3-P5 已于 2026-08-10 再次按实际代码审计，须按修正版顺序实施
+> 状态：P0-P3 已完成；P4-P5 已于 2026-08-10 再次按实际代码审计，须按修正版顺序实施
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -1274,6 +1274,8 @@ docs/benchmarks/runtime-live-smoke-*.json
 ### P3：上下文和 reasoning 活性可观测性
 
 **目标**：用户看得见真实活动，watchdog 不误判。
+
+**实施状态（2026-08-10）**：已完成。OpenCode watchdog 已分离 runtime liveness 与 productive progress；reasoning 形成 content-free started/activity/completed 生命周期；高频 activity 由统一事件策略限制在有界实时流或节流后的 session 活性摘要，不进入 run JSONL、Worker Job Store 或 Autopilot Event Store。Agent Observability 已升级到 v3，前端能显示真实活动、等待原因和上下文诊断。实现与验证证据见 `docs/benchmarks/runtime-p3-activity-observability-2026-08-10.md`。
 
 工作：
 

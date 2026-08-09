@@ -173,6 +173,7 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
                     timeout=10,
                     event_sink=lambda event, data: events.append((event, data)),
                 )
+            persisted_events = (run_root / "runtime.events.jsonl").read_text(encoding="utf-8")
 
         self.assertEqual(result.status, "completed")
         for key in (
@@ -189,6 +190,10 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
         self.assertNotIn("private reasoning", serialized)
         self.assertIn("runner.first_reasoning", serialized)
         self.assertIn("runner.first_output", serialized)
+        self.assertNotIn("private reasoning", persisted_events)
+        self.assertNotIn("runner.reasoning.activity", persisted_events)
+        self.assertIn("runner.reasoning.started", persisted_events)
+        self.assertIn("runner.reasoning.completed", persisted_events)
 
     def test_provider_aborted_message_is_retryable(self):
         self.assertTrue(

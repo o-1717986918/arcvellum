@@ -59,6 +59,54 @@ class OpenCodeIdleTimeoutTests(unittest.TestCase):
         )
         self.assertEqual(status, "idle_timeout")
 
+    def test_reasoning_liveness_prevents_false_first_event_timeout(self):
+        status = _wait_for_session(
+            _BusyClient(),
+            "session",
+            time.monotonic() + 0.03,
+            threading.Event(),
+            first_event_timeout=0.01,
+            inter_event_timeout=10,
+            has_runtime_activity=lambda: True,
+            has_productive_activity=lambda: False,
+            started_at=time.monotonic() - 1,
+            last_activity=time.monotonic,
+        )
+        self.assertEqual(status, "timeout")
+
+    def test_runtime_activity_that_stops_trips_inter_event_timeout(self):
+        status = _wait_for_session(
+            _BusyClient(),
+            "session",
+            time.monotonic() + 5,
+            threading.Event(),
+            first_event_timeout=10,
+            inter_event_timeout=0.01,
+            has_runtime_activity=lambda: True,
+            has_productive_activity=lambda: False,
+            started_at=time.monotonic(),
+            last_activity=lambda: time.monotonic() - 1,
+        )
+        self.assertEqual(status, "idle_timeout")
+
+    def test_productive_stall_diagnostic_is_emitted_once_without_stopping_liveness(self):
+        diagnostics = []
+        status = _wait_for_session(
+            _BusyClient(),
+            "session",
+            time.monotonic() + 0.05,
+            threading.Event(),
+            first_event_timeout=0.01,
+            inter_event_timeout=10,
+            has_runtime_activity=lambda: True,
+            has_productive_activity=lambda: False,
+            on_productive_stall=diagnostics.append,
+            started_at=time.monotonic() - 1,
+            last_activity=time.monotonic,
+        )
+        self.assertEqual(status, "timeout")
+        self.assertEqual(len(diagnostics), 1)
+
     def test_role_profile_takes_precedence_over_stale_legacy_timeout(self):
         policy = session_timeout_policy(
             {

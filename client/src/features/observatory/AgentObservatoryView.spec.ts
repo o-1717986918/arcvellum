@@ -15,7 +15,7 @@ vi.mock("@/services/api", () => ({
 function observabilityFixture() {
   return {
     ok: true,
-    schema: "arcvellum/agent-observability/v2",
+    schema: "arcvellum/agent-observability/v3",
     project_root: "C:\\ArcVellum\\潮线",
     status: "active",
     active_task: {
@@ -28,6 +28,23 @@ function observabilityFixture() {
       message: "",
       tasks_completed: 1,
       failures: 0,
+    },
+    activity: {
+      phase: "reasoning",
+      label: "正在推演",
+      runtime_active: true,
+      productive_progress_observed: false,
+      waiting_reason: "模型连接保持活动，正在组织判断。",
+      last_event: "runner.reasoning.started",
+    },
+    context_diagnostics: {
+      available: true,
+      task_kind: "prose",
+      mode: "bounded",
+      contract_status: "bounded-ready",
+      digest: "context-digest",
+      tiers: { must_inline: 8, exact_on_demand: 3, excluded: 2 },
+      access: { available: true, read_tool_calls: 4, unique_read_targets: 3, redundant_read_calls: 1 },
     },
     sessions: [
       {
@@ -80,6 +97,9 @@ describe("AgentObservatoryView", () => {
     expect(wrapper.text()).toContain("task.started");
     expect(wrapper.text()).toContain("主创 Agent");
     expect(wrapper.text()).toContain("任务已开始");
+    expect(wrapper.text()).toContain("正在推演");
+    expect(wrapper.text()).toContain("8 直接 / 3 按需 / 2 排除");
+    expect(wrapper.text()).toContain("1 次");
   });
 
   it("explains missing observability without fabricating data", async () => {

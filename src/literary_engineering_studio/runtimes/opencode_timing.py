@@ -14,6 +14,7 @@ _METADATA_KEYS = {
     "process_ready": "time_to_process_ready_ms",
     "session_created": "time_to_session_created_ms",
     "prompt_submitted": "time_to_prompt_submitted_ms",
+    "activity": "time_to_first_activity_ms",
     "reasoning": "time_to_first_reasoning_ms",
     "text": "time_to_first_text_ms",
     "tool": "time_to_first_tool_ms",

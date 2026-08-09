@@ -71,6 +71,36 @@ function eventLabel(value: string): string {
 
         <article class="strategy-card">
           <header>
+            <span class="eyebrow">当前活动</span>
+            <h2>{{ app.agentObservability.activity?.label || "等待运行时活动" }}</h2>
+          </header>
+          <dl v-if="app.agentObservability.activity">
+            <div><dt>连接</dt><dd>{{ app.agentObservability.activity.runtime_active ? "保持活动" : "当前待命" }}</dd></div>
+            <div><dt>可见产出</dt><dd>{{ app.agentObservability.activity.productive_progress_observed ? "已经出现" : "尚未出现" }}</dd></div>
+            <div><dt>最近信号</dt><dd>{{ app.agentObservability.activity.last_event || "等待首个信号" }}</dd></div>
+          </dl>
+          <p v-if="app.agentObservability.activity?.waiting_reason" class="strategy-empty">
+            {{ app.agentObservability.activity.waiting_reason }}
+          </p>
+        </article>
+
+        <article class="strategy-card">
+          <header>
+            <span class="eyebrow">上下文合同</span>
+            <h2>{{ app.agentObservability.context_diagnostics?.available ? "资料已编译" : "等待任务资料" }}</h2>
+          </header>
+          <dl v-if="app.agentObservability.context_diagnostics?.available">
+            <div><dt>模式</dt><dd>{{ app.agentObservability.context_diagnostics.mode || "未记录" }}</dd></div>
+            <div><dt>任务类型</dt><dd>{{ app.agentObservability.context_diagnostics.task_kind || "未记录" }}</dd></div>
+            <div><dt>资料分层</dt><dd>{{ app.agentObservability.context_diagnostics.tiers.must_inline }} 直接 / {{ app.agentObservability.context_diagnostics.tiers.exact_on_demand }} 按需 / {{ app.agentObservability.context_diagnostics.tiers.excluded }} 排除</dd></div>
+            <div><dt>摘要指纹</dt><dd>{{ app.agentObservability.context_diagnostics.digest }}</dd></div>
+            <div><dt>重复读取</dt><dd>{{ app.agentObservability.context_diagnostics.access.available ? `${app.agentObservability.context_diagnostics.access.redundant_read_calls} 次` : "执行完成后可用" }}</dd></div>
+          </dl>
+          <p v-else class="strategy-empty">领取正式 Agent 任务后，这里会显示资料分层与读取摘要。</p>
+        </article>
+
+        <article class="strategy-card">
+          <header>
             <span class="eyebrow">会话</span>
             <h2>{{ app.agentObservability.sessions?.length ?? 0 }} 个 Worker 会话</h2>
           </header>

@@ -103,6 +103,9 @@ def _status_for(event: str, raw_status: str, current: dict[str, Any]) -> str:
         return "failed"
     if event in {
         "runner.session.started",
+        "runner.reasoning.started",
+        "runner.reasoning.activity",
+        "runner.reasoning.completed",
         "advisor.session.started",
         "steward.session.started",
         "tool.started",
@@ -136,6 +139,10 @@ def _public_message(event: str, data: dict[str, Any]) -> str:
     messages = {
         "runner.session.created": "主创会话已经创建，正在准备任务资料。",
         "runner.session.started": "主创正在执行当前正式任务。",
+        "runner.reasoning.started": "主创已经开始推演，尚未形成可见产出。",
+        "runner.reasoning.activity": "主创仍在推演，运行时连接保持活动。",
+        "runner.reasoning.completed": "主创已结束本轮推演，正在整理可见产出。",
+        "runner.no_productive_progress": "运行时仍有活动，但尚未形成文本、工具或文件产出。",
         "tool.started": "正在运行任务允许的工具步骤。",
         "repair.started": "产物未通过确定性预检，正在执行受控修订。",
         "validation.failed": "当前产物仍需修订。",

@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ..observability.event_policy import is_ephemeral_runtime_event
+
 
 class WorkerObserver:
     """Attach one worker run's context identity to emitted lifecycle events."""
@@ -86,7 +88,14 @@ class WorkerObserver:
                 self._agent_session_id = session_id
         if self.event_sink is not None:
             try:
-                self.event_sink(event, {**data, **self._context_ledger_fields})
+                context_fields = self._context_ledger_fields
+                if is_ephemeral_runtime_event(event):
+                    context_fields = {
+                        key: value
+                        for key, value in context_fields.items()
+                        if key in {"context_ledger_id", "context_ledger_digest"}
+                    }
+                self.event_sink(event, {**data, **context_fields})
             except Exception as exc:
                 self._pending_sink_failures.append(
                     {

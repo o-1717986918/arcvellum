@@ -41,13 +41,44 @@ class AgentObservabilityTests(unittest.TestCase):
             now=datetime(2026, 7, 22, 0, 0, 5, tzinfo=timezone.utc),
         )
         self.assertEqual(projection["status"], "active")
-        self.assertEqual(projection["schema"], "arcvellum/agent-observability/v2")
+        self.assertEqual(projection["schema"], "arcvellum/agent-observability/v3")
         self.assertEqual(projection["active_task"]["stage"], "主创正在工作")
         self.assertNotIn("C:/projects/example", projection["recent_events"][0]["message"])
         self.assertEqual(projection["sessions"][0]["role"], "主创执行者")
         self.assertEqual(projection["sessions"][0]["retry_count"], 1)
         self.assertEqual(projection["services"][0]["status"], "busy")
         self.assertNotIn("profile_path", projection["services"][0])
+        self.assertEqual(projection["activity"]["phase"], "starting")
+        self.assertFalse(projection["activity"]["productive_progress_observed"])
+
+    def test_projects_reasoning_activity_without_hidden_content(self):
+        projection = build_agent_observability(
+            "C:/projects/example",
+            {"run": {"run_id": "run-1", "runtime": "opencode", "status": "running"}},
+            [{
+                "sequence": 1,
+                "event": "worker.runner.reasoning.started",
+                "at": "2026-07-22T00:00:01Z",
+                "data": {"total_characters": 90, "private": "must-not-leak"},
+            }],
+            {"current_task": {}},
+            [{
+                "session_id": "session-1",
+                "role": "worker",
+                "runtime": "opencode",
+                "status": "running",
+                "last_event": "runner.reasoning.started",
+                "started_at": "2026-07-22T00:00:00Z",
+                "updated_at": "2026-07-22T00:00:01Z",
+            }],
+            [],
+            now=datetime(2026, 7, 22, 0, 0, 2, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(projection["activity"]["phase"], "reasoning")
+        self.assertTrue(projection["activity"]["runtime_active"])
+        self.assertFalse(projection["activity"]["productive_progress_observed"])
+        self.assertNotIn("must-not-leak", str(projection))
 
     def test_marks_running_controller_stalled_after_no_verifiable_activity(self):
         projection = build_agent_observability(
