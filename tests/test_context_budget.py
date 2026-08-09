@@ -159,6 +159,27 @@ class ContextBudgetTests(unittest.TestCase):
                     mandatory_paths=("required.md",),
                 )
 
+    def test_bounded_mode_rejects_mandatory_path_missing_from_authorized_set(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "required.md").write_text("required evidence", encoding="utf-8")
+            (root / "optional.md").write_text("optional evidence", encoding="utf-8")
+            budget = resolve_task_context_budget(
+                _task(root, contract_status="bounded-ready"),
+                {"context_budget": {"mode": "bounded"}},
+            )
+
+            with self.assertRaisesRegex(
+                ContextBudgetExceeded,
+                "absent from the authorized context set",
+            ):
+                build_prepared_prompt_context(
+                    root,
+                    ("optional.md",),
+                    budget=budget,
+                    mandatory_paths=("required.md",),
+                )
+
     def test_explicit_bounded_rejects_non_ready_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(

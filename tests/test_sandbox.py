@@ -544,6 +544,71 @@ class SandboxTests(unittest.TestCase):
                 context["context_digest"],
             )
 
+    def test_shadow_sandbox_prioritizes_tiered_paths_over_large_optional_source(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            root = Path(temporary)
+            task = self._task(root)
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.md"
+            composition.parent.mkdir(parents=True)
+            composition.write_text("authoritative composition", encoding="utf-8")
+            optional = root / "canon" / "large-optional.md"
+            optional.parent.mkdir()
+            optional.write_text("x" * 200_000, encoding="utf-8")
+            payload = json.loads(task.task_json_path.read_text(encoding="utf-8"))
+            payload.update(
+                {
+                    "source_paths": [
+                        "canon/large-optional.md",
+                        "scenes/scene_0001.yaml",
+                        "drafts/compositions/scene_0001_composition.md",
+                    ],
+                    "agent_source_paths": [
+                        "canon/large-optional.md",
+                        "scenes/scene_0001.yaml",
+                        "drafts/compositions/scene_0001_composition.md",
+                    ],
+                    "context_contract_required": True,
+                    "context_contract_schema": (
+                        "literary-engineering-workbench/task-context-contract/v1"
+                    ),
+                    "context_contract_revision": "scene-v1",
+                    "context_contract_status": "bounded-ready",
+                    "context_must_inline_paths": [
+                        "scenes/scene_0001.yaml",
+                        "drafts/compositions/scene_0001_composition.md",
+                    ],
+                }
+            )
+            task.task_json_path.write_text(
+                json.dumps(_enrich_task_payload(payload), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            task = load_task_package(root, task.task_json_path)
+            budget = resolve_task_context_budget(task)
+
+            sandbox = stage_task(
+                task,
+                Path(runs),
+                runtime="host-agent",
+                run_id="run-tier-contract-priority",
+                context_budget=budget,
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )["execution_context"]
+
+            self.assertEqual(
+                context["must_inline"],
+                [
+                    "scenes/scene_0001.yaml",
+                    "drafts/compositions/scene_0001_composition.md",
+                ],
+            )
+            self.assertTrue(
+                (sandbox.workspace / "drafts" / "compositions" / "scene_0001_composition.md").is_file()
+            )
+            self.assertIn("canon/large-optional.md", context["exact_on_demand"])
+
     def test_sandbox_persists_controlled_capability_and_resource_contracts(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
             root = Path(temporary)

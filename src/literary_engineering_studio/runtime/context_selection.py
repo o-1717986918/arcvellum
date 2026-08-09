@@ -71,8 +71,17 @@ def select_agent_context(task: TaskPackage) -> AgentContextSelection:
     references = compact_task_references(task)
     summary_paths = _summary_paths(task.payload.get("context_summary_references"))
     explicitly_excluded = _strings(task.payload.get("context_excluded_paths"))
+    contract_paths = _context_contract_paths(task)
+    _validate_context_tiers(contract_paths, explicitly_excluded, summary_paths)
     unavailable_inline = set((*explicitly_excluded, *summary_paths))
-    sources = tuple(path for path in _unique(sources) if path not in unavailable_inline)
+    # The tier contract is authoritative. A compact ``agent_source_paths`` list
+    # may remove optional material, but it cannot remove files that the same
+    # task declares mandatory or exact-on-demand.
+    sources = tuple(
+        path
+        for path in _unique((*contract_paths, *sources))
+        if path not in unavailable_inline
+    )
     references = tuple(path for path in _unique(references) if path not in unavailable_inline)
     operational = (
         *task.expected_outputs,
@@ -113,6 +122,29 @@ def _strings(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
     return _unique(str(item) for item in value if str(item).strip())
+
+
+def _context_contract_paths(task: TaskPackage) -> tuple[str, ...]:
+    return _unique(
+        (
+            *_strings(task.payload.get("context_must_inline_paths")),
+            *_strings(task.payload.get("context_exact_on_demand_paths")),
+        )
+    )
+
+
+def _validate_context_tiers(
+    contract_paths: tuple[str, ...],
+    excluded_paths: tuple[str, ...],
+    summary_paths: tuple[str, ...],
+) -> None:
+    unavailable = set((*excluded_paths, *summary_paths))
+    conflicting = tuple(path for path in contract_paths if path in unavailable)
+    if conflicting:
+        raise ValueError(
+            "context tier contract conflicts with excluded or summary paths: "
+            + ", ".join(conflicting)
+        )
 
 
 def _summary_paths(value: object) -> tuple[str, ...]:

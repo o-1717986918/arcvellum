@@ -47,7 +47,14 @@ class OpenCodeServer:
             provider_overrides=provider_overrides,
         )
         state_root = self.shared_data_root / "opencode"
-        for path in (state_root / "config", state_root / "data", state_root / "cache", state_root / "state"):
+        home_root = state_root / "home"
+        for path in (
+            state_root / "config",
+            state_root / "data",
+            state_root / "cache",
+            state_root / "state",
+            home_root / ".config" / "opencode",
+        ):
             path.mkdir(parents=True, exist_ok=True)
         port = _free_port()
         username = "studio"
@@ -60,6 +67,12 @@ class OpenCodeServer:
             "OPENCODE_CONFIG": str(profile_path),
             "OPENCODE_CONFIG_DIR": str(profile_root),
             "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT": "1",
+            # OpenCode's Windows runtime may consult the platform home before
+            # honoring XDG paths. Keep that fallback inside Studio-owned state
+            # so an unrelated or malformed ~/.config/opencode cannot prevent
+            # the bundled runner from starting.
+            "HOME": str(home_root),
+            "USERPROFILE": str(home_root),
             "XDG_CONFIG_HOME": str(state_root / "config"),
             "XDG_DATA_HOME": str(state_root / "data"),
             "XDG_CACHE_HOME": str(state_root / "cache"),

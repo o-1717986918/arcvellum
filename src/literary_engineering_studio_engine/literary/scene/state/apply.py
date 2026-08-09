@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, MutableMapping
+
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
+from ruamel.yaml.error import YAMLError
 
 from ....atomic_io import atomic_write_batch
 from ....agent_tasks import agent_task_completion_status
@@ -115,7 +119,7 @@ def apply_character_state_patch(
         "applied_characters": applied,
         "update_count": total_updates,
         "guardrails": [
-            "只写回人物档案中的 state、arc、relationships 和 memory_refs。",
+            "只写回人物档案中的 state、arc、state.relationship_changes 和 memory_refs。",
             "不写 canon/facts.json，不确认世界观事实。",
             "重复执行时会尽量去重已有列表项。",
         ],
@@ -148,149 +152,104 @@ def _apply_one_character(text: str, patch: dict[str, Any], patch_path: Path, roo
     if not isinstance(relationship_updates, dict):
         relationship_updates = {}
 
-    result = text.rstrip() + "\n"
-    count = 0
-    result, changed = _append_nested_list(result, "state", "known_facts", _string_list(state_updates.get("known_facts_add")))
-    count += changed
-    result, changed = _append_nested_list(result, "state", "resources", _string_list(state_updates.get("resources_add")))
-    count += changed
-    result, changed = _set_nested_scalar(result, "state", "location", str(state_updates.get("location_note") or ""))
-    count += changed
-    result, changed = _set_nested_scalar(result, "state", "health", str(state_updates.get("health_note") or ""))
-    count += changed
-    result, changed = _append_nested_list(result, "arc", "required_trigger_events", _string_list(arc_updates.get("candidate_changes")))
-    count += changed
-    result, changed = _append_top_list(result, "relationships", _string_list(relationship_updates.get("candidate_changes")))
-    count += changed
-    result, changed = _append_top_list(result, "memory_refs", [f"state_patch:{_rel(patch_path, root)}"])
-    count += changed
-    return result, count
+    document = _load_character_yaml(text)
+    state = _ensure_mapping(document, "state")
+    arc = _ensure_mapping(document, "arc")
+    count = _migrate_legacy_relationship_events(document, state)
+    count += _extend_unique(state, "known_facts", _string_list(state_updates.get("known_facts_add")))
+    count += _extend_unique(state, "resources", _string_list(state_updates.get("resources_add")))
+    count += _set_scalar(state, "location", str(state_updates.get("location_note") or ""))
+    count += _set_scalar(state, "health", str(state_updates.get("health_note") or ""))
+    count += _extend_unique(arc, "required_trigger_events", _string_list(arc_updates.get("candidate_changes")))
+
+    # Relationship definitions are structured records.  Narrative deltas from
+    # a state patch belong in a separate event ledger; appending strings to the
+    # formal relationships list corrupts the character document shape.
+    count += _extend_unique(
+        state,
+        "relationship_changes",
+        _string_list(relationship_updates.get("candidate_changes")),
+    )
+    count += _extend_unique(document, "memory_refs", [f"state_patch:{_rel(patch_path, root)}"])
+    return _dump_character_yaml(document), count
 
 
-def _append_nested_list(text: str, section: str, key: str, items: list[str]) -> tuple[str, int]:
+def _migrate_legacy_relationship_events(
+    document: MutableMapping[str, Any],
+    state: MutableMapping[str, Any],
+) -> int:
+    """Move scalar relationship deltas written by older releases out of definitions."""
+
+    relationships = document.get("relationships")
+    if relationships is None:
+        return 0
+    if not isinstance(relationships, list):
+        raise RuntimeError("character field `relationships` must be a list")
+    legacy_events = [str(item).strip() for item in relationships if isinstance(item, str) and str(item).strip()]
+    if not legacy_events:
+        return 0
+    relationships[:] = [item for item in relationships if not isinstance(item, str)]
+    _extend_unique(state, "relationship_changes", legacy_events)
+    return len(legacy_events)
+
+
+def _load_character_yaml(text: str) -> MutableMapping[str, Any]:
+    try:
+        document = _yaml().load(text) or CommentedMap()
+    except YAMLError as exc:
+        raise RuntimeError(f"character file is not valid YAML: {exc}") from exc
+    if not isinstance(document, MutableMapping):
+        raise RuntimeError("character file root must be a YAML mapping")
+    return document
+
+
+def _dump_character_yaml(document: MutableMapping[str, Any]) -> str:
+    stream = StringIO()
+    _yaml().dump(document, stream)
+    return stream.getvalue()
+
+
+def _yaml() -> YAML:
+    yaml = YAML(typ="rt")
+    yaml.preserve_quotes = True
+    yaml.default_flow_style = False
+    yaml.allow_unicode = True
+    yaml.width = 4096
+    return yaml
+
+
+def _ensure_mapping(parent: MutableMapping[str, Any], key: str) -> MutableMapping[str, Any]:
+    value = parent.get(key)
+    if value is None:
+        value = CommentedMap()
+        parent[key] = value
+    if not isinstance(value, MutableMapping):
+        raise RuntimeError(f"character field `{key}` must be a mapping")
+    return value
+
+
+def _extend_unique(parent: MutableMapping[str, Any], key: str, items: list[str]) -> int:
     items = _clean_items(items)
     if not items:
-        return text, 0
-    lines = text.splitlines()
-    section_idx = _ensure_top_section(lines, section)
-    section_end = _top_section_end(lines, section_idx)
-    key_idx = _find_nested_key(lines, section_idx, section_end, key)
-    if key_idx < 0:
-        insert = [f"  {key}:"] + [f"    - {item}" for item in items]
-        lines[section_end:section_end] = insert
-        return "\n".join(lines) + "\n", len(items)
-
-    block_end = _nested_block_end(lines, key_idx)
-    existing = _existing_list_items(lines[key_idx:block_end])
-    new_items = [item for item in items if item not in existing]
-    if not new_items:
-        return text, 0
-    if block_end == key_idx + 1 or lines[key_idx].strip().endswith("[]"):
-        lines[key_idx] = f"  {key}:"
-        lines[key_idx + 1:key_idx + 1] = [f"    - {item}" for item in new_items]
-    else:
-        lines[block_end:block_end] = [f"    - {item}" for item in new_items]
-    return "\n".join(lines) + "\n", len(new_items)
+        return 0
+    value = parent.get(key)
+    if value is None:
+        value = CommentedSeq()
+        parent[key] = value
+    if not isinstance(value, list):
+        raise RuntimeError(f"character field `{key}` must be a list")
+    existing = {str(item).strip() for item in value if isinstance(item, str)}
+    additions = [item for item in items if item not in existing]
+    value.extend(additions)
+    return len(additions)
 
 
-def _set_nested_scalar(text: str, section: str, key: str, value: str) -> tuple[str, int]:
+def _set_scalar(parent: MutableMapping[str, Any], key: str, value: str) -> int:
     value = value.strip()
-    if not value:
-        return text, 0
-    lines = text.splitlines()
-    section_idx = _ensure_top_section(lines, section)
-    section_end = _top_section_end(lines, section_idx)
-    key_idx = _find_nested_key(lines, section_idx, section_end, key)
-    new_line = f"  {key}: {_yaml_quote(value)}"
-    if key_idx < 0:
-        lines[section_end:section_end] = [new_line]
-        return "\n".join(lines) + "\n", 1
-    if lines[key_idx] == new_line:
-        return text, 0
-    lines[key_idx] = new_line
-    return "\n".join(lines) + "\n", 1
-
-
-def _append_top_list(text: str, key: str, items: list[str]) -> tuple[str, int]:
-    items = _clean_items(items)
-    if not items:
-        return text, 0
-    lines = text.splitlines()
-    key_idx = _find_top_key(lines, key)
-    if key_idx < 0:
-        lines.extend([f"{key}:"] + [f"  - {item}" for item in items])
-        return "\n".join(lines) + "\n", len(items)
-    block_end = _top_list_end(lines, key_idx)
-    existing = _existing_list_items(lines[key_idx:block_end])
-    new_items = [item for item in items if item not in existing]
-    if not new_items:
-        return text, 0
-    if block_end == key_idx + 1 or lines[key_idx].strip().endswith("[]"):
-        lines[key_idx] = f"{key}:"
-        lines[key_idx + 1:key_idx + 1] = [f"  - {item}" for item in new_items]
-    else:
-        lines[block_end:block_end] = [f"  - {item}" for item in new_items]
-    return "\n".join(lines) + "\n", len(new_items)
-
-
-def _ensure_top_section(lines: list[str], section: str) -> int:
-    idx = _find_top_key(lines, section)
-    if idx >= 0:
-        return idx
-    if lines and lines[-1].strip():
-        lines.append("")
-    lines.append(f"{section}:")
-    return len(lines) - 1
-
-
-def _find_top_key(lines: list[str], key: str) -> int:
-    pattern = re.compile(rf"^{re.escape(key)}\s*:")
-    for idx, line in enumerate(lines):
-        if pattern.match(line):
-            return idx
-    return -1
-
-
-def _top_section_end(lines: list[str], start: int) -> int:
-    for idx in range(start + 1, len(lines)):
-        if lines[idx] and not lines[idx].startswith((" ", "-")) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:", lines[idx]):
-            return idx
-    return len(lines)
-
-
-def _find_nested_key(lines: list[str], section_idx: int, section_end: int, key: str) -> int:
-    pattern = re.compile(rf"^  {re.escape(key)}\s*:")
-    for idx in range(section_idx + 1, section_end):
-        if pattern.match(lines[idx]):
-            return idx
-    return -1
-
-
-def _nested_block_end(lines: list[str], key_idx: int) -> int:
-    for idx in range(key_idx + 1, len(lines)):
-        line = lines[idx]
-        if line and not line.startswith(" "):
-            return idx
-        if re.match(r"^  [A-Za-z_][A-Za-z0-9_]*\s*:", line):
-            return idx
-    return len(lines)
-
-
-def _top_list_end(lines: list[str], key_idx: int) -> int:
-    for idx in range(key_idx + 1, len(lines)):
-        line = lines[idx]
-        if line and not line.startswith(" "):
-            return idx
-    return len(lines)
-
-
-def _existing_list_items(lines: list[str]) -> set[str]:
-    items = set()
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("-"):
-            items.add(stripped.lstrip("-").strip())
-    return items
+    if not value or parent.get(key) == value:
+        return 0
+    parent[key] = value
+    return 1
 
 
 def _clean_items(items: list[str]) -> list[str]:
@@ -441,10 +400,6 @@ def _render_report(manifest: dict[str, object]) -> str:
 
 def _md_list(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items) if items else "- 无。"
-
-
-def _yaml_quote(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
 
 
 def _read(path: Path) -> str:

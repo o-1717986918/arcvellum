@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from ruamel.yaml import YAML
+
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.character_state_apply import apply_character_state_patch, state_patch_writeback_status
@@ -87,6 +89,70 @@ class StateWritebackContractTests(unittest.TestCase):
             self.assertEqual(manifest["patch_sha256"], digest)
             self.assertTrue(manifest["approval_matches_patch"])
             self.assertEqual(state_patch_writeback_status(root, "scene_0001")["status"], "pass")
+
+    def test_relationship_deltas_do_not_corrupt_structured_relationships(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            character = root / "characters" / "li.yml"
+            character.parent.mkdir(parents=True)
+            character.write_text(
+                "character_id: li\n"
+                "name: 李\n"
+                "relationships:\n"
+                "  - character_id: zhou\n"
+                "    relation: 合作者\n"
+                "  - 李与周形成受审计约束的合作。\n"
+                "state:\n"
+                "  known_facts: []\n"
+                "arc: {}\n",
+                encoding="utf-8",
+            )
+            patch_path = root / "characters" / "state_patches" / "scene_0001_state_patch.json"
+            patch_path.parent.mkdir(parents=True)
+            patch_payload = {
+                "scene_id": "scene_0001",
+                "characters": [
+                    {
+                        "character_id": "li",
+                        "name": "李",
+                        "file": "characters/li.yml",
+                        "proposed_updates": {
+                            "state": {"known_facts_add": [], "resources_add": [], "location_note": "", "health_note": ""},
+                            "arc": {"candidate_changes": []},
+                            "relationships": {"candidate_changes": ["李与周形成受审计约束的合作。"]},
+                        },
+                    }
+                ],
+                "unresolved_changes": [],
+            }
+            patch_path.write_text(json.dumps(patch_payload, ensure_ascii=False), encoding="utf-8")
+            digest = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+            review = patch_path.with_name("scene_0001_state_patch_review.json")
+            review.write_text(json.dumps({
+                "schema": "literary-engineering-workbench/state-patch-review/v1",
+                "scene_id": "scene_0001",
+                "status": "complete",
+                "source_artifact": "characters/state_patches/scene_0001_state_patch.json",
+                "state_patch_sha256": digest,
+                "evidence_paths": ["drafts/scenes/scene_0001.md"],
+                "verdict": "pass",
+                "findings": ["关系变化有正文依据。"],
+                "approval_recommendation": "approve",
+                "required_changes": [],
+            }, ensure_ascii=False), encoding="utf-8")
+            sidecar = patch_path.with_suffix(".agent_tasks.md")
+            sidecar.write_text("# state task\n", encoding="utf-8")
+            write_agent_completion_marker(sidecar, root=root, handled_by="reviewer-session")
+            record_workflow_approval(root, patch_path.stem, "approve", subject_sha256=digest)
+
+            first = apply_character_state_patch(root, patch=patch_path, approval_run_id=patch_path.stem)
+            second = apply_character_state_patch(root, patch=patch_path, approval_run_id=patch_path.stem)
+            payload = YAML(typ="safe").load(character.read_text(encoding="utf-8"))
+
+            self.assertEqual(first.update_count, 2)
+            self.assertEqual(second.update_count, 0)
+            self.assertTrue(all(isinstance(item, dict) for item in payload["relationships"]))
+            self.assertEqual(payload["state"]["relationship_changes"], ["李与周形成受审计约束的合作。"])
 
 
 if __name__ == "__main__":

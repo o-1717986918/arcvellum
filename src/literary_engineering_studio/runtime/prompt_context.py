@@ -78,7 +78,10 @@ def build_prepared_prompt_context(
             + ", ".join(overlap)
         )
     records = _load_records(workspace, paths)
-    if budget is not None and budget.mode is ContextBudgetMode.BOUNDED:
+    # ``context_must_inline_paths`` is a contract in every rollout mode. Shadow
+    # mode changes enforcement/reporting, not whether mandatory evidence may be
+    # displaced by a large optional source that happens to appear first.
+    if mandatory:
         records = _mandatory_first(records, mandatory)
         _validate_mandatory_records(records, mandatory, inline_limit)
     selected = _select_records(
@@ -139,6 +142,13 @@ def _validate_mandatory_records(
     mandatory: set[str],
     inline_limit: int,
 ) -> None:
+    record_paths = {record.relative for record in records}
+    undeclared = sorted(mandatory - record_paths)
+    if undeclared:
+        raise ContextBudgetExceeded(
+            "bounded context mandatory paths are absent from the authorized context set: "
+            + ", ".join(undeclared)
+        )
     unavailable = [
         record.relative
         for record in records

@@ -54,7 +54,7 @@ def probe_agent_runner(
                 models = list(event["model_usage"])
                 if models:
                     actual_model = actual_model or str(models[0])
-        output = result.output_path.read_text(encoding="utf-8", errors="replace") if result.output_path else ""
+        output = _read_runtime_output(result.output_path)
         output_tail = output[-2000:]
         configured_model = str(settings.get("model") or "")
         model_matches = not (configured_model and actual_model) or _models_compatible(configured_model, actual_model)
@@ -100,6 +100,12 @@ def _read_events(path: Path) -> list[dict[str, Any]]:
         if isinstance(payload, dict):
             events.append(payload)
     return events
+
+
+def _read_runtime_output(path: Path | None) -> str:
+    if path is None or not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
 
 
 def _models_compatible(requested: str, actual: str) -> bool:
