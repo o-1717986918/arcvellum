@@ -23,7 +23,7 @@ def normalize_opencode_event(
         part = properties.get("part") if isinstance(properties.get("part"), dict) else {}
         part_type = str(part.get("type") or "")
         if part_type == "reasoning":
-            return ()
+            return (("runner.reasoning.activity", {"session_id": event_session}),)
         if part_type == "text":
             delta = properties.get("delta")
             if isinstance(delta, str) and delta:

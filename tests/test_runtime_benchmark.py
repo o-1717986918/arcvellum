@@ -17,29 +17,29 @@ CATALOG = Path(__file__).parent / "fixtures" / "runtime_benchmarks" / "catalog.j
 
 
 class RuntimeBenchmarkTests(unittest.TestCase):
-    def test_catalog_covers_five_classes_and_marks_deep_prose_fixture_pending(self):
+    def test_catalog_covers_five_ready_runtime_classes(self):
         cases = load_benchmark_catalog(CATALOG)
         self.assertEqual(len(cases), 5)
         self.assertEqual(
             {item.benchmark_class for item in cases},
             {"structured", "analysis", "prose", "review", "planning"},
         )
-        prose = next(item for item in cases if item.benchmark_class == "prose")
-        self.assertEqual(prose.availability, "pending-p0b")
+        self.assertTrue(all(item.availability == "ready" for item in cases))
 
-    def test_all_ready_cases_are_reconstructed_through_real_deterministic_prefix(self):
+    def test_all_ready_cases_are_reconstructed_through_real_route_prefix(self):
         cases = [item for item in load_benchmark_catalog(CATALOG) if item.availability == "ready"]
         with tempfile.TemporaryDirectory() as temporary:
             results = [
                 reconstruct_benchmark_case(case, Path(temporary) / case.case_id)
                 for case in cases
             ]
-        self.assertEqual(len(results), 4)
+        self.assertEqual(len(results), 5)
         self.assertEqual(
             {item.current_state for item in results},
             {
                 "asset-creation-agent-task",
                 "roleplay-agent-task",
+                "candidate-generation-provenance",
                 "canon-review-agent-task",
                 "story-architecture-agent-task",
             },
@@ -47,8 +47,14 @@ class RuntimeBenchmarkTests(unittest.TestCase):
         for result in results:
             self.assertEqual(result.execution_policy, "agent-required")
             self.assertGreaterEqual(result.deterministic_steps, 1)
+            self.assertEqual(
+                result.preparation_steps,
+                result.deterministic_steps + result.synthetic_agent_steps,
+            )
             self.assertEqual(len(result.task_contract_sha256), 64)
             self.assertNotIn("project_root", result.safe_projection())
+        prose = next(item for item in results if item.benchmark_class == "prose")
+        self.assertEqual(prose.synthetic_agent_steps, 3)
 
     def test_historical_report_omits_paths_prompts_and_reasoning_text(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -72,7 +78,15 @@ class RuntimeBenchmarkTests(unittest.TestCase):
                         "context_budget": {"task_kind": "review", "mode": "shadow"},
                         "prepared_context_cache": {"status": "disabled"},
                         "execution_contract": {"agent_role": "main-review-agent"},
-                        "runtime_metadata": {"time_to_first_event_ms": 200, "total_ms": 2000},
+                        "runtime_metadata": {
+                            "time_to_process_ready_ms": 20,
+                            "time_to_session_created_ms": 40,
+                            "time_to_prompt_submitted_ms": 60,
+                            "time_to_first_reasoning_ms": 120,
+                            "time_to_first_event_ms": 200,
+                            "time_to_first_output_ms": 350,
+                            "total_ms": 2000,
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -96,6 +110,8 @@ class RuntimeBenchmarkTests(unittest.TestCase):
         self.assertNotIn("private-character-name", encoded)
         self.assertIn("model-a", markdown)
         self.assertEqual(report["samples"][0]["usage"]["total_tokens"], 17)
+        self.assertEqual(report["samples"][0]["time_to_first_reasoning_ms"], 120)
+        self.assertEqual(report["samples"][0]["time_to_first_output_ms"], 350)
 
 
 if __name__ == "__main__":

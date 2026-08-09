@@ -36,12 +36,12 @@
       "title": "远行者运行时基线",
       "premise": "一名少年在五卷旅程中从控制同伴转向共同承担。",
       "work_type": "novel",
-      "target_length": 120000,
+      "target_length": 30000,
       "route": "scene-development",
       "preparation": "synthetic-scene-closure",
-      "expected_state": "generation-agent-task",
-      "availability": "pending-p0b",
-      "rationale": "必须由合成场景正式闭环生成，禁止手写脱离状态机的 prose task。"
+      "expected_state": "candidate-generation-provenance",
+      "availability": "ready",
+      "rationale": "由合成场景沿正式状态机闭合推演、分支与 composition 前置链后领取真实正文创作任务。"
     },
     {
       "case_id": "review-project-canon",

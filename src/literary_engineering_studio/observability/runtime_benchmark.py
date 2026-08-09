@@ -9,11 +9,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ..application.config import default_config
-from ..contracts import TaskPackage, load_task_package
-from ..runtime.worker import AgentWorker
 from .throughput_metrics import build_throughput_projection
+from .runtime_benchmark_preparation import drive_benchmark_preparation
+from .runtime_benchmark_scene import seed_synthetic_scene
 from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
-from literary_engineering_studio_engine.tasking.registry import issue_next_task
 
 
 CATALOG_SCHEMA = "arcvellum/runtime-benchmark-catalog/v1"
@@ -52,7 +51,9 @@ class ReconstructedBenchmark:
     task_json_sha256: str
     task_markdown_sha256: str
     task_contract_sha256: str
+    preparation_steps: int
     deterministic_steps: int
+    synthetic_agent_steps: int
 
     def safe_projection(self) -> dict[str, object]:
         payload = asdict(self)
@@ -89,7 +90,7 @@ def reconstruct_benchmark_case(
         raise RuntimeError(
             f"benchmark case {case.case_id} is not reconstructable yet: {case.availability}"
         )
-    if case.preparation != "deterministic-prefix":
+    if case.preparation not in {"deterministic-prefix", "synthetic-scene-closure"}:
         raise ValueError(f"unsupported benchmark preparation: {case.preparation}")
     project = destination.resolve()
     if project.exists():
@@ -103,11 +104,19 @@ def reconstruct_benchmark_case(
             target_length=case.target_length,
         )
     )
+    if case.preparation == "synthetic-scene-closure":
+        seed_synthetic_scene(project)
     runtime_config = dict(config or default_config())
     worker_config = dict(runtime_config.get("worker") or {})
     worker_config["runs_root"] = str(project.parent / ".runtime-benchmark-runs")
     runtime_config["worker"] = worker_config
-    task, steps = _drive_deterministic_prefix(project, case, runtime_config)
+    task, deterministic_steps, synthetic_agent_steps = drive_benchmark_preparation(
+        project,
+        route=case.route,
+        expected_state=case.expected_state,
+        preparation=case.preparation,
+        config=runtime_config,
+    )
     return ReconstructedBenchmark(
         schema=RECONSTRUCTION_SCHEMA,
         case_id=case.case_id,
@@ -127,7 +136,9 @@ def reconstruct_benchmark_case(
                 "markdown_sha256": _file_digest(task.task_markdown_path),
             }
         ),
-        deterministic_steps=steps,
+        preparation_steps=deterministic_steps + synthetic_agent_steps,
+        deterministic_steps=deterministic_steps,
+        synthetic_agent_steps=synthetic_agent_steps,
     )
 
 
@@ -168,46 +179,6 @@ def render_historical_report_markdown(report: Mapping[str, object]) -> str:
             continue
         lines.append(_markdown_sample_row(row))
     return "\n".join(lines) + "\n"
-
-
-def _drive_deterministic_prefix(
-    project: Path,
-    case: BenchmarkCase,
-    config: dict[str, Any],
-) -> tuple[TaskPackage, int]:
-    worker = AgentWorker(config)
-    for step in range(12):
-        issued = issue_next_task(project, route=case.route)
-        if issued.status != "issued" or not issued.task_id:
-            raise RuntimeError(
-                f"benchmark route became {issued.status} before {case.expected_state}: {case.route}"
-            )
-        task = load_task_package(
-            project,
-            project / "workflow" / "tasks" / f"{issued.task_id}.task.json",
-        )
-        if task.current_state == case.expected_state:
-            if task.execution_contract.execution_policy != "agent-required":
-                raise RuntimeError(
-                    f"benchmark target is not an Agent task: {task.current_state}"
-                )
-            return task, step
-        if task.execution_contract.execution_policy != "deterministic":
-            raise RuntimeError(
-                "benchmark deterministic prefix reached an unexpected Agent task: "
-                f"{task.current_state}"
-            )
-        result = worker.run_once(
-            project,
-            route=case.route,
-            runtime_id="opencode",
-            task_id=task.task_id,
-        )
-        if result.status != "complete":
-            raise RuntimeError(
-                f"benchmark deterministic prefix failed at {task.current_state}: {result.message}"
-            )
-    raise RuntimeError(f"benchmark deterministic prefix exceeded 12 steps: {case.case_id}")
 
 
 def _historical_sample(path: Path) -> dict[str, object] | None:
@@ -305,9 +276,14 @@ def _sample_timings(
     updated = str(manifest.get("updated_at") or "")
     total = _integer(runtime_metadata.get("total_ms")) or _elapsed_ms(created, updated)
     return {
+        "time_to_process_ready_ms": _available_integer(runtime_metadata.get("time_to_process_ready_ms")),
+        "time_to_session_created_ms": _available_integer(runtime_metadata.get("time_to_session_created_ms")),
+        "time_to_prompt_submitted_ms": _available_integer(runtime_metadata.get("time_to_prompt_submitted_ms")),
+        "time_to_first_reasoning_ms": _available_integer(runtime_metadata.get("time_to_first_reasoning_ms")),
         "time_to_first_event_ms": _available_integer(runtime_metadata.get("time_to_first_event_ms")),
         "time_to_first_text_ms": _available_integer(runtime_metadata.get("time_to_first_text_ms")),
         "time_to_first_tool_ms": _available_integer(runtime_metadata.get("time_to_first_tool_ms")),
+        "time_to_first_output_ms": _available_integer(runtime_metadata.get("time_to_first_output_ms")),
         "total_ms": total or "unavailable",
     }
 

@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：已按实际仓库完成实施前审计；P0A 已完成，P0B-P5 待实施
+> 状态：已按实际仓库完成实施前审计；P0 已完成，P1-P5 待实施
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -1169,7 +1169,16 @@ P5 的 Pi CLI 只用于开发实验，不进入安装包。新增专用 sidecar 
 
 **目标**：没有基线，不开始替换运行时。
 
-**实施状态（2026-08-09）**：P0A 已完成。仓库已有五类脱敏 catalog、四类可从空目录经真实确定性前缀重建的任务、历史运行报告器与三次稳定摘要证据；prose 合成场景闭环、OpenCode live smoke 和 transport/thinking/text/tool 分时属于 P0B，不计作已完成。
+**实施状态（2026-08-09）**：P0 已完成。仓库已有五类脱敏 catalog；全部 case 均从空目录初始化并经权威路线领取真实 `TaskPackage`。其中 prose case 通过三项受控合成语义前置任务闭合到真正负责正文的 `candidate-generation-provenance`，没有把残余回执状态 `generation-agent-task` 误当正文任务。历史报告三次生成摘要一致；OpenCode analysis live smoke 已完成并保留脱敏报告。
+
+实测基线：
+
+- Runner：OpenCode `1.18.3`，模型 `opencode/deepseek-v4-flash-free`；
+- 进程就绪 `1224 ms`，会话建立 `1398 ms`，prompt 提交 `1578 ms`；
+- 首个 reasoning 活性 `12013 ms`，首个公开事件/工具调用 `174787 ms`，首个有效输出 `210151 ms`；
+- 总耗时 `232568 ms`，最终状态 `waiting_writeback`，说明候选通过执行与预检并进入正式写回审批；
+- prepared context `40303` 字符，context mode 为 `shadow`，prepared cache 为 `disabled`；
+- 本次数据支持 P3：reasoning 真实存在但未计入公开活性；也支持 P4：上下文和缓存仍有明确优化空间；不支持把慢点归因于进程启动。
 
 工作：
 
@@ -1189,6 +1198,7 @@ tests/fixtures/runtime_benchmarks/
   catalog.json
 scripts/runtime_benchmark.py
 docs/benchmarks/runtime-baseline-*.md
+docs/benchmarks/runtime-live-smoke-*.json
 ```
 
 验收：

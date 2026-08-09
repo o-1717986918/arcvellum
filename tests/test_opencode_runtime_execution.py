@@ -111,6 +111,32 @@ class _QuotaFailureClient(_Client):
         ]
 
 
+class _ObservableClient(_Client):
+    def events(self, _stop):
+        return iter(
+            [
+                {
+                    "type": "message.part.updated",
+                    "properties": {
+                        "delta": "private reasoning",
+                        "part": {"type": "reasoning", "sessionID": "session-fixed"},
+                    },
+                },
+                {
+                    "type": "message.part.updated",
+                    "properties": {
+                        "delta": "公开进度",
+                        "part": {"type": "text", "sessionID": "session-fixed"},
+                    },
+                },
+                {
+                    "type": "file.edited",
+                    "properties": {"sessionID": "session-fixed", "file": "output.json"},
+                },
+            ]
+        )
+
+
 class _PreparedRepair:
     prompt = "# Bounded Repair"
 
@@ -123,6 +149,47 @@ class _PreparedRepair:
 
 
 class OpenCodeRuntimeExecutionTests(unittest.TestCase):
+    def test_runtime_reports_content_free_transport_and_output_timings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = root / "prompt.md"
+            prompt.write_text("执行正式任务", encoding="utf-8")
+            runtime = OpenCodeRuntime({"model": "fixture/model", "models": {"worker": "fixture/model"}})
+            runtime.runtime_pool = _Pool(_ObservableClient())
+            events = []
+
+            with patch(
+                "literary_engineering_studio.runtimes.opencode.locate_opencode",
+                return_value=Path("opencode.exe"),
+            ):
+                result = runtime.execute(
+                    workspace,
+                    prompt,
+                    run_root,
+                    timeout=10,
+                    event_sink=lambda event, data: events.append((event, data)),
+                )
+
+        self.assertEqual(result.status, "completed")
+        for key in (
+            "time_to_process_ready_ms",
+            "time_to_session_created_ms",
+            "time_to_prompt_submitted_ms",
+            "time_to_first_reasoning_ms",
+            "time_to_first_text_ms",
+            "time_to_first_output_ms",
+            "total_ms",
+        ):
+            self.assertIn(key, result.metadata)
+        serialized = str(events)
+        self.assertNotIn("private reasoning", serialized)
+        self.assertIn("runner.first_reasoning", serialized)
+        self.assertIn("runner.first_output", serialized)
+
     def test_provider_aborted_message_is_retryable(self):
         self.assertTrue(
             _is_transient_stream_failure(

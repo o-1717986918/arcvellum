@@ -16,7 +16,6 @@ from ..config import default_data_root
 from ..opencode_binary import bundle_manifest, ensure_opencode_integrity, locate_opencode
 from ..opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
-from ..runtime_events import merge_usage_summary, normalize_opencode_event
 from ..runtime.context_access import summarize_context_access
 from ..subprocess_utils import run_hidden
 from .base import (
@@ -33,9 +32,9 @@ from .opencode_repair import (
 from .opencode_failures import (
     classify_model_error as _classify_model_error,
     is_transient_stream_failure as _is_transient_stream_failure,
-    normalize_model_warning,
     public_model_error as _public_model_error,
 )
+from .opencode_event_observer import OpenCodeEventObserver
 from .opencode_session import (
     cross_task_session_reuse_assessment,
     execution_identity,
@@ -44,6 +43,7 @@ from .opencode_session import (
     session_timeout_policy,
 )
 from .opencode_timeout import timeout_runtime_result
+from .opencode_timing import OpenCodeTiming, attach_timing
 from .opencode_wait import wait_for_session as _wait_for_session
 
 
@@ -156,12 +156,8 @@ class OpenCodeRuntime(AgentRuntime):
         session_id = ""
         errors: list[str] = []
         tool_states: dict[str, str] = {}
-        execution_started = time.monotonic()
-        first_public_event = False
-        first_public_event_ms = 0
-        first_text_ms = 0
-        first_tool_ms = 0
-        usage_summary: dict[str, Any] = {}
+        timing = OpenCodeTiming()
+        execution_started = timing.started_at
         context_access: dict[str, object] = {}
         activity_lock = threading.Lock()
         last_activity_at = execution_started
@@ -198,6 +194,7 @@ class OpenCodeRuntime(AgentRuntime):
             )
             component_id = role_client.component_id
             health = client.health()
+            process_ready_ms = timing.mark("process_ready")
             emit(
                 "runner.process.started",
                 {
@@ -206,57 +203,45 @@ class OpenCodeRuntime(AgentRuntime):
                     "component_id": component_id,
                     "reused": bool(lease.reused) if lease is not None else False,
                     "generation": lease.generation if lease is not None else 1,
-                    "elapsed_ms": round((time.monotonic() - execution_started) * 1000),
+                    "elapsed_ms": process_ready_ms,
                 },
             )
             session = client.create_session(f"Studio {role.value} {run_root.name}")
             session_id = str(session.get("id") or "")
             if not session_id:
                 raise RuntimeError("OpenCode did not return a session id")
+            session_created_ms = timing.mark("session_created")
             session_path.write_text(json.dumps(session, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             emit(
                 "runner.session.created",
-                {"session_id": session_id, "elapsed_ms": round((time.monotonic() - execution_started) * 1000)},
+                {"session_id": session_id, "elapsed_ms": session_created_ms},
             )
             emit(
                 "runner.session.reuse_assessed",
                 {"session_id": session_id, **session_reuse},
             )
 
-            def consume_events() -> None:
-                nonlocal first_public_event, first_public_event_ms, first_text_ms, first_tool_ms
-                try:
-                    for raw in client.events(event_stop):
-                        for name, data in normalize_opencode_event(raw, session_id=session_id, tool_states=tool_states):
-                            event_session = str(data.get("session_id") or "")
-                            if not event_session or event_session == session_id:
-                                mark_activity()
-                            if name in {"agent.message.delta", "tool.started"} and not first_public_event:
-                                first_public_event = True
-                                first_public_event_ms = round((time.monotonic() - execution_started) * 1000)
-                                emit(
-                                    "runner.first_event",
-                                    {"session_id": session_id, "elapsed_ms": first_public_event_ms},
-                                )
-                            if name == "agent.message.delta" and not first_text_ms:
-                                first_text_ms = round((time.monotonic() - execution_started) * 1000)
-                                emit("runner.first_text", {"session_id": session_id, "elapsed_ms": first_text_ms})
-                            if name == "tool.started" and not first_tool_ms:
-                                first_tool_ms = round((time.monotonic() - execution_started) * 1000)
-                                emit("runner.first_tool", {"session_id": session_id, "elapsed_ms": first_tool_ms})
-                            if name == "usage.updated":
-                                merge_usage_summary(usage_summary, data)
-                            data = normalize_model_warning(name, data, errors)
-                            emit(name, data)
-                except (RuntimeError, OSError, TimeoutError) as exc:
-                    if not event_stop.is_set():
-                        emit("runner.warning", {"session_id": session_id, "kind": "event-stream", "detail": str(exc)})
+            observer = OpenCodeEventObserver(
+                session_id=session_id,
+                timing=timing,
+                emit=emit,
+                mark_activity=mark_activity,
+                errors=errors,
+                tool_states=tool_states,
+            )
 
-            event_thread = threading.Thread(target=consume_events, name=f"les-opencode-events-{session_id}", daemon=True)
+            event_thread = threading.Thread(
+                target=observer.consume,
+                args=(client, event_stop),
+                name=f"les-opencode-events-{session_id}",
+                daemon=True,
+            )
             event_thread.start()
             prompt = self.load_execution_prompt(prompt_path)
             client.prompt_async(session_id, text=prompt, model=model, agent=agent_id)
+            prompt_submitted_ms = timing.mark("prompt_submitted")
             mark_activity()
+            emit("runner.prompt.submitted", {"session_id": session_id, "elapsed_ms": prompt_submitted_ms})
             emit("runner.session.started", {"runner_id": self.runtime_id, "session_id": session_id, "model": model})
             deadline = time.monotonic() + max(1, int(timeout))
             timeout_policy = session_timeout_policy(self.settings, role)
@@ -267,14 +252,17 @@ class OpenCodeRuntime(AgentRuntime):
                 cancellation,
                 first_event_timeout=timeout_policy.first_event_seconds,
                 inter_event_timeout=timeout_policy.inter_event_seconds,
-                has_public_activity=lambda: first_public_event,
+                has_public_activity=lambda: observer.public_activity,
                 started_at=execution_started,
                 last_activity=last_activity,
             )
             if wait_status == "cancelled":
                 emit("run.stopped", {"session_id": session_id, "reason": "cancelled"})
                 emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "cancelled"})
-                return RuntimeResult(self.runtime_id, "cancelled", None, self.build_command(workspace), output_path, "runtime cancelled")
+                return attach_timing(
+                    RuntimeResult(self.runtime_id, "cancelled", None, self.build_command(workspace), output_path, "runtime cancelled"),
+                    timing,
+                )
             terminal = timeout_runtime_result(
                 wait_status,
                 runtime_id=self.runtime_id,
@@ -290,7 +278,7 @@ class OpenCodeRuntime(AgentRuntime):
                 emit=emit,
             )
             if terminal is not None:
-                return terminal
+                return attach_timing(terminal, timing)
 
             repair_result = run_open_code_repairs(
                 client=client,
@@ -314,15 +302,18 @@ class OpenCodeRuntime(AgentRuntime):
             repairs = repair_result.repairs
             final_preflight = repair_result.preflight
             if repair_result.status != "passed":
-                return repair_failure_result(
-                    repair_result,
-                    runtime_id=self.runtime_id,
-                    command=self.build_command(workspace),
-                    client=client,
-                    session_id=session_id,
-                    model=model,
-                    output_path=output_path,
-                    emit=emit,
+                return attach_timing(
+                    repair_failure_result(
+                        repair_result,
+                        runtime_id=self.runtime_id,
+                        command=self.build_command(workspace),
+                        client=client,
+                        session_id=session_id,
+                        model=model,
+                        output_path=output_path,
+                        emit=emit,
+                    ),
+                    timing,
                 )
 
             messages = client.messages(session_id)
@@ -365,19 +356,22 @@ class OpenCodeRuntime(AgentRuntime):
                         "retryable": retryable,
                     },
                 )
-                return RuntimeResult(
-                    self.runtime_id,
-                    "failed",
-                    1,
-                    self.build_command(workspace),
-                    output_path,
-                    public_message,
-                    {
-                        "session_id": session_id,
-                        "failure_kind": failure_kind.value,
-                        "retryable": retryable,
-                        "diagnostic_error": raw_error,
-                    },
+                return attach_timing(
+                    RuntimeResult(
+                        self.runtime_id,
+                        "failed",
+                        1,
+                        self.build_command(workspace),
+                        output_path,
+                        public_message,
+                        {
+                            "session_id": session_id,
+                            "failure_kind": failure_kind.value,
+                            "retryable": retryable,
+                            "diagnostic_error": raw_error,
+                        },
+                    ),
+                    timing,
                 )
             emit("agent.message.completed", {"session_id": session_id, "text": assistant_text})
             emit("runner.session.finished", {"session_id": session_id, "model": model, "status": "complete"})
@@ -402,11 +396,9 @@ class OpenCodeRuntime(AgentRuntime):
                     "generation": lease.generation if lease is not None else 1,
                     "repairs": repairs,
                     "preflight": final_preflight.as_dict() if final_preflight is not None else {},
-                    "time_to_first_event_ms": first_public_event_ms,
-                    "time_to_first_text_ms": first_text_ms,
-                    "time_to_first_tool_ms": first_tool_ms,
-                    "total_ms": round((time.monotonic() - execution_started) * 1000),
-                    "usage": usage_summary,
+                    "time_to_first_event_ms": _first_public_event_ms(timing),
+                    **timing.metadata(),
+                    "usage": observer.usage_summary,
                     "context_access": context_access,
                 },
             )
@@ -428,6 +420,7 @@ class OpenCodeRuntime(AgentRuntime):
                     "failure_kind": RuntimeFailureKind.PROCESS_CRASH.value,
                     "retryable": True,
                     "session_id": session_id,
+                    **timing.metadata(),
                 },
             )
         finally:
@@ -440,6 +433,19 @@ class OpenCodeRuntime(AgentRuntime):
                 event_thread.join(timeout=3)
             if manager is not None:
                 manager.shutdown()
+
+
+def _first_public_event_ms(timing: OpenCodeTiming) -> int:
+    metadata = timing.metadata(include_total=False)
+    values = [
+        int(value)
+        for value in (
+            metadata.get("time_to_first_text_ms"),
+            metadata.get("time_to_first_tool_ms"),
+        )
+        if value is not None
+    ]
+    return min(values) if values else 0
 
 
 def _assistant_result(messages: list[dict[str, Any]]) -> tuple[str, str]:

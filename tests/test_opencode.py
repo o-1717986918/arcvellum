@@ -206,11 +206,18 @@ class OpenCodeFoundationTests(unittest.TestCase):
         self.assertEqual(settings["models"]["advisor"], "alibaba-cn/qwen-plus")
         self.assertNotEqual(settings["models"]["worker"], "opencode/deepseek-v4-flash-free")
 
-    def test_event_normalizer_drops_reasoning_and_keeps_text_delta(self):
+    def test_event_normalizer_reduces_reasoning_to_content_free_activity(self):
         reasoning = normalize_opencode_event(
-            {"type": "message.part.updated", "properties": {"part": {"type": "reasoning"}}}
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "delta": "private chain text",
+                    "part": {"type": "reasoning", "sessionID": "ses_fixture"},
+                },
+            }
         )
-        self.assertEqual(reasoning, ())
+        self.assertEqual(reasoning[0][0], "runner.reasoning.activity")
+        self.assertNotIn("private chain text", json.dumps(reasoning))
         text = normalize_opencode_event(
             {
                 "type": "message.part.updated",

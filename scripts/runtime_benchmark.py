@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import sys
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,7 @@ from literary_engineering_studio.observability.runtime_benchmark import (
     reconstruct_benchmark_case,
     render_historical_report_markdown,
 )
+from literary_engineering_studio.observability.runtime_benchmark_live import run_live_benchmark
 
 
 DEFAULT_CATALOG = ROOT / "tests" / "fixtures" / "runtime_benchmarks" / "catalog.json"
@@ -41,6 +44,18 @@ def main(argv: list[str] | None = None) -> int:
     historical.add_argument("--output", type=Path, required=True)
     historical.add_argument("--markdown", type=Path)
     historical.add_argument("--limit", type=int, default=0)
+
+    live = subparsers.add_parser("live", help="Run one explicit live-model smoke benchmark.")
+    live.add_argument("case_id")
+    live.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+    live.add_argument("--runtime", default="opencode")
+    live.add_argument("--timeout-seconds", type=int, default=300)
+    live.add_argument("--output", type=Path, required=True)
+    live.add_argument(
+        "--confirm-live-model",
+        action="store_true",
+        help="Acknowledge that this command invokes the selected live model.",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "catalog":
@@ -65,13 +80,31 @@ def main(argv: list[str] | None = None) -> int:
         if args.case_id not in cases:
             parser.error(f"unknown benchmark case: {args.case_id}")
         payload = reconstruct_benchmark_case(cases[args.case_id], args.destination).safe_projection()
-    else:
+    elif args.command == "historical":
         payload = build_historical_runtime_report(args.runs_root, limit=max(0, args.limit))
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if args.markdown:
             args.markdown.parent.mkdir(parents=True, exist_ok=True)
             args.markdown.write_text(render_historical_report_markdown(payload), encoding="utf-8")
+    else:
+        if not args.confirm_live_model:
+            parser.error("live benchmark requires --confirm-live-model")
+        cases = {item.case_id: item for item in load_benchmark_catalog(args.catalog)}
+        if args.case_id not in cases:
+            parser.error(f"unknown benchmark case: {args.case_id}")
+        temporary = Path(tempfile.mkdtemp(prefix="arcvellum-runtime-live-"))
+        try:
+            payload = run_live_benchmark(
+                cases[args.case_id],
+                temporary / "project",
+                runtime_id=args.runtime,
+                timeout_seconds=args.timeout_seconds,
+            )
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
