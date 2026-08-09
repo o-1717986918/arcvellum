@@ -1,0 +1,75 @@
+{
+  "schema": "arcvellum/runtime-benchmark-catalog/v1",
+  "cases": [
+    {
+      "case_id": "structured-world-foundation",
+      "benchmark_class": "structured",
+      "fixture_id": "linear-mystery",
+      "title": "雨钟疑案运行时基线",
+      "premise": "一名修钟匠追查每夜提前响起的钟。",
+      "work_type": "novel",
+      "target_length": 30000,
+      "route": "character-and-world-assets",
+      "preparation": "deterministic-prefix",
+      "expected_state": "asset-creation-agent-task",
+      "availability": "ready",
+      "rationale": "多输出资产任务，用于衡量结构化候选与报告的完整提交。"
+    },
+    {
+      "case_id": "analysis-scene-roleplay",
+      "benchmark_class": "analysis",
+      "fixture_id": "multi-party-conflict",
+      "title": "盐港三方运行时基线",
+      "premise": "港口税令迫使商会、渔民与巡防队重新站队。",
+      "work_type": "novel",
+      "target_length": 60000,
+      "route": "scene-development",
+      "preparation": "deterministic-prefix",
+      "expected_state": "roleplay-agent-task",
+      "availability": "ready",
+      "rationale": "需要因果、角色与世界后果推演的分析任务。"
+    },
+    {
+      "case_id": "prose-scene-generation",
+      "benchmark_class": "prose",
+      "fixture_id": "multi-volume-growth",
+      "title": "远行者运行时基线",
+      "premise": "一名少年在五卷旅程中从控制同伴转向共同承担。",
+      "work_type": "novel",
+      "target_length": 120000,
+      "route": "scene-development",
+      "preparation": "synthetic-scene-closure",
+      "expected_state": "generation-agent-task",
+      "availability": "pending-p0b",
+      "rationale": "必须由合成场景正式闭环生成，禁止手写脱离状态机的 prose task。"
+    },
+    {
+      "case_id": "review-project-canon",
+      "benchmark_class": "review",
+      "fixture_id": "dense-canon-world",
+      "title": "浮城条约运行时基线",
+      "premise": "浮城的空气配给条例与旧条约同时失效。",
+      "work_type": "novel",
+      "target_length": 80000,
+      "route": "review-and-audit",
+      "preparation": "deterministic-prefix",
+      "expected_state": "canon-review-agent-task",
+      "availability": "ready",
+      "rationale": "精确证据、结构化结论和独立审查任务。"
+    },
+    {
+      "case_id": "planning-story-architecture",
+      "benchmark_class": "planning",
+      "fixture_id": "multi-volume-growth",
+      "title": "远行者规划运行时基线",
+      "premise": "一名少年在五卷旅程中从控制同伴转向共同承担。",
+      "work_type": "novel",
+      "target_length": 120000,
+      "route": "longform-planning",
+      "preparation": "deterministic-prefix",
+      "expected_state": "story-architecture-agent-task",
+      "availability": "ready",
+      "rationale": "长篇结构、事件库存、时间跨度和章节功能规划任务。"
+    }
+  ]
+}
