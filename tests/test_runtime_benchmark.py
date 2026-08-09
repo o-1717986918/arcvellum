@@ -11,6 +11,8 @@ from literary_engineering_studio.observability.runtime_benchmark import (
     reconstruct_benchmark_case,
     render_historical_report_markdown,
 )
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 
 
 CATALOG = Path(__file__).parent / "fixtures" / "runtime_benchmarks" / "catalog.json"
@@ -19,7 +21,7 @@ CATALOG = Path(__file__).parent / "fixtures" / "runtime_benchmarks" / "catalog.j
 class RuntimeBenchmarkTests(unittest.TestCase):
     def test_catalog_covers_five_ready_runtime_classes(self):
         cases = load_benchmark_catalog(CATALOG)
-        self.assertEqual(len(cases), 5)
+        self.assertEqual(len(cases), 6)
         self.assertEqual(
             {item.benchmark_class for item in cases},
             {"structured", "analysis", "prose", "review", "planning"},
@@ -33,13 +35,14 @@ class RuntimeBenchmarkTests(unittest.TestCase):
                 reconstruct_benchmark_case(case, Path(temporary) / case.case_id)
                 for case in cases
             ]
-        self.assertEqual(len(results), 5)
+        self.assertEqual(len(results), 6)
         self.assertEqual(
             {item.current_state for item in results},
             {
                 "asset-creation-agent-task",
                 "roleplay-agent-task",
                 "candidate-generation-provenance",
+                "candidate-review",
                 "canon-review-agent-task",
                 "story-architecture-agent-task",
             },
@@ -55,6 +58,45 @@ class RuntimeBenchmarkTests(unittest.TestCase):
             self.assertNotIn("project_root", result.safe_projection())
         prose = next(item for item in results if item.benchmark_class == "prose")
         self.assertEqual(prose.synthetic_agent_steps, 3)
+        scene_review = next(item for item in results if item.case_id == "review-scene-candidate")
+        self.assertEqual(scene_review.synthetic_agent_steps, 4)
+
+    def test_scene_review_benchmark_uses_exact_candidate_context_contract(self):
+        case = next(
+            item
+            for item in load_benchmark_catalog(CATALOG)
+            if item.case_id == "review-scene-candidate"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            result = reconstruct_benchmark_case(case, Path(temporary) / case.case_id)
+            task = json.loads(
+                (result.project_root / "workflow" / "tasks" / f"{result.task_id}.task.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            candidate = "drafts/candidates/scene_0001-platform-agent.md"
+            evidence = task.get("context_evidence_contract")
+            self.assertEqual(task["current_state"], "candidate-review")
+            self.assertEqual(task["candidate"], candidate)
+            self.assertIn(candidate, task["agent_source_paths"])
+            self.assertIsInstance(evidence, dict)
+            self.assertEqual(
+                evidence.get("schema"),
+                "literary-engineering-workbench/scene-review-context-declaration/v1",
+            )
+            CoreBridge(default_config()).execute_task_command(
+                task["command"],
+                result.project_root,
+            )
+            context = json.loads(
+                (result.project_root / evidence["artifact_path"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                context.get("schema"),
+                "literary-engineering-workbench/scene-review-context/v1",
+            )
+            self.assertEqual(context["candidate"]["path"], candidate)
+            self.assertEqual(context["deterministic_evidence"]["style_lint"]["status"], "pass")
 
     def test_historical_report_omits_paths_prompts_and_reasoning_text(self):
         with tempfile.TemporaryDirectory() as temporary:

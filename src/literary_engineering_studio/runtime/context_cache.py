@@ -111,10 +111,11 @@ def build_context_cache_key(
     budget: TaskContextBudget | None,
     mandatory_paths: Iterable[str],
     exact_on_demand_paths: Iterable[str],
+    trace_workspace: Path | None = None,
 ) -> tuple[ContextCacheKey | None, str]:
     """Build a key from declared task inputs; never discover extra project files."""
 
-    trace_path = _declared_trace_path(task, workspace)
+    trace_path = _declared_trace_path(task, trace_workspace or workspace)
     if trace_path is None:
         return None, "context-trace-not-declared"
     trace = _read_trace(trace_path)

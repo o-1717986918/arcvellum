@@ -76,8 +76,10 @@ def _default_worker_config() -> dict[str, Any]:
             },
         },
         "prepared_context_cache": {
-            "enabled": False,
+            "enabled": True,
             "max_entries": 32,
+            "routes": ["scene-development"],
+            "states": ["candidate-review"],
         },
         "context_budget": {
             "mode": "shadow",

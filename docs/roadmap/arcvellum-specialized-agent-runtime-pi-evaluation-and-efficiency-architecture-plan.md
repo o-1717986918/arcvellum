@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：P0-P3 已完成；P4-P5 已于 2026-08-10 再次按实际代码审计，须按修正版顺序实施
+> 状态：P0-P4 工程实现已完成；P4 bounded 产品放量待多样本与盲评，P5 按实际代码审计后的修正版实施
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -1298,6 +1298,8 @@ docs/benchmarks/runtime-live-smoke-*.json
 - `agent_observability.py` 仍只返回用户安全投影，不暴露 prompt、绝对路径或秘密值。
 
 ### P4：已有上下文优化正式 canary
+
+> 完成记录（2026-08-10）：已新增真实 `candidate-review` benchmark；同模型 A/B 首轮可见字符减少 65.15%、非缓存输入 token 减少 66.12%、耗时减少 114.787 秒，两臂首次 preflight 均通过。rollback drill 通过。独立 cache micro-benchmark 产生 1 次 miss、6 次 hit，内容/预算摘要一致，本地准备耗时中位数改善 15.84%。默认只为 `scene-development / candidate-review` 开启窄 cache canary；bounded rollout 因尚缺多样本和独立文学盲评保持关闭，只允许显式实验。旧用户显式配置继续优先。证据见 `docs/benchmarks/runtime-p4-bounded-and-cache-canary-2026-08-10.md`。
 
 **目标**：兑现已经验证的上下文收益。
 

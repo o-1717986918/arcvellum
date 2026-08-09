@@ -195,7 +195,7 @@ def materialize_agent_workspace(
         copied_paths=copied,
         context_budget=context_budget,
         prepared_context_cache=prepared_context_cache,
-        execution_profile=execution_profile,
+        execution_profile=execution_profile, cache_identity_workspace=_control_workspace(sandbox),
     )
     refresh_sandbox_baseline(sandbox)
     update_run_manifest(

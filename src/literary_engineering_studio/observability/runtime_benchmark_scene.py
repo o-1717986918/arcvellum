@@ -10,8 +10,13 @@ from typing import Any
 from ruamel.yaml import YAML
 
 from ..contracts import TaskPackage
+from ..runtime.engine_bridge import CoreBridge
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
+)
+from literary_engineering_studio_engine.foundation.draft_text import (
+    count_delivery_chars,
+    count_delivery_chinese_content_chars,
 )
 from literary_engineering_studio_engine.tasking.semantic_contracts import (
     semantic_artifact_template,
@@ -23,12 +28,25 @@ _SYNTHETIC_AGENT_STATES = {
     "roleplay-agent-task",
     "branch-agent-task",
     "composition-agent-task",
+    "candidate-generation-provenance",
 }
 
 
 def seed_synthetic_scene(project: Path) -> None:
     """Populate the initialized scaffold before any route artifacts are issued."""
 
+    # A cacheable formal trace needs identities for the empty canon-patch set
+    # and the rhythm plan. Production projects acquire these naturally; the
+    # compact benchmark fixture declares them explicitly.
+    (project / "canon" / "patches").mkdir(parents=True, exist_ok=True)
+    _write_json(
+        project / "plot" / "rhythm_plan.json",
+        {
+            "schema": "literary-engineering-workbench/rhythm-plan/v1",
+            "revision": 1,
+            "entries": [],
+        },
+    )
     scene_path = project / "scenes" / f"{_SCENE_ID}.yaml"
     yaml = YAML()
     yaml.preserve_quotes = True
@@ -73,16 +91,26 @@ def supports_synthetic_completion(task: TaskPackage) -> bool:
     return task.current_state in _SYNTHETIC_AGENT_STATES
 
 
-def complete_synthetic_scene_task(project: Path, task: TaskPackage) -> None:
-    """Close only the semantic prerequisites needed to issue the real prose task."""
+def complete_synthetic_scene_task(
+    project: Path,
+    task: TaskPackage,
+    *,
+    bridge: CoreBridge,
+) -> None:
+    """Close semantic prerequisites needed to issue a real downstream Agent task."""
 
     handlers = {
-        "roleplay-agent-task": _complete_roleplay,
-        "branch-agent-task": _complete_branches,
-        "composition-agent-task": _complete_composition,
+        "roleplay-agent-task": lambda: _complete_roleplay(project),
+        "branch-agent-task": lambda: _complete_branches(project),
+        "composition-agent-task": lambda: _complete_composition(project),
+        "candidate-generation-provenance": lambda: _complete_candidate_generation(
+            project,
+            task,
+            bridge=bridge,
+        ),
     }
     try:
-        handlers[task.current_state](project)
+        handlers[task.current_state]()
     except KeyError as exc:
         raise ValueError(f"unsupported synthetic scene task: {task.current_state}") from exc
 
@@ -188,6 +216,112 @@ def _complete_composition(project: Path) -> None:
         payload,
     )
     _mark_complete(project, f"drafts/compositions/{_SCENE_ID}_composition.agent_tasks.md")
+
+
+def _complete_candidate_generation(
+    project: Path,
+    task: TaskPackage,
+    *,
+    bridge: CoreBridge,
+) -> None:
+    """Create a controlled candidate while retaining formal CLI provenance.
+
+    The benchmark is not testing prose quality here. It needs a stable,
+    non-sensitive candidate so the authoritative route can issue the exact
+    candidate-review contract used by production.
+    """
+
+    bridge.execute_task_command(task.command, project)
+    candidate = project / "drafts" / "candidates" / f"{_SCENE_ID}-platform-agent.md"
+    candidate.write_text(_benchmark_candidate_text(), encoding="utf-8")
+    prompt_path = candidate.with_suffix(".prompt.json")
+    prompt = _read_json(prompt_path)
+    standards = prompt.get("generation_standards")
+    standards = standards if isinstance(standards, dict) else {}
+    rhythm = standards.get("narrative_rhythm_contract")
+    rhythm = rhythm if isinstance(rhythm, dict) else {}
+    reader = standards.get("reader_experience_contract")
+    reader = reader if isinstance(reader, dict) else {}
+    budget = standards.get("scene_word_budget_contract")
+    budget = budget if isinstance(budget, dict) else {}
+    body = candidate.read_text(encoding="utf-8")
+    manifest = {
+        "schema": "literary-engineering-workbench/scene-candidate/v1",
+        "formal_contract_revision": "2026-07-23.3",
+        "generated_by": "platform-agent",
+        "provider": "benchmark-fixture",
+        "candidate": candidate.relative_to(project).as_posix(),
+        "writer_session_id": "benchmark-main-writer",
+        "prompt_manifest": prompt_path.relative_to(project).as_posix(),
+        "source_paths": [
+            relative
+            for relative in task.source_paths
+            if (project / relative).is_file()
+        ],
+        "style_profile": str(prompt.get("style_profile") or ""),
+        "context": str(prompt.get("context") or ""),
+        "composition": str(prompt.get("composition") or ""),
+        "style_mount_snapshot": prompt.get("style_mount_snapshot") or {},
+        "creative_quality_profile_digest": str(
+            standards.get("creative_quality_profile_digest") or ""
+        ),
+        "style_generation_standard_applied": True,
+        "reader_experience_contract": reader,
+        "reader_experience_standard_applied": True,
+        "word_budget_standard_applied": False,
+        "narrative_rhythm_contract": rhythm,
+        "narrative_rhythm_standard_applied": True,
+        "hard_constraints_applied": True,
+        "anti_evasion_protocol_applied": True,
+        "pass_with_notes_actions_applied": False,
+        "word_budget_contract": budget,
+        "clean_body_chinese_chars": count_delivery_chinese_content_chars(body),
+        "clean_body_machine_chars": count_delivery_chars(body),
+        "word_budget_adherence": {"status": "not_required"},
+        "new_character_register": {
+            "schema": "literary-engineering-workbench/new-character-register/v0.1",
+            "status": "none",
+            "introduced": [],
+            "ephemeral_waivers": [],
+            "blocking_issues": [],
+        },
+        "canon_writeback": {
+            "canon_change": False,
+            "no_canon_change_reason": "The benchmark candidate only exercises existing fixture facts.",
+        },
+        "blocking_issues": [],
+    }
+    _write_json(candidate.with_suffix(".json"), manifest)
+    _mark_complete(
+        project,
+        f"drafts/candidates/{_SCENE_ID}-platform-agent.agent_tasks.md",
+    )
+
+
+def _benchmark_candidate_text() -> str:
+    return """# 脱敏候选正文
+
+## 正文候选
+
+钟铺的门留着一道缝。守钟人推门进去，把提灯放在工作台边。铜屑贴着桌面，账册压在钟锤下面。昨夜的记录写着三更，墨迹已经干透。
+
+他取下钟壳，先看摆轮，再量发条。齿轮没有裂口，调时螺钉上留着新鲜擦痕。有人在鸣钟前动过它，还把工具擦净放回原位。
+
+街口传来车轮声。搬运账册的人到了门外。守钟人合上钟壳，抽出账册最末一页。他把缺失的钥匙编号记在纸角，然后将那页纸藏进袖中。
+
+门被推开时，工作台已经收拾妥当。来人搬走账册，只看见一盏提灯和一座停摆的钟。守钟人等脚步离开，才从门后的灰尘里捡起半枚蜡印。
+
+蜡印属于能接触内门的人。下一步要查清昨夜是谁领走了钥匙。
+
+## 状态变化候选
+
+- 守钟人确认鸣钟时间遭到人为调整。
+- 缺失钥匙和半枚蜡印成为后续调查线索。
+
+## 新角色候选登记
+
+- 无。
+"""
 
 
 def _mark_complete(project: Path, relative: str) -> None:

@@ -52,6 +52,8 @@ class ApplicationLifecycleManager:
         self.prepared_context_cache = PreparedContextCache(
             enabled=bool(cache_config.get("enabled", False)),
             max_entries=int(cache_config.get("max_entries") or 32),
+            routes=tuple(str(item) for item in cache_config.get("routes") or []),
+            states=tuple(str(item) for item in cache_config.get("states") or []),
         )
         self.process_manager = ProcessManager(data_root / "logs" / "sidecars")
         self.opencode_pool = OpenCodeRuntimePool(config, self.process_manager)

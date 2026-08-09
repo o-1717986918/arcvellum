@@ -34,6 +34,8 @@
 
 ## 2. P4：bounded context 与 prepared cache
 
+> 实施状态：已按本节修正顺序完成工程实现。真实 candidate-review A/B、回滚演练和独立 cache micro-benchmark 的结果见 `runtime-p4-bounded-and-cache-canary-2026-08-10.md`。cache 进入默认窄 canary；bounded 因尚缺多样本与独立文学盲评，保持显式 opt-in。
+
 ### 已经存在
 
 - `context_rollout.py` 已实现 contract-driven shadow/bounded 决策和 rollback reason。

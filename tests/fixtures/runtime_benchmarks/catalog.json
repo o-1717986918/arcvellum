@@ -58,6 +58,20 @@
       "rationale": "精确证据、结构化结论和独立审查任务。"
     },
     {
+      "case_id": "review-scene-candidate",
+      "benchmark_class": "review",
+      "fixture_id": "multi-volume-growth",
+      "title": "远行者场景审查运行时基线",
+      "premise": "一名少年在五卷旅程中从控制同伴转向共同承担。",
+      "work_type": "novel",
+      "target_length": 30000,
+      "route": "scene-development",
+      "preparation": "synthetic-scene-closure",
+      "expected_state": "candidate-review",
+      "availability": "ready",
+      "rationale": "沿正式场景状态机生成 CLI provenance 与脱敏候选后，领取真实 exact-candidate AgentReview 任务。"
+    },
+    {
       "case_id": "planning-story-architecture",
       "benchmark_class": "planning",
       "fixture_id": "multi-volume-growth",

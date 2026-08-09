@@ -43,7 +43,7 @@ def drive_benchmark_preparation(
             return task, deterministic_steps, synthetic_agent_steps
         if task.execution_contract.execution_policy == "agent-required":
             if preparation == "synthetic-scene-closure" and supports_synthetic_completion(task):
-                complete_synthetic_scene_task(project, task)
+                complete_synthetic_scene_task(project, task, bridge=worker.bridge)
                 synthetic_agent_steps += 1
                 continue
             raise RuntimeError(

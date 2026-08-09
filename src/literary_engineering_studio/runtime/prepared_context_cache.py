@@ -24,9 +24,18 @@ from .prompt_context import PreparedPromptContext
 class PreparedContextCache:
     """Thread-safe LRU containing JSON projections, never project facts."""
 
-    def __init__(self, *, enabled: bool = False, max_entries: int = 32):
+    def __init__(
+        self,
+        *,
+        enabled: bool = False,
+        max_entries: int = 32,
+        routes: tuple[str, ...] = (),
+        states: tuple[str, ...] = (),
+    ):
         self.enabled = bool(enabled)
         self.max_entries = max(1, min(256, int(max_entries)))
+        self.routes = _normalized_allowlist(routes)
+        self.states = _normalized_allowlist(states)
         self._entries: OrderedDict[str, tuple[ContextCacheKey, str]] = OrderedDict()
         self._lock = threading.RLock()
         self._hits = 0
@@ -35,6 +44,14 @@ class PreparedContextCache:
         self._evictions = 0
         self._bypasses = 0
         self._bypass_reasons: dict[str, int] = {}
+
+    def allows(self, route: str, state: str) -> bool:
+        if not self.enabled:
+            return False
+        return (
+            (not self.routes or route in self.routes)
+            and (not self.states or state in self.states)
+        )
 
     def get(self, key: ContextCacheKey) -> PreparedPromptContext | None:
         if not self.enabled:
@@ -84,6 +101,8 @@ class PreparedContextCache:
         with self._lock:
             return {
                 "enabled": self.enabled,
+                "routes": list(self.routes),
+                "states": list(self.states),
                 "entries": len(self._entries),
                 "max_entries": self.max_entries,
                 "hits": self._hits,
@@ -148,3 +167,7 @@ def _strings(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise ValueError("prepared context cache path fields must be arrays")
     return tuple(str(item) for item in value)
+
+
+def _normalized_allowlist(values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(str(item).strip() for item in values if str(item).strip()))

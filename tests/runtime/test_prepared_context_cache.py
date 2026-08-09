@@ -60,6 +60,17 @@ class PreparedContextCacheTests(unittest.TestCase):
         self.assertIsNone(cache.get(_key("scene_0001")))
         self.assertEqual(cache.status()["entries"], 0)
 
+    def test_task_allowlist_limits_enabled_cache(self):
+        cache = PreparedContextCache(
+            enabled=True,
+            routes=("scene-development",),
+            states=("candidate-review",),
+        )
+
+        self.assertTrue(cache.allows("scene-development", "candidate-review"))
+        self.assertFalse(cache.allows("scene-development", "candidate-generation-provenance"))
+        self.assertFalse(cache.allows("review-and-audit", "candidate-review"))
+
 
 if __name__ == "__main__":
     unittest.main()

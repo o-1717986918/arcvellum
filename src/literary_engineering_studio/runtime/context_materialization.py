@@ -55,21 +55,22 @@ def materialize_agent_context_contract(
     context_budget: TaskContextBudget | None = None,
     prepared_context_cache: PreparedContextCache | None = None,
     execution_profile: dict[str, object] | None = None,
+    cache_identity_workspace: Path | None = None,
 ) -> MaterializedContextContract:
     sources, references = selection.copied_prompt_paths(copied_paths)
     mandatory_paths = _mandatory_context_paths(task, context_budget)
     exact_on_demand_paths = _exact_on_demand_context_paths(task, context_budget)
     _validate_review_context(task, workspace, context_budget)
     direction = _user_direction(task)
-    context_paths = (*task.core_managed_outputs, *sources, *references)
-    prepared_context, cache_status, cache_key, cache_reason = _prepared_context(
+    prepared_context, cache_status, cache_key, cache_reason = _materialize_task_context(
         task,
         workspace,
-        context_paths,
+        (*task.core_managed_outputs, *sources, *references),
         context_budget=context_budget,
         mandatory_paths=mandatory_paths,
         exact_on_demand_paths=exact_on_demand_paths,
         cache=prepared_context_cache,
+        cache_identity_workspace=cache_identity_workspace,
     )
     execution_context = build_execution_context_envelope(
         task,
@@ -123,6 +124,34 @@ def materialize_agent_context_contract(
     )
 
 
+def _materialize_task_context(
+    task: TaskPackage,
+    workspace: Path,
+    paths: tuple[str, ...],
+    *,
+    context_budget: TaskContextBudget | None,
+    mandatory_paths: tuple[str, ...],
+    exact_on_demand_paths: tuple[str, ...],
+    cache: PreparedContextCache | None,
+    cache_identity_workspace: Path | None,
+) -> tuple[PreparedPromptContext, str, str, str]:
+    active_cache = cache if cache is not None and cache.allows(task.route, task.current_state) else None
+    result = _prepared_context(
+        task,
+        workspace,
+        paths,
+        context_budget=context_budget,
+        mandatory_paths=mandatory_paths,
+        exact_on_demand_paths=exact_on_demand_paths,
+        cache=active_cache,
+        cache_identity_workspace=cache_identity_workspace,
+    )
+    if cache is not None and cache.enabled and active_cache is None:
+        prepared, status, key, _ = result
+        return prepared, status, key, "cache-task-outside-allowlist"
+    return result
+
+
 def _prepared_context(
     task: TaskPackage,
     workspace: Path,
@@ -132,6 +161,7 @@ def _prepared_context(
     mandatory_paths: tuple[str, ...],
     exact_on_demand_paths: tuple[str, ...],
     cache: PreparedContextCache | None,
+    cache_identity_workspace: Path | None,
 ) -> tuple[PreparedPromptContext, str, str, str]:
     key = None
     reason = ""
@@ -143,6 +173,7 @@ def _prepared_context(
             budget=context_budget,
             mandatory_paths=mandatory_paths,
             exact_on_demand_paths=exact_on_demand_paths,
+            trace_workspace=cache_identity_workspace,
         )
         if key is None:
             cache.record_bypass(reason)
