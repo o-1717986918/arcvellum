@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from ..contracts import TaskPackage
@@ -32,6 +33,9 @@ from .task_semantic_contract import (
 from .worker_program_template import WORKER_PROGRAM_TEMPLATE
 
 
+_EMPTY_PROMPT_ACCESS: Mapping[str, object] = MappingProxyType({})
+
+
 @dataclass(frozen=True)
 class CompiledWorkerProgram:
     text: str
@@ -57,6 +61,7 @@ def build_task_context(
     source_paths: tuple[str, ...] | None = None,
     execution_context: ExecutionContextEnvelope | None = None,
     execution_profile: dict[str, Any] | None = None,
+    prompt_access: Mapping[str, object] = _EMPTY_PROMPT_ACCESS,
 ) -> dict[str, Any]:
     prompt_asset = task.payload.get("prompt_asset") if isinstance(task.payload.get("prompt_asset"), dict) else {}
     agent_sources = task.payload.get("agent_source_paths")
@@ -125,6 +130,7 @@ def build_task_context(
             if execution_context is not None
             else {}
         ),
+        "prompt_access": dict(prompt_access),
     }
 
 
@@ -136,6 +142,7 @@ def write_task_context(
     source_paths: tuple[str, ...] | None = None,
     execution_context: ExecutionContextEnvelope | None = None,
     execution_profile: dict[str, Any] | None = None,
+    prompt_access: Mapping[str, object] = _EMPTY_PROMPT_ACCESS,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -146,6 +153,7 @@ def write_task_context(
                 source_paths=source_paths,
                 execution_context=execution_context,
                 execution_profile=execution_profile,
+                prompt_access=prompt_access,
             ),
             ensure_ascii=False,
             indent=2,

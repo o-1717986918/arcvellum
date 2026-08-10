@@ -1,6 +1,6 @@
 # ArcVellum Prompt v3 与自适应推理预算实施方案
 
-> 状态：实施中，P0-P2 已完成；P3-P4 compile canary 已通过，live v3 A/B 待运行；P5 已完成，P6 live 技术 canary 已通过
+> 状态：实施中，P0-P2、P5、P6 已完成；P3-P4 compile canary 与首轮 live v3 技术样本已通过，三次交错 A/B 和文学盲评待完成
 > 编写日期：2026-08-10
 > Studio 基线：`release/v0.97.0` / `640cc63`
 > Pi fork 基线：`85bf8eff`
@@ -804,7 +804,7 @@ worker:
 
 ### P3：structured canary
 
-状态：**compile-only 门禁已通过；live A/B 未运行（2026-08-10）**
+状态：**compile-only 与首轮 live v3 技术样本已通过；三次交错 A/B 待完成（2026-08-11）**
 
 修改：structured recipe 和 Pi Worker opt-in。
 
@@ -821,10 +821,13 @@ worker:
 - 资产创建在 Runtime 中语义上属于 `creative`，不是 `structured`。rollout 因此增加 route/state 精确选择，避免为命中一个结构化资产输出而误开全部 creative 任务；
 - 资产 sidecar 与实现说明被正确识别为 recovery，仅在没有 Engine 显式 must-inline 合同时降级为 exact-on-demand；Schema、枚举和机器拥有字段直接从正式 TaskPackage 投影；
 - 当前本机正式配置中的 Pi Worker 为 disabled，且没有 entrypoint、model 或 auth 配置，因此没有伪造 live 结果，也没有启用 Prompt v3 enforcement。
+- 首轮 live 暴露 Prompt v3 编译后 exact-on-demand 与 Worker 授权集合不一致；现已新增 `prompt-access/v1` 合同，并由 Capability Manifest 继续限制权限上界；
+- 修复后 structured v3 以 8,465 字符正式 Prompt、0 reasoning token、4 次 Provider 请求、73.0 秒完成，Studio preflight 为 0 issues 并进入 waiting_writeback；
+- 单次技术样本不替代三次交错 A/B，产品默认仍保持 shadow。
 
 ### P4：review canary
 
-状态：**compile-only 门禁已通过；3 次交错 live A/B 与盲评待运行（2026-08-10）**
+状态：**compile-only 与首轮 live v3 技术样本已通过；3 次交错 live A/B 与盲评待完成（2026-08-11）**
 
 修改：review recipe、compact evidence 优先、context packet retrieval 去重。
 
@@ -843,6 +846,10 @@ worker:
 - structured JSON/YAML 只做保值字段投影，lossless candidate 与 mounted style 不做摘要；compact review evidence 删除被 exact scene/style 重复覆盖的传输字段，保留 Style Lint、字数、reader experience、review policy 与输出 Schema；
 - v3 duplicate ratio 为 0，Prompt Lint 通过。正式证据见 `docs/benchmarks/prompt-v3-compile-canary-2026-08-10.{json,md}`；
 - live preflight、修复次数、Provider token、延迟和匿名文学质量尚未证明，因此正式默认仍为 shadow。
+- 首轮 review v3 在权限修复后完成读写，但因 compact Schema 删除字段类型而把 `character_logic` 写成 dict，Studio 权威 preflight 正确阻断；
+- compact Schema 现将必填类型压缩为 `required_type_groups`，并同步去除工具 Prompt 的重复运行纪律；review compile canary 为 14,111 字符，相对公平 v2 基线 23,519 字符下降 40.0%；
+- 修复后 review v3 使用 3 次 Provider 请求、0 reasoning token、68.4 秒完成，0 repair、0 preflight issues，并进入 waiting_writeback；
+- 证据见 `docs/benchmarks/prompt-v3-live-access-contract-canary-2026-08-11.md`。匿名质量与重复样本尚未完成，不能扩大到 prose/planning。
 
 ### P5：ReasoningBudget shadow
 

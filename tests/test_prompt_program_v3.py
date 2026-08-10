@@ -7,12 +7,41 @@ import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.runtime.context_budget import resolve_task_context_budget
-from literary_engineering_studio.runtime.prompt_program import resolve_prompt_program_rollout
+from literary_engineering_studio.runtime.prompt_program import (
+    OnDemandEvidence,
+    PromptProgram,
+    resolve_prompt_program_rollout,
+)
+from literary_engineering_studio.runtime.prompt_renderer import render_tool_worker_program
 from literary_engineering_studio.runtime.prompt_metrics import measure_prompt
 from literary_engineering_studio.runtime.sandbox import stage_task
 
 
 class PromptProgramV3Tests(unittest.TestCase):
+    def test_tool_renderer_requires_exact_paths_instead_of_evidence_ids(self):
+        program = PromptProgram(
+            schema="arcvellum/prompt-program/v3",
+            recipe_id="prompt-v3/structured/v1",
+            task_identity={"task_id": "one", "route": "route", "current_state": "state", "agent_role": "agent"},
+            objective="完成任务。",
+            decisions=(),
+            constraints=(),
+            output_contract={"outputs": []},
+            evidence=(),
+            exact_on_demand=(
+                OnDemandEvidence("D001", "exact.md", "digest", "recovery", "按需读取"),
+            ),
+            stop_contract=("完成后停止。",),
+            compile_metrics={},
+            digest="digest",
+        )
+
+        rendered = render_tool_worker_program(program)
+
+        self.assertIn("`Dxxx` 仅为标签", rendered)
+        self.assertIn("`read_authorized_source.path`", rendered)
+        self.assertIn("`D001` `exact.md`", rendered)
+
     def test_rollout_requires_explicit_enforcement_match(self):
         shadow = resolve_prompt_program_rollout(
             {"mode": "shadow"}, runtime_id="pi-worker", task_kind="structured"
@@ -159,6 +188,53 @@ class PromptProgramV3Tests(unittest.TestCase):
             self.assertNotIn('"lifecycle"', shadow)
             self.assertEqual(projection["program"]["compile_metrics"]["demoted_recovery_count"], 1)
             self.assertEqual(projection["metrics"]["exact_on_demand_count"], 2)
+
+    def test_enforced_v3_persists_compiled_prompt_access_for_demoted_recovery(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("project:\n  title: 测试\n", encoding="utf-8")
+            (root / "source.md").write_text("首轮正式证据。\n", encoding="utf-8")
+            (root / "source-copy.md").write_text("另一份首轮证据。\n", encoding="utf-8")
+            (root / "exact.md").write_text("原始按需证据。\n", encoding="utf-8")
+            (root / "creation.agent_tasks.md").write_text("恢复说明。\n", encoding="utf-8")
+            task = _task(root)
+            task.payload["source_paths"].append("creation.agent_tasks.md")
+            task.payload["agent_source_paths"].append("creation.agent_tasks.md")
+            task.payload["context_must_inline_paths"].append("creation.agent_tasks.md")
+            budget = resolve_task_context_budget(task, {"context_budget": {"mode": "shadow"}})
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="compiled-prompt-access",
+                context_budget=budget,
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "v2",
+                    "enforcement": {
+                        "enabled": True,
+                        "runtimes": ["pi-worker"],
+                        "states": ["asset-creation-agent-task"],
+                    },
+                },
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            access = context["prompt_access"]
+
+            self.assertEqual(access["formal_version"], "v3")
+            self.assertEqual(access["renderer"], "tool-worker")
+            self.assertIn("source.md", access["inline"])
+            self.assertIn("creation.agent_tasks.md", access["exact_on_demand"])
+            self.assertNotIn("creation.agent_tasks.md", access["inline"])
+            self.assertIn(
+                "creation.agent_tasks.md",
+                context["controlled_capabilities"]["readable_paths"],
+            )
+            self.assertEqual(len(access["digest"]), 64)
 
 
 def _task(root: Path) -> TaskPackage:

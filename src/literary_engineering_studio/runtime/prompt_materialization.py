@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -18,6 +20,34 @@ class PromptMaterialization:
     shadow: CompiledWorkerProgram | None
     shadow_path: Path | None
     rollout: Mapping[str, object]
+
+    def access_contract(
+        self,
+        execution_context: ExecutionContextEnvelope,
+    ) -> dict[str, object]:
+        """Project the final formal prompt's content-safe read contract."""
+        program = self.formal.program
+        if self.formal.version == "v3" and program is not None:
+            inline = [item.source_ref for item in program.evidence]
+            exact_on_demand = [item.source_ref for item in program.exact_on_demand]
+            program_digest = program.digest
+        else:
+            inline = [
+                *execution_context.must_inline,
+                *execution_context.summary_reference_paths,
+            ]
+            exact_on_demand = list(execution_context.exact_on_demand)
+            program_digest = ""
+        payload: dict[str, object] = {
+            "schema": "arcvellum/prompt-access/v1",
+            "formal_version": self.formal.version,
+            "renderer": self.formal.renderer,
+            "program_digest": program_digest,
+            "inline": list(dict.fromkeys(inline)),
+            "exact_on_demand": list(dict.fromkeys(exact_on_demand)),
+        }
+        payload["digest"] = _contract_digest(payload)
+        return payload
 
     def safe_projection(self, run_root: Path) -> dict[str, object]:
         return {
@@ -93,6 +123,16 @@ def materialize_prompt_programs(
         shadow_path = run_root / "prompt-v3-shadow.md"
         shadow_path.write_text(v3.text, encoding="utf-8")
     return PromptMaterialization(formal, v3 if v3 is not formal else None, shadow_path, rollout)
+
+
+def _contract_digest(payload: Mapping[str, object]) -> str:
+    serialized = json.dumps(
+        dict(payload),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 __all__ = ["PromptMaterialization", "materialize_prompt_programs"]

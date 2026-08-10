@@ -109,12 +109,15 @@ def materialize_agent_context_contract(
         references, sources, prepared_context, execution_context, execution_profile,
     )
     prompt_path.write_text(prompt_program.formal.text, encoding="utf-8")
+    prompt_access = prompt_program.access_contract(execution_context)
     context_path = write_task_context(
         task,
         workspace / "TASK_CONTEXT.json",
         reference_paths=references,
         source_paths=sources,
-        execution_context=execution_context, execution_profile=execution_profile,
+        execution_context=execution_context,
+        execution_profile=execution_profile,
+        prompt_access=prompt_access,
     )
     materialize_execution_boundaries(run_root, task_dir, task_context_path=context_path)
     ledger = materialize_runtime_context_ledger(

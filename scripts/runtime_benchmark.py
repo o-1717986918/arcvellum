@@ -94,6 +94,12 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--runner-model", default="")
     live.add_argument("--runner-auth-path", default="")
     live.add_argument("--runner-thinking", default="low")
+    live.add_argument(
+        "--prompt-version",
+        choices=["configured", "v2", "v3"],
+        default="configured",
+        help="Select the formal Prompt version for this in-memory live probe only.",
+    )
     live.add_argument("--timeout-seconds", type=int, default=300)
     live.add_argument("--output", type=Path, required=True)
     live.add_argument(
@@ -233,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
                 runtime_id=args.runtime,
                 timeout_seconds=args.timeout_seconds,
                 config=runtime_config,
+                prompt_version=args.prompt_version,
             )
         finally:
             if not retained:

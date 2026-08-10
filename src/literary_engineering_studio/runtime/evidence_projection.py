@@ -112,13 +112,28 @@ def _compact_review_schema(value: object) -> object:
         return value
     contract = value.get("contract")
     compact_contract = dict(contract) if isinstance(contract, dict) else {}
+    compact_contract["required_type_groups"] = _required_type_groups(
+        compact_contract
+    )
     compact_contract.pop("recommended", None)
+    compact_contract.pop("required", None)
     compact_contract.pop("types", None)
     return {
         key: item
         for key, item in value.items()
         if key != "resource_sha256"
     } | {"contract": compact_contract}
+
+
+def _required_type_groups(contract: dict[str, Any]) -> dict[str, list[str]]:
+    required = contract.get("required")
+    field_types = contract.get("types")
+    groups: dict[str, list[str]] = {}
+    for field in required if isinstance(required, list) else []:
+        field_type = field_types.get(field) if isinstance(field_types, dict) else None
+        if isinstance(field_type, str):
+            groups.setdefault(field_type, []).append(field)
+    return groups
 
 
 def _prune_empty(value: Any) -> Any:
