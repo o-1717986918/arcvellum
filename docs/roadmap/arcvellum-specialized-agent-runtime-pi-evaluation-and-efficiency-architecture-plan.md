@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：P0-P5 工程实现与证据闭环已完成；Pi RPC 工程价值成立，但同模型创作价值证据不足，按停止门禁不进入 P6
+> 状态：P0-P5 工程实现与证据闭环已完成；完整 Pi RPC 未通过默认晋升门禁。经用户明确批准，P6 以“Pi Agent Core 专用 Worker”这一独立架构假设完成最小原型；原型成立但未胜过 OpenCode，保持实验禁用，不进入产品化、安装包或 Autopilot
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -1324,7 +1324,7 @@ docs/benchmarks/runtime-live-smoke-*.json
 
 ### P5：Pi coding-agent RPC benchmark adapter
 
-**实施状态（2026-08-10）**：已完成。固定构建、无模型 RPC、Registry 语义、短生命周期适配、取消与回收均通过；Pi 当前没有可与 OpenCode 对齐的已认证模型，正式结论为“价值证据不足”，不进入 P6。详见 `docs/benchmarks/runtime-p5-pi-rpc-evaluation-2026-08-10.md`。
+**实施状态（2026-08-10）**：已完成。固定构建、无模型 RPC、Registry 语义、短生命周期适配、取消与回收均通过。后续配置 DeepSeek 凭证后完成了与 OpenCode 的同 Provider、同模型复测：Pi 在 review 与 structured 样本中均一次通过 preflight，但耗时和费用都明显恶化，且暴露高频 reasoning 事件写放大，因此仍不进入 P6。详见 `docs/benchmarks/runtime-p5-pi-rpc-evaluation-2026-08-10.md` 与 `docs/benchmarks/runtime-p5-p6-gate-recheck-2026-08-10.md`。
 
 **目标**：不先造专用 Worker，先验证 Pi 的现实表现。
 
@@ -1359,6 +1359,8 @@ docs/benchmarks/runtime-live-smoke-*.json
 未满足则停止，不进入 P6 Pi 专用 Worker。
 
 ### P6：Pi Agent Core 专用 Worker 试验
+
+**实施状态（2026-08-10）**：经用户明确批准，以独立架构假设重新开放最小 P6 原型。Pi Agent Core 专用 Worker、七工具权限、显式完成、事件聚合、Python Runtime 和 structured/review live benchmark 已完成。原型相对完整 Pi RPC 明显改善，但相对 OpenCode 未达到默认替代门禁；保留实验代码，停止在产品化、安装包、Autopilot 和前端接入之前。详见 `docs/architecture/arcvellum-pi-specialized-worker-prototype-v1.md` 与 `docs/benchmarks/runtime-p6-specialized-pi-worker-prototype-2026-08-10.md`。
 
 **目标**：获得最小工具面、精确完成语义和可控上下文。
 
@@ -1637,7 +1639,9 @@ docs(release): record benchmark and default-runtime decision
 10. **P5A Pi 环境**：扩展 fork sparse checkout、固定构建、生成收据、完成无模型 RPC 冒烟；
 11. **P5B Pi 适配器**：修正 Registry 后实现短生命周期 Pi RPC Runtime 和沙箱/取消/回收测试；
 12. **P5C 价值验证**：能对齐同模型则完成正式 A/B；不能则交付证据不足报告，不进入 P6；
-13. 数据达到晋升阈值后，才另行批准并创建 Pi Agent Core 专用 Worker。
+13. 数据达到晋升阈值后，才允许按默认晋升路线创建 Pi Agent Core 专用 Worker；若用户基于新的架构假设明确批准独立实验，必须保持默认禁用、限制任务范围，并重新执行 P6 自身的性能与质量门禁。
+
+**实际执行补记（2026-08-10）**：完整 Pi RPC 未满足默认晋升阈值，因此没有替代 OpenCode。随后用户明确批准验证“绕开完整 coding-agent、直接使用 Pi Agent Core”的独立假设；P6 仅实现 structured/review 两类最小原型并在未通过 OpenCode 替代门禁后停止，没有扩展到安装、前端、Autopilot 或默认 Runtime。
 
 这是最小风险、最高信息增益的路径，也符合本文最重要的判断：
 
