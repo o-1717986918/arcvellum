@@ -199,7 +199,7 @@ class WorkerExecutionProfileTests(unittest.TestCase):
         self.assertEqual(timeout, 600)
         self.assertEqual(kwargs["max_repairs"], 1)
         self.assertEqual(kwargs["reasoning_policy"], "medium")
-        self.assertEqual(kwargs["max_turns"], 4)
+        self.assertEqual(kwargs["max_turns"], 5)
         self.assertEqual(kwargs["max_tool_calls"], 5)
         self.assertNotIn("first_event_timeout", kwargs)
 
