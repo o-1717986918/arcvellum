@@ -85,10 +85,14 @@ def _default_worker_config() -> dict[str, Any]:
             "mode": "shadow",
             "enforcement": {
                 "enabled": False,
-                "runtimes": ["opencode"],
-                "routes": [],
-                "states": [],
-                "task_kinds": [],
+                "runtimes": ["pi-worker"],
+                "routes": ["character-and-world-assets", "scene-development"],
+                "states": ["asset-creation-agent-task", "candidate-review"],
+                "task_kinds": ["creative", "review"],
+            },
+            "reasoning_budget": {
+                "enabled": True,
+                "max_escalations": 1,
             },
         },
         "prepared_context_cache": {

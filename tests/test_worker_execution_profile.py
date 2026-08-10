@@ -202,6 +202,12 @@ class WorkerExecutionProfileTests(unittest.TestCase):
         self.assertEqual(kwargs["max_turns"], 5)
         self.assertEqual(kwargs["max_tool_calls"], 5)
         self.assertNotIn("first_event_timeout", kwargs)
+        self.assertEqual(profile.reasoning_budget_status, "shadow")
+        self.assertEqual(profile.reasoning_budget_provider_support, "unsupported")
+        self.assertEqual(observer.events[1][0], "runner.reasoning_budget.recommended")
+        self.assertIsNone(
+            observer.events[1][1]["reasoning_budget"]["effective"]
+        )
 
 
 if __name__ == "__main__":

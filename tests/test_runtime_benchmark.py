@@ -166,6 +166,11 @@ class RuntimeBenchmarkTests(unittest.TestCase):
             report["samples"][0]["prompt_program"]["formal_version"],
             "unavailable",
         )
+        reasoning = report["samples"][0]["reasoning_budget"]
+        self.assertEqual(reasoning["status"], "unavailable")
+        self.assertEqual(reasoning["actual"]["reasoning_tokens"], 3)
+        self.assertTrue(reasoning["actual"]["reasoning_tokens_reported"])
+        self.assertNotIn("SECRET", json.dumps(reasoning))
 
 
 if __name__ == "__main__":

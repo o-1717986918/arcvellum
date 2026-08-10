@@ -846,6 +846,8 @@ worker:
 
 ### P5：ReasoningBudget shadow
 
+状态：**已完成 shadow 实现；未改变正式运行（2026-08-10）**
+
 修改：Profile v2、policy、observability、Pi receipt。
 
 交付：
@@ -854,6 +856,17 @@ worker:
 - 比较 recommended 与 actual；
 - 确认 Provider 支持；
 - 独立提交。
+
+实现记录：
+
+- `TaskExecutionProfile` 升级为 v2，嵌入不可变 `ReasoningBudget`，同时提供显式 v1 safe projection；
+- 七类任务的初始等级、最高等级、每请求目标、单任务总目标、Provider 请求数和单次升级上限均由表驱动策略生成；确定性任务保持 `off/0`；
+- 新增纯函数 reasoning policy：机械格式/路径/缺文件问题只允许同等级定向修复，语义冲突最多升级一级，相同进度指纹第二次出现或总预算耗尽时停止；
+- 默认配置只启用预算计算，`reasoning_budget.status=shadow` 且 `effective=null`，现有 reasoning level、超时、修复次数和 Runtime 选择均未改变；
+- run manifest 与历史 benchmark 现在可比较 requested budget、Provider support、实际 reasoning token 和 Provider request 可见性；未收到 Provider usage receipt 时使用 `unavailable`，绝不伪造为 `0`；
+- 当前 OpenCode 和 Pi Worker 都未声明 `reasoning-budget-control`，因此 P5 如实记录为 `unsupported`。Pi Worker 的真实预算参数、使用收据与能力声明属于 P6，不在 shadow 阶段提前宣称生效；
+- 26 项 Profile、policy、runtime benchmark 与配置定向测试通过；architecture audit 为 `0` 新增债务、`0` 循环依赖；
+- live 同模型成本、时延、preflight 与文学质量尚未证明，不能进入 P6 enforced 或修改产品默认值。
 
 ### P6：ReasoningBudget canary
 

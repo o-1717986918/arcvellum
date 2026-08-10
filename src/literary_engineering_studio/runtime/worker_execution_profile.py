@@ -89,6 +89,14 @@ def activate_execution_profile(
             "execution_profile": profile.as_dict(),
         },
     )
+    observer.emit(
+        "runner.reasoning_budget.recommended",
+        {
+            "runner_id": runtime_id,
+            "task_id": task.task_id,
+            "reasoning_budget": profile.as_dict()["reasoning_budget"],
+        },
+    )
     timeout = profile.effective_int(
         "total_timeout_seconds",
         int(worker_config.get("timeout_seconds") or 1800),

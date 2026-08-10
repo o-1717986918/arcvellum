@@ -77,7 +77,18 @@ class ExecutionProfileTests(unittest.TestCase):
                 capability_ids=("bounded-repair", "silence-timeout-control"),
             )
         controls = _controls(profile)
+        projection = profile.as_dict()
         self.assertEqual(profile.mode, "shadow")
+        self.assertEqual(projection["schema"], "arcvellum/task-execution-profile/v2")
+        self.assertIn("arcvellum/task-execution-profile/v1", projection["compatible_with"])
+        self.assertEqual(profile.safe_projection_v1()["schema"], "arcvellum/task-execution-profile/v1")
+        self.assertEqual(
+            projection["reasoning_budget"]["requested"]["initial_level"],
+            "low",
+        )
+        self.assertEqual(projection["reasoning_budget"]["status"], "shadow")
+        self.assertEqual(projection["reasoning_budget"]["provider_support"], "unsupported")
+        self.assertIsNone(projection["reasoning_budget"]["effective"])
         self.assertEqual(controls["total_timeout_seconds"]["effective"], 1800)
         self.assertEqual(controls["max_repair_attempts"]["effective"], 2)
         self.assertEqual(controls["first_event_timeout_seconds"]["status"], "shadow")
@@ -132,6 +143,9 @@ class ExecutionProfileTests(unittest.TestCase):
                 runtime_id="opencode",
             )
         self.assertEqual(profile.mode, "deterministic")
+        budget = profile.as_dict()["reasoning_budget"]
+        self.assertEqual(budget["requested"]["total_tokens"], 0)
+        self.assertEqual(budget["status"], "applied")
         for control in _controls(profile).values():
             self.assertEqual(control["effective"], 0 if control["requested"] != "off" else "off")
             self.assertEqual(control["status"], "applied")
