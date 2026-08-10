@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Mapping
 
 from ..contracts import TaskPackage, normalize_relative_path
 from ..observability.context_ledger import ContextLedger
@@ -27,7 +27,8 @@ from .execution_context import (
 )
 from .prompt_context import PreparedPromptContext, build_prepared_prompt_context
 from .prepared_context_cache import PreparedContextCache
-from .task_program import render_worker_program, write_task_context
+from .prompt_materialization import materialize_prompt_programs
+from .task_program import write_task_context
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,27 @@ class MaterializedContextContract:
     context_cache_status: str = "disabled"
     context_cache_key: str = ""
     context_cache_reason: str = ""
+    prompt_program: Mapping[str, object] | None = None
+
+    def run_manifest_fields(self, run_root: Path) -> dict[str, object]:
+        return {
+            "context_ledger": str(run_root / "context-ledger.json"),
+            "context_ledger_id": self.ledger.ledger_id,
+            "context_ledger_digest": self.ledger.digest,
+            "context_assembled_sha256": self.ledger.assembled_sha256,
+            "prepared_context_paths": list(self.prepared_context.included_paths),
+            "omitted_context_paths": list(self.prepared_context.omitted_paths),
+            "prepared_context_characters": self.prepared_context.character_count,
+            "prepared_context_sha256": self.prepared_context.sha256,
+            "context_budget": self.prepared_context.budget_report_dict(),
+            "prepared_context_cache": {
+                "status": self.context_cache_status,
+                "key": self.context_cache_key,
+                "reason": self.context_cache_reason,
+            },
+            "execution_context": self.execution_context.safe_projection(),
+            "prompt_program": self.prompt_program or {},
+        }
 
 
 def materialize_agent_context_contract(
@@ -56,6 +78,8 @@ def materialize_agent_context_contract(
     prepared_context_cache: PreparedContextCache | None = None,
     execution_profile: dict[str, object] | None = None,
     cache_identity_workspace: Path | None = None,
+    runtime_id: str = "host-agent",
+    prompt_program_config: Mapping[str, Any] | None = None,
 ) -> MaterializedContextContract:
     sources, references = selection.copied_prompt_paths(copied_paths)
     mandatory_paths = _mandatory_context_paths(task, context_budget)
@@ -80,19 +104,11 @@ def materialize_agent_context_contract(
         budget=context_budget,
         user_direction=direction,
     )
-    prompt_path.write_text(
-        render_worker_program(
-            task,
-            user_direction=direction,
-            reference_paths=references,
-            source_paths=sources,
-            prepared_context=prepared_context.rendered,
-            prepared_context_paths=prepared_context.included_paths,
-            omitted_context_paths=prepared_context.omitted_paths,
-            execution_context=execution_context, execution_profile=execution_profile,
-        ),
-        encoding="utf-8",
+    prompt_program = _materialize_prompt(
+        task, workspace, run_root, runtime_id, prompt_program_config, direction,
+        references, sources, prepared_context, execution_context, execution_profile,
     )
+    prompt_path.write_text(prompt_program.formal.text, encoding="utf-8")
     context_path = write_task_context(
         task,
         workspace / "TASK_CONTEXT.json",
@@ -121,6 +137,37 @@ def materialize_agent_context_contract(
         cache_status,
         cache_key,
         cache_reason,
+        prompt_program.safe_projection(run_root),
+    )
+
+
+def _materialize_prompt(
+    task: TaskPackage,
+    workspace: Path,
+    run_root: Path,
+    runtime_id: str,
+    config: Mapping[str, Any] | None,
+    direction: str,
+    references: tuple[str, ...],
+    sources: tuple[str, ...],
+    prepared: PreparedPromptContext,
+    execution_context: ExecutionContextEnvelope,
+    execution_profile: dict[str, object] | None,
+):
+    return materialize_prompt_programs(
+        task,
+        workspace=workspace,
+        run_root=run_root,
+        runtime_id=runtime_id,
+        config=config,
+        user_direction=direction,
+        reference_paths=references,
+        source_paths=sources,
+        prepared_context=prepared.rendered,
+        prepared_context_paths=prepared.included_paths,
+        omitted_context_paths=prepared.omitted_paths,
+        execution_context=execution_context,
+        execution_profile=execution_profile,
     )
 
 

@@ -1,6 +1,6 @@
 # ArcVellum Prompt v3 与自适应推理预算实施方案
 
-> 状态：实施中，P0-P1 已完成
+> 状态：实施中，P0-P2 已完成
 > 编写日期：2026-08-10
 > Studio 基线：`release/v0.97.0` / `640cc63`
 > Pi fork 基线：`85bf8eff`
@@ -778,6 +778,8 @@ worker:
 
 ### P2：Prompt v3 IR 与 shadow compiler
 
+状态：**已完成（2026-08-10）**
+
 修改：新增 Prompt Program、recipe、evidence、renderer、metrics；`task_program.py` facade。
 
 交付：
@@ -787,6 +789,18 @@ worker:
 - 不调用第二次模型；
 - 架构审计与 digest 稳定测试；
 - 独立提交。
+
+实现记录：
+
+- 新增不可变 `PromptProgram` / `PromptEvidence`、七类表驱动 recipe、Evidence Compiler 和 file/tool 双 renderer；
+- `task_program.py` 保持唯一公开 facade，v2 调用签名向后兼容；
+- Prompt v3 根据 Execution Context 读取 must-inline，exact-on-demand 仅保留路径、digest、角色和读取理由；
+- 相同路径与相同内容 digest 在编译时去重，保留 content-free 丢弃计数；
+- 新增 Prompt lint、硬上限、重复率阈值和无 Agent output 检查；
+- 默认配置为 shadow，正式 `AGENT_TASK.md` 继续使用 v2；v3 只写入 run 根目录的 shadow artifact；
+- run manifest 只保存安全投影，不保存 Prompt、正文、reasoning 或绝对 shadow 内容；
+- Prompt Program digest 在重复物化中稳定；
+- 定向测试、沙箱回归、路线重建和 architecture audit 通过。
 
 ### P3：structured canary
 

@@ -34,11 +34,20 @@ def stage_profiled_task(
         context_budget=context_budget,
         prepared_context_cache=prepared_context_cache,
         execution_profile=profile.as_dict(),
+        prompt_program_config=prompt_program_settings(worker_config),
     )
     persist_initial_execution_profile(
         task, sandbox, worker_config, runtime_id, profile=profile
     )
     return profile, sandbox
+
+
+def _mapping(value: object) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def prompt_program_settings(worker_config: Mapping[str, Any]) -> Mapping[str, Any]:
+    return _mapping(worker_config.get("prompt_program"))
 
 
 def persist_initial_execution_profile(

@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
-from typing import Iterable
+from typing import Any, Iterable, Mapping
 
 from literary_engineering_studio_engine.foundation.resources import engine_root
 from ..contracts import TaskPackage
@@ -52,6 +52,7 @@ def stage_task(
     context_budget: TaskContextBudget | None = None,
     prepared_context_cache: PreparedContextCache | None = None,
     execution_profile: dict[str, object] | None = None,
+    prompt_program_config: Mapping[str, Any] | None = None,
 ) -> SandboxManifest:
     identifier = run_id or _run_id(task.task_id)
     run_root = runs_root.expanduser().resolve() / _project_key(task.project_root) / identifier
@@ -136,6 +137,7 @@ def stage_task(
             task, sandbox, context_budget=context_budget,
             prepared_context_cache=prepared_context_cache,
             execution_profile=execution_profile,
+            prompt_program_config=prompt_program_config,
         )
     else:
         workspace.mkdir(parents=True, exist_ok=False)
@@ -148,6 +150,7 @@ def materialize_agent_workspace(
     task: TaskPackage, sandbox: SandboxManifest, *, context_budget: TaskContextBudget | None = None,
     prepared_context_cache: PreparedContextCache | None = None,
     execution_profile: dict[str, object] | None = None,
+    prompt_program_config: Mapping[str, Any] | None = None,
 ) -> tuple[str, ...]:
     """Build the bounded Agent view from the fully reproducible control view."""
 
@@ -195,7 +198,10 @@ def materialize_agent_workspace(
         copied_paths=copied,
         context_budget=context_budget,
         prepared_context_cache=prepared_context_cache,
-        execution_profile=execution_profile, cache_identity_workspace=_control_workspace(sandbox),
+        execution_profile=execution_profile,
+        cache_identity_workspace=_control_workspace(sandbox),
+        runtime_id=str((execution_profile or {}).get("runtime_id") or "host-agent"),
+        prompt_program_config=prompt_program_config,
     )
     refresh_sandbox_baseline(sandbox)
     update_run_manifest(
@@ -205,17 +211,7 @@ def materialize_agent_workspace(
         agent_missing_sources=missing,
         agent_prompt_source_paths=list(context.source_paths),
         agent_prompt_reference_paths=list(context.reference_paths),
-        context_ledger=str(sandbox.run_root / "context-ledger.json"),
-        context_ledger_id=context.ledger.ledger_id,
-        context_ledger_digest=context.ledger.digest,
-        context_assembled_sha256=context.ledger.assembled_sha256,
-        prepared_context_paths=list(context.prepared_context.included_paths),
-        omitted_context_paths=list(context.prepared_context.omitted_paths),
-        prepared_context_characters=context.prepared_context.character_count,
-        prepared_context_sha256=context.prepared_context.sha256,
-        context_budget=context.prepared_context.budget_report_dict(),
-        prepared_context_cache={"status": context.context_cache_status, "key": context.context_cache_key, "reason": context.context_cache_reason},
-        execution_context=context.execution_context.safe_projection(),
+        **context.run_manifest_fields(sandbox.run_root),
     )
     return tuple(copied)
 

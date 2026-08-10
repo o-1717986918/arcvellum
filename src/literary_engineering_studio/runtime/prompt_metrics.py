@@ -21,6 +21,17 @@ _AUTHORIZED_BLOCK = re.compile(
     r"^-{5} END AUTHORIZED FILE: `(?P=path)` -{5}$",
     re.MULTILINE | re.DOTALL,
 )
+_V3_EVIDENCE_FILE = re.compile(
+    r"^### E\d+: `(?P<path>[^`]+)`\s*$.*?"
+    r"^- source_sha256: `(?P<digest>[0-9a-f]{64})`\s*$",
+    re.MULTILINE | re.DOTALL,
+)
+_V3_EVIDENCE_BLOCK = re.compile(
+    r"^-{5} BEGIN EVIDENCE (?P<evidence_id>E\d+) -{5}\n"
+    r"(?P<body>.*?)"
+    r"^-{5} END EVIDENCE (?P=evidence_id) -{5}$",
+    re.MULTILINE | re.DOTALL,
+)
 _CONSTRAINT_WORDS = ("必须", "不得", "禁止", "只允许", "不允许", "must", "forbidden")
 
 
@@ -48,12 +59,39 @@ class PromptMetrics:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class PromptLintIssue:
+    code: str
+    severity: str
+    message: str
+
+
+@dataclass(frozen=True)
+class PromptLintReport:
+    schema: str
+    status: str
+    issues: tuple[PromptLintIssue, ...]
+
+    def safe_projection(self) -> dict[str, object]:
+        return {
+            "schema": self.schema,
+            "status": self.status,
+            "issues": [asdict(item) for item in self.issues],
+        }
+
+
 def measure_prompt(text: str) -> PromptMetrics:
     """Measure a rendered prompt without retaining any prompt content."""
 
     normalized = text.replace("\r\n", "\n")
-    sources = list(_AUTHORIZED_FILE.finditer(normalized))
-    source_blocks = list(_AUTHORIZED_BLOCK.finditer(normalized))
+    sources = [
+        *_AUTHORIZED_FILE.finditer(normalized),
+        *_V3_EVIDENCE_FILE.finditer(normalized),
+    ]
+    source_blocks = [
+        *_AUTHORIZED_BLOCK.finditer(normalized),
+        *_V3_EVIDENCE_BLOCK.finditer(normalized),
+    ]
     source_paths = [item.group("path") for item in sources]
     source_digests = [item.group("digest") for item in sources]
     evidence_characters = sum(len(item.group(0)) for item in source_blocks)
@@ -63,7 +101,9 @@ def measure_prompt(text: str) -> PromptMetrics:
         len(normalized), duplicate_paragraph_characters + nested_duplicate_characters
     )
     constraint_lines = _constraint_lines(normalized)
-    repeated_constraints = sum(count - 1 for count in Counter(constraint_lines).values() if count > 1)
+    repeated_constraints = sum(
+        count - 1 for count in Counter(constraint_lines).values() if count > 1
+    )
     total_characters = len(normalized)
     return PromptMetrics(
         schema="arcvellum/prompt-metrics/v1",
@@ -84,6 +124,54 @@ def measure_prompt(text: str) -> PromptMetrics:
         exact_on_demand_count=_exact_on_demand_count(normalized),
         prompt_sha256=hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
     )
+
+
+def lint_prompt(
+    metrics: PromptMetrics,
+    *,
+    hard_character_limit: int,
+    output_count: int,
+    duplicate_warning_ratio: float = 0.15,
+    duplicate_error_ratio: float = 0.25,
+) -> PromptLintReport:
+    issues: list[PromptLintIssue] = []
+    if metrics.total_characters > hard_character_limit:
+        issues.append(
+            PromptLintIssue(
+                "prompt_hard_limit",
+                "error",
+                f"rendered prompt exceeds recipe hard limit: {metrics.total_characters} > {hard_character_limit}",
+            )
+        )
+    if metrics.duplicate_path_count:
+        issues.append(
+            PromptLintIssue("duplicate_source_path", "error", "a source path is rendered more than once")
+        )
+    if metrics.duplicate_digest_count:
+        issues.append(
+            PromptLintIssue("duplicate_source_digest", "error", "identical source content is rendered more than once")
+        )
+    duplicate_severity = (
+        "error"
+        if metrics.duplicate_character_ratio > duplicate_error_ratio
+        else "warning"
+        if metrics.duplicate_character_ratio > duplicate_warning_ratio
+        else ""
+    )
+    if duplicate_severity:
+        issues.append(
+            PromptLintIssue(
+                "nested_duplicate_content",
+                duplicate_severity,
+                f"estimated duplicate ratio is {metrics.duplicate_character_ratio:.1%}",
+            )
+        )
+    if output_count <= 0:
+        issues.append(
+            PromptLintIssue("missing_agent_output", "error", "Prompt Program declares no Agent-owned output")
+        )
+    status = "error" if any(item.severity == "error" for item in issues) else "warning" if issues else "pass"
+    return PromptLintReport("arcvellum/prompt-lint/v1", status, tuple(issues))
 
 
 def _estimate_tokens(text: str) -> int:

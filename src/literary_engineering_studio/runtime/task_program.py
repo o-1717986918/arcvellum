@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from ..contracts import TaskPackage
 from .context_selection import compact_task_references
@@ -15,6 +16,11 @@ from .execution_context import (
     execution_context_program_fields,
 )
 from .prompt_context import PreparedPromptContext, render_prepared_context_section
+from .prompt_compiler import compile_prompt_program
+from .prompt_metrics import PromptLintReport, PromptMetrics, lint_prompt, measure_prompt
+from .prompt_program import PromptProgram
+from .prompt_recipes import prompt_recipe
+from .prompt_renderer import render_file_agent_program, render_tool_worker_program
 from .task_completion import (
     build_task_completion_contract,
     completion_program_fields,
@@ -24,6 +30,25 @@ from .task_semantic_contract import (
     semantic_output_contract,
 )
 from .worker_program_template import WORKER_PROGRAM_TEMPLATE
+
+
+@dataclass(frozen=True)
+class CompiledWorkerProgram:
+    text: str
+    version: str
+    renderer: str
+    metrics: PromptMetrics
+    lint: PromptLintReport | None
+    program: PromptProgram | None
+
+    def safe_projection(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "renderer": self.renderer,
+            "metrics": self.metrics.safe_projection(),
+            "lint": self.lint.safe_projection() if self.lint is not None else {},
+            "program": self.program.safe_projection() if self.program is not None else {},
+        }
 
 def build_task_context(
     task: TaskPackage,
@@ -138,7 +163,44 @@ def render_worker_program(
     omitted_context_paths: tuple[str, ...] = (),
     execution_context: ExecutionContextEnvelope | None = None,
     execution_profile: dict[str, Any] | None = None,
+    prompt_version: str = "v2",
+    renderer: str = "file-agent",
+    workspace: Path | None = None,
+    prompt_lint_config: Mapping[str, Any] | None = None,
 ) -> str:
+    return compile_worker_program(
+        task,
+        user_direction=user_direction,
+        reference_paths=reference_paths,
+        source_paths=source_paths,
+        prepared_context=prepared_context,
+        prepared_context_paths=prepared_context_paths,
+        omitted_context_paths=omitted_context_paths,
+        execution_context=execution_context,
+        execution_profile=execution_profile,
+        prompt_version=prompt_version,
+        renderer=renderer,
+        workspace=workspace,
+        prompt_lint_config=prompt_lint_config,
+    ).text
+
+
+def compile_worker_program(
+    task: TaskPackage,
+    *,
+    user_direction: str = "",
+    reference_paths: tuple[str, ...] | None = None,
+    source_paths: tuple[str, ...] | None = None,
+    prepared_context: str = "",
+    prepared_context_paths: tuple[str, ...] = (),
+    omitted_context_paths: tuple[str, ...] = (),
+    execution_context: ExecutionContextEnvelope | None = None,
+    execution_profile: dict[str, Any] | None = None,
+    prompt_version: str = "v2",
+    renderer: str = "file-agent",
+    workspace: Path | None = None,
+    prompt_lint_config: Mapping[str, Any] | None = None,
+) -> CompiledWorkerProgram:
     context = build_task_context(
         task,
         reference_paths=reference_paths,
@@ -146,6 +208,40 @@ def render_worker_program(
         execution_context=execution_context,
         execution_profile=execution_profile,
     )
+    if prompt_version == "v3":
+        if execution_context is None or workspace is None:
+            raise ValueError("Prompt v3 requires workspace and execution context")
+        program = compile_prompt_program(
+            task,
+            workspace=workspace,
+            task_context=context,
+            execution_context=execution_context,
+            user_direction=user_direction,
+        )
+        if renderer == "tool-worker":
+            text = render_tool_worker_program(program)
+        elif renderer == "file-agent":
+            text = render_file_agent_program(program)
+        else:
+            raise ValueError(f"unsupported Prompt v3 renderer: {renderer}")
+        metrics = measure_prompt(text)
+        recipe = prompt_recipe(execution_context.task_kind)
+        outputs = program.output_contract.get("outputs")
+        output_count = len(outputs) if isinstance(outputs, list) else 0
+        lint = lint_prompt(
+            metrics,
+            hard_character_limit=recipe.hard_character_limit,
+            output_count=output_count,
+            duplicate_warning_ratio=_float_setting(
+                prompt_lint_config, "duplicate_warning_ratio", 0.15
+            ),
+            duplicate_error_ratio=_float_setting(
+                prompt_lint_config, "duplicate_error_ratio", 0.25
+            ),
+        )
+        return CompiledWorkerProgram(text, "v3", renderer, metrics, lint, program)
+    if prompt_version != "v2":
+        raise ValueError(f"unsupported Prompt version: {prompt_version}")
     prepared = PreparedPromptContext(
         rendered=prepared_context,
         included_paths=prepared_context_paths,
@@ -154,7 +250,8 @@ def render_worker_program(
         sha256="",
     )
     fields = _worker_program_fields(task, context, user_direction, prepared)
-    return WORKER_PROGRAM_TEMPLATE.format_map(fields)
+    text = WORKER_PROGRAM_TEMPLATE.format_map(fields)
+    return CompiledWorkerProgram(text, "v2", "file-agent", measure_prompt(text), None, None)
 
 
 def _worker_program_fields(
@@ -305,3 +402,14 @@ def _bullet_block(values: list[str]) -> str:
 
 def _profile_projection(value: dict[str, Any] | None) -> dict[str, Any]:
     return dict(value) if value else {}
+
+
+def _float_setting(
+    config: Mapping[str, Any] | None,
+    key: str,
+    default: float,
+) -> float:
+    try:
+        return float((config or {}).get(key, default))
+    except (TypeError, ValueError):
+        return default

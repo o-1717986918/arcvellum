@@ -35,6 +35,7 @@ from .worker_observability import WorkerObserver
 from .worker_execution_profile import (
     activate_execution_profile,
     build_runtime_kwargs,
+    prompt_program_settings,
     stage_profiled_task,
 )
 from .worker_paths import (
@@ -213,6 +214,7 @@ class AgentWorker:
                 visible = materialize_agent_workspace(
                     task, sandbox, context_budget=context_budget, prepared_context_cache=self.prepared_context_cache,
                     execution_profile=initial_profile.as_dict(),
+                    prompt_program_config=prompt_program_settings(self.config.get("worker", {})),
                 )
                 self.observer.emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
             self.observer.emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})

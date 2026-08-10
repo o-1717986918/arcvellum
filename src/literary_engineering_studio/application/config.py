@@ -65,6 +65,20 @@ def _default_worker_config() -> dict[str, Any]:
         "max_repair_attempts": 2,
         "auto_run_task_command": True,
         "pause_on_human_gate": True,
+        "prompt_program": {
+            "mode": "shadow",
+            "version": "v3",
+            "enforcement": {
+                "enabled": False,
+                "runtimes": ["pi-worker"],
+                "task_kinds": ["structured", "review"],
+            },
+            "fallback": "v2",
+            "lint": {
+                "duplicate_warning_ratio": 0.15,
+                "duplicate_error_ratio": 0.25,
+            },
+        },
         "execution_profile": {
             "mode": "shadow",
             "enforcement": {
