@@ -22,6 +22,7 @@ from literary_engineering_studio.observability.runtime_benchmark import (
     render_historical_report_markdown,
 )
 from literary_engineering_studio.observability.runtime_benchmark_live import run_live_benchmark
+from literary_engineering_studio.application.config import load_config
 
 
 DEFAULT_CATALOG = ROOT / "tests" / "fixtures" / "runtime_benchmarks" / "catalog.json"
@@ -49,12 +50,20 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("case_id")
     live.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     live.add_argument("--runtime", default="opencode")
+    live.add_argument("--runner-executable", default="")
+    live.add_argument("--runner-entrypoint", default="")
+    live.add_argument("--runner-model", default="")
     live.add_argument("--timeout-seconds", type=int, default=300)
     live.add_argument("--output", type=Path, required=True)
     live.add_argument(
         "--confirm-live-model",
         action="store_true",
         help="Acknowledge that this command invokes the selected live model.",
+    )
+    live.add_argument(
+        "--confirm-experimental-runner",
+        action="store_true",
+        help="Acknowledge that pi-rpc is an unsupported, unpackaged experiment.",
     )
 
     args = parser.parse_args(argv)
@@ -90,6 +99,24 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not args.confirm_live_model:
             parser.error("live benchmark requires --confirm-live-model")
+        runtime_config = None
+        if args.runtime == "pi-rpc":
+            if not args.confirm_experimental_runner:
+                parser.error("pi-rpc benchmark requires --confirm-experimental-runner")
+            if not args.runner_executable or not args.runner_entrypoint or not args.runner_model:
+                parser.error("pi-rpc benchmark requires executable, entrypoint, and model")
+            runtime_config = load_config()
+            settings = runtime_config.setdefault("agent_runners", {}).setdefault("pi-rpc", {})
+            settings.update(
+                {
+                    "enabled": True,
+                    "executable": args.runner_executable,
+                    "entrypoint": args.runner_entrypoint,
+                    "model": args.runner_model,
+                    "experiment_only": True,
+                    "experiment_authorized": True,
+                }
+            )
         cases = {item.case_id: item for item in load_benchmark_catalog(args.catalog)}
         if args.case_id not in cases:
             parser.error(f"unknown benchmark case: {args.case_id}")
@@ -100,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
                 temporary / "project",
                 runtime_id=args.runtime,
                 timeout_seconds=args.timeout_seconds,
+                config=runtime_config,
             )
         finally:
             shutil.rmtree(temporary, ignore_errors=True)

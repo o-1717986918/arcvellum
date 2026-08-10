@@ -1,0 +1,69 @@
+{
+  "schema": "arcvellum/pi-rpc-build-receipt/v1",
+  "recorded_at": "2026-08-10",
+  "source": {
+    "fork": "https://github.com/o-1717986918/arcvellum-pi-agent",
+    "commit": "936aff00918de1187f085f123c2812d8f2d67745",
+    "package": "@earendil-works/pi-coding-agent",
+    "version": "0.84.1",
+    "license": "MIT"
+  },
+  "toolchain": {
+    "node": "v24.16.0",
+    "npm": "11.13.0",
+    "package_lock_sha256": "01BB5DF57ED0DE4F308ED1B88B4536E43A0B61CE82B0EFF3FCB1B922176C3C4C"
+  },
+  "checkout": {
+    "mode": "partial-clone-sparse-checkout",
+    "materialized_packages": [
+      "packages/agent",
+      "packages/ai",
+      "packages/client",
+      "packages/coding-agent",
+      "packages/protocol",
+      "packages/server",
+      "packages/session-backends/sqlite-node",
+      "packages/telemetry",
+      "packages/tui",
+      "scripts"
+    ]
+  },
+  "dependency_install": {
+    "command": "npm ci --ignore-scripts",
+    "status": "pass",
+    "audit_vulnerabilities": 0
+  },
+  "model_data_hydration": {
+    "primary_command": "npm run hydrate:model-data",
+    "primary_status": "blocked",
+    "primary_reason": "models.dev:443 was unreachable from the build environment",
+    "fallback_source": "official npm package @earendil-works/pi-ai@0.84.1",
+    "fallback_integrity": "sha512-wMsAdJMxuNri08vLqTyYVI201DQQezGhPSTkzYsHdw5dYX3rCNwEmSvpaAwhi7ELKI/2tE/CEgSWg/6iRxSgdQ==",
+    "fallback_shasum": "e3e6318392a9f6df6fcc9040dcfafa5e5fb779f4",
+    "verification_command": "npm --prefix packages/ai run check:model-data",
+    "verification_status": "pass"
+  },
+  "build": {
+    "command": "npm run build:offline",
+    "status": "pass",
+    "source_tree_dirty_after_build": false
+  },
+  "artifacts": [
+    {
+      "path": "packages/coding-agent/dist/cli.js",
+      "bytes": 710,
+      "sha256": "840D1E8E689ED9E4937BCB00B9A810E02A8567D9AFB10A47097F11CA93EA1521"
+    },
+    {
+      "path": "packages/coding-agent/dist/modes/rpc/rpc-mode.js",
+      "bytes": 27954,
+      "sha256": "B8056AF06447A3B89B680519BAE1CE1D9063A266D827C3CA92F2DCD57C5FFD2B"
+    }
+  ],
+  "scope": {
+    "packaged_with_arcvellum": false,
+    "default_runtime": false,
+    "credentials_recorded": false,
+    "absolute_user_paths_recorded": false
+  }
+}

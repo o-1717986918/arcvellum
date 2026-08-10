@@ -1,6 +1,6 @@
 # ArcVellum 专用 Agent Runtime、Pi 评估与创作效率架构实施方案
 
-> 状态：P0-P4 工程实现已完成；P4 bounded 产品放量待多样本与盲评，P5 按实际代码审计后的修正版实施
+> 状态：P0-P5 工程实现与证据闭环已完成；Pi RPC 工程价值成立，但同模型创作价值证据不足，按停止门禁不进入 P6
 > 编写日期：2026-08-09  
 > 审计日期：2026-08-09  
 > ArcVellum 基线：产品版本 `0.97.3`；分支 `release/v0.97.0`；提交 `6f8b66b55ae8076135c31cfb2716511ed659a5f6`  
@@ -1323,6 +1323,8 @@ docs/benchmarks/runtime-live-smoke-*.json
 - cache 实验不得与 bounded 实验共用同一个变化批次，报告能独立归因。
 
 ### P5：Pi coding-agent RPC benchmark adapter
+
+**实施状态（2026-08-10）**：已完成。固定构建、无模型 RPC、Registry 语义、短生命周期适配、取消与回收均通过；Pi 当前没有可与 OpenCode 对齐的已认证模型，正式结论为“价值证据不足”，不进入 P6。详见 `docs/benchmarks/runtime-p5-pi-rpc-evaluation-2026-08-10.md`。
 
 **目标**：不先造专用 Worker，先验证 Pi 的现实表现。
 

@@ -66,7 +66,10 @@ class ApplicationLifecycleManager:
         )
         self._processes: dict[str, ManagedProcessState] = {}
         self._lock = threading.RLock()
-        self._runner_states = [_pending_runner_state(runner_id) for runner_id in RUNTIME_TYPES]
+        self._runner_states = [
+            _pending_runner_state(runner_id, _runner_enabled(config, runner_id))
+            for runner_id in RUNTIME_TYPES
+        ]
         self._runner_error = ""
         self._runner_refresh_thread: threading.Thread | None = None
         self._started_at = _now()
@@ -179,18 +182,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _pending_runner_state(runner_id: str) -> dict[str, Any]:
+def _pending_runner_state(runner_id: str, enabled: bool) -> dict[str, Any]:
     return {
         "runtime": runner_id,
         "runner_id": runner_id,
+        "registered": True,
+        "enabled": enabled,
+        "probed": False,
         "available": False,
         "installed": False,
-        "readiness_state": "checking",
+        "readiness_state": "checking" if enabled else "unavailable",
         "executable": "",
-        "detail": "正在后台检查本机创作执行器。",
+        "detail": "正在后台检查本机创作执行器。" if enabled else "disabled by configuration",
         "capabilities": {
             "runner_id": runner_id,
             "available": False,
-            "readiness_state": "checking",
+            "readiness_state": "checking" if enabled else "unavailable",
         },
     }
+
+
+def _runner_enabled(config: dict[str, Any], runner_id: str) -> bool:
+    runners = config.get("agent_runners") if isinstance(config.get("agent_runners"), dict) else {}
+    settings = runners.get(runner_id) if isinstance(runners.get(runner_id), dict) else {}
+    return settings.get("enabled") is not False

@@ -158,6 +158,14 @@ def default_config() -> dict[str, Any]:
                 "executable": "codex",
                 "sandbox": "workspace-write",
             },
+            "pi-rpc": {
+                "enabled": False,
+                "executable": "",
+                "entrypoint": "",
+                "model": "",
+                "experiment_only": True,
+                "reasoning_visibility": "activity",
+            },
         },
         "model_connections": {
             "managed_by": "agent-runner",

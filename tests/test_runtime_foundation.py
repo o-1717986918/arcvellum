@@ -9,6 +9,7 @@ from unittest.mock import patch
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.lifecycle import ApplicationLifecycleManager
 from literary_engineering_studio.process_manager import ProcessSpec
+from literary_engineering_studio.runtimes import RUNTIME_TYPES
 from literary_engineering_studio.runtimes.base import AgentRuntime
 
 
@@ -75,7 +76,7 @@ class RuntimeFoundationTests(unittest.TestCase):
                 elapsed = time.monotonic() - before
                 self.assertLess(elapsed, 0.2)
                 self.assertTrue(health["agent_runner_refreshing"])
-                self.assertEqual(len(health["agent_runners"]), 4)
+                self.assertEqual(len(health["agent_runners"]), len(RUNTIME_TYPES))
                 release.set()
                 refreshed = lifecycle.refresh_agent_runners(wait=True, force=False)
                 lifecycle.shutdown()

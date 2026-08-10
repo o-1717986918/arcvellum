@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
-from literary_engineering_studio.runtimes import RUNTIME_TYPES
+from literary_engineering_studio.config import default_config
+from literary_engineering_studio.runtimes import RUNTIME_TYPES, agent_runner_status, build_runtime
 from literary_engineering_studio.runtimes.base import AgentRunnerCapabilities
 from literary_engineering_studio.runtimes.base import RuntimeAvailability
 
@@ -95,6 +97,36 @@ class RuntimeCapabilityContractTests(unittest.TestCase):
         self.assertNotIn("reasoning-policy-control", capabilities)
         self.assertNotIn("turn-limit-control", capabilities)
         self.assertNotIn("tool-limit-control", capabilities)
+
+    def test_disabled_registered_runner_is_reported_without_probe(self):
+        config = default_config()
+        self.assertFalse(config["agent_runners"]["pi-rpc"]["enabled"])
+        runtime_type = RUNTIME_TYPES["pi-rpc"]
+        with patch.object(runtime_type, "availability", side_effect=AssertionError("disabled runner was probed")):
+            status = next(
+                item for item in agent_runner_status(config, force_refresh=True) if item["runner_id"] == "pi-rpc"
+            )
+        self.assertTrue(status["registered"])
+        self.assertFalse(status["enabled"])
+        self.assertFalse(status["probed"])
+        self.assertFalse(status["available"])
+        self.assertEqual(status["detail"], "disabled by configuration")
+
+    def test_disabled_registered_runner_cannot_execute(self):
+        with self.assertRaisesRegex(RuntimeError, "Agent runtime is disabled: pi-rpc"):
+            build_runtime("pi-rpc", default_config())
+
+    def test_experimental_runner_requires_explicit_invocation_even_when_enabled(self):
+        config = default_config()
+        config["agent_runners"]["pi-rpc"]["enabled"] = True
+        with self.assertRaisesRegex(RuntimeError, "requires an explicit experimental invocation"):
+            build_runtime("pi-rpc", config)
+        status = next(
+            item for item in agent_runner_status(config, force_refresh=True) if item["runner_id"] == "pi-rpc"
+        )
+        self.assertTrue(status["enabled"])
+        self.assertFalse(status["probed"])
+        self.assertEqual(status["detail"], "experimental invocation required")
 
 
 if __name__ == "__main__":

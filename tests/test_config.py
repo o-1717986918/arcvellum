@@ -20,6 +20,8 @@ class ConfigTests(unittest.TestCase):
         self.assertNotIn("core", config)
         self.assertEqual(config["engine"]["module"], "literary_engineering_studio_engine")
         self.assertIn("agent_runners", config)
+        self.assertFalse(config["agent_runners"]["pi-rpc"]["enabled"])
+        self.assertTrue(config["agent_runners"]["pi-rpc"]["experiment_only"])
         self.assertIn("model_connections", config)
         self.assertNotIn("runtimes", config)
 
