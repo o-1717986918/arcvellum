@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 import subprocess
 from typing import Any
@@ -13,6 +14,7 @@ from .base import (
     AgentRunnerCapabilities,
     AgentRuntime,
     RuntimeAvailability,
+    RuntimeFailureKind,
     RuntimeResult,
     executable_prefix,
     resolve_executable,
@@ -185,7 +187,7 @@ class PiWorkerRuntime(AgentRuntime):
         }
         self._execution_overrides = {key: value for key, value in overrides.items() if value is not None}
         try:
-            return super().execute(
+            result = super().execute(
                 workspace,
                 prompt_path,
                 run_root,
@@ -193,8 +195,33 @@ class PiWorkerRuntime(AgentRuntime):
                 event_sink=event_sink,
                 cancel_event=cancel_event,
             )
+            return self._with_worker_result(result)
         finally:
             self._execution_overrides = {}
+
+    def _with_worker_result(self, result: RuntimeResult) -> RuntimeResult:
+        worker_result = _last_worker_result(result.output_path)
+        if not worker_result:
+            return result
+        status = str(worker_result.get("status") or "")
+        message = str(worker_result.get("message") or result.message)
+        metadata: dict[str, Any] = {"worker_result": worker_result}
+        if status != "completed":
+            detail = message.lower()
+            no_progress = status == "blocked" and any(
+                token in detail for token in ("no-progress", "budget exhausted")
+            )
+            metadata.update(
+                {
+                    "failure_kind": (
+                        RuntimeFailureKind.NO_PROGRESS.value
+                        if no_progress
+                        else RuntimeFailureKind.VALIDATION_FAILURE.value
+                    ),
+                    "retryable": not no_progress,
+                }
+            )
+        return replace(result, message=message, metadata=metadata)
 
     def _entrypoint(self) -> Path | None:
         value = str(self.settings.get("entrypoint") or "").strip()
@@ -243,3 +270,20 @@ def _public_value(value: Any) -> Any:
 def _secret_key(value: object) -> bool:
     normalized = str(value).lower().replace("-", "_")
     return any(token in normalized for token in ("api_key", "apikey", "password", "secret", "credential", "auth"))
+
+
+def _last_worker_result(output_path: Path | None) -> dict[str, Any]:
+    if output_path is None or not output_path.is_file():
+        return {}
+    result: dict[str, Any] = {}
+    for line in output_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict) or payload.get("event") != "runner.worker.result":
+            continue
+        data = payload.get("data")
+        if isinstance(data, dict):
+            result = _public_event_data(data)
+    return result

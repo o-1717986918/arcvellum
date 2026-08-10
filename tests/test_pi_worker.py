@@ -38,10 +38,19 @@ events = [
     ("tool.completed", {"tool": "write_expected_output", "tool_use_id": "one"}),
     ("agent.message.delta", {"text": "done"}),
     ("usage.updated", {"usage": {"input": 10, "output": 3}, "cost_usd": 0.01}),
-    ("runner.worker.result", {"status": "completed", "validationPassed": True}),
+    (
+        "runner.worker.result",
+        {
+            "status": "incomplete" if "incomplete" in prompt else "completed",
+            "message": "model stopped without calling complete_task" if "incomplete" in prompt else "ready",
+            "validationPassed": "incomplete" not in prompt,
+        },
+    ),
 ]
 for event, data in events:
     print(json.dumps({"event": event, "data": data}), flush=True)
+if "incomplete" in prompt:
+    raise SystemExit(2)
 '''
 
 
@@ -113,6 +122,7 @@ class PiWorkerRuntimeTests(unittest.TestCase):
             invocation = json.loads((workspace / "worker_args.json").read_text(encoding="utf-8"))
 
         self.assertEqual(result.status, "completed")
+        self.assertEqual(result.metadata["worker_result"]["status"], "completed")
         self.assertEqual(invocation["prompt"], "perform fixture")
         self.assertEqual(invocation["args"][invocation["args"].index("--thinking") + 1], "high")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-turns") + 1], "2")
@@ -120,6 +130,31 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertTrue(any(event == "runner.reasoning.activity" for event, _ in events))
         self.assertTrue(any(event == "tool.started" for event, _ in events))
         self.assertTrue(any(event == "usage.updated" for event, _ in events))
+
+    def test_incomplete_worker_result_is_classified_for_studio(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            entrypoint = self._fixture(root)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = workspace / "AGENT_TASK.md"
+            prompt.write_text("incomplete fixture", encoding="utf-8")
+            runtime = PiWorkerRuntime(
+                {
+                    "executable": sys.executable,
+                    "entrypoint": str(entrypoint),
+                    "model": "fixture/model",
+                }
+            )
+
+            result = runtime.execute(workspace, prompt, run_root, timeout=10)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.message, "model stopped without calling complete_task")
+        self.assertEqual(result.metadata["failure_kind"], "validation_failure")
+        self.assertTrue(result.metadata["retryable"])
 
     def test_protocol_parser_omits_raw_invalid_output_and_secret_fields(self):
         runtime = PiWorkerRuntime({})

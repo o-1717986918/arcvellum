@@ -183,13 +183,13 @@ def _targets(
 
 
 _PROFILE_TARGETS: dict[ContextTaskKind, dict[str, object]] = {
-    ContextTaskKind.STRUCTURED: _targets(300, 90, 120, "minimal", 1, 2, 2),
-    ContextTaskKind.CREATIVE: _targets(600, 180, 300, "medium", 1, 3, 4),
-    ContextTaskKind.PLANNING: _targets(900, 240, 360, "medium", 1, 3, 4),
-    ContextTaskKind.STYLE: _targets(600, 180, 300, "medium", 1, 3, 4),
-    ContextTaskKind.ARCHAEOLOGY: _targets(600, 180, 300, "medium", 1, 3, 4),
-    ContextTaskKind.PROSE: _targets(900, 240, 360, "medium", 1, 2, 2),
-    ContextTaskKind.REVIEW: _targets(600, 240, 360, "high", 1, 2, 2),
+    ContextTaskKind.STRUCTURED: _targets(300, 90, 120, "minimal", 1, 3, 2),
+    ContextTaskKind.CREATIVE: _targets(600, 180, 300, "medium", 1, 4, 4),
+    ContextTaskKind.PLANNING: _targets(900, 240, 360, "medium", 1, 4, 4),
+    ContextTaskKind.STYLE: _targets(600, 180, 300, "medium", 1, 4, 4),
+    ContextTaskKind.ARCHAEOLOGY: _targets(600, 180, 300, "medium", 1, 4, 4),
+    ContextTaskKind.PROSE: _targets(900, 240, 360, "medium", 1, 3, 2),
+    ContextTaskKind.REVIEW: _targets(600, 240, 360, "high", 1, 3, 2),
 }
 
 

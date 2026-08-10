@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -57,6 +58,11 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--runner-thinking", default="low")
     live.add_argument("--timeout-seconds", type=int, default=300)
     live.add_argument("--output", type=Path, required=True)
+    live.add_argument(
+        "--workdir",
+        type=Path,
+        help="Retain the reconstructed benchmark project and run artifacts in this directory.",
+    )
     live.add_argument(
         "--confirm-live-model",
         action="store_true",
@@ -144,7 +150,18 @@ def main(argv: list[str] | None = None) -> int:
         cases = {item.case_id: item for item in load_benchmark_catalog(args.catalog)}
         if args.case_id not in cases:
             parser.error(f"unknown benchmark case: {args.case_id}")
-        temporary = Path(tempfile.mkdtemp(prefix="arcvellum-runtime-live-"))
+        retained = args.workdir is not None
+        temporary = (
+            args.workdir.expanduser().resolve()
+            if retained
+            else Path(tempfile.mkdtemp(prefix="arcvellum-runtime-live-"))
+        )
+        if retained and os.name == "nt" and len(str(temporary)) > 100:
+            parser.error(
+                "--workdir is too deep for retained Windows run artifacts; choose a short path"
+            )
+        if retained:
+            temporary.mkdir(parents=True, exist_ok=False)
         try:
             payload = run_live_benchmark(
                 cases[args.case_id],
@@ -154,7 +171,8 @@ def main(argv: list[str] | None = None) -> int:
                 config=runtime_config,
             )
         finally:
-            shutil.rmtree(temporary, ignore_errors=True)
+            if not retained:
+                shutil.rmtree(temporary, ignore_errors=True)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
