@@ -26,6 +26,11 @@ _V3_EVIDENCE_FILE = re.compile(
     r"^- source_sha256: `(?P<digest>[0-9a-f]{64})`\s*$",
     re.MULTILINE | re.DOTALL,
 )
+_V3_COMPACT_EVIDENCE_FILE = re.compile(
+    r"^### E\d+: `(?P<path>[^`]+)`\s*$\n\s*"
+    r"- role=`[^`]+`; fidelity=`[^`]+`; sha256=`(?P<digest>[0-9a-f]{64})`\s*$",
+    re.MULTILINE,
+)
 _V3_EVIDENCE_BLOCK = re.compile(
     r"^-{5} BEGIN EVIDENCE (?P<evidence_id>E\d+) -{5}\n"
     r"(?P<body>.*?)"
@@ -87,6 +92,7 @@ def measure_prompt(text: str) -> PromptMetrics:
     sources = [
         *_AUTHORIZED_FILE.finditer(normalized),
         *_V3_EVIDENCE_FILE.finditer(normalized),
+        *_V3_COMPACT_EVIDENCE_FILE.finditer(normalized),
     ]
     source_blocks = [
         *_AUTHORIZED_BLOCK.finditer(normalized),
@@ -234,7 +240,7 @@ def _constraint_lines(text: str) -> list[str]:
 
 def _exact_on_demand_count(text: str) -> int:
     match = re.search(
-        r"^### Exact On Demand\s*$\n(?P<body>.*?)(?=^### |^## |\Z)",
+        r"^#{2,3} Exact On Demand\s*$\n(?P<body>.*?)(?=^#{2,3} |\Z)",
         text,
         re.MULTILINE | re.DOTALL,
     )

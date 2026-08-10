@@ -27,6 +27,10 @@ from literary_engineering_studio.observability.prompt_audit import (
     build_prompt_audit_report,
     render_prompt_audit_markdown,
 )
+from literary_engineering_studio.observability.prompt_canary import (
+    render_prompt_canary_markdown,
+    run_prompt_compile_canary,
+)
 from literary_engineering_studio.application.config import load_config
 
 
@@ -64,6 +68,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     prompt_audit.add_argument("--output", type=Path, required=True)
     prompt_audit.add_argument("--markdown", type=Path)
+
+    prompt_canary = subparsers.add_parser(
+        "prompt-canary",
+        help="Compile reproducible v2/v3 prompts without invoking a model.",
+    )
+    prompt_canary.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Benchmark case id; defaults to structured-world-foundation and review-scene-candidate.",
+    )
+    prompt_canary.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+    prompt_canary.add_argument("--runtime", default="pi-worker")
+    prompt_canary.add_argument("--workdir", type=Path, required=True)
+    prompt_canary.add_argument("--output", type=Path, required=True)
+    prompt_canary.add_argument("--markdown", type=Path)
 
     live = subparsers.add_parser("live", help="Run one explicit live-model smoke benchmark.")
     live.add_argument("case_id")
@@ -130,6 +150,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.markdown:
             args.markdown.parent.mkdir(parents=True, exist_ok=True)
             args.markdown.write_text(render_prompt_audit_markdown(payload), encoding="utf-8")
+    elif args.command == "prompt-canary":
+        catalog_cases = {item.case_id: item for item in load_benchmark_catalog(args.catalog)}
+        selected_ids = args.case or ["structured-world-foundation", "review-scene-candidate"]
+        missing = [case_id for case_id in selected_ids if case_id not in catalog_cases]
+        if missing:
+            parser.error("unknown benchmark case: " + ", ".join(missing))
+        if args.workdir.exists():
+            parser.error("prompt-canary --workdir must not already exist")
+        payload = run_prompt_compile_canary(
+            (catalog_cases[case_id] for case_id in selected_ids),
+            args.workdir,
+            runtime_id=args.runtime,
+        )
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if args.markdown:
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(render_prompt_canary_markdown(payload), encoding="utf-8")
     else:
         if not args.confirm_live_model:
             parser.error("live benchmark requires --confirm-live-model")

@@ -81,6 +81,7 @@ def build_task_context(
         "output_contracts": output_contracts,
         "semantic_artifact": task.semantic_artifact,
         "semantic_output_contract": semantic_output,
+        "system_owned_fields": _system_owned_fields(task),
         "completion_contract": build_task_completion_contract(
             task,
             output_contracts=output_contracts,
@@ -402,6 +403,11 @@ def _bullet_block(values: list[str]) -> str:
 
 def _profile_projection(value: dict[str, Any] | None) -> dict[str, Any]:
     return dict(value) if value else {}
+
+
+def _system_owned_fields(task: TaskPackage) -> dict[str, Any]:
+    value = task.payload.get("system_owned_fields")
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _float_setting(

@@ -44,7 +44,7 @@ _RECIPES = {
     ),
     ContextTaskKind.REVIEW: PromptRecipe(
         "prompt-v3/review/v1", ContextTaskKind.REVIEW, 36_000, 48_000, 2,
-        ("review_requirements", "output_contract"),
+        (),
     ),
 }
 

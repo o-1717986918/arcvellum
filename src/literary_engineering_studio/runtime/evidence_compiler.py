@@ -7,6 +7,8 @@ import hashlib
 from pathlib import Path
 from typing import Iterable
 
+from ..contracts import TaskPackage
+from .evidence_projection import project_evidence_body
 from .execution_context import ExecutionContextEnvelope
 from .prompt_program import OnDemandEvidence, PromptEvidence
 
@@ -18,6 +20,7 @@ class EvidenceCompilation:
     dropped_path_count: int
     dropped_digest_count: int
     dropped_characters: int
+    demoted_recovery_count: int
 
     def safe_metrics(self) -> dict[str, int]:
         return {
@@ -26,17 +29,58 @@ class EvidenceCompilation:
             "dropped_path_count": self.dropped_path_count,
             "dropped_digest_count": self.dropped_digest_count,
             "dropped_characters": self.dropped_characters,
+            "demoted_recovery_count": self.demoted_recovery_count,
         }
 
 
+@dataclass(frozen=True)
+class _InlineCompilation:
+    evidence: tuple[PromptEvidence, ...]
+    demoted: tuple[tuple[str, str, str], ...]
+    seen_paths: frozenset[str]
+    seen_digests: frozenset[str]
+    dropped_path_count: int
+    dropped_digest_count: int
+    dropped_characters: int
+
+
 def compile_evidence(
+    task: TaskPackage,
     workspace: Path,
     envelope: ExecutionContextEnvelope,
 ) -> EvidenceCompilation:
     root = workspace.resolve()
+    compiled = _compile_inline(task, root, envelope)
+    inline = list(compiled.evidence)
+    seen_paths = set(compiled.seen_paths)
+    seen_digests = set(compiled.seen_digests)
+    dropped_paths = compiled.dropped_path_count
+    dropped_digests = compiled.dropped_digest_count
+    dropped_characters = compiled.dropped_characters
+    inline, dropped_paths, dropped_digests, dropped_characters = _append_summaries(
+        inline, seen_paths, seen_digests, envelope, dropped_paths, dropped_digests, dropped_characters
+    )
+    declared_exact = _declared_exact(root, envelope, seen_paths)
+    exact = _on_demand_evidence((*compiled.demoted, *declared_exact))
+    return EvidenceCompilation(
+        inline=tuple(inline),
+        exact_on_demand=exact,
+        dropped_path_count=dropped_paths,
+        dropped_digest_count=dropped_digests,
+        dropped_characters=dropped_characters,
+        demoted_recovery_count=len(compiled.demoted),
+    )
+
+
+def _compile_inline(
+    task: TaskPackage,
+    root: Path,
+    envelope: ExecutionContextEnvelope,
+) -> _InlineCompilation:
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
     inline: list[PromptEvidence] = []
+    demoted: list[tuple[str, str, str]] = []
     dropped_paths = dropped_digests = dropped_characters = 0
     for source_ref in envelope.must_inline:
         normalized = _normalized_path(source_ref)
@@ -45,27 +89,46 @@ def compile_evidence(
             continue
         body = _read_authorized_text(root, normalized)
         source_digest = _sha256(body)
+        role, fidelity = _evidence_role(normalized, envelope.task_kind)
+        if role == "recovery" and task.payload.get("context_contract_required") is not True:
+            seen_paths.add(normalized)
+            demoted.append((normalized, source_digest, role))
+            continue
         if source_digest in seen_digests:
             dropped_digests += 1
             dropped_characters += len(body)
             continue
         seen_paths.add(normalized)
         seen_digests.add(source_digest)
-        role, fidelity = _evidence_role(normalized, envelope.task_kind)
+        projected = project_evidence_body(normalized, body, fidelity=fidelity)
         inline.append(
             PromptEvidence(
                 evidence_id=f"E{len(inline) + 1:03d}",
                 source_ref=normalized,
                 source_sha256=source_digest,
-                projection_sha256=source_digest,
+                projection_sha256=_sha256(projected),
                 role=role,
                 tier="must_inline",
                 fidelity=fidelity,
-                body=body,
+                body=projected,
             )
         )
-    summaries = list(envelope.summary_references)
-    for summary in summaries:
+    return _InlineCompilation(
+        tuple(inline), tuple(demoted), frozenset(seen_paths), frozenset(seen_digests),
+        dropped_paths, dropped_digests, dropped_characters,
+    )
+
+
+def _append_summaries(
+    inline: list[PromptEvidence],
+    seen_paths: set[str],
+    seen_digests: set[str],
+    envelope: ExecutionContextEnvelope,
+    dropped_paths: int,
+    dropped_digests: int,
+    dropped_characters: int,
+) -> tuple[list[PromptEvidence], int, int, int]:
+    for summary in envelope.summary_references:
         normalized = _normalized_path(summary.source_ref)
         if normalized in seen_paths or summary.summary_sha256 in seen_digests:
             dropped_paths += int(normalized in seen_paths)
@@ -86,32 +149,46 @@ def compile_evidence(
                 body=summary.summary,
             )
         )
-    exact = tuple(
+    return inline, dropped_paths, dropped_digests, dropped_characters
+
+
+def _declared_exact(
+    root: Path,
+    envelope: ExecutionContextEnvelope,
+    seen_paths: set[str],
+) -> list[tuple[str, str, str]]:
+    return [
+        (normalized, _sha256(_read_authorized_text(root, normalized)), _evidence_role(normalized, envelope.task_kind)[0])
+        for normalized in _unique(_normalized_path(item) for item in envelope.exact_on_demand)
+        if normalized not in seen_paths
+    ]
+
+
+def _on_demand_evidence(
+    values: tuple[tuple[str, str, str], ...],
+) -> tuple[OnDemandEvidence, ...]:
+    return tuple(
         OnDemandEvidence(
             evidence_id=f"D{index:03d}",
             source_ref=normalized,
-            source_sha256=_sha256(_read_authorized_text(root, normalized)),
-            role=_evidence_role(normalized, envelope.task_kind)[0],
+            source_sha256=source_digest,
+            role=role,
             reason="仅在首轮证据不足以完成一项具体判断时读取",
         )
-        for index, normalized in enumerate(
-            _unique(_normalized_path(item) for item in envelope.exact_on_demand),
-            start=1,
+        for index, (normalized, source_digest, role) in enumerate(
+            values, start=1
         )
-    )
-    return EvidenceCompilation(
-        inline=tuple(inline),
-        exact_on_demand=exact,
-        dropped_path_count=dropped_paths,
-        dropped_digest_count=dropped_digests,
-        dropped_characters=dropped_characters,
     )
 
 
 def _evidence_role(path: str, task_kind: str) -> tuple[str, str]:
     lowered = path.casefold()
+    if _is_recovery_path(lowered):
+        return "recovery", "recovery"
     if "candidate" in lowered or "/draft" in lowered or lowered.startswith("drafts/"):
         return ("candidate" if task_kind == "review" else "drafting_material", "lossless")
+    if lowered == "style/creative_quality_profile.json":
+        return "creative_quality_profile", "structured"
     if lowered.startswith("style/") or "style" in lowered:
         return "mounted_style", "lossless"
     if lowered.startswith("characters/"):
@@ -122,11 +199,15 @@ def _evidence_role(path: str, task_kind: str) -> tuple[str, str]:
         return "scene", "structured"
     if "context.json" in lowered or "lint" in lowered or "budget" in lowered:
         return "deterministic_evidence", "structured"
-    if "context_packet" in lowered:
-        return "context_packet", "recovery"
-    if lowered.endswith(".agent_tasks.md"):
-        return "task_sidecar", "recovery"
     return "project_evidence", "structured"
+
+
+def _is_recovery_path(path: str) -> bool:
+    return (
+        path.endswith(".agent_tasks.md")
+        or path.startswith("docs/implementation/")
+        or "context_packet" in path
+    )
 
 
 def _read_authorized_text(root: Path, relative: str) -> str:

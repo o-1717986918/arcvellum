@@ -1,6 +1,6 @@
 # ArcVellum Prompt v3 与自适应推理预算实施方案
 
-> 状态：实施中，P0-P2 已完成
+> 状态：实施中，P0-P2 已完成；P3-P4 compile canary 已通过，live A/B 待运行
 > 编写日期：2026-08-10
 > Studio 基线：`release/v0.97.0` / `640cc63`
 > Pi fork 基线：`85bf8eff`
@@ -804,6 +804,8 @@ worker:
 
 ### P3：structured canary
 
+状态：**compile-only 门禁已通过；live A/B 未运行（2026-08-10）**
+
 修改：structured recipe 和 Pi Worker opt-in。
 
 交付：
@@ -812,7 +814,17 @@ worker:
 - 通过后只对实验 Pi Worker enforced；
 - 失败则修编译器，不扩大范围。
 
+阶段记录：
+
+- 新增可复现、内容安全的 `runtime_benchmark.py prompt-canary`；它从空项目沿正式路线重建 TaskPackage，同一运行同时物化 v2 正式 Prompt 与 v3 shadow Prompt，不调用模型；
+- `structured-world-foundation` 从修正 tier 后的公平 v2 基线 16,167 字符降至 8,319 字符，下降 48.5%，估算 input token 从 5,814 降至 2,253；
+- 资产创建在 Runtime 中语义上属于 `creative`，不是 `structured`。rollout 因此增加 route/state 精确选择，避免为命中一个结构化资产输出而误开全部 creative 任务；
+- 资产 sidecar 与实现说明被正确识别为 recovery，仅在没有 Engine 显式 must-inline 合同时降级为 exact-on-demand；Schema、枚举和机器拥有字段直接从正式 TaskPackage 投影；
+- 当前本机正式配置中的 Pi Worker 为 disabled，且没有 entrypoint、model 或 auth 配置，因此没有伪造 live 结果，也没有启用 Prompt v3 enforcement。
+
 ### P4：review canary
+
+状态：**compile-only 门禁已通过；3 次交错 live A/B 与盲评待运行（2026-08-10）**
 
 修改：review recipe、compact evidence 优先、context packet retrieval 去重。
 
@@ -822,6 +834,15 @@ worker:
 - exact-on-demand recovery 验证；
 - 3 次交错 A/B 与盲评；
 - 独立提交。
+
+阶段记录：
+
+- `review-scene-candidate` 从修正 tier 后的公平 v2 基线 23,519 字符降至 14,094 字符，下降 40.1%，估算 input token 从 8,336 降至 5,213；
+- v3 首轮不再内联 full review sidecar 和 context packet；两者保留 digest-bound exact-on-demand 身份；
+- exact candidate、scene、creative quality、style profile、composition、branch、标点规范和 compact deterministic review evidence 仍在首轮；
+- structured JSON/YAML 只做保值字段投影，lossless candidate 与 mounted style 不做摘要；compact review evidence 删除被 exact scene/style 重复覆盖的传输字段，保留 Style Lint、字数、reader experience、review policy 与输出 Schema；
+- v3 duplicate ratio 为 0，Prompt Lint 通过。正式证据见 `docs/benchmarks/prompt-v3-compile-canary-2026-08-10.{json,md}`；
+- live preflight、修复次数、Provider token、延迟和匿名文学质量尚未证明，因此正式默认仍为 shadow。
 
 ### P5：ReasoningBudget shadow
 

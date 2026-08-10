@@ -13,6 +13,7 @@ from .runtime_event_timings import recover_event_timings
 from .throughput_metrics import build_throughput_projection
 from .runtime_benchmark_preparation import drive_benchmark_preparation
 from .runtime_benchmark_scene import seed_synthetic_scene
+from .prompt_benchmark_projection import prompt_program_projection
 from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 
 
@@ -255,6 +256,7 @@ def _sample_metrics(
         ),
         "repairs": int(projection.get("repairs") or 0),
         "usage": dict(usage),
+        "prompt_program": prompt_program_projection(manifest),
         "coverage": _sample_coverage(timings, usage, context),
     }
 

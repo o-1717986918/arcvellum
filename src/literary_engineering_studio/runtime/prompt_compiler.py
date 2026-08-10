@@ -26,7 +26,7 @@ def compile_prompt_program(
 ) -> PromptProgram:
     recipe = prompt_recipe(execution_context.task_kind)
     asset = _mapping(task_context.get("prompt_asset"))
-    evidence = compile_evidence(workspace, execution_context)
+    evidence = compile_evidence(task, workspace, execution_context)
     objective = _objective(user_direction, str(asset.get("body") or ""))
     decisions = _decisions(asset, recipe)
     constraints = _constraints(task_context, asset)
@@ -132,7 +132,17 @@ def _output_contract(context: Mapping[str, Any]) -> dict[str, object]:
         for key in ("schema", "schema_id", "schema_value", "required", "exact_lines")
         if key in semantic
     }
-    return {"outputs": outputs, "semantic": compact_semantic}
+    machine_contract = _mapping(context.get("system_owned_fields"))
+    agent_visible_machine_contract = {
+        key: machine_contract[key]
+        for key in ("candidate", "review", "enums")
+        if key in machine_contract
+    }
+    return {
+        "outputs": outputs,
+        "semantic": compact_semantic,
+        "machine_contract": agent_visible_machine_contract,
+    }
 
 
 def _mapping(value: object) -> Mapping[str, Any]:

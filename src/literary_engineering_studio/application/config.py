@@ -71,7 +71,9 @@ def _default_worker_config() -> dict[str, Any]:
             "enforcement": {
                 "enabled": False,
                 "runtimes": ["pi-worker"],
-                "task_kinds": ["structured", "review"],
+                "routes": ["character-and-world-assets", "scene-development"],
+                "states": ["asset-creation-agent-task", "candidate-review"],
+                "task_kinds": ["creative", "review"],
             },
             "fallback": "v2",
             "lint": {

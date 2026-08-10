@@ -68,6 +68,8 @@ def materialize_prompt_programs(
         config,
         runtime_id=runtime_id,
         task_kind=execution_context.task_kind,
+        route=task.route,
+        current_state=task.current_state,
     )
     needs_v3 = rollout["formal_version"] == "v3" or rollout["emit_shadow"] is True
     v3 = (

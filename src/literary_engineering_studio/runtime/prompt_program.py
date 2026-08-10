@@ -105,6 +105,8 @@ def resolve_prompt_program_rollout(
     *,
     runtime_id: str,
     task_kind: str,
+    route: str = "",
+    current_state: str = "",
 ) -> dict[str, object]:
     settings = config if isinstance(config, Mapping) else {}
     mode = str(settings.get("mode") or "off").strip().lower()
@@ -112,7 +114,9 @@ def resolve_prompt_program_rollout(
         mode = "off"
     enforcement = settings.get("enforcement")
     rules = enforcement if isinstance(enforcement, Mapping) else {}
-    matched = _matches_enforcement(rules, runtime_id, task_kind)
+    matched = _matches_enforcement(
+        rules, runtime_id, task_kind, route=route, current_state=current_state
+    )
     enforced = mode == "enforced" and matched
     return {
         "schema": "arcvellum/prompt-program-rollout/v1",
@@ -147,13 +151,20 @@ def _matches_enforcement(
     rules: Mapping[str, Any],
     runtime_id: str,
     task_kind: str,
+    *,
+    route: str,
+    current_state: str,
 ) -> bool:
     runtimes = _strings(rules.get("runtimes"))
     kinds = _strings(rules.get("task_kinds"))
+    routes = _strings(rules.get("routes"))
+    states = _strings(rules.get("states"))
     return (
         rules.get("enabled") is True
         and (not runtimes or runtime_id in runtimes)
         and (not kinds or task_kind in kinds)
+        and (not routes or route in routes)
+        and (not states or current_state in states)
     )
 
 

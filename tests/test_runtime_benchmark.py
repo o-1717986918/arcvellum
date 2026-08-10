@@ -162,6 +162,10 @@ class RuntimeBenchmarkTests(unittest.TestCase):
         self.assertEqual(report["samples"][0]["time_to_first_event_ms"], 200)
         self.assertEqual(report["samples"][0]["time_to_first_output_ms"], 350)
         self.assertEqual(report["samples"][0]["persisted_event_count"], 8)
+        self.assertEqual(
+            report["samples"][0]["prompt_program"]["formal_version"],
+            "unavailable",
+        )
 
 
 if __name__ == "__main__":
