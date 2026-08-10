@@ -106,6 +106,8 @@ class RuntimeCapabilityContractTests(unittest.TestCase):
         )
         self.assertIn("bounded-repair", capabilities)
         self.assertIn("reasoning-policy-control", capabilities)
+        self.assertIn("reasoning-budget-control", capabilities)
+        self.assertIn("provider-request-limit-control", capabilities)
         self.assertIn("turn-limit-control", capabilities)
         self.assertIn("tool-limit-control", capabilities)
         self.assertFalse(projection.shell_control)

@@ -22,6 +22,11 @@ from .repair_snapshots import (
     snapshot_outputs,
 )
 from .sandbox import SandboxManifest
+from .reasoning_policy import (
+    ReasoningBudget,
+    ReasoningUsage,
+    decide_reasoning_action,
+)
 
 
 REPAIR_CONTEXT_SCHEMA = "arcvellum/repair-context/v1"
@@ -63,9 +68,12 @@ class RepairContextCoordinator:
         self,
         task: TaskPackage,
         sandbox: SandboxManifest,
+        *,
+        reasoning_budget: ReasoningBudget | None = None,
     ) -> None:
         self.task = task
         self.sandbox = sandbox
+        self.reasoning_budget = reasoning_budget
         self._pending: dict[str, object] | None = None
 
     def prepare(
@@ -114,6 +122,7 @@ class RepairContextCoordinator:
             invalid_outputs,
             protected_outputs,
             excerpt_characters,
+            _reasoning_repair_contract(self.reasoning_budget, result, attempt),
         )
         digest = _canonical_sha256(semantic_payload)
         payload = {**semantic_payload, "context_digest": digest}
@@ -177,6 +186,7 @@ def _semantic_payload(
     invalid_outputs: list[dict[str, object]],
     protected_outputs: list[dict[str, object]],
     excerpt_characters: int,
+    reasoning_contract: Mapping[str, object],
 ) -> dict[str, object]:
     return {
         "schema": REPAIR_CONTEXT_SCHEMA,
@@ -199,8 +209,33 @@ def _semantic_payload(
                 MAX_TOTAL_EXCERPT_CHARACTERS
             ),
             "actual_excerpt_characters": excerpt_characters,
+            "reasoning": dict(reasoning_contract),
         },
         "preflight_issue_count": len(result.issues),
+    }
+
+
+def _reasoning_repair_contract(
+    budget: ReasoningBudget | None,
+    result: PreflightResult,
+    attempt: int,
+) -> dict[str, object]:
+    if budget is None:
+        return {"status": "unavailable", "action": "keep"}
+    decision = decide_reasoning_action(
+        budget,
+        current_level=budget.initial_level,
+        attempt=max(1, int(attempt)),
+        issue_categories=(item.code for item in result.issues),
+        evidence_conflict=any("conflict" in item.code for item in result.issues),
+        usage=ReasoningUsage(),
+    )
+    return {
+        "status": "recommended",
+        "initial_level": budget.initial_level,
+        "maximum_level": budget.maximum_level,
+        "remaining_escalations": budget.max_escalations,
+        **decision.as_dict(),
     }
 
 

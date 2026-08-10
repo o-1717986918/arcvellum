@@ -8,6 +8,7 @@ import textwrap
 import unittest
 
 from literary_engineering_studio.runtimes.pi_worker import PiWorkerRuntime
+from literary_engineering_studio.runtimes.base import RuntimeResult
 
 
 FIXTURE_WORKER = r'''\
@@ -44,6 +45,27 @@ events = [
             "status": "incomplete" if "incomplete" in prompt else "completed",
             "message": "model stopped without calling complete_task" if "incomplete" in prompt else "ready",
             "validationPassed": "incomplete" not in prompt,
+            "reasoning_budget": (
+                {
+                    "requested": {
+                        "initial_level": option("--thinking"),
+                        "maximum_level": option("--max-thinking-level"),
+                        "per_request_tokens": int(option("--reasoning-per-request")),
+                        "total_tokens": int(option("--reasoning-total")),
+                        "max_provider_requests": int(option("--max-provider-requests")),
+                        "max_escalations": int(option("--max-reasoning-escalations")),
+                        "over_budget_action": "validate_then_stop",
+                    },
+                    "provider_support": "partial",
+                    "actual_tokens": 3,
+                    "actual_characters": 420,
+                    "provider_requests": 1,
+                    "escalations": [],
+                    "stop_reason": "",
+                }
+                if "--reasoning-total" in sys.argv
+                else {}
+            ),
         },
     ),
 ]
@@ -114,7 +136,17 @@ class PiWorkerRuntimeTests(unittest.TestCase):
                 run_root,
                 timeout=10,
                 event_sink=lambda event, data: events.append((event, data)),
-                reasoning_policy="high",
+                reasoning_policy="low",
+                reasoning_budget={
+                    "initial_level": "low",
+                    "maximum_level": "medium",
+                    "per_request_tokens": 512,
+                    "total_tokens": 2048,
+                    "max_provider_requests": 4,
+                    "max_escalations": 1,
+                    "escalation_triggers": ["semantic_literary_judgment"],
+                    "over_budget_action": "validate_then_stop",
+                },
                 max_turns=2,
                 max_tool_calls=3,
                 max_repairs=1,
@@ -124,7 +156,13 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.metadata["worker_result"]["status"], "completed")
         self.assertEqual(invocation["prompt"], "perform fixture")
-        self.assertEqual(invocation["args"][invocation["args"].index("--thinking") + 1], "high")
+        self.assertEqual(invocation["args"][invocation["args"].index("--thinking") + 1], "low")
+        self.assertEqual(invocation["args"][invocation["args"].index("--max-thinking-level") + 1], "medium")
+        self.assertEqual(invocation["args"][invocation["args"].index("--reasoning-total") + 1], "2048")
+        self.assertEqual(invocation["args"][invocation["args"].index("--reasoning-per-request") + 1], "512")
+        self.assertEqual(invocation["args"][invocation["args"].index("--max-provider-requests") + 1], "4")
+        self.assertEqual(result.metadata["reasoning_budget_receipt"]["status"], "matched")
+        self.assertEqual(result.metadata["reasoning_budget_receipt"]["provider_support"], "partial")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-turns") + 1], "2")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-tools") + 1], "3")
         self.assertTrue(any(event == "runner.reasoning.activity" for event, _ in events))
@@ -156,6 +194,34 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(result.metadata["failure_kind"], "validation_failure")
         self.assertTrue(result.metadata["retryable"])
 
+    def test_reasoning_budget_exhaustion_is_non_retryable_no_progress(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "runtime.output.log"
+            output.write_text(
+                json.dumps(
+                    {
+                        "event": "runner.worker.result",
+                        "data": {
+                            "status": "blocked",
+                            "message": "reasoning_token_budget_exhausted",
+                            "reasoning_budget": {
+                                "provider_support": "partial",
+                                "actual_tokens": 2048,
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            runtime = PiWorkerRuntime({})
+            result = runtime._with_worker_result(
+                RuntimeResult("pi-worker", "failed", 2, (), output, "blocked")
+            )
+
+        self.assertEqual(result.metadata["failure_kind"], "no_progress")
+        self.assertFalse(result.metadata["retryable"])
+
     def test_protocol_parser_omits_raw_invalid_output_and_secret_fields(self):
         runtime = PiWorkerRuntime({})
         malformed = runtime.normalize_output_line("not-json api_key=do-not-repeat")
@@ -181,6 +247,8 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertFalse(capabilities.external_directory_control)
         self.assertIn("turn-limit-control", capabilities.capability_ids)
         self.assertIn("tool-limit-control", capabilities.capability_ids)
+        self.assertIn("reasoning-budget-control", capabilities.capability_ids)
+        self.assertIn("provider-request-limit-control", capabilities.capability_ids)
 
 
 if __name__ == "__main__":

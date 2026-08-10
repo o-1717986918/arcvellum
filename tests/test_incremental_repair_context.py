@@ -18,6 +18,8 @@ from literary_engineering_studio.runtime.repair_rendering import (
     MAX_EXCERPT_CHARACTERS,
     MAX_TOTAL_EXCERPT_CHARACTERS,
 )
+from literary_engineering_studio.runtime.context_budget import ContextTaskKind
+from literary_engineering_studio.runtime.reasoning_policy import resolve_reasoning_budget
 from literary_engineering_studio.runtime.sandbox import SandboxManifest
 
 
@@ -158,6 +160,39 @@ class IncrementalRepairContextTests(unittest.TestCase):
                 finalized["restored_outputs"],
                 ["out/passed.md"],
             )
+
+    def test_repair_context_carries_a_non_escalating_mechanical_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root, ("out/result.json",))
+            sandbox = _sandbox(root)
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "invalid-json",
+                        "out/result.json",
+                        "JSON 无效。",
+                        "只修复 JSON 格式。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(
+                task,
+                sandbox,
+                reasoning_budget=resolve_reasoning_budget(
+                    ContextTaskKind.REVIEW,
+                    "agent-required",
+                ),
+            )
+
+            prepared = coordinator.prepare(result, 1, 2)
+            payload = json.loads(prepared.artifact_path.read_text(encoding="utf-8"))
+
+        reasoning = payload["budgets"]["reasoning"]
+        self.assertEqual(reasoning["action"], "retry_same")
+        self.assertEqual(reasoning["level"], "low")
+        self.assertIn("机械格式", prepared.prompt)
 
     def test_issue_identity_is_stable_across_attempts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

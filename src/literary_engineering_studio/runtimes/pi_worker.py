@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 import subprocess
 from typing import Any
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from ..subprocess_utils import run_hidden
 from .base import (
@@ -99,6 +99,7 @@ class PiWorkerRuntime(AgentRuntime):
         command.extend(["--max-turns", str(self._positive_setting("max_turns", 6))])
         command.extend(["--max-tools", str(self._positive_setting("max_tool_calls", 12))])
         command.extend(["--max-repairs", str(self._positive_setting("max_repair_attempts", 1))])
+        command.extend(self._reasoning_budget_args())
         for state in self._allowed_states():
             command.extend(["--allow-state", state])
         return tuple(command)
@@ -147,6 +148,8 @@ class PiWorkerRuntime(AgentRuntime):
             "bounded-repair",
             "process-cancellation",
             "reasoning-policy-control",
+            "reasoning-budget-control",
+            "provider-request-limit-control",
             "tool-limit-control",
             "total-timeout-control",
             "turn-limit-control",
@@ -178,12 +181,14 @@ class PiWorkerRuntime(AgentRuntime):
         reasoning_policy: str | None = None,
         max_turns: int | None = None,
         max_tool_calls: int | None = None,
+        reasoning_budget: Mapping[str, object] | None = None,
     ) -> RuntimeResult:
         overrides = {
             "max_repair_attempts": max_repairs,
             "reasoning_policy": reasoning_policy,
             "max_turns": max_turns,
             "max_tool_calls": max_tool_calls,
+            "reasoning_budget": dict(reasoning_budget) if reasoning_budget is not None else None,
         }
         self._execution_overrides = {key: value for key, value in overrides.items() if value is not None}
         try:
@@ -205,11 +210,15 @@ class PiWorkerRuntime(AgentRuntime):
             return result
         status = str(worker_result.get("status") or "")
         message = str(worker_result.get("message") or result.message)
-        metadata: dict[str, Any] = {"worker_result": worker_result}
+        metadata: dict[str, Any] = {
+            "worker_result": worker_result,
+            "reasoning_budget_receipt": self._reasoning_budget_receipt(worker_result),
+        }
         if status != "completed":
             detail = message.lower()
             no_progress = status == "blocked" and any(
-                token in detail for token in ("no-progress", "budget exhausted")
+                token in detail
+                for token in ("no-progress", "budget exhausted", "budget_exhausted")
             )
             metadata.update(
                 {
@@ -222,6 +231,49 @@ class PiWorkerRuntime(AgentRuntime):
                 }
             )
         return replace(result, message=message, metadata=metadata)
+
+    def _reasoning_budget_args(self) -> list[str]:
+        budget = self._execution_overrides.get("reasoning_budget")
+        if not isinstance(budget, Mapping):
+            return []
+        maximum = str(budget.get("maximum_level") or "").strip().lower()
+        if maximum not in _THINKING_LEVELS:
+            raise ValueError(f"unsupported maximum thinking level: {maximum}")
+        return [
+            "--max-thinking-level",
+            maximum,
+            "--reasoning-total",
+            str(_positive_budget_value(budget, "total_tokens")),
+            "--reasoning-per-request",
+            str(_positive_budget_value(budget, "per_request_tokens")),
+            "--max-provider-requests",
+            str(_positive_budget_value(budget, "max_provider_requests")),
+            "--max-reasoning-escalations",
+            str(_non_negative_budget_value(budget, "max_escalations")),
+        ]
+
+    def _reasoning_budget_receipt(self, worker_result: Mapping[str, Any]) -> dict[str, Any]:
+        expected = self._execution_overrides.get("reasoning_budget")
+        receipt = worker_result.get("reasoning_budget")
+        if not isinstance(expected, Mapping):
+            return _public_event_data(receipt) if isinstance(receipt, dict) else {}
+        if not isinstance(receipt, dict):
+            return {"status": "missing", "provider_support": "unknown"}
+        public = _public_event_data(receipt)
+        requested = public.get("requested")
+        matches = isinstance(requested, dict) and all(
+            requested.get(key) == expected.get(key)
+            for key in (
+                "initial_level",
+                "maximum_level",
+                "per_request_tokens",
+                "total_tokens",
+                "max_provider_requests",
+                "max_escalations",
+                "over_budget_action",
+            )
+        )
+        return {**public, "status": "matched" if matches else "mismatch"}
 
     def _entrypoint(self) -> Path | None:
         value = str(self.settings.get("entrypoint") or "").strip()
@@ -287,3 +339,23 @@ def _last_worker_result(output_path: Path | None) -> dict[str, Any]:
         if isinstance(data, dict):
             result = _public_event_data(data)
     return result
+
+
+def _positive_budget_value(budget: Mapping[str, object], name: str) -> int:
+    try:
+        value = int(budget.get(name) or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"reasoning budget {name} must be an integer") from exc
+    if value <= 0:
+        raise ValueError(f"reasoning budget {name} must be positive")
+    return value
+
+
+def _non_negative_budget_value(budget: Mapping[str, object], name: str) -> int:
+    try:
+        value = int(budget.get(name) or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"reasoning budget {name} must be an integer") from exc
+    if value < 0:
+        raise ValueError(f"reasoning budget {name} must be non-negative")
+    return value

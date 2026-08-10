@@ -374,9 +374,10 @@ def _reasoning_budget_status(
         return "disabled", "unknown"
     if capability_ids is None:
         return "pending", "unknown"
-    support = "supported" if "reasoning-budget-control" in capabilities else "unsupported"
-    # P5 is observation-only. P6 owns runtime enforcement and receipts.
-    return "shadow", support
+    if "reasoning-budget-control" not in capabilities:
+        return "shadow", "unsupported"
+    # Adapter support is known here; provider support remains unknown until receipt.
+    return ("applied" if mode == "enforced" else "shadow"), "unknown"
 
 
 def _validate_role(task: TaskPackage, kind: ContextTaskKind) -> None:

@@ -107,8 +107,8 @@ def activate_execution_profile(
 def profile_runtime_kwargs(
     profile: TaskExecutionProfile,
     worker_config: Mapping[str, Any],
-) -> dict[str, int | str]:
-    kwargs: dict[str, int | str] = {
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
         "max_repairs": profile.effective_int(
             "max_repair_attempts",
             int(worker_config.get("max_repair_attempts") or 2),
@@ -120,6 +120,9 @@ def profile_runtime_kwargs(
         kwargs["inter_event_timeout"] = profile.effective_int("inter_event_timeout_seconds", 300)
     if profile.is_applied("reasoning_policy"):
         kwargs["reasoning_policy"] = profile.effective_str("reasoning_policy", "low")
+    if profile.reasoning_budget_status == "applied":
+        kwargs["reasoning_policy"] = profile.reasoning_budget.initial_level
+        kwargs["reasoning_budget"] = profile.reasoning_budget.as_dict()
     if profile.is_applied("max_turns"):
         kwargs["max_turns"] = profile.effective_int("max_turns", 6)
     if profile.is_applied("max_tool_calls"):
@@ -149,7 +152,11 @@ def build_runtime_kwargs(
         return kwargs
     if runtime_id != "opencode":
         return kwargs
-    repair_context = RepairContextCoordinator(task, sandbox)
+    repair_context = RepairContextCoordinator(
+        task,
+        sandbox,
+        reasoning_budget=profile.reasoning_budget,
+    )
     kwargs.update(
         {
             "output_validator": lambda: writeback.validate_outputs(

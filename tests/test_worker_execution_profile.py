@@ -25,6 +25,8 @@ class _PiWorkerRuntime:
     def execution_control_capabilities(self):
         return (
             "bounded-repair",
+            "reasoning-budget-control",
+            "provider-request-limit-control",
             "reasoning-policy-control",
             "turn-limit-control",
             "tool-limit-control",
@@ -198,14 +200,16 @@ class WorkerExecutionProfileTests(unittest.TestCase):
 
         self.assertEqual(timeout, 600)
         self.assertEqual(kwargs["max_repairs"], 1)
-        self.assertEqual(kwargs["reasoning_policy"], "medium")
+        self.assertEqual(kwargs["reasoning_policy"], "low")
+        self.assertEqual(kwargs["reasoning_budget"]["maximum_level"], "medium")
+        self.assertEqual(kwargs["reasoning_budget"]["total_tokens"], 2048)
         self.assertEqual(kwargs["max_turns"], 5)
         self.assertEqual(kwargs["max_tool_calls"], 5)
         self.assertNotIn("first_event_timeout", kwargs)
-        self.assertEqual(profile.reasoning_budget_status, "shadow")
-        self.assertEqual(profile.reasoning_budget_provider_support, "unsupported")
+        self.assertEqual(profile.reasoning_budget_status, "applied")
+        self.assertEqual(profile.reasoning_budget_provider_support, "unknown")
         self.assertEqual(observer.events[1][0], "runner.reasoning_budget.recommended")
-        self.assertIsNone(
+        self.assertIsNotNone(
             observer.events[1][1]["reasoning_budget"]["effective"]
         )
 

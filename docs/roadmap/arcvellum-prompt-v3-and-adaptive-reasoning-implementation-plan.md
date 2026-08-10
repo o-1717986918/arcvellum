@@ -864,11 +864,13 @@ worker:
 - 新增纯函数 reasoning policy：机械格式/路径/缺文件问题只允许同等级定向修复，语义冲突最多升级一级，相同进度指纹第二次出现或总预算耗尽时停止；
 - 默认配置只启用预算计算，`reasoning_budget.status=shadow` 且 `effective=null`，现有 reasoning level、超时、修复次数和 Runtime 选择均未改变；
 - run manifest 与历史 benchmark 现在可比较 requested budget、Provider support、实际 reasoning token 和 Provider request 可见性；未收到 Provider usage receipt 时使用 `unavailable`，绝不伪造为 `0`；
-- 当前 OpenCode 和 Pi Worker 都未声明 `reasoning-budget-control`，因此 P5 如实记录为 `unsupported`。Pi Worker 的真实预算参数、使用收据与能力声明属于 P6，不在 shadow 阶段提前宣称生效；
+- P5 提交当时 OpenCode 和 Pi Worker 都未声明 `reasoning-budget-control`，因此该阶段如实记录为 `unsupported`。Pi Worker 的真实预算参数、使用收据与能力声明随后由 P6 独立实现；
 - 26 项 Profile、policy、runtime benchmark 与配置定向测试通过；architecture audit 为 `0` 新增债务、`0` 循环依赖；
 - live 同模型成本、时延、preflight 与文学质量尚未证明，不能进入 P6 enforced 或修改产品默认值。
 
 ### P6：ReasoningBudget canary
+
+状态：**合同与 fixture canary 已通过；live 同模型门禁未运行（2026-08-11）**
 
 修改：Pi Worker 执行与 Studio projection。
 
@@ -878,6 +880,18 @@ worker:
 - 预算、升级、停止和 repair E2E；
 - 同模型基准；
 - 未过门禁立即回 shadow。
+
+阶段记录：
+
+- Pi fork 新增 opt-in reasoning budget CLI 合同；旧 `--thinking` 调用未提供完整预算参数时保持原行为；
+- Worker 在回合边界执行 Provider 请求上限与 Provider 已报告 reasoning token 总上限，不在流式响应中途硬切断工具调用；
+- 达到预算时先本地验证已有产物：产物完整则交还 Studio 权威 preflight，产物不完整则以非盲重试的 `no_progress` 阻断；
+- Worker receipt 已包含 requested、provider support、actual token/null、reasoning characters、Provider 请求数、升级记录和 stop reason；Studio 对 requested 合同做匹配校验；
+- Pi Runtime 声明 `reasoning-budget-control` 与 `provider-request-limit-control`；OpenCode 不声明也不接收这些参数；
+- repair context 增加当前预算和纯函数策略动作。机械格式、路径、字段、缺文件与确定性 lint 保持同等级修复，不因失败自动加大推理；
+- Pi Worker 19 项测试、TypeScript build 和 CLI version probe 通过；Studio 39 项定向测试、1001 项全量回归和 architecture audit 通过；
+- 当前本机 Pi Worker / Pi RPC 均为 disabled，且 entrypoint、model、auth path 为空，因此没有执行 live A/B，也没有启用默认 enforcement；
+- 证据见 `docs/benchmarks/reasoning-budget-p6-contract-canary-2026-08-10.md`。在 live token、费用、时延、preflight 和文学盲评门禁通过前，P6 不得标记为产品晋升，P7 不扩大到 prose/planning。
 
 ### P7：扩展决策
 
