@@ -173,6 +173,23 @@ def load_schema_spec(schema_name: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def compact_schema_contract(schema_name: str) -> dict[str, Any]:
+    """Return the machine contract an Agent needs without exposing schema paths."""
+
+    spec = load_schema_spec(schema_name)
+    contract: dict[str, Any] = {
+        "schema_name": schema_name,
+        "schema_value": spec.get("schema_value", ""),
+        "required": list(spec.get("required") or []),
+        "types": dict(spec.get("types") or {}),
+    }
+    for key in ("recommended", "enums"):
+        value = spec.get(key)
+        if value:
+            contract[key] = value
+    return contract
+
+
 def minimal_payload(schema_name: str, **overrides: Any) -> dict[str, Any]:
     spec = load_schema_spec(schema_name)
     payload: dict[str, Any] = {"schema": spec.get("schema_value", schema_name)}

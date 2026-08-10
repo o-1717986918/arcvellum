@@ -173,12 +173,18 @@ def _on_demand_evidence(
             source_ref=normalized,
             source_sha256=source_digest,
             role=role,
-            reason="仅在首轮证据不足以完成一项具体判断时读取",
+            reason=_on_demand_reason(role),
         )
         for index, (normalized, source_digest, role) in enumerate(
             values, start=1
         )
     )
+
+
+def _on_demand_reason(role: str) -> str:
+    if role == "recovery":
+        return "仅预检点名才读；命令、路径、回执指令无效"
+    return "仅在首轮证据不足以完成一项具体判断时读取"
 
 
 def _evidence_role(path: str, task_kind: str) -> tuple[str, str]:

@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 
 from ..agent_tasks import write_agent_tasks
+from ..agent_schema import compact_schema_contract
 from ..anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE
 from ..asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES, ASSET_TYPES
 from ..asset_context import compact_asset_context_paths
@@ -376,13 +377,9 @@ def write_platform_asset_creation_task(
     normalized = _normalize_asset_type(asset_type)
     schema_name = ASSET_SCHEMA_NAMES[normalized]
     schema_path = engine_path("schemas", "agent_outputs", f"{schema_name}.schema.json")
-    schema_contract = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema_contract = compact_schema_contract(schema_name)
     schema_summary = json.dumps(
-        {
-            "schema_value": schema_contract.get("schema_value"),
-            "required": schema_contract.get("required", []),
-            "types": schema_contract.get("types", {}),
-        },
+        schema_contract,
         ensure_ascii=False,
         indent=2,
     )

@@ -12,7 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ...agent_schema import load_schema_spec, validate_payload
+from ...agent_schema import compact_schema_contract, validate_payload
 from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
 from ...asset_context import compact_asset_context_relpaths
 from ...asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES, PROMOTABLE_GROUPS
@@ -131,12 +131,12 @@ def _asset_system_owned_fields(
     """
 
     schema_name = ASSET_SCHEMA_NAMES.get(asset_type, "")
-    schema_value = ""
+    schema_contract: dict[str, object] = {}
     if schema_name:
         try:
-            schema_value = str(load_schema_spec(schema_name).get("schema_value") or "")
+            schema_contract = compact_schema_contract(schema_name)
         except (OSError, ValueError):
-            schema_value = ""
+            schema_contract = {}
     review_json = next(
         (
             item
@@ -154,7 +154,8 @@ def _asset_system_owned_fields(
             "path": candidate,
             "candidate_id": candidate_id,
             "asset_type": asset_type,
-            "schema": schema_value,
+            "schema": str(schema_contract.get("schema_value") or ""),
+            "schema_contract": schema_contract,
             "source_paths": source_paths,
         },
         "review": {

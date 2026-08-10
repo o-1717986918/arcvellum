@@ -505,6 +505,14 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
                 expected_outputs=["reviews/assets/protagonist_review.json"],
             )
             self.assertEqual(fields["enums"]["asset_review.status"], ["recheck_required"])
+            self.assertEqual(
+                fields["candidate"]["schema_contract"]["schema_name"],
+                "character_profile.v1",
+            )
+            self.assertEqual(
+                fields["candidate"]["schema_contract"]["types"]["background_story"],
+                "dict",
+            )
 
 
 if __name__ == "__main__":

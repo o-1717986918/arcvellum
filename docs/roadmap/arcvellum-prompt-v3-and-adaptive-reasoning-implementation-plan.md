@@ -823,6 +823,9 @@ worker:
 - 当前本机正式配置中的 Pi Worker 为 disabled，且没有 entrypoint、model 或 auth 配置，因此没有伪造 live 结果，也没有启用 Prompt v3 enforcement。
 - 首轮 live 暴露 Prompt v3 编译后 exact-on-demand 与 Worker 授权集合不一致；现已新增 `prompt-access/v1` 合同，并由 Capability Manifest 继续限制权限上界；
 - 修复后 structured v3 以 8,465 字符正式 Prompt、0 reasoning token、4 次 Provider 请求、73.0 秒完成，Studio preflight 为 0 issues 并进入 waiting_writeback；
+- 第二轮交错样本中，v2 在准备写回后遭工具拒绝，v3 在读取 recovery sidecar 后尝试读取未授权 schema 路径；旧 Worker 将两者都折叠成 `no_progress`，暴露了工具错误不可观测和 legacy sidecar 指令冲突，而非证明模型连接失败；
+- Pi Worker 现记录经过路径/凭证清洗的工具错误；第一次新错误进入进度摘要并获得一次纠错机会，重复同一错误才由 no-progress Gate 停止。沙箱读写白名单没有放宽；
+- Engine 现把资产 `schema_name/schema_value/required/types` 作为机器合同直接投影到 v3；工具版 Prompt 不再要求 Agent 读取或完成 Studio 管理的 sidecar。修复后 compile canary 为 8,782 字符，相对 v2 的 16,248 字符下降 45.95%；
 - 单次技术样本不替代三次交错 A/B，产品默认仍保持 shadow。
 
 ### P4：review canary
@@ -849,6 +852,7 @@ worker:
 - 首轮 review v3 在权限修复后完成读写，但因 compact Schema 删除字段类型而把 `character_logic` 写成 dict，Studio 权威 preflight 正确阻断；
 - compact Schema 现将必填类型压缩为 `required_type_groups`，并同步去除工具 Prompt 的重复运行纪律；review compile canary 为 14,111 字符，相对公平 v2 基线 23,519 字符下降 40.0%；
 - 修复后 review v3 使用 3 次 Provider 请求、0 reasoning token、68.4 秒完成，0 repair、0 preflight issues，并进入 waiting_writeback；
+- recovery 资料的提示压缩为单句非权威说明；最新 review compile canary 为 14,111 字符，相对 v2 的 23,519 字符下降 40.0017%，Prompt Lint 通过。该门槛余量极小，后续不得向首轮 review Prompt 添加重复说明；
 - 证据见 `docs/benchmarks/prompt-v3-live-access-contract-canary-2026-08-11.md`。匿名质量与重复样本尚未完成，不能扩大到 prose/planning。
 
 ### P5：ReasoningBudget shadow

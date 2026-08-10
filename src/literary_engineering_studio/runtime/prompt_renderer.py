@@ -121,7 +121,18 @@ def _tool_visible_constraints(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(
         value
         for value in values
-        if not any(fragment in value.casefold() for fragment in enforced_fragments)
+        if not _studio_owned_constraint(value, enforced_fragments)
+    )
+
+
+def _studio_owned_constraint(value: str, enforced_fragments: tuple[str, ...]) -> bool:
+    lowered = value.casefold()
+    if any(fragment in lowered for fragment in enforced_fragments):
+        return True
+    return "sidecar" in lowered and (
+        lowered.startswith("read ")
+        or " sidecar completed" in lowered
+        or " sidecar is complete" in lowered
     )
 
 
