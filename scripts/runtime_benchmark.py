@@ -126,6 +126,21 @@ def main(argv: list[str] | None = None) -> int:
                         "thinking": args.runner_thinking,
                     }
                 )
+                execution_profile = runtime_config.setdefault("worker", {}).setdefault(
+                    "execution_profile", {}
+                )
+                execution_profile.update(
+                    {
+                        "mode": "enforced",
+                        "enforcement": {
+                            "enabled": True,
+                            "runtimes": ["pi-worker"],
+                            "routes": [],
+                            "states": [],
+                            "task_kinds": [],
+                        },
+                    }
+                )
         cases = {item.case_id: item for item in load_benchmark_catalog(args.catalog)}
         if args.case_id not in cases:
             parser.error(f"unknown benchmark case: {args.case_id}")

@@ -102,7 +102,11 @@ def resolve_task_execution_profile(
 
     settings = _mapping(worker.get("execution_profile"))
     mode = _effective_mode(task, runtime_id, kind, settings)
-    targets = _PROFILE_TARGETS[kind]
+    targets = dict(_PROFILE_TARGETS[kind])
+    targets["max_tool_calls"] = max(
+        int(targets["max_tool_calls"]),
+        _minimum_bounded_worker_tool_calls(task),
+    )
     capabilities = set(capability_ids or ())
     controls = (
         _control("total_timeout_seconds", targets, mode, int(worker.get("timeout_seconds") or 1800), True),
@@ -187,6 +191,16 @@ _PROFILE_TARGETS: dict[ContextTaskKind, dict[str, object]] = {
     ContextTaskKind.PROSE: _targets(900, 240, 360, "medium", 1, 2, 2),
     ContextTaskKind.REVIEW: _targets(600, 240, 360, "high", 1, 2, 2),
 }
+
+
+def _minimum_bounded_worker_tool_calls(task: TaskPackage) -> int:
+    """Reserve writes plus context, validation, and completion for narrow workers."""
+
+    agent_outputs = sum(
+        output.kind not in {"completion-evidence", "deterministic", "human-approval"}
+        for output in task.execution_contract.outputs
+    )
+    return max(1, agent_outputs + 4)
 
 
 def _effective_mode(
