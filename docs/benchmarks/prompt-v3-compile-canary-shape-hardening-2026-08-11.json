@@ -1,0 +1,107 @@
+{
+  "schema": "arcvellum/prompt-compile-canary/v1",
+  "mode": "compile-only",
+  "runtime_renderer": "pi-worker",
+  "sample_count": 2,
+  "status": "pass",
+  "samples": [
+    {
+      "case_id": "structured-world-foundation",
+      "benchmark_class": "structured",
+      "runtime_task_kind": "creative",
+      "task_contract_sha256": "5e79f9e0c43f937faa22be0f50c452c1188b6c8d272441a29b7cd6a796101389",
+      "status": "pass",
+      "required_character_reduction": 0.3,
+      "actual_character_reduction": 0.457077,
+      "v2": {
+        "total_characters": 16553,
+        "estimated_input_tokens": 5911,
+        "instruction_characters": 5536,
+        "evidence_characters": 11017,
+        "unique_source_count": 14,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 47,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 1,
+        "prompt_sha256": "4402f44974caefd342029e2c378c18c049529eaa634fd02fa7f2a7f2cbaa588a"
+      },
+      "v3": {
+        "total_characters": 8987,
+        "estimated_input_tokens": 2409,
+        "instruction_characters": 6477,
+        "evidence_characters": 2510,
+        "unique_source_count": 11,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 4,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 4,
+        "prompt_sha256": "b670122453c4ce9a9c5dbe2795f6c6645623da27f4d83209c5310d1e4eaeaeac"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "f487b16b3c2af8fe72f48be3e9fbef82dc6aa22fa52aceac305927e3e0444813",
+      "compile_metrics": {
+        "inline_count": 11,
+        "exact_on_demand_count": 3,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 3,
+        "soft_character_limit": 42000,
+        "hard_character_limit": 60000,
+        "max_on_demand_reads": 2
+      }
+    },
+    {
+      "case_id": "review-scene-candidate",
+      "benchmark_class": "review",
+      "runtime_task_kind": "review",
+      "task_contract_sha256": "a96396979f7921c3aad244bc55f0ea6dff0fa04b94c3847f07440837924e93e4",
+      "status": "pass",
+      "required_character_reduction": 0.4,
+      "actual_character_reduction": 0.400536,
+      "v2": {
+        "total_characters": 23883,
+        "estimated_input_tokens": 8427,
+        "instruction_characters": 7556,
+        "evidence_characters": 16327,
+        "unique_source_count": 8,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 36,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 2,
+        "prompt_sha256": "3f48b4023879cf7d1a65920ce473e5733a7c68e3a6e6a4ff8b2d7d8acbc70dd6"
+      },
+      "v3": {
+        "total_characters": 14317,
+        "estimated_input_tokens": 5259,
+        "instruction_characters": 4528,
+        "evidence_characters": 9789,
+        "unique_source_count": 8,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 10,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 3,
+        "prompt_sha256": "59938034c59f828823a473dc254a5fe5f6a4e8489b3933d93a81339c53fcead9"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "7551c7461b966cae78fc87f1d67c6c9a8e2655849224fd3424836a1439490d2d",
+      "compile_metrics": {
+        "inline_count": 8,
+        "exact_on_demand_count": 2,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 0,
+        "soft_character_limit": 36000,
+        "hard_character_limit": 48000,
+        "max_on_demand_reads": 2
+      }
+    }
+  ],
+  "limitations": [
+    "No model was invoked; quality, preflight pass rate, latency, and provider token usage remain unproven.",
+    "A live interleaved A/B gate is still required before Prompt v3 enforcement is enabled."
+  ],
+  "content_policy": "no prompt bodies, prose, reasoning, credentials, or absolute paths",
+  "revision": "1d180885897866f7c260"
+}

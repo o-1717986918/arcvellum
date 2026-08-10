@@ -41,6 +41,12 @@ class EvidenceProjectionTests(unittest.TestCase):
                             "character_logic": "list",
                             "agent_confidence": "str",
                         },
+                        "object_shapes": {
+                            "canon_writeback": {
+                                "status": "str",
+                                "canon_change": "bool | str",
+                            }
+                        },
                     },
                 },
             },
@@ -62,6 +68,10 @@ class EvidenceProjectionTests(unittest.TestCase):
         self.assertNotIn("required", projected["output_schema"]["contract"])
         self.assertNotIn("types", projected["output_schema"]["contract"])
         self.assertNotIn("recommended", projected["output_schema"]["contract"])
+        self.assertEqual(
+            projected["output_schema"]["contract"]["object_shapes"]["canon_writeback"],
+            {"status": "str", "canon_change": "bool | str"},
+        )
         self.assertEqual(projected["output_schema"]["contract_sha256"], "contract")
 
 

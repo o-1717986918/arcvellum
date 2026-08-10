@@ -29,6 +29,21 @@
     "style_mount_snapshot": "dict",
     "reviewer_session_id": "str"
   },
+  "object_shapes": {
+    "canon_writeback": {
+      "status": "pass | not_required | pending_canon_evolve | unknown",
+      "canon_change": "true | false | unknown",
+      "no_canon_change_reason": "str",
+      "candidate_patch": "str"
+    },
+    "new_character_register": {
+      "schema": "literary-engineering-workbench/new-character-register/v0.1",
+      "status": "none | existing_only | ephemeral_only | resolved | needs_candidate | needs_review | needs_approval",
+      "introduced": "list",
+      "ephemeral_waivers": "list",
+      "blocking_issues": "list"
+    }
+  },
   "enums": {
     "conclusion": ["pass", "pass_with_notes", "revise_required", "reject"]
   }

@@ -1,0 +1,107 @@
+{
+  "schema": "arcvellum/prompt-compile-canary/v1",
+  "mode": "compile-only",
+  "runtime_renderer": "pi-worker",
+  "sample_count": 2,
+  "status": "pass",
+  "samples": [
+    {
+      "case_id": "structured-world-foundation",
+      "benchmark_class": "structured",
+      "runtime_task_kind": "creative",
+      "task_contract_sha256": "a65c74e2547ded6460263d993fac22454d800d94fdc3da197b2f28166d3d9a9b",
+      "status": "pass",
+      "required_character_reduction": 0.3,
+      "actual_character_reduction": 0.457077,
+      "v2": {
+        "total_characters": 16553,
+        "estimated_input_tokens": 5911,
+        "instruction_characters": 5536,
+        "evidence_characters": 11017,
+        "unique_source_count": 14,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 47,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 1,
+        "prompt_sha256": "e8b82bf2cb2d8e13962f679993720ae2d0bf5cf0feba9b0d040a599b0c72c75f"
+      },
+      "v3": {
+        "total_characters": 8987,
+        "estimated_input_tokens": 2409,
+        "instruction_characters": 6477,
+        "evidence_characters": 2510,
+        "unique_source_count": 11,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 4,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 4,
+        "prompt_sha256": "0f37b3f5e506f71861e527ba535b8052c6c8dba3c06e60980c63900297155935"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "d3ec83b0b37e50ba94887abac25d2a129334a7d3de80893b0330980512d6f9da",
+      "compile_metrics": {
+        "inline_count": 11,
+        "exact_on_demand_count": 3,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 3,
+        "soft_character_limit": 42000,
+        "hard_character_limit": 60000,
+        "max_on_demand_reads": 2
+      }
+    },
+    {
+      "case_id": "review-scene-candidate",
+      "benchmark_class": "review",
+      "runtime_task_kind": "review",
+      "task_contract_sha256": "b9d27a4259079df3e731d06ca0ff494bc871e6b60be04f1f7a0a39c67f121afc",
+      "status": "pass",
+      "required_character_reduction": 0.4,
+      "actual_character_reduction": 0.400536,
+      "v2": {
+        "total_characters": 23883,
+        "estimated_input_tokens": 8427,
+        "instruction_characters": 7556,
+        "evidence_characters": 16327,
+        "unique_source_count": 8,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 36,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 2,
+        "prompt_sha256": "8feb439142d28fafcb96a4a33907c52554274cb9de0f9cdb0dadaabd5c2c496d"
+      },
+      "v3": {
+        "total_characters": 14317,
+        "estimated_input_tokens": 5259,
+        "instruction_characters": 4528,
+        "evidence_characters": 9789,
+        "unique_source_count": 8,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 10,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 3,
+        "prompt_sha256": "57ff0bccd1d0fee42d8f5c34a77a05ef0a95c7979a617d66f93205029ddbcfc3"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "8b15356495c983d33bea4bead9387ef5b27bbc902ca97a4b53d3fd845f32d592",
+      "compile_metrics": {
+        "inline_count": 8,
+        "exact_on_demand_count": 2,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 0,
+        "soft_character_limit": 36000,
+        "hard_character_limit": 48000,
+        "max_on_demand_reads": 2
+      }
+    }
+  ],
+  "limitations": [
+    "No model was invoked; quality, preflight pass rate, latency, and provider token usage remain unproven.",
+    "A live interleaved A/B gate is still required before Prompt v3 enforcement is enabled."
+  ],
+  "content_policy": "no prompt bodies, prose, reasoning, credentials, or absolute paths",
+  "revision": "e70ee97dde9b63ba8aab"
+}

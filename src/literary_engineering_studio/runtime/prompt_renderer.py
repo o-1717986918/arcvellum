@@ -117,6 +117,13 @@ def _tool_visible_constraints(values: tuple[str, ...]) -> tuple[str, ...]:
         "do not let subagents",
         "do not write api keys",
         "do not call a local dry-run",
+        "candidate json exists",
+        "candidate report exists",
+        "candidate schema validates",
+        "scene_review.v1 json exists",
+        "review cites exact candidate",
+        "review conclusion is recorded",
+        "new_character_register is recorded",
     )
     return tuple(
         value

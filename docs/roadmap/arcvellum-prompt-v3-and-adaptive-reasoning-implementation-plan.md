@@ -804,7 +804,7 @@ worker:
 
 ### P3：structured canary
 
-状态：**compile-only 与首轮 live v3 技术样本已通过；三次交错 A/B 待完成（2026-08-11）**
+状态：**已完成并通过定向 Prompt v3 门禁（2026-08-11）**
 
 修改：structured recipe 和 Pi Worker opt-in。
 
@@ -826,11 +826,14 @@ worker:
 - 第二轮交错样本中，v2 在准备写回后遭工具拒绝，v3 在读取 recovery sidecar 后尝试读取未授权 schema 路径；旧 Worker 将两者都折叠成 `no_progress`，暴露了工具错误不可观测和 legacy sidecar 指令冲突，而非证明模型连接失败；
 - Pi Worker 现记录经过路径/凭证清洗的工具错误；第一次新错误进入进度摘要并获得一次纠错机会，重复同一错误才由 no-progress Gate 停止。沙箱读写白名单没有放宽；
 - Engine 现把资产 `schema_name/schema_value/required/types` 作为机器合同直接投影到 v3；工具版 Prompt 不再要求 Agent 读取或完成 Studio 管理的 sidecar。修复后 compile canary 为 8,782 字符，相对 v2 的 16,248 字符下降 45.95%；
-- 单次技术样本不替代三次交错 A/B，产品默认仍保持 shadow。
+- 世界基础 Prompt 增加最小范围纪律：未经 premise/user/canon 支持，不得发明具名机构、精确法律、历史事件、时钟历法事实、形而上机制或繁琐准入程序；未决原因进入 open questions，规则必须保留角色能动性；
+- 最终 compile canary 为 9,406 字符，相对同版本 v2 的 16,972 字符下降 44.58%，重复率 0；
+- 3 对交错 live A/B 全部首次通过 preflight、repair 为 0。v3 非缓存输入中位数下降 39.69%，总 token 下降 28.08%，费用下降 22.42%，耗时下降 10.06%；
+- 揭盲前 structured 质量中位分 v2/v3 为 4.32/4.40，v3 未退化。该精确路线满足 Prompt v3 定向灰度条件，但不能替代其他 creative 状态的独立 A/B。
 
 ### P4：review canary
 
-状态：**compile-only 与首轮 live v3 技术样本已通过；3 次交错 live A/B 与盲评待完成（2026-08-11）**
+状态：**已完成并通过定向 Prompt v3 门禁（2026-08-11）**
 
 修改：review recipe、compact evidence 优先、context packet retrieval 去重。
 
@@ -853,7 +856,11 @@ worker:
 - compact Schema 现将必填类型压缩为 `required_type_groups`，并同步去除工具 Prompt 的重复运行纪律；review compile canary 为 14,111 字符，相对公平 v2 基线 23,519 字符下降 40.0%；
 - 修复后 review v3 使用 3 次 Provider 请求、0 reasoning token、68.4 秒完成，0 repair、0 preflight issues，并进入 waiting_writeback；
 - recovery 资料的提示压缩为单句非权威说明；最新 review compile canary 为 14,111 字符，相对 v2 的 23,519 字符下降 40.0017%，Prompt Lint 通过。该门槛余量极小，后续不得向首轮 review Prompt 添加重复说明；
-- 证据见 `docs/benchmarks/prompt-v3-live-access-contract-canary-2026-08-11.md`。匿名质量与重复样本尚未完成，不能扩大到 prose/planning。
+- 一轮语义 A/B 暴露两个独立缺口：模型会把 deterministic clean 当作文学完成，并会把 `canon_writeback` / `new_character_register` 写成字符串。Exact review asset 现强制逐项对照内部/外部冲突、角色选择、scene turn、reader effect、bridge、distance、texture 与字数义务；权威 Schema 增加两个歧义嵌套对象的 `object_shapes`，v3 投影保留这些形状；
+- 最终 compile canary 为 14,317 字符，相对同版本 v2 的 23,883 字符下降 40.05%，重复率 0；
+- 3 对交错 live A/B 全部首次通过 preflight、repair 为 0。v3 非缓存输入中位数下降 26.90%，总 token 下降 22.26%；中位耗时上升 5.50%，费用只下降 1.19%；
+- 全部 6 份 review 都识别出 fixture 正文缺失“守钟人害怕指控盟友”的内部冲突并给出 `revise_required`；3 份 v3 均一次生成合法嵌套对象。揭盲前质量中位分 v2/v3 为 4.77/4.80；
+- 证据见 `docs/benchmarks/prompt-v3-final-ab-gate-2026-08-11.{json,md}`。该状态满足 review Prompt v3 定向灰度条件，但 review 延迟与费用数据不支持同步晋升推理预算。
 
 ### P5：ReasoningBudget shadow
 
@@ -881,7 +888,7 @@ worker:
 
 ### P6：ReasoningBudget canary
 
-状态：**合同、fixture 与 live 技术 canary 已通过；文学盲评门禁未运行（2026-08-11）**
+状态：**合同与技术 canary 通过；产品级 enforced 门禁未通过，保持 shadow（2026-08-11）**
 
 修改：Pi Worker 执行与 Studio projection。
 
@@ -906,11 +913,30 @@ worker:
 - DeepSeek 对精确 token budget 仍只标记 `partial`。当前通过的是等级安全钳制、请求上限、回执和 preflight 技术门禁，不代表 Provider 能执行 512/768 token 的精确单请求预算；
 - Pi Worker 21 项测试、TypeScript build 和 CLI version probe 通过；Studio 定向测试、1002 项全量回归和 architecture audit 通过；
 - 产品正式配置未被写入或改为 enforced，Prompt v3 仍为 shadow；
-- 证据见 `docs/benchmarks/reasoning-budget-p6-contract-canary-2026-08-10.md`、`docs/benchmarks/reasoning-budget-p6-live-canary-2026-08-11.md` 及对应 JSON。P3-P4 live v3 A/B 与文学盲评通过前，P7 不扩大到 prose/planning。
+- P3-P4 最终 A/B 已证明 0 reasoning 在当前 structured/review fixture 上没有造成文学质量退化，但跨两类样本的耗时与费用收益没有达到 15%/20% 门禁；尤其 review 中位耗时上升、费用近乎持平。因此不能把技术可执行等同于产品级收益；
+- 证据见 `docs/benchmarks/reasoning-budget-p6-contract-canary-2026-08-10.md`、`docs/benchmarks/reasoning-budget-p6-live-canary-2026-08-11.md` 与 `docs/benchmarks/prompt-v3-final-ab-gate-2026-08-11.{json,md}`。ReasoningBudget 继续 shadow，不提高默认推理，也不扩大到 prose/planning。
 
 ### P7：扩展决策
 
+状态：**已完成本轮决策；不扩大到 prose/planning，逐类 A/B 后再开（2026-08-11）**
+
 只有 P3-P6 通过后才评估 creative/planning/prose。每类单独 A/B，不允许一次全开。
+
+本轮决策：
+
+- `character-and-world-assets / asset-creation-agent-task / pi-worker` 与 `scene-development / candidate-review / pi-worker` 具备 Prompt v3 精确灰度资格；
+- 默认产品配置仍保留 shadow 和 v2 fallback，避免一次实验模型的结果静默改变既有用户配置；需要灰度时必须显式启用现有 route/state enforcement；
+- prose、planning、roleplay、branch、revision 不因 structured/review 通过而继承资格；每类至少 3 对交错样本并独立盲评；
+- ReasoningBudget 不随 Prompt v3 一起晋升。继续采集 Provider 请求与工具回合数据，优先优化 review 的回合数与尾延迟，而不是继续压低推理等级；
+- 本轮没有删除 v2 renderer；保留一个版本周期和明确 fallback，等更多模型与真实项目样本后再决定双轨收敛。
+
+最终验收：
+
+- `python -m unittest discover -s tests -q`：1009 项通过，1 项跳过；首次全量运行中的归档后台 job 等待超时单独复跑通过，第二次全量干净通过，记录为测试时序波动而非隐藏失败；
+- `python scripts/architecture_audit.py --json`：`ok: true`，无新增文件/函数债务或依赖违规；
+- Pi Worker：25 项 Vitest 通过，TypeScript build 通过；
+- Prompt asset evaluation、Prompt v3 投影/Schema 定向测试通过；
+- 新增 benchmark 未检出凭证模式或本机绝对路径，`git diff --check` 通过。
 
 每个 P 批次必须执行：
 

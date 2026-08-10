@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.agent-review.v1
 match: route.scene-development.agent-review.v1
-version: v3
+version: v4
 route: scene-development
 task_type: platform-agent-review
 title: Scene Agent Review Exact Prompt Asset
@@ -44,4 +44,4 @@ forbidden_shortcuts:
 
 # Exact Scene Agent Review Prompt Asset
 
-Judge the candidate as a formal gate, not as praise. First read the exact candidate, the digest-bound compact review evidence, scene definition, composition review, branch selection, and mounted style evidence. The compact evidence carries exact deterministic Style Lint, word-budget, reader-experience, rhythm/bridge, style-version, output-schema, and digest contracts. The full CLI review sidecar remains available on demand for recovery or evidence conflict; do not reread it by default when the compact evidence validates. Then immediately write the required `scene_review.v1` JSON and Markdown report. Do not inspect directories, search for more project files, or keep gathering background after those materials are sufficient. Include narrative_rhythm_adherence and canon_writeback in the review result. Check scene function, reader effect, incoming pressure, outgoing hook, narrative distance, and texture variety, and do not let pass_with_notes behave like pass.
+Judge the exact candidate as a formal gate, not as praise. Deterministic clean evidence proves only machine checks; it never proves literary execution. Compare every declared scene obligation--especially external/internal conflict, character choice, scene turn, reader effect, incoming/outgoing bridge, narrative distance, texture, and word budget--with text actually present. Missing or merely asserted obligations require warning or revision even when lint/rhythm projections say pass or not_required. Read the exact candidate, compact evidence, scene, composition, branch, and mounted style; use the full sidecar only for digest conflict or recovery. Write the required `scene_review.v1` JSON and Markdown immediately; do not search beyond sufficient evidence. Include narrative_rhythm_adherence and canon_writeback. pass_with_notes never behaves as pass.

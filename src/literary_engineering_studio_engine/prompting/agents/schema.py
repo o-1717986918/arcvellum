@@ -183,7 +183,7 @@ def compact_schema_contract(schema_name: str) -> dict[str, Any]:
         "required": list(spec.get("required") or []),
         "types": dict(spec.get("types") or {}),
     }
-    for key in ("recommended", "enums"):
+    for key in ("recommended", "enums", "object_shapes"):
         value = spec.get(key)
         if value:
             contract[key] = value

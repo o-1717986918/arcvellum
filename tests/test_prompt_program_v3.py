@@ -15,6 +15,7 @@ from literary_engineering_studio.runtime.prompt_program import (
 from literary_engineering_studio.runtime.prompt_renderer import render_tool_worker_program
 from literary_engineering_studio.runtime.prompt_metrics import measure_prompt
 from literary_engineering_studio.runtime.sandbox import stage_task
+from literary_engineering_studio_engine.prompting.agents.schema import compact_schema_contract
 
 
 class PromptProgramV3Tests(unittest.TestCase):
@@ -53,6 +54,8 @@ class PromptProgramV3Tests(unittest.TestCase):
                 "Read the asset creation sidecar and write a candidate.",
                 "asset creation sidecar completed",
                 "Candidate JSON must satisfy its schema.",
+                "scene_review.v1 JSON exists",
+                "review conclusion is recorded",
             ),
             output_contract={"outputs": []},
             evidence=(),
@@ -67,6 +70,19 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertNotIn("Read the asset creation sidecar", rendered)
         self.assertNotIn("sidecar completed", rendered)
         self.assertIn("Candidate JSON must satisfy its schema", rendered)
+        self.assertNotIn("scene_review.v1 JSON exists", rendered)
+        self.assertNotIn("review conclusion is recorded", rendered)
+
+    def test_compact_review_schema_preserves_ambiguous_object_shapes(self):
+        contract = compact_schema_contract("scene_review.v1")
+
+        self.assertEqual(contract["types"]["canon_writeback"], "dict")
+        self.assertEqual(contract["types"]["new_character_register"], "dict")
+        self.assertIn("canon_change", contract["object_shapes"]["canon_writeback"])
+        self.assertEqual(
+            contract["object_shapes"]["new_character_register"]["introduced"],
+            "list",
+        )
 
     def test_rollout_requires_explicit_enforcement_match(self):
         shadow = resolve_prompt_program_rollout(

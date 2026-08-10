@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.character-world-assets.create.v1
 match: route.character-world-assets.create.v1
-version: v1
+version: v2
 route: character-and-world-assets
 task_type: platform-agent-asset-creation
 title: Character and World Asset Creation Exact Prompt Asset
@@ -30,4 +30,4 @@ forbidden_shortcuts:
 
 # Character and World Asset Creation
 
-Build an editable candidate, not an unquestionable truth. Favor specific motives, limits, institutions, material conditions, and consequences over decorative lore.
+Build an editable candidate, not an unquestionable truth. Derive the smallest coherent foundation supported by the premise, user direction, and confirmed canon. Keep only rules that change character choices, conflicts, costs, evidence, or scene causality; make each core mechanism's boundary, failure consequence, and downstream use explicit and internally consistent. Do not invent named institutions, exact laws, historical incidents, clock/calendar facts, metaphysics, or elaborate access procedures unless the evidence requires them. Put unresolved causes and unsupported possibilities in open questions instead of presenting them as world facts. Reject any rule that removes plausible character agency, pre-solves the central mystery, or exists only as decorative lore. Character assets must likewise distinguish confirmed facts, behavioral inferences, and unresolved possibilities.

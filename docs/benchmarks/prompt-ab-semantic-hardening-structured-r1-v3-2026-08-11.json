@@ -1,0 +1,104 @@
+{
+  "schema": "arcvellum/runtime-benchmark-live-smoke/v1",
+  "case_id": "structured-world-foundation",
+  "benchmark_class": "structured",
+  "runtime": "pi-worker",
+  "selected_model": "deepseek/deepseek-v4-flash",
+  "runner_readiness": "ready-for-experimental-probe",
+  "requested_prompt_version": "v3",
+  "status": "waiting_writeback",
+  "failure_kind": "",
+  "retryable": null,
+  "preflight": {
+    "issue_count": 0,
+    "issue_codes": []
+  },
+  "sample": {
+    "run_fingerprint": "a8f6188cb94f",
+    "project_fingerprint": "8ab973b2d1d4",
+    "task_fingerprint": "f86aea376441",
+    "route": "character-and-world-assets",
+    "current_state": "asset-creation-agent-task",
+    "task_kind": "creative",
+    "runtime": "pi-worker",
+    "model": "deepseek-v4-flash",
+    "status": "awaiting_writeback_approval",
+    "failure_kind": "",
+    "retryable": null,
+    "execution_profile_mode": "enforced",
+    "execution_profile_digest": "7cf1f1b0bacfb6853bbc848d7c5bdf5e15cb7d0907ef44e91e9d84eb8a3f760a",
+    "time_to_process_ready_ms": 618,
+    "time_to_session_created_ms": 627,
+    "time_to_prompt_submitted_ms": 719,
+    "time_to_first_reasoning_ms": "unavailable",
+    "time_to_first_event_ms": 618,
+    "time_to_first_text_ms": 1787,
+    "time_to_first_tool_ms": 2308,
+    "time_to_first_output_ms": 68109,
+    "total_ms": 73768,
+    "prepared_context_characters": 11242,
+    "context_mode": "shadow",
+    "cache_status": "disabled",
+    "tool_calls": 5,
+    "persisted_event_count": 208,
+    "reasoning_activity_events": 0,
+    "text_delta_events": 173,
+    "repairs": 0,
+    "usage": {
+      "input_tokens": 11915,
+      "non_cached_input_tokens": 11915,
+      "output_tokens": 8028,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 23040,
+      "cache_write_tokens": 0,
+      "total_tokens": 42983,
+      "cost_usd": 0.00398
+    },
+    "prompt_program": {
+      "formal_version": "v3",
+      "formal_metrics": {
+        "total_characters": 9087,
+        "estimated_input_tokens": 2434,
+        "duplicate_character_ratio": 0.0,
+        "constraint_repetition_ratio": 0.0,
+        "prompt_sha256": "d230b4c4212b5890198c6d1b2bfd98cd5c74ccd4bab7bd2fe4ca85953eec4ee2"
+      },
+      "shadow_version": "unavailable",
+      "shadow_metrics": {},
+      "rollout_reason": "prompt-v3-enforced"
+    },
+    "reasoning_budget": {
+      "status": "applied",
+      "provider_support": "partial",
+      "receipt_status": "matched",
+      "effective_level": "off",
+      "requested": {
+        "initial_level": "low",
+        "maximum_level": "medium",
+        "per_request_tokens": 512,
+        "total_tokens": 2048,
+        "max_provider_requests": 4,
+        "max_escalations": 1,
+        "over_budget_action": "validate_then_stop"
+      },
+      "actual": {
+        "reasoning_tokens": 0,
+        "reasoning_tokens_reported": true,
+        "provider_requests_observed": 4,
+        "provider_requests_reported": true
+      },
+      "comparison": {
+        "reasoning_token_delta": -2048,
+        "reasoning_tokens_within_target": true,
+        "level_adjusted": true
+      }
+    },
+    "coverage": {
+      "first_event": true,
+      "total": true,
+      "usage": true,
+      "context": true
+    }
+  },
+  "content_policy": "no prompts, prose, reasoning text, paths, credentials, or tool payloads"
+}

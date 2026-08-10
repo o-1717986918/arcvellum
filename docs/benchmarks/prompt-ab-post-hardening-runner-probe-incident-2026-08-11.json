@@ -1,0 +1,19 @@
+{
+  "schema": "arcvellum/runtime-benchmark-live-smoke/v1",
+  "case_id": "structured-world-foundation",
+  "benchmark_class": "structured",
+  "runtime": "pi-worker",
+  "selected_model": "unavailable",
+  "runner_readiness": "unavailable",
+  "requested_prompt_version": "v2",
+  "status": "evidence-insufficient",
+  "failure_kind": "runner-unavailable",
+  "retryable": null,
+  "preflight": {
+    "issue_count": 0,
+    "issue_codes": []
+  },
+  "diagnostic": "version probe failed: Command '['D:\\\\nodejs\\\\node.exe', 'C:\\\\Users\\\\26532\\\\Documents\\\\Codex\\\\2026-07-16\\\\c-users-26532-documents-codex-2026\\\\outputs\\\\arcvellum-pi-agent\\\\packages\\\\arcvellum-worker\\\\dist\\\\main.js', '--version']' timed out after 15 seconds; task-context read/write policy enforced inside the worker",
+  "sample": {},
+  "content_policy": "no prompts, prose, reasoning text, paths, credentials, or tool payloads"
+}

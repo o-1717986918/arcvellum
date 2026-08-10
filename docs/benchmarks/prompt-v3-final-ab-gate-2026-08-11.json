@@ -1,0 +1,113 @@
+{
+  "schema": "arcvellum/prompt-v3-final-ab-gate/v1",
+  "date": "2026-08-11",
+  "status": "prompt-v3-canary-pass-reasoning-rollout-hold",
+  "model_family": "deepseek-v4-flash",
+  "runtime": "pi-worker",
+  "sample_policy": {
+    "pairs_per_class": 3,
+    "classes": ["structured-world-foundation", "review-scene-candidate"],
+    "execution_order": "interleaved",
+    "isolated_workspaces": true,
+    "reasoning_level": "off-effective",
+    "content_safe": true
+  },
+  "compile_gate": {
+    "structured": {
+      "v2_characters": 16972,
+      "v3_characters": 9406,
+      "character_reduction": 0.445793,
+      "duplicate_character_ratio": 0.0,
+      "status": "pass"
+    },
+    "review": {
+      "v2_characters": 23883,
+      "v3_characters": 14317,
+      "character_reduction": 0.400536,
+      "duplicate_character_ratio": 0.0,
+      "status": "pass"
+    }
+  },
+  "live_medians": {
+    "structured": {
+      "v2": {
+        "total_ms": 62005,
+        "non_cached_input_tokens": 13761,
+        "total_tokens": 53358,
+        "cost_usd": 0.003617,
+        "tool_calls": 4
+      },
+      "v3": {
+        "total_ms": 55767,
+        "non_cached_input_tokens": 8299,
+        "total_tokens": 38373,
+        "cost_usd": 0.002806,
+        "tool_calls": 5
+      },
+      "reductions": {
+        "total_ms": 0.100605,
+        "non_cached_input_tokens": 0.396919,
+        "total_tokens": 0.280839,
+        "cost_usd": 0.224219
+      }
+    },
+    "review": {
+      "v2": {
+        "total_ms": 73268,
+        "non_cached_input_tokens": 18668,
+        "total_tokens": 72617,
+        "cost_usd": 0.005123,
+        "tool_calls": 5
+      },
+      "v3": {
+        "total_ms": 77297,
+        "non_cached_input_tokens": 13646,
+        "total_tokens": 56455,
+        "cost_usd": 0.005062,
+        "tool_calls": 4
+      },
+      "reductions": {
+        "total_ms": -0.05499,
+        "non_cached_input_tokens": 0.269016,
+        "total_tokens": 0.222565,
+        "cost_usd": 0.011907
+      }
+    }
+  },
+  "reliability": {
+    "v2_first_pass_rate": 1.0,
+    "v3_first_pass_rate": 1.0,
+    "v2_repairs": 0,
+    "v3_repairs": 0,
+    "review_internal_conflict_detection_rate_v2": 1.0,
+    "review_internal_conflict_detection_rate_v3": 1.0,
+    "review_nested_object_schema_pass_rate_v3": 1.0,
+    "exact_evidence_coverage": 1.0
+  },
+  "blind_quality": {
+    "structured": {
+      "v2_median": 4.32,
+      "v3_median": 4.4,
+      "result": "v3-not-worse"
+    },
+    "review": {
+      "v2_median": 4.77,
+      "v3_median": 4.8,
+      "result": "v3-not-worse"
+    },
+    "rubric_scale": "1-5",
+    "mapping_revealed_after_scoring": true
+  },
+  "decision": {
+    "prompt_v3_structured_review": "eligible-for-targeted-pi-worker-enforcement",
+    "prompt_v3_prose_planning_creative_expansion": "hold-for-separate-ab",
+    "reasoning_budget_product_enforcement": "hold-shadow",
+    "reason": "Prompt v3 met its character, input, reliability, evidence, and blind-quality gates. The combined runtime gate did not meet the required time and cost reductions: review median latency increased and review cost was nearly flat."
+  },
+  "evidence": {
+    "compile": "prompt-v3-compile-canary-release-2026-08-11.json",
+    "live_samples_glob": "prompt-ab-final-*-2026-08-11.json",
+    "object_shape_canary": "prompt-v3-live-review-object-shape-2026-08-11.json"
+  },
+  "content_policy": "No prompts, prose, reasoning text, credentials, absolute paths, or tool payloads are stored in this report."
+}
