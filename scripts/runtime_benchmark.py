@@ -23,6 +23,10 @@ from literary_engineering_studio.observability.runtime_benchmark import (
     render_historical_report_markdown,
 )
 from literary_engineering_studio.observability.runtime_benchmark_live import run_live_benchmark
+from literary_engineering_studio.observability.prompt_audit import (
+    build_prompt_audit_report,
+    render_prompt_audit_markdown,
+)
 from literary_engineering_studio.application.config import load_config
 
 
@@ -46,6 +50,20 @@ def main(argv: list[str] | None = None) -> int:
     historical.add_argument("--output", type=Path, required=True)
     historical.add_argument("--markdown", type=Path)
     historical.add_argument("--limit", type=int, default=0)
+
+    prompt_audit = subparsers.add_parser(
+        "prompt-audit",
+        help="Measure rendered Agent prompts without storing their content.",
+    )
+    prompt_audit.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        metavar="ID=PATH",
+        help="Add a labelled AGENT_TASK.md path; may be repeated.",
+    )
+    prompt_audit.add_argument("--output", type=Path, required=True)
+    prompt_audit.add_argument("--markdown", type=Path)
 
     live = subparsers.add_parser("live", help="Run one explicit live-model smoke benchmark.")
     live.add_argument("case_id")
@@ -104,6 +122,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.markdown:
             args.markdown.parent.mkdir(parents=True, exist_ok=True)
             args.markdown.write_text(render_historical_report_markdown(payload), encoding="utf-8")
+    elif args.command == "prompt-audit":
+        cases = _prompt_audit_cases(args.case, parser)
+        payload = build_prompt_audit_report(cases)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if args.markdown:
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(render_prompt_audit_markdown(payload), encoding="utf-8")
     else:
         if not args.confirm_live_model:
             parser.error("live benchmark requires --confirm-live-model")
@@ -177,6 +203,24 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
+
+
+def _prompt_audit_cases(values: list[str], parser: argparse.ArgumentParser) -> dict[str, Path]:
+    cases: dict[str, Path] = {}
+    for value in values:
+        case_id, separator, raw_path = value.partition("=")
+        if not separator or not case_id.strip() or not raw_path.strip():
+            parser.error("prompt-audit --case must use ID=PATH")
+        identifier = case_id.strip()
+        if identifier in cases:
+            parser.error(f"duplicate prompt-audit case id: {identifier}")
+        path = Path(raw_path.strip())
+        if not path.is_file():
+            parser.error(f"prompt-audit source not found: {path}")
+        cases[identifier] = path
+    if not cases:
+        parser.error("prompt-audit requires at least one --case ID=PATH")
+    return cases
 
 
 if __name__ == "__main__":

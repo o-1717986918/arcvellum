@@ -1,6 +1,6 @@
 # ArcVellum Prompt v3 与自适应推理预算实施方案
 
-> 状态：待实施
+> 状态：实施中，P0 已完成
 > 编写日期：2026-08-10
 > Studio 基线：`release/v0.97.0` / `640cc63`
 > Pi fork 基线：`85bf8eff`
@@ -733,6 +733,8 @@ worker:
 
 ### P0：冻结基线与 Prompt Audit
 
+状态：**已完成（2026-08-10）**
+
 修改：benchmark/metrics/tests/docs。
 
 交付：
@@ -741,6 +743,17 @@ worker:
 - section size、duplicate、evidence coverage；
 - reasoning/provider request 基线；
 - 独立提交。
+
+实现记录：
+
+- 新增内容安全的 Prompt 指标与 `runtime_benchmark.py prompt-audit`；
+- 冻结 structured、planning、creative、prose、review 五类 v2 实际运行样本；
+- 基线见 `docs/benchmarks/prompt-v2-baseline-2026-08-10.{json,md}`；
+- prose 为 136,895 字符、估算 56,962 input tokens、25.6% 嵌套重复、34.9% 约束重复；
+- review 为 60,965 字符、估算 26,102 input tokens、10.5% 嵌套重复；
+- Pi review 既有同模型样本的 23,505 reasoning tokens 继续作为推理基线；
+- 指标只保存计数、比例和 digest，不保存 Prompt、正文、reasoning、凭证或绝对路径；
+- 定向测试与 architecture audit 通过。
 
 ### P1：修正 tier 语义
 
