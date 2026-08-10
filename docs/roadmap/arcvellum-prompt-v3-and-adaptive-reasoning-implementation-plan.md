@@ -1,6 +1,6 @@
 # ArcVellum Prompt v3 与自适应推理预算实施方案
 
-> 状态：实施中，P0 已完成
+> 状态：实施中，P0-P1 已完成
 > 编写日期：2026-08-10
 > Studio 基线：`release/v0.97.0` / `640cc63`
 > Pi fork 基线：`85bf8eff`
@@ -757,6 +757,8 @@ worker:
 
 ### P1：修正 tier 语义
 
+状态：**已完成（2026-08-10）**
+
 修改：`context_materialization.py`、context tests。
 
 交付：
@@ -765,6 +767,14 @@ worker:
 - 旧 v2 Prompt 仍可执行；
 - candidate-review 定向回归；
 - 独立提交，可单独回滚。
+
+实现记录：
+
+- `context_exact_on_demand_paths` 不再依赖 bounded mode；
+- off、shadow、bounded 均把完整 review sidecar 留在按需层；
+- compact review evidence 在首轮保留并继续执行 candidate/sidecar/schema digest 校验；
+- 三模式集成测试确认 must-inline 与 exact-on-demand 互斥，manifest、ledger 和 Prompt 使用同一 context digest；
+- 36 项上下文、沙箱、review 回归及 architecture audit 通过。
 
 ### P2：Prompt v3 IR 与 shadow compiler
 

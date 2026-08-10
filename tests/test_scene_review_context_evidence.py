@@ -201,7 +201,7 @@ class SceneReviewContextEvidenceTests(unittest.TestCase):
                 require=True,
             )
 
-    def test_formal_bounded_sandbox_inlines_compact_and_defers_sidecar(
+    def test_formal_sandbox_inlines_compact_and_defers_sidecar_in_every_mode(
         self,
     ) -> None:
         payload = registry._enrich_task_payload(
@@ -235,53 +235,59 @@ class SceneReviewContextEvidenceTests(unittest.TestCase):
             encoding="utf-8",
         )
         task = load_task_package(self.root, task_json)
-        budget = resolve_task_context_budget(
-            task,
-            {"context_budget": {"mode": "bounded"}},
-        )
-        sandbox = stage_task(
-            task,
-            self.root / ".runs",
-            runtime="test",
-            run_id="bounded-review",
-            context_budget=budget,
-        )
-        task_context = json.loads(
-            (sandbox.workspace / "TASK_CONTEXT.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        execution = task_context["execution_context"]
-        compact = self.compact.relative_to(self.root).as_posix()
-        sidecar = self.result.task_path.relative_to(
-            self.root
-        ).as_posix()
+        for mode in ("off", "shadow", "bounded"):
+            with self.subTest(mode=mode):
+                budget = resolve_task_context_budget(
+                    task,
+                    {"context_budget": {"mode": mode}},
+                )
+                sandbox = stage_task(
+                    task,
+                    self.root / ".runs",
+                    runtime="test",
+                    run_id=f"{mode}-review",
+                    context_budget=budget,
+                )
+                task_context = json.loads(
+                    (sandbox.workspace / "TASK_CONTEXT.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                execution = task_context["execution_context"]
+                compact = self.compact.relative_to(self.root).as_posix()
+                sidecar = self.result.task_path.relative_to(
+                    self.root
+                ).as_posix()
 
-        self.assertIn(compact, execution["must_inline"])
-        self.assertIn(sidecar, execution["exact_on_demand"])
-        self.assertFalse(
-            set(execution["must_inline"])
-            & set(execution["exact_on_demand"])
-        )
-        self.assertFalse(
-            set(payload["context_must_inline_paths"])
-            - set(execution["must_inline"])
-        )
-        manifest = json.loads(
-            sandbox.manifest_path.read_text(encoding="utf-8")
-        )
-        ledger = json.loads(
-            (sandbox.run_root / "context-ledger.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        digest = execution["context_digest"]
-        self.assertEqual(
-            manifest["execution_context"]["digest"],
-            digest,
-        )
-        self.assertEqual(ledger["execution_context_digest"], digest)
-        self.assertIn(digest, sandbox.prompt_path.read_text(encoding="utf-8"))
+                self.assertIn(compact, execution["must_inline"])
+                self.assertIn(sidecar, execution["exact_on_demand"])
+                self.assertNotIn(sidecar, execution["must_inline"])
+                self.assertFalse(
+                    set(execution["must_inline"])
+                    & set(execution["exact_on_demand"])
+                )
+                self.assertFalse(
+                    set(payload["context_must_inline_paths"])
+                    - set(execution["must_inline"])
+                )
+                manifest = json.loads(
+                    sandbox.manifest_path.read_text(encoding="utf-8")
+                )
+                ledger = json.loads(
+                    (sandbox.run_root / "context-ledger.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                digest = execution["context_digest"]
+                self.assertEqual(
+                    manifest["execution_context"]["digest"],
+                    digest,
+                )
+                self.assertEqual(ledger["execution_context_digest"], digest)
+                self.assertIn(
+                    digest,
+                    sandbox.prompt_path.read_text(encoding="utf-8"),
+                )
 
 
 if __name__ == "__main__":

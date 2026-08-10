@@ -253,8 +253,9 @@ def _exact_on_demand_context_paths(
     task: TaskPackage,
     budget: TaskContextBudget | None,
 ) -> tuple[str, ...]:
-    if budget is None or budget.mode is not ContextBudgetMode.BOUNDED:
-        return ()
+    # Visibility is part of the task contract, not a bounded-budget feature.
+    # Rollout mode controls the inline limit and blocking behavior only.
+    del budget
     declared = task.payload.get("context_exact_on_demand_paths")
     if not isinstance(declared, list):
         return ()
