@@ -21,6 +21,16 @@ class _Runtime:
         return ("bounded-repair", "silence-timeout-control")
 
 
+class _PiWorkerRuntime:
+    def execution_control_capabilities(self):
+        return (
+            "bounded-repair",
+            "reasoning-policy-control",
+            "turn-limit-control",
+            "tool-limit-control",
+        )
+
+
 class _Observer:
     def __init__(self):
         self.events = []
@@ -152,6 +162,46 @@ class WorkerExecutionProfileTests(unittest.TestCase):
                 writeback=_Writeback(),
             )
         self.assertEqual(set(kwargs), {"timeout", "event_sink", "cancel_event"})
+
+    def test_pi_worker_receives_supported_profile_controls(self):
+        settings = {
+            "timeout_seconds": 1800,
+            "max_repair_attempts": 2,
+            "execution_profile": {
+                "enforcement": {"enabled": True, "task_kinds": ["creative"]}
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root)
+            sandbox = _sandbox(root)
+            observer = _Observer()
+            profile, timeout = activate_execution_profile(
+                task,
+                sandbox,
+                worker_config=settings,
+                runtime_id="pi-worker",
+                runtime=_PiWorkerRuntime(),
+                observer=observer,
+            )
+            kwargs = build_runtime_kwargs(
+                task,
+                sandbox,
+                runtime_id="pi-worker",
+                timeout=timeout,
+                profile=profile,
+                worker_config=settings,
+                observer=observer,
+                cancel_event=threading.Event(),
+                writeback=_Writeback(),
+            )
+
+        self.assertEqual(timeout, 600)
+        self.assertEqual(kwargs["max_repairs"], 1)
+        self.assertEqual(kwargs["reasoning_policy"], "medium")
+        self.assertEqual(kwargs["max_turns"], 3)
+        self.assertEqual(kwargs["max_tool_calls"], 4)
+        self.assertNotIn("first_event_timeout", kwargs)
 
 
 if __name__ == "__main__":

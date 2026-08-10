@@ -73,6 +73,13 @@ class TaskExecutionProfile:
         except (TypeError, ValueError):
             return fallback
 
+    def effective_str(self, name: str, fallback: str) -> str:
+        control = next((item for item in self.controls if item.name == name), None)
+        if control is None or control.effective is None:
+            return fallback
+        value = str(control.effective).strip()
+        return value or fallback
+
     def is_applied(self, name: str) -> bool:
         control = next((item for item in self.controls if item.name == name), None)
         return bool(control and control.status == "applied")

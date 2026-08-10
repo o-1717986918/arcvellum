@@ -13,6 +13,7 @@ from .codex_cli import CodexCliRuntime
 from .host_agent import HostAgentRuntime
 from .opencode import OpenCodeRuntime
 from .pi_rpc import PiRpcRuntime
+from .pi_worker import PiWorkerRuntime
 
 
 RUNTIME_TYPES = {
@@ -21,6 +22,7 @@ RUNTIME_TYPES = {
     "claude-code": ClaudeCodeRuntime,
     "codex-cli": CodexCliRuntime,
     "pi-rpc": PiRpcRuntime,
+    "pi-worker": PiWorkerRuntime,
 }
 
 _STATUS_CACHE: dict[str, tuple[float, list[dict[str, object]]]] = {}

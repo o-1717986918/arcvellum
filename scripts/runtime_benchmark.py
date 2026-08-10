@@ -53,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--runner-executable", default="")
     live.add_argument("--runner-entrypoint", default="")
     live.add_argument("--runner-model", default="")
+    live.add_argument("--runner-auth-path", default="")
+    live.add_argument("--runner-thinking", default="low")
     live.add_argument("--timeout-seconds", type=int, default=300)
     live.add_argument("--output", type=Path, required=True)
     live.add_argument(
@@ -63,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument(
         "--confirm-experimental-runner",
         action="store_true",
-        help="Acknowledge that pi-rpc is an unsupported, unpackaged experiment.",
+        help="Acknowledge that the selected Pi runtime is an unsupported, unpackaged experiment.",
     )
 
     args = parser.parse_args(argv)
@@ -100,13 +102,13 @@ def main(argv: list[str] | None = None) -> int:
         if not args.confirm_live_model:
             parser.error("live benchmark requires --confirm-live-model")
         runtime_config = None
-        if args.runtime == "pi-rpc":
+        if args.runtime in {"pi-rpc", "pi-worker"}:
             if not args.confirm_experimental_runner:
-                parser.error("pi-rpc benchmark requires --confirm-experimental-runner")
+                parser.error(f"{args.runtime} benchmark requires --confirm-experimental-runner")
             if not args.runner_executable or not args.runner_entrypoint or not args.runner_model:
-                parser.error("pi-rpc benchmark requires executable, entrypoint, and model")
+                parser.error(f"{args.runtime} benchmark requires executable, entrypoint, and model")
             runtime_config = load_config()
-            settings = runtime_config.setdefault("agent_runners", {}).setdefault("pi-rpc", {})
+            settings = runtime_config.setdefault("agent_runners", {}).setdefault(args.runtime, {})
             settings.update(
                 {
                     "enabled": True,
@@ -117,6 +119,13 @@ def main(argv: list[str] | None = None) -> int:
                     "experiment_authorized": True,
                 }
             )
+            if args.runtime == "pi-worker":
+                settings.update(
+                    {
+                        "auth_path": args.runner_auth_path,
+                        "thinking": args.runner_thinking,
+                    }
+                )
         cases = {item.case_id: item for item in load_benchmark_catalog(args.catalog)}
         if args.case_id not in cases:
             parser.error(f"unknown benchmark case: {args.case_id}")

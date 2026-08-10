@@ -90,8 +90,8 @@ def activate_execution_profile(
 def profile_runtime_kwargs(
     profile: TaskExecutionProfile,
     worker_config: Mapping[str, Any],
-) -> dict[str, int]:
-    kwargs = {
+) -> dict[str, int | str]:
+    kwargs: dict[str, int | str] = {
         "max_repairs": profile.effective_int(
             "max_repair_attempts",
             int(worker_config.get("max_repair_attempts") or 2),
@@ -101,6 +101,12 @@ def profile_runtime_kwargs(
         kwargs["first_event_timeout"] = profile.effective_int("first_event_timeout_seconds", 180)
     if profile.is_applied("inter_event_timeout_seconds"):
         kwargs["inter_event_timeout"] = profile.effective_int("inter_event_timeout_seconds", 300)
+    if profile.is_applied("reasoning_policy"):
+        kwargs["reasoning_policy"] = profile.effective_str("reasoning_policy", "low")
+    if profile.is_applied("max_turns"):
+        kwargs["max_turns"] = profile.effective_int("max_turns", 6)
+    if profile.is_applied("max_tool_calls"):
+        kwargs["max_tool_calls"] = profile.effective_int("max_tool_calls", 12)
     return kwargs
 
 
@@ -121,6 +127,9 @@ def build_runtime_kwargs(
         "event_sink": observer.emit,
         "cancel_event": cancel_event,
     }
+    if runtime_id == "pi-worker":
+        kwargs.update(profile_runtime_kwargs(profile, worker_config))
+        return kwargs
     if runtime_id != "opencode":
         return kwargs
     repair_context = RepairContextCoordinator(task, sandbox)

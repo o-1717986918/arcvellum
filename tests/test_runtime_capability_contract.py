@@ -98,6 +98,19 @@ class RuntimeCapabilityContractTests(unittest.TestCase):
         self.assertNotIn("turn-limit-control", capabilities)
         self.assertNotIn("tool-limit-control", capabilities)
 
+    def test_pi_worker_declares_bounded_agent_controls_without_general_shell(self):
+        runtime = RUNTIME_TYPES["pi-worker"]({"model": "fixture/model"})
+        capabilities = set(runtime.execution_control_capabilities())
+        projection = runtime.capabilities(
+            RuntimeAvailability("pi-worker", True, "node", "fixture")
+        )
+        self.assertIn("bounded-repair", capabilities)
+        self.assertIn("reasoning-policy-control", capabilities)
+        self.assertIn("turn-limit-control", capabilities)
+        self.assertIn("tool-limit-control", capabilities)
+        self.assertFalse(projection.shell_control)
+        self.assertFalse(projection.web_control)
+
     def test_disabled_registered_runner_is_reported_without_probe(self):
         config = default_config()
         self.assertFalse(config["agent_runners"]["pi-rpc"]["enabled"])

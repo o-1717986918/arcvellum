@@ -22,6 +22,8 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("agent_runners", config)
         self.assertFalse(config["agent_runners"]["pi-rpc"]["enabled"])
         self.assertTrue(config["agent_runners"]["pi-rpc"]["experiment_only"])
+        self.assertFalse(config["agent_runners"]["pi-worker"]["enabled"])
+        self.assertTrue(config["agent_runners"]["pi-worker"]["experiment_only"])
         self.assertIn("model_connections", config)
         self.assertNotIn("runtimes", config)
 

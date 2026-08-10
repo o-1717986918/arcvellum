@@ -41,14 +41,14 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(payload["model_connection_policy"], "runner-managed")
         self.assertEqual(
             {item["runner_id"] for item in payload["agent_runners"]},
-            {"opencode", "host-agent", "claude-code", "codex-cli", "pi-rpc"},
+            {"opencode", "host-agent", "claude-code", "codex-cli", "pi-rpc", "pi-worker"},
         )
         pi_status = next(item for item in payload["agent_runners"] if item["runner_id"] == "pi-rpc")
         self.assertFalse(pi_status["enabled"])
         self.assertFalse(pi_status["probed"])
         self.assertEqual(payload["model_connections"][0]["connection_id"], "opencode-starter")
         runners = self.client.get("/agent-runners").json()
-        self.assertEqual(len(runners["items"]), 5)
+        self.assertEqual(len(runners["items"]), 6)
         connections = self.client.get("/model-connections").json()
         self.assertEqual(connections["managed_by"], "agent-runner")
 

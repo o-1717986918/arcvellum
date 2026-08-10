@@ -247,7 +247,11 @@ def main(argv: list[str] | None = None) -> int:
 def _task_arguments(parser: argparse.ArgumentParser, *, include_task_id: bool = True) -> None:
     parser.add_argument("project", help="Literary Engineering work-project directory.")
     parser.add_argument("--route", default="scene-development")
-    parser.add_argument("--runtime", choices=["opencode", "host-agent", "claude-code", "codex-cli"], default="opencode")
+    parser.add_argument(
+        "--runtime",
+        choices=["opencode", "host-agent", "claude-code", "codex-cli", "pi-worker"],
+        default="opencode",
+    )
     parser.add_argument("--scene", default="")
     if include_task_id:
         parser.add_argument("--task-id", default="")
