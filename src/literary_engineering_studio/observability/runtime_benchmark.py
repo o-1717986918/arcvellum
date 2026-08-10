@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ..application.config import default_config
+from .runtime_event_timings import recover_event_timings
 from .throughput_metrics import build_throughput_projection
 from .runtime_benchmark_preparation import drive_benchmark_preparation
 from .runtime_benchmark_scene import seed_synthetic_scene
@@ -193,7 +194,7 @@ def _historical_sample(path: Path) -> dict[str, object] | None:
     context = _mapping(manifest.get("context_budget"))
     usage = _mapping(projection.get("usage"))
     model = _last_event_value(events, "model")
-    timings = _sample_timings(manifest, runtime_metadata)
+    timings = _sample_timings(manifest, runtime_metadata, events)
     return {
         **_sample_identity(manifest, path),
         **_sample_execution(manifest, runtime_metadata, context, model),
@@ -245,6 +246,13 @@ def _sample_metrics(
         "context_mode": str(context.get("mode") or "unavailable"),
         "cache_status": str(cache.get("status") or "unavailable"),
         "tool_calls": sum(1 for item in events if item.get("event") == "tool.started"),
+        "persisted_event_count": len(events),
+        "reasoning_activity_events": sum(
+            1 for item in events if item.get("event") == "runner.reasoning.activity"
+        ),
+        "text_delta_events": sum(
+            1 for item in events if item.get("event") == "agent.message.delta"
+        ),
         "repairs": int(projection.get("repairs") or 0),
         "usage": dict(usage),
         "coverage": _sample_coverage(timings, usage, context),
@@ -274,19 +282,29 @@ def _markdown_sample_row(row: Mapping[str, object]) -> str:
 def _sample_timings(
     manifest: Mapping[str, object],
     runtime_metadata: Mapping[str, object],
+    events: list[dict[str, object]],
 ) -> dict[str, object]:
     created = str(manifest.get("created_at") or "")
     updated = str(manifest.get("updated_at") or "")
-    total = _integer(runtime_metadata.get("total_ms")) or _elapsed_ms(created, updated)
+    event_timings = recover_event_timings(events, created)
+    total = (
+        _integer(runtime_metadata.get("total_ms"))
+        or _integer(event_timings.get("total_ms"))
+        or _elapsed_ms(created, updated)
+    )
     return {
-        "time_to_process_ready_ms": _available_integer(runtime_metadata.get("time_to_process_ready_ms")),
-        "time_to_session_created_ms": _available_integer(runtime_metadata.get("time_to_session_created_ms")),
-        "time_to_prompt_submitted_ms": _available_integer(runtime_metadata.get("time_to_prompt_submitted_ms")),
-        "time_to_first_reasoning_ms": _available_integer(runtime_metadata.get("time_to_first_reasoning_ms")),
-        "time_to_first_event_ms": _available_integer(runtime_metadata.get("time_to_first_event_ms")),
-        "time_to_first_text_ms": _available_integer(runtime_metadata.get("time_to_first_text_ms")),
-        "time_to_first_tool_ms": _available_integer(runtime_metadata.get("time_to_first_tool_ms")),
-        "time_to_first_output_ms": _available_integer(runtime_metadata.get("time_to_first_output_ms")),
+        name: _available_integer(runtime_metadata.get(name) or event_timings.get(name))
+        for name in (
+            "time_to_process_ready_ms",
+            "time_to_session_created_ms",
+            "time_to_prompt_submitted_ms",
+            "time_to_first_reasoning_ms",
+            "time_to_first_event_ms",
+            "time_to_first_text_ms",
+            "time_to_first_tool_ms",
+            "time_to_first_output_ms",
+        )
+    } | {
         "total_ms": total or "unavailable",
     }
 

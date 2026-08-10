@@ -136,8 +136,14 @@ class RuntimeBenchmarkTests(unittest.TestCase):
             (run / "runtime.events.jsonl").write_text(
                 "\n".join(
                     [
+                        json.dumps({"event": "runtime_started", "at": "2026-08-09T00:00:00+00:00"}),
+                        json.dumps({"event": "runner.ready", "at": "2026-08-09T00:00:00.020000+00:00"}),
+                        json.dumps({"event": "runner.session.created", "at": "2026-08-09T00:00:00.040000+00:00"}),
+                        json.dumps({"event": "runner.reasoning.started", "at": "2026-08-09T00:00:00.120000+00:00"}),
+                        json.dumps({"event": "agent.message.delta", "at": "2026-08-09T00:00:00.350000+00:00", "text": "SECRET PROSE"}),
                         json.dumps({"event": "usage.updated", "at": "2026-08-09T00:00:01+00:00", "usage_id": "u1", "model": "model-a", "usage": {"input": 10, "output": 4, "reasoning": 3}, "cost_usd": 0.01}),
                         json.dumps({"event": "agent.message.completed", "at": "2026-08-09T00:00:02+00:00", "text": "SECRET PROSE AND REASONING"}),
+                        json.dumps({"event": "runtime_finished", "at": "2026-08-09T00:00:02+00:00"}),
                     ]
                 ),
                 encoding="utf-8",
@@ -153,7 +159,9 @@ class RuntimeBenchmarkTests(unittest.TestCase):
         self.assertIn("model-a", markdown)
         self.assertEqual(report["samples"][0]["usage"]["total_tokens"], 17)
         self.assertEqual(report["samples"][0]["time_to_first_reasoning_ms"], 120)
+        self.assertEqual(report["samples"][0]["time_to_first_event_ms"], 200)
         self.assertEqual(report["samples"][0]["time_to_first_output_ms"], 350)
+        self.assertEqual(report["samples"][0]["persisted_event_count"], 8)
 
 
 if __name__ == "__main__":
