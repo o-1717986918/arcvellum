@@ -1,6 +1,6 @@
 # ArcVellum Prompt v3 与自适应推理预算实施方案
 
-> 状态：实施中，P0-P2 已完成；P3-P4 compile canary 已通过，live A/B 待运行
+> 状态：实施中，P0-P2 已完成；P3-P4 compile canary 已通过，live v3 A/B 待运行；P5 已完成，P6 live 技术 canary 已通过
 > 编写日期：2026-08-10
 > Studio 基线：`release/v0.97.0` / `640cc63`
 > Pi fork 基线：`85bf8eff`
@@ -870,7 +870,7 @@ worker:
 
 ### P6：ReasoningBudget canary
 
-状态：**合同与 fixture canary 已通过；live 同模型门禁未运行（2026-08-11）**
+状态：**合同、fixture 与 live 技术 canary 已通过；文学盲评门禁未运行（2026-08-11）**
 
 修改：Pi Worker 执行与 Studio projection。
 
@@ -889,9 +889,13 @@ worker:
 - Worker receipt 已包含 requested、provider support、actual token/null、reasoning characters、Provider 请求数、升级记录和 stop reason；Studio 对 requested 合同做匹配校验；
 - Pi Runtime 声明 `reasoning-budget-control` 与 `provider-request-limit-control`；OpenCode 不声明也不接收这些参数；
 - repair context 增加当前预算和纯函数策略动作。机械格式、路径、字段、缺文件与确定性 lint 保持同等级修复，不因失败自动加大推理；
-- Pi Worker 19 项测试、TypeScript build 和 CLI version probe 通过；Studio 39 项定向测试、1001 项全量回归和 architecture audit 通过；
-- 当前本机 Pi Worker / Pi RPC 均为 disabled，且 entrypoint、model、auth path 为空，因此没有执行 live A/B，也没有启用默认 enforcement；
-- 证据见 `docs/benchmarks/reasoning-budget-p6-contract-canary-2026-08-10.md`。在 live token、费用、时延、preflight 和文学盲评门禁通过前，P6 不得标记为产品晋升，P7 不扩大到 prose/planning。
+- 首次 DeepSeek live canary 暴露 Pi 通用钳制会把不受支持的 `low` 隐式抬升为 `high`，实际产生 13,352 reasoning tokens；专用 Worker 已改为只向下选择受支持等级，绝不隐式提高推理强度；
+- 修复后同一 structured 样本以 `off` 执行，reasoning tokens 从 13,352 降至 0，总耗时从 136.8 秒降至 57.3 秒，费用从约 0.00576 美元降至约 0.00338 美元，并继续通过 preflight 进入待写回；
+- review 样本同样以 `off` 执行，0 reasoning tokens、97.2 秒、约 0.00610 美元，并通过 preflight 进入待写回；两个修复后样本均触及 4 次 Provider 请求上限，说明下一轮还需优化工具回合而非继续压低推理；
+- DeepSeek 对精确 token budget 仍只标记 `partial`。当前通过的是等级安全钳制、请求上限、回执和 preflight 技术门禁，不代表 Provider 能执行 512/768 token 的精确单请求预算；
+- Pi Worker 21 项测试、TypeScript build 和 CLI version probe 通过；Studio 定向测试、1002 项全量回归和 architecture audit 通过；
+- 产品正式配置未被写入或改为 enforced，Prompt v3 仍为 shadow；
+- 证据见 `docs/benchmarks/reasoning-budget-p6-contract-canary-2026-08-10.md`、`docs/benchmarks/reasoning-budget-p6-live-canary-2026-08-11.md` 及对应 JSON。P3-P4 live v3 A/B 与文学盲评通过前，P7 不扩大到 prose/planning。
 
 ### P7：扩展决策
 

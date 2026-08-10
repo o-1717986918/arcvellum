@@ -17,6 +17,7 @@ def reasoning_budget_projection(
     receipt = _mapping(runtime.get("reasoning_budget_receipt"))
     actual, actual_tokens = _actual_projection(receipt, events, usage)
     total_target = _optional_int(requested.get("total_tokens"))
+    effective_level = str(receipt.get("effective_level") or "unavailable")
     return {
         "status": str(contract.get("status") or "unavailable"),
         "provider_support": str(
@@ -25,12 +26,23 @@ def reasoning_budget_projection(
             or "unknown"
         ),
         "receipt_status": str(receipt.get("status") or "unavailable"),
+        "effective_level": effective_level,
         "requested": _requested_projection(requested),
         "actual": actual,
         "comparison": {
             "reasoning_token_delta": (
                 actual_tokens - total_target
                 if actual_tokens is not None and total_target is not None
+                else "unavailable"
+            ),
+            "reasoning_tokens_within_target": (
+                actual_tokens <= total_target
+                if actual_tokens is not None and total_target is not None
+                else "unavailable"
+            ),
+            "level_adjusted": (
+                effective_level != str(requested.get("initial_level") or "")
+                if effective_level != "unavailable" and requested.get("initial_level")
                 else "unavailable"
             ),
         },

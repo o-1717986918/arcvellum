@@ -11,6 +11,9 @@ from literary_engineering_studio.observability.runtime_benchmark import (
     reconstruct_benchmark_case,
     render_historical_report_markdown,
 )
+from literary_engineering_studio.observability.reasoning_benchmark_projection import (
+    reasoning_budget_projection,
+)
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 
@@ -19,6 +22,31 @@ CATALOG = Path(__file__).parent / "fixtures" / "runtime_benchmarks" / "catalog.j
 
 
 class RuntimeBenchmarkTests(unittest.TestCase):
+    def test_reasoning_projection_exposes_safe_level_adjustment_and_budget_breach(self):
+        manifest = {
+            "execution_profile": {
+                "reasoning_budget": {
+                    "status": "applied",
+                    "requested": {"initial_level": "low", "total_tokens": 2048},
+                }
+            },
+            "runtime_metadata": {
+                "reasoning_budget_receipt": {
+                    "status": "matched",
+                    "provider_support": "partial",
+                    "effective_level": "off",
+                    "actual_tokens": 0,
+                    "provider_requests": 1,
+                }
+            },
+        }
+
+        projection = reasoning_budget_projection(manifest, [], {})
+
+        self.assertEqual(projection["effective_level"], "off")
+        self.assertTrue(projection["comparison"]["level_adjusted"])
+        self.assertTrue(projection["comparison"]["reasoning_tokens_within_target"])
+
     def test_catalog_covers_five_ready_runtime_classes(self):
         cases = load_benchmark_catalog(CATALOG)
         self.assertEqual(len(cases), 6)

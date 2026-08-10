@@ -25,16 +25,19 @@
 
 ## Verification
 
-- Pi Worker: `19` tests passed; TypeScript build passed; built CLI returned `arcvellum-pi-worker 0.1.0`.
+- Pi Worker: `21` tests passed after safe-level resolution; TypeScript build passed; built CLI returned `arcvellum-pi-worker 0.1.0`.
 - Studio focused suite: `39` tests passed.
-- Studio full regression (2026-08-11): `1001` tests passed; `1` skipped.
+- Studio full regression (2026-08-11): `1002` tests passed; `1` skipped.
 - Architecture audit: passed with no new file/function debt and no import cycle.
+
+## Live Follow-up
+
+The first live DeepSeek probe revealed an unsafe generic Pi behavior: unsupported `low` reasoning was clamped upward to `high`. ArcVellum's specialized Worker now resolves only to the requested level or a supported lower level and records the effective level in its receipt. See `reasoning-budget-p6-live-canary-2026-08-11.md`.
 
 ## Not Yet Proven
 
-- Same-model structured/review token reduction.
 - Live Provider acceptance of the requested per-request target.
-- Live latency, cost, preflight pass rate, repair count, or literary blind-review quality.
+- Literary blind-review quality and repeated-run variance.
 - Semantic escalation across a Studio authoritative preflight retry.
 
-P6 therefore remains a canary implementation, not a product-default promotion.
+P6 remains an opt-in canary implementation, not a product-default promotion.

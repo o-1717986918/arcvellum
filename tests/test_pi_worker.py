@@ -57,6 +57,7 @@ events = [
                         "over_budget_action": "validate_then_stop",
                     },
                     "provider_support": "partial",
+                    "effective_level": "off",
                     "actual_tokens": 3,
                     "actual_characters": 420,
                     "provider_requests": 1,
@@ -163,6 +164,7 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(invocation["args"][invocation["args"].index("--max-provider-requests") + 1], "4")
         self.assertEqual(result.metadata["reasoning_budget_receipt"]["status"], "matched")
         self.assertEqual(result.metadata["reasoning_budget_receipt"]["provider_support"], "partial")
+        self.assertEqual(result.metadata["reasoning_budget_receipt"]["effective_level"], "off")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-turns") + 1], "2")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-tools") + 1], "3")
         self.assertTrue(any(event == "runner.reasoning.activity" for event, _ in events))
