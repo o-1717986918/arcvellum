@@ -40,7 +40,10 @@ export function safeThinkingLevel(
 		const candidate = LEVELS[index];
 		if (supported.includes(candidate)) return candidate;
 	}
-	throw new Error(`model cannot safely satisfy requested thinking level: ${requested}`);
+	// Some provider catalogs omit `off` even though omitting the reasoning
+	// parameter is always the only safe lower-bound fallback. Never increase a
+	// user's requested reasoning intensity merely to match a sparse catalog.
+	return "off";
 }
 
 export function providerBudgetSupport(
