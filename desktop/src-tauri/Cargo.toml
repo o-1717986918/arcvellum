@@ -1,6 +1,6 @@
 [package]
 name = "arcvellum-desktop"
-version = "0.97.3"
+version = "0.97.4"
 description = "Native desktop shell for ArcVellum"
 authors = ["ArcVellum contributors"]
 edition = "2021"

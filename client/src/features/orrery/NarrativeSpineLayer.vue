@@ -19,6 +19,11 @@ const size = ref({ width: 1, height: 1 });
 let resizeObserver: ResizeObserver | null = null;
 
 const isDetailView = computed(() => props.projection.level !== "book");
+const relationDensityClass = computed(() => props.projection.edges.length > 900
+  ? "relation-density-saturated"
+  : props.projection.edges.length > 320
+    ? "relation-density-dense"
+    : "relation-density-open");
 const spineClusters = computed<SpineCluster[]>(() => chapterCentroids(props.projection.nodes, props.anchors));
 const spinePoints = computed<SpinePoint[]>(() => spineClusters.value.map((cluster) => ({ node: cluster.node, anchor: cluster.anchor })));
 const spinePath = computed(() => buildPath(spinePoints.value.map((item) => item.anchor)));
@@ -312,6 +317,7 @@ function threadColor(value: string): string {
   <svg
     ref="host"
     class="narrative-spine-layer"
+    :class="relationDensityClass"
     :viewBox="`0 0 ${size.width} ${size.height}`"
     preserveAspectRatio="none"
     aria-hidden="true"

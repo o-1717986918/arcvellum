@@ -639,17 +639,13 @@ export class NarrativeParallaxRenderer {
             ? this.palette.core
             : mix(this.palette.core, this.palette.label, 0.46);
       const backbone = edge.type === "sequence" || edge.type === "bridge";
-      // A detail view can contain every scene in the book. Only evidence
-      // attached to an explicitly focused node deserves foreground treatment;
-      // the rest remains quiet background context until the reader navigates
-      // toward it.
-      const focusedEvidence = Boolean(this.focusedNodeId) && (
-        edge.source === this.focusedNodeId || edge.target === this.focusedNodeId
-      );
-      const localEvidence = detailProjection && focusedEvidence && !backbone;
+      // Evidence, promises and character relations belong to the SVG
+      // interaction layer. Keeping them out of this atmospheric Pixi pass
+      // prevents every relation from being painted twice on large projects.
+      if (!backbone) continue;
       const relationMode = relationModeForLevel(profiles.get(edge.relation_family), this.projection.level);
       const emphasized = relationMode === "emphasized";
-      const connection = (backbone && globalBackboneGrammar) || localEvidence || emphasized ? primary : secondary;
+      const connection = globalBackboneGrammar || emphasized ? primary : secondary;
       // A narrative relationship is a route through the field, not a diagram
       // wire. Its stable bend keeps the graph legible across live refreshes.
       const dx = end.x - start.x;
@@ -662,8 +658,8 @@ export class NarrativeParallaxRenderer {
       const controlB = { x: end.x - dx * 0.34 + normalX * bend, y: end.y - dy * 0.34 + normalY * bend };
       const modeWidth = relationMode === "emphasized" ? 1.55 : relationMode === "individual" ? 1.15 : 0.82;
       const modeAlpha = relationMode === "emphasized" ? 1.6 : relationMode === "individual" ? 1.08 : 0.72;
-      const width = (edge.type === "branch" ? 2.3 : backbone ? 2.8 : localEvidence ? 1.15 : 1.1) * modeWidth;
-      const alpha = Math.min(0.78, (backbone ? (detailProjection ? 0.64 : 0.48) : localEvidence ? 0.38 : edge.strength > 0.7 ? 0.2 : 0.11) * modeAlpha);
+      const width = 2.8 * modeWidth;
+      const alpha = Math.min(0.78, (detailProjection ? 0.64 : 0.48) * modeAlpha);
       connection.moveTo(start.x, start.y).bezierCurveTo(controlA.x, controlA.y, controlB.x, controlB.y, end.x, end.y).stroke({ color, width, alpha });
     }
     this.primaryRelations = primary;

@@ -19,6 +19,7 @@ from .base import (
     executable_prefix,
     resolve_executable,
 )
+from .pi_worker_repair import run_pi_worker_repairs
 
 
 _WORKER_EVENTS = frozenset(
@@ -182,6 +183,11 @@ class PiWorkerRuntime(AgentRuntime):
         max_turns: int | None = None,
         max_tool_calls: int | None = None,
         reasoning_budget: Mapping[str, object] | None = None,
+        output_validator=None,
+        repair_prompt_builder=None,
+        repair_turn_finalizer=None,
+        progress_digest_builder=None,
+        allowed_states: Sequence[str] | None = None,
     ) -> RuntimeResult:
         overrides = {
             "max_repair_attempts": max_repairs,
@@ -189,10 +195,11 @@ class PiWorkerRuntime(AgentRuntime):
             "max_turns": max_turns,
             "max_tool_calls": max_tool_calls,
             "reasoning_budget": dict(reasoning_budget) if reasoning_budget is not None else None,
+            "allowed_states": tuple(allowed_states) if allowed_states is not None else None,
         }
         self._execution_overrides = {key: value for key, value in overrides.items() if value is not None}
         try:
-            result = super().execute(
+            result = self._execute_once(
                 workspace,
                 prompt_path,
                 run_root,
@@ -200,9 +207,45 @@ class PiWorkerRuntime(AgentRuntime):
                 event_sink=event_sink,
                 cancel_event=cancel_event,
             )
-            return self._with_worker_result(result)
+            return run_pi_worker_repairs(
+                result,
+                run_root=run_root,
+                output_validator=output_validator,
+                max_repairs=int(max_repairs or 0),
+                repair_prompt_builder=repair_prompt_builder,
+                repair_turn_finalizer=repair_turn_finalizer,
+                run_turn=lambda repair_prompt, repair_root: self._execute_once(
+                    workspace,
+                    repair_prompt,
+                    repair_root,
+                    timeout=timeout,
+                    event_sink=event_sink,
+                    cancel_event=cancel_event,
+                ),
+                emit=event_sink or (lambda _event, _data: None),
+            )
         finally:
             self._execution_overrides = {}
+
+    def _execute_once(
+        self,
+        workspace: Path,
+        prompt_path: Path,
+        run_root: Path,
+        *,
+        timeout: int,
+        event_sink=None,
+        cancel_event=None,
+    ) -> RuntimeResult:
+        result = super().execute(
+            workspace,
+            prompt_path,
+            run_root,
+            timeout=timeout,
+            event_sink=event_sink,
+            cancel_event=cancel_event,
+        )
+        return self._with_worker_result(result)
 
     def _with_worker_result(self, result: RuntimeResult) -> RuntimeResult:
         worker_result = _last_worker_result(result.output_path)
@@ -296,7 +339,7 @@ class PiWorkerRuntime(AgentRuntime):
         return max(1, normalized)
 
     def _allowed_states(self) -> tuple[str, ...]:
-        raw = self.settings.get("allowed_states")
+        raw = self._execution_overrides.get("allowed_states", self.settings.get("allowed_states"))
         if not isinstance(raw, (list, tuple)):
             return _DEFAULT_STATES
         values = tuple(str(item).strip() for item in raw if str(item).strip())

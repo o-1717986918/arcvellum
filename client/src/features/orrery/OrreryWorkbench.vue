@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Activity, ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
+import { Activity, ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, PanelsTopLeft, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
@@ -476,6 +476,7 @@ async function loadChapterRail(root: string): Promise<void> {
       <button title="打开 Agent 执行中心" @click="windows.openInstrument('agent')"><Activity :size="16" /><span>执行</span></button>
       <button title="查看待定决定" :data-count="choices.length || undefined" @click="windows.openInstrument('decisions')"><GitBranch :size="16" /><span>决策</span></button>
       <button title="查看创作规则" @click="windows.openInstrument('rules')"><SlidersHorizontal :size="16" /><span>规则</span></button>
+      <button title="整理打开的窗口" @click="windows.constrainToViewport()"><PanelsTopLeft :size="16" /><span>整理</span></button>
     </nav>
     <button class="orrery-v3-reader-entry" title="打开正文长卷" @click="windows.openInstrument('reader')"><BookOpenText :size="16" /><span><small>MANUSCRIPT</small><strong>正文长卷</strong></span></button>
     <button class="orrery-v3-delivery-beacon" :class="{ ready: deliveryReady }" :disabled="!deliveryReady" :title="deliveryReady ? '作品已具备交付条件' : '交付条件尚未满足'" @click="windows.openInstrument('delivery')"><PackageCheck :size="17" /><span>{{ deliveryReady ? '可以交付' : '交付待命' }}</span></button>

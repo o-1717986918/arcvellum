@@ -159,7 +159,20 @@ async function visibleNodeCount(page: Page): Promise<number> {
 }
 
 async function canvasPixelEvidence(page: Page): Promise<{ nonTransparent: number; luminous: number; variance: number }> {
-  const buffer = await page.locator(".narrative-parallax-stage canvas").screenshot();
+  const canvas = page.locator(".narrative-parallax-stage canvas");
+  const bounds = await canvas.boundingBox();
+  const viewport = page.viewportSize();
+  expect(bounds).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  if (!bounds || !viewport) return { nonTransparent: 0, luminous: 0, variance: 0 };
+  const x = Math.max(0, bounds.x);
+  const y = Math.max(0, bounds.y);
+  const width = Math.min(bounds.width, viewport.width - x);
+  const height = Math.min(bounds.height, viewport.height - y);
+  const buffer = await page.screenshot({
+    animations: "disabled",
+    clip: { x, y, width, height },
+  });
   const png = PNG.sync.read(buffer);
   let nonTransparent = 0;
   let luminous = 0;

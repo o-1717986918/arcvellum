@@ -5,8 +5,10 @@ from pathlib import Path
 import sys
 import tempfile
 import textwrap
+from types import SimpleNamespace
 import unittest
 
+from literary_engineering_studio.preflight.common import PreflightIssue, PreflightResult
 from literary_engineering_studio.runtimes.pi_worker import PiWorkerRuntime
 from literary_engineering_studio.runtimes.base import RuntimeResult
 
@@ -26,7 +28,10 @@ def option(name):
 
 workspace = Path(option("--workspace"))
 prompt = sys.stdin.read()
-(workspace / "result.md").write_text("fixture output", encoding="utf-8")
+(workspace / "result.md").write_text(
+    "repaired output" if "Studio Incremental Repair" in prompt else "fixture output",
+    encoding="utf-8",
+)
 (workspace / "worker_args.json").write_text(
     json.dumps({"args": sys.argv[1:], "prompt": prompt}), encoding="utf-8"
 )
@@ -151,6 +156,7 @@ class PiWorkerRuntimeTests(unittest.TestCase):
                 max_turns=2,
                 max_tool_calls=3,
                 max_repairs=1,
+                allowed_states=("story-architecture-agent-task",),
             )
             invocation = json.loads((workspace / "worker_args.json").read_text(encoding="utf-8"))
 
@@ -167,6 +173,10 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(result.metadata["reasoning_budget_receipt"]["effective_level"], "off")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-turns") + 1], "2")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-tools") + 1], "3")
+        self.assertEqual(
+            invocation["args"][invocation["args"].index("--allow-state") + 1],
+            "story-architecture-agent-task",
+        )
         self.assertTrue(any(event == "runner.reasoning.activity" for event, _ in events))
         self.assertTrue(any(event == "tool.started" for event, _ in events))
         self.assertTrue(any(event == "usage.updated" for event, _ in events))
@@ -195,6 +205,61 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(result.message, "model stopped without calling complete_task")
         self.assertEqual(result.metadata["failure_kind"], "validation_failure")
         self.assertTrue(result.metadata["retryable"])
+
+    def test_studio_preflight_can_request_one_bounded_fresh_process_repair(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            entrypoint = self._fixture(root)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = workspace / "AGENT_TASK.md"
+            prompt.write_text("perform fixture", encoding="utf-8")
+            events: list[tuple[str, dict[str, object]]] = []
+            runtime = PiWorkerRuntime(
+                {
+                    "executable": sys.executable,
+                    "entrypoint": str(entrypoint),
+                    "model": "fixture/model",
+                }
+            )
+
+            def validate():
+                passed = (workspace / "result.md").read_text(encoding="utf-8") == "repaired output"
+                return PreflightResult(
+                    passed,
+                    () if passed else (
+                        PreflightIssue(
+                            "fixture-style",
+                            "result.md",
+                            "fixture needs a bounded repair",
+                            "replace only the invalid fixture output",
+                        ),
+                    ),
+                )
+
+            result = runtime.execute(
+                workspace,
+                prompt,
+                run_root,
+                timeout=10,
+                event_sink=lambda event, data: events.append((event, data)),
+                max_repairs=1,
+                output_validator=validate,
+                repair_prompt_builder=lambda _result, attempt, maximum: SimpleNamespace(
+                    prompt=f"# Studio Incremental Repair {attempt}/{maximum}\nfix the fixture output",
+                    event_fields=lambda: {"repair_context_digest": "fixture"},
+                ),
+                repair_turn_finalizer=lambda: {"restored_output_count": 0},
+            )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.metadata["repair_attempts"], 1)
+        self.assertTrue(result.metadata["final_preflight"]["passed"])
+        self.assertTrue(any(event == "repair.started" for event, _ in events))
+        self.assertTrue(any(event == "validation.failed" for event, _ in events))
+        self.assertTrue(any(event == "validation.passed" for event, _ in events))
 
     def test_reasoning_budget_exhaustion_is_non_retryable_no_progress(self):
         with tempfile.TemporaryDirectory() as temporary:

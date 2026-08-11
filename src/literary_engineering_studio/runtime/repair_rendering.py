@@ -62,11 +62,16 @@ def render_repair_prompt(payload: Mapping[str, object]) -> str:
         f"- `{item}`" for item in target_rows
     ) or "- 无可映射目标。"
     reasoning_text = _reasoning_budget_text(payload)
+    session_text = (
+        "这是同一 Agent session 内的有界修复回合。"
+        if payload.get("repair_session") == "same-session"
+        else "这是同一任务沙箱中的独立有界修复回合；此前完整任务不会重放。"
+    )
     return f"""# Studio Incremental Repair {payload.get('attempt')}/{payload.get('maximum_attempts')}
 
 Repair Context: `{payload.get('context_digest')}`
 
-这是同一 Agent session 内的有界修复回合。不要重做完整任务，不要重新解释已经成立的创作判断，不要把无关文件加入上下文。
+{session_text}不要重做完整任务，不要重新解释已经成立的创作判断，不要把无关文件加入上下文。
 
 ## 本回合允许保留修改的输出
 

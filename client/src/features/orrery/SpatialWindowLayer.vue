@@ -38,6 +38,7 @@ const progressCalibrated = computed(() => String(props.progress?.status || "") =
 const deliveryFiles = computed(() => asList<Record<string, unknown>>(props.delivery?.files));
 const deliveryPreparing = ref(false);
 const deliveryMessage = ref("");
+let viewportTimer = 0;
 
 function statusLabel(status: string): string {
   return ({ formal: "已晋升", current: "正在推进", blocked: "需要处理", alternative: "候选分支", memory: "已写回" } as Record<string, string>)[status] || "已登记";
@@ -171,8 +172,21 @@ function handleShortcut(event: KeyboardEvent): void {
   }
 }
 
-onMounted(() => window.addEventListener("keydown", handleShortcut));
-onBeforeUnmount(() => window.removeEventListener("keydown", handleShortcut));
+function handleViewportResize(): void {
+  window.clearTimeout(viewportTimer);
+  viewportTimer = window.setTimeout(() => windows.constrainToViewport(), 90);
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", handleShortcut);
+  window.addEventListener("resize", handleViewportResize);
+  handleViewportResize();
+});
+onBeforeUnmount(() => {
+  window.clearTimeout(viewportTimer);
+  window.removeEventListener("keydown", handleShortcut);
+  window.removeEventListener("resize", handleViewportResize);
+});
 </script>
 
 <template>

@@ -143,7 +143,7 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### Windows 桌面端
 
-1. 下载 [ArcVellum v0.97.3 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.97.3/ArcVellum_0.97.3_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
+1. 下载 [ArcVellum v0.97.4 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.97.4/ArcVellum_0.97.4_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
 2. 启动 ArcVellum。默认作品库为 `Documents/ArcVellum/Works`，也可在设置中调整。
 3. 打开 **设置 -> 连接与模型**，连接模型服务并为不同角色选择模型。
 4. 新建作品，写下创作大方向与约束，再选择协作、监督自动或全自动推进方式。
@@ -153,7 +153,7 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### 自动更新
 
-ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.97.3**。
+ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.97.4**。
 
 ## 开发者入口
 
@@ -216,7 +216,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 
 ## 项目状态与 v1.0 方向
 
-ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.97.3 通过真实最小文学项目验证了从规划、场景推演和正文生成，到独立审查、晋升、人物状态写回、连续性账本应用及下一场衔接的完整闭环，并修复了上下文授权、YAML 状态持久化与 Runner 隔离中的系统性问题。
+ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.97.4 增加实验性的 Pi 专用文学 Worker，完成规划、角色推演、正文与独立审查的真实模型任务矩阵验证，并用 Studio 权威预检和有界修复继续守住正式写回边界；叙事星仪同时改善了高密度关系和多窗口工作台体验。
 
 走向 v1.0 的重点不是继续堆功能，而是积累证据：更多题材的长期项目样本、无人值守恢复验证、Windows 10/11 干净环境下的安装/覆盖升级矩阵、更强的模型连接诊断，以及在真实稿件上的创作质量评估。
 
@@ -226,7 +226,7 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本�
 - [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
-- [v0.97.3 发行说明](docs/releases/v0.97.3.md)
+- [v0.97.4 发行说明](docs/releases/v0.97.4.md)
 - [v0.97.2 发行说明](docs/releases/v0.97.2.md)
 - [v0.97.1 发行说明](docs/releases/v0.97.1.md)
 - [v0.97.0 发行说明](docs/releases/v0.97.0.md)

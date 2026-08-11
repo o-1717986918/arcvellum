@@ -157,6 +157,36 @@ describe("application store", () => {
     expect(store.dashboard?.current_task).toEqual({ title: "开始写第一场" });
   });
 
+  it("coalesces concurrent workspace refreshes for one large project", async () => {
+    const { useAppStore } = await import("./app");
+    const store = useAppStore();
+    await store.initialize();
+    let releaseSnapshot!: (value: Record<string, unknown>) => void;
+    const snapshot = new Promise<Record<string, unknown>>((resolve) => (releaseSnapshot = resolve));
+    apiMock.mockImplementation(async (path: string) => {
+      if (path.startsWith("/project/workspace?")) return snapshot;
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+
+    const first = store.refreshWorkspace();
+    const second = store.refreshWorkspace();
+    await Promise.resolve();
+
+    const workspaceCalls = apiMock.mock.calls.filter(([path]) => String(path).startsWith("/project/workspace?"));
+    expect(workspaceCalls).toHaveLength(1);
+    releaseSnapshot({
+      dashboard: { ok: true, current_task: { title: "合并加载" } },
+      library: { ok: true, sections: { characters: [] } },
+      delivery: { ok: true, project_root: "C:\\ArcVellum\\潮汐之后", status: "draft", files: [] },
+      reader_manifest: { ok: true, units: [], delta: { added: [], removed: [], initial: true } },
+      project_progress: { ok: true, status: "waiting_calibration", overall_percent: null, parts: [] },
+      autopilot_status: { ok: true, run: null },
+      agent_observability: { ok: true, status: "idle", active_task: null, sessions: [], recent_events: [] },
+    });
+    await Promise.all([first, second]);
+    expect(store.dashboard?.current_task).toEqual({ title: "合并加载" });
+  });
+
   it("preserves unchanged read-model identities across observability-only workspace updates", async () => {
     const { useAppStore } = await import("./app");
     const store = useAppStore();

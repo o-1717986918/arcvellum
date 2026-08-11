@@ -2,6 +2,30 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.97.4] - 2026-08-11
+
+### Added
+
+- Added an experimental bounded Pi literary Worker with task-specific execution profiles, explicit reasoning budgets, structured prompt v3 canaries, and terminal validation at the turn limit.
+- Added Studio-authoritative post-generation validation and one bounded, digest-aware fresh-process repair attempt inside the same isolated task workspace.
+- Added real-model benchmark evidence for long-form planning, roleplay, prose generation, and independent candidate review.
+
+### Changed
+
+- Reflowed persisted Orrery instruments on viewport changes, added a visible workspace tidy command, and introduced compact collision-aware layouts for dense desktop and narrow viewports.
+- Kept chapter and scene backbones in the Pixi atmosphere layer while moving evidence, promise, review, and character relationships to the interactive SVG layer to avoid duplicate rendering.
+- Reduced non-focused relationship intensity in dense projects without removing relationship data or focused highlights.
+- Made visual pixel evidence compatible with continuously animated canvas scenes instead of waiting for an intentionally moving element to become static.
+
+### Fixed
+
+- Prevented Pi tasks from failing after producing valid outputs on their final permitted turn.
+- Prevented Studio preflight failures from discarding an otherwise useful expensive Worker session when a bounded repair can correct exact deterministic issues.
+- Prevented persisted spatial windows from clipping or stacking after viewport and layout changes.
+- Coalesced concurrent initial workspace snapshot requests so large projects are not projected twice while the application shell and overview mount together.
+- Bound the Vite development server to the same IPv4 host used by the API proxy and visual-test harness.
+- Preserved architecture budgets by separating repair orchestration from one-process repair execution.
+
 ## [0.97.0] - 2026-08-03
 
 ### Added

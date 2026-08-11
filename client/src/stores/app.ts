@@ -53,6 +53,8 @@ export const useAppStore = defineStore("app", () => {
   let autopilotStream: EventStreamConnection | null = null;
   let agentObservabilityStream: EventStreamConnection | null = null;
   let workspaceRevisions: Record<string, string> = {};
+  let workspaceRefresh: Promise<void> | null = null;
+  let workspaceRefreshRoot = "";
   let modelCatalogAuthoritative = false;
 
   const currentProject = computed(
@@ -129,6 +131,24 @@ export const useAppStore = defineStore("app", () => {
   async function refreshWorkspace(): Promise<void> {
     if (!currentProjectPath.value) return;
     const requestedRoot = currentProjectPath.value;
+    if (workspaceRefresh && workspaceRefreshRoot === requestedRoot) {
+      await workspaceRefresh;
+      return;
+    }
+    const pending = loadWorkspaceSnapshot(requestedRoot);
+    workspaceRefresh = pending;
+    workspaceRefreshRoot = requestedRoot;
+    try {
+      await pending;
+    } finally {
+      if (workspaceRefresh === pending) {
+        workspaceRefresh = null;
+        workspaceRefreshRoot = "";
+      }
+    }
+  }
+
+  async function loadWorkspaceSnapshot(requestedRoot: string): Promise<void> {
     error.value = "";
     const snapshot = await api<ProjectWorkspaceSnapshot>(
       `/project/workspace?${query({ project_root: requestedRoot })}`,

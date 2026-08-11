@@ -16,6 +16,7 @@ import {
   buildAnchor,
   clampPosition,
   clampSize,
+  compactSize,
   instrumentPosition,
   isReaderMode,
   isWindowKind,
@@ -126,6 +127,7 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
     if (existing) {
       if (kind === "reader" && !existing.reader_mode) existing.reader_mode = "peek";
       restore(id);
+      constrainToViewport();
       return;
     }
     const readerMode = kind === "reader" ? "peek" : undefined;
@@ -142,7 +144,7 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       collapsed: false,
       reader_mode: readerMode,
     });
-    persist();
+    constrainToViewport();
   }
 
   function setReaderMode(mode: ReaderWindowMode): void {
@@ -277,6 +279,79 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
     });
   }
 
+  function constrainToViewport(): void {
+    const expanded = windows.value
+      .filter((item) => !item.collapsed)
+      // Large instruments have fewer valid homes. Place them first, then fit
+      // compact windows around them while preserving layer order as a tie-break.
+      .sort((left, right) => (right.size.width * right.size.height) - (left.size.width * left.size.height) || right.layer - left.layer);
+    if (window.innerWidth <= 760 && expanded.length > 1) {
+      const active = [...expanded].sort((left, right) => right.layer - left.layer)[0];
+      expanded.forEach((item) => { item.collapsed = item.id !== active.id; });
+      persist();
+      return;
+    }
+    if (expanded.length >= 4 && window.innerWidth > 760) {
+      tileDenseWindows(expanded);
+      persist();
+      return;
+    }
+    const placed: SpatialWindow[] = [];
+    expanded.forEach((item) => {
+      if (item.kind === "reader" && item.reader_mode === "immersive") {
+        item.size = readerModeSize("immersive");
+        item.position = { left: 16, top: 16 };
+      } else {
+        item.size = item.kind === "reader"
+          ? readerModeSize(item.reader_mode || "peek")
+          : clampSize(item.kind, item.size);
+        const preferred = clampPosition(item.position, item.size);
+        item.position = item.kind === "node" && item.anchor?.enabled
+          ? preferred
+          : placeWithoutCollision(preferred, item.size, placed);
+      }
+      placed.push(item);
+    });
+    windows.value.filter((item) => item.collapsed).forEach((item) => {
+      item.size = clampSize(item.kind, item.size);
+      item.position = clampPosition(item.position, item.size);
+    });
+    persist();
+  }
+
+  function tileDenseWindows(items: SpatialWindow[]): void {
+    const margin = 12;
+    const gap = 18;
+    const top = Math.min(96, Math.max(margin, window.innerHeight * 0.12));
+    const columnCount = window.innerWidth >= 1080 ? 3 : 2;
+    const columnWidth = Math.floor((window.innerWidth - margin * 2 - gap * (columnCount - 1)) / columnCount);
+    const columnBottoms = Array.from({ length: columnCount }, () => top);
+    items.forEach((item) => {
+      if (item.kind === "reader" && item.reader_mode === "immersive") {
+        item.size = readerModeSize("immersive");
+        item.position = { left: 16, top: 16 };
+        return;
+      }
+      const compact = item.kind === "reader" ? readerModeSize(item.reader_mode || "peek") : compactSize(item.kind);
+      item.size = { width: Math.min(compact.width, columnWidth), height: compact.height };
+      const column = columnBottoms.indexOf(Math.min(...columnBottoms));
+      const nextTop = columnBottoms[column];
+      if (nextTop + item.size.height > window.innerHeight - margin) {
+        item.collapsed = true;
+        return;
+      }
+      const trackLeft = margin + column * (columnWidth + gap);
+      item.position = {
+        left: Math.round(trackLeft + (columnWidth - item.size.width) / 2),
+        top: Math.round(nextTop),
+      };
+      columnBottoms[column] = nextTop + item.size.height + gap;
+    });
+    windows.value.filter((item) => item.collapsed).forEach((item) => {
+      item.position = clampPosition(item.position, item.size);
+    });
+  }
+
   function clear(persistCurrent = false): void {
     windows.value = [];
     selectedNodeId.value = "";
@@ -332,7 +407,7 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       windows.value = restored;
       highestLayer = Math.max(50, ...restored.map((item) => item.layer));
       while (windows.value.filter((item) => !item.collapsed).length > MAX_EXPANDED_WINDOWS) collapseForCapacity();
-      if (restored.length) persist();
+      if (restored.length) constrainToViewport();
     } catch {
       localStorage.removeItem(persistenceKey);
     }
@@ -355,7 +430,7 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
     localStorage.setItem(persistenceKey, JSON.stringify(payload));
   }
 
-  return { windows: sortedWindows, expandedWindows, minimizedWindows, selectedNodeId, openNode, openInstrument, setReaderMode, bringForward, updatePosition, updateSize, toggleCollapsed, restore, close, closeActive, toggleActive, resetPosition, resetActive, focusNext, syncNodeAnchors, clear, setScope };
+  return { windows: sortedWindows, expandedWindows, minimizedWindows, selectedNodeId, openNode, openInstrument, setReaderMode, bringForward, updatePosition, updateSize, toggleCollapsed, restore, close, closeActive, toggleActive, resetPosition, resetActive, focusNext, syncNodeAnchors, constrainToViewport, clear, setScope };
 });
 
 function persistedWindowSize(item: PersistedSpatialWindow): SpatialWindowSize {

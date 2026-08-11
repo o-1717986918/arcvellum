@@ -70,10 +70,12 @@ class RepairContextCoordinator:
         sandbox: SandboxManifest,
         *,
         reasoning_budget: ReasoningBudget | None = None,
+        same_session_required: bool = True,
     ) -> None:
         self.task = task
         self.sandbox = sandbox
         self.reasoning_budget = reasoning_budget
+        self.same_session_required = same_session_required
         self._pending: dict[str, object] | None = None
 
     def prepare(
@@ -124,12 +126,15 @@ class RepairContextCoordinator:
             excerpt_characters,
             _reasoning_repair_contract(self.reasoning_budget, result, attempt),
         )
+        semantic_payload["repair_session"] = (
+            "same-session" if self.same_session_required else "fresh-bounded-session"
+        )
         digest = _canonical_sha256(semantic_payload)
         payload = {**semantic_payload, "context_digest": digest}
         prompt = render_repair_prompt(payload)
         payload["transport"] = {
             "prompt_characters": len(prompt),
-            "same_session_required": True,
+            "same_session_required": self.same_session_required,
             "full_task_replay": False,
         }
         artifact_path = _write_context_artifact(

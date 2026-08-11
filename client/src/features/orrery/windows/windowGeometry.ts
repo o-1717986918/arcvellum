@@ -49,6 +49,10 @@ export function clampSize(kind: SpatialWindowKind, size: SpatialWindowSize): Spa
   };
 }
 
+export function compactSize(kind: SpatialWindowKind): SpatialWindowSize {
+  return clampSize(kind, MIN_SIZES[kind]);
+}
+
 export function instrumentPosition(
   kind: Exclude<SpatialWindowKind, "node">,
   size: SpatialWindowSize,
@@ -95,17 +99,27 @@ export function placeWithoutCollision(
   const base = clampPosition(preferred, size);
   const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
+  const gap = 18;
+  const topSafeArea = Math.min(96, Math.max(12, viewportHeight - size.height - 12));
+  const active = existing.filter((item) => !item.collapsed);
+  const perimeterCandidates = [12, Math.round((viewportWidth - size.width) / 2), viewportWidth - size.width - 12]
+    .flatMap((left) => [topSafeArea, Math.round((viewportHeight - size.height) / 2), viewportHeight - size.height - 18]
+      .map((top) => ({ left, top })));
+  const neighborCandidates = active.flatMap((item) => [
+    { left: item.position.left - size.width - gap, top: item.position.top },
+    { left: item.position.left + item.size.width + gap, top: item.position.top },
+    { left: item.position.left, top: item.position.top - size.height - gap },
+    { left: item.position.left, top: item.position.top + item.size.height + gap },
+  ]);
   const candidates = [
     base,
-    { left: base.left - size.width - 28, top: base.top },
-    { left: base.left, top: base.top + size.height + 28 },
-    { left: base.left - size.width - 28, top: base.top + Math.round(size.height * 0.45) },
-    { left: 28, top: viewportHeight - size.height - 34 },
-    { left: viewportWidth - size.width - 28, top: 132 },
-  ].map((candidate) => clampPosition(candidate, size));
-  const active = existing.filter((item) => !item.collapsed);
-  return candidates.find((candidate) => active.every((item) => !overlaps(candidate, size, item)))
-    ?? clampPosition({ left: base.left - active.length * 26, top: base.top + active.length * 32 }, size);
+    ...neighborCandidates,
+    ...perimeterCandidates,
+  ]
+    .map((candidate) => clampPosition(candidate, size))
+    .filter((candidate, index, all) => all.findIndex((item) => item.left === candidate.left && item.top === candidate.top) === index)
+    .sort((left, right) => placementScore(left, size, active, base) - placementScore(right, size, active, base));
+  return candidates[0] ?? base;
 }
 
 export function buildAnchor(nodeId: string, stagger: number): SpatialWindowAnchor {
@@ -161,16 +175,24 @@ export function validReaderReturn(value: SpatialWindow["reader_return"]): boolea
   );
 }
 
-function overlaps(
+function placementScore(
+  position: SpatialWindowPosition,
+  size: SpatialWindowSize,
+  existing: SpatialWindow[],
+  preferred: SpatialWindowPosition,
+): number {
+  const collisionPenalty = existing.reduce((total, item) => total + overlapArea(position, size, item), 0);
+  const preferredDistance = Math.hypot(position.left - preferred.left, position.top - preferred.top);
+  return collisionPenalty * 10_000 + preferredDistance;
+}
+
+function overlapArea(
   position: SpatialWindowPosition,
   size: SpatialWindowSize,
   other: SpatialWindow,
-): boolean {
+): number {
   const gap = 18;
-  return !(
-    position.left + size.width + gap <= other.position.left
-    || other.position.left + other.size.width + gap <= position.left
-    || position.top + size.height + gap <= other.position.top
-    || other.position.top + other.size.height + gap <= position.top
-  );
+  const horizontal = Math.max(0, Math.min(position.left + size.width + gap, other.position.left + other.size.width) - Math.max(position.left, other.position.left - gap));
+  const vertical = Math.max(0, Math.min(position.top + size.height + gap, other.position.top + other.size.height) - Math.max(position.top, other.position.top - gap));
+  return horizontal * vertical;
 }

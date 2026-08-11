@@ -164,4 +164,59 @@ describe("spatialWindows", () => {
     expect(store.minimizedWindows).toHaveLength(2);
     expect(store.windows.find((item) => item.id === minimized.id)?.collapsed).toBe(false);
   });
+
+  it("reflows persisted instruments inside a smaller viewport without overlap", () => {
+    Object.defineProperty(window, "innerWidth", { value: 1720, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 980, configurable: true });
+    const store = useSpatialWindowsStore();
+    store.openInstrument("rules");
+    store.openInstrument("agent");
+    store.openInstrument("decisions");
+    store.openInstrument("progress");
+
+    Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 720, configurable: true });
+    store.constrainToViewport();
+
+    const open = store.expandedWindows;
+    expect(open).toHaveLength(4);
+    open.forEach((item) => {
+      expect(item.position.left).toBeGreaterThanOrEqual(12);
+      expect(item.position.top).toBeGreaterThanOrEqual(12);
+      expect(item.position.left + item.size.width).toBeLessThanOrEqual(1268);
+      expect(item.position.top + item.size.height).toBeLessThanOrEqual(708);
+    });
+    for (let left = 0; left < open.length; left += 1) {
+      for (let right = left + 1; right < open.length; right += 1) {
+        expect(rectanglesOverlap(open[left], open[right]), JSON.stringify(open.map((item) => ({ id: item.id, position: item.position, size: item.size })))).toBe(false);
+      }
+    }
+  });
+
+  it("keeps only the active instrument expanded on a compact viewport", () => {
+    const store = useSpatialWindowsStore();
+    store.openInstrument("progress");
+    store.openInstrument("agent");
+    store.openInstrument("rules");
+    Object.defineProperty(window, "innerWidth", { value: 720, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 900, configurable: true });
+
+    store.constrainToViewport();
+
+    expect(store.expandedWindows).toHaveLength(1);
+    expect(store.expandedWindows[0].id).toBe("instrument:rules");
+    expect(store.minimizedWindows).toHaveLength(2);
+  });
 });
+
+function rectanglesOverlap(
+  left: { position: { left: number; top: number }; size: { width: number; height: number } },
+  right: { position: { left: number; top: number }; size: { width: number; height: number } },
+): boolean {
+  return !(
+    left.position.left + left.size.width <= right.position.left
+    || right.position.left + right.size.width <= left.position.left
+    || left.position.top + left.size.height <= right.position.top
+    || right.position.top + right.size.height <= left.position.top
+  );
+}
