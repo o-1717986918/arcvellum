@@ -114,7 +114,7 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertIn("memory/context_packets/scene_0001.md", blueprint["expected_outputs"])
             self.assertIn("memory/index.json", blueprint["expected_outputs"])
 
-    def test_candidate_generation_transports_declared_missing_character_assets(self):
+    def test_missing_scene_characters_are_prepared_before_candidate_generation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "project.yaml").write_text("project:\n  title: 潮线\n", encoding="utf-8")
@@ -128,11 +128,14 @@ class TaskContractTransportTests(unittest.TestCase):
             (root / "characters" / "hero.yaml").write_text("name: 林昭\n", encoding="utf-8")
 
             blueprint = task_registry._blueprint_for_state(
-                root, "scene_0001", "scenes/scene_0001.yaml", "candidate-generation-provenance", ""
+                root, "scene_0001", "scenes/scene_0001.yaml", "scene-character-asset-tasks", ""
             )
 
-            self.assertIn("--out drafts/candidates/scene_0001-platform-agent.md", blueprint["command"])
-            self.assertIn("characters/candidates/scene-0001-林正.json", blueprint["expected_outputs"])
+            self.assertIn("prepare-scene-character-assets", blueprint["command"])
+            self.assertEqual(
+                blueprint["expected_outputs"],
+                ["characters/candidates/scene-0001-林正.agent_tasks.md"],
+            )
             self.assertEqual(blueprint["scene_character_assets"][0]["name"], "林正")
             payload = task_registry._build_task_payload(
                 root,
@@ -140,17 +143,19 @@ class TaskContractTransportTests(unittest.TestCase):
                 {
                     "scene_id": "scene_0001",
                     "scene": "scenes/scene_0001.yaml",
-                    "current_step": "candidate-generation-provenance",
+                    "current_step": "scene-character-asset-tasks",
                 },
             )
             self.assertIn(
-                "drafts/candidates/scene_0001-platform-agent.prompt.json",
-                payload["core_managed_outputs"],
-            )
-            self.assertIn(
                 "characters/candidates/scene-0001-林正.agent_tasks.md",
-                payload["core_managed_outputs"],
+                payload["expected_outputs"],
             )
+
+            prose = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "candidate-generation-provenance", ""
+            )
+            self.assertNotIn("characters/candidates/scene-0001-林正.json", prose["expected_outputs"])
+            self.assertNotIn("scene_character_assets", prose)
 
     def test_candidate_generation_writes_to_the_current_revision_candidate(self):
         """A resumed route must never let the CLI create an untracked default candidate."""

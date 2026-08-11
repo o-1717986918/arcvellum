@@ -51,3 +51,47 @@ class SceneCharacterAssetTests(unittest.TestCase):
             requirements = scene_character_asset_requirements(root, scene)
 
             self.assertEqual([item.name for item in requirements], ["阿梨", "舟夫"])
+
+    def test_protagonist_symbol_and_declared_alias_resolve_to_formal_assets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "characters").mkdir()
+            (root / "characters" / "protagonist-orbit-engineer.yaml").write_text(
+                "character_id: protagonist-orbit-engineer\n"
+                "name: 林昭\n"
+                "aliases: [小林]\n",
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text(
+                "scene_id: scene_0001\nparticipants: [主角, 小林, 新同事]\n",
+                encoding="utf-8",
+            )
+
+            requirements = scene_character_asset_requirements(root, scene)
+
+            self.assertEqual([item.name for item in requirements], ["新同事"])
+
+    def test_promoted_scene_candidate_id_remains_a_reference_alias(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "characters").mkdir()
+            (root / "characters" / "crew-member.yaml").write_text(
+                "character_id: crew-member\nname: 陈默\n",
+                encoding="utf-8",
+            )
+            promotions = root / "workflow" / "asset_promotions"
+            promotions.mkdir(parents=True)
+            (promotions / "scene-0001-轨道维修舱内同仁_promotion.json").write_text(
+                '{"candidate_id":"scene-0001-轨道维修舱内同仁"}\n',
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text(
+                "scene_id: scene_0001\nparticipants: [轨道维修舱内同仁]\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(scene_character_asset_requirements(root, scene), [])

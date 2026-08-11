@@ -14,6 +14,7 @@ from ..context_broker import context_trace_status
 from ..flow_gates import branch_selection_status
 from ..narrative_rhythm import narrative_rhythm_contract
 from ..reader_experience import reader_experience_contract
+from ..scene_character_assets import scene_character_asset_requirements
 from ..scene_composer import composition_input_digest
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..word_budget import scene_word_budget_contract
@@ -129,6 +130,7 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
     roleplay_result = root / semantic_artifact_relative_path("roleplay-agent-task", scene_id)
     branch_manifest = root / "branches" / scene_id / "branch_manifest.json"
     steps = [
+        _scene_character_assets_step(root, scene_path),
         _file_step("context-packet", root / "memory" / "context_packets" / f"{scene_id}.md", "run context --scene scenes/{scene}.yaml".format(scene=scene_id)),
         _context_trace_step(root, scene_id),
         _dependency_file_step("roleplay-simulation", roleplay, [context_trace], "run simulate-scene --agent"),
@@ -167,6 +169,37 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
         "current_step": first_open["key"] if first_open else "ready",
         "next_action": first_open["next_action"] if first_open else "",
         "steps": steps,
+    }
+
+
+def _scene_character_assets_step(root: Path, scene_path: Path) -> dict[str, object]:
+    """Resolve durable named participants before context, RP, or prose."""
+
+    requirements = scene_character_asset_requirements(root, scene_path)
+    if not requirements:
+        return {
+            "key": "scene-character-assets",
+            "status": "pass",
+            "path": _rel(scene_path, root),
+            "message": "all durable named participants resolve to formal character assets",
+            "next_action": "",
+        }
+    missing_tasks = [item for item in requirements if not item.task_path.is_file()]
+    names = "、".join(item.name for item in requirements)
+    if missing_tasks:
+        return {
+            "key": "scene-character-asset-tasks",
+            "status": "missing",
+            "path": _rel(scene_path, root),
+            "message": f"named participants require candidate-asset task contracts: {names}",
+            "next_action": f"run prepare-scene-character-assets --scene {_rel(scene_path, root)}",
+        }
+    return {
+        "key": "scene-character-asset-dependency",
+        "status": "dependency_pending",
+        "path": _rel(scene_path, root),
+        "message": f"candidate assets await review, approval, and promotion: {names}",
+        "next_action": "complete the character-and-world-assets route before returning to scene-development",
     }
 
 

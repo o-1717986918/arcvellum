@@ -51,9 +51,9 @@ class SceneCommandRuntimeTests(unittest.TestCase):
                 patch.object(scene_prose, "build_context_packet", return_value=_ContextResult()) as build_context,
                 patch.object(scene_prose, "ensure_scene_pre_generation_tasks_completed"),
                 patch.object(scene_prose, "build_scene_prompt_pack", return_value=_PromptPack()),
+                patch.object(scene_prose, "scene_character_asset_requirements", return_value=[]),
                 patch.object(scene_prose, "write_prompt_manifest"),
                 patch.object(scene_prose, "write_platform_scene_generation_task", return_value=_GenerationResult()),
-                patch.object(scene_prose, "ensure_scene_character_asset_tasks", return_value=[]),
                 patch.object(scene_prose, "print_agent_task_notice"),
             ):
                 self.assertEqual(scene.handle(args, parser=None), 0)

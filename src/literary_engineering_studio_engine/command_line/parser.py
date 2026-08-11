@@ -368,6 +368,13 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     review.add_argument("draft", help="Draft markdown path.")
     review.add_argument("--out", default="", help="Output review report path.")
 
+    prepare_characters = sub.add_parser(
+        "prepare-scene-character-assets",
+        help="Create candidate-asset sidecars for unresolved named scene participants before RP/prose.",
+    )
+    prepare_characters.add_argument("project", help="Work project directory.")
+    prepare_characters.add_argument("--scene", default="scenes/scene_0001.yaml")
+
     generate = sub.add_parser("generate-scene", help="Write a formal platform-agent scene generation task.")
     generate.add_argument("project", help="Work project directory.")
     generate.add_argument("--scene", default="scenes/scene_0001.yaml")

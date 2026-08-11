@@ -145,17 +145,42 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         )
     )
     scene_character_assets = scene_character_asset_requirements(root, scene_path)
-    scene_character_asset_outputs = [
-        relative
+    scene_character_asset_tasks = [
+        _rel(requirement.task_path, root)
         for requirement in scene_character_assets
-        for relative in (
-            _rel(requirement.candidate_path, root),
-            _rel(requirement.report_path, root),
-            _rel(requirement.task_path, root),
-            _rel(requirement.completion_path, root),
-        )
     ]
     table: dict[str, dict[str, object]] = {
+        "scene-character-asset-tasks": {
+            "task_type": "deterministic-cli",
+            "prompt_asset_id": "route.scene-development.character-assets.prepare.v1",
+            "command": f"python -m literary_engineering_studio_engine prepare-scene-character-assets <project> --scene {scene_rel}",
+            "source_paths": [scene_rel, "characters", "canon", "plot/outline.md"],
+            "expected_outputs": scene_character_asset_tasks,
+            "hard_constraints": [
+                "Run the documented preparation command; it emits candidate task contracts only and never invents or promotes characters.",
+                "Do not begin context, roleplay, composition, or prose while a durable named participant lacks a reviewed and promoted formal character asset.",
+                "After this task completes, continue through character-and-world-assets until every dependency is promoted.",
+            ],
+            "style_constraints": [],
+            "validation_gates": ["every unresolved named participant has a CLI-owned candidate-asset task sidecar"],
+            "next_allowed_states": ["scene-character-asset-dependency", "context-packet"],
+            "scene_character_assets": [item.as_dict(root) for item in scene_character_assets],
+        },
+        "scene-character-asset-dependency": {
+            "task_type": "route-dependency",
+            "prompt_asset_id": "route.scene-development.character-assets.prepare.v1",
+            "command": "",
+            "source_paths": [scene_rel, *scene_character_asset_tasks],
+            "expected_outputs": [],
+            "hard_constraints": [
+                "Do not execute scene work while character candidate assets remain pending.",
+                "Switch to character-and-world-assets and complete creation, independent review, approval, and promotion for every listed participant.",
+            ],
+            "style_constraints": [],
+            "validation_gates": ["all durable named participants resolve to promoted formal character assets"],
+            "next_allowed_states": ["character-and-world-assets", "context-packet"],
+            "scene_character_assets": [item.as_dict(root) for item in scene_character_assets],
+        },
         "context-packet": {
             "task_type": "deterministic-cli",
             "prompt_asset_id": "route.scene-development.context.v1",
@@ -395,19 +420,11 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 f"{candidate}.prompt.json",
                 f"{candidate}.agent_tasks.md",
                 f"{candidate}.agent_completion.json",
-                *scene_character_asset_outputs,
             ],
             "hard_constraints": [
                 "Studio has already run generate-scene in the isolated workspace. Read its prompt manifest and sidecar; then the main platform agent personally writes the candidate body. Do not run CLI commands in this task.",
                 "The candidate must not be drafted by a subagent and must not include workflow traces.",
-                *(
-                    [
-                        "This scene declares named participants without formal character files. The CLI has already emitted each character candidate sidecar; read them and create each schema-valid candidate JSON/report before drafting prose. Completion receipts are Studio-owned.",
-                        "Record those candidates in new_character_register with status=candidates_ready and an empty blocking_issues list. Do not promote them or pretend they are already formal characters.",
-                    ]
-                    if scene_character_assets
-                    else []
-                ),
+                "All declared durable participants must already resolve to formal character assets. Do not create planned character candidates from this prose task; record only genuinely prose-introduced characters through new_character_register.",
             ],
             "style_constraints": [
                 "Apply mounted Style Skill first at expression level.",
@@ -415,11 +432,9 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             ],
             "validation_gates": ["candidate Markdown exists", "candidate manifest exists", "prompt manifest exists", "generation sidecar completion marker exists"],
             "next_allowed_states": ["generation-agent-task", "candidate-review"],
-            "scene_character_assets": [item.as_dict(root) for item in scene_character_assets],
             "core_managed_outputs": [
                 f"{candidate}.prompt.json",
                 f"{candidate}.agent_tasks.md",
-                *[_rel(item.task_path, root) for item in scene_character_assets],
             ],
         },
         "generation-agent-task": {

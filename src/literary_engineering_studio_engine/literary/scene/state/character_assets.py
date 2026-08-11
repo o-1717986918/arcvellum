@@ -57,7 +57,7 @@ def scene_character_asset_requirements(project_root: Path, scene_path: Path) -> 
     used_ids: set[str] = set()
     for name in _list_value(scene_text, "participants"):
         normalized = name.strip()
-        if not normalized or normalized in aliases:
+        if not normalized or normalized in aliases or _slug(normalized) in aliases:
             continue
         candidate_id = _stable_candidate_id(scene_id, normalized, used_ids)
         candidate = root / "characters" / "candidates" / f"{candidate_id}.json"
@@ -106,12 +106,49 @@ def _formal_character_aliases(root: Path) -> set[str]:
         if path.name.startswith("_"):
             continue
         text = _read(path)
-        aliases.add(path.stem)
+        _add_alias(aliases, path.stem)
+        character_id = _field_value(text, "character_id")
         for key in ("character_id", "name"):
             value = _field_value(text, key)
             if value:
-                aliases.add(value)
+                _add_alias(aliases, value)
+        for value in _list_value(text, "aliases"):
+            _add_alias(aliases, value)
+        # Longform planning happens before the foundational character asset is
+        # promoted, so early scene inventories legitimately use the symbolic
+        # label ``主角``.  Bind that label to the promoted protagonist instead
+        # of creating a duplicate ``scene-xxxx-主角`` character candidate.
+        if "protagonist" in path.stem.lower() or "protagonist" in character_id.lower():
+            _add_alias(aliases, "主角")
+            _add_alias(aliases, "protagonist")
+    promotions = root / "workflow" / "asset_promotions"
+    if promotions.is_dir():
+        for path in promotions.glob("*_promotion.json"):
+            text = _read(path)
+            candidate_id = _field_value(text, "candidate_id")
+            if not candidate_id:
+                match = re.search(r'"candidate_id"\s*:\s*"([^"]+)"', text)
+                candidate_id = match.group(1).strip() if match else path.stem.removesuffix("_promotion")
+            _add_alias(aliases, candidate_id)
+            # Scene-created character candidates preserve the original
+            # participant spelling in their deterministic candidate id.  The
+            # promoted character may choose a more specific canonical name;
+            # retaining this slug as an alias keeps the originating scene
+            # reference resolved without mutating user-authored prose facts.
+            match = re.match(r"scene-\d+-(.+)", candidate_id)
+            if match:
+                _add_alias(aliases, match.group(1))
     return aliases
+
+
+def _add_alias(aliases: set[str], value: str) -> None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return
+    aliases.add(normalized)
+    slug = _slug(normalized)
+    if slug:
+        aliases.add(slug)
 
 
 def _scene_id(path: Path, text: str) -> str:

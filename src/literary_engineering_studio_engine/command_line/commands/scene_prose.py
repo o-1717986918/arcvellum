@@ -12,7 +12,10 @@ from ...flow_gates import ensure_scene_pre_generation_tasks_completed
 from ...platform_agent_tasks import write_platform_scene_generation_task
 from ...prompt_pack import build_scene_prompt_pack, write_prompt_manifest
 from ...review_ci import review_scene_draft
-from ...scene_character_assets import ensure_scene_character_asset_tasks
+from ...scene_character_assets import (
+    ensure_scene_character_asset_tasks,
+    scene_character_asset_requirements,
+)
 from ...scene_draft import build_scene_draft
 from ...scene_revision import build_scene_revision_task
 
@@ -58,6 +61,14 @@ def handle_generate_scene(args, parser) -> int:
         )
         if not (args.allow_unselected_composition or args.allow_missing_composition):
             ensure_scene_pre_generation_tasks_completed(root, scene_id)
+        unresolved_characters = scene_character_asset_requirements(root, scene_path)
+        if unresolved_characters:
+            ensure_scene_character_asset_tasks(root, scene_path)
+            names = "、".join(item.name for item in unresolved_characters)
+            raise RuntimeError(
+                "scene prose is blocked until named participant assets are reviewed and promoted: "
+                f"{names}; run the character-and-world-assets route, then retry generate-scene"
+            )
         prompt_pack = build_scene_prompt_pack(
             root,
             scene_path,
@@ -82,18 +93,32 @@ def handle_generate_scene(args, parser) -> int:
             prompt_manifest_path=prompt_manifest,
             candidate_path=candidate,
         )
-        character_assets = ensure_scene_character_asset_tasks(root, scene_path)
     except (FileExistsError, FileNotFoundError, RuntimeError, ValueError, KeyError) as exc:
         parser.error(str(exc))
     print(f"scene_generation_task: {result.task_path}")
     print(f"expected_candidate: {result.expected_report_path}")
     print(f"expected_manifest: {result.expected_json_path}")
     print(f"prompt_manifest: {prompt_manifest}")
-    for requirement in character_assets:
-        print(f"scene_character_asset_task: {requirement.task_path}")
     print("receiver: platform-agent")
     print(f"scene: {scene_id}")
     print_agent_task_notice(result.task_path, project=root)
+    return 0
+
+
+def handle_prepare_scene_character_assets(args, parser) -> int:
+    """Emit candidate-asset sidecars before RP or prose work begins."""
+
+    try:
+        root = Path(args.project).resolve()
+        scene_path = cli_path(root, args.scene)
+        requirements = ensure_scene_character_asset_tasks(root, scene_path)
+    except (FileNotFoundError, RuntimeError, ValueError, KeyError) as exc:
+        parser.error(str(exc))
+    print(f"scene: {scene_path.stem}")
+    print(f"unresolved_character_assets: {len(requirements)}")
+    for requirement in requirements:
+        print(f"scene_character_asset_task: {requirement.task_path}")
+    print("next_route: character-and-world-assets" if requirements else "next_route: scene-development")
     return 0
 
 
@@ -179,6 +204,7 @@ HANDLERS = {
     "draft-scene": handle_draft_scene,
     "review-scene": handle_review_scene,
     "generate-scene": handle_generate_scene,
+    "prepare-scene-character-assets": handle_prepare_scene_character_assets,
     "revise-scene": handle_revise_scene,
     "promote-candidate": handle_promote_candidate,
 }
