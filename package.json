@@ -18,7 +18,8 @@
     "tauri": "tauri",
     "desktop:dev": "npm run client:build && tauri dev",
     "desktop:verify-sidecar": "python packaging/sidecar_provenance.py verify --root . --binary desktop/src-tauri/binaries/literary-engineering-studio-sidecar-x86_64-pc-windows-msvc.exe --manifest build/sidecar-provenance.json",
-    "desktop:build": "npm run client:build && npm run desktop:verify-sidecar && tauri build",
+    "desktop:verify-pi-worker": "python packaging/pi_worker_bundle.py verify --root . --destination desktop/src-tauri/resources/pi-worker",
+    "desktop:build": "npm run client:build && npm run desktop:verify-sidecar && npm run desktop:verify-pi-worker && tauri build",
     "desktop:icons": "tauri icon desktop/app-icon.svg --output desktop/src-tauri/icons"
   },
   "devDependencies": {

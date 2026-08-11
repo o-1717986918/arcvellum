@@ -18,7 +18,7 @@
     "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "externalBin": ["binaries/literary-engineering-studio-sidecar"],
-    "resources": ["resources/opencode.exe", "resources/opencode-installation.json", "resources/OPENCODE-NOTICE.md", "resources/OPENCODE-LICENSE.txt"],
+    "resources": ["resources/opencode.exe", "resources/opencode-installation.json", "resources/OPENCODE-NOTICE.md", "resources/OPENCODE-LICENSE.txt", "resources/pi-worker/**/*"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

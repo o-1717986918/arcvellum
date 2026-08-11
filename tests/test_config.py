@@ -22,8 +22,8 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("agent_runners", config)
         self.assertFalse(config["agent_runners"]["pi-rpc"]["enabled"])
         self.assertTrue(config["agent_runners"]["pi-rpc"]["experiment_only"])
-        self.assertFalse(config["agent_runners"]["pi-worker"]["enabled"])
-        self.assertTrue(config["agent_runners"]["pi-worker"]["experiment_only"])
+        self.assertTrue(config["agent_runners"]["pi-worker"]["enabled"])
+        self.assertFalse(config["agent_runners"]["pi-worker"]["experiment_only"])
         self.assertIn("model_connections", config)
         self.assertNotIn("runtimes", config)
 
@@ -38,6 +38,40 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(loaded["schema"], CONFIG_SCHEMA)
             self.assertFalse(loaded["agent_runners"]["host-agent"]["enabled"])
             self.assertNotIn("runtimes", loaded)
+
+    def test_migrates_experimental_pi_worker_to_embedded_runtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            target.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-studio/config/v0.5",
+                        "agent_runners": {
+                            "pi-worker": {
+                                "enabled": False,
+                                "executable": "D:/prototype/node.exe",
+                                "entrypoint": "D:/prototype/main.js",
+                                "model": "deepseek/deepseek-v4-flash",
+                                "auth_path": "D:/private/auth.json",
+                                "experiment_only": True,
+                                "experiment_authorized": True,
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = load_config(target)
+            pi_worker = loaded["agent_runners"]["pi-worker"]
+
+            self.assertTrue(pi_worker["enabled"])
+            self.assertFalse(pi_worker["experiment_only"])
+            self.assertEqual(pi_worker["executable"], "")
+            self.assertEqual(pi_worker["entrypoint"], "")
+            self.assertEqual(pi_worker["model"], "deepseek/deepseek-v4-flash")
+            self.assertEqual(pi_worker["auth_path"], "D:/private/auth.json")
+            self.assertNotIn("experiment_authorized", pi_worker)
 
     def test_migrates_unified_opencode_model_to_all_agent_roles(self):
         with tempfile.TemporaryDirectory() as temporary:

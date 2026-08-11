@@ -1,4 +1,4 @@
-"""Experimental adapter for the bounded ArcVellum Pi Agent Core worker."""
+"""Adapter for the embedded bounded ArcVellum Pi Agent Core worker."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import subprocess
 from typing import Any
 from collections.abc import Mapping, Sequence
 
+from ..integrations.pi_worker import locate_pi_worker
 from ..subprocess_utils import run_hidden
 from .base import (
     AgentRunnerCapabilities,
@@ -17,7 +18,6 @@ from .base import (
     RuntimeFailureKind,
     RuntimeResult,
     executable_prefix,
-    resolve_executable,
 )
 from .pi_worker_repair import run_pi_worker_repairs
 
@@ -61,10 +61,11 @@ class PiWorkerRuntime(AgentRuntime):
         self._execution_overrides: dict[str, object] = {}
 
     def availability(self) -> RuntimeAvailability:
-        executable = resolve_executable(str(self.settings.get("executable") or "node"))
+        installation = locate_pi_worker(self.settings)
+        executable = installation.executable
         if not executable:
             return RuntimeAvailability(self.runtime_id, False, "", "Node.js executable not found")
-        entrypoint = self._entrypoint()
+        entrypoint = installation.entrypoint
         if entrypoint is None or not entrypoint.is_file():
             return RuntimeAvailability(self.runtime_id, False, executable, "ArcVellum Pi Worker entrypoint not found")
         try:
@@ -87,8 +88,11 @@ class PiWorkerRuntime(AgentRuntime):
         return RuntimeAvailability(self.runtime_id, completed.returncode == 0, executable, detail)
 
     def build_command(self, workspace: Path) -> Sequence[str]:
-        executable = resolve_executable(str(self.settings.get("executable") or "node"))
-        entrypoint = self._entrypoint()
+        installation = locate_pi_worker(self.settings)
+        executable = installation.executable
+        entrypoint = installation.entrypoint
+        if not executable or entrypoint is None:
+            raise RuntimeError("ArcVellum Pi Worker installation is incomplete")
         command = [*executable_prefix(executable), str(entrypoint), "--workspace", str(workspace)]
         model = str(self.settings.get("model") or "").strip()
         if model:
@@ -114,7 +118,7 @@ class PiWorkerRuntime(AgentRuntime):
         elif not model:
             readiness = "model-selection-required"
         else:
-            readiness = "ready-for-experimental-probe"
+            readiness = "ready"
         provider = model.split("/", 1)[0] if "/" in model else ""
         return AgentRunnerCapabilities(
             runner_id=self.runtime_id,
@@ -124,7 +128,7 @@ class PiWorkerRuntime(AgentRuntime):
             authentication_state="runner-managed-not-probed",
             provider=provider,
             selected_model=model,
-            execution_modes=("single-task", "bounded-tools", "jsonl", "experiment-only"),
+            execution_modes=("single-task", "bounded-tools", "jsonl", "embedded"),
             structured_output=True,
             streaming_events=True,
             model_selection=True,
@@ -317,10 +321,6 @@ class PiWorkerRuntime(AgentRuntime):
             )
         )
         return {**public, "status": "matched" if matches else "mismatch"}
-
-    def _entrypoint(self) -> Path | None:
-        value = str(self.settings.get("entrypoint") or "").strip()
-        return Path(value).expanduser().resolve() if value else None
 
     def _thinking_level(self) -> str:
         value = str(

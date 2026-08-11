@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-CONFIG_SCHEMA = "literary-engineering-studio/config/v0.5"
+CONFIG_SCHEMA = "literary-engineering-studio/config/v0.6"
 
 
 def repository_root() -> Path:
@@ -187,8 +187,8 @@ def default_config() -> dict[str, Any]:
                 "reasoning_visibility": "activity",
             },
             "pi-worker": {
-                "enabled": False,
-                "executable": "node",
+                "enabled": True,
+                "executable": "",
                 "entrypoint": "",
                 "model": "",
                 "auth_path": "",
@@ -201,7 +201,7 @@ def default_config() -> dict[str, Any]:
                     "canon-review-agent-task",
                     "candidate-review",
                 ],
-                "experiment_only": True,
+                "experiment_only": False,
                 "reasoning_visibility": "activity",
             },
         },
@@ -287,6 +287,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
     migrated = dict(payload)
+    source_schema = str(migrated.get("schema") or "")
     legacy_runtimes = migrated.pop("runtimes", None)
     if isinstance(legacy_runtimes, dict) and not isinstance(migrated.get("agent_runners"), dict):
         migrated["agent_runners"] = legacy_runtimes
@@ -302,6 +303,25 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
             }
             runners = dict(runners)
             runners["opencode"] = opencode
+            migrated["agent_runners"] = runners
+    if source_schema != CONFIG_SCHEMA and isinstance(migrated.get("agent_runners"), dict):
+        runners = dict(migrated["agent_runners"])
+        pi_worker = runners.get("pi-worker")
+        if isinstance(pi_worker, dict) and pi_worker.get("experiment_only") is True:
+            # v0.5 shipped only an opt-in research adapter. v0.6 owns a bundled
+            # installation, so discard prototype machine paths while retaining
+            # the user's model, credential location, and execution budgets.
+            pi_worker = dict(pi_worker)
+            pi_worker.update(
+                {
+                    "enabled": True,
+                    "executable": "",
+                    "entrypoint": "",
+                    "experiment_only": False,
+                }
+            )
+            pi_worker.pop("experiment_authorized", None)
+            runners["pi-worker"] = pi_worker
             migrated["agent_runners"] = runners
     return migrated
 

@@ -72,6 +72,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+          cache-dependency-path: workers/pi-worker/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - name: Freeze the sidecar required by the Tauri resource contract
         shell: pwsh
@@ -87,6 +92,7 @@ jobs:
           Copy-Item -Force build/vendor/opencode-v1.18.3/expanded/opencode-installation.json desktop/src-tauri/resources/opencode-installation.json
           Copy-Item -Force src/literary_engineering_studio/vendor/OPENCODE-NOTICE.md desktop/src-tauri/resources/OPENCODE-NOTICE.md
           Copy-Item -Force src/literary_engineering_studio/vendor/OPENCODE-LICENSE.txt desktop/src-tauri/resources/OPENCODE-LICENSE.txt
+          python packaging/pi_worker_bundle.py stage --root . --destination desktop/src-tauri/resources/pi-worker --cache-root build/vendor/node-v22.19.0
       - name: Check Tauri shell compilation against the frozen resource
         shell: pwsh
         run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml

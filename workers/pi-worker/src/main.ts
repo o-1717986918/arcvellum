@@ -7,7 +7,7 @@ import type { ReasoningBudget, RuntimeEventSink, WorkerOptions } from "./contrac
 import { validateReasoningBudget } from "./reasoning-budget.ts";
 import { runWorker } from "./worker.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.98.0";
 const DEFAULT_STATES = ["asset-creation-agent-task", "canon-review-agent-task", "candidate-review"];
 
 async function main(): Promise<number> {

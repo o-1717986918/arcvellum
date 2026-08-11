@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "clean": "shx rm -rf dist",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/main.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "test": "vitest --run",
     "check": "npm run clean && npm run build && npm run test"
   },
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "24.13.3",
+    "esbuild": "0.28.2",
     "shx": "0.4.0",
     "typescript": "5.9.3",
     "vitest": "4.1.9"

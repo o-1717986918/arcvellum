@@ -25,6 +25,7 @@ npm.cmd ci
 npm.cmd run check
 ```
 
-The release build stages compiled code, production dependencies, a pinned Node
-runtime, and third-party notices under the desktop application resources. The
-Pi research fork is not bundled.
+The release build bundles the Worker and its used dependencies into one
+JavaScript artifact, then stages that artifact with a pinned Node runtime and
+third-party notices under the desktop application resources. The Pi research
+fork and a loose `node_modules` tree are not bundled.
