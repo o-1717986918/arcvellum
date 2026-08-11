@@ -94,7 +94,10 @@ class WordBudgetModuleBoundaryTests(unittest.TestCase):
                 side_effect=lambda _root, *, scene_path=None: (scene_path is not None, "scoped materialization"),
             ):
                 adherence = word_budget_adherence_for_body(root, scene, "甲乙丙丁", materialization_scope="scene")
+                rendered = render_scene_word_budget_contract(root, scene, materialization_scope="scene")
             self.assertEqual(adherence["status"], "pass")
+            self.assertNotIn("字数预算门禁未通过", rendered)
+            self.assertIn("目标中文内容字符：4", rendered)
 
 
 if __name__ == "__main__":

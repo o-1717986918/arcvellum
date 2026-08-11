@@ -29,7 +29,7 @@ def compile_prompt_program(
     evidence = compile_evidence(task, workspace, execution_context)
     objective = _objective(user_direction, str(asset.get("body") or ""))
     decisions = _decisions(asset, recipe)
-    constraints = _constraints(task_context, asset)
+    constraints = _constraints(task_context, asset, task_kind=execution_context.task_kind)
     output_contract = _output_contract(task_context)
     stop_contract = (
         "写完所有 Agent-owned outputs 并逐项检查格式与内容。",
@@ -95,9 +95,19 @@ def _decisions(asset: Mapping[str, Any], recipe: PromptRecipe) -> tuple[str, ...
 def _constraints(
     context: Mapping[str, Any],
     asset: Mapping[str, Any],
+    *,
+    task_kind: str,
 ) -> tuple[str, ...]:
+    execution_protocol: tuple[str, ...] = ()
+    if task_kind == "prose":
+        execution_protocol = (
+            "首个模型响应必须直接调用 write_expected_output 批量写入所有 Agent-owned outputs；不要先输出计划、分析、草稿聊天文本或逐字计数。",
+            "按 word_count_target 直接写出接近目标的完整正文；中文内容字符由 Studio 在落盘后确定性统计，Agent 不得手工枚举、逐段累计或解释字符数。",
+            "若同一任务还包含人物候选等配套产物，将它们与正文和 manifest 在同一次批量写入中提交；随后只根据 validate_output 的精确问题做局部修复。",
+        )
     return _unique(
         (
+            *execution_protocol,
             *_strings(context.get("hard_constraints")),
             *_strings(context.get("style_constraints")),
             *_strings(asset.get("hard_constraints")),

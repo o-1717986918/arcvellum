@@ -271,7 +271,14 @@ def build_context_packet(
         build_memory_index(root)
 
     scene_text = _read(scene_path)
-    word_budget_contract = render_scene_word_budget_contract(root, scene_path)
+    # This packet belongs to one active scene. Full-book inventory may still
+    # report ``needs_expansion`` after that scene has been materialized; using
+    # the full scope here injected a stale failure into a valid prose prompt.
+    word_budget_contract = render_scene_word_budget_contract(
+        root,
+        scene_path,
+        materialization_scope="scene",
+    )
     retrieval_query = _query_from_scene(scene_text, query)
     raw_hits = search_memory(root, retrieval_query, top_k=top_k)
     character_text, loaded_character_ids, restrict_character_hits = _character_section(root, scene_text)

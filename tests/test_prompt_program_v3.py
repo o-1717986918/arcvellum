@@ -14,12 +14,19 @@ from literary_engineering_studio.runtime.prompt_program import (
 )
 from literary_engineering_studio.runtime.prompt_renderer import render_tool_worker_program
 from literary_engineering_studio.runtime.prompt_metrics import measure_prompt
-from literary_engineering_studio.runtime.prompt_compiler import _output_contract
+from literary_engineering_studio.runtime.prompt_compiler import _constraints, _output_contract
 from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio_engine.prompting.agents.schema import compact_schema_contract
 
 
 class PromptProgramV3Tests(unittest.TestCase):
+    def test_prose_constraints_require_first_turn_write_and_deterministic_counting(self):
+        constraints = _constraints({}, {}, task_kind="prose")
+
+        self.assertIn("write_expected_output", constraints[0])
+        self.assertTrue(any("确定性统计" in item for item in constraints))
+        self.assertTrue(any("同一次批量写入" in item for item in constraints))
+
     def test_v3_output_contract_keeps_exact_branch_semantic_shape(self):
         shape = {"branch_id": "agent_branch_replace_1", "beat_plan": []}
         contract = _output_contract(

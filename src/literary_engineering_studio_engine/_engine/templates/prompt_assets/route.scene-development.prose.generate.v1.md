@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.prose.generate.v1
 match: route.scene-development.prose.generate.v1
-version: v2
+version: v3
 route: scene-development
 task_type: main-platform-agent-prose
 title: Scene Prose Generation Exact Prompt Asset
@@ -26,6 +26,8 @@ context_groups:
   - reader experience
   - narrative rhythm
 hard_constraints:
+  - The first model response must call write_expected_output with one complete batch for all Agent-owned outputs. Do not spend a turn planning, narrating the draft in chat, or manually counting characters.
+  - Draft near word_count_target, write it, and let Studio count Chinese content characters deterministically. Never enumerate characters or keep a paragraph-by-paragraph running total.
   - Studio has already run generate-scene before this Agent task. Read the generated prompt manifest and sidecar; do not run CLI commands or handwrite a formal candidate outside the task package.
   - The main platform Agent must write body prose personally; subagents may only gather/check bounded evidence.
   - Apply mounted style, word budget, reader experience, narrative rhythm, scene bridge, scene function, reader question/promise-payoff, narrative distance, punctuation standard, anti-evasion, and new-character registration before drafting.
@@ -44,4 +46,4 @@ forbidden_shortcuts:
 
 # Exact Prose Generation Prompt Asset
 
-Treat the CLI task package as the execution program. Write the scene body only after all required sources are read. Make rhythm and bridge visible through pacing, scene function, scene turn, reader effect, entrance pressure, outgoing hooks, narrative distance, and texture variety, not through workflow explanation.
+Treat the CLI task package as the execution program. The required evidence is already inline; do not reread it unless an exact field is genuinely missing. Your first response must batch-write every Agent-owned output, not discuss or manually count the draft. Make rhythm and bridge visible through pacing, scene function, scene turn, reader effect, entrance pressure, outgoing hooks, narrative distance, and texture variety, not through workflow explanation.

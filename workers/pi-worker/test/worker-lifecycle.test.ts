@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TaskContext, WorkerState } from "../src/contracts.ts";
-import { settleTurnBudget } from "../src/worker.ts";
+import { noProgressTurnLimit, settleTurnBudget } from "../src/worker.ts";
 
 const roots: string[] = [];
 
@@ -12,6 +12,12 @@ afterEach(async () => {
 });
 
 describe("bounded worker lifecycle", () => {
+	it("allows one bounded landing turn only for the main prose agent", () => {
+		expect(noProgressTurnLimit("main-creative-agent")).toBe(3);
+		expect(noProgressTurnLimit("main-review-agent")).toBe(2);
+		expect(noProgressTurnLimit("main-agent")).toBe(2);
+	});
+
 	it("completes at the turn boundary when all local output contracts pass", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-turn-"));
 		roots.push(root);

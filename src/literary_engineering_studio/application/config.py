@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-CONFIG_SCHEMA = "literary-engineering-studio/config/v0.6"
+CONFIG_SCHEMA = "literary-engineering-studio/config/v0.7"
 
 
 def repository_root() -> Path:
@@ -66,14 +66,14 @@ def _default_worker_config() -> dict[str, Any]:
         "auto_run_task_command": True,
         "pause_on_human_gate": True,
         "prompt_program": {
-            "mode": "shadow",
+            "mode": "enforced",
             "version": "v3",
             "enforcement": {
-                "enabled": False,
+                "enabled": True,
                 "runtimes": ["pi-worker"],
-                "routes": ["character-and-world-assets", "scene-development"],
-                "states": ["asset-creation-agent-task", "candidate-review"],
-                "task_kinds": ["creative", "review"],
+                "routes": ["scene-development"],
+                "states": ["candidate-generation-provenance"],
+                "task_kinds": ["prose"],
             },
             "fallback": "v2",
             "lint": {
@@ -323,6 +323,50 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
             pi_worker.pop("experiment_authorized", None)
             runners["pi-worker"] = pi_worker
             migrated["agent_runners"] = runners
+    if source_schema != CONFIG_SCHEMA:
+        migrated = _migrate_pi_prose_prompt_rollout(migrated)
+    return migrated
+
+
+def _migrate_pi_prose_prompt_rollout(payload: dict[str, Any]) -> dict[str, Any]:
+    """Promote only the untouched v0.6 Pi prompt canary to the proven prose path."""
+
+    migrated = dict(payload)
+    worker = migrated.get("worker")
+    if not isinstance(worker, dict):
+        return migrated
+    worker = dict(worker)
+    prompt = worker.get("prompt_program")
+    if not isinstance(prompt, dict):
+        return migrated
+    prompt = dict(prompt)
+    enforcement = prompt.get("enforcement")
+    if not isinstance(enforcement, dict):
+        return migrated
+    enforcement = dict(enforcement)
+    legacy_states = {str(item) for item in enforcement.get("states") or []}
+    untouched = (
+        str(prompt.get("mode") or "") == "shadow"
+        and enforcement.get("enabled") is False
+        and {str(item) for item in enforcement.get("runtimes") or []} == {"pi-worker"}
+        and legacy_states == {"asset-creation-agent-task", "candidate-review"}
+    )
+    if not untouched:
+        return migrated
+    prompt.update(
+        {
+            "mode": "enforced",
+            "enforcement": {
+                "enabled": True,
+                "runtimes": ["pi-worker"],
+                "routes": ["scene-development"],
+                "states": ["candidate-generation-provenance"],
+                "task_kinds": ["prose"],
+            },
+        }
+    )
+    worker["prompt_program"] = prompt
+    migrated["worker"] = worker
     return migrated
 
 

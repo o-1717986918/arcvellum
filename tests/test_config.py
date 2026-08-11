@@ -8,6 +8,38 @@ from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, lo
 
 
 class ConfigTests(unittest.TestCase):
+    def test_migrates_untouched_v06_pi_prompt_canary_to_prose_v3(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-studio/config/v0.6",
+                        "worker": {
+                            "prompt_program": {
+                                "mode": "shadow",
+                                "enforcement": {
+                                    "enabled": False,
+                                    "runtimes": ["pi-worker"],
+                                    "routes": ["character-and-world-assets", "scene-development"],
+                                    "states": ["asset-creation-agent-task", "candidate-review"],
+                                    "task_kinds": ["creative", "review"],
+                                },
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_config(path)
+            prompt = config["worker"]["prompt_program"]
+
+            self.assertEqual(prompt["mode"], "enforced")
+            self.assertTrue(prompt["enforcement"]["enabled"])
+            self.assertEqual(prompt["enforcement"]["states"], ["candidate-generation-provenance"])
+            self.assertEqual(prompt["enforcement"]["task_kinds"], ["prose"])
+
     def test_repository_root_is_the_checkout_root_not_src_directory(self):
         root = repository_root()
         self.assertTrue((root / "pyproject.toml").is_file())
