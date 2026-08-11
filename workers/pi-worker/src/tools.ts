@@ -1,0 +1,226 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { Type } from "@earendil-works/pi-ai";
+import type { RuntimeEventSink, TaskContext, ValidationIssue, ValidationResult, WorkerOptions, WorkerState } from "./contracts.ts";
+import { atomicWriteAuthorizedFile, normalizeRelativePath, readAuthorizedFile, resolveWorkspacePath } from "./path-policy.ts";
+import { publicTaskProjection } from "./task-context.ts";
+
+const EMPTY_PARAMETERS = Type.Object({});
+
+export function createWorkerTools(
+	context: TaskContext,
+	options: WorkerOptions,
+	state: WorkerState,
+	emit: RuntimeEventSink,
+): AgentTool[] {
+	const ownedPaths = new Set(context.agentOwnedOutputs.map((item) => item.path));
+	const readablePaths = new Set(context.exactOnDemand);
+	return [
+		{
+			name: "read_task_context",
+			label: "Read Task Contract",
+			description: "Return the safe, machine-readable ArcVellum task contract and completion checklist.",
+			parameters: EMPTY_PARAMETERS,
+			executionMode: "sequential",
+			execute: async () => result(publicTaskProjection(context), { taskId: context.taskId }),
+		},
+		{
+			name: "read_authorized_source",
+			label: "Read Exact Context",
+			description: "Read one exact-on-demand source. Must-inline sources are already in the task prompt and cannot be reread.",
+			parameters: Type.Object({
+				path: Type.String(),
+				offset: Type.Optional(Type.Integer({ minimum: 0 })),
+				limit: Type.Optional(Type.Integer({ minimum: 1, maximum: context.maxResultChars })),
+			}),
+			executionMode: "sequential",
+			execute: async (_id, params) => {
+				const input = params as { path: string; offset?: number; limit?: number };
+				const path = normalizeRelativePath(input.path);
+				if (!readablePaths.has(path)) throw new Error("source is not exact-on-demand for this task");
+				const content = await readAuthorizedFile(options.workspace, path);
+				const offset = input.offset ?? 0;
+				const limit = input.limit ?? context.maxResultChars;
+				const text = content.slice(offset, offset + limit);
+				state.readPaths.add(path);
+				return result(text, { path, offset, returned: text.length, total: content.length, truncated: offset + text.length < content.length });
+			},
+		},
+		{
+			name: "write_expected_output",
+			label: "Write Expected Output",
+			description: "Atomically write one or several Agent-owned expected outputs. Prefer one batch call for all ready artifacts. Completion receipts are never writable by the Agent.",
+			parameters: Type.Object({
+				path: Type.Optional(Type.String()),
+				content: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000_000 })),
+				outputs: Type.Optional(Type.Array(
+					Type.Object({ path: Type.String(), content: Type.String({ minLength: 1, maxLength: 2_000_000 }) }),
+					{ minItems: 1, maxItems: 64 },
+				)),
+			}),
+			executionMode: "sequential",
+			execute: async (_id, params) => {
+				const input = params as {
+					path?: string;
+					content?: string;
+					outputs?: Array<{ path: string; content: string }>;
+				};
+				const values = outputWrites(input);
+				const normalized = values.map((item) => ({
+					path: normalizeRelativePath(item.path),
+					content: normalizeText(item.content),
+				}));
+				if (new Set(normalized.map((item) => item.path)).size !== normalized.length) {
+					throw new Error("a batch cannot contain duplicate output paths");
+				}
+				if (normalized.some((item) => !ownedPaths.has(item.path))) {
+					throw new Error("path is not an Agent-owned expected output");
+				}
+				for (const item of normalized) {
+					await atomicWriteAuthorizedFile(options.workspace, item.path, item.content);
+					state.writtenPaths.add(item.path);
+					emit("file.changed", { path: item.path });
+				}
+				return result("outputs written", {
+					paths: normalized.map((item) => item.path),
+					characters: normalized.reduce((total, item) => total + item.content.length, 0),
+				});
+			},
+		},
+		{
+			name: "validate_output",
+			label: "Validate Outputs",
+			description: "Run local existence and machine-format checks for one or all Agent-owned outputs. Studio still owns formal preflight.",
+			parameters: Type.Object({ path: Type.Optional(Type.String()) }),
+			executionMode: "sequential",
+			execute: async (_id, params) => {
+				const input = params as { path?: string };
+				const path = input.path ? normalizeRelativePath(input.path) : undefined;
+				if (path && !ownedPaths.has(path)) throw new Error("path is not an Agent-owned expected output");
+				state.lastValidation = await validateOutputs(context, options.workspace, path);
+				return result(state.lastValidation, { checked: path ?? "all" });
+			},
+		},
+		{
+			name: "complete_task",
+			label: "Complete Task",
+			description: "Finish only after every Agent-owned output passes local validation. Studio will run authoritative preflight after exit.",
+			parameters: EMPTY_PARAMETERS,
+			executionMode: "sequential",
+			execute: async () => {
+				state.lastValidation = await validateOutputs(context, options.workspace);
+				if (!state.lastValidation.passed) {
+					throw new Error(`outputs are incomplete: ${state.lastValidation.issues.map((item) => `${item.path}:${item.code}`).join(", ")}`);
+				}
+				state.completed = true;
+				return { ...result("task outputs are ready for Studio preflight", { outputs: context.agentOwnedOutputs.map((item) => item.path) }), terminate: true };
+			},
+		},
+		{
+			name: "request_repair",
+			label: "Request Local Repair",
+			description: "Request one bounded local repair pass using only current validation failures and existing task context.",
+			parameters: Type.Object({ reason: Type.String({ minLength: 1, maxLength: 1000 }) }),
+			executionMode: "sequential",
+			execute: async (_id, params) => {
+				const input = params as { reason: string };
+				if (state.repairRequests >= options.maxRepairs) throw new Error("local repair budget exhausted");
+				state.repairRequests += 1;
+				state.lastValidation = await validateOutputs(context, options.workspace);
+				return result({ reason: input.reason, validation: state.lastValidation }, { repair: state.repairRequests });
+			},
+		},
+		{
+			name: "report_blocker",
+			label: "Report Blocker",
+			description: "Stop and return a structured blocker when the task cannot be completed within its contract.",
+			parameters: Type.Object({ reason: Type.String({ minLength: 1, maxLength: 2000 }) }),
+			executionMode: "sequential",
+			execute: async (_id, params) => {
+				const input = params as { reason: string };
+				state.blocked = true;
+				state.blockerReason = input.reason.trim();
+				return { ...result("blocker recorded", { reason: state.blockerReason }), terminate: true };
+			},
+		},
+	];
+}
+
+export async function validateOutputs(context: TaskContext, workspace: string, onlyPath?: string): Promise<ValidationResult> {
+	const contracts = onlyPath
+		? context.agentOwnedOutputs.filter((item) => item.path === onlyPath)
+		: context.agentOwnedOutputs;
+	const issues: ValidationIssue[] = [];
+	for (const contract of contracts) {
+		let text: string;
+		try {
+			const target = await resolveWorkspacePath(workspace, contract.path, false);
+			text = await readFile(target, "utf8");
+		} catch (error) {
+			issues.push({ path: contract.path, code: "missing", message: publicError(error) });
+			continue;
+		}
+		if (!text.trim()) {
+			issues.push({ path: contract.path, code: "empty", message: "output is empty" });
+			continue;
+		}
+		if (contract.format === "json") {
+			try {
+				JSON.parse(text);
+			} catch (error) {
+				issues.push({ path: contract.path, code: "invalid_json", message: publicError(error) });
+			}
+		}
+	}
+	return { passed: issues.length === 0, issues };
+}
+
+export async function progressDigest(context: TaskContext, workspace: string, state: WorkerState): Promise<string> {
+	const hash = createHash("sha256");
+	for (const contract of context.agentOwnedOutputs) {
+		hash.update(contract.path);
+		try {
+			hash.update(await readAuthorizedFile(workspace, contract.path));
+		} catch {
+			hash.update("missing");
+		}
+	}
+	hash.update([...state.readPaths].sort().join("\n"));
+	hash.update(state.lastValidation.passed ? "validation:passed" : "validation:not-passed");
+	hash.update(state.lastValidation.issues.map((item) => `${item.path}:${item.code}`).sort().join("\n"));
+	hash.update(
+		state.lastToolError
+			? `tool-error:${state.lastToolError.tool}:${state.lastToolError.reason}`
+			: "tool-error:none",
+	);
+	return hash.digest("hex");
+}
+
+function result(value: unknown, details: Record<string, unknown>) {
+	return {
+		content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }],
+		details,
+	};
+}
+
+function normalizeText(value: string): string {
+	return value.replaceAll("\r\n", "\n").replaceAll("\r", "\n").replace(/^\uFEFF/, "");
+}
+
+function outputWrites(input: {
+	path?: string;
+	content?: string;
+	outputs?: Array<{ path: string; content: string }>;
+}): Array<{ path: string; content: string }> {
+	const hasSingle = typeof input.path === "string" || typeof input.content === "string";
+	const hasBatch = Array.isArray(input.outputs);
+	if (hasSingle === hasBatch) throw new Error("provide either path/content or outputs");
+	if (hasBatch) return input.outputs ?? [];
+	if (!input.path || !input.content) throw new Error("single output requires both path and content");
+	return [{ path: input.path, content: input.content }];
+}
+
+function publicError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}

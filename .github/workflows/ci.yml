@@ -50,6 +50,20 @@ jobs:
           npm run client:test
           npm run client:build
 
+  pi-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+          cache-dependency-path: workers/pi-worker/package-lock.json
+      - name: Install, compile, and test the bounded Pi Worker
+        run: |
+          npm --prefix workers/pi-worker ci --ignore-scripts
+          npm run pi-worker:check
+
   desktop-shell:
     runs-on: windows-latest
     steps:

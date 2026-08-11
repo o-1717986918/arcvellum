@@ -46,6 +46,7 @@ jobs:
           python -m pip install -e ".[api,test]"
           python -m pip install "pyinstaller==6.21.0"
           npm ci
+          npm run pi-worker:install
           python -m literary_engineering_studio opencode-install --destination build/vendor/opencode-v1.18.3/expanded
 
       - name: Verify release version
@@ -76,6 +77,10 @@ jobs:
         run: |
           npm run client:test
           npm run client:build
+
+      - name: Test embedded Pi Worker
+        shell: pwsh
+        run: npm run pi-worker:check
 
       # The Tauri build requires the frozen Python sidecar, which is generated
       # by build_desktop.ps1 and intentionally not tracked in Git. That script
