@@ -27,7 +27,8 @@ const TOOL_NAMES = new Set([
 export interface WorkerResult {
 	status: "completed" | "blocked" | "incomplete";
 	message: string;
-	failureKind?: "provider_empty_response";
+	failureKind?: "provider_empty_response" | "provider_error";
+	providerError?: string;
 	taskId: string;
 	provider: string;
 	model: string;
@@ -152,6 +153,26 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 	agent.subscribe((event) => eventAdapter.handle(event));
 	await agent.prompt(prompt);
 
+	const providerError = sanitizeProviderError(agent.state.errorMessage);
+	if (providerError) {
+		emit("runner.warning", {
+			kind: "provider_error",
+			detail: providerError,
+		});
+		return buildResult(
+			"blocked",
+			"provider request failed",
+			context.taskId,
+			provider,
+			modelId,
+			state,
+			options,
+			budgetSupport,
+			effectiveThinking,
+			"provider_error",
+			providerError,
+		);
+	}
 	if (isProviderEmptyResponse(state)) {
 		return buildResult(
 			"incomplete",
@@ -207,11 +228,13 @@ function buildResult(
 	budgetSupport: ReturnType<typeof providerBudgetSupport>,
 	effectiveThinking: WorkerOptions["thinking"],
 	failureKind?: WorkerResult["failureKind"],
+	providerError?: string,
 ): WorkerResult {
 	return {
 		status,
 		message,
 		...(failureKind ? { failureKind } : {}),
+		...(providerError ? { providerError } : {}),
 		taskId,
 		provider,
 		model,
@@ -232,6 +255,17 @@ export function isProviderEmptyResponse(state: WorkerState): boolean {
 		&& state.reasoningCharacters === 0
 		&& state.textCharacters === 0
 		&& state.writtenPaths.size === 0;
+}
+
+export function sanitizeProviderError(value: unknown): string {
+	return String(value ?? "")
+		.replace(/[A-Za-z]:[\\/][^\s'"`]+/g, "<redacted-path>")
+		.replace(/sk-[A-Za-z0-9_-]{20,}/g, "<redacted-secret>")
+		.replace(/(?:api[_ -]?key|authorization|bearer)\s*[:=]?\s*[A-Za-z0-9._-]{12,}/gi, "<redacted-credential>")
+		.replace(/[\r\n\t]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 1000);
 }
 
 function parseModelId(value: string): [string, string] {

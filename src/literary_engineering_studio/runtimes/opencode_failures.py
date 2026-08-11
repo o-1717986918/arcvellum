@@ -67,11 +67,13 @@ def normalize_model_warning(
 _QUOTA_MARKERS = (
     "insufficient balance",
     "insufficient_balance",
+    "payment required",
     "quota exceeded",
     "billing quota",
     '"statuscode":402',
     '"statuscode": 402',
     "status code 402",
+    "(402)",
 )
 _AUTH_MARKERS = (
     "invalid api key",

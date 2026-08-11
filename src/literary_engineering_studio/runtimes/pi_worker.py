@@ -19,6 +19,7 @@ from .base import (
     RuntimeResult,
     executable_prefix,
 )
+from .opencode_failures import classify_model_error
 from .pi_worker_repair import run_pi_worker_repairs
 
 
@@ -267,8 +268,14 @@ class PiWorkerRuntime(AgentRuntime):
                 token in detail
                 for token in ("no-progress", "budget exhausted", "budget_exhausted")
             )
+            provider_error = str(worker_result.get("providerError") or "").strip()
             provider_empty = _provider_empty_response(worker_result)
-            if provider_empty:
+            if provider_error:
+                failure_kind, retryable, public_message = classify_model_error(
+                    provider_error
+                )
+                message = public_message
+            elif provider_empty:
                 message = (
                     "模型供应商返回了空响应，未产生文本、推理或工具调用；"
                     "ArcVellum 将保留当前任务并按连接故障策略重试。"
@@ -276,17 +283,23 @@ class PiWorkerRuntime(AgentRuntime):
             metadata.update(
                 {
                     "failure_kind": (
-                        RuntimeFailureKind.TRANSIENT_NETWORK.value
-                        if provider_empty
+                        failure_kind.value
+                        if provider_error
                         else (
-                            RuntimeFailureKind.NO_PROGRESS.value
-                            if no_progress
-                            else RuntimeFailureKind.VALIDATION_FAILURE.value
+                            RuntimeFailureKind.TRANSIENT_NETWORK.value
+                            if provider_empty
+                            else (
+                                RuntimeFailureKind.NO_PROGRESS.value
+                                if no_progress
+                                else RuntimeFailureKind.VALIDATION_FAILURE.value
+                            )
                         )
                     ),
-                    "retryable": not no_progress,
+                    "retryable": retryable if provider_error else not no_progress,
                     "provider_failure_kind": (
-                        "provider_empty_response" if provider_empty else ""
+                        "provider_error"
+                        if provider_error
+                        else ("provider_empty_response" if provider_empty else "")
                     ),
                 }
             )

@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TaskContext, WorkerState } from "../src/contracts.ts";
-import { isProviderEmptyResponse, noProgressTurnLimit, settleTurnBudget } from "../src/worker.ts";
+import {
+	isProviderEmptyResponse,
+	noProgressTurnLimit,
+	sanitizeProviderError,
+	settleTurnBudget,
+} from "../src/worker.ts";
 
 const roots: string[] = [];
 
@@ -26,6 +31,16 @@ describe("bounded worker lifecycle", () => {
 
 		workerState.textCharacters = 1;
 		expect(isProviderEmptyResponse(workerState)).toBe(false);
+	});
+
+	it("redacts credentials while preserving provider failure evidence", () => {
+		const value = sanitizeProviderError(
+			"DeepSeek API error (402) Payment Required api_key=sk-abcdefghijklmnopqrstuvwxyz",
+		);
+
+		expect(value).toContain("402");
+		expect(value).toContain("Payment Required");
+		expect(value).not.toContain("abcdefghijklmnopqrstuvwxyz");
 	});
 
 	it("completes at the turn boundary when all local output contracts pass", async () => {
