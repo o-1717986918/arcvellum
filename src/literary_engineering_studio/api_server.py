@@ -57,6 +57,7 @@ from .api.routers.application import ApplicationRouterDependencies, build_applic
 from .api.routers.archive import build_archive_router, default_archive_dependencies
 from .api.routers.archaeology import build_archaeology_router
 from .api.routers.runners import RunnerRouterDependencies, build_runner_router
+from .api.routers.pi_worker import build_pi_worker_router
 from .api.routers.projects import ProjectRouterDependencies, build_project_router
 from .api.routers.quality import QualityRouterDependencies, build_quality_router
 from .api.routers.advisor import AdvisorRouterDependencies, build_advisor_router
@@ -323,7 +324,7 @@ def create_app(config_override: dict[str, Any] | None = None):
             )
         )
     )
-
+    app.include_router(build_pi_worker_router(config))
     app.include_router(
         build_project_router(
             ProjectRouterDependencies(

@@ -7,6 +7,7 @@ import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
 import { applyOrreryExperience, readOrreryExperience, type OrreryDepth, type OrreryMotion, type OrreryRenderQuality, type OrreryTheme } from "@/services/orreryPreferences";
 import { useAppStore } from "@/stores/app";
+import PiWorkerConnection from "./components/PiWorkerConnection.vue";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
@@ -287,6 +288,8 @@ function pathValue(key: string): string {
       <div><span class="summary-symbol"><CloudCog :size="21" /></span><p>已连接服务<strong>{{ connectedProviders.length }}</strong></p></div>
       <div><span class="summary-symbol"><WandSparkles :size="21" /></span><p>正文模型<strong>{{ store.modelCatalog?.selected_models?.worker || store.modelCatalog?.selected_model || "尚未选择" }}</strong></p></div>
     </section>
+
+    <PiWorkerConnection />
 
     <div class="settings-grid">
       <section class="settings-section">

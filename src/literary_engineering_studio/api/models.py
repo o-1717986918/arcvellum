@@ -136,6 +136,11 @@ class OpenCodeCredentialRequest(BaseModel):
     credential: str
 
 
+class PiWorkerCredentialRequest(BaseModel):
+    provider_id: str
+    credential: str
+
+
 class CustomProviderModelRequest(BaseModel):
     id: str
     name: str = ""
@@ -345,6 +350,7 @@ __all__ = [
     "DirectionRequest",
     "ModelSelectionRequest",
     "OpenCodeCredentialRequest",
+    "PiWorkerCredentialRequest",
     "ProjectCreateRequest",
     "ProjectLocationRequest",
     "ProjectOpenRequest",

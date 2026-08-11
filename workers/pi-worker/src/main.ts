@@ -3,7 +3,9 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { ReasoningBudget, RuntimeEventSink, WorkerOptions } from "./contracts.ts";
+import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { validateReasoningBudget } from "./reasoning-budget.ts";
 import { runWorker } from "./worker.ts";
 
@@ -14,6 +16,10 @@ async function main(): Promise<number> {
 	const args = process.argv.slice(2);
 	if (args.includes("--version")) {
 		process.stdout.write(`arcvellum-pi-worker ${VERSION}\n`);
+		return 0;
+	}
+	if (args.includes("--catalog")) {
+		await writeCatalog(args);
 		return 0;
 	}
 	const options = parseOptions(args);
@@ -32,16 +38,43 @@ async function main(): Promise<number> {
 	}
 }
 
+async function writeCatalog(args: string[]): Promise<void> {
+	const values = optionValues(args.filter((item) => item !== "--catalog"));
+	const suppliedAuthPath = single(values, "--auth-path");
+	const authPath = resolve(
+		suppliedAuthPath
+			|| (process.env.PI_CODING_AGENT_DIR
+				? join(process.env.PI_CODING_AGENT_DIR, "auth.json")
+				: join(homedir(), ".pi", "agent", "auth.json")),
+	);
+	const credentials = new ReadOnlyJsonCredentialStore(authPath);
+	const connected = new Set((await credentials.list()).map((item) => item.providerId));
+	const models = builtinModels({ credentials });
+	const providers = models.getProviders().map((provider) => ({
+		id: provider.id,
+		name: provider.name,
+		connected: connected.has(provider.id),
+		auth_methods: Object.keys(provider.auth ?? {}),
+		models: models.getModels(provider.id).map((model) => ({
+			id: model.id,
+			qualified_id: `${provider.id}/${model.id}`,
+			name: model.name,
+			context: model.contextWindow,
+			max_output: model.maxTokens,
+			reasoning: model.reasoning,
+		})),
+	}));
+	process.stdout.write(`${JSON.stringify({
+		schema: "arcvellum/pi-worker-catalog/v1",
+		worker_version: VERSION,
+		providers,
+		connected_provider_count: providers.filter((item) => item.connected).length,
+		available_model_count: providers.filter((item) => item.connected).reduce((count, item) => count + item.models.length, 0),
+	})}\n`);
+}
+
 function parseOptions(args: string[]): WorkerOptions {
-	const values = new Map<string, string[]>();
-	for (let index = 0; index < args.length; index += 1) {
-		const name = args[index];
-		if (!name?.startsWith("--")) throw new Error(`unexpected argument: ${name ?? ""}`);
-		const value = args[index + 1];
-		if (!value || value.startsWith("--")) throw new Error(`missing value for ${name}`);
-		values.set(name, [...(values.get(name) ?? []), value]);
-		index += 1;
-	}
+	const values = optionValues(args);
 	const workspace = resolve(single(values, "--workspace") || process.cwd());
 	const model = required(values, "--model");
 	const suppliedAuthPath = single(values, "--auth-path");
@@ -67,6 +100,19 @@ function parseOptions(args: string[]): WorkerOptions {
 		allowedStates,
 		reasoningBudget,
 	};
+}
+
+function optionValues(args: string[]): Map<string, string[]> {
+	const values = new Map<string, string[]>();
+	for (let index = 0; index < args.length; index += 1) {
+		const name = args[index];
+		if (!name?.startsWith("--")) throw new Error(`unexpected argument: ${name ?? ""}`);
+		const value = args[index + 1];
+		if (!value || value.startsWith("--")) throw new Error(`missing value for ${name}`);
+		values.set(name, [...(values.get(name) ?? []), value]);
+		index += 1;
+	}
+	return values;
 }
 
 function parseReasoningBudget(values: Map<string, string[]>, initialLevel: WorkerOptions["thinking"]): ReasoningBudget {

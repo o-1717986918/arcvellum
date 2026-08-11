@@ -12,6 +12,7 @@ import type { SpatialNarrativeProjection } from "@/types/spatial";
 import type { ProjectProgress } from "@/types/api";
 import { asList, asRecord, describeGate, labelFor } from "@/services/presentation";
 import { api, authorizedFetch, query } from "@/services/api";
+import { readCreativeRuntime } from "@/services/runtimePreference";
 
 const props = defineProps<{ projection: SpatialNarrativeProjection | null; dashboard: Record<string, unknown> | null; choices: Record<string, unknown>[]; delivery: Record<string, unknown> | null; progress: ProjectProgress | null; prose: Record<string, unknown>[] }>();
 const emit = defineEmits<{ advance: []; inspectTask: []; openReader: []; readNode: [node: SpatialNarrativeProjection["nodes"][number]]; focusNode: [nodeId: string]; choose: [choice: Record<string, unknown>] }>();
@@ -110,7 +111,7 @@ async function prepareDelivery(): Promise<void> {
   try {
     const result = await api<Record<string, unknown>>("/worker/run", {
       method: "POST",
-      body: JSON.stringify({ project_root: app.currentProjectPath, route: "export-and-release", runtime: "opencode" }),
+      body: JSON.stringify({ project_root: app.currentProjectPath, route: "export-and-release", runtime: readCreativeRuntime() }),
     });
     deliveryMessage.value = String(result.message || "交付任务已开始；完成后文件会出现在这里。");
     await Promise.allSettled([app.loadDelivery(), app.loadDashboard(), app.loadAgentObservability(), app.loadAutopilotStatus()]);

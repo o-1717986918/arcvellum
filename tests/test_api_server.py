@@ -26,6 +26,7 @@ class ApiServerTests(unittest.TestCase):
         self.config["application"]["projects_root"] = str(root / "projects")
         self.config["worker"]["runs_root"] = str(root / "runs")
         self.config["agent_runners"]["opencode"]["data_root"] = str(root)
+        self.config["agent_runners"]["pi-worker"]["auth_path"] = str(root / "pi-auth.json")
         self.client = TestClient(create_app(self.config))
 
     def tearDown(self):

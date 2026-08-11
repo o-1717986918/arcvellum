@@ -25,6 +25,7 @@ const policy = {
 describe("AutopilotPanel", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    localStorage.clear();
     apiMock.mockReset();
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.startsWith("/autopilot/status")) return { ok: true, policy, run: null };
@@ -34,6 +35,52 @@ describe("AutopilotPanel", () => {
       }
       throw new Error(`Unexpected API path: ${path}`);
     });
+  });
+
+  it("starts formal creation with the embedded Pi worker by default", async () => {
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.startsWith("/autopilot/status")) return { ok: true, policy, run: null };
+      if (path === "/autopilot/start") {
+        const request = JSON.parse(String(init?.body || "{}"));
+        expect(request.runtime).toBe("pi-worker");
+        return {
+          ok: true,
+          run: {
+            run_id: "run-pi-worker",
+            project_root: "C:\\ArcVellum\\作品",
+            mode: "collaborative",
+            runtime: request.runtime,
+            status: "running",
+            current_route: "planning",
+            current_task_id: "",
+            tasks_completed: 0,
+            failures: 0,
+            consecutive_revisions: 0,
+            estimated_cost: 0,
+            last_error: "",
+            stop_reason: "",
+          },
+        };
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const { useAppStore } = await import("@/stores/app");
+    useAppStore().setCurrentProject("C:\\ArcVellum\\作品", false);
+    const wrapper = mount(AutopilotPanel, { global: { plugins: [pinia] } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("内置 Pi 主创");
+    const start = wrapper.findAll("button").find((button) => button.text() === "开始");
+    expect(start).toBeTruthy();
+    await start?.trigger("click");
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith(
+      "/autopilot/start",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("makes full-auto selection visible and asks for explicit authorization", async () => {

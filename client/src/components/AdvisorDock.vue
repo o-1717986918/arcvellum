@@ -20,9 +20,9 @@ import {
 } from "lucide-vue-next";
 import { api, connectEventStream, query, streamApi, type EventStreamConnection } from "@/services/api";
 import { renderSafeMarkdown } from "@/services/markdown";
+import { readCreativeRuntime } from "@/services/runtimePreference";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AdvisorAction, AdvisorAnswer, AdvisorMessage, AdvisorSession } from "@/types/api";
-
 const store = useAppStore();
 const route = useRoute();
 const router = useRouter();
@@ -429,14 +429,14 @@ async function runAction(action: AdvisorAction): Promise<void> {
       const allowedRoutes = new Set(["auto", "scene-development", "longform-planning", "style-engineering", "character-and-world-assets", "review-and-audit", "export-and-release"]);
       await api("/worker/run", {
         method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, route: allowedRoutes.has(action.route || "") ? action.route : "auto", runtime: "opencode" }),
+        body: JSON.stringify({ project_root: store.currentProjectPath, route: allowedRoutes.has(action.route || "") ? action.route : "auto", runtime: readCreativeRuntime() }),
       });
       store.notice = "下一项创作任务已经启动。";
       await store.loadDashboard();
     } else if (action.type === "start_autopilot") {
       await api("/autopilot/start", {
         method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, runtime: "opencode" }),
+        body: JSON.stringify({ project_root: store.currentProjectPath, runtime: readCreativeRuntime() }),
       });
       store.notice = "连续创作已经开始。";
       await store.loadDashboard();

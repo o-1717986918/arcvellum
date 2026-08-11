@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Bot, CircleCheck, CirclePause, Gauge, Pause, Play, RefreshCw, ShieldAlert, Sparkles, Timer, Wrench } from "lucide-vue-next";
 import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
+import { readCreativeRuntime, saveCreativeRuntime, type CreativeRuntime } from "@/services/runtimePreference";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy } from "@/types/api";
 
@@ -11,6 +12,7 @@ const snapshot = ref<AutopilotStatus | null>(null);
 const busy = ref(false);
 const authorized = ref(false);
 const selectedMode = ref<AutopilotMode>("collaborative");
+const selectedRuntime = ref<CreativeRuntime>(readCreativeRuntime());
 const authorizationConfirmationRequired = ref(false);
 const modeChangeNotice = ref("");
 const liveStage = ref("等待开始");
@@ -78,6 +80,9 @@ async function load(): Promise<void> {
   try {
     snapshot.value = await api<AutopilotStatus>(`/autopilot/status?${query({ project_root: store.currentProjectPath })}`);
     selectedMode.value = snapshot.value.policy.mode || "collaborative";
+    if (snapshot.value.run?.runtime === "pi-worker" || snapshot.value.run?.runtime === "opencode") {
+      selectedRuntime.value = snapshot.value.run.runtime;
+    }
     authorizationConfirmationRequired.value = false;
     authorized.value = false;
     syncRenewalLimits();
@@ -149,7 +154,7 @@ async function start(): Promise<void> {
   try {
     const result = await api<{ run: AutopilotRun }>("/autopilot/start", {
       method: "POST",
-      body: JSON.stringify({ project_root: store.currentProjectPath, runtime: "opencode", authorized: mode.value !== "full_auto" || authorized.value }),
+      body: JSON.stringify({ project_root: store.currentProjectPath, runtime: selectedRuntime.value, authorized: mode.value !== "full_auto" || authorized.value }),
     });
     if (snapshot.value) snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
@@ -161,6 +166,11 @@ async function start(): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+function chooseRuntime(value: CreativeRuntime): void {
+  if (running.value || busy.value) return;
+  selectedRuntime.value = saveCreativeRuntime(value);
 }
 
 async function pause(): Promise<void> {
@@ -332,6 +342,12 @@ function routeText(route: string): string {
         <CircleCheck v-else :size="18" />
         <span><strong>{{ item.title }}</strong><small>{{ item.text }}</small></span>
       </button>
+    </div>
+
+    <div class="creative-runtime-selector" aria-label="创作执行器">
+      <span><Bot :size="15" /><strong>创作执行器</strong><small>决定由哪种 Agent 完成正式任务</small></span>
+      <button :class="{ active: selectedRuntime === 'pi-worker' }" :disabled="running || busy" @click="chooseRuntime('pi-worker')"><i></i>内置 Pi 主创</button>
+      <button :class="{ active: selectedRuntime === 'opencode' }" :disabled="running || busy" @click="chooseRuntime('opencode')"><i></i>OpenCode</button>
     </div>
 
     <section v-if="modeChangeNotice" class="autopilot-mode-notice" aria-live="polite">

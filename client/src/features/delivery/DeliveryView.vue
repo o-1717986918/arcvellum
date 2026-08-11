@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { CheckCircle2, Download, FileText, PackageOpen, RefreshCw, ShieldCheck } from "lucide-vue-next";
 import { api, query } from "@/services/api";
 import { asList, displayValue } from "@/services/presentation";
+import { readCreativeRuntime } from "@/services/runtimePreference";
 import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
@@ -30,7 +31,7 @@ async function prepareDelivery(): Promise<void> {
   try {
     const result = await api<Record<string, unknown>>("/worker/run", {
       method: "POST",
-      body: JSON.stringify({ project_root: store.currentProjectPath, route: "export-and-release", runtime: "opencode" }),
+      body: JSON.stringify({ project_root: store.currentProjectPath, route: "export-and-release", runtime: readCreativeRuntime() }),
     });
     message.value = String(result.message || "交付任务已经启动；完成后正式文件会出现在下方。");
     await Promise.allSettled([store.loadDelivery(), store.loadDashboard(), store.loadAgentObservability(), store.loadAutopilotStatus()]);

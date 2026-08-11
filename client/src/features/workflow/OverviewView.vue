@@ -7,6 +7,7 @@ import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ImmersiveConsole from "@/components/ImmersiveConsole.vue";
 import StoryTrace from "@/components/StoryTrace.vue";
 import { api } from "@/services/api";
+import { readCreativeRuntime } from "@/services/runtimePreference";
 import { asList, asRecord, describeGate, describeWorkflowAction, formatCount, labelFor, manuscriptItems, targetLabel, workflowStepLabel } from "@/services/presentation";
 import { applyOrreryExperience, backgroundForTheme, normalizeInstrumentVisibility, normalizeOrreryBackground, normalizeOrreryMode, normalizeOrreryTheme, type OrreryBackground, type OrreryMode, type OrreryTheme } from "@/services/orreryPreferences";
 import { loadOrreryBackground } from "@/services/orreryAssets";
@@ -144,7 +145,7 @@ async function prepareNextTask(): Promise<void> {
   try {
     const result = await api<Record<string, unknown>>("/worker/run", {
       method: "POST",
-      body: JSON.stringify({ project_root: store.currentProjectPath, route: String(firstAction.value?.route || "auto"), runtime: "opencode" }),
+      body: JSON.stringify({ project_root: store.currentProjectPath, route: String(firstAction.value?.route || "auto"), runtime: readCreativeRuntime() }),
     });
     actionMessage.value = result.job_id
       ? "下一项创作任务已经启动，进度会持续显示在活动记录中。"
