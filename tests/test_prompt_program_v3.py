@@ -14,11 +14,42 @@ from literary_engineering_studio.runtime.prompt_program import (
 )
 from literary_engineering_studio.runtime.prompt_renderer import render_tool_worker_program
 from literary_engineering_studio.runtime.prompt_metrics import measure_prompt
+from literary_engineering_studio.runtime.prompt_compiler import _output_contract
 from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio_engine.prompting.agents.schema import compact_schema_contract
 
 
 class PromptProgramV3Tests(unittest.TestCase):
+    def test_v3_output_contract_keeps_exact_branch_semantic_shape(self):
+        shape = {"branch_id": "agent_branch_replace_1", "beat_plan": []}
+        contract = _output_contract(
+            {
+                "core_managed_outputs": [],
+                "output_contracts": [
+                    {
+                        "path": "branches/scene_0001/branch_proposals.json",
+                        "kind": "semantic-candidate",
+                        "format": "json",
+                    }
+                ],
+                "semantic_output_contract": {
+                    "path": "branches/scene_0001/branch_proposals.json",
+                    "schema_name": "branch_proposals.v1",
+                    "required_fields": ["schema", "proposals"],
+                    "branch_proposal_contract": {
+                        "proposal_count": 4,
+                        "proposal_shape": shape,
+                    },
+                },
+                "system_owned_fields": {},
+            }
+        )
+
+        semantic = contract["semantic"]
+        self.assertEqual(semantic["schema_name"], "branch_proposals.v1")
+        self.assertEqual(semantic["branch_proposal_contract"]["proposal_count"], 4)
+        self.assertEqual(semantic["branch_proposal_contract"]["proposal_shape"], shape)
+
     def test_tool_renderer_requires_exact_paths_instead_of_evidence_ids(self):
         program = PromptProgram(
             schema="arcvellum/prompt-program/v3",

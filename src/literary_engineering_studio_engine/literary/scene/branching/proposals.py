@@ -31,6 +31,77 @@ REQUIRED_BEAT_FIELDS = (
     "detail_level",
     "serves",
 )
+WRITEBACK_FIELDS = (
+    "new_facts",
+    "character_changes",
+    "relationship_changes",
+    "foreshadowing_changes",
+    "next_scene_inputs",
+)
+
+
+def branch_proposal_scaffold(slot: int = 1) -> dict[str, Any]:
+    """Return the single authoritative Agent-facing proposal shape.
+
+    Placeholder values intentionally fail the quality gate.  The scaffold is
+    an editing aid, not a deterministic proposal or a way to bypass creative
+    judgment.
+    """
+
+    number = max(1, int(slot))
+    return {
+        "branch_id": f"agent_branch_replace_{number}",
+        "title": "<replace: scene-specific title>",
+        "strategy": "<replace: causal strategy, not a renamed fallback>",
+        "causal_premise": "<replace: choice causes consequence>",
+        "action_chain": [
+            "<replace: concrete action 1>",
+            "<replace: concrete action 2>",
+        ],
+        "cost": "<replace: irreversible or accumulating cost>",
+        "reader_effect": "<replace: reader expectation or emotion change>",
+        "state_writeback": {
+            "new_facts": [],
+            "character_changes": [],
+            "relationship_changes": [],
+            "foreshadowing_changes": [],
+            "next_scene_inputs": ["<replace: concrete next-scene pressure>"],
+        },
+        "beat_plan": [
+            {
+                "beat_id": f"branch_{number}_beat_1",
+                "function": "<replace: opening beat function>",
+                "visible_action": "<replace: observable action>",
+                "causal_change": "<replace: state changed by this action>",
+                "pace": "measured",
+                "detail_level": "standard",
+                "serves": ["incoming_bridge", "goal"],
+            },
+            {
+                "beat_id": f"branch_{number}_beat_2",
+                "function": "<replace: turn and consequence function>",
+                "visible_action": "<replace: observable action>",
+                "causal_change": "<replace: state changed by this action>",
+                "pace": "accelerating",
+                "detail_level": "expanded",
+                "serves": ["turn", "cost", "reader_effect", "outgoing_hook"],
+            },
+        ],
+    }
+
+
+def branch_proposal_contract(proposal_count: int = 0) -> dict[str, Any]:
+    """Project the exact mechanical contract without making creative choices."""
+
+    return {
+        "proposal_count": max(0, int(proposal_count)),
+        "proposal_shape": branch_proposal_scaffold(),
+        "proposal_required_fields": list(REQUIRED_PROPOSAL_FIELDS),
+        "beat_required_fields": list(REQUIRED_BEAT_FIELDS),
+        "beat_obligations": sorted(REQUIRED_BEAT_OBLIGATIONS),
+        "state_writeback_fields": list(WRITEBACK_FIELDS),
+        "identity_rule": "branch_id must match agent_branch_<slug>",
+    }
 
 
 def branch_proposal_quality_errors(payload: dict[str, Any], relative: str) -> list[str]:
@@ -89,12 +160,18 @@ def _proposal_errors(proposal: dict[str, Any], index: int, relative: str) -> lis
     branch_id = str(proposal.get("branch_id") or "").strip()
     if not re.fullmatch(r"agent_branch_[a-z0-9][a-z0-9_-]*", branch_id):
         errors.append(f"branch proposal id must use agent_branch_<slug>: {relative}")
+    if branch_id.startswith("agent_branch_replace_"):
+        errors.append(f"branch proposal `{label}` still contains scaffold identity: {relative}")
     for field in ("title", "strategy", "causal_premise", "cost", "reader_effect"):
         if not str(proposal.get(field) or "").strip():
             errors.append(f"branch proposal `{label}` requires non-empty {field}: {relative}")
+        elif _contains_placeholder(proposal.get(field)):
+            errors.append(f"branch proposal `{label}` must replace placeholder {field}: {relative}")
     actions = proposal.get("action_chain")
     if not isinstance(actions, list) or len(_nonempty_values(actions)) < 2:
         errors.append(f"branch proposal `{label}` requires at least two concrete actions: {relative}")
+    elif any(_contains_placeholder(item) for item in actions):
+        errors.append(f"branch proposal `{label}` must replace action_chain placeholders: {relative}")
     writeback = proposal.get("state_writeback")
     if not isinstance(writeback, dict) or not _has_writeback_change(writeback):
         errors.append(f"branch proposal `{label}` requires a concrete state writeback: {relative}")
@@ -156,7 +233,13 @@ def _nonempty_values(values: list[Any]) -> list[Any]:
 
 
 def _meaningful_beat_value(value: Any) -> bool:
-    return bool(_nonempty_values(value)) if isinstance(value, list) else bool(str(value or "").strip())
+    if isinstance(value, list):
+        return bool(_nonempty_values(value)) and not any(_contains_placeholder(item) for item in value)
+    return bool(str(value or "").strip()) and not _contains_placeholder(value)
+
+
+def _contains_placeholder(value: Any) -> bool:
+    return "<replace:" in str(value or "").casefold()
 
 
 def _signature(value: Any) -> str:

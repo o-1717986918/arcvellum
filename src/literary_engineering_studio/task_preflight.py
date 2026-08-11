@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from .contracts import TaskPackage
 from .preflight.assets import _validate_asset_candidate, _validate_asset_review_contract
 from .preflight.canonicalization import canonicalize_task_outputs
@@ -31,6 +34,9 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_definition,
     semantic_artifact_errors,
     semantic_artifact_relative_path,
+)
+from literary_engineering_studio_engine.literary.scene.branching.proposals import (
+    branch_proposal_scaffold,
 )
 
 
@@ -98,7 +104,22 @@ def _validate_semantic_task_contract(
     relative = semantic_artifact_relative_path(current_state, scene_id)
     if not relative:
         return
-    for message in semantic_artifact_errors(sandbox.workspace, current_state, scene_id):
+    messages = semantic_artifact_errors(sandbox.workspace, current_state, scene_id)
+    if current_state == "branch-agent-task" and messages:
+        issues.append(
+            PreflightIssue(
+                "semantic-contract",
+                relative,
+                _compact_semantic_errors(messages),
+                _semantic_artifact_repair_instruction(
+                    current_state,
+                    relative,
+                    branch_count=_branch_count(sandbox.workspace, scene_id),
+                ),
+            )
+        )
+        return
+    for message in messages:
         issues.append(
             PreflightIssue(
                 "semantic-contract",
@@ -109,7 +130,12 @@ def _validate_semantic_task_contract(
         )
 
 
-def _semantic_artifact_repair_instruction(current_state: str, relative: str) -> str:
+def _semantic_artifact_repair_instruction(
+    current_state: str,
+    relative: str,
+    *,
+    branch_count: int = 0,
+) -> str:
     """Give the repair turn an executable contract, not a schema-name hint."""
 
     if current_state == "composition-agent-task":
@@ -135,4 +161,36 @@ def _semantic_artifact_repair_instruction(current_state: str, relative: str) -> 
             "source_artifact 和 canon_patch_sha256。不要自行创建 completion marker。若证据不足，使用 "
             "needs_revision/revise_required/hold，并列出可执行的 required_changes。"
         )
+    if current_state == "branch-agent-task":
+        count_rule = f"恰好 {branch_count} 条" if branch_count else "2-5 条"
+        shape = json.dumps(branch_proposal_scaffold(), ensure_ascii=False, indent=2)
+        return (
+            f"只修复 `{relative}` 的机械合同并保留已经成立的创意内容。`proposals` 必须有{count_rule}，"
+            "每条严格使用下列字段形状，不得使用 id/rationale/irreversible_cost/next_scene_pressure 等近义字段：\n"
+            f"{shape}\n"
+            "将示例中的所有 <replace: ...> 和 agent_branch_replace_* 替换为本场真实内容；"
+            "state_writeback 五项保持字符串列表且至少一项非空；每条含 2-8 个 beat，serves 是义务名列表，"
+            "所有 beat 合计覆盖 incoming_bridge、goal、turn、cost、reader_effect、outgoing_hook。"
+            "顶层 status=complete，evidence_paths/findings 非空。不要自行创建 completion marker。"
+        )
     return "完成任务要求的 Agent 判断；保留已有有效内容，并修正 semantic artifact 的 schema、scene_id、列表字段、证据和完成状态。"
+
+
+def _branch_count(workspace: Path, scene_id: str) -> int:
+    path = workspace / "branches" / scene_id / "branch_manifest.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return max(0, int(payload.get("branch_count") or 0)) if isinstance(payload, dict) else 0
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return 0
+
+
+def _compact_semantic_errors(messages: list[str]) -> str:
+    unique: list[str] = []
+    for message in messages:
+        normalized = str(message).strip()
+        if normalized and normalized not in unique:
+            unique.append(normalized)
+    sample = "; ".join(unique[:8])
+    suffix = f"; 另有 {len(unique) - 8} 项同类问题" if len(unique) > 8 else ""
+    return f"branch proposal semantic artifact has {len(unique)} contract violation(s): {sample}{suffix}"

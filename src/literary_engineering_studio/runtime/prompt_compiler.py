@@ -129,7 +129,18 @@ def _output_contract(context: Mapping[str, Any]) -> dict[str, object]:
     semantic = _mapping(context.get("semantic_output_contract"))
     compact_semantic = {
         key: semantic[key]
-        for key in ("schema", "schema_id", "schema_value", "required", "exact_lines")
+        for key in (
+            "path",
+            "schema_name",
+            "required_fields",
+            "field_types",
+            "allowed_values",
+            "locked_values",
+            "pass_requirements",
+            "revision_requirements",
+            "continuity_kind",
+            "branch_proposal_contract",
+        )
         if key in semantic
     }
     machine_contract = _mapping(context.get("system_owned_fields"))

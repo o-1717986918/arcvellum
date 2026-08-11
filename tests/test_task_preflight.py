@@ -14,6 +14,7 @@ from literary_engineering_studio.runtime.sandbox import (
 )
 from literary_engineering_studio.task_preflight import (
     COMPLETION_SCHEMA,
+    _compact_semantic_errors,
     _semantic_artifact_repair_instruction,
     canonicalize_task_outputs,
     validate_task_outputs,
@@ -34,6 +35,29 @@ from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELD
 
 
 class TaskPreflightTests(unittest.TestCase):
+    def test_branch_semantic_repair_is_exact_and_bounded(self):
+        instruction = _semantic_artifact_repair_instruction(
+            "branch-agent-task",
+            "branches/scene_0001/branch_proposals.json",
+            branch_count=4,
+        )
+
+        self.assertIn("恰好 4 条", instruction)
+        self.assertIn('"branch_id"', instruction)
+        self.assertIn('"causal_premise"', instruction)
+        self.assertIn('"state_writeback"', instruction)
+        self.assertIn('"beat_id"', instruction)
+        self.assertIn('"serves"', instruction)
+        self.assertIn("不得使用 id/rationale/irreversible_cost/next_scene_pressure", instruction)
+        self.assertLess(len(instruction), 6_000)
+
+        summary = _compact_semantic_errors(
+            [f"proposal field problem {index}" for index in range(79)]
+        )
+        self.assertIn("79 contract violation", summary)
+        self.assertIn("另有 71 项", summary)
+        self.assertLess(len(summary), 1_000)
+
     def test_archaeology_chunk_machine_identity_is_worker_owned(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "project"

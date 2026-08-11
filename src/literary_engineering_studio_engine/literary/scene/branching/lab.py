@@ -193,6 +193,7 @@ def _prepare_branch_agent_task(
         scene_id,
         source=manifest_path.relative_to(root).as_posix(),
         overwrite=False,
+        branch_count=int(payload["branch_count"]),
     )
     return _write_branch_agent_tasks(
         root, scene_path, context_path, output_path, manifest_path, selection_path, payload
@@ -236,7 +237,7 @@ def _write_branch_agent_tasks(
             ),
             (
                 "写入正式分支提案",
-                f"""把恰好 {payload['branch_count']} 条提案写入 `{proposal_path.relative_to(root).as_posix()}`。每条使用唯一 `agent_branch_<slug>` id，并填写 title、strategy、causal_premise、至少两步 action_chain、不可回避的 cost、reader_effect、具体 state_writeback 和 2-8 拍 beat_plan。每拍填写 function、visible_action、causal_change、pace、detail_level、serves；整份计划必须覆盖 incoming_bridge、goal、turn、cost、reader_effect、outgoing_hook。不同提案必须在因果、行动链、代价、读者效果和写回上都真实不同。设置 status=complete，引用实际 evidence_paths，并在 findings 说明差异依据。""",
+                f"""编辑已经预置精确 JSON 形状的 `{proposal_path.relative_to(root).as_posix()}`，保留顶层 schema、scene_id 和 source_artifact。把其中恰好 {payload['branch_count']} 个占位提案逐一改为真实内容；每条 `branch_id` 使用唯一 `agent_branch_<slug>`，不得改名为 id、rationale、irreversible_cost 或 next_scene_pressure。`state_writeback` 的五个字段都保持字符串列表；`beat_plan` 每拍保留 beat_id、function、visible_action、causal_change、pace、detail_level、serves，且 serves 必须是义务名称列表，整份计划覆盖 incoming_bridge、goal、turn、cost、reader_effect、outgoing_hook。不同提案必须在因果、行动链、代价、读者效果和写回上都真实不同。设置 status=complete，引用实际 evidence_paths，并在 findings 说明差异依据。""",
             ),
             (
                 "决定选择策略",
@@ -244,7 +245,7 @@ def _write_branch_agent_tasks(
             ),
             (
                 "检查写回风险",
-                """检查每个分支的 writeback_candidates，标出哪些新增事实、人物状态、关系变化和伏笔变化需要用户批准。不得直接写入 canon 或 characters/*.yaml。""",
+                """检查每个提案的 state_writeback，标出哪些新增事实、人物状态、关系变化和伏笔变化需要用户批准。不得直接写入 canon 或 characters/*.yaml。""",
             ),
         ],
     )

@@ -16,9 +16,51 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_template,
 )
 from literary_engineering_studio_engine import task_registry
+from literary_engineering_studio_engine.literary.scene.branching.proposals import (
+    branch_proposal_quality_errors,
+)
 
 
 class SemanticTaskContractTests(unittest.TestCase):
+    def test_branch_template_exposes_exact_editable_shape_without_passing_gate(self):
+        payload = semantic_artifact_template(
+            "branch-agent-task",
+            "scene_0001",
+            source="branches/scene_0001/branch_manifest.json",
+            branch_count=3,
+        )
+
+        self.assertEqual(len(payload["proposals"]), 3)
+        proposal = payload["proposals"][0]
+        self.assertEqual(
+            set(proposal),
+            {
+                "branch_id",
+                "title",
+                "strategy",
+                "causal_premise",
+                "action_chain",
+                "cost",
+                "reader_effect",
+                "state_writeback",
+                "beat_plan",
+            },
+        )
+        self.assertEqual(
+            set(proposal["state_writeback"]),
+            {
+                "new_facts",
+                "character_changes",
+                "relationship_changes",
+                "foreshadowing_changes",
+                "next_scene_inputs",
+            },
+        )
+        self.assertIsInstance(proposal["beat_plan"][0]["serves"], list)
+        errors = branch_proposal_quality_errors(payload, "branch_proposals.json")
+        self.assertTrue(any("scaffold identity" in item for item in errors))
+        self.assertTrue(any("placeholder" in item for item in errors))
+
     def _project(self, root: Path) -> Path:
         (root / "project.yaml").write_text("project:\n  title: Semantic Contract\n", encoding="utf-8")
         (root / "scenes").mkdir(parents=True)

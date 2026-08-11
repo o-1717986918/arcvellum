@@ -7,6 +7,9 @@ from typing import Any
 
 from ..contracts import TaskPackage
 from literary_engineering_studio_engine.prompting.agents.schema import load_schema_spec
+from literary_engineering_studio_engine.literary.scene.branching.proposals import (
+    branch_proposal_contract,
+)
 
 
 def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
@@ -25,7 +28,8 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
     schema = _load_schema(schema_name)
     if schema is None:
         return {"path": str(semantic.get("path") or ""), "schema_name": schema_name}
-    locked = _locked_values(_load_template(task, semantic))
+    template = _load_template(task, semantic)
+    locked = _locked_values(template)
     contract: dict[str, Any] = {
         "path": str(semantic.get("path") or ""),
         "schema_name": schema_name,
@@ -36,6 +40,10 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
         "current_state": current_state,
     }
     contract.update(_state_requirements(current_state, scene_id, locked))
+    if current_state == "branch-agent-task":
+        proposals = template.get("proposals")
+        proposal_count = len(proposals) if isinstance(proposals, list) else 0
+        contract["branch_proposal_contract"] = branch_proposal_contract(proposal_count)
     return contract
 
 
@@ -162,7 +170,32 @@ def render_semantic_output_contract(contract: dict[str, Any]) -> str:
     continuity = _continuity_guidance(str(contract.get("continuity_kind") or ""))
     if continuity:
         return base + continuity
+    branch = contract.get("branch_proposal_contract")
+    if isinstance(branch, dict):
+        return base + _branch_proposal_guidance(branch)
     return base + _requirements_guidance(contract)
+
+
+def _branch_proposal_guidance(contract: dict[str, Any]) -> str:
+    count = int(contract.get("proposal_count") or 0)
+    shape = contract.get("proposal_shape") if isinstance(contract.get("proposal_shape"), dict) else {}
+    rendered = json.dumps(shape, ensure_ascii=False, indent=2)
+    count_rule = f"恰好 {count} 条" if count else "2-5 条"
+    return f"""
+
+`proposals` 必须保留并完成 {count_rule}场景特定提案。下面是唯一权威的单条机械形状；复制形状可以，复制占位内容不可以：
+
+```json
+{rendered}
+```
+
+- 不得把字段改名为 `id`、`rationale`、`irreversible_cost`、`next_scene_pressure` 或其他近义词。
+- `state_writeback` 保留 `new_facts`、`character_changes`、`relationship_changes`、`foreshadowing_changes`、`next_scene_inputs` 五个字符串列表；至少一个列表必须有具体变化。
+- 每条提案含 2-8 个 beat；每拍填写全部字段，`serves` 必须是义务名称列表。
+- 每条提案的全部 beat 合计覆盖 `incoming_bridge`、`goal`、`turn`、`cost`、`reader_effect`、`outgoing_hook`。
+- 顶层设置 `status=complete`，`evidence_paths` 与 `findings` 非空；所有 `<replace: ...>` 和 `agent_branch_replace_*` 占位值必须被替换。
+- 同时完成任务声明的 `branch_selection.md`，其中 `selected_branch` 必须精确引用本文件的一条 `branch_id`；不要自行创建 completion receipt。
+"""
 
 
 def _render_contract_base(contract: dict[str, Any]) -> str:

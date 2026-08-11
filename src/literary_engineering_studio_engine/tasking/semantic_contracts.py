@@ -14,7 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from ..agent_schema import validate_payload
-from ..literary.scene.branching.proposals import branch_option_ids, branch_proposal_options, branch_proposal_quality_errors
+from ..literary.scene.branching.proposals import (
+    branch_option_ids,
+    branch_proposal_options,
+    branch_proposal_quality_errors,
+    branch_proposal_scaffold,
+)
 
 
 SEMANTIC_ARTIFACTS: dict[str, dict[str, str]] = {
@@ -88,7 +93,13 @@ def semantic_artifact_contract(current_state: str, scene_id: str) -> dict[str, s
     }
 
 
-def semantic_artifact_template(current_state: str, scene_id: str, *, source: str = "") -> dict[str, Any]:
+def semantic_artifact_template(
+    current_state: str,
+    scene_id: str,
+    *,
+    source: str = "",
+    branch_count: int = 0,
+) -> dict[str, Any]:
     """Build a deliberately incomplete template for the active Agent task."""
 
     definition = semantic_artifact_definition(current_state)
@@ -115,7 +126,10 @@ def semantic_artifact_template(current_state: str, scene_id: str, *, source: str
         return {
             "schema": "literary-engineering-workbench/branch-proposals/v1",
             **common,
-            "proposals": [],
+            "proposals": [
+                branch_proposal_scaffold(index + 1)
+                for index in range(max(0, int(branch_count)))
+            ],
         }
     if current_state == "composition-agent-task":
         return {
@@ -154,18 +168,49 @@ def write_semantic_artifact_template(
     *,
     source: str = "",
     overwrite: bool = False,
+    branch_count: int = 0,
 ) -> Path:
     relative = semantic_artifact_relative_path(current_state, scene_id)
     if not relative:
         raise ValueError(f"no semantic artifact path is defined for {current_state}")
     path = root.resolve() / relative
     path.parent.mkdir(parents=True, exist_ok=True)
-    if overwrite or not path.exists():
+    should_write = overwrite or not path.exists()
+    if (
+        not should_write
+        and current_state == "branch-agent-task"
+        and branch_count > 0
+        and _pending_branch_template_needs_scaffold(path)
+    ):
+        should_write = True
+    if should_write:
         path.write_text(
-            json.dumps(semantic_artifact_template(current_state, scene_id, source=source), ensure_ascii=False, indent=2) + "\n",
+            json.dumps(
+                semantic_artifact_template(
+                    current_state,
+                    scene_id,
+                    source=source,
+                    branch_count=branch_count,
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
             encoding="utf-8",
         )
     return path
+
+
+def _pending_branch_template_needs_scaffold(path: Path) -> bool:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return (
+        isinstance(payload, dict)
+        and str(payload.get("status") or "") == "pending_agent_judgment"
+        and not payload.get("proposals")
+    )
 
 
 def semantic_artifact_errors(root: Path, current_state: str, scene_id: str) -> list[str]:
