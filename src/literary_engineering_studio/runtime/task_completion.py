@@ -99,6 +99,14 @@ def completion_program_fields(
     checks = semantic.get("required_checks")
     check_rows = checks if isinstance(checks, list) else []
     pass_lines = "\n".join(f"- `{item}`" for item in check_rows) or "- Studio 确定性预检通过。"
+    review_requirement = str(semantic.get("review_conclusion") or "")
+    if review_requirement == "pass":
+        pass_lines += "\n- 审查 Markdown 必须包含独占机器行：`- 结论： pass`。标题、代码字段或普通段落不能替代。"
+    elif review_requirement == "recorded":
+        pass_lines += (
+            "\n- 审查 Markdown 必须包含独占机器行：`- 结论： pass`、"
+            "`- 结论： revise_required` 或 `- 结论： reject`。标题、代码字段或普通段落不能替代。"
+        )
 
     stop = contract.get("stop_condition")
     stop_payload = stop if isinstance(stop, Mapping) else {}

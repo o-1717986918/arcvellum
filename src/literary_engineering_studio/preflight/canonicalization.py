@@ -48,7 +48,11 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(_canonicalize_scene_candidate_manifest(task, sandbox))
     changes.extend(canonicalize_scene_review_metadata(task, sandbox))
     gates = " ".join(str(item) for item in task.payload.get("validation_gates") or []).lower()
-    if "conclusion is pass" not in gates and "结论" not in gates:
+    if (
+        "conclusion is pass" not in gates
+        and "conclusion is recorded" not in gates
+        and "结论" not in gates
+    ):
         return changes
     for relative in task.expected_outputs:
         if not relative.endswith(".md") or "review" not in relative.lower() or "agent_tasks" in relative.lower():

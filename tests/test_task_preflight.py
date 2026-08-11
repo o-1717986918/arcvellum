@@ -587,6 +587,45 @@ class TaskPreflightTests(unittest.TestCase):
             passed = validate_task_outputs(task, sandbox)
             self.assertTrue(passed.passed, passed.as_dict())
 
+    def test_recorded_review_gate_rejects_non_machine_conclusion(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            task_json = project / "task.json"
+            task_markdown = project / "task.md"
+            task_markdown.write_text("# review\n", encoding="utf-8")
+            task_json.write_text(
+                json.dumps(
+                    {
+                        "schema": TASK_SCHEMA,
+                        "task_id": "budget-review-recorded",
+                        "route": "longform-planning",
+                        "current_state": "budget-agent-task",
+                        "task_type": "platform-agent-review",
+                        "task_markdown": "task.md",
+                        "required_reading": [],
+                        "source_paths": [],
+                        "expected_outputs": ["reviews/word_budget/word_budget_review.md"],
+                        "validation_gates": ["word-budget review conclusion is recorded"],
+                        "forbidden_shortcuts": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = load_task_package(project, task_json)
+            sandbox = stage_task(task, root / "runs", runtime="pi-worker")
+            review = sandbox.workspace / "reviews" / "word_budget" / "word_budget_review.md"
+            review.parent.mkdir(parents=True)
+            review.write_text("## 结论\n\n`review_status: pass`\n", encoding="utf-8")
+
+            failed = validate_task_outputs(task, sandbox)
+
+            self.assertFalse(failed.passed)
+            issue = next(item for item in failed.issues if item.code == "missing-machine-conclusion")
+            self.assertIn("- 结论：", issue.repair)
+
     def test_completion_receipt_is_refreshed_after_its_sidecar_is_reissued(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

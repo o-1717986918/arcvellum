@@ -125,7 +125,11 @@ def _validate_review_conclusions(
     issues: list[PreflightIssue],
 ) -> None:
     gates = " ".join(str(item) for item in task.payload.get("validation_gates") or []).lower()
-    if "conclusion is pass" not in gates and "结论" not in gates:
+    if (
+        "conclusion is pass" not in gates
+        and "conclusion is recorded" not in gates
+        and "结论" not in gates
+    ):
         return
     candidates = [
         relative

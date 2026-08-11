@@ -56,6 +56,16 @@ class TaskCompletionContractTests(unittest.TestCase):
             self.assertIn("review_machine_conclusion_is_pass", program)
             self.assertIn("聊天内容不计入产物", program)
 
+    def test_recorded_review_contract_renders_exact_machine_line_examples(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task = _task(Path(temporary), gate="word-budget review conclusion is recorded")
+
+            program = render_worker_program(task)
+
+            self.assertIn("`- 结论： pass`", program)
+            self.assertIn("`- 结论： revise_required`", program)
+            self.assertIn("标题、代码字段或普通段落不能替代", program)
+
     def test_progress_digest_changes_only_with_machine_visible_progress(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -78,7 +88,7 @@ class TaskCompletionContractTests(unittest.TestCase):
             self.assertNotEqual(first.digest, changed.digest)
 
 
-def _task(root: Path) -> TaskPackage:
+def _task(root: Path, *, gate: str = "word-budget review conclusion is pass") -> TaskPackage:
     review = "reviews/word_budget/word_budget_review.md"
     sidecar = "plot/word_budget/word_budget.agent_tasks.md"
     receipt = "plot/word_budget/word_budget.agent_completion.json"
@@ -104,7 +114,7 @@ def _task(root: Path) -> TaskPackage:
                 {"path": sidecar, "kind": "task-scaffold", "writeback_policy": "automatic"},
                 {"path": receipt, "kind": "completion-evidence", "writeback_policy": "automatic"},
             ],
-            "validation_gates": ["word-budget review conclusion is pass"],
+            "validation_gates": [gate],
         },
     )
 
