@@ -206,6 +206,38 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(result.metadata["failure_kind"], "validation_failure")
         self.assertTrue(result.metadata["retryable"])
 
+    def test_empty_provider_response_is_a_retryable_transport_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "runtime.output.log"
+            output.write_text(
+                json.dumps(
+                    {
+                        "event": "runner.worker.result",
+                        "data": {
+                            "status": "incomplete",
+                            "message": "model stopped without calling complete_task",
+                            "failureKind": "provider_empty_response",
+                            "providerRequests": 1,
+                            "toolCalls": 0,
+                            "reasoningCharacters": 0,
+                            "textCharacters": 0,
+                            "writtenOutputs": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = PiWorkerRuntime({})._with_worker_result(
+                RuntimeResult("pi-worker", "failed", 2, (), output, "failed")
+            )
+
+        self.assertEqual(result.metadata["failure_kind"], "transient_network")
+        self.assertEqual(result.metadata["provider_failure_kind"], "provider_empty_response")
+        self.assertTrue(result.metadata["retryable"])
+        self.assertIn("空响应", result.message)
+
     def test_studio_preflight_can_request_one_bounded_fresh_process_repair(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

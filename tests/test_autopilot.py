@@ -3,7 +3,7 @@ import json
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from literary_engineering_studio.autopilot import (
     AutopilotService,
@@ -15,6 +15,10 @@ from literary_engineering_studio.autopilot import (
     normalize_policy,
 )
 from literary_engineering_studio.automation.lease_heartbeat import LeaseRenewalResult
+from literary_engineering_studio.automation.run_result_handler import (
+    ClaimedRunResultHandler,
+    RouteCycle,
+)
 from literary_engineering_studio.creative_steward import (
     _decision_evidence_packet,
     _decision_prompt,
@@ -33,6 +37,47 @@ class _Audit:
 
 
 class AutopilotTests(unittest.TestCase):
+    def test_transport_retries_do_not_consume_literary_task_failure_budget(self):
+        host = MagicMock()
+        host.store = MagicMock()
+        handler = ClaimedRunResultHandler(
+            host,
+            run_id="autopilot-transport",
+            project=Path("project"),
+            policy=DelegationPolicy(default_policy("full_auto")),
+            steward=MagicMock(),
+            stop=threading.Event(),
+            dependency_probe=lambda _project: False,
+            campaign=None,
+        )
+        cycle = RouteCycle(0, "longform-planning", "longform-planning", False, "owner")
+        failure = WorkerRunResult(
+            "runtime_failed",
+            Path("project"),
+            "longform-planning",
+            "planning-task",
+            "pi-worker",
+            Path("run"),
+            Path("workspace"),
+            "模型供应商返回空响应",
+            failure_kind="transient_network",
+            retryable=True,
+        )
+
+        with patch("literary_engineering_studio.automation.run_result_handler.time.sleep") as sleep:
+            self.assertFalse(handler.handle({}, cycle, failure, "before"))
+            self.assertFalse(handler.handle({}, cycle, failure, "before"))
+            self.assertTrue(handler.handle({}, cycle, failure, "before"))
+
+        self.assertEqual(handler.failure_by_task, {})
+        self.assertEqual(handler.transport_failure_by_task["planning-task"], 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+        host._pause_for.assert_called_once_with(
+            "autopilot-transport",
+            "model-connection-temporarily-unavailable",
+            unittest.mock.ANY,
+        )
+
     def test_steward_style_choice_uses_controlled_mount_once(self):
         class MountService:
             def __init__(self):

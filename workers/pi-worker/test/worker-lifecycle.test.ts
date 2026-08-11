@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TaskContext, WorkerState } from "../src/contracts.ts";
-import { noProgressTurnLimit, settleTurnBudget } from "../src/worker.ts";
+import { isProviderEmptyResponse, noProgressTurnLimit, settleTurnBudget } from "../src/worker.ts";
 
 const roots: string[] = [];
 
@@ -16,6 +16,16 @@ describe("bounded worker lifecycle", () => {
 		expect(noProgressTurnLimit("main-creative-agent")).toBe(3);
 		expect(noProgressTurnLimit("main-review-agent")).toBe(2);
 		expect(noProgressTurnLimit("main-agent")).toBe(2);
+	});
+
+	it("distinguishes a provider empty response from an invalid literary output", () => {
+		const workerState = state();
+		workerState.providerRequests = 1;
+
+		expect(isProviderEmptyResponse(workerState)).toBe(true);
+
+		workerState.textCharacters = 1;
+		expect(isProviderEmptyResponse(workerState)).toBe(false);
 	});
 
 	it("completes at the turn boundary when all local output contracts pass", async () => {

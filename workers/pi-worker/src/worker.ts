@@ -27,11 +27,13 @@ const TOOL_NAMES = new Set([
 export interface WorkerResult {
 	status: "completed" | "blocked" | "incomplete";
 	message: string;
+	failureKind?: "provider_empty_response";
 	taskId: string;
 	provider: string;
 	model: string;
 	turns: number;
 	toolCalls: number;
+	providerRequests: number;
 	reasoningCharacters: number;
 	textCharacters: number;
 	writtenOutputs: string[];
@@ -150,6 +152,20 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 	agent.subscribe((event) => eventAdapter.handle(event));
 	await agent.prompt(prompt);
 
+	if (isProviderEmptyResponse(state)) {
+		return buildResult(
+			"incomplete",
+			"provider returned an empty response with zero model activity",
+			context.taskId,
+			provider,
+			modelId,
+			state,
+			options,
+			budgetSupport,
+			effectiveThinking,
+			"provider_empty_response",
+		);
+	}
 	if (state.completed) {
 		return buildResult("completed", "outputs submitted for Studio preflight", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
 	}
@@ -190,21 +206,32 @@ function buildResult(
 	options: WorkerOptions,
 	budgetSupport: ReturnType<typeof providerBudgetSupport>,
 	effectiveThinking: WorkerOptions["thinking"],
+	failureKind?: WorkerResult["failureKind"],
 ): WorkerResult {
 	return {
 		status,
 		message,
+		...(failureKind ? { failureKind } : {}),
 		taskId,
 		provider,
 		model,
 		turns: state.turns,
 		toolCalls: state.toolCalls,
+		providerRequests: state.providerRequests,
 		reasoningCharacters: state.reasoningCharacters,
 		textCharacters: state.textCharacters,
 		writtenOutputs: [...state.writtenPaths].sort(),
 		validationPassed: state.lastValidation.passed,
 		reasoning_budget: reasoningBudgetReceipt(options.reasoningBudget, state, budgetSupport, effectiveThinking),
 	};
+}
+
+export function isProviderEmptyResponse(state: WorkerState): boolean {
+	return state.providerRequests > 0
+		&& state.toolCalls === 0
+		&& state.reasoningCharacters === 0
+		&& state.textCharacters === 0
+		&& state.writtenPaths.size === 0;
 }
 
 function parseModelId(value: string): [string, string] {

@@ -267,14 +267,27 @@ class PiWorkerRuntime(AgentRuntime):
                 token in detail
                 for token in ("no-progress", "budget exhausted", "budget_exhausted")
             )
+            provider_empty = _provider_empty_response(worker_result)
+            if provider_empty:
+                message = (
+                    "模型供应商返回了空响应，未产生文本、推理或工具调用；"
+                    "ArcVellum 将保留当前任务并按连接故障策略重试。"
+                )
             metadata.update(
                 {
                     "failure_kind": (
-                        RuntimeFailureKind.NO_PROGRESS.value
-                        if no_progress
-                        else RuntimeFailureKind.VALIDATION_FAILURE.value
+                        RuntimeFailureKind.TRANSIENT_NETWORK.value
+                        if provider_empty
+                        else (
+                            RuntimeFailureKind.NO_PROGRESS.value
+                            if no_progress
+                            else RuntimeFailureKind.VALIDATION_FAILURE.value
+                        )
                     ),
                     "retryable": not no_progress,
+                    "provider_failure_kind": (
+                        "provider_empty_response" if provider_empty else ""
+                    ),
                 }
             )
         return replace(result, message=message, metadata=metadata)
@@ -382,6 +395,30 @@ def _last_worker_result(output_path: Path | None) -> dict[str, Any]:
         if isinstance(data, dict):
             result = _public_event_data(data)
     return result
+
+
+def _provider_empty_response(worker_result: Mapping[str, Any]) -> bool:
+    if str(worker_result.get("failureKind") or "") == "provider_empty_response":
+        return True
+    receipt = worker_result.get("reasoning_budget")
+    provider_requests = worker_result.get("providerRequests")
+    if provider_requests is None and isinstance(receipt, Mapping):
+        provider_requests = receipt.get("provider_requests")
+    try:
+        request_count = int(provider_requests or 0)
+        tool_calls = int(worker_result.get("toolCalls") or 0)
+        reasoning_characters = int(worker_result.get("reasoningCharacters") or 0)
+        text_characters = int(worker_result.get("textCharacters") or 0)
+    except (TypeError, ValueError):
+        return False
+    written = worker_result.get("writtenOutputs")
+    return (
+        request_count > 0
+        and tool_calls == 0
+        and reasoning_characters == 0
+        and text_characters == 0
+        and (not isinstance(written, list) or not written)
+    )
 
 
 def _positive_budget_value(budget: Mapping[str, object], name: str) -> int:

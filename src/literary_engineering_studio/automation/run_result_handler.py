@@ -17,6 +17,11 @@ from .policy import DelegationPolicy, next_revision_count
 from .support import _now, _operational_decision, _project_progress_fingerprint
 
 
+_TRANSPORT_FAILURE_KINDS = frozenset(
+    {"transient_network", "first_event_timeout", "idle_timeout"}
+)
+
+
 @dataclass(frozen=True)
 class RouteCycle:
     """The route identity and lock owner for one worker cycle."""
@@ -110,6 +115,7 @@ class ClaimedRunResultHandler:
         self.dependency_probe = dependency_probe
         self.campaign = campaign
         self.failure_by_task: dict[str, int] = {}
+        self.transport_failure_by_task: dict[str, int] = {}
         self._recorded_recovery_decisions: set[tuple[str, str, int]] = set()
 
     def handle(
@@ -255,6 +261,9 @@ class ClaimedRunResultHandler:
         *,
         emit_event: bool,
     ) -> bool:
+        task_key = result.task_id or f"{cycle.route}:unknown"
+        self.failure_by_task.pop(task_key, None)
+        self.transport_failure_by_task.pop(task_key, None)
         progress_after, evidence = self.progress_identity()
         if progress_after == progress_before:
             return self._record_stall(cycle, result, emit_event)
@@ -403,6 +412,11 @@ class ClaimedRunResultHandler:
 
     def _handle_failure(self, cycle: RouteCycle, result: WorkerRunResult) -> bool:
         task_key = result.task_id or f"{cycle.route}:unknown"
+        if (
+            result.retryable is not False
+            and result.failure_kind in _TRANSPORT_FAILURE_KINDS
+        ):
+            return self._handle_transport_failure(cycle, result, task_key)
         failure_count = self.failure_by_task.get(task_key, 0) + 1
         self.failure_by_task[task_key] = failure_count
         self.host.store.update_autopilot_run(
@@ -444,6 +458,51 @@ class ClaimedRunResultHandler:
             )
             return True
         time.sleep(min(5, failure_count))
+        return False
+
+    def _handle_transport_failure(
+        self,
+        cycle: RouteCycle,
+        result: WorkerRunResult,
+        task_key: str,
+    ) -> bool:
+        attempt = self.transport_failure_by_task.get(task_key, 0) + 1
+        self.transport_failure_by_task[task_key] = attempt
+        decision = self._recovery_decision(result.failure_kind, attempt, task_key)
+        self.host.store.update_autopilot_run(self.run_id, last_error=result.message)
+        self.host.store.append_autopilot_event(
+            self.run_id,
+            "task.transport_interrupted",
+            {
+                "task_id": task_key,
+                "route": cycle.route,
+                "failure_kind": result.failure_kind,
+                "attempt": attempt,
+                "recovery_step": decision.step.value,
+                "literary_failure_count": self.failure_by_task.get(task_key, 0),
+            },
+        )
+        if decision.step is RecoveryStep.STOP_WITH_EVIDENCE:
+            self.host._pause_for(
+                self.run_id,
+                "model-connection-temporarily-unavailable",
+                "模型连接连续返回空响应或中断。当前文学任务未被判定失败，"
+                "系统已保留原任务与连接诊断，请稍后恢复自动创作。",
+            )
+            return True
+        if decision.step is RecoveryStep.SESSION_RENEW:
+            self.host.store.append_autopilot_event(
+                self.run_id,
+                "runner.session.renew_requested",
+                {"task_id": task_key, "route": cycle.route, "attempt": attempt},
+            )
+        delay = min(10, 2 ** (attempt - 1))
+        self.host.store.append_autopilot_event(
+            self.run_id,
+            "task.transport_retry_scheduled",
+            {"task_id": task_key, "attempt": attempt, "delay_seconds": delay},
+        )
+        time.sleep(delay)
         return False
 
     def _apply_recovery_step(
