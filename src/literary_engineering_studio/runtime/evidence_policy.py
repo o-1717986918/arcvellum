@@ -141,6 +141,34 @@ def evidence_policy(
         # available only for a concrete evidence dispute.
         return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
 
+    if task.current_state.casefold() == "state-agent-task":
+        scene_id = str(task.payload.get("scene_id") or "").casefold()
+        if lowered == f"characters/state_patches/{scene_id}_state_patch.json":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "state-patch"
+            )
+        if lowered == f"drafts/scenes/{scene_id}.md":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "state-prose"
+            )
+        if lowered == f"drafts/compositions/{scene_id}_composition.json":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "state-composition"
+            )
+        if lowered.startswith("characters/") and lowered.endswith((".yaml", ".yml")):
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "state-character"
+            )
+        if lowered == f"scenes/{scene_id}.yaml":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "state-scene"
+            )
+        # Context packets, trace/provenance, promotion manifests, earlier prose
+        # reviews, style manuals and the generated sidecar remain available for
+        # one concrete dispute. Replaying them all would duplicate the exact
+        # patch, prose, composition writeback and character evidence above.
+        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
     if "asset-review" in task.task_type.casefold():
         if lowered.startswith("plot/word_budget/"):
             return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)

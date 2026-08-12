@@ -132,7 +132,7 @@ class ContextBudgetTests(unittest.TestCase):
 
             self.assertIs(planning.task_kind, ContextTaskKind.PLANNING)
             self.assertIs(roleplay.task_kind, ContextTaskKind.CREATIVE)
-            self.assertIs(state.task_kind, ContextTaskKind.STRUCTURED)
+            self.assertIs(state.task_kind, ContextTaskKind.REVIEW)
 
     def test_composition_agent_task_is_review_not_creative_generation(self):
         with tempfile.TemporaryDirectory() as temporary:

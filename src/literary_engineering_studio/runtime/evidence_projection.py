@@ -31,7 +31,12 @@ def project_evidence_body(
         return _prose_context_packet_projection(body)
     if projection == "continuity-prose":
         return _continuity_prose_projection(body)
-    if fidelity != "structured":
+    if projection == "state-prose":
+        return _continuity_prose_projection(body)
+    # These projections are explicitly selected by the state-review evidence
+    # policy.  Character and patch files are lossless in the general role
+    # table, but this task only needs their state-transition semantics.
+    if fidelity != "structured" and projection not in {"state-patch", "state-character"}:
         return body
     suffix = PurePosixPath(path).suffix.casefold()
     try:
@@ -51,6 +56,10 @@ def project_evidence_body(
                 )
             elif projection == "revision-review":
                 payload = _revision_review_projection(payload)
+            elif projection == "state-patch":
+                payload = _state_patch_projection(payload)
+            elif projection == "state-composition":
+                payload = _state_composition_projection(payload)
             elif path.endswith("scene_review.context.json"):
                 payload = _review_context_projection(payload)
             elif path == "style/creative_quality_profile.json":
@@ -65,6 +74,10 @@ def project_evidence_body(
                 payload = _project_identity_projection(payload)
             elif projection == "continuity-scene":
                 payload = _continuity_scene_projection(payload)
+            elif projection == "state-character":
+                payload = _state_character_projection(payload)
+            elif projection == "state-scene":
+                payload = _state_scene_projection(payload)
             stream = StringIO()
             writer = YAML()
             writer.default_flow_style = False
@@ -102,6 +115,129 @@ def _continuity_scene_projection(value: object) -> object:
             "scene_bridge",
             "incoming_from_previous",
             "outgoing_hooks",
+        )
+        if key in value
+    }
+
+
+def _state_patch_projection(value: object) -> object:
+    """Keep the exact state candidate semantics without transport narration."""
+
+    if not isinstance(value, dict):
+        return value
+    characters = []
+    for item in value.get("characters") if isinstance(value.get("characters"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        characters.append(
+            {
+                key: item[key]
+                for key in (
+                    "character_id",
+                    "name",
+                    "file",
+                    "current_state",
+                    "proposed_updates",
+                    "confidence",
+                )
+                if key in item
+            }
+        )
+    return {
+        key: value[key]
+        for key in (
+            "schema",
+            "scene_id",
+            "scene",
+            "source_artifact",
+            "status",
+            "unresolved_changes",
+            "source_changes",
+            "source_change_sources",
+            "new_character_policy",
+        )
+        if key in value
+    } | {"characters": characters}
+
+
+def _state_composition_projection(value: object) -> object:
+    """Expose only composition facts that can justify state writeback."""
+
+    if not isinstance(value, dict):
+        return value
+    return {
+        key: value[key]
+        for key in (
+            "schema",
+            "scene_id",
+            "selected_branch",
+            "writeback_candidates",
+            "scene_bridge",
+        )
+        if key in value
+    }
+
+
+def _state_character_projection(value: object) -> object:
+    """Keep behavioral causality and current durable state for one character."""
+
+    if not isinstance(value, dict):
+        return value
+    background = value.get("background_story")
+    compact_background = {}
+    if isinstance(background, dict):
+        compact_background = {
+            key: background[key]
+            for key in ("summary", "behavior_influences", "reveal_policy")
+            if key in background
+        }
+    psychology = value.get("psychology")
+    compact_psychology = {}
+    if isinstance(psychology, dict):
+        compact_psychology = {
+            key: psychology[key]
+            for key in ("fear", "moral_line")
+            if key in psychology
+        }
+    return {
+        key: value[key]
+        for key in (
+            "character_id",
+            "name",
+            "aliases",
+            "role",
+            "importance",
+            "bdi",
+            "state",
+            "arc",
+            "relationships",
+        )
+        if key in value
+    } | {
+        "background_story": compact_background,
+        "psychology": compact_psychology,
+    }
+
+
+def _state_scene_projection(value: object) -> object:
+    """Keep scene identity and declared state obligations for writeback review."""
+
+    if not isinstance(value, dict):
+        return value
+    return {
+        key: value[key]
+        for key in (
+            "scene_id",
+            "chapter_id",
+            "title",
+            "participants",
+            "referenced_characters",
+            "scene_goal",
+            "conflict",
+            "actions",
+            "revealed_info",
+            "scene_bridge",
+            "output_state",
         )
         if key in value
     }

@@ -8,6 +8,11 @@ import unittest
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.runtime.context_budget import resolve_task_context_budget
 from literary_engineering_studio.runtime.context_materialization import _legacy_user_direction
+from literary_engineering_studio.runtime.context_selection import select_agent_context
+from literary_engineering_studio.runtime.execution_context import (
+    build_execution_context_envelope,
+)
+from literary_engineering_studio.runtime.prompt_context import build_prepared_prompt_context
 from literary_engineering_studio.runtime.prompt_program import (
     OnDemandEvidence,
     PromptProgram,
@@ -16,12 +21,114 @@ from literary_engineering_studio.runtime.prompt_program import (
 from literary_engineering_studio.runtime.prompt_renderer import render_tool_worker_program
 from literary_engineering_studio.runtime.prompt_metrics import measure_prompt
 from literary_engineering_studio.runtime.prompt_compiler import _constraints, _output_contract
+from literary_engineering_studio.runtime.task_program import compile_worker_program
 from literary_engineering_studio.runtime.task_semantic_contract import semantic_output_contract
 from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio_engine.prompting.agents.schema import compact_schema_contract
 
 
 class PromptProgramV3Tests(unittest.TestCase):
+    def test_pi_state_review_uses_compact_exact_writeback_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                "scenes/scene_0001.yaml": "scene_id: scene_0001\nparticipants: [林]\noutput_state:\n  character_changes: [林开始抗命]\n",
+                "drafts/scenes/scene_0001.md": "## 正文草稿\n\n林关掉返航程序，决定留下。\n",
+                "drafts/compositions/scene_0001_composition.json": json.dumps(
+                    {
+                        "scene_id": "scene_0001",
+                        "characters": [{"large": "x" * 20_000}],
+                        "beats": [{"large": "y" * 20_000}],
+                        "writeback_candidates": {"character_changes": ["林开始抗命"]},
+                    },
+                    ensure_ascii=False,
+                ),
+                "characters/lin.yaml": "character_id: lin\nname: 林\nrole: 主角\nbdi:\n  belief: [规程重要]\narc:\n  current_stage: 守规\n",
+                "characters/state_patches/scene_0001_state_patch.json": json.dumps(
+                    {
+                        "scene_id": "scene_0001",
+                        "characters": [
+                            {
+                                "character_id": "lin",
+                                "file": "characters/lin.yaml",
+                                "proposed_updates": {"arc": {"candidate_changes": ["林开始抗命"]}},
+                            }
+                        ],
+                        "source_changes": {"character_changes": ["林开始抗命"]},
+                    },
+                    ensure_ascii=False,
+                ),
+                "memory/context_packets/scene_0001.md": "整包重复资料" * 12_000,
+                "drafts/promotions/scene_0001_promotion.json": json.dumps({"nested": "z" * 30_000}),
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            sources = list(files)
+            payload = {
+                "task_id": "scene-development-scene-0001-state-agent-task",
+                "route": "scene-development",
+                "scene_id": "scene_0001",
+                "current_state": "state-agent-task",
+                "task_type": "platform-agent-review",
+                "source_paths": sources,
+                "agent_source_paths": sources,
+                "required_reading": [],
+                "expected_outputs": ["characters/state_patches/scene_0001_state_patch_review.json"],
+                "core_managed_outputs": [],
+                "hard_constraints": ["只审查，不应用。"],
+                "style_constraints": [],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+                "execution_policy": "agent",
+                "agent_role": "main-review-agent",
+                "human_gate": {"required": False, "reasons": [], "source": "test"},
+                "runtime_capabilities_required": ["read", "write"],
+                "output_contracts": [
+                    {
+                        "path": "characters/state_patches/scene_0001_state_patch_review.json",
+                        "kind": "semantic-artifact",
+                        "writeback_policy": "automatic",
+                    }
+                ],
+                "prompt_asset": {
+                    "exact": True,
+                    "body": "审查状态补丁。",
+                    "hard_constraints": [],
+                    "style_constraints": [],
+                    "output_contract": ["输出审查 JSON"],
+                    "review_requirements": ["逐项核对正文与人物因果"],
+                    "forbidden_shortcuts": [],
+                },
+            }
+            task = TaskPackage(root, root / "task.json", root / "task.md", payload)
+            selection = select_agent_context(task)
+            budget = resolve_task_context_budget(task)
+            prepared = build_prepared_prompt_context(root, selection.requested_context_paths, budget=budget)
+            envelope = build_execution_context_envelope(
+                task,
+                workspace=root,
+                selection=selection,
+                prepared_context=prepared,
+                budget=budget,
+            )
+            compiled = compile_worker_program(
+                task,
+                prompt_version="v3",
+                renderer="tool-worker",
+                workspace=root,
+                execution_context=envelope,
+            )
+
+            self.assertEqual(envelope.task_kind, "review")
+            self.assertLess(compiled.metrics.total_characters, 48_000)
+            self.assertEqual(compiled.lint.status, "pass")
+            self.assertIn("林关掉返航程序", compiled.text)
+            self.assertIn("林开始抗命", compiled.text)
+            self.assertNotIn("整包重复资料整包重复资料", compiled.text)
+            self.assertNotIn('"large":"' + "x" * 100, compiled.text)
+
     def test_prose_candidate_contract_separates_literary_and_machine_fields(self):
         root = Path("C:/fixture")
         task = TaskPackage(

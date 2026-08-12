@@ -7,6 +7,99 @@ from literary_engineering_studio.runtime.evidence_projection import project_evid
 
 
 class EvidenceProjectionTests(unittest.TestCase):
+    def test_state_review_projections_keep_writeback_causality_without_pipeline_replay(self):
+        patch = json.dumps(
+            {
+                "schema": "state/v1",
+                "generated_at": "volatile",
+                "project_root": "machine-path",
+                "scene_id": "scene_0001",
+                "source_artifact": "drafts/scenes/scene_0001.md",
+                "status": "pending_human_approval",
+                "characters": [
+                    {
+                        "character_id": "lin",
+                        "name": "林",
+                        "file": "characters/lin.yaml",
+                        "current_state": {"arc": {"current_stage": "守规"}},
+                        "proposed_updates": {"arc": {"candidate_changes": ["林开始抗命"]}},
+                        "confidence": "candidate",
+                    }
+                ],
+                "source_changes": {"character_changes": ["林开始抗命"]},
+                "source_change_sources": ["drafts/compositions/scene_0001_composition.json"],
+                "guardrails": ["重复的流程说明"],
+                "approval_required": ["重复的审批说明"],
+            },
+            ensure_ascii=False,
+        )
+        projected_patch = json.loads(
+            project_evidence_body(
+                "characters/state_patches/scene_0001_state_patch.json",
+                patch,
+                fidelity="structured",
+                projection="state-patch",
+            )
+        )
+        self.assertEqual(projected_patch["characters"][0]["character_id"], "lin")
+        self.assertIn("source_changes", projected_patch)
+        self.assertNotIn("project_root", projected_patch)
+        self.assertNotIn("guardrails", projected_patch)
+        self.assertNotIn("approval_required", projected_patch)
+
+        character = """character_id: lin
+name: 林
+role: 主角
+candidate:
+  source_paths: [one, two]
+background_story:
+  summary: 曾因服从规程失去同伴
+  formative_events: [冗长传记]
+  behavior_influences: [先核验再行动]
+  reveal_policy: implicit_only
+bdi:
+  belief: [证据重要]
+psychology:
+  fear: [再次失去同伴]
+  moral_line: 不伪造证据
+state:
+  location: 站内
+arc:
+  current_stage: 守规
+"""
+        projected_character = project_evidence_body(
+            "characters/lin.yaml",
+            character,
+            fidelity="structured",
+            projection="state-character",
+        )
+        self.assertIn("behavior_influences", projected_character)
+        self.assertIn("moral_line", projected_character)
+        self.assertNotIn("formative_events", projected_character)
+        self.assertNotIn("source_paths", projected_character)
+
+        composition = json.dumps(
+            {
+                "scene_id": "scene_0001",
+                "characters": [{"very": "large"}],
+                "beats": [{"duplicate": "large"}],
+                "writeback_candidates": {"character_changes": ["林开始抗命"]},
+                "scene_bridge": {"outgoing_hook": "追责"},
+            },
+            ensure_ascii=False,
+        )
+        projected_composition = json.loads(
+            project_evidence_body(
+                "drafts/compositions/scene_0001_composition.json",
+                composition,
+                fidelity="structured",
+                projection="state-composition",
+            )
+        )
+        self.assertEqual(projected_composition["writeback_candidates"]["character_changes"], ["林开始抗命"])
+        self.assertNotIn("characters", projected_composition)
+        self.assertNotIn("beats", projected_composition)
+
     def test_prose_context_packet_keeps_hard_facts_and_drops_duplicate_transport_sections(self):
         body = """# 场景上下文包：scene_0002
 
