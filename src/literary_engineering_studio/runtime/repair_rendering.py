@@ -101,7 +101,7 @@ Repair Context: `{payload.get('context_digest')}`
 
 {protected_text}
 
-修复后只重新读取本回合目标，逐项核对 issue ID 对应要求，然后结束。Studio 会再次运行完整确定性预检；不得伪造 pass、完成回执或审查结论。
+把完整修复结果写入目标后立即结束；不要在模型上下文中重新读取或重复解释。Worker 会做本地格式验证，Studio 会再次运行完整确定性预检；不得伪造 pass、完成回执或审查结论。
 """
 
 

@@ -45,6 +45,7 @@ class PreparedRepairContext:
     target_count: int
     protected_count: int
     excerpt_characters: int
+    repair_targets: tuple[str, ...]
 
     def event_fields(self) -> dict[str, object]:
         return {
@@ -157,6 +158,7 @@ class RepairContextCoordinator:
             target_count=len(targets),
             protected_count=len(protected),
             excerpt_characters=excerpt_characters,
+            repair_targets=targets,
         )
 
     def finalize(self) -> dict[str, object]:

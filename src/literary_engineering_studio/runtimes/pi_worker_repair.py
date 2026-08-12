@@ -19,7 +19,7 @@ def run_pi_worker_repairs(
     max_repairs: int,
     repair_prompt_builder: Callable[[Any, int, int], Any] | None,
     repair_turn_finalizer: Callable[[], dict[str, object]] | None,
-    run_turn: Callable[[Path, Path], RuntimeResult],
+    run_turn: Callable[[Path, Path, tuple[str, ...]], RuntimeResult],
     emit: Callable[[str, dict[str, Any]], None],
 ) -> RuntimeResult:
     """Run bounded issue-focused repairs in fresh processes within one workspace."""
@@ -101,7 +101,7 @@ def _execute_repair_turn(
     run_root: Path,
     repair_prompt_builder: Callable[[Any, int, int], Any],
     repair_turn_finalizer: Callable[[], dict[str, object]] | None,
-    run_turn: Callable[[Path, Path], RuntimeResult],
+    run_turn: Callable[[Path, Path, tuple[str, ...]], RuntimeResult],
     emit: Callable[[str, dict[str, Any]], None],
 ) -> RuntimeResult:
     prepared = repair_prompt_builder(preflight, attempt, maximum)
@@ -112,7 +112,12 @@ def _execute_repair_turn(
     fields = prepared.event_fields() if hasattr(prepared, "event_fields") else {}
     emit("repair.started", {"attempt": attempt, "maximum": maximum, **fields})
     try:
-        return run_turn(prompt_path, attempt_root)
+        targets = tuple(
+            str(item).strip()
+            for item in getattr(prepared, "repair_targets", ())
+            if str(item).strip()
+        )
+        return run_turn(prompt_path, attempt_root, targets)
     finally:
         finalized = repair_turn_finalizer() if repair_turn_finalizer else {}
         emit("repair.finished", {"attempt": attempt, **finalized})

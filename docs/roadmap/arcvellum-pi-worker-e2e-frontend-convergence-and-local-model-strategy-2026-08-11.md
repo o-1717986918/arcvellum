@@ -53,6 +53,21 @@
 - 相同错误 digest 重复出现时立即停止，防止修复空转；
 - 通过后仍由原有 `task-submit`、`task-complete` 和 Gate 收束。
 
+#### 增量修复误绑定正文首写人格
+
+连续闭环实测进一步发现：正文初稿已成功写入，但修复进程仍沿用主创首写系统提示，和“先读取当前修复目标”的修复任务发生冲突。模型会把完整改稿写进聊天文本，耗尽回合后才暴露为 `model stopped without calling complete_task`，掩盖了真实的 Style Lint 与字数问题。
+
+修复后：
+
+- Studio 显式传递 `repair` 运行模式与精确 repair targets；
+- Pi Worker 为修复态绑定独立、短小、持久的 repair profile；
+- 修复进程的读写能力收窄为当前目标，不能读取原任务资料或受保护输出；
+- 支持的 Provider 使用原生 required tool choice，运行时再校验工具阶段；
+- 修复只执行“读取当前目标 -> 写回完整修订”，本地验证通过后自动交还 Studio；
+- Studio 继续执行完整预检，质量 Gate、两轮上限和无进展停止策略均未放宽。
+
+验证证据：Pi Worker 38 项测试通过；Studio Pi/repair context 14 项测试通过。下一步继续同一作品的真实连续闭环，不以孤立 benchmark 代替验收。
+
 #### 状态授权过窄
 
 原型曾把允许状态写死为三个 canary state，导致正文的 `candidate-generation-provenance` 被错误拒绝。

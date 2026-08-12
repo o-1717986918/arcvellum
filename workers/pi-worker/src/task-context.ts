@@ -3,7 +3,11 @@ import { join } from "node:path";
 import type { OutputContract, TaskContext } from "./contracts.ts";
 import { normalizeRelativePath } from "./path-policy.ts";
 
-export async function loadTaskContext(workspace: string, allowedStates: readonly string[]): Promise<TaskContext> {
+export async function loadTaskContext(
+	workspace: string,
+	allowedStates: readonly string[],
+	repairTargets: readonly string[] = [],
+): Promise<TaskContext> {
 	const raw = await readJson(join(workspace, "TASK_CONTEXT.json"));
 	const task = await readJson(join(workspace, "_task", "task.json"));
 	const execution = await readJson(join(workspace, "_task", "execution_contract.json"));
@@ -50,6 +54,15 @@ export async function loadTaskContext(workspace: string, allowedStates: readonly
 		throw new Error("writable capability manifest exceeds expected outputs");
 	}
 
+	const repairTargetSet = new Set(repairTargets.map(normalizeRelativePath));
+	if ([...repairTargetSet].some((item) => !agentOwnedOutputs.some((output) => output.path === item))) {
+		throw new Error("repair target exceeds Agent-owned expected outputs");
+	}
+	const activeOutputs = repairTargetSet.size > 0
+		? agentOwnedOutputs.filter((item) => repairTargetSet.has(item.path))
+		: agentOwnedOutputs;
+	const activePaths = activeOutputs.map((item) => item.path);
+
 	return {
 		schema,
 		taskId,
@@ -57,12 +70,12 @@ export async function loadTaskContext(workspace: string, allowedStates: readonly
 		currentState,
 		agentRole: requiredString(raw, "agent_role"),
 		executionPolicy,
-		expectedOutputs,
-		agentOwnedOutputs,
-		exactOnDemand,
+		expectedOutputs: repairTargetSet.size > 0 ? activePaths : expectedOutputs,
+		agentOwnedOutputs: activeOutputs,
+		exactOnDemand: repairTargetSet.size > 0 ? [] : exactOnDemand,
 		excluded,
-		readablePaths,
-		writablePaths,
+		readablePaths: repairTargetSet.size > 0 ? activePaths : readablePaths,
+		writablePaths: repairTargetSet.size > 0 ? activePaths : writablePaths,
 		hardConstraints: stringList(raw.hard_constraints),
 		styleConstraints: stringList(raw.style_constraints),
 		validationGates: stringList(raw.validation_gates),

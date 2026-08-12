@@ -7,6 +7,8 @@ import {
 	isProviderEmptyResponse,
 	noProgressTurnLimit,
 	sanitizeProviderError,
+	bindRequiredTool,
+	desiredRepairTool,
 	settleValidOutputs,
 	settleTurnBudget,
 } from "../src/worker.ts";
@@ -29,6 +31,29 @@ describe("bounded worker lifecycle", () => {
 		expect(writer.systemPrompt).toContain("FIRST assistant action");
 		expect(reviewer.systemPrompt).not.toContain("FIRST assistant action");
 		expect(writer.systemPrompt).not.toContain("SKILL.md");
+		const repair = workerProfile("main-creative-agent", "repair");
+		expect(repair.systemPrompt).toContain("incremental-repair Worker");
+		expect(repair.systemPrompt).not.toContain("FIRST assistant action");
+		expect(repair.digest).not.toBe(writer.digest);
+	});
+
+	it("forces repair turns through read, write, then completion tools", () => {
+		const workerState = state();
+		expect(desiredRepairTool({ mode: "repair" }, ["out/review.md"], workerState)).toBe("read_authorized_source");
+		workerState.readPaths.add("out/review.md");
+		expect(desiredRepairTool({ mode: "repair" }, ["out/review.md"], workerState)).toBe("write_expected_output");
+		workerState.writtenPaths.add("out/review.md");
+		expect(desiredRepairTool({ mode: "repair" }, ["out/review.md"], workerState)).toBe("complete_task");
+		expect(desiredRepairTool({ mode: "task" }, ["out/review.md"], workerState)).toBe("");
+	});
+
+	it("projects required tool choice using provider-native payload shapes", () => {
+		expect(bindRequiredTool({}, "openai-completions", "write_expected_output")).toEqual({
+			tool_choice: { type: "function", function: { name: "write_expected_output" } },
+		});
+		expect(bindRequiredTool({ options: { reasoning: "low" } }, "pi-messages", "complete_task")).toEqual({
+			options: { reasoning: "low", toolChoice: { type: "function", function: { name: "complete_task" } } },
+		});
 	});
 
 	it("allows one bounded landing turn only for the main prose agent", () => {

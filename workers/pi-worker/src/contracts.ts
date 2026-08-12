@@ -39,6 +39,8 @@ export interface WorkerOptions {
 	maxRepairs: number;
 	allowedStates: string[];
 	reasoningBudget: ReasoningBudget;
+	mode: "task" | "repair";
+	repairTargets: string[];
 }
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";

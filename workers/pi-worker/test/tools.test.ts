@@ -119,6 +119,18 @@ function options(workspace: string): WorkerOptions {
 		maxToolCalls: 6,
 		maxRepairs: 1,
 		allowedStates: ["candidate-review"],
+		reasoningBudget: {
+			enabled: false,
+			initialLevel: "minimal",
+			maximumLevel: "minimal",
+			perRequestTokens: 512,
+			totalTokens: 2048,
+			maxProviderRequests: 4,
+			maxEscalations: 0,
+			overBudgetAction: "validate_then_stop",
+		},
+		mode: "task",
+		repairTargets: [],
 	};
 }
 

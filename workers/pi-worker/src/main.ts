@@ -89,6 +89,12 @@ function parseOptions(args: string[]): WorkerOptions {
 	const reasoningBudget = parseReasoningBudget(values, thinkingValue);
 	validateReasoningBudget(reasoningBudget);
 	const allowedStates = values.get("--allow-state") ?? DEFAULT_STATES;
+	const mode = single(values, "--mode") || "task";
+	if (!isWorkerMode(mode)) throw new Error(`unsupported worker mode: ${mode}`);
+	const repairTargets = values.get("--repair-target") ?? [];
+	if (mode === "repair" && repairTargets.length === 0) {
+		throw new Error("repair mode requires at least one --repair-target");
+	}
 	return {
 		workspace,
 		model,
@@ -99,6 +105,8 @@ function parseOptions(args: string[]): WorkerOptions {
 		maxRepairs: positiveInteger(single(values, "--max-repairs"), 1),
 		allowedStates,
 		reasoningBudget,
+		mode,
+		repairTargets,
 	};
 }
 
@@ -171,6 +179,10 @@ function nonNegativeInteger(value: string, fallback: number): number {
 
 function isThinkingLevel(value: string): value is WorkerOptions["thinking"] {
 	return ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(value);
+}
+
+function isWorkerMode(value: string): value is WorkerOptions["mode"] {
+	return value === "task" || value === "repair";
 }
 
 function sanitizeError(error: unknown, options: WorkerOptions): string {

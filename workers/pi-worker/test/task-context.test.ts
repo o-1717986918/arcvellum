@@ -48,6 +48,23 @@ describe("loadTaskContext", () => {
 		});
 		await expect(loadTaskContext(root, ["candidate-review"])).rejects.toThrow("exceeds the readable capability manifest");
 	});
+
+	it("narrows a repair process to its exact Agent-owned targets", async () => {
+		const root = await workspace();
+		const context = await loadTaskContext(root, ["candidate-review"], ["reviews/scene.json"]);
+
+		expect(context.expectedOutputs).toEqual(["reviews/scene.json"]);
+		expect(context.agentOwnedOutputs.map((item) => item.path)).toEqual(["reviews/scene.json"]);
+		expect(context.exactOnDemand).toEqual([]);
+		expect(context.readablePaths).toEqual(["reviews/scene.json"]);
+		expect(context.writablePaths).toEqual(["reviews/scene.json"]);
+	});
+
+	it("rejects repair targets outside Agent-owned outputs", async () => {
+		const root = await workspace();
+		await expect(loadTaskContext(root, ["candidate-review"], ["reviews/scene.agent_completion.json"]))
+			.rejects.toThrow("repair target exceeds Agent-owned expected outputs");
+	});
 });
 
 async function workspace(options: { readablePaths?: string[]; promptAccessPaths?: string[] } = {}): Promise<string> {

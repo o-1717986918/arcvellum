@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import mainCreativeAgentProfile from "../profiles/main-creative-agent.md?raw";
+import incrementalRepairProfile from "../profiles/incremental-repair.md?raw";
 
 export const WORKER_PROFILE_SCHEMA = "arcvellum/pi-worker-profile/v1";
 export const WORKER_PROFILE_VERSION = "1";
@@ -17,10 +18,12 @@ export interface WorkerProfile {
  * contracts deliberately do not belong here: they have independent digests
  * and invalidation rules in Studio's Prompt Program.
  */
-export function workerProfile(agentRole: string): WorkerProfile {
-	const systemPrompt = systemPromptForRole(agentRole);
+export function workerProfile(agentRole: string, mode: "task" | "repair" = "task"): WorkerProfile {
+	const systemPrompt = mode === "repair"
+		? incrementalRepairProfile.trim()
+		: systemPromptForRole(agentRole);
 	const digest = createHash("sha256")
-		.update(`${WORKER_PROFILE_SCHEMA}\0${WORKER_PROFILE_VERSION}\0${agentRole}\0${systemPrompt}`)
+		.update(`${WORKER_PROFILE_SCHEMA}\0${WORKER_PROFILE_VERSION}\0${agentRole}\0${mode}\0${systemPrompt}`)
 		.digest("hex");
 	return {
 		schema: WORKER_PROFILE_SCHEMA,

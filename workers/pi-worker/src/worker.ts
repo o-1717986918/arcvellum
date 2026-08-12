@@ -14,6 +14,7 @@ import {
 import { loadTaskContext } from "./task-context.ts";
 import { createWorkerTools, progressDigest, validateOutputs } from "./tools.ts";
 import { workerProfile } from "./worker-profile.ts";
+import { readAuthorizedFile } from "./path-policy.ts";
 
 const TOOL_NAMES = new Set([
 	"read_task_context",
@@ -44,7 +45,7 @@ export interface WorkerResult {
 }
 
 export async function runWorker(options: WorkerOptions, prompt: string, emit: RuntimeEventSink): Promise<WorkerResult> {
-	const context = await loadTaskContext(options.workspace, options.allowedStates);
+	const context = await loadTaskContext(options.workspace, options.allowedStates, options.repairTargets);
 	const [provider, modelId] = parseModelId(options.model);
 	const credentials = new ReadOnlyJsonCredentialStore(options.authPath);
 	const models = builtinModels({ credentials });
@@ -74,7 +75,10 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		progressDigests: [],
 	};
 	const sessionId = sessionIdentity(context.taskId, options.model);
-	const profile = workerProfile(context.agentRole);
+	const profile = workerProfile(context.agentRole, options.mode);
+	const repairSources = options.mode === "repair"
+		? await existingRepairSources(context, options.workspace)
+		: [];
 	emit("runner.profile.bound", {
 		schema: profile.schema,
 		version: profile.version,
@@ -106,11 +110,20 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			?? { minimal: 128, low: 512, medium: 1024, high: 2048 },
 		onPayload: (payload) => {
 			eventAdapter.providerRequest(provider, modelId);
-			return payload;
+			const requiredTool = desiredRepairTool(options, repairSources, state);
+			return requiredTool ? bindRequiredTool(payload, model.api, requiredTool) : payload;
 		},
 		beforeToolCall: async ({ toolCall }) => {
 			if (!TOOL_NAMES.has(toolCall.name)) return { block: true, reason: "tool is outside the ArcVellum whitelist", terminate: true };
 			if (state.completed || state.blocked) return { block: true, reason: "worker is already terminal", terminate: true };
+			const requiredRepairTool = desiredRepairTool(options, repairSources, state);
+			if (requiredRepairTool && toolCall.name !== requiredRepairTool) {
+				return {
+					block: true,
+					reason: `repair mode requires ${requiredRepairTool} at this stage`,
+					terminate: true,
+				};
+			}
 			if (state.toolCalls > options.maxToolCalls) {
 				state.blocked = true;
 				state.blockerReason = "tool-call budget exhausted";
@@ -203,6 +216,67 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		return buildResult("blocked", state.blockerReason || "worker reported a blocker", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
 	}
 	return buildResult("incomplete", "model stopped without calling complete_task", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
+}
+
+async function existingRepairSources(
+	context: Awaited<ReturnType<typeof loadTaskContext>>,
+	workspace: string,
+): Promise<string[]> {
+	const existing: string[] = [];
+	for (const output of context.agentOwnedOutputs) {
+		try {
+			await readAuthorizedFile(workspace, output.path);
+			existing.push(output.path);
+		} catch {
+			// A missing repair target must be created directly.
+		}
+	}
+	return existing;
+}
+
+export function desiredRepairTool(
+	options: Pick<WorkerOptions, "mode">,
+	repairSources: readonly string[],
+	state: Pick<WorkerState, "readPaths" | "writtenPaths">,
+): string {
+	if (options.mode !== "repair") return "";
+	if (repairSources.some((path) => !state.readPaths.has(path))) return "read_authorized_source";
+	if (state.writtenPaths.size === 0) return "write_expected_output";
+	return "complete_task";
+}
+
+export function bindRequiredTool(payload: unknown, api: string, tool: string): unknown {
+	if (!isRecord(payload)) return payload;
+	if (api === "pi-messages") {
+		const options = isRecord(payload.options) ? { ...payload.options } : {};
+		return {
+			...payload,
+			options: {
+				...options,
+				toolChoice: { type: "function", function: { name: tool } },
+			},
+		};
+	}
+	if (api === "anthropic-messages") {
+		return { ...payload, tool_choice: { type: "tool", name: tool } };
+	}
+	if (api === "openai-responses" || api === "azure-openai-responses") {
+		return { ...payload, tool_choice: { type: "function", name: tool } };
+	}
+	if (api === "openai-codex-responses") {
+		return { ...payload, tool_choice: "required" };
+	}
+	if (api === "openai-completions" || api === "mistral-conversations") {
+		return { ...payload, tool_choice: { type: "function", function: { name: tool } } };
+	}
+	if (api === "google-generative-ai" || api === "google-vertex" || api === "bedrock-converse-stream") {
+		return { ...payload, tool_choice: "any" };
+	}
+	return payload;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

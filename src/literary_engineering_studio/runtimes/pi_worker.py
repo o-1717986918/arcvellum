@@ -108,6 +108,11 @@ class PiWorkerRuntime(AgentRuntime):
         command.extend(self._reasoning_budget_args())
         for state in self._allowed_states():
             command.extend(["--allow-state", state])
+        mode = str(self._execution_overrides.get("worker_mode") or "").strip()
+        if mode:
+            command.extend(["--mode", mode])
+        for target in self._repair_targets():
+            command.extend(["--repair-target", target])
         return tuple(command)
 
     def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
@@ -219,13 +224,14 @@ class PiWorkerRuntime(AgentRuntime):
                 max_repairs=int(max_repairs or 0),
                 repair_prompt_builder=repair_prompt_builder,
                 repair_turn_finalizer=repair_turn_finalizer,
-                run_turn=lambda repair_prompt, repair_root: self._execute_once(
+                run_turn=lambda repair_prompt, repair_root, repair_targets: self._execute_once(
                     workspace,
                     repair_prompt,
                     repair_root,
                     timeout=timeout,
                     event_sink=event_sink,
                     cancel_event=cancel_event,
+                    repair_targets=repair_targets,
                 ),
                 emit=event_sink or (lambda _event, _data: None),
             )
@@ -241,16 +247,28 @@ class PiWorkerRuntime(AgentRuntime):
         timeout: int,
         event_sink=None,
         cancel_event=None,
+        repair_targets: Sequence[str] = (),
     ) -> RuntimeResult:
-        result = super().execute(
-            workspace,
-            prompt_path,
-            run_root,
-            timeout=timeout,
-            event_sink=event_sink,
-            cancel_event=cancel_event,
-        )
-        return self._with_worker_result(result)
+        previous = dict(self._execution_overrides)
+        if repair_targets:
+            self._execution_overrides.update(
+                {
+                    "worker_mode": "repair",
+                    "repair_targets": tuple(repair_targets),
+                }
+            )
+        try:
+            result = super().execute(
+                workspace,
+                prompt_path,
+                run_root,
+                timeout=timeout,
+                event_sink=event_sink,
+                cancel_event=cancel_event,
+            )
+            return self._with_worker_result(result)
+        finally:
+            self._execution_overrides = previous
 
     def _with_worker_result(self, result: RuntimeResult) -> RuntimeResult:
         worker_result = _last_worker_result(result.output_path)
@@ -370,6 +388,12 @@ class PiWorkerRuntime(AgentRuntime):
             return _DEFAULT_STATES
         values = tuple(str(item).strip() for item in raw if str(item).strip())
         return values or _DEFAULT_STATES
+
+    def _repair_targets(self) -> tuple[str, ...]:
+        raw = self._execution_overrides.get("repair_targets")
+        if not isinstance(raw, (list, tuple)):
+            return ()
+        return tuple(str(item).strip() for item in raw if str(item).strip())
 
 
 def _public_event_data(value: dict[str, Any]) -> dict[str, Any]:

@@ -313,10 +313,14 @@ class PiWorkerRuntimeTests(unittest.TestCase):
                 output_validator=validate,
                 repair_prompt_builder=lambda _result, attempt, maximum: SimpleNamespace(
                     prompt=f"# Studio Incremental Repair {attempt}/{maximum}\nfix the fixture output",
+                    repair_targets=("result.md",),
                     event_fields=lambda: {"repair_context_digest": "fixture"},
                 ),
                 repair_turn_finalizer=lambda: {"restored_output_count": 0},
             )
+            invocation = json.loads(
+                (workspace / "worker_args.json").read_text(encoding="utf-8")
+            )["args"]
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.metadata["repair_attempts"], 1)
@@ -324,6 +328,11 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertTrue(any(event == "repair.started" for event, _ in events))
         self.assertTrue(any(event == "validation.failed" for event, _ in events))
         self.assertTrue(any(event == "validation.passed" for event, _ in events))
+        self.assertEqual(invocation[invocation.index("--mode") + 1], "repair")
+        self.assertEqual(
+            invocation[invocation.index("--repair-target") + 1],
+            "result.md",
+        )
 
     def test_reasoning_budget_exhaustion_is_non_retryable_no_progress(self):
         with tempfile.TemporaryDirectory() as temporary:
