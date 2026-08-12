@@ -15,7 +15,7 @@ export function createWorkerTools(
 	emit: RuntimeEventSink,
 ): AgentTool[] {
 	const ownedPaths = new Set(context.agentOwnedOutputs.map((item) => item.path));
-	const readablePaths = new Set(context.exactOnDemand);
+	const readablePaths = new Set([...context.exactOnDemand, ...ownedPaths]);
 	return [
 		{
 			name: "read_task_context",
@@ -27,8 +27,8 @@ export function createWorkerTools(
 		},
 		{
 			name: "read_authorized_source",
-			label: "Read Exact Context",
-			description: "Read one exact-on-demand source. Must-inline sources are already in the task prompt and cannot be reread.",
+			label: "Read Exact Context Or Output",
+			description: "Read one exact-on-demand source or the current content of an Agent-owned expected output. Must-inline sources that are not outputs are already in the task prompt and cannot be reread.",
 			parameters: Type.Object({
 				path: Type.String(),
 				offset: Type.Optional(Type.Integer({ minimum: 0 })),
@@ -38,7 +38,7 @@ export function createWorkerTools(
 			execute: async (_id, params) => {
 				const input = params as { path: string; offset?: number; limit?: number };
 				const path = normalizeRelativePath(input.path);
-				if (!readablePaths.has(path)) throw new Error("source is not exact-on-demand for this task");
+				if (!readablePaths.has(path)) throw new Error("path is neither exact-on-demand nor an Agent-owned expected output");
 				const content = await readAuthorizedFile(options.workspace, path);
 				const offset = input.offset ?? 0;
 				const limit = input.limit ?? context.maxResultChars;

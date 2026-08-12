@@ -105,13 +105,15 @@ class TaskPreflightTests(unittest.TestCase):
         )
 
         self.assertIn("恰好 4 条", instruction)
-        self.assertIn('"branch_id"', instruction)
-        self.assertIn('"causal_premise"', instruction)
-        self.assertIn('"state_writeback"', instruction)
-        self.assertIn('"beat_id"', instruction)
-        self.assertIn('"serves"', instruction)
-        self.assertIn("不得使用 id/rationale/irreversible_cost/next_scene_pressure", instruction)
-        self.assertLess(len(instruction), 6_000)
+        self.assertIn("`branch_id`", instruction)
+        self.assertIn("`causal_premise`", instruction)
+        self.assertIn("`state_writeback`", instruction)
+        self.assertIn("`beat_id`", instruction)
+        self.assertIn("`serves`", instruction)
+        self.assertIn("`id`、`rationale`、`irreversible_cost`、`next_scene_pressure`", instruction)
+        self.assertIn("只补齐缺项", instruction)
+        self.assertIn("通常保留 2 个 beat", instruction)
+        self.assertLess(len(instruction), 2_000)
 
         summary = _compact_semantic_errors(
             [f"proposal field problem {index}" for index in range(79)]

@@ -51,6 +51,32 @@ describe("local output validation", () => {
 		expect([...workerState.writtenPaths].sort()).toEqual(["out/review.json", "out/review.md"]);
 	});
 
+	it("rereads an Agent-owned output for a bounded repair turn", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-tools-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), '{"status":"needs_revision"}\n', "utf8");
+		const workerState = state();
+		const read = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "read_authorized_source");
+
+		const response = await read?.execute("call", { path: "out/review.json" });
+
+		expect(response?.content[0]?.text).toContain("needs_revision");
+		expect(workerState.readPaths.has("out/review.json")).toBe(true);
+	});
+
+	it("still rejects a path outside exact context and Agent-owned outputs", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-tools-"));
+		roots.push(root);
+		await writeFile(join(root, "secret.txt"), "hidden", "utf8");
+		const read = createWorkerTools(context(), options(root), state(), () => undefined)
+			.find((tool) => tool.name === "read_authorized_source");
+
+		await expect(read?.execute("call", { path: "secret.txt" }))
+			.rejects.toThrow("neither exact-on-demand nor an Agent-owned expected output");
+	});
+
 	it("treats a passing validation as progress even when files are unchanged", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-tools-"));
 		roots.push(root);

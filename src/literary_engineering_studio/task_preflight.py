@@ -36,9 +36,6 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_errors,
     semantic_artifact_relative_path,
 )
-from literary_engineering_studio_engine.literary.scene.branching.proposals import (
-    branch_proposal_scaffold,
-)
 from literary_engineering_studio_engine.reader_experience import (
     chapter_obligation_contract_issues,
 )
@@ -226,15 +223,22 @@ def _semantic_artifact_repair_instruction(
             "needs_revision/revise_required/hold，并列出可执行的 required_changes。"
         )
     if current_state == "branch-agent-task":
-        count_rule = f"恰好 {branch_count} 条" if branch_count else "2-5 条"
-        shape = json.dumps(branch_proposal_scaffold(), ensure_ascii=False, indent=2)
+        count_rule = (
+            f"恰好 {branch_count} 条"
+            if branch_count
+            else "branch_manifest.json 的 branch_count 所声明的精确数量"
+        )
         return (
-            f"只修复 `{relative}` 的机械合同并保留已经成立的创意内容。`proposals` 必须有{count_rule}，"
-            "每条严格使用下列字段形状，不得使用 id/rationale/irreversible_cost/next_scene_pressure 等近义字段：\n"
-            f"{shape}\n"
-            "将示例中的所有 <replace: ...> 和 agent_branch_replace_* 替换为本场真实内容；"
-            "state_writeback 五项保持字符串列表且至少一项非空；每条含 2-8 个 beat，serves 是义务名列表，"
-            "所有 beat 合计覆盖 incoming_bridge、goal、turn、cost、reader_effect、outgoing_hook。"
+            f"读取并只修复 `{relative}`，保留其中已经通过的提案与创意判断。`proposals` 必须有{count_rule}；"
+            "数量不足时只补齐缺项，数量过多时只删除最弱或重复项，不要重写全部有效提案。"
+            "每条严格保留字段 `branch_id`、`title`、`strategy`、`causal_premise`、`action_chain`、`cost`、"
+            "`reader_effect`、`state_writeback`、`beat_plan`；不得使用 `id`、`rationale`、"
+            "`irreversible_cost`、`next_scene_pressure` 等近义字段。"
+            "state_writeback 五项保持字符串列表且至少一项非空。通常保留 2 个 beat，只有因果转向无法在两拍中"
+            "清楚表达时才使用第 3 拍；每拍保留 `beat_id`、`function`、`visible_action`、`causal_change`、"
+            "`pace`、`detail_level`、`serves`，且所有 beat 合计覆盖 incoming_bridge、goal、turn、cost、"
+            "reader_effect、outgoing_hook。"
+            "将所有 <replace: ...> 和 agent_branch_replace_* 占位值替换为本场真实内容；"
             "顶层 status=complete，evidence_paths/findings 非空。不要自行创建 completion marker。"
         )
     return "完成任务要求的 Agent 判断；保留已有有效内容，并修正 semantic artifact 的 schema、scene_id、列表字段、证据和完成状态。"

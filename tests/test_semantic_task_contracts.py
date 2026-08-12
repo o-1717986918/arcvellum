@@ -297,6 +297,13 @@ class SemanticTaskContractTests(unittest.TestCase):
             self.assertEqual(semantic_contract["consumed_by"], "branch-manifest")
             self.assertEqual(semantic_contract["schema_name"], "roleplay_result.v1")
 
+            branch_dir = root / "branches" / "scene_0001"
+            branch_dir.mkdir(parents=True, exist_ok=True)
+            (branch_dir / "branch_manifest.json").write_text(
+                json.dumps({"branch_count": 4}),
+                encoding="utf-8",
+            )
+
             branch_task = task_registry._enrich_task_payload(
                 task_registry._build_task_payload(
                     root,
@@ -313,6 +320,12 @@ class SemanticTaskContractTests(unittest.TestCase):
             self.assertEqual(branch_semantic["schema_name"], "branch_proposals.v1")
             self.assertIn(branch_semantic["path"], branch_task["expected_outputs"])
             self.assertIn(branch_semantic["path"], branch_task["agent_source_paths"])
+            self.assertTrue(
+                any("exactly 4 scene-specific proposals" in item for item in branch_task["hard_constraints"])
+            )
+            self.assertFalse(
+                any("2-5 scene-specific proposals" in item for item in branch_task["hard_constraints"])
+            )
 
 
 if __name__ == "__main__":

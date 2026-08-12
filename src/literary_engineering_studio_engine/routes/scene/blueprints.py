@@ -15,6 +15,24 @@ from ...scene_route_support import (
 )
 
 
+def _branch_proposal_count(root: Path, scene_id: str) -> int:
+    """Return the exact count already issued by the branch manifest.
+
+    The Creative Policy Graph may choose any supported count.  Downstream
+    task prose must repeat that decision instead of publishing a conflicting
+    range that invites the Worker to guess.
+    """
+
+    payload, _error = _read_optional_json(
+        root / "branches" / scene_id / "branch_manifest.json"
+    )
+    try:
+        count = int(payload.get("branch_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return count if 2 <= count <= 5 else 0
+
+
 def _state_patch_character_files(root: Path, state_patch: str) -> list[str]:
     """Return the existing, in-project character files a state apply may mutate.
 
@@ -62,6 +80,12 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     context = f"memory/context_packets/{scene_id}.md"
     context_trace = f"memory/context_packets/{scene_id}.trace.json"
     branch_dir = f"branches/{scene_id}"
+    branch_proposal_count = _branch_proposal_count(root, scene_id)
+    branch_count_rule = (
+        f"Write exactly {branch_proposal_count} scene-specific proposals, matching branch_manifest.json branch_count."
+        if branch_proposal_count
+        else "Write the exact proposal count declared by branch_manifest.json; do not infer a range."
+    )
     composition = f"drafts/compositions/{scene_id}_composition"
     current_candidate = current_scene_candidate(root, scene_id)
     candidate_markdown = (
@@ -265,7 +289,11 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "source_paths": [scene_rel, context, context_trace, roleplay_result, f"{branch_dir}/branch_simulation.md", f"{branch_dir}/branch_manifest.json", f"{branch_dir}/branch_manifest.agent_tasks.md", f"{branch_dir}/branch_proposals.json"],
             "context_trace": context_trace,
             "expected_outputs": [f"{branch_dir}/branch_proposals.json", f"{branch_dir}/branch_selection.md", f"{branch_dir}/branch_manifest.agent_completion.json"],
-            "hard_constraints": ["Write 2-5 scene-specific proposals to branch_proposals.json before selecting; each must change causality, action, cost, reader effect, and state writeback rather than rename a fallback archetype.", "Use agent_branch_<slug> ids, write a formal selected decision, and let the Worker create the completion receipt only after deterministic preflight passes."],
+            "hard_constraints": [
+                f"{branch_count_rule} Write them to branch_proposals.json before selecting; each must change causality, action, cost, reader effect, and state writeback rather than rename a fallback archetype.",
+                "Keep each alternative economical: normally use the two-beat scaffold, and use a third beat only when the causal turn cannot be represented clearly in two; a beat may serve several named obligations.",
+                "Use agent_branch_<slug> ids, write a formal selected decision, and let the Worker create the completion receipt only after deterministic preflight passes.",
+            ],
             "style_constraints": [],
             "validation_gates": ["branch_proposals.v1 semantic artifact passes", "branch_selection.md exists", "branch sidecar completion marker exists"],
             "next_allowed_states": ["branch-selection"],
