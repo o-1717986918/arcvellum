@@ -415,6 +415,7 @@ def _review_step(root: Path, scene_id: str, candidate: Path | None) -> dict[str,
         "missing",
         "task_incomplete",
         "schema_failed",
+        "semantic_contract_failed",
         "stale_or_wrong_source",
         "creative_quality_review_stale",
     }
@@ -571,10 +572,16 @@ def _latest_scene_candidate(root: Path, scene_id: str) -> Path | None:
     candidates: list[Path] = []
     for directory, pattern in (
         (root / "drafts" / "candidates", f"{scene_id}-*.md"),
-        (root / "drafts" / "revisions", f"{scene_id}_revision.md"),
+        (root / "drafts" / "revisions", f"{scene_id}_revision*.md"),
     ):
         if directory.exists():
-            candidates.extend(path for path in directory.glob(pattern) if not path.name.endswith(".agent_tasks.md") and not path.name.endswith(".prompt.md"))
+            candidates.extend(
+                path
+                for path in directory.glob(pattern)
+                if not path.name.endswith(".agent_tasks.md")
+                and not path.name.endswith(".prompt.md")
+                and not path.name.endswith("_report.md")
+            )
     if not candidates:
         return None
     return sorted(candidates, key=lambda path: path.stat().st_mtime, reverse=True)[0]

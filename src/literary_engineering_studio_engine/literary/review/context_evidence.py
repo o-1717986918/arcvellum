@@ -285,12 +285,17 @@ def _review_policy() -> dict[str, object]:
                 "ephemeral_only",
                 "resolved",
             ],
-            "requires_empty": [
+            "requires_no_actionable": [
                 "blocking_issues",
-                "warnings",
                 "revision_actions",
+                "warnings where blocks_pass is not false",
+                "style_adherence.deviations where blocks_pass is not false",
+                "style_adherence.revision_actions",
+            ],
+            "informational_evidence_allowed": [
                 "style_notes",
-                "style_adherence.deviations",
+                "low/info warnings with blocks_pass=false",
+                "below-threshold style deviations with blocks_pass=false",
             ],
         },
         "anti_evasion_required": True,

@@ -26,8 +26,9 @@ MATERIALIZED_DECISIONS = {
     "release_approval",
     "canon_patch_approval",
     "state_patch_confirmation",
+    "revision_direction",
 }
-DIRECTION_DECISIONS = {"revision_direction", "word_budget_direction"}
+DIRECTION_DECISIONS = {"word_budget_direction"}
 
 
 class DecisionDelegator:

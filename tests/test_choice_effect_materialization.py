@@ -8,6 +8,35 @@ from literary_engineering_studio.project_manager import read_directions
 
 
 class ChoiceEffectMaterializationTests(unittest.TestCase):
+    def test_revision_direction_is_consumed_without_becoming_global_direction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+
+            result = record_choice(
+                default_config(),
+                root,
+                {
+                    "choice_id": "choice-revision",
+                    "route": "scene-development",
+                    "decision_type": "revision_direction",
+                    "target": {
+                        "target_id": "scene_0001",
+                        "candidate_path": "drafts/candidates/scene_0001.md",
+                        "candidate_sha256": "a" * 64,
+                    },
+                    "options": [{"id": "fix_style_first", "label": "先修文风"}],
+                    "selected": "fix_style_first",
+                    "rationale": "精确候选存在可执行文风问题。",
+                    "actor": "delegated-agent:creative-steward",
+                },
+            )
+
+            self.assertEqual(result["effect"]["kind"], "candidate-bound-direction")
+            self.assertTrue(result["consumed"])
+            self.assertEqual(read_directions(root), [])
+            self.assertFalse((root / "workflow/studio/user_directions.md").exists())
+
     def test_direction_choice_becomes_task_readable_project_direction(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

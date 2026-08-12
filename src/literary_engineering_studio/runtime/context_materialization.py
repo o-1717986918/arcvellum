@@ -264,7 +264,8 @@ def _user_direction(task: TaskPackage) -> str:
                 continue
             if isinstance(payload, dict):
                 message = str(payload.get("message") or "").strip()
-                if message:
+                actor = str(payload.get("actor") or "").strip()
+                if message and not _transient_delegated_direction(message, actor):
                     messages.append(message)
         if messages:
             selected: list[str] = []
@@ -299,7 +300,7 @@ def _legacy_user_direction(text: str) -> str:
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(normalized)
         message = normalized[match.end():end].strip()
-        if message:
+        if message and not _transient_delegated_direction(message, ""):
             messages.append(message)
     if not messages:
         return ""
@@ -312,6 +313,16 @@ def _legacy_user_direction(text: str) -> str:
         characters += len(message)
     selected.reverse()
     return selected[0] if len(selected) == 1 else "\n\n".join(selected)
+
+
+def _transient_delegated_direction(message: str, actor: str) -> bool:
+    """Hide legacy candidate-local decisions from durable creator direction."""
+
+    return (
+        message.lstrip().startswith("创作代理已在授权范围内决定：")
+        or actor == "delegated-agent:creative-steward"
+        and "修订方向" in message
+    )
 
 
 def _validate_review_context(

@@ -22,8 +22,8 @@ _ARTIFACT_GROUPS = (
     ("generation", "drafts/candidates/*.prompt.json"),
     ("candidate", "drafts/candidates/*.json"),
     ("review", "reviews/agent/*_scene_review.json"),
-    ("revision", "drafts/revisions/*_revision.prompt.json"),
-    ("revision", "drafts/revisions/*_revision.json"),
+    ("revision", "drafts/revisions/*_revision*.prompt.json"),
+    ("revision", "drafts/revisions/*_revision*.json"),
 )
 _SCENE_ID_RE = re.compile(r"(scene_[0-9]+)", re.IGNORECASE)
 

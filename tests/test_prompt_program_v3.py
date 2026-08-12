@@ -120,6 +120,20 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertNotIn("Studio 客户端记录", direction)
         self.assertNotIn("执行任务时应", direction)
 
+    def test_legacy_direction_digest_ignores_candidate_local_delegated_choices(self):
+        digest = """# 当前用户创作方向
+
+## 2026-08-11T10:00:00+00:00
+
+保留克制的叙事距离。
+
+## 2026-08-11T11:00:00+00:00
+
+创作代理已在授权范围内决定：scene_0001 需要确认修订方向选择‘先修文风’。执行后续任务时必须落实该方向。
+"""
+
+        self.assertEqual(_legacy_user_direction(digest), "保留克制的叙事距离。")
+
     def test_prose_task_constraints_leave_stable_tool_protocol_to_worker_profile(self):
         constraints = _constraints({}, {}, task_kind="prose")
 

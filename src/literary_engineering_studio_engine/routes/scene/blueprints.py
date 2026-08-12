@@ -1,6 +1,7 @@
 """Task blueprints for the formal scene-development route."""
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import re
 
@@ -70,6 +71,53 @@ def _state_patch_character_files(root: Path, state_patch: str) -> list[str]:
     return _unique(character_files)
 
 
+def _matching_revision_choice_sources(
+    root: Path,
+    scene_id: str,
+    revision_source: str,
+) -> list[str]:
+    """Return only consumed revision choices bound to the exact source body."""
+
+    source = _resolve_project_path(root, revision_source)
+    if not source.is_file():
+        return []
+    source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    choices = root / "workflow" / "human_choices"
+    matches: list[tuple[int, str]] = []
+    for path in choices.glob("choice.revision_direction.*.json") if choices.is_dir() else ():
+        payload = _read_json(path)
+        target = payload.get("target") if isinstance(payload.get("target"), dict) else {}
+        if payload.get("consumed") is not True:
+            continue
+        if str(payload.get("decision_type") or "") != "revision_direction":
+            continue
+        if str(target.get("target_id") or "") != scene_id:
+            continue
+        if str(target.get("candidate_path") or "").replace("\\", "/") != revision_source:
+            continue
+        if str(target.get("candidate_sha256") or "").lower() != source_sha256:
+            continue
+        matches.append((path.stat().st_mtime_ns, _rel(path, root)))
+    return [max(matches)[1]] if matches else []
+
+
+def _next_revision_base(root: Path, scene_id: str, revision_source: str) -> str:
+    """Allocate an immutable revision artifact set for the exact source."""
+
+    first = f"drafts/revisions/{scene_id}_revision"
+    normalized = revision_source.replace("\\", "/")
+    if not normalized.startswith("drafts/revisions/") and not (root / f"{first}.md").exists():
+        return first
+    highest = 1 if (root / f"{first}.md").exists() else 0
+    folder = root / "drafts" / "revisions"
+    pattern = re.compile(rf"^{re.escape(scene_id)}_revision_(\d+)[.]md$")
+    for path in folder.glob(f"{scene_id}_revision_*.md") if folder.is_dir() else ():
+        match = pattern.match(path.name)
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return f"drafts/revisions/{scene_id}_revision_{highest + 1:02d}"
+
+
 def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_state: str, next_action: str) -> dict[str, object]:
     scene_path = _resolve_project_path(root, scene_rel)
     scene_text = _read_text(scene_path)
@@ -107,15 +155,15 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         revision_source = _rel(Path(revision_source), root)
     if current_state == "static-revision":
         revision_source = f"drafts/scenes/{scene_id}.md"
-    revision = f"drafts/revisions/{scene_id}_revision"
+    revision = _next_revision_base(root, scene_id, revision_source)
     state_patch = f"characters/state_patches/{scene_id}_state_patch"
     state_patch_character_files = _state_patch_character_files(root, state_patch)
     state_apply = f"characters/state_patches/{scene_id}_state_apply"
     canon_patch = f"canon/patches/{scene_id}_canon_patch"
-    direction_sources = (
-        ["workflow/studio/user_directions.md"]
-        if (root / "workflow" / "studio" / "user_directions.md").is_file()
-        else []
+    direction_sources = _matching_revision_choice_sources(
+        root,
+        scene_id,
+        revision_source,
     )
     common_sources = [scene_rel]
     context_sources = _context_source_paths(root, scene_rel)
@@ -495,7 +543,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "expected_outputs": [f"{review}.json", f"{review}.md", f"{review}.agent_tasks.md", f"{review}.context.json", f"{review}.agent_completion.json"],
             "core_managed_outputs": [f"{review}.agent_tasks.md", f"{review}.context.json"],
             "hard_constraints": [
-                "Review the exact candidate path; pass_with_notes, warnings, or revision actions block promotion.",
+                "Review the exact candidate path. pass_with_notes and actionable findings block promotion; low/info observations explicitly marked blocks_pass=false remain evidence under a clean pass and must not manufacture revision work.",
                 "A non-pass verdict is a valid completed review and must remain available to the formal candidate-revision task.",
                 "Do not edit prose in this review task and do not soften findings to make the route advance.",
             ],
@@ -506,7 +554,12 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         "candidate-revision": {
             "task_type": "platform-agent-revision",
             "prompt_asset_id": "route.scene-development.revision.v1",
-            "command": f"python -m literary_engineering_studio_engine revise-scene <project> --scene {scene_rel} --draft {revision_source} --review {review}.json",
+            "command": (
+                f"python -m literary_engineering_studio_engine revise-scene <project> --scene {scene_rel} "
+                f"--draft {revision_source} --review {review}.json --out {revision}.md "
+                f"--report-out {revision}_report.md --manifest-out {revision}.json "
+                f"--prompt-manifest-out {revision}.prompt.json --agent-tasks-out {revision}.agent_tasks.md"
+            ),
             "source_paths": list(
                 dict.fromkeys(
                     [
@@ -535,7 +588,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 "Every blocking issue, warning, revision action, style deviation, budget gap, reader-contract gap, and rhythm/bridge gap must map to an observable prose change or remain explicitly blocking.",
                 "The revised deliverable body must differ from the exact source candidate; changing only reports or manifests is forbidden.",
                 "The revision remains a candidate and must receive a fresh exact-candidate AgentReview before promotion.",
-                "When the review requires a human/delegated direction, follow the matching exact-candidate decision in workflow/studio/user_directions.md and the review JSON. Do not alter canon or character assets from this prose task.",
+                "When the review requires a human/delegated direction, follow only the consumed revision_direction choice file included in source_paths. It must match the exact revision source path and SHA-256; never reuse a global or stale direction. Do not alter canon or character assets from this prose task.",
             ],
             "style_constraints": [
                 "Apply semantic anti-evasion revision rather than regex cleanup.",
@@ -657,7 +710,12 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         "static-revision": {
             "task_type": "main-platform-agent-prose-revision",
             "prompt_asset_id": "route.scene-development.revision.v1",
-            "command": f"python -m literary_engineering_studio_engine revise-scene <project> --scene {scene_rel} --draft {revision_source} --review reviews/{scene_id}-review.md",
+            "command": (
+                f"python -m literary_engineering_studio_engine revise-scene <project> --scene {scene_rel} "
+                f"--draft {revision_source} --review reviews/{scene_id}-review.md --out {revision}.md "
+                f"--report-out {revision}_report.md --manifest-out {revision}.json "
+                f"--prompt-manifest-out {revision}.prompt.json --agent-tasks-out {revision}.agent_tasks.md"
+            ),
             "source_paths": list(
                 dict.fromkeys(
                     [

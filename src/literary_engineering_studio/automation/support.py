@@ -106,7 +106,18 @@ def _project_direction(project: Path) -> str:
     values = read_directions(project, limit=12)
     if not isinstance(values, list):
         return ""
-    return "\n".join(str(item.get("message") or "") for item in values if isinstance(item, dict) and item.get("message"))[-6000:]
+    messages = []
+    for item in values:
+        if not isinstance(item, dict) or not item.get("message"):
+            continue
+        message = str(item.get("message") or "")
+        actor = str(item.get("actor") or "")
+        if message.lstrip().startswith("创作代理已在授权范围内决定："):
+            continue
+        if actor == "delegated-agent:creative-steward" and "修订方向" in message:
+            continue
+        messages.append(message)
+    return "\n".join(messages)[-6000:]
 
 
 def _choice_fingerprint(choice: dict[str, Any]) -> str:

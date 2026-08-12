@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.agent-review.v1
 match: route.scene-development.agent-review.v1
-version: v4
+version: v5
 route: scene-development
 task_type: platform-agent-review
 title: Scene Agent Review Exact Prompt Asset
@@ -28,7 +28,9 @@ hard_constraints:
   - Review the exact candidate path and candidate_sha256 supplied by the task; stale or wrong-content reviews fail.
   - Treat the compact review evidence as the authoritative deterministic projection. Its candidate, full-sidecar, and output-schema digests must match; use the full sidecar only as exact-on-demand recovery evidence.
   - Medium+ Style Lint, unresolved word-budget failure, reader-experience failure, new-character unresolved status, missing scene function, reader question/promise-payoff failure, narrative-distance monotony, texture repetition, or rhythm/bridge failure blocks pass.
-  - pass_with_notes must go through revise-scene or explicit user accepted notes; it does not promote cleanly.
+  - pass_with_notes must contain at least one exact, actionable unresolved finding and must go through revise-scene or an explicit candidate-bound acceptance; it does not promote cleanly.
+  - Deterministic low/info findings below the configured threshold are diagnostics, not revision obligations by themselves. Keep them as `blocks_pass: false` evidence under a clean pass unless an independent scene-specific literary defect is demonstrated from exact prose.
+  - Never turn an already-satisfied revision action into a new action merely to drive a metric toward zero. Verify the prior action against its stated target and current threshold.
   - Canon writeback must be classified as no_change, declared, needs_patch, or unknown.
 style_constraints:
   - Be stricter than the writer about mechanical contrast, punctuation evasion, and AI-trace patterns.
@@ -37,11 +39,12 @@ output_contract:
 review_requirements:
   - Review JSON must cite the exact candidate path.
   - Review JSON candidate_sha256 must equal the digest supplied in the task package.
-  - conclusion=pass requires no unresolved warnings, revision actions, style deviations, word-budget failure, reader-experience failure, rhythm/bridge failure, or new-character issues. `style_notes` is an evidence ledger only: use it for concise positive or neutral observations; put every actionable style defect in warnings, revision_actions, or style_adherence.deviations. A below-threshold lint observation or an already-approved waiver may be retained only as a structured low/info warning with `blocks_pass: false`; otherwise a warning is treated as unresolved.
+  - conclusion=pass requires no actionable warning, revision action, actionable style deviation, word-budget failure, reader-experience failure, rhythm/bridge failure, or new-character issue. `style_notes` is an evidence ledger for positive or neutral observations and may be non-empty. A below-threshold lint observation or approved waiver may remain as a low/info warning or deviation only with `blocks_pass: false`; set `style_adherence.status=pass` when these are the only style observations.
+  - Every revision action is blocking by definition. Do not put `blocks_pass: false` on a revision action. Move optional polish to `style_notes` or a non-blocking warning.
 forbidden_shortcuts:
   - Do not call a local dry-run or external hidden reviewer.
 ---
 
 # Exact Scene Agent Review Prompt Asset
 
-Judge the exact candidate as a formal gate, not as praise. Deterministic clean evidence proves only machine checks; it never proves literary execution. Compare every declared scene obligation--especially external/internal conflict, character choice, scene turn, reader effect, incoming/outgoing bridge, narrative distance, texture, and word budget--with text actually present. Missing or merely asserted obligations require warning or revision even when lint/rhythm projections say pass or not_required. Read the exact candidate, compact evidence, scene, composition, branch, and mounted style; use the full sidecar only for digest conflict or recovery. Write the required `scene_review.v1` JSON and Markdown immediately; do not search beyond sufficient evidence. Include narrative_rhythm_adherence and canon_writeback. pass_with_notes never behaves as pass.
+Judge the exact candidate as a formal gate, not as praise. Deterministic clean evidence proves only machine checks; it never proves literary execution. Compare every declared scene obligation--especially external/internal conflict, character choice, scene turn, reader effect, incoming/outgoing bridge, narrative distance, texture, and word budget--with text actually present. Missing or merely asserted obligations require an exact actionable finding even when lint/rhythm projections say pass or not_required. Read the exact candidate, compact evidence, scene, composition, branch, and mounted style; use the full sidecar only for digest conflict or recovery. Write the required `scene_review.v1` JSON and Markdown immediately; do not search beyond sufficient evidence. Include narrative_rhythm_adherence and canon_writeback. Use pass_with_notes only for unresolved work, never for harmless diagnostics or optional polishing.

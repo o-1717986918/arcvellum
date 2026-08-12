@@ -14,6 +14,10 @@ from ....creative_quality import creative_quality_profile_exists, load_creative_
 from ....new_character_register import new_character_register_issues
 from ....reader_experience import reader_experience_adherence_for_body
 from ....word_budget import word_budget_adherence_for_body
+from ...review.resolution import (
+    actionable_review_findings,
+    review_semantic_consistency_issues,
+)
 from .gate_support import (
     candidate_body,
     canon_change_value,
@@ -137,6 +141,7 @@ def _review_assessment(
     return {
         "payload": payload,
         "errors": errors,
+        "semantic_errors": review_semantic_consistency_issues(payload),
         "conclusion": conclusion,
         "style_status": style_status,
         "style_gate": style_gate,
@@ -189,6 +194,12 @@ def _review_identity_checks(a: dict[str, object]) -> list[GateCheck]:
     trace = a["context_trace"]
     return [
         GateCheck(not a["errors"], "schema_failed", "candidate review JSON does not satisfy scene_review.v1"),
+        GateCheck(
+            not a["semantic_errors"],
+            "semantic_contract_failed",
+            "candidate review verdict contradicts its findings: "
+            + "; ".join(str(item) for item in a["semantic_errors"]),
+        ),
         GateCheck(bool(a["task_completed"]), "task_incomplete", f"scene review agent task is incomplete: {a['task_message']}"),
         GateCheck(trace.passed, "context_trace_stale", f"candidate must be regenerated from a fresh context trace: {trace.message}"),
         GateCheck(bool(a["review_fresh"]), "stale_or_wrong_source", "scene review predates the current candidate; rerun independent AgentReview"),
@@ -246,6 +257,7 @@ def _review_projection(a: dict[str, object], decision: GateCheck) -> dict[str, o
         "review_session_independent": a["session_ok"],
         "review_session_message": a["session_message"],
         "schema_errors": a["errors"],
+        "semantic_errors": a["semantic_errors"],
         "unresolved_notes": a["unresolved"],
         "human_decision_notes": a["human_decision_notes"],
         "candidate_sha256": str(payload.get("candidate_sha256") or "").strip().lower(),
@@ -303,25 +315,9 @@ def _unresolved_review_notes(payload: dict[str, object]) -> list[str]:
     conclusion = str(payload.get("conclusion") or "").strip().lower()
     if conclusion in {"pass_with_notes", "revise_required", "reject"}:
         notes.append(f"conclusion={conclusion}")
-    for key in ("blocking_issues", "revision_actions"):
-        if isinstance(payload.get(key), list) and payload.get(key):
-            notes.append(key)
-    warnings = payload.get("warnings")
-    if isinstance(warnings, list) and any(_warning_requires_followup(item) for item in warnings):
-        notes.append("warnings")
-    _append_style_notes(notes, payload)
+    notes.extend(actionable_review_findings(payload))
     _append_literary_contract_notes(notes, payload)
-    return notes
-
-
-def _append_style_notes(notes: list[str], payload: dict[str, object]) -> None:
-    style = _mapping(payload, "style_adherence")
-    status = _status(style)
-    if status in {"pass_with_notes", "revise_required", "reject"}:
-        notes.append(f"style_adherence.status={status}")
-    for key in ("deviations", "revision_actions"):
-        if isinstance(style.get(key), list) and style.get(key):
-            notes.append(f"style_adherence.{key}")
+    return list(dict.fromkeys(notes))
 
 
 def _append_literary_contract_notes(notes: list[str], payload: dict[str, object]) -> None:
@@ -346,22 +342,6 @@ def _append_literary_contract_notes(notes: list[str], payload: dict[str, object]
     revision_ok, revision_status, revision_message = _revision_integrity_review_gate(_mapping(payload, "revision_integrity"))
     if not revision_ok:
         notes.append(f"revision_integrity.{revision_status}:{revision_message}")
-
-
-def _warning_requires_followup(value: object) -> bool:
-    if not isinstance(value, dict):
-        return True
-    if value.get("blocks_pass") is False:
-        return False
-    severity = str(value.get("severity") or "").strip().lower()
-    resolution = str(value.get("resolution") or "").strip().lower()
-    if severity not in {"info", "low", "note"}:
-        return True
-    if resolution in {"noted_below_threshold", "waived", "not_required", "non_blocking", "non-blocking"}:
-        return False
-    text = " ".join(str(value.get(key) or "") for key in ("message", "detail", "description")).lower()
-    markers = ("不作为阻塞", "不阻塞", "低于阈值", "已登记豁免", "not blocking", "below threshold", "waived")
-    return not any(marker in text for marker in markers)
 
 
 def _human_decision_notes(payload: dict[str, object]) -> list[str]:

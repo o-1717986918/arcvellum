@@ -43,6 +43,9 @@ def _validate_scene_review_contract(
         return
 
     from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+    from literary_engineering_studio_engine.literary.review.resolution import (
+        review_semantic_consistency_issues,
+    )
 
     schema_errors, _warnings = validate_payload(payload, "scene_review.v1")
     for error in schema_errors:
@@ -54,6 +57,16 @@ def _validate_scene_review_contract(
                 f"{review_rel}#{field}",
                 message,
                 "读取 CLI Protected Outputs 中的 scene review sidecar 和 scene_review.v1 schema；保留真实审查结论，仅补齐缺失字段、正确类型与固定 schema 值。",
+            )
+        )
+    for message in review_semantic_consistency_issues(payload):
+        issues.append(
+            PreflightIssue(
+                "scene-review-verdict-inconsistent",
+                f"{review_rel}#conclusion",
+                message,
+                "重新判断审查语义：低于阈值且 blocks_pass=false 的观察保留在 clean pass 的 warning/style_notes；"
+                "只有精确、可执行且尚未解决的问题才能进入 revision_actions 并使用 pass_with_notes/revise_required。",
             )
         )
 

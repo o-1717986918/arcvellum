@@ -273,7 +273,7 @@ def _add_promotion_gates(gates: list[dict[str, str]], root: Path, scene_id: str)
 
 
 def _revision_manifest_path(root: Path, scene_id: str, candidate_path: Path | None) -> Path:
-    if candidate_path is not None and candidate_path.name.endswith("_revision.md"):
+    if candidate_path is not None and _is_revision_candidate(root, candidate_path):
         return candidate_path.with_suffix(".json")
     return root / "drafts" / "revisions" / f"{scene_id}_revision.json"
 
@@ -283,7 +283,7 @@ def _is_revision_candidate(root: Path, candidate_path: Path) -> bool:
         rel = candidate_path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         rel = str(candidate_path)
-    return rel.startswith("drafts/revisions/") or candidate_path.name.endswith("_revision.md")
+    return rel.startswith("drafts/revisions/") or "_revision" in candidate_path.stem
 
 
 def _revision_evasion_clean(payload: dict[str, object]) -> bool:

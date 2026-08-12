@@ -305,8 +305,8 @@ def _scene_revision_gate_errors(root: Path, task: dict[str, object], candidate: 
     elif _file_sha256(candidate) == previous_hash:
         errors.append("scene revision candidate is unchanged from the exact reviewed source")
 
-    scene_id = str(task.get("scene_id") or candidate.stem.replace("_revision", ""))
-    base = root / "drafts" / "revisions" / f"{scene_id}_revision"
+    scene_id = str(task.get("scene_id") or candidate.stem.split("_revision", 1)[0])
+    base = candidate.with_suffix("")
     manifest_path = base.with_suffix(".json")
     report = base.with_name(base.name + "_report.md")
     prompt = base.with_suffix(".prompt.json")

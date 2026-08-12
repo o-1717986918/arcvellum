@@ -371,6 +371,14 @@ class TaskContractTransportTests(unittest.TestCase):
 
             exact_source = revision.relative_to(root).as_posix()
             self.assertEqual(payload["revision_source"], exact_source)
+            self.assertEqual(
+                payload["candidate"],
+                "drafts/revisions/scene_0001_revision_02.md",
+            )
+            self.assertIn(
+                "--out drafts/revisions/scene_0001_revision_02.md",
+                payload["command"],
+            )
             self.assertIn(exact_source, payload["agent_source_paths"])
             self.assertIn(exact_source, payload["context_must_inline_paths"])
 

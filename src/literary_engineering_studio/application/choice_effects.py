@@ -9,7 +9,6 @@ from .project_manager import record_direction
 
 
 DIRECTION_DECISIONS = {
-    "revision_direction",
     "word_budget_direction",
     "cross_asset_alignment",
     "general_project_choice",
@@ -42,6 +41,14 @@ def apply_choice_effect(
         result["effect"] = {
             "kind": "creative-direction",
             "summary": "已写入项目创作方向，下一份任务包会自动携带这项选择。",
+            "path": result["materialized"],
+        }
+        return
+    if decision_type == "revision_direction":
+        result["materialized"] = str(result.get("choice_path") or "")
+        result["effect"] = {
+            "kind": "candidate-bound-direction",
+            "summary": "修订方向已绑定当前候选；修订任务消费后不会污染后续候选或全局创作方向。",
             "path": result["materialized"],
         }
         return

@@ -15,6 +15,7 @@ from ....flow_gates import branch_selection_status
 from ....new_character_register import new_character_register_issues
 from ....reader_experience import reader_experience_adherence_for_body
 from ....word_budget import word_budget_adherence_for_body
+from ...review.resolution import actionable_review_findings
 
 
 def scene_flow_gate_issues(root: Path, scene_id: str) -> tuple[str, ...]:
@@ -250,19 +251,7 @@ def _unresolved_review_notes(payload: dict[str, Any]) -> list[str]:
     conclusion = str(payload.get("conclusion") or "").strip().lower()
     if conclusion in {"pass_with_notes", "revise_required", "reject"}:
         notes.append(f"conclusion={conclusion}")
-    for key in ("blocking_issues", "warnings", "revision_actions", "style_notes"):
-        value = payload.get(key)
-        if isinstance(value, list) and value:
-            notes.append(key)
-    style = payload.get("style_adherence")
-    if isinstance(style, dict):
-        style_status = str(style.get("status") or "").strip().lower()
-        if style_status in {"pass_with_notes", "revise_required", "reject"}:
-            notes.append(f"style_adherence.status={style_status}")
-        for key in ("deviations", "revision_actions"):
-            value = style.get(key)
-            if isinstance(value, list) and value:
-                notes.append(f"style_adherence.{key}")
+    notes.extend(actionable_review_findings(payload))
     budget = payload.get("word_budget_adherence")
     if isinstance(budget, dict):
         budget_status = str(budget.get("status") or "").strip().lower()
@@ -277,7 +266,7 @@ def _unresolved_review_notes(payload: dict[str, Any]) -> list[str]:
             notes.append(f"reader_experience_adherence.status={reader_status}")
         if reader_status in {"pass", "not_required"} and reader.get("reader_promise_satisfied") is False:
             notes.append("reader_experience_adherence.reader_promise_satisfied=false")
-    return notes
+    return list(dict.fromkeys(notes))
 
 
 def _mounted_style_exists(root: Path) -> bool:

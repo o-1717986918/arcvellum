@@ -1083,8 +1083,12 @@ class AutopilotTests(unittest.TestCase):
                 service._run(run["run_id"], threading.Event())
 
             self.assertEqual(FakeSteward.calls, 1)
-            direction = (project / "workflow" / "studio" / "user_directions.md").read_text(encoding="utf-8")
-            self.assertIn("先修因果逻辑", direction)
+            choice_record = json.loads(
+                (project / "workflow" / "human_choices" / "volatile-id.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(choice_record["selected"], "fix_logic_first")
+            self.assertTrue(choice_record["consumed"])
+            self.assertFalse((project / "workflow" / "studio" / "user_directions.md").exists())
             decisions = store.delegated_decisions(run["run_id"])
             self.assertEqual(len(decisions), 1)
             self.assertTrue(decisions[0]["choice_fingerprint"])

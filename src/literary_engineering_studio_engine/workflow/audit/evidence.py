@@ -3,15 +3,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...literary.review.resolution import actionable_review_findings
+
 
 def _review_needs_revision(payload: dict) -> bool:
     conclusion = str(payload.get("conclusion") or "").strip().lower()
     if conclusion in {"pass_with_notes", "revise_required", "reject"}:
         return True
-    for key in ("revision_actions", "warnings", "style_notes", "blocking_issues"):
-        value = payload.get(key)
-        if isinstance(value, list) and value:
-            return True
+    if actionable_review_findings(payload):
+        return True
     budget_status = _word_budget_adherence_status(payload)
     if budget_status not in {"", "pass", "not_required"}:
         return True

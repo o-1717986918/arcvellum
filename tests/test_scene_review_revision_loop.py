@@ -14,6 +14,7 @@ from literary_engineering_studio_engine.candidate_promotion import _candidate_re
 from literary_engineering_studio_engine.review_ci import review_scene_draft
 from literary_engineering_studio_engine.scene_revision import _prompt_manifest
 from literary_engineering_studio_engine.literary.scene.promotion.revision_contract import revision_manifest_errors
+from literary_engineering_studio_engine.literary.review.resolution import review_semantic_consistency_issues
 from literary_engineering_studio_engine.workflow_state import _current_scene_candidate, _static_review_step
 from literary_engineering_studio_engine.workflow_state import _review_step
 
@@ -147,6 +148,51 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             }
         )
         self.assertEqual(notes, ["warnings"])
+
+    def test_below_threshold_observations_cannot_manufacture_pass_with_notes(self):
+        payload = {
+            "conclusion": "pass_with_notes",
+            "blocking_issues": [],
+            "warnings": [
+                {
+                    "severity": "low",
+                    "message": "密度低于阈值，仅作诊断记录。",
+                    "blocks_pass": False,
+                }
+            ],
+            "revision_actions": [],
+            "style_notes": [{"severity": "neutral", "message": "保留观察。"}],
+            "style_adherence": {
+                "status": "pass",
+                "deviations": [
+                    {
+                        "severity": "low",
+                        "blocks_pass": False,
+                        "detail": "低于阈值。",
+                    }
+                ],
+                "revision_actions": [],
+            },
+        }
+
+        issues = review_semantic_consistency_issues(payload)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("no actionable finding", issues[0])
+
+    def test_revision_action_cannot_claim_it_does_not_block_pass(self):
+        issues = review_semantic_consistency_issues(
+            {
+                "conclusion": "pass_with_notes",
+                "blocking_issues": [],
+                "warnings": [],
+                "revision_actions": [
+                    {"id": "RA1", "action": "optional polish", "blocks_pass": False}
+                ],
+                "style_adherence": {"status": "pass", "deviations": []},
+            }
+        )
+
+        self.assertTrue(any("blocks_pass=false" in issue for issue in issues))
 
     def test_non_pass_scene_review_is_recordable_for_revision_routing(self):
         with patch("literary_engineering_studio_engine.scene_route_gates.candidate_review_gate", return_value={"status": "notes_unresolved", "message": "revise"}):
