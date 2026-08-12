@@ -62,6 +62,7 @@ def render_repair_prompt(payload: Mapping[str, object]) -> str:
         f"- `{item}`" for item in target_rows
     ) or "- 无可映射目标。"
     reasoning_text = _reasoning_budget_text(payload)
+    quantitative_repair_text = _quantitative_repair_text(issue_rows)
     session_text = (
         "这是同一 Agent session 内的有界修复回合。"
         if payload.get("repair_session") == "same-session"
@@ -87,7 +88,7 @@ Repair Context: `{payload.get('context_digest')}`
 
 {reasoning_text}
 
-机械格式、字段、路径、缺文件和确定性 lint 问题不得通过提高推理等级解决；只做 issue 指向的最小修复。仅当上方策略动作明确为 `escalate` 时，Runtime 才可在能力与总预算允许范围内升一级。
+机械格式、字段、路径、缺文件和确定性 lint 问题不得通过提高推理等级解决；默认只做 issue 指向的最小充分修复。{quantitative_repair_text}仅当上方策略动作明确为 `escalate` 时，Runtime 才可在能力与总预算允许范围内升一级。
 
 ## 无效输出的有界片段
 
@@ -103,6 +104,16 @@ Repair Context: `{payload.get('context_digest')}`
 
 把完整修复结果写入目标后立即结束；不要在模型上下文中重新读取或重复解释。Worker 会做本地格式验证，Studio 会再次运行完整确定性预检；不得伪造 pass、完成回执或审查结论。
 """
+
+
+def _quantitative_repair_text(issue_rows: list[Mapping[str, object]]) -> str:
+    codes = {str(row.get("code") or "") for row in issue_rows}
+    if "candidate-word-budget-invalid" not in codes:
+        return ""
+    return (
+        "本回合含量化字数缺口：这里的“最小充分”指达到修复要求给出的安全目标，"
+        "不是保持原长度的局部改词；必须写回完整正文，并让新增材料承担已有事件链中的叙事功能。"
+    )
 
 
 def _reasoning_budget_text(payload: Mapping[str, object]) -> str:

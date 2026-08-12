@@ -187,7 +187,7 @@ def _validate_scene_candidate_generation_contract(
                 "candidate-word-budget-invalid",
                 candidate_rel,
                 str(budget.get("message") or "candidate failed the scene word budget"),
-                "在不灌水、不重复情绪描写的前提下扩写或压缩正文，使清洁正文达到当前场景的中文内容字符预算。",
+                _word_budget_repair_instruction(budget),
             )
         )
     reader = reader_experience_adherence_for_body(sandbox.workspace, scene_path, body)
@@ -200,6 +200,35 @@ def _validate_scene_candidate_generation_contract(
                 "重写正文以兑现本场读者问题、承诺和场景桥接；不要只改 manifest 描述。",
             )
         )
+
+
+def _word_budget_repair_instruction(budget: dict[str, object]) -> str:
+    current = int(budget.get("clean_body_chinese_chars") or 0)
+    minimum = int(budget.get("min_chinese_chars") or 0)
+    maximum = int(budget.get("max_chinese_chars") or 0)
+    target = int(budget.get("target_chinese_chars") or 0)
+    if minimum and current < minimum:
+        safe_target = target if target >= minimum and (not maximum or target <= maximum) else minimum
+        deficit = max(0, minimum - current)
+        return (
+            f"当前清洁正文为 {current} 个中文内容字符，下限 {minimum}，"
+            f"安全目标约 {safe_target}，至少仍缺 {deficit}。必须重写完整目标并做足量扩写，"
+            "不能只改命中句或保持原长度。扩写必须来自已有场景功能与事件链：展开可观察动作、"
+            "对话阻力、程序性过程、信息核验和选择代价；不得重复心理解释、堆叠景物、引入未经授权的 canon，"
+            "也不得用同义复述灌水。完成时应留出小幅计数余量，同时不得超过上限"
+            f" {maximum or '未设置'}。"
+        )
+    if maximum and current > maximum:
+        excess = current - maximum
+        safe_target = target if target and target <= maximum else maximum
+        return (
+            f"当前清洁正文为 {current} 个中文内容字符，上限 {maximum}，"
+            f"安全目标约 {safe_target}，至少需压缩 {excess}。删除重复解释、重复景物和不承担场景功能的段落，"
+            "保留事件因果、人物选择、场景转向、衔接钩子与必要的文学节奏；不得用摘要替代正文。"
+        )
+    return (
+        "在不灌水、不重复情绪描写的前提下扩写或压缩正文，使清洁正文达到当前场景的中文内容字符预算。"
+    )
 
 
 def _validate_scene_character_candidates(

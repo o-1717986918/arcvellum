@@ -194,6 +194,33 @@ class IncrementalRepairContextTests(unittest.TestCase):
         self.assertEqual(reasoning["level"], "low")
         self.assertIn("机械格式", prepared.prompt)
 
+    def test_quantitative_word_budget_repair_overrides_same_length_local_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root, ("out/scene.md",))
+            sandbox = _sandbox(root)
+            output = sandbox.workspace / "out" / "scene.md"
+            output.parent.mkdir(parents=True)
+            output.write_text("正文" * 300, encoding="utf-8")
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "candidate-word-budget-invalid",
+                        "out/scene.md",
+                        "cleaned body has 1940 Chinese content chars, below min_chinese_chars=2700",
+                        "当前清洁正文为 1940 个中文内容字符，下限 2700，安全目标约 3000，至少仍缺 760。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(task, sandbox)
+
+            prepared = coordinator.prepare(result, 1, 2)
+            coordinator.finalize()
+
+            self.assertIn("不是保持原长度的局部改词", prepared.prompt)
+            self.assertIn("安全目标约 3000", prepared.prompt)
+
     def test_issue_identity_is_stable_across_attempts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
