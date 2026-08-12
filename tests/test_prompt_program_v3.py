@@ -53,6 +53,41 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertIn("writer_session_id", contract["studio_owned_fields"])
         self.assertNotIn("writer_session_id", contract["required_fields"])
 
+    def test_revision_contract_keeps_exact_identity_machine_owned(self):
+        root = Path("C:/fixture")
+        task = TaskPackage(
+            project_root=root,
+            task_json_path=root / "task.json",
+            task_markdown_path=root / "task.md",
+            payload={
+                "task_id": "revision",
+                "route": "scene-development",
+                "current_state": "candidate-revision",
+                "task_type": "platform-agent-revision",
+                "scene_id": "scene_0001",
+                "revision_source": "drafts/candidates/scene_0001-platform-agent.md",
+                "candidate": "drafts/revisions/scene_0001_revision.md",
+                "required_reading": [],
+                "source_paths": [],
+                "expected_outputs": [
+                    "drafts/revisions/scene_0001_revision.md",
+                    "drafts/revisions/scene_0001_revision.json",
+                ],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+            },
+        )
+
+        contract = semantic_output_contract(task)
+
+        self.assertEqual(contract["schema_name"], "scene-revision/v1")
+        self.assertIn("revision_actions_applied", contract["model_owned_fields"])
+        self.assertIn("anti_evasion_rows", contract["model_owned_fields"])
+        self.assertIn("candidate_sha256", contract["studio_owned_fields"])
+        self.assertIn("source_candidate_sha256", contract["studio_owned_fields"])
+        self.assertNotIn("candidate_sha256", contract["required_fields"])
+        self.assertNotIn("anti_evasion_not_applicable_reason", contract["required_fields"])
+
     def test_prose_constraints_make_scene_budget_override_project_total(self):
         constraints = _constraints(
             {"word_count": {"target": 1350, "minimum": 1215, "maximum": 1485}},

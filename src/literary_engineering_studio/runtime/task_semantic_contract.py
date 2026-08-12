@@ -17,6 +17,9 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
 
     current_state = str(task.current_state or task.payload.get("current_state") or "")
     scene_id = str(task.payload.get("scene_id") or "").strip()
+    revision = _scene_revision_output_contract(task, current_state, scene_id)
+    if revision:
+        return revision
     candidate = _scene_candidate_output_contract(task, current_state, scene_id)
     if candidate:
         return candidate
@@ -48,6 +51,98 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
         proposal_count = len(proposals) if isinstance(proposals, list) else 0
         contract["branch_proposal_contract"] = branch_proposal_contract(proposal_count)
     return contract
+
+
+def _scene_revision_output_contract(
+    task: TaskPackage,
+    current_state: str,
+    scene_id: str,
+) -> dict[str, Any]:
+    """Separate revision judgments from exact-source transport metadata."""
+
+    if current_state not in {"candidate-revision", "static-revision"}:
+        return {}
+    path = next(
+        (
+            item
+            for item in task.expected_outputs
+            if item.endswith("_revision.json")
+        ),
+        "",
+    )
+    if not path:
+        return {}
+    required_fields = [
+        "revision_actions_applied",
+        "warnings_addressed",
+        "style_notes_addressed",
+        "style_adherence_addressed",
+        "anti_evasion_rows",
+        "retained_transition_proofs",
+        "evasion_risks_unresolved",
+        "new_character_register",
+        "waivers",
+    ]
+    model_fields = [*required_fields, "anti_evasion_not_applicable_reason"]
+    return {
+        "path": path,
+        "schema_name": "scene-revision/v1",
+        "revision_kind": "exact-source",
+        "required_fields": required_fields,
+        "field_types": {
+            "revision_actions_applied": "list",
+            "warnings_addressed": "list",
+            "style_notes_addressed": "list",
+            "style_adherence_addressed": "list",
+            "anti_evasion_rows": "list",
+            "anti_evasion_not_applicable_reason": "str",
+            "retained_transition_proofs": "list",
+            "evasion_risks_unresolved": "list",
+            "new_character_register": "dict",
+            "waivers": "list",
+        },
+        "object_shapes": {
+            "anti_evasion_rows[]": {
+                "source_excerpt": "exact excerpt present in revision_source",
+                "issue": "specific review or lint defect",
+                "revised_excerpt": "exact excerpt present in the revised candidate",
+                "still_uses_explicit_transition": "bool",
+                "suspected_rephrase": "bool",
+                "critical_objection": "critical attempt to disprove the repair",
+                "verdict": "resolved | retained_with_proof",
+            },
+            "new_character_register": {
+                "schema": "literary-engineering-workbench/new-character-register/v0.1",
+                "status": "none | existing_only | ephemeral_only | candidates_ready | resolved",
+                "introduced": "list",
+                "ephemeral_waivers": "list",
+                "blocking_issues": "list; must be empty for a clean revision",
+            },
+        },
+        "model_owned_fields": model_fields,
+        "studio_owned_fields": [
+            "schema",
+            "scene_id",
+            "source_candidate",
+            "source_candidate_sha256",
+            "candidate",
+            "candidate_sha256",
+            "report",
+            "source_paths",
+            "prompt_manifest",
+            "style_mount_snapshot",
+            "creative_quality_profile_digest",
+            "reader_experience_contract",
+            "narrative_rhythm_contract",
+            "anti_evasion_protocol_applied",
+            "ready_for_review",
+            "generated_by",
+            "provider",
+            "formal_contract_revision",
+            "writer_session_id",
+        ],
+        "locked_values": {"scene_id": scene_id},
+    }
 
 
 def _scene_candidate_output_contract(
@@ -256,10 +351,35 @@ def render_semantic_output_contract(contract: dict[str, Any]) -> str:
     continuity = _continuity_guidance(str(contract.get("continuity_kind") or ""))
     if continuity:
         return base + continuity
+    if contract.get("revision_kind") == "exact-source":
+        return base + _revision_guidance(contract)
     branch = contract.get("branch_proposal_contract")
     if isinstance(branch, dict):
         return base + _branch_proposal_guidance(branch)
     return base + _requirements_guidance(contract)
+
+
+def _revision_guidance(contract: dict[str, Any]) -> str:
+    shapes = contract.get("object_shapes") if isinstance(contract.get("object_shapes"), dict) else {}
+    row_shape = shapes.get("anti_evasion_rows[]") if isinstance(shapes.get("anti_evasion_rows[]"), dict) else {}
+    rendered = json.dumps(row_shape, ensure_ascii=False, indent=2)
+    return f"""
+
+只填写修订中真实发生的文学判断，不得猜测 schema、路径、SHA-256、会话或受保护标准；这些字段由 Studio 在提交前绑定。
+
+- `revision_actions_applied`、`warnings_addressed`、`style_notes_addressed`、`style_adherence_addressed` 分别记录已实际落实到正文的审查项；四组中至少一组非空。
+- 不适用的组写空数组；无法落实的项目写入 `waivers`，不能谎报为已完成。
+- `evasion_risks_unresolved` 必须为空才能进入复审；若仍有风险，保留具体条目并让任务继续阻塞。
+- `anti_evasion_rows` 每项必须使用以下形状，两个 excerpt 都必须逐字存在于精确源正文或修订候选正文：
+
+```json
+{rendered}
+```
+
+- 源正文存在机械对照或换皮转折风险时，`anti_evasion_rows` 不得为空；确实不存在时才填写具体的 `anti_evasion_not_applicable_reason`。
+- 保留显式转折时使用 `verdict=retained_with_proof`，并在 `retained_transition_proofs` 中给出经批判性反驳仍成立的场景功能证据。
+- `new_character_register` 必须基于修订正文实际出现的人物填写；不得因 Studio 会补机器字段而省略文学判断。
+"""
 
 
 def _branch_proposal_guidance(contract: dict[str, Any]) -> str:

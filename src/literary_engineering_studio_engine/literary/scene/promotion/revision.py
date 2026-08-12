@@ -233,7 +233,9 @@ def _write_revision_task(
             ),
             (
                 "写入修订 manifest",
-                f"""创建或覆盖 `{_rel(manifest, root)}`，记录 schema=`literary-engineering-workbench/scene-revision/v0.1`、scene_id、source_candidate=`{_rel(source_candidate, root)}`、source_candidate_sha256（从 prompt manifest 精确复制）、candidate=`{_rel(candidate, root)}`、candidate_sha256（修订候选文件的精确 SHA-256）、report、source_paths、revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、style_mount_snapshot（从 prompt manifest 精确复制，不得切换版本）、creative_quality_profile_digest=`{load_creative_quality_profile(root).get('digest')}`、reader_experience_contract（从 prompt manifest 精确复制）、narrative_rhythm_contract（从 prompt manifest 精确复制）、anti_evasion_protocol_applied=true、anti_evasion_rows、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers、ready_for_review=false、generated_by=`platform-agent`。
+                f"""创建或覆盖 `{_rel(manifest, root)}`，只填写模型负责的修订判断：revision_actions_applied、warnings_addressed、style_notes_addressed、style_adherence_addressed、anti_evasion_rows、anti_evasion_not_applicable_reason（仅在确实不适用时）、retained_transition_proofs、evasion_risks_unresolved、new_character_register、waivers。至少一组 addressed/applied 字段必须非空，并且只能登记正文中已经实际发生的修改。
+
+schema、scene_id、source_candidate、source_candidate_sha256、candidate、candidate_sha256、report、source_paths、prompt_manifest、style_mount_snapshot、creative_quality_profile_digest、reader_experience_contract、narrative_rhythm_contract、anti_evasion_protocol_applied、ready_for_review、generated_by、provider、formal_contract_revision 和 writer_session_id 由 Studio 在提交前按精确任务证据绑定；不得猜测、复制或覆盖这些机器字段。
 
 anti_evasion_rows 每项固定填写 source_excerpt、issue、revised_excerpt、still_uses_explicit_transition（布尔）、suspected_rephrase（布尔）、critical_objection、verdict（resolved 或 retained_with_proof）。摘录必须逐字存在于精确源正文和修订候选正文。若源文没有机械对照/换皮转折风险且列表为空，必须填写 anti_evasion_not_applicable_reason；不得只写布尔值宣称完成。
 

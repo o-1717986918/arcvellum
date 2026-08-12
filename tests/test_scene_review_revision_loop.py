@@ -212,18 +212,22 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                     path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
                 elif relative.endswith("_revision.json"):
                     path.write_text(json.dumps({
-                        "schema": "literary-engineering-workbench/scene-revision/v0.1",
-                        "scene_id": "scene_0001",
-                        "source_candidate": source_rel,
-                        "source_candidate_sha256": before,
-                        "candidate": candidate_rel,
-                        "candidate_sha256": before,
                         "revision_actions_applied": ["修正动作"],
-                        "anti_evasion_protocol_applied": True,
+                        "warnings_addressed": [],
+                        "style_notes_addressed": [],
+                        "style_adherence_addressed": [],
                         "anti_evasion_rows": [],
                         "anti_evasion_not_applicable_reason": "源正文未检出机械对照或换皮转折。",
+                        "retained_transition_proofs": [],
                         "evasion_risks_unresolved": [],
-                        "ready_for_review": False,
+                        "new_character_register": {
+                            "schema": "literary-engineering-workbench/new-character-register/v0.1",
+                            "status": "none",
+                            "introduced": [],
+                            "ephemeral_waivers": [],
+                            "blocking_issues": [],
+                        },
+                        "waivers": [],
                     }, ensure_ascii=False), encoding="utf-8")
                 elif relative.endswith("agent_completion.json"):
                     path.write_text(json.dumps({"schema": COMPLETION_SCHEMA, "source_task": "drafts/revisions/scene_0001_revision.agent_tasks.md", "status": "complete", "handled_by": "main-agent", "completed_at": "2026-07-21T00:00:00Z", "expected_artifacts_checked": True, "notes": []}, ensure_ascii=False), encoding="utf-8")
@@ -238,10 +242,15 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
 
             revised = sandbox.workspace / candidate_rel
             revised.write_text("## 修订正文候选\n\n她没有停。门已经从里面打开。\n", encoding="utf-8")
+            changes = canonicalize_task_outputs(task, sandbox)
+            self.assertTrue(any(change.get("field") == "candidate_sha256" for change in changes))
             revision_manifest = sandbox.workspace / "drafts/revisions/scene_0001_revision.json"
             revision_payload = json.loads(revision_manifest.read_text(encoding="utf-8"))
-            revision_payload["candidate_sha256"] = hashlib.sha256(revised.read_bytes()).hexdigest()
-            revision_manifest.write_text(json.dumps(revision_payload, ensure_ascii=False), encoding="utf-8")
+            self.assertEqual(revision_payload["schema"], "literary-engineering-workbench/scene-revision/v0.1")
+            self.assertEqual(revision_payload["source_candidate_sha256"], before)
+            self.assertEqual(revision_payload["candidate_sha256"], hashlib.sha256(revised.read_bytes()).hexdigest())
+            self.assertIs(revision_payload["anti_evasion_protocol_applied"], True)
+            self.assertIs(revision_payload["ready_for_review"], False)
             accepted = validate_task_outputs(task, sandbox)
             self.assertTrue(accepted.passed, accepted.as_dict())
 

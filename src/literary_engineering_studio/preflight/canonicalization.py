@@ -45,6 +45,7 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(canonicalize_style_machine_metadata(task, sandbox))
     changes.extend(_canonicalize_project_review_metadata(task, sandbox))
     changes.extend(_canonicalize_agent_completion_markers(task, sandbox))
+    changes.extend(_canonicalize_scene_revision_manifest(task, sandbox))
     changes.extend(_canonicalize_scene_candidate_manifest(task, sandbox))
     changes.extend(canonicalize_scene_review_metadata(task, sandbox))
     gates = " ".join(str(item) for item in task.payload.get("validation_gates") or []).lower()
@@ -722,6 +723,94 @@ def _canonicalize_asset_completion_markers(
     return changed
 
 
+def _canonicalize_scene_revision_manifest(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+) -> list[dict[str, str]]:
+    """Bind an Agent-authored revision judgment to exact Studio evidence."""
+
+    if task.current_state not in {"candidate-revision", "static-revision"}:
+        return []
+    candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
+    if not candidate_rel:
+        candidate_rel = next(
+            (
+                item
+                for item in task.expected_outputs
+                if item.endswith("_revision.md") and "report" not in item
+            ),
+            "",
+        )
+    manifest_rel = next(
+        (item for item in task.expected_outputs if item.endswith("_revision.json")),
+        "",
+    )
+    if not candidate_rel or not manifest_rel:
+        return []
+    candidate_path = sandbox.workspace / Path(candidate_rel)
+    manifest_path = sandbox.workspace / Path(manifest_rel)
+    payload = _read_object(manifest_path)
+    if payload is None or not candidate_path.is_file():
+        return []
+
+    prompt_rel = next(
+        (item for item in task.expected_outputs if item.endswith("_revision.prompt.json")),
+        candidate_rel[:-3] + ".prompt.json" if candidate_rel.endswith(".md") else candidate_rel + ".prompt.json",
+    )
+    prompt = _read_object(sandbox.workspace / Path(prompt_rel)) or {}
+    standards = prompt.get("generation_standards") if isinstance(prompt.get("generation_standards"), dict) else {}
+    source_rel = str(task.payload.get("revision_source") or "").replace("\\", "/").strip()
+    source_digest = str(task.payload.get("candidate_sha256_before_revision") or "").strip().lower()
+    report_rel = next(
+        (item for item in task.expected_outputs if item.endswith("_revision_report.md")),
+        "",
+    )
+    source_rows = prompt.get("sources") if isinstance(prompt.get("sources"), list) else []
+    source_paths = [
+        str(item.get("path") or "").replace("\\", "/").strip()
+        for item in source_rows
+        if isinstance(item, dict) and str(item.get("path") or "").strip()
+    ]
+    expected: dict[str, Any] = {
+        "schema": "literary-engineering-workbench/scene-revision/v0.1",
+        "scene_id": str(task.payload.get("scene_id") or task.scene_id or "").strip(),
+        "source_candidate": source_rel,
+        "source_candidate_sha256": source_digest,
+        "candidate": candidate_rel,
+        "candidate_sha256": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
+        "report": report_rel,
+        "source_paths": source_paths,
+        "prompt_manifest": prompt_rel,
+        "style_mount_snapshot": prompt_style_snapshot(sandbox.workspace / Path(prompt_rel)),
+        "creative_quality_profile_digest": str(standards.get("creative_quality_profile_digest") or "").strip(),
+        "reader_experience_contract": standards.get("reader_experience_contract") if isinstance(standards.get("reader_experience_contract"), dict) else {},
+        "narrative_rhythm_contract": standards.get("narrative_rhythm_contract") if isinstance(standards.get("narrative_rhythm_contract"), dict) else {},
+        "anti_evasion_protocol_applied": True,
+        "ready_for_review": False,
+        "generated_by": "platform-agent",
+        "provider": "studio-agent-runtime",
+        "formal_contract_revision": str(task.payload.get("task_contract_revision") or "2026-07-24.8"),
+        "writer_session_id": _session_identity(task, "writer"),
+    }
+    changed: list[str] = []
+    for field, value in expected.items():
+        if payload.get(field) == value:
+            continue
+        payload[field] = value
+        changed.append(field)
+    if not changed:
+        return []
+    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return [
+        {
+            "path": manifest_rel,
+            "field": field,
+            "reason": "bound deterministic exact-source revision metadata",
+        }
+        for field in changed
+    ]
+
+
 def _canonicalize_scene_candidate_manifest(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
     """Fill system-owned candidate metadata that an Agent must not improvise.
 
@@ -730,7 +819,7 @@ def _canonicalize_scene_candidate_manifest(task: TaskPackage, sandbox: SandboxMa
     character assets are deterministic task facts, so normalizing them prevents
     avoidable JSON-shape failures without weakening the downstream review gate.
     """
-    if task.current_state not in {"candidate-generation-provenance", "generation-agent-task", "candidate-revision", "static-revision"}:
+    if task.current_state not in {"candidate-generation-provenance", "generation-agent-task"}:
         return []
     candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
     if not candidate_rel:
