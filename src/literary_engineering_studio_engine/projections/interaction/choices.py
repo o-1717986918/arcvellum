@@ -70,7 +70,7 @@ def build_current_human_choices(
             add_choice(_direction_choice(route, target or "longform", "word_budget_direction"), step, str(action.get("next_action") or ""))
         elif route == "scene-development" and step == "candidate-human-decision":
             add_choice(_candidate_asset_alignment_choice(root, target), step, str(action.get("next_action") or ""))
-        elif route == "scene-development" and step in {"candidate-review", "agent-review-task", "static-review", "revision-direction"}:
+        elif route == "scene-development" and step in {"candidate-revision", "static-revision", "revision-direction"}:
             add_choice(_direction_choice(route, target or "scene", "revision_direction"), step, str(action.get("next_action") or ""))
         elif route == "scene-development" and step in {"state-writeback", "state-patch-approval"}:
             add_choice(_state_patch_choice(root, target), step, str(action.get("next_action") or ""))

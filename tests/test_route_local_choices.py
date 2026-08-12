@@ -165,6 +165,48 @@ class RouteLocalChoiceTests(unittest.TestCase):
             self.assertEqual(choice["target"]["candidate_sha256"], "a" * 64)
             self.assertEqual(choice["options"][1]["id"], "hold_for_asset_revision")
 
+    def test_pending_scene_review_does_not_emit_a_revision_direction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            for step in ("candidate-review", "agent-review-task", "static-review"):
+                with self.subTest(step=step), patch.object(
+                    project_interaction_choices,
+                    "_route_choice_actions",
+                    return_value=([{
+                        "route": "scene-development",
+                        "target": "scene_0001",
+                        "current_step": step,
+                        "next_action": "run the pending review task",
+                    }], ""),
+                ):
+                    payload = project_interaction.build_current_human_choices(
+                        root, route="scene-development"
+                    )
+                self.assertEqual(payload["choices"], [])
+
+    def test_failed_scene_review_emits_a_revision_direction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            for step in ("candidate-revision", "static-revision"):
+                with self.subTest(step=step), patch.object(
+                    project_interaction_choices,
+                    "_route_choice_actions",
+                    return_value=([{
+                        "route": "scene-development",
+                        "target": "scene_0001",
+                        "current_step": step,
+                        "next_action": "revise the exact reviewed candidate",
+                    }], ""),
+                ):
+                    payload = project_interaction.build_current_human_choices(
+                        root, route="scene-development"
+                    )
+                self.assertEqual(len(payload["choices"]), 1)
+                self.assertEqual(payload["choices"][0]["decision_type"], "revision_direction")
+                self.assertEqual(payload["choices"][0]["task_step"], step)
+
     def test_route_local_choices_do_not_take_the_dashboard_projection_lock(self):
         entered = []
 
