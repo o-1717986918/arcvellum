@@ -170,7 +170,7 @@ def _validate_scene_candidate_generation_contract(
             PreflightIssue(
                 "candidate-style-lint-blocking",
                 candidate_rel,
-                style_lint_gate_message(lint),
+                style_lint_gate_message(lint, max_items=12),
                 "逐句重写命中的正文。不得只替换标点、把“不是……而是……”改成同义对照，或用另一种模板转折规避检测。",
             )
         )

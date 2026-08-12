@@ -9,7 +9,7 @@ except ImportError:  # pragma: no cover
 
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.config import default_config
-from literary_engineering_studio_engine.anti_ai_style import style_lint_gate
+from literary_engineering_studio_engine.anti_ai_style import style_lint_gate, style_lint_gate_message
 from literary_engineering_studio_engine.creative_quality import (
     creative_quality_profile_path,
     default_creative_quality_profile,
@@ -58,6 +58,23 @@ class CreativeQualityProfileTests(unittest.TestCase):
         gate = style_lint_gate("命运的齿轮开始转动。" * 4, profile=profile)
         self.assertEqual(gate["status"], "blocking")
         self.assertEqual(gate["blocking"][0]["rule"], "custom-banned-phrase")
+
+    def test_comma_overload_reports_multiple_sentences_in_one_repair_batch(self):
+        profile = default_creative_quality_profile()
+        text = (
+            "他核对名单，又检查封条，还问了值班人，记下交接时间，最后把记录压在桌角。"
+            "她关上窗户，收起钥匙，清点文件，记下时间，再去通知门外的人。"
+        )
+
+        gate = style_lint_gate(text, profile=profile)
+        comma_issues = [
+            item for item in gate["blocking"] if item["rule"] == "comma-overload-in-sentence"
+        ]
+
+        self.assertEqual(len(comma_issues), 2)
+        message = style_lint_gate_message(gate, max_items=12)
+        self.assertIn("他核对名单", message)
+        self.assertIn("她关上窗户", message)
 
     def test_missing_profile_loads_compatible_implicit_default(self):
         with tempfile.TemporaryDirectory() as directory:

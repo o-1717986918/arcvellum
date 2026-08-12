@@ -369,6 +369,7 @@ def _sentence_shape_issues(
     skip_dash: bool = False,
 ) -> list[AIStyleIssue]:
     issues: list[AIStyleIssue] = []
+    max_comma_overload_issues = 8
     dash_count = text.count("——")
     if dash_count and not skip_dash:
         severity, density_note = _soft_density_verdict(
@@ -386,6 +387,7 @@ def _sentence_shape_issues(
                 _sample(text, "——"),
             )
         )
+    comma_overload_count = 0
     for sentence in re.split(r"[。！？!?\n]", text):
         comma_limit = int(quality_threshold(profile, "commas_per_sentence", 3))
         if sentence.count("，") + sentence.count(",") > comma_limit:
@@ -397,7 +399,9 @@ def _sentence_shape_issues(
                     sentence.strip()[:100],
                 )
             )
-            break
+            comma_overload_count += 1
+            if comma_overload_count >= max_comma_overload_issues:
+                break
     transition_patterns = [
         r"也不[^，。！？\n]{1,12}[，,]也不[^，。！？\n]{1,12}[，,]只是",
         r"很[^，。！？\n]{1,8}[，,]很[^，。！？\n]{1,8}[，,]但(?:确实|的确)",
