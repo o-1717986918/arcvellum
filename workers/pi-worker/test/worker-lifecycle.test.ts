@@ -9,6 +9,7 @@ import {
 	sanitizeProviderError,
 	bindRequiredTool,
 	desiredRepairTool,
+	desiredWorkerTool,
 	settleValidOutputs,
 	settleTurnBudget,
 } from "../src/worker.ts";
@@ -45,6 +46,22 @@ describe("bounded worker lifecycle", () => {
 		workerState.writtenPaths.add("out/review.md");
 		expect(desiredRepairTool({ mode: "repair" }, ["out/review.md"], workerState)).toBe("complete_task");
 		expect(desiredRepairTool({ mode: "task" }, ["out/review.md"], workerState)).toBe("");
+	});
+
+	it("forces main creative task turns into the artifact channel", () => {
+		const workerState = state();
+		const creative = {
+			agentRole: "main-creative-agent",
+			agentOwnedOutputs: [{ path: "draft.md", kind: "agent-authored", format: "markdown", schemaName: "" }],
+		};
+		const review = { ...creative, agentRole: "main-review-agent" };
+
+		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("write_expected_output");
+		workerState.writtenPaths.add("draft.md");
+		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("write_expected_output");
+		expect(desiredWorkerTool({ mode: "task" }, review, [], workerState)).toBe("");
+		workerState.completed = true;
+		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("");
 	});
 
 	it("projects required tool choice using provider-native payload shapes", () => {

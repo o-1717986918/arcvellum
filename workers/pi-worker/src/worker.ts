@@ -110,17 +110,17 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			?? { minimal: 128, low: 512, medium: 1024, high: 2048 },
 		onPayload: (payload) => {
 			eventAdapter.providerRequest(provider, modelId);
-			const requiredTool = desiredRepairTool(options, repairSources, state);
+			const requiredTool = desiredWorkerTool(options, context, repairSources, state);
 			return requiredTool ? bindRequiredTool(payload, model.api, requiredTool) : payload;
 		},
 		beforeToolCall: async ({ toolCall }) => {
 			if (!TOOL_NAMES.has(toolCall.name)) return { block: true, reason: "tool is outside the ArcVellum whitelist", terminate: true };
 			if (state.completed || state.blocked) return { block: true, reason: "worker is already terminal", terminate: true };
-			const requiredRepairTool = desiredRepairTool(options, repairSources, state);
-			if (requiredRepairTool && toolCall.name !== requiredRepairTool) {
+			const requiredTool = desiredWorkerTool(options, context, repairSources, state);
+			if (requiredTool && toolCall.name !== requiredTool) {
 				return {
 					block: true,
-					reason: `repair mode requires ${requiredRepairTool} at this stage`,
+					reason: `worker protocol requires ${requiredTool} at this stage`,
 					terminate: true,
 				};
 			}
@@ -243,6 +243,28 @@ export function desiredRepairTool(
 	if (repairSources.some((path) => !state.readPaths.has(path))) return "read_authorized_source";
 	if (state.writtenPaths.size === 0) return "write_expected_output";
 	return "complete_task";
+}
+
+export function desiredWorkerTool(
+	options: Pick<WorkerOptions, "mode">,
+	context: Pick<Awaited<ReturnType<typeof loadTaskContext>>, "agentRole" | "agentOwnedOutputs">,
+	repairSources: readonly string[],
+	state: Pick<WorkerState, "completed" | "readPaths" | "writtenPaths">,
+): string {
+	const repairTool = desiredRepairTool(options, repairSources, state);
+	if (repairTool) return repairTool;
+	if (
+		options.mode === "task"
+		&& context.agentRole === "main-creative-agent"
+		&& context.agentOwnedOutputs.length > 0
+		&& !state.completed
+	) {
+		// The model may reason internally, but prose must enter the artifact
+		// channel on every turn. This prevents a long draft from exhausting the
+		// response budget as chat text before any file is written.
+		return "write_expected_output";
+	}
+	return "";
 }
 
 export function bindRequiredTool(payload: unknown, api: string, tool: string): unknown {
