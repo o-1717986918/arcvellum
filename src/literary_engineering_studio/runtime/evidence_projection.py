@@ -37,6 +37,8 @@ def project_evidence_body(
             payload = json.loads(body)
             if projection == "prose-composition":
                 payload = _prose_composition_projection(payload)
+            elif projection == "composition-review":
+                payload = _composition_review_projection(payload)
             elif projection == "prose-chapter-obligation":
                 payload = _prose_chapter_obligation_projection(payload)
             elif projection == "prose-word-budget":
@@ -110,6 +112,34 @@ def _prose_composition_projection(value: object) -> object:
         "reader_experience_contract": reader_projection,
         "prose_execution_contract": prose_projection,
     }
+
+
+def _composition_review_projection(value: object) -> object:
+    """Keep one sufficient, non-replayed source for composition judgment."""
+
+    if not isinstance(value, dict):
+        return value
+    compact = _prose_composition_projection(value)
+    if not isinstance(compact, dict):
+        return compact
+    return {
+        key: value[key]
+        for key in (
+            "schema",
+            "scene_id",
+            "formal_cli_provenance",
+            "branch_manifest",
+            "branch_selection",
+            "selected_branch",
+            "selection_source",
+            "flow_gate",
+            "branch",
+            "revision_targets",
+            "guardrails",
+            "creative_quality_profile_digest",
+        )
+        if key in value
+    } | compact
 
 
 def _scene_word_budget_projection(value: object) -> object:

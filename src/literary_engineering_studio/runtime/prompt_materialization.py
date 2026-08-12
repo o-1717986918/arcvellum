@@ -114,12 +114,22 @@ def materialize_prompt_programs(
     )
     formal = v3 if rollout["formal_version"] == "v3" and v3 is not None else v2
     if formal is v3 and v3 is not None and v3.lint is not None and v3.lint.status == "error":
+        details = "; ".join(
+            f"{issue.code}: {issue.message}"
+            for issue in v3.lint.issues
+            if issue.severity == "error"
+        ) or "unknown prompt lint error"
         if runtime_id == "pi-worker":
             raise ValueError(
-                "Pi Worker Prompt v3 lint failed; refusing legacy v2 fallback because it can reintroduce duplicated Skill and task evidence"
+                "Pi Worker Prompt v3 lint failed; refusing legacy v2 fallback "
+                "because it can reintroduce duplicated Skill and task evidence: "
+                + details
             )
         if rollout.get("fallback") != "v2":
-            raise ValueError("Prompt v3 lint failed and no supported fallback is configured")
+            raise ValueError(
+                "Prompt v3 lint failed and no supported fallback is configured: "
+                + details
+            )
         formal = v2
         rollout = {**rollout, "formal_version": "v2", "reason": "prompt-v3-lint-fallback"}
     shadow_path: Path | None = None

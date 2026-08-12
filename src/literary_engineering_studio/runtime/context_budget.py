@@ -265,6 +265,11 @@ def _route_task_kind(
 
 
 def _scene_task_kind(state: str) -> ContextTaskKind | None:
+    # The composition package is creative, but this state audits an existing
+    # package and emits a typed verdict.  Classifying it as creative grants a
+    # larger, less focused context and can replay the whole planning corpus.
+    if state == "composition-agent-task":
+        return ContextTaskKind.REVIEW
     if any(token in state for token in ("roleplay", "branch", "composition")):
         return ContextTaskKind.CREATIVE
     if any(token in state for token in ("state-", "canon-", "continuity-ledger")):

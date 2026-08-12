@@ -134,6 +134,19 @@ class ContextBudgetTests(unittest.TestCase):
             self.assertIs(roleplay.task_kind, ContextTaskKind.CREATIVE)
             self.assertIs(state.task_kind, ContextTaskKind.STRUCTURED)
 
+    def test_composition_agent_task_is_review_not_creative_generation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            budget = resolve_task_context_budget(
+                _task(
+                    Path(temporary),
+                    task_type="main-platform-agent-composition-review",
+                    role="main-review-agent",
+                    current_state="composition-agent-task",
+                )
+            )
+
+            self.assertIs(budget.task_kind, ContextTaskKind.REVIEW)
+
     def test_bounded_mode_fails_closed_when_mandatory_context_does_not_fit(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

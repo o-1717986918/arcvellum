@@ -712,6 +712,82 @@ class PromptProgramV3Tests(unittest.TestCase):
                 self.assertIn(relative, context["prompt_access"]["exact_on_demand"])
                 self.assertNotIn(relative, context["prompt_access"]["inline"])
 
+    def test_pi_composition_review_uses_single_compact_composition_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                "project.yaml": "project:\n  title: 测试\n",
+                "scenes/scene_0001.yaml": "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+                "drafts/compositions/scene_0001_composition.json": json.dumps(
+                    {
+                        "schema": "composition/v1",
+                        "scene_id": "scene_0001",
+                        "selected_branch": "branch_1",
+                        "beats": [{"visible_action": "行动"}],
+                        "composition_obligations": {"word_target_hanzi": 1400},
+                        "embedded_transport_copy": "重复" * 30_000,
+                    },
+                    ensure_ascii=False,
+                ),
+                "drafts/compositions/scene_0001_composition.md": "# 重复的人读版\n" + "重复" * 20_000,
+                "plot/word_budget/word_budget.json": '{"target":6000}',
+                "plot/word_budget/word_budget.md": "# 重复预算\n" + "预算" * 10_000,
+                "plot/chapter_obligations/chapter_0001.json": '{"chapter_id":"chapter_0001"}',
+                "characters/protagonist.yaml": "name: 主角\n" + "背景" * 10_000,
+                "style/creative_quality_profile.json": '{"schema":"quality/v1"}',
+                "references/punctuation-standard.md": "# 标点标准\n",
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            task = _task(root)
+            task.payload.update(
+                {
+                    "route": "scene-development",
+                    "task_type": "main-platform-agent-composition-review",
+                    "current_state": "composition-agent-task",
+                    "scene_id": "scene_0001",
+                    "source_paths": list(files),
+                    "agent_source_paths": list(files),
+                    "context_must_inline_paths": list(files),
+                }
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="composition-review-compact",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "error",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            prompt = manifest["prompt_program"]["formal"]
+
+            self.assertEqual(prompt["program"]["task_identity"]["task_kind"], "review")
+            self.assertEqual(prompt["lint"]["status"], "pass")
+            self.assertLess(prompt["metrics"]["total_characters"], 48_000)
+            self.assertIn(
+                "drafts/compositions/scene_0001_composition.json",
+                context["prompt_access"]["inline"],
+            )
+            for relative in (
+                "drafts/compositions/scene_0001_composition.md",
+                "plot/word_budget/word_budget.md",
+                "characters/protagonist.yaml",
+            ):
+                self.assertIn(relative, context["prompt_access"]["exact_on_demand"])
+                self.assertNotIn(relative, context["prompt_access"]["inline"])
+            self.assertNotIn("embedded_transport_copy", sandbox.prompt_path.read_text(encoding="utf-8"))
+
     def test_old_transport_task_kind_compiles_without_context_budget(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

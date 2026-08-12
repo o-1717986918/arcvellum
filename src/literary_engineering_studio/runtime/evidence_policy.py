@@ -86,6 +86,38 @@ def evidence_policy(
         if lowered == "project.yaml":
             return EvidencePolicyDecision(EvidenceDisposition.INLINE, "project-identity")
 
+    if task.current_state.casefold() == "composition-agent-task":
+        scene_id = str(task.payload.get("scene_id") or "").casefold()
+        if lowered == f"drafts/compositions/{scene_id}_composition.json":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "composition-review"
+            )
+        if lowered == f"scenes/{scene_id}.yaml":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "prose-scene"
+            )
+        if lowered == "plot/word_budget/word_budget.json":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "prose-word-budget"
+            )
+        if lowered.startswith("plot/chapter_obligations/") and lowered.endswith(".json"):
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "prose-chapter-obligation"
+            )
+        if lowered == "project.yaml":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "project-identity"
+            )
+        if lowered in {
+            "style/creative_quality_profile.json",
+            "references/punctuation-standard.md",
+        }:
+            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+        # The composition JSON has already consumed branch, RP, character,
+        # chapter and budget inputs. Keep their exact originals available for
+        # a concrete dispute, but do not replay the entire project on turn one.
+        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
     if "asset-review" in task.task_type.casefold():
         if lowered.startswith("plot/word_budget/"):
             return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
