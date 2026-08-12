@@ -189,7 +189,34 @@ class RouteLocalChoiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            candidate = root / "drafts" / "candidates" / "scene_0001-platform-agent.md"
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("当前候选。\n", encoding="utf-8")
+            review = root / "reviews" / "agent" / "scene_0001_scene_review.json"
+            review.parent.mkdir(parents=True)
+            review.write_text(
+                json.dumps(
+                    {
+                        "candidate_path": "drafts/candidates/scene_0001-platform-agent.md",
+                        "candidate_sha256": "old-review-digest",
+                        "conclusion": "pass_with_notes",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            review.with_suffix(".md").write_text("# 审查\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text("scene_id: scene_0001\n", encoding="utf-8")
             for step in ("candidate-revision", "static-revision"):
+                if step == "static-revision":
+                    draft = root / "drafts" / "scenes" / "scene_0001.md"
+                    draft.parent.mkdir(parents=True, exist_ok=True)
+                    draft.write_text("已晋升正文。\n", encoding="utf-8")
+                    static_review = root / "reviews" / "scene_0001-review.md"
+                    static_review.parent.mkdir(parents=True, exist_ok=True)
+                    static_review.write_text("# 静态审查\n", encoding="utf-8")
                 with self.subTest(step=step), patch.object(
                     project_interaction_choices,
                     "_route_choice_actions",
@@ -204,8 +231,27 @@ class RouteLocalChoiceTests(unittest.TestCase):
                         root, route="scene-development"
                     )
                 self.assertEqual(len(payload["choices"]), 1)
-                self.assertEqual(payload["choices"][0]["decision_type"], "revision_direction")
-                self.assertEqual(payload["choices"][0]["task_step"], step)
+                choice = payload["choices"][0]
+                self.assertEqual(choice["decision_type"], "revision_direction")
+                self.assertEqual(choice["task_step"], step)
+                self.assertTrue(choice["target"]["candidate_sha256"])
+                self.assertTrue(all(not path.endswith("/") for path in choice["source_paths"]))
+                self.assertIn("scenes/scene_0001.yaml", choice["source_paths"])
+                if step == "candidate-revision":
+                    self.assertEqual(
+                        choice["target"]["candidate_path"],
+                        "drafts/candidates/scene_0001-platform-agent.md",
+                    )
+                    self.assertIn(
+                        "reviews/agent/scene_0001_scene_review.json",
+                        choice["source_paths"],
+                    )
+                else:
+                    self.assertEqual(
+                        choice["target"]["candidate_path"],
+                        "drafts/scenes/scene_0001.md",
+                    )
+                    self.assertIn("reviews/scene_0001-review.md", choice["source_paths"])
 
     def test_route_local_choices_do_not_take_the_dashboard_projection_lock(self):
         entered = []

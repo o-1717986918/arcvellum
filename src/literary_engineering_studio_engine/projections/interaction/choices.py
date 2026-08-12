@@ -71,7 +71,11 @@ def build_current_human_choices(
         elif route == "scene-development" and step == "candidate-human-decision":
             add_choice(_candidate_asset_alignment_choice(root, target), step, str(action.get("next_action") or ""))
         elif route == "scene-development" and step in {"candidate-revision", "static-revision", "revision-direction"}:
-            add_choice(_direction_choice(route, target or "scene", "revision_direction"), step, str(action.get("next_action") or ""))
+            add_choice(
+                _revision_direction_choice(root, route, target or "scene", step),
+                step,
+                str(action.get("next_action") or ""),
+            )
         elif route == "scene-development" and step in {"state-writeback", "state-patch-approval"}:
             add_choice(_state_patch_choice(root, target), step, str(action.get("next_action") or ""))
         elif route == "style-engineering":
@@ -312,23 +316,6 @@ def _approval_choice(root: Path, route: str, target: str, decision_type: str, su
 
 def _direction_choice(route: str, target: str, decision_type: str) -> dict[str, object]:
     safe_target = _safe_target_id(target or "longform")
-    if decision_type == "revision_direction":
-        return {
-            "choice_id": _make_id("choice", decision_type, safe_target),
-            "route": route,
-            "decision_type": decision_type,
-            "title": f"{safe_target} 需要确认修订方向",
-            "summary": "用于记录你希望平台 Agent 在修订中优先处理的问题，正式正文仍需 revise/review/promote。",
-            "target": {"target_id": safe_target},
-            "source_paths": ["reviews/", "drafts/candidates/", "drafts/revisions/"],
-            "options": [
-                {"id": "fix_logic_first", "label": "先修因果逻辑", "summary": "优先处理人物动机、剧情因果和 canon 冲突。"},
-                {"id": "fix_style_first", "label": "先修文风和 AI 味", "summary": "优先处理句式、标点、节奏和文风偏移。"},
-                {"id": "expand_scene", "label": "扩写场景", "summary": "在不灌水的前提下补足动作、冲突和读者回报。"},
-                {"id": "ask_agent_compare", "label": "要求给出修订方案对比", "summary": "先让平台 Agent 提供多种修订策略再决定。"},
-            ],
-            "actions": ["记录修订方向"],
-        }
     return {
         "choice_id": _make_id("choice", decision_type, safe_target),
         "route": route,
@@ -343,6 +330,64 @@ def _direction_choice(route: str, target: str, decision_type: str) -> dict[str, 
             {"id": "ask_agent_replan", "label": "重新规划", "summary": "让平台 Agent 提出新的字数与结构方案。"},
         ],
         "actions": ["记录方向"],
+    }
+
+
+def _revision_direction_choice(root: Path, route: str, target: str, step: str) -> dict[str, object]:
+    safe_target = _safe_target_id(target or "scene")
+    review_json = root / "reviews" / "agent" / f"{safe_target}_scene_review.json"
+    review_markdown = review_json.with_suffix(".md")
+    review = read_json_file(review_json)
+    candidate_relative = str(review.get("candidate_path") or review.get("candidate") or "").replace("\\", "/").strip().lstrip("/")
+    candidate = (root / candidate_relative).resolve() if candidate_relative else None
+    try:
+        candidate_relative = candidate.relative_to(root).as_posix() if candidate is not None else ""
+    except ValueError:
+        candidate = None
+        candidate_relative = ""
+    if step == "static-revision":
+        candidate_relative = f"drafts/scenes/{safe_target}.md"
+        candidate = (root / candidate_relative).resolve()
+
+    source_paths = []
+    for path in (
+        review_json,
+        review_markdown,
+        root / f"reviews/{safe_target}-review.md" if step == "static-revision" else None,
+        candidate,
+        root / f"scenes/{safe_target}.yaml",
+        root / f"drafts/compositions/{safe_target}_composition_review.json",
+    ):
+        if path is None or not path.is_file():
+            continue
+        relative = path.resolve().relative_to(root).as_posix()
+        if relative not in source_paths:
+            source_paths.append(relative)
+
+    candidate_sha256 = ""
+    if candidate is not None and candidate.is_file():
+        candidate_sha256 = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    target_payload = {
+        "target_id": safe_target,
+        "candidate_path": candidate_relative,
+        "candidate_sha256": candidate_sha256,
+        "review_conclusion": str(review.get("conclusion") or ""),
+    }
+    return {
+        "choice_id": _make_id("choice", "revision_direction", safe_target),
+        "route": route,
+        "decision_type": "revision_direction",
+        "title": f"{safe_target} 需要确认修订方向",
+        "summary": "根据当前候选及其精确审查证据选择修订重点；正式正文仍需 revise/review/promote。",
+        "target": target_payload,
+        "source_paths": source_paths,
+        "options": [
+            {"id": "fix_logic_first", "label": "先修因果逻辑", "summary": "优先处理人物动机、剧情因果和 canon 冲突。"},
+            {"id": "fix_style_first", "label": "先修文风和 AI 味", "summary": "优先处理句式、标点、节奏和文风偏移。"},
+            {"id": "expand_scene", "label": "扩写场景", "summary": "在不灌水的前提下补足动作、冲突和读者回报。"},
+            {"id": "ask_agent_compare", "label": "要求给出修订方案对比", "summary": "先让平台 Agent 提供多种修订策略再决定。"},
+        ],
+        "actions": ["记录修订方向"],
     }
 
 def _candidate_asset_alignment_choice(root: Path, scene_id: str) -> dict[str, object] | None:
