@@ -946,6 +946,87 @@ class PromptProgramV3Tests(unittest.TestCase):
                 self.assertNotIn(relative, context["prompt_access"]["inline"])
             self.assertNotIn("embedded_transport_copy", sandbox.prompt_path.read_text(encoding="utf-8"))
 
+    def test_pi_continuity_delta_uses_reader_evidence_not_nested_promotion_history(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                "project.yaml": "project:\n  title: 测试\n",
+                "workflow/studio/user_directions.md": "全局创作方向" * 1500,
+                "scenes/scene_0001.yaml": (
+                    "scene_id: scene_0001\nchapter_id: chapter_0001\n"
+                    "scene_function: bridge\n"
+                    "outgoing_hooks:\n  - 信号仍未确认\n"
+                ),
+                "drafts/scenes/scene_0001.md": (
+                    "## 正文草稿\n\n" + "他核对信号，留下一个尚未回答的问题。" * 300
+                    + "\n\n## 状态变化\n\n### 新增事实候选\n- 信号待确认。\n"
+                ),
+                "drafts/promotions/scene_0001_promotion.json": json.dumps(
+                    {"nested_review_history": "不得进入首轮" * 3000}, ensure_ascii=False
+                ),
+                "plot/ledger_deltas/scene_0001.json": '{"status":"pending"}',
+                "plot/ledger_deltas/scene_0001.agent_tasks.md": "恢复说明" * 1500,
+                "plot/reader_questions/ledger.json": '{"entries":[]}',
+                "plot/promises/ledger.json": '{"entries":[]}',
+                "style/creative_quality_profile.json": '{"profile":"balanced"}',
+                "style/style-profile.md": "# 文风\n" + "无关文风说明" * 1000,
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            task = _task(root)
+            task.payload.update(
+                {
+                    "task_id": "continuity-delta",
+                    "route": "scene-development",
+                    "task_type": "platform-agent-judgment",
+                    "current_state": "continuity-ledger-agent-task",
+                    "agent_role": "main-review-agent",
+                    "scene_id": "scene_0001",
+                    "source_paths": list(files),
+                    "agent_source_paths": list(files),
+                    "context_must_inline_paths": [],
+                    "context_exact_on_demand_paths": [],
+                    "expected_outputs": [
+                        "plot/ledger_deltas/scene_0001.json",
+                        "plot/ledger_deltas/scene_0001.agent_completion.json",
+                    ],
+                    "core_managed_outputs": [],
+                }
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="continuity-compact",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "error",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
+            projection = manifest["prompt_program"]["formal"]
+
+            self.assertEqual(projection["lint"]["status"], "pass")
+            self.assertLess(projection["metrics"]["total_characters"], 18_000)
+            self.assertIn("尚未回答的问题", prompt)
+            self.assertIn("信号仍未确认", prompt)
+            self.assertNotIn("状态变化", prompt)
+            self.assertNotIn("不得进入首轮", prompt)
+            self.assertNotIn("全局创作方向", prompt)
+            self.assertIn(
+                "drafts/promotions/scene_0001_promotion.json",
+                context["prompt_access"]["exact_on_demand"],
+            )
+
     def test_old_transport_task_kind_compiles_without_context_budget(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

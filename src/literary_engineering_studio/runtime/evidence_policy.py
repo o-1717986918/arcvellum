@@ -120,6 +120,27 @@ def evidence_policy(
         # a concrete dispute, but do not replay the entire project on turn one.
         return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
 
+    if task.current_state.casefold() == "continuity-ledger-agent-task":
+        scene_id = str(task.payload.get("scene_id") or "").casefold()
+        if lowered == f"drafts/scenes/{scene_id}.md":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "continuity-prose"
+            )
+        if lowered == f"scenes/{scene_id}.yaml":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "continuity-scene"
+            )
+        if lowered in {
+            "plot/reader_questions/ledger.json",
+            "plot/promises/ledger.json",
+        }:
+            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+        # Promotion already proved provenance and quality gates. Replaying its
+        # nested review/generation snapshots cannot improve a ledger delta.
+        # The template, style profiles, and recovery sidecar likewise remain
+        # available only for a concrete evidence dispute.
+        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
     if "asset-review" in task.task_type.casefold():
         if lowered.startswith("plot/word_budget/"):
             return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)

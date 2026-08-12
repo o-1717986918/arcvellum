@@ -34,7 +34,7 @@ def compile_prompt_program(
         audience=audience,
     )
     objective = _objective(
-        user_direction,
+        _task_scoped_user_direction(user_direction, execution_context.current_state),
         str(asset.get("body") or ""),
         audience=audience,
     )
@@ -106,6 +106,17 @@ def _objective(
         or "按当前任务合同完成声明的产物。"
     )
     return "\n\n".join(parts)
+
+
+def _task_scoped_user_direction(user_direction: str, current_state: str) -> str:
+    """Keep global creative direction out of evidence-extraction turns."""
+
+    if current_state.casefold() in {
+        "continuity-ledger-agent-task",
+        "continuity-ledger-review",
+    }:
+        return ""
+    return user_direction
 
 
 def _decisions(

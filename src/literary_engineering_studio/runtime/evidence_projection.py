@@ -29,6 +29,8 @@ def project_evidence_body(
 
     if projection == "prose-context-packet":
         return _prose_context_packet_projection(body)
+    if projection == "continuity-prose":
+        return _continuity_prose_projection(body)
     if fidelity != "structured":
         return body
     suffix = PurePosixPath(path).suffix.casefold()
@@ -61,6 +63,8 @@ def project_evidence_body(
                 payload = _prose_scene_projection(payload)
             elif projection == "project-identity":
                 payload = _project_identity_projection(payload)
+            elif projection == "continuity-scene":
+                payload = _continuity_scene_projection(payload)
             stream = StringIO()
             writer = YAML()
             writer.default_flow_style = False
@@ -70,6 +74,37 @@ def project_evidence_body(
     except (ValueError, TypeError, OSError):
         return body
     return body
+
+
+def _continuity_prose_projection(body: str) -> str:
+    """Expose only reader-visible prose to a continuity-ledger judgment."""
+
+    from literary_engineering_studio_engine.foundation.draft_text import (
+        final_body_from_workbench_text,
+    )
+
+    return final_body_from_workbench_text(body)
+
+
+def _continuity_scene_projection(value: object) -> object:
+    """Keep the scene's reader obligations and handoff, not its full pipeline."""
+
+    if not isinstance(value, dict):
+        return value
+    return {
+        key: value[key]
+        for key in (
+            "scene_id",
+            "chapter_id",
+            "scene_function",
+            "reader_experience",
+            "narrative_rhythm",
+            "scene_bridge",
+            "incoming_from_previous",
+            "outgoing_hooks",
+        )
+        if key in value
+    }
 
 
 def _prose_composition_projection(value: object) -> object:
