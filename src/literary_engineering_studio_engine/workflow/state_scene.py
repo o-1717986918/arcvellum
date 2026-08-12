@@ -252,6 +252,9 @@ def _state_patch_writeback_step(root: Path, scene_id: str) -> dict[str, object]:
     elif value == "pending_apply":
         key = "state-apply"
         next_action = "run state-apply with the recorded approval run id"
+    elif value == "stale_source":
+        key = "state-patch-json"
+        next_action = "rerun state-evolve from the current structured writeback contract"
     elif passed:
         key = "state-writeback"
         next_action = ""

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from literary_engineering_studio_engine.literary.scene.promotion.historical impo
 from literary_engineering_studio_engine.literary.scene.promotion.gate_support import (
     candidate_body,
 )
+from literary_engineering_studio_engine.canon_evolver import canon_writeback_status
 
 from tests.scene_lifecycle_support import candidate_text, prepare_promotable_candidate
 
@@ -82,6 +84,69 @@ class DeterministicProsePromotionE2ETests(unittest.TestCase):
             )
             self.assertTrue(historical.passed, historical.errors)
             self.assertTrue(historical.current)
+
+    def test_clean_pi_prose_keeps_structured_writeback_and_reviewed_canon_declaration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, candidate = prepare_promotable_candidate(Path(temporary))
+            candidate.write_text(
+                "# 旧楼里的电流声\n\n林舟把手电压低，推开旧楼的门。",
+                encoding="utf-8",
+            )
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True, exist_ok=True)
+            composition.write_text(
+                json.dumps(
+                    {
+                        "writeback_candidates": {
+                            "new_facts": ["旧楼断电后仍有稳定电流声。"],
+                            "character_changes": ["林舟决定进入旧楼继续调查。"],
+                            "relationship_changes": [],
+                            "foreshadowing_changes": ["电流声来源等待后续确认。"],
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            # The candidate must be derived from the current composition
+            # packet, even when the prose body itself does not change.
+            candidate.touch()
+            review_path = root / "reviews" / "agent" / "scene_0001_scene_review.json"
+            review = json.loads(review_path.read_text(encoding="utf-8"))
+            review["candidate_sha256"] = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            review["canon_writeback"] = {
+                "status": "pending_canon_evolve",
+                "canon_change": True,
+                "no_canon_change_reason": "",
+                "candidate_patch": "旧楼断电后的稳定电流声是需要跨场景约束的地点事实。",
+            }
+            review_path.write_text(json.dumps(review, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            result = promote_scene_candidate(
+                root,
+                scene=Path("scenes/scene_0001.yaml"),
+                candidate=candidate.relative_to(root),
+                overwrite=True,
+            )
+
+            draft = result.draft_path.read_text(encoding="utf-8")
+            self.assertIn("林舟决定进入旧楼继续调查", draft)
+            self.assertNotIn("无。\n\n### 人物状态变化\n\n- 无。", draft)
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                manifest["writeback_sections_source"],
+                "drafts/compositions/scene_0001_composition.json",
+            )
+            self.assertIs(manifest["canon_writeback"]["canon_change"], True)
+            self.assertEqual(
+                manifest["canon_writeback"]["source"],
+                "reviews/agent/scene_0001_scene_review.json",
+            )
+            status = canon_writeback_status(root, "scene_0001")
+            self.assertEqual(status["status"], "missing_patch", status)
+            self.assertIs(status["declaration"]["canon_change"], True)
 
     def test_tampering_or_style_lint_failure_blocks_repromotion(self):
         with tempfile.TemporaryDirectory() as temporary:

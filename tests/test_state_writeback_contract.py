@@ -10,10 +10,78 @@ from ruamel.yaml import YAML
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.character_state_apply import apply_character_state_patch, state_patch_writeback_status
+from literary_engineering_studio_engine.character_state_evolver import build_character_state_patch
 from literary_engineering_studio_engine.workflow.state_scene import _state_patch_writeback_step
 
 
 class StateWritebackContractTests(unittest.TestCase):
+    def test_structured_composition_changes_cannot_collapse_into_empty_state_patch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir(parents=True)
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nparticipants:\n  - li\n",
+                encoding="utf-8",
+            )
+            (root / "characters").mkdir(parents=True)
+            (root / "characters" / "li.yaml").write_text(
+                "character_id: li\nname: 李\nstate:\n  known_facts: []\narc: {}\n",
+                encoding="utf-8",
+            )
+            (root / "drafts" / "scenes").mkdir(parents=True)
+            (root / "drafts" / "scenes" / "scene_0001.md").write_text(
+                "## 正文草稿\n\n李推开门，决定独自进入旧楼。\n",
+                encoding="utf-8",
+            )
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            composition.write_text(
+                json.dumps(
+                    {
+                        "writeback_candidates": {
+                            "character_changes": ["李决定独自进入旧楼。"],
+                            "relationship_changes": [],
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_character_state_patch(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(len(payload["characters"]), 1)
+            self.assertIn(
+                "drafts/compositions/scene_0001_composition.json",
+                payload["source_change_sources"],
+            )
+            self.assertEqual(
+                state_patch_writeback_status(root, "scene_0001")["status"],
+                "semantic_incomplete",
+            )
+
+    def test_empty_old_patch_is_stale_when_composition_declares_state_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            patch = root / "characters" / "state_patches" / "scene_0001_state_patch.json"
+            patch.parent.mkdir(parents=True)
+            patch.write_text(
+                json.dumps({"scene_id": "scene_0001", "characters": [], "unresolved_changes": []}),
+                encoding="utf-8",
+            )
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            composition.write_text(
+                json.dumps({"writeback_candidates": {"character_changes": ["李改变决定。"]}}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            status = state_patch_writeback_status(root, "scene_0001")
+
+            self.assertEqual(status["status"], "stale_source")
+            self.assertIn("composition", status["message"])
+
     def test_workflow_exposes_concrete_state_approval_apply_or_review_steps(self):
         cases = {
             "needs_approval": "state-patch-approval",

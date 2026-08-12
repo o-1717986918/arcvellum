@@ -17,6 +17,7 @@ from ruamel.yaml.error import YAMLError
 from ....atomic_io import atomic_write_batch
 from ....agent_tasks import agent_task_completion_status
 from ....semantic_task_contracts import semantic_artifact_errors
+from .writeback_source import has_state_changes, structured_scene_writeback
 
 
 @dataclass(frozen=True)
@@ -333,6 +334,23 @@ def state_patch_writeback_status(root: Path, scene_id: str) -> dict[str, object]
         result.update({"status": "invalid", "message": "state patch JSON is invalid"})
         return result
     characters = payload.get("characters") if isinstance(payload.get("characters"), list) else []
+    unresolved = payload.get("unresolved_changes") if isinstance(payload.get("unresolved_changes"), list) else []
+    expected_changes, expected_source = structured_scene_writeback(root, scene_id)
+    if has_state_changes(expected_changes) and not characters and not unresolved:
+        result.update({
+            "status": "stale_source",
+            "message": (
+                "state patch omitted structured character or relationship changes from "
+                f"{expected_source}; rerun state-evolve"
+            ),
+        })
+        return result
+    if unresolved and not characters:
+        result.update({
+            "status": "semantic_incomplete",
+            "message": "state patch has unresolved character or relationship changes",
+        })
+        return result
     if not characters:
         result.update({"status": "not_required", "message": "state patch contains no durable character changes"})
         return result

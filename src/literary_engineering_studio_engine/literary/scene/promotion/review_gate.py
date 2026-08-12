@@ -253,6 +253,10 @@ def _review_projection(a: dict[str, object], decision: GateCheck) -> dict[str, o
         "reader_experience_status": a["reader_status"],
         "narrative_rhythm_status": a["review_rhythm_status"],
         "canon_writeback_review_status": a["canon_status"],
+        # The independent exact-candidate review is the semantic authority for
+        # durable-fact writeback.  Carry the declaration into promotion instead
+        # of asking later stages to recover it from prose headings.
+        "canon_writeback": _mapping(payload, "canon_writeback"),
         "revision_integrity_status": a["revision_status"],
         "review_session_independent": a["session_ok"],
         "review_session_message": a["session_message"],

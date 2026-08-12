@@ -254,7 +254,16 @@ def canon_writeback_status(root: Path, scene_id: str) -> dict[str, Any]:
     task_path = json_path.with_suffix(".agent_tasks.md")
     candidate_manifest = _candidate_manifest(root, scene_id)
     promotion_manifest = _read_json(root / "drafts" / "promotions" / f"{scene_id}_promotion.json")
-    declaration = _canon_declaration(candidate_manifest) or _canon_declaration(promotion_manifest)
+    # The exact-candidate independent review is the final semantic authority.
+    # Candidate manifests are writer-owned declarations and can legitimately
+    # change during revision; using them first can silently drop a reviewer-
+    # confirmed canon change.  Promotion binds the exact candidate digest, so
+    # only accept a review that matches that same digest.
+    declaration = (
+        _review_canon_declaration(root, scene_id, promotion_manifest)
+        or _canon_declaration(promotion_manifest)
+        or _canon_declaration(candidate_manifest)
+    )
     payload = _read_json(json_path)
     completion = agent_task_completion_status(task_path, root=root)
     result: dict[str, Any] = {
@@ -634,6 +643,27 @@ def _candidate_manifest(root: Path, scene_id: str) -> dict[str, Any]:
     if candidate is None:
         return {}
     return _read_json(candidate.with_suffix(".json"))
+
+
+def _review_canon_declaration(
+    root: Path,
+    scene_id: str,
+    promotion_manifest: dict[str, Any],
+) -> dict[str, Any]:
+    review_path = root / "reviews" / "agent" / f"{scene_id}_scene_review.json"
+    review = _read_json(review_path)
+    if not review:
+        return {}
+    candidate_digest = str(promotion_manifest.get("candidate_sha256") or "").strip().lower()
+    review_digest = str(review.get("candidate_sha256") or "").strip().lower()
+    if not candidate_digest or review_digest != candidate_digest:
+        return {}
+    if str(review.get("conclusion") or "").strip().lower() not in {"pass", "pass_with_notes"}:
+        return {}
+    declaration = _canon_declaration(review)
+    if declaration:
+        declaration["source"] = _rel(review_path, root)
+    return declaration
 
 
 def _canon_declaration(payload: dict[str, Any]) -> dict[str, Any]:

@@ -27,6 +27,7 @@ from .review_gate import (
     candidate_review_gate,
 )
 from .style_gate import candidate_style_snapshot
+from ..state.writeback_source import structured_scene_writeback
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,12 @@ def promote_scene_candidate(
     review_gate = candidate_review_gate(root, scene_id, candidate_path)
     if not allow_unreviewed:
         _ensure_candidate_reviewed(review_gate, allow_review_notes=allow_review_notes)
-    sections = _candidate_writeback_sections(candidate_text)
+    sections, writeback_source = _candidate_writeback_sections(
+        root,
+        scene_id,
+        candidate_path,
+        candidate_text,
+    )
     generated_at = _now()
     draft = _render_draft(
         scene_id=scene_id,
@@ -107,6 +113,7 @@ def promote_scene_candidate(
         allow_review_notes=allow_review_notes,
         draft=draft,
         sections=sections,
+        writeback_source=writeback_source,
     )
     manifest = seal_historical_promotion(root, manifest, candidate_path, draft_path)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -123,16 +130,36 @@ def promote_scene_candidate(
     )
 
 
-def _candidate_writeback_sections(candidate_text: str) -> dict[str, list[str]]:
+def _candidate_writeback_sections(
+    root: Path,
+    scene_id: str,
+    candidate_path: Path,
+    candidate_text: str,
+) -> tuple[dict[str, list[str]], str]:
+    """Resolve state candidates without requiring workflow prose sections.
+
+    Pi Worker intentionally emits a clean literary artifact.  The selected
+    composition already owns structured state/relationship/foreshadowing
+    candidates, so preserve those in the workbench draft and let the formal
+    state review verify them against the exact promoted prose.  Old host-agent
+    candidates with explicit headings remain supported as a final fallback.
+    """
+
+    sections, source = structured_scene_writeback(
+        root,
+        scene_id,
+        candidate_manifest=candidate_path.with_suffix(".json"),
+    )
+    if any(sections.values()):
+        return sections, source
+
     return {
         "new_facts": _candidate_bullets(candidate_text, "新增事实候选"),
         "character_changes": _candidate_bullets(candidate_text, "人物状态变化"),
         "relationship_changes": _candidate_bullets(candidate_text, "关系变化"),
         "foreshadowing_changes": _candidate_bullets(candidate_text, "伏笔变化"),
         "approval_items": _candidate_bullets(candidate_text, "需要人工确认"),
-    }
-
-
+    }, "candidate-workbench-sections"
 def _promotion_manifest(
     *,
     root: Path,
@@ -149,7 +176,23 @@ def _promotion_manifest(
     allow_review_notes: bool,
     draft: str,
     sections: dict[str, list[str]],
+    writeback_source: str,
 ) -> dict[str, object]:
+    reviewed_canon = review_gate.get("canon_writeback")
+    canon_writeback = (
+        dict(reviewed_canon)
+        if isinstance(reviewed_canon, dict) and reviewed_canon.get("canon_change") is not None
+        else _canon_writeback_declaration(root, candidate_path)
+    )
+    canon_writeback["source"] = (
+        str(review_gate.get("review") or "")
+        if isinstance(reviewed_canon, dict) and reviewed_canon.get("canon_change") is not None
+        else str(canon_writeback.get("source") or "")
+    )
+    canon_writeback["note"] = (
+        "Independent exact-candidate AgentReview is the semantic authority; "
+        "canon-evolve still creates and reviews the candidate patch separately."
+    )
     return {
         "schema": "literary-engineering-workbench/candidate-promotion/v0.1",
         "promoted_at": generated_at,
@@ -169,7 +212,8 @@ def _promotion_manifest(
         "allow_review_notes": allow_review_notes,
         "chars": len(draft),
         "writeback_sections": sections,
-        "canon_writeback": _canon_writeback_declaration(root, candidate_path),
+        "writeback_sections_source": writeback_source,
+        "canon_writeback": canon_writeback,
         "guardrails": [
             "本命令只把候选稿转入草稿审查通道，不确认 canon。",
             "默认必须先完成针对该候选稿的正式平台 Agent 场景审查。",
@@ -244,7 +288,7 @@ def _candidate_bullets(text: str, heading: str) -> list[str]:
         item = stripped.lstrip("-").strip()
         if item and item not in {"无。", "待真实 provider 补全。"}:
             items.append(item)
-    return items or ["无。"]
+    return items
 
 
 def _render_draft(

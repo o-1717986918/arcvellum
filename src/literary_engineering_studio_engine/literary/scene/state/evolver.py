@@ -13,6 +13,7 @@ from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
 from ....flow_gates import ensure_composition_ready_for_generation
 from ....roleplay_lab import CharacterCard, _list_after, _load_characters, _nested_list, _nested_scalar, _read, _scalar
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
+from .writeback_source import merge_writeback_candidates, structured_scene_writeback
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,9 @@ def build_character_state_patch(
 
     cards = _load_characters(root)
     active_cards = _active_cards(cards, participants)
-    source_changes = _source_changes(source_path, source_text)
+    artifact_changes = _source_changes(source_path, source_text)
+    structured_changes, structured_source = structured_scene_writeback(root, scene_id)
+    source_changes = merge_writeback_candidates(structured_changes, artifact_changes)
     patches, unresolved = _build_patches(root, active_cards or cards, active_cards, source_changes)
     default_dir = root / "characters" / "state_patches"
     output_path = _resolve(root, output, default_dir / f"{scene_id}_state_patch.md")
@@ -75,6 +78,11 @@ def build_character_state_patch(
         "characters": patches,
         "unresolved_changes": unresolved,
         "source_changes": source_changes,
+        "source_change_sources": [
+            value
+            for value in [_rel(source_path, root), structured_source]
+            if value
+        ],
         "new_character_policy": {
             "status": "requires_platform_agent_check",
             "rule": "持久新角色必须进入 characters/candidates/，不得通过 state patch 直接写入正式角色库。",
