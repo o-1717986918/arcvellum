@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 from .contracts import TaskPackage
 from .preflight.assets import _validate_asset_candidate, _validate_asset_review_contract
@@ -37,6 +38,9 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
 )
 from literary_engineering_studio_engine.literary.scene.branching.proposals import (
     branch_proposal_scaffold,
+)
+from literary_engineering_studio_engine.reader_experience import (
+    chapter_obligation_contract_issues,
 )
 
 
@@ -79,10 +83,70 @@ def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Prefli
     validate_archaeology_chunk_output(task, sandbox, issues)
     validate_archaeology_reconstruction_output(task, sandbox, issues)
     _validate_source_extraction_revision(task, sandbox, issues)
+    _validate_chapter_obligation_contract(task, sandbox, issues)
     _validate_semantic_task_contract(task, sandbox, issues)
     _validate_continuity_ledger_contract(task, sandbox, issues)
     _validate_branch_selection_contract(task, sandbox, issues)
     return PreflightResult(not issues, tuple(issues))
+
+
+def _validate_chapter_obligation_contract(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    issues: list[PreflightIssue],
+) -> None:
+    current_state = str(task.current_state or task.payload.get("current_state") or "")
+    if current_state != "reader-experience-contract":
+        return
+    chapter_id = _chapter_id_for_reader_contract(task, sandbox.workspace)
+    relative = f"plot/chapter_obligations/{chapter_id}.json"
+    path = sandbox.workspace / relative
+    if not path.is_file():
+        return
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    messages = chapter_obligation_contract_issues(payload)
+    if not messages:
+        return
+    issues.append(
+        PreflightIssue(
+            "chapter-obligation-contract",
+            relative,
+            "; ".join(messages),
+            (
+                f"只修复 `{relative}` 的章节义务机械合同并保留已经成立的创意内容。"
+                "must_payoff、must_setup、must_change、must_not_resolve、inherited_hooks 和 "
+                "expansion_needed 必须是 JSON 字符串数组；不需扩写时写 "
+                "expansion_needed=[]，不得写 false、null 或说明字符串。"
+                "reader_experience_by_scene 必须是非空数组。不要自行创建 completion marker。"
+            ),
+        )
+    )
+
+
+def _chapter_id_for_reader_contract(task: TaskPackage, workspace: Path) -> str:
+    scene_id = str(task.payload.get("scene_id") or "").strip()
+    scene_rel = str(task.payload.get("scene") or f"scenes/{scene_id}.yaml").strip()
+    scene_path = workspace / scene_rel
+    if scene_path.is_file():
+        match = re.search(
+            r"(?m)^\s*chapter_id:\s*['\"]?([^'\"\s#]+)",
+            scene_path.read_text(encoding="utf-8", errors="ignore"),
+        )
+        if match:
+            return match.group(1).strip()
+    for relative in task.expected_outputs:
+        match = re.fullmatch(
+            r"plot/chapter_obligations/([^/]+)\.json",
+            relative,
+        )
+        if match:
+            return match.group(1)
+    return "chapter_0001"
 
 
 def _validate_semantic_task_contract(

@@ -28,6 +28,14 @@ OPTIONAL_EMPTY_CHAPTER_LIST_FIELDS = (
     "inherited_hooks",
     "expansion_needed",
 )
+CHAPTER_LIST_FIELDS = (
+    "must_payoff",
+    "must_setup",
+    "must_change",
+    "must_not_resolve",
+    "inherited_hooks",
+    "expansion_needed",
+)
 REQUIRED_READER_FIELDS = (
     "reader_question",
     "promised_reward",
@@ -145,7 +153,7 @@ def chapter_obligation_contract(root: Path, scene_path: Path) -> dict[str, Any]:
     if str(payload.get("chapter_id") or "") != chapter_id:
         base.update({"status": "invalid", "message": f"chapter obligation chapter_id mismatch: expected {chapter_id}"})
         return base
-    issues = _chapter_contract_issues(payload)
+    issues = chapter_obligation_contract_issues(payload)
     task_path = path.with_suffix(".agent_tasks.md")
     completion = agent_task_completion_status(task_path, root=root)
     if completion.get("complete") is not True:
@@ -353,7 +361,7 @@ def _write_chapter_obligation_agent_tasks(
         tasks=[
             (
                 "填写章节义务契约",
-                f"""读取 word_budget、outline、已有 scenes 和上下文，创建或覆盖 `{_rel(json_path, root)}`。将 status 改为 pass，并完整填写 chapter_function、must_payoff、must_setup、must_change、must_not_resolve、inherited_hooks、ending_hook、inventory_sufficiency、expansion_needed。目标字数口径必须是中文内容字符，机器非空白字符只能作诊断。""",
+                f"""读取 word_budget、outline、已有 scenes 和上下文，创建或覆盖 `{_rel(json_path, root)}`。将 status 改为 pass，并完整填写 chapter_function、must_payoff、must_setup、must_change、must_not_resolve、inherited_hooks、ending_hook、inventory_sufficiency、expansion_needed。must_payoff、must_setup、must_change、must_not_resolve、inherited_hooks 和 expansion_needed 必须始终是 JSON 字符串数组；不需要扩写时写 expansion_needed=[]，不得写 false、null 或说明字符串。目标字数口径必须是中文内容字符，机器非空白字符只能作诊断。""",
             ),
             (
                 "填写逐场读者体验契约",
@@ -411,7 +419,13 @@ def _reader_contract_required(root: Path, scene_text: str) -> bool:
     return project_target >= 100000 or budget_target >= 100000 or bool(_scalar(scene_text, "chapter_obligation_id"))
 
 
-def _chapter_contract_issues(payload: dict[str, Any]) -> list[str]:
+def chapter_obligation_contract_issues(payload: dict[str, Any]) -> list[str]:
+    """Return the canonical deterministic issues for one chapter contract.
+
+    Studio sandbox preflight and the Engine route gate deliberately share this
+    validator so an invalid Agent artifact is repaired before formal writeback.
+    """
+
     issues: list[str] = []
     for field in REQUIRED_CHAPTER_FIELDS:
         value = payload.get(field)
@@ -419,7 +433,7 @@ def _chapter_contract_issues(payload: dict[str, Any]) -> list[str]:
             issues.append(f"chapter obligation field missing: {field}")
     # An opening chapter can legitimately have no earlier hook to inherit and no
     # due payoff. Require these fields to be explicit lists, not non-empty lists.
-    for field in OPTIONAL_EMPTY_CHAPTER_LIST_FIELDS:
+    for field in CHAPTER_LIST_FIELDS:
         value = payload.get(field)
         if not isinstance(value, list):
             issues.append(f"chapter obligation field must be a list: {field}")

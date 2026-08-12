@@ -238,6 +238,8 @@ class WritebackCoordinator:
             str(error),
             (),
             writeback_preview=preview.as_dict(),
+            failure_kind="core_gate_contract",
+            retryable=False,
         )
 
     def _complete_core_gate(

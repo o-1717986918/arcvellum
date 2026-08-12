@@ -222,6 +222,8 @@ class MutationReceiptTests(unittest.TestCase):
                 )
 
             self.assertEqual(result.status, "blocked_by_core_gate")
+            self.assertEqual(result.failure_kind, "core_gate_contract")
+            self.assertFalse(result.retryable)
             assert result.run_root is not None
             rolled_back = [
                 item

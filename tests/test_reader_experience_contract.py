@@ -6,6 +6,7 @@ import unittest
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.reader_experience import (
     CHAPTER_OBLIGATION_SCHEMA,
+    chapter_obligation_contract_issues,
     chapter_obligation_contract,
 )
 
@@ -93,6 +94,44 @@ class ReaderExperienceContractTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "incomplete")
             self.assertIn("chapter obligation field must be a list: must_payoff", result["issues"])
+
+    def test_contract_rejects_boolean_expansion_needed_from_live_failure(self):
+        payload = {
+            "chapter_function": "建立燃料冲突",
+            "must_payoff": [],
+            "must_setup": ["求救信号"],
+            "must_change": ["主角承担代价"],
+            "must_not_resolve": ["空间站真相"],
+            "inherited_hooks": [],
+            "ending_hook": "主角改变航迹",
+            "inventory_sufficiency": "sufficient",
+            "expansion_needed": False,
+            "reader_experience_by_scene": [{"scene_id": "scene_0001"}],
+        }
+
+        self.assertIn(
+            "chapter obligation field must be a list: expansion_needed",
+            chapter_obligation_contract_issues(payload),
+        )
+
+    def test_contract_rejects_non_list_required_obligation_fields(self):
+        payload = {
+            "chapter_function": "建立燃料冲突",
+            "must_payoff": [],
+            "must_setup": "求救信号",
+            "must_change": ["主角承担代价"],
+            "must_not_resolve": ["空间站真相"],
+            "inherited_hooks": [],
+            "ending_hook": "主角改变航迹",
+            "inventory_sufficiency": "sufficient",
+            "expansion_needed": [],
+            "reader_experience_by_scene": [{"scene_id": "scene_0001"}],
+        }
+
+        self.assertIn(
+            "chapter obligation field must be a list: must_setup",
+            chapter_obligation_contract_issues(payload),
+        )
 
 
 if __name__ == "__main__":

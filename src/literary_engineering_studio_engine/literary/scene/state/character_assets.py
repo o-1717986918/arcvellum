@@ -118,7 +118,12 @@ def _formal_character_aliases(root: Path) -> set[str]:
         # promoted, so early scene inventories legitimately use the symbolic
         # label ``主角``.  Bind that label to the promoted protagonist instead
         # of creating a duplicate ``scene-xxxx-主角`` character candidate.
-        if "protagonist" in path.stem.lower() or "protagonist" in character_id.lower():
+        role = _field_value(text, "role").lower()
+        if (
+            "protagonist" in path.stem.lower()
+            or "protagonist" in character_id.lower()
+            or role in {"protagonist", "主角"}
+        ):
             _add_alias(aliases, "主角")
             _add_alias(aliases, "protagonist")
     promotions = root / "workflow" / "asset_promotions"
@@ -130,6 +135,9 @@ def _formal_character_aliases(root: Path) -> set[str]:
                 match = re.search(r'"candidate_id"\s*:\s*"([^"]+)"', text)
                 candidate_id = match.group(1).strip() if match else path.stem.removesuffix("_promotion")
             _add_alias(aliases, candidate_id)
+            if "protagonist" in candidate_id.lower():
+                _add_alias(aliases, "主角")
+                _add_alias(aliases, "protagonist")
             # Scene-created character candidates preserve the original
             # participant spelling in their deterministic candidate id.  The
             # promoted character may choose a more specific canonical name;

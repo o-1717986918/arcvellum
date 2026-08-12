@@ -35,6 +35,68 @@ from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELD
 
 
 class TaskPreflightTests(unittest.TestCase):
+    def test_reader_contract_preflight_rejects_boolean_expansion_before_writeback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            scene = workspace / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+                encoding="utf-8",
+            )
+            relative = "plot/chapter_obligations/chapter_0001.json"
+            output = workspace / relative
+            output.parent.mkdir(parents=True)
+            output.write_text(
+                json.dumps(
+                    {
+                        "chapter_function": "建立开场冲突",
+                        "must_payoff": [],
+                        "must_setup": ["异常信号"],
+                        "must_change": ["主角改变航迹"],
+                        "must_not_resolve": ["信号来源"],
+                        "inherited_hooks": [],
+                        "ending_hook": "燃料警报响起",
+                        "inventory_sufficiency": "sufficient",
+                        "expansion_needed": False,
+                        "reader_experience_by_scene": [{"scene_id": "scene_0001"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0001-reader-experience-contract",
+                    "route": "scene-development",
+                    "current_state": "reader-experience-contract",
+                    "scene_id": "scene_0001",
+                    "source_paths": ["scenes/scene_0001.yaml"],
+                    "expected_outputs": [relative],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="reader-contract",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+            sandbox.baseline_path.write_text("{}", encoding="utf-8")
+
+            result = validate_task_outputs(task, sandbox)
+
+            self.assertFalse(result.passed)
+            issue = next(item for item in result.issues if item.code == "chapter-obligation-contract")
+            self.assertIn("expansion_needed", issue.message)
+            self.assertIn("expansion_needed=[]", issue.repair)
+
     def test_branch_semantic_repair_is_exact_and_bounded(self):
         instruction = _semantic_artifact_repair_instruction(
             "branch-agent-task",

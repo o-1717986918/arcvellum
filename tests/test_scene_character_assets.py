@@ -95,3 +95,26 @@ class SceneCharacterAssetTests(unittest.TestCase):
             )
 
             self.assertEqual(scene_character_asset_requirements(root, scene), [])
+
+    def test_foundational_promotion_binds_symbolic_protagonist_to_real_character(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "characters").mkdir()
+            (root / "characters" / "gu-zheng.yaml").write_text(
+                "character_id: gu-zheng\nname: 顾铮\nrole: protagonist\n",
+                encoding="utf-8",
+            )
+            promotions = root / "workflow" / "asset_promotions"
+            promotions.mkdir(parents=True)
+            (promotions / "protagonist-foundation_promotion.json").write_text(
+                '{"candidate_id":"protagonist-foundation","outputs":["characters/gu-zheng.yaml"]}\n',
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text(
+                "scene_id: scene_0001\nparticipants: [主角]\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(scene_character_asset_requirements(root, scene), [])
