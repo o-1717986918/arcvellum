@@ -127,7 +127,6 @@ def _validate_scene_candidate_generation_contract(
 
     from literary_engineering_studio_engine.literary.style.anti_ai import (
         style_lint_gate,
-        style_lint_gate_message,
     )
     from literary_engineering_studio_engine.literary.planning.contracts import (
         word_budget_adherence_for_body,
@@ -166,14 +165,7 @@ def _validate_scene_candidate_generation_contract(
         return
     lint = style_lint_gate(body, profile=load_creative_quality_profile(sandbox.workspace), scope=scene_id)
     if lint.get("status") == "blocking":
-        issues.append(
-            PreflightIssue(
-                "candidate-style-lint-blocking",
-                candidate_rel,
-                style_lint_gate_message(lint, max_items=12),
-                "逐句重写命中的正文。不得只替换标点、把“不是……而是……”改成同义对照，或用另一种模板转折规避检测。",
-            )
-        )
+        _append_style_lint_issues(lint, candidate_rel, issues)
     scene_path = sandbox.workspace / "scenes" / f"{scene_id}.yaml"
     budget = word_budget_adherence_for_body(
         sandbox.workspace,
@@ -198,6 +190,32 @@ def _validate_scene_candidate_generation_contract(
                 candidate_rel,
                 str(reader.get("message") or "candidate failed the reader-experience contract"),
                 "重写正文以兑现本场读者问题、承诺和场景桥接；不要只改 manifest 描述。",
+            )
+        )
+
+
+def _append_style_lint_issues(
+    lint: dict[str, object],
+    candidate_rel: str,
+    issues: list[PreflightIssue],
+) -> None:
+    blocking = lint.get("blocking")
+    rows = blocking if isinstance(blocking, list) else []
+    for item in rows[:12]:
+        if not isinstance(item, dict):
+            continue
+        rule = str(item.get("rule") or "unknown")
+        severity = str(item.get("severity") or "")
+        sample = str(item.get("sample") or "").strip()
+        detail = str(item.get("message") or "").strip()
+        sample_text = f" 示例：{sample}" if sample else ""
+        issues.append(
+            PreflightIssue(
+                "candidate-style-lint-blocking",
+                candidate_rel,
+                f"{rule}[{severity}]{sample_text}。{detail}".strip("。"),
+                "只重写该条发现命中的句段，同时复核同类变体。不得只替换标点、把“不是……而是……”改成同义对照，"
+                "或用另一种模板转折规避检测；修改后保持事件事实、人物意图和正文长度合同。",
             )
         )
 

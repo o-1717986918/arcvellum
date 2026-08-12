@@ -9,6 +9,7 @@ except ImportError:  # pragma: no cover
 
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.config import default_config
+from literary_engineering_studio.preflight.scene import _append_style_lint_issues
 from literary_engineering_studio_engine.anti_ai_style import style_lint_gate, style_lint_gate_message
 from literary_engineering_studio_engine.creative_quality import (
     creative_quality_profile_path,
@@ -75,6 +76,33 @@ class CreativeQualityProfileTests(unittest.TestCase):
         message = style_lint_gate_message(gate, max_items=12)
         self.assertIn("他核对名单", message)
         self.assertIn("她关上窗户", message)
+
+    def test_scene_preflight_preserves_each_style_finding_as_a_repair_issue(self):
+        lint = {
+            "status": "blocking",
+            "blocking": [
+                {
+                    "rule": "comma-overload-in-sentence",
+                    "severity": "medium",
+                    "message": "请拆句。",
+                    "sample": "第一句样本",
+                },
+                {
+                    "rule": "abstract-summary-density",
+                    "severity": "medium",
+                    "message": "请改为具体叙事。",
+                    "sample": "第二句样本",
+                },
+            ],
+        }
+        issues = []
+
+        _append_style_lint_issues(lint, "drafts/candidates/scene_0001.md", issues)
+
+        self.assertEqual(len(issues), 2)
+        self.assertTrue(all(item.code == "candidate-style-lint-blocking" for item in issues))
+        self.assertIn("第一句样本", issues[0].message)
+        self.assertIn("第二句样本", issues[1].message)
 
     def test_missing_profile_loads_compatible_implicit_default(self):
         with tempfile.TemporaryDirectory() as directory:

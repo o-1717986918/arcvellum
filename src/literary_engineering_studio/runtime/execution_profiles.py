@@ -251,7 +251,7 @@ _PROFILE_TARGETS: dict[ContextTaskKind, dict[str, object]] = {
     ContextTaskKind.PLANNING: _targets(900, 240, 360, "medium", 1, 5, 4),
     ContextTaskKind.STYLE: _targets(600, 180, 300, "medium", 1, 5, 4),
     ContextTaskKind.ARCHAEOLOGY: _targets(600, 180, 300, "medium", 1, 5, 4),
-    ContextTaskKind.PROSE: _targets(1200, 240, 360, "minimal", 4, 6, 8),
+    ContextTaskKind.PROSE: _targets(1200, 240, 360, "minimal", 6, 6, 8),
     ContextTaskKind.REVIEW: _targets(600, 240, 360, "high", 1, 5, 2),
 }
 
