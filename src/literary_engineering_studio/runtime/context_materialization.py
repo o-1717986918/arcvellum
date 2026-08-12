@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
+import re
 from typing import Any, Iterable, Mapping
 
 from ..contracts import TaskPackage, normalize_relative_path
@@ -252,13 +254,64 @@ def _prepared_context(
 
 
 def _user_direction(task: TaskPackage) -> str:
+    index = task.project_root / "workflow/studio/user_directions.jsonl"
+    if index.is_file():
+        messages: list[str] = []
+        for line in index.read_text(encoding="utf-8", errors="ignore").splitlines():
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                message = str(payload.get("message") or "").strip()
+                if message:
+                    messages.append(message)
+        if messages:
+            selected: list[str] = []
+            characters = 0
+            for message in reversed(messages):
+                if selected and (len(selected) >= 5 or characters + len(message) > 12_000):
+                    break
+                selected.append(message)
+                characters += len(message)
+            if len(selected) == 1:
+                return selected[0]
+            return "\n\n".join(
+                f"方向 {index}: {message}"
+                for index, message in enumerate(selected, start=1)
+            )
     path = task.project_root / "workflow/studio/user_directions.md"
     if not path.is_file():
         return ""
-    return path.read_text(
-        encoding="utf-8",
-        errors="ignore",
-    ).strip()
+    return _legacy_user_direction(
+        path.read_text(encoding="utf-8", errors="ignore")
+    )
+
+
+def _legacy_user_direction(text: str) -> str:
+    """Extract messages from the old rendered digest, not its UI boilerplate."""
+
+    normalized = text.replace("\r\n", "\n").strip()
+    if not normalized.startswith("# 当前用户创作方向"):
+        return normalized
+    matches = list(re.finditer(r"(?m)^##\s+[^\n]+\n", normalized))
+    messages: list[str] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(normalized)
+        message = normalized[match.end():end].strip()
+        if message:
+            messages.append(message)
+    if not messages:
+        return ""
+    selected: list[str] = []
+    characters = 0
+    for message in reversed(messages):
+        if selected and (len(selected) >= 5 or characters + len(message) > 12_000):
+            break
+        selected.append(message)
+        characters += len(message)
+    selected.reverse()
+    return selected[0] if len(selected) == 1 else "\n\n".join(selected)
 
 
 def _validate_review_context(

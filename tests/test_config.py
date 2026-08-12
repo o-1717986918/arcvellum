@@ -8,7 +8,7 @@ from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, lo
 
 
 class ConfigTests(unittest.TestCase):
-    def test_migrates_untouched_v06_pi_prompt_canary_to_prose_v3(self):
+    def test_migrates_untouched_v06_pi_prompt_canary_to_all_pi_tasks_v3(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"
             path.write_text(
@@ -37,8 +37,41 @@ class ConfigTests(unittest.TestCase):
 
             self.assertEqual(prompt["mode"], "enforced")
             self.assertTrue(prompt["enforcement"]["enabled"])
-            self.assertEqual(prompt["enforcement"]["states"], ["candidate-generation-provenance"])
-            self.assertEqual(prompt["enforcement"]["task_kinds"], ["prose"])
+            self.assertEqual(prompt["enforcement"]["runtimes"], ["pi-worker"])
+            self.assertNotIn("routes", prompt["enforcement"])
+            self.assertNotIn("states", prompt["enforcement"])
+            self.assertNotIn("task_kinds", prompt["enforcement"])
+
+    def test_migrates_v07_prose_only_rollout_to_all_pi_tasks_v3(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-studio/config/v0.7",
+                        "worker": {
+                            "prompt_program": {
+                                "mode": "enforced",
+                                "enforcement": {
+                                    "enabled": True,
+                                    "runtimes": ["pi-worker"],
+                                    "routes": ["scene-development"],
+                                    "states": ["candidate-generation-provenance"],
+                                    "task_kinds": ["prose"],
+                                },
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            prompt = load_config(path)["worker"]["prompt_program"]
+
+            self.assertEqual(
+                prompt["enforcement"],
+                {"enabled": True, "runtimes": ["pi-worker"]},
+            )
 
     def test_repository_root_is_the_checkout_root_not_src_directory(self):
         root = repository_root()
@@ -58,6 +91,10 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(config["agent_runners"]["pi-worker"]["experiment_only"])
         self.assertIn("model_connections", config)
         self.assertNotIn("runtimes", config)
+        self.assertEqual(
+            config["worker"]["prompt_program"]["enforcement"],
+            {"enabled": True, "runtimes": ["pi-worker"]},
+        )
 
     def test_migrates_legacy_runtimes_to_agent_runners(self):
         with tempfile.TemporaryDirectory() as temporary:

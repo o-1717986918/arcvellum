@@ -7,6 +7,7 @@ import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.runtime.context_budget import resolve_task_context_budget
+from literary_engineering_studio.runtime.context_materialization import _legacy_user_direction
 from literary_engineering_studio.runtime.prompt_program import (
     OnDemandEvidence,
     PromptProgram,
@@ -15,17 +16,82 @@ from literary_engineering_studio.runtime.prompt_program import (
 from literary_engineering_studio.runtime.prompt_renderer import render_tool_worker_program
 from literary_engineering_studio.runtime.prompt_metrics import measure_prompt
 from literary_engineering_studio.runtime.prompt_compiler import _constraints, _output_contract
+from literary_engineering_studio.runtime.task_semantic_contract import semantic_output_contract
 from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio_engine.prompting.agents.schema import compact_schema_contract
 
 
 class PromptProgramV3Tests(unittest.TestCase):
-    def test_prose_constraints_require_first_turn_write_and_deterministic_counting(self):
+    def test_prose_candidate_contract_separates_literary_and_machine_fields(self):
+        root = Path("C:/fixture")
+        task = TaskPackage(
+            project_root=root,
+            task_json_path=root / "task.json",
+            task_markdown_path=root / "task.md",
+            payload={
+                "task_id": "prose",
+                "route": "scene-development",
+                "current_state": "candidate-generation-provenance",
+                "task_type": "main-platform-agent-prose",
+                "scene_id": "scene_0001",
+                "required_reading": [],
+                "source_paths": [],
+                "expected_outputs": [
+                    "drafts/candidates/scene_0001-platform-agent.md",
+                    "drafts/candidates/scene_0001-platform-agent.json",
+                ],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+            },
+        )
+
+        contract = semantic_output_contract(task)
+
+        self.assertEqual(contract["schema_name"], "scene-candidate/v1")
+        self.assertIn("canon_writeback", contract["model_owned_fields"])
+        self.assertIn("new_character_register", contract["model_owned_fields"])
+        self.assertIn("writer_session_id", contract["studio_owned_fields"])
+        self.assertNotIn("writer_session_id", contract["required_fields"])
+
+    def test_prose_constraints_make_scene_budget_override_project_total(self):
+        constraints = _constraints(
+            {"word_count": {"target": 1350, "minimum": 1215, "maximum": 1485}},
+            {},
+            task_kind="prose",
+            audience="tool-worker",
+        )
+
+        budget = next(item for item in constraints if "清洁正文目标" in item)
+        self.assertIn("1350", budget)
+        self.assertIn("1215-1485", budget)
+        self.assertIn("不得在本场一次写完", budget)
+
+    def test_legacy_direction_digest_exposes_messages_not_ui_boilerplate(self):
+        digest = """# 当前用户创作方向
+
+以下内容由 Studio 客户端记录。执行任务时应把较新的方向视为更高优先级，但不得借此绕过 Canon、审查或人工审批门禁。
+
+## 2026-08-11T10:00:00+00:00
+
+第一场建立燃料冲突。
+
+## 2026-08-11T11:00:00+00:00
+
+结尾保留静默余波。
+"""
+        direction = _legacy_user_direction(digest)
+
+        self.assertEqual(direction, "第一场建立燃料冲突。\n\n结尾保留静默余波。")
+        self.assertNotIn("Studio 客户端记录", direction)
+        self.assertNotIn("执行任务时应", direction)
+
+    def test_prose_task_constraints_leave_stable_tool_protocol_to_worker_profile(self):
         constraints = _constraints({}, {}, task_kind="prose")
 
-        self.assertIn("write_expected_output", constraints[0])
-        self.assertTrue(any("确定性统计" in item for item in constraints))
-        self.assertTrue(any("同一次批量写入" in item for item in constraints))
+        self.assertFalse(any("write_expected_output" in item for item in constraints))
+        self.assertFalse(any("手工枚举" in item for item in constraints))
+        self.assertTrue(any("正文任务只完成正文" in item for item in constraints))
+        self.assertTrue(any("不得在正文回合扩张职责" in item for item in constraints))
 
     def test_v3_output_contract_keeps_exact_branch_semantic_shape(self):
         shape = {"branch_id": "agent_branch_replace_1", "beat_plan": []}
@@ -56,6 +122,22 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertEqual(semantic["schema_name"], "branch_proposals.v1")
         self.assertEqual(semantic["branch_proposal_contract"]["proposal_count"], 4)
         self.assertEqual(semantic["branch_proposal_contract"]["proposal_shape"], shape)
+
+    def test_v3_output_contract_infers_json_and_markdown_formats(self):
+        contract = _output_contract(
+            {
+                "core_managed_outputs": [],
+                "output_contracts": [
+                    {"path": "drafts/candidate.md", "kind": "agent-authored"},
+                    {"path": "drafts/candidate.json", "kind": "agent-authored"},
+                ],
+                "semantic_output_contract": {},
+                "system_owned_fields": {},
+            }
+        )
+
+        self.assertEqual(contract["outputs"][0]["format"], "markdown")
+        self.assertEqual(contract["outputs"][1]["format"], "json")
 
     def test_tool_renderer_requires_exact_paths_instead_of_evidence_ids(self):
         program = PromptProgram(
@@ -110,6 +192,68 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertIn("Candidate JSON must satisfy its schema", rendered)
         self.assertNotIn("scene_review.v1 JSON exists", rendered)
         self.assertNotIn("review conclusion is recorded", rendered)
+
+    def test_tool_renderer_uses_system_bootstrap_and_removes_host_skill_language(self):
+        program = PromptProgram(
+            schema="arcvellum/prompt-program/v3",
+            recipe_id="prompt-v3/prose/v1",
+            task_identity={"task_id": "one", "route": "route", "current_state": "state", "agent_role": "main-creative-agent"},
+            objective="The main platform Agent follows the CLI task package and mounted Style Skill.",
+            decisions=(),
+            constraints=("The current main Worker writes the prose.",),
+            output_contract={"outputs": []},
+            evidence=(),
+            exact_on_demand=(),
+            stop_contract=("完成后停止。",),
+            compile_metrics={},
+            digest="digest",
+        )
+
+        rendered = render_tool_worker_program(program)
+
+        self.assertNotIn("## Runtime Contract", rendered)
+        self.assertNotIn("仅用本任务 Evidence", rendered)
+
+    def test_tool_compiler_removes_runtime_owned_rules_and_normalizes_agent_identity(self):
+        constraints = _constraints(
+            {
+                "hard_constraints": [
+                    "The main platform Agent writes the prose.",
+                    "Studio has already run generate-scene before this Agent task.",
+                ],
+                "style_constraints": [],
+                "validation_gates": ["review JSON exists"],
+                "forbidden_shortcuts": ["Do not use --allow-unapproved."],
+            },
+            {
+                "hard_constraints": [],
+                "style_constraints": [],
+                "forbidden_shortcuts": [],
+            },
+            task_kind="creative",
+            audience="tool-worker",
+        )
+
+        self.assertIn("The current main Worker writes the prose.", constraints)
+        self.assertFalse(any("Studio has already run" in item for item in constraints))
+        self.assertFalse(any("review JSON exists" in item for item in constraints))
+        self.assertFalse(any("--allow-unapproved" in item for item in constraints))
+
+    def test_tool_audience_removes_cli_and_sidecar_vocabulary_from_objective(self):
+        from literary_engineering_studio.runtime.prompt_compiler import _objective
+
+        objective = _objective(
+            "",
+            "Audit the CLI-created packet and its sidecar before the platform Agent writes prose.",
+            audience="tool-worker",
+        )
+
+        self.assertIn("Studio-created packet", objective)
+        self.assertIn("task contract", objective)
+        self.assertIn("Worker writes prose", objective)
+        self.assertNotIn("CLI", objective)
+        self.assertNotIn("sidecar", objective)
+        self.assertNotIn("platform Agent", objective)
 
     def test_compact_review_schema_preserves_ambiguous_object_shapes(self):
         contract = compact_schema_contract("scene_review.v1")
@@ -269,6 +413,41 @@ class PromptProgramV3Tests(unittest.TestCase):
             self.assertEqual(projection["program"]["compile_metrics"]["demoted_recovery_count"], 1)
             self.assertEqual(projection["metrics"]["exact_on_demand_count"], 2)
 
+    def test_tool_worker_demotes_host_contract_even_when_legacy_task_marks_it_required(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("project:\n  title: 测试\n", encoding="utf-8")
+            (root / "source.md").write_text("正式证据。\n", encoding="utf-8")
+            (root / "source-copy.md").write_text("另一份正式证据。\n", encoding="utf-8")
+            (root / "exact.md").write_text("按需证据。\n", encoding="utf-8")
+            legacy = "装载本 Skill 的平台 Agent 必须运行 task-submit。"
+            (root / "creation.agent_tasks.md").write_text(legacy, encoding="utf-8")
+            task = _task(root)
+            task.payload["context_contract_required"] = True
+            task.payload["source_paths"].append("creation.agent_tasks.md")
+            task.payload["agent_source_paths"].append("creation.agent_tasks.md")
+            task.payload["context_must_inline_paths"].append("creation.agent_tasks.md")
+            budget = resolve_task_context_budget(task, {"context_budget": {"mode": "shadow"}})
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="tool-worker-recovery-demotion",
+                context_budget=budget,
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "v2",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
+            context = json.loads((sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8"))
+
+            self.assertNotIn(legacy, prompt)
+            self.assertIn("creation.agent_tasks.md", context["prompt_access"]["exact_on_demand"])
+
     def test_recovery_sidecar_is_labeled_as_non_authoritative(self):
         program = PromptProgram(
             schema="arcvellum/prompt-program/v3",
@@ -343,6 +522,229 @@ class PromptProgramV3Tests(unittest.TestCase):
                 context["controlled_capabilities"]["readable_paths"],
             )
             self.assertEqual(len(access["digest"]), 64)
+
+    def test_pi_asset_review_keeps_candidate_and_demotes_planning_ledgers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                "project.yaml": "project:\n  title: 测试\n",
+                "canon/candidates/world_rules/world.json": (
+                    '{"schema":"world/v1","world_name":"测试世界"}\n'
+                ),
+                "canon/world_rules.yaml": "rules:\n  - 既有规则\n",
+                "characters/_template.yaml": "character:\n  role: template\n",
+                "plot/outline.md": "# 大纲\n世界规则会影响结局。\n",
+                "plot/word_budget/word_budget.md": "# 字数预算\n无关预算。\n",
+                "plot/conflict_matrix.md": "# 冲突矩阵\n无关矩阵。\n",
+                "plot/foreshadowing.csv": "id,detail\n1,无关伏笔\n",
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            task = _task(root)
+            task.payload.update(
+                {
+                    "task_id": "world-review",
+                    "task_type": "platform-agent-asset-review",
+                    "current_state": "asset-review-agent-task",
+                    "asset_type": "world",
+                    "candidate": "canon/candidates/world_rules/world.json",
+                    "source_paths": list(files),
+                    "agent_source_paths": list(files),
+                    "context_must_inline_paths": list(files),
+                }
+            )
+            budget = resolve_task_context_budget(
+                task, {"context_budget": {"mode": "shadow"}}
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="asset-review-relevance",
+                context_budget=budget,
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "v2",
+                    "enforcement": {
+                        "enabled": True,
+                        "runtimes": ["pi-worker"],
+                    },
+                },
+            )
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            projection = json.loads(
+                sandbox.manifest_path.read_text(encoding="utf-8")
+            )["prompt_program"]["formal"]["program"]
+
+            self.assertIn("测试世界", prompt)
+            self.assertIn("既有规则", prompt)
+            self.assertIn("世界规则会影响结局", prompt)
+            self.assertNotIn("无关预算", prompt)
+            self.assertNotIn("无关矩阵", prompt)
+            self.assertNotIn("无关伏笔", prompt)
+            self.assertNotIn("role: template", prompt)
+            for path in (
+                "plot/word_budget/word_budget.md",
+                "plot/conflict_matrix.md",
+                "plot/foreshadowing.csv",
+                "characters/_template.yaml",
+            ):
+                self.assertIn(path, context["prompt_access"]["exact_on_demand"])
+            self.assertEqual(
+                projection["compile_metrics"]["demoted_optional_count"], 4
+            )
+
+    def test_blank_style_template_is_on_demand_for_pi_but_real_style_remains_inline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "style").mkdir()
+            blank = "# 风格 Profile 模板\n\n- 风格名称：\n- 必须保持：\n- 禁止倾向：\n"
+            (root / "style" / "style-profile.md").write_text(blank, encoding="utf-8")
+            (root / "source.md").write_text("正文合同。\n", encoding="utf-8")
+            (root / "exact.md").write_text("恢复。\n", encoding="utf-8")
+            task = _task(root)
+            task.payload["task_type"] = "main-platform-agent-prose"
+            task.payload["current_state"] = "candidate-generation-provenance"
+            task.payload["context_must_inline_paths"] = ["source.md", "style/style-profile.md"]
+            task.payload["agent_source_paths"] = ["source.md", "style/style-profile.md", "exact.md"]
+            task.payload["source_paths"] = ["source.md", "style/style-profile.md", "exact.md"]
+
+            blank_sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="blank-style",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "error",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            blank_context = json.loads(
+                (blank_sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            self.assertNotIn("style/style-profile.md", blank_context["prompt_access"]["inline"])
+            self.assertIn("style/style-profile.md", blank_context["prompt_access"]["exact_on_demand"])
+
+            (root / "style" / "style-profile.md").write_text(
+                "# 冷静技术叙事\n\n- 风格名称：冷静技术叙事\n- 必须保持：动词优先\n",
+                encoding="utf-8",
+            )
+            real_sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="real-style",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "error",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            real_context = json.loads(
+                (real_sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            self.assertIn("style/style-profile.md", real_context["prompt_access"]["inline"])
+
+    def test_pi_prose_demotes_bookwide_and_already_consumed_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                "project.yaml": "project:\n  title: 测试\n",
+                "scenes/scene_0001.yaml": "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+                "drafts/compositions/scene_0001_composition.json": '{"scene_id":"scene_0001","beats":[{"visible_action":"行动"}]}\n',
+                "drafts/compositions/scene_0001_composition_review.json": '{"verdict":"pass","findings":["已通过"]}\n',
+                "branches/scene_0001/branch_selection.md": "# 长分支理由\n已被 composition 消费。\n",
+                "plot/outline.md": "# 全书长大纲\n后续章节材料。\n",
+                "references/punctuation-standard.md": "# 完整标点开发文档\n",
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            task = _task(root)
+            task.payload.update(
+                {
+                    "task_type": "main-platform-agent-prose",
+                    "current_state": "candidate-generation-provenance",
+                    "scene_id": "scene_0001",
+                    "source_paths": list(files),
+                    "agent_source_paths": list(files),
+                    "context_must_inline_paths": list(files),
+                }
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="prose-consumed-evidence",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "error",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+
+            self.assertIn(
+                "drafts/compositions/scene_0001_composition.json",
+                context["prompt_access"]["inline"],
+            )
+            for relative in (
+                "drafts/compositions/scene_0001_composition_review.json",
+                "branches/scene_0001/branch_selection.md",
+                "plot/outline.md",
+                "references/punctuation-standard.md",
+            ):
+                self.assertIn(relative, context["prompt_access"]["exact_on_demand"])
+                self.assertNotIn(relative, context["prompt_access"]["inline"])
+
+    def test_old_transport_task_kind_compiles_without_context_budget(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "project:\n  title: 测试\n", encoding="utf-8"
+            )
+            (root / "source.md").write_text("候选。\n", encoding="utf-8")
+            (root / "source-copy.md").write_text("证据。\n", encoding="utf-8")
+            (root / "exact.md").write_text("恢复。\n", encoding="utf-8")
+            task = _task(root)
+            task.payload["task_type"] = "platform-agent-asset-review"
+            task.payload["current_state"] = "asset-review-agent-task"
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="legacy-kind",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "v2",
+                    "enforcement": {
+                        "enabled": True,
+                        "runtimes": ["pi-worker"],
+                    },
+                },
+            )
+
+            self.assertIn(
+                "Prompt Program v3",
+                sandbox.prompt_path.read_text(encoding="utf-8"),
+            )
 
 
 def _task(root: Path) -> TaskPackage:

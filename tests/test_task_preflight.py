@@ -1138,6 +1138,8 @@ class TaskPreflightTests(unittest.TestCase):
             normalized = json.loads(candidate.read_text(encoding="utf-8"))
 
             self.assertTrue(changes)
+            self.assertEqual(normalized["schema"], "literary-engineering-workbench/scene-candidate/v1")
+            self.assertEqual(normalized["provider"], "studio-agent-runtime")
             self.assertEqual(normalized["new_character_register"]["status"], "candidates_ready")
             self.assertEqual(normalized["new_character_register"]["introduced"][0]["candidate_path"], "characters/candidates/scene-0001-林正.json")
 

@@ -226,6 +226,7 @@ def compile_worker_program(
             task_context=context,
             execution_context=execution_context,
             user_direction=user_direction,
+            audience=renderer,
         )
         if renderer == "tool-worker":
             text = render_tool_worker_program(program)

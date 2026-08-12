@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "clean": "shx rm -rf dist",
-    "build": "tsc -p tsconfig.build.json && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/main.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "build": "tsc -p tsconfig.build.json && node ./scripts/build.mjs",
     "test": "vitest --run",
     "check": "npm run clean && npm run build && npm run test"
   },

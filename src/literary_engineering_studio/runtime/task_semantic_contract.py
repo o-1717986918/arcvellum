@@ -17,6 +17,9 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
 
     current_state = str(task.current_state or task.payload.get("current_state") or "")
     scene_id = str(task.payload.get("scene_id") or "").strip()
+    candidate = _scene_candidate_output_contract(task, current_state, scene_id)
+    if candidate:
+        return candidate
     continuity = _continuity_ledger_output_contract(current_state, scene_id)
     if continuity:
         return continuity
@@ -45,6 +48,89 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
         proposal_count = len(proposals) if isinstance(proposals, list) else 0
         contract["branch_proposal_contract"] = branch_proposal_contract(proposal_count)
     return contract
+
+
+def _scene_candidate_output_contract(
+    task: TaskPackage,
+    current_state: str,
+    scene_id: str,
+) -> dict[str, Any]:
+    """Expose only the literary judgments the prose Worker must author.
+
+    Candidate identity, paths, profile digests and session provenance are
+    deterministic Studio facts.  Keeping them out of the Agent-owned shape
+    prevents the model from spending a prose turn guessing transport fields.
+    """
+
+    if current_state not in {"candidate-generation-provenance", "generation-agent-task"}:
+        return {}
+    path = next(
+        (
+            item
+            for item in task.expected_outputs
+            if item.endswith(".json")
+            and not item.endswith(".prompt.json")
+            and not item.endswith(".agent_completion.json")
+        ),
+        "",
+    )
+    if not path:
+        return {}
+    return {
+        "path": path,
+        "schema_name": "scene-candidate/v1",
+        "required_fields": [
+            "word_budget_standard_applied",
+            "pass_with_notes_actions_applied",
+            "canon_writeback",
+            "new_character_register",
+        ],
+        "field_types": {
+            "word_budget_standard_applied": "bool",
+            "pass_with_notes_actions_applied": "bool",
+            "canon_writeback": "dict",
+            "new_character_register": "dict",
+        },
+        "object_shapes": {
+            "canon_writeback": {
+                "canon_change": "true | false | unknown",
+                "no_canon_change_reason": "required non-empty str when canon_change=false",
+                "candidate_patch": "optional project-relative str",
+            },
+            "new_character_register": {
+                "schema": "literary-engineering-workbench/new-character-register/v0.1",
+                "status": "none | existing_only | ephemeral_only | candidates_ready | resolved",
+                "introduced": "list",
+                "ephemeral_waivers": "list",
+                "blocking_issues": "list; must be empty for a clean generation result",
+            },
+        },
+        "model_owned_fields": [
+            "word_budget_standard_applied",
+            "pass_with_notes_actions_applied",
+            "canon_writeback",
+            "new_character_register",
+        ],
+        "studio_owned_fields": [
+            "schema",
+            "scene_id",
+            "candidate",
+            "prompt_manifest",
+            "generated_by",
+            "provider",
+            "formal_contract_revision",
+            "writer_session_id",
+            "style_mount_snapshot",
+            "creative_quality_profile_digest",
+            "reader_experience_contract",
+            "narrative_rhythm_contract",
+            "style_generation_standard_applied",
+            "hard_constraints_applied",
+            "anti_evasion_protocol_applied",
+            "narrative_rhythm_standard_applied",
+        ],
+        "locked_values": {"scene_id": scene_id},
+    }
 
 
 def _load_schema(schema_name: str) -> dict[str, Any] | None:

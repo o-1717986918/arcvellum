@@ -7,8 +7,10 @@ import {
 	isProviderEmptyResponse,
 	noProgressTurnLimit,
 	sanitizeProviderError,
+	settleValidOutputs,
 	settleTurnBudget,
 } from "../src/worker.ts";
+import { workerProfile } from "../src/worker-profile.ts";
 
 const roots: string[] = [];
 
@@ -17,6 +19,18 @@ afterEach(async () => {
 });
 
 describe("bounded worker lifecycle", () => {
+	it("binds stable role-isolated Worker profiles instead of task text", () => {
+		const writer = workerProfile("main-creative-agent");
+		const writerAgain = workerProfile("main-creative-agent");
+		const reviewer = workerProfile("main-review-agent");
+
+		expect(writer.digest).toBe(writerAgain.digest);
+		expect(writer.digest).not.toBe(reviewer.digest);
+		expect(writer.systemPrompt).toContain("FIRST assistant action");
+		expect(reviewer.systemPrompt).not.toContain("FIRST assistant action");
+		expect(writer.systemPrompt).not.toContain("SKILL.md");
+	});
+
 	it("allows one bounded landing turn only for the main prose agent", () => {
 		expect(noProgressTurnLimit("main-creative-agent")).toBe(3);
 		expect(noProgressTurnLimit("main-review-agent")).toBe(2);
@@ -69,6 +83,24 @@ describe("bounded worker lifecycle", () => {
 		expect(workerState.completed).toBe(false);
 		expect(workerState.blocked).toBe(true);
 		expect(workerState.blockerReason).toContain("before outputs passed");
+	});
+
+	it("hands valid written outputs to Studio before the no-progress guard", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-valid-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), "{}\n", "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
+		const workerState = state();
+		workerState.writtenPaths.add("out/review.json");
+		workerState.writtenPaths.add("out/review.md");
+
+		const complete = await settleValidOutputs(context(), root, workerState);
+
+		expect(complete).toBe(true);
+		expect(workerState.completed).toBe(true);
+		expect(workerState.blocked).toBe(false);
+		expect(workerState.reasoningStopReason).toBe("local_outputs_validated");
 	});
 });
 

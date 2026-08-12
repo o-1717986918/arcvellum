@@ -52,6 +52,18 @@ class PromptMetricsTests(unittest.TestCase):
         self.assertNotIn("不得跳过门禁", str(report))
         self.assertIn("structured", rendered)
 
+    def test_tool_worker_on_demand_instruction_is_not_counted_as_evidence(self):
+        prompt = """## Exact On Demand
+
+- `Dxxx` 仅为标签；按路径读取。
+- `D001` `canon/facts.json` (canon): 按需读取
+- `D002` `reviews/task.agent_tasks.md` (recovery): 仅预检点名才读
+
+## Stop Contract
+"""
+
+        self.assertEqual(measure_prompt(prompt).exact_on_demand_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

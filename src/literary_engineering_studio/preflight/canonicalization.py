@@ -759,10 +759,12 @@ def _canonicalize_scene_candidate_manifest(task: TaskPackage, sandbox: SandboxMa
     scene_id = str(task.payload.get("scene_id") or task.scene_id or "").strip()
     prompt_rel = candidate_rel[:-3] + ".prompt.json" if candidate_rel.endswith(".md") else candidate_rel + ".prompt.json"
     machine_manifest_fields: dict[str, Any] = {
+        "schema": "literary-engineering-workbench/scene-candidate/v1",
         "scene_id": scene_id,
         "candidate": candidate_rel,
         "prompt_manifest": prompt_rel,
         "generated_by": "platform-agent",
+        "provider": "studio-agent-runtime",
         "formal_contract_revision": str(task.payload.get("task_contract_revision") or "2026-07-24.8"),
         "writer_session_id": _session_identity(task, "writer"),
     }

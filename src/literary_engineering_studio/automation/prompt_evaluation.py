@@ -11,9 +11,13 @@ import re
 import tempfile
 from typing import Any
 
-from literary_engineering_studio_engine.prompting.registry import resolve_prompt_asset
+from literary_engineering_studio_engine.prompting.registry import (
+    list_prompt_assets,
+    resolve_prompt_asset,
+)
 
 from ..runtimes import build_runtime
+from ..runtime.prompt_compiler import _audience_text, _runtime_owned_constraint
 
 
 REPORT_SCHEMA = "literary-engineering-studio/prompt-evaluation/v0.1"
@@ -57,6 +61,18 @@ LIVE_GENRES = {
     "realistic": "县城医院准备合并科室。工作十年的护士长要在会上说明一项排班隐患，同时保护刚犯错的年轻护士，冲突来自具体制度与关系。",
     "fantasy": "潮汐会抹去姓名的海港。守灯人发现妹妹的名字正在从账册消失，但恢复她会让另一名无辜者被遗忘。让世界规则通过行动显现。",
 }
+TOOL_AUDIENCE_RESIDUES = (
+    "SKILL.md",
+    "AGENTS.md",
+    "agentread.yaml",
+    "platform Agent",
+    "platform agent",
+    "[AGENT_TASK",
+    "task-submit",
+    "task-complete",
+    "CLI",
+    "sidecar",
+)
 
 
 def evaluate_prompt_assets(
@@ -104,13 +120,17 @@ def evaluate_prompt_assets(
             }
         )
     failures = sum(1 for case in cases if case["status"] != "pass")
+    audience_cases = _tool_audience_cases()
+    audience_failures = sum(
+        1 for case in audience_cases if case["status"] != "pass"
+    )
     live_cases: list[dict[str, Any]] = []
     if live:
         if config is None:
             raise ValueError("live prompt evaluation requires Studio configuration")
         live_cases = _evaluate_live_cases(config, runner_id=runner_id, model=model, timeout=timeout)
     live_failures = sum(1 for case in live_cases if case["status"] != "pass")
-    total_failures = failures + live_failures
+    total_failures = failures + audience_failures + live_failures
     return {
         "schema": REPORT_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -118,14 +138,53 @@ def evaluate_prompt_assets(
         "case_count": len(cases),
         "failure_count": total_failures,
         "cases": cases,
+        "tool_audience_cases": audience_cases,
         "live_cases": live_cases,
         "metrics": {
             "exact_asset_rate": (len(cases) - failures) / len(cases) if cases else 0.0,
+            "tool_audience_asset_count": len(audience_cases),
+            "tool_audience_failure_count": audience_failures,
             "live_semantic_evaluation": "pass" if live and live_failures == 0 else "fail" if live else "not-run",
             "live_genre_count": len(live_cases),
             "live_failure_count": live_failures,
         },
     }
+
+
+def _tool_audience_cases() -> list[dict[str, Any]]:
+    cases: list[dict[str, Any]] = []
+    for asset in list_prompt_assets():
+        values = [asset.body]
+        for field in (
+            "hard_constraints",
+            "style_constraints",
+            "output_contract",
+            "review_requirements",
+            "forbidden_shortcuts",
+        ):
+            for value in asset.metadata.get(field) or []:
+                text = str(value).strip()
+                if text and not _runtime_owned_constraint(text, "tool-worker"):
+                    values.append(text)
+        compiled = "\n".join(
+            _audience_text(value, "tool-worker") for value in values
+        )
+        residues = {
+            token: compiled.count(token)
+            for token in TOOL_AUDIENCE_RESIDUES
+            if compiled.count(token)
+        }
+        cases.append(
+            {
+                "prompt_asset_id": asset.prompt_asset_id,
+                "status": "pass" if not residues else "fail",
+                "residues": residues,
+                "compiled_digest": hashlib.sha256(
+                    compiled.encode("utf-8")
+                ).hexdigest(),
+            }
+        )
+    return cases
 
 
 def write_prompt_evaluation(path: Path, **kwargs: Any) -> dict[str, Any]:

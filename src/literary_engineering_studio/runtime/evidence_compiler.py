@@ -7,7 +7,10 @@ import hashlib
 from pathlib import Path
 from typing import Iterable
 
+from ruamel.yaml import YAML
+
 from ..contracts import TaskPackage
+from .evidence_policy import EvidenceDisposition, evidence_policy
 from .evidence_projection import project_evidence_body
 from .execution_context import ExecutionContextEnvelope
 from .prompt_program import OnDemandEvidence, PromptEvidence
@@ -21,6 +24,8 @@ class EvidenceCompilation:
     dropped_digest_count: int
     dropped_characters: int
     demoted_recovery_count: int
+    demoted_optional_count: int
+    dropped_projection_count: int
 
     def safe_metrics(self) -> dict[str, int]:
         return {
@@ -30,6 +35,8 @@ class EvidenceCompilation:
             "dropped_digest_count": self.dropped_digest_count,
             "dropped_characters": self.dropped_characters,
             "demoted_recovery_count": self.demoted_recovery_count,
+            "demoted_optional_count": self.demoted_optional_count,
+            "dropped_projection_count": self.dropped_projection_count,
         }
 
 
@@ -42,15 +49,20 @@ class _InlineCompilation:
     dropped_path_count: int
     dropped_digest_count: int
     dropped_characters: int
+    demoted_recovery_count: int
+    demoted_optional_count: int
+    dropped_projection_count: int
 
 
 def compile_evidence(
     task: TaskPackage,
     workspace: Path,
     envelope: ExecutionContextEnvelope,
+    *,
+    audience: str = "file-agent",
 ) -> EvidenceCompilation:
     root = workspace.resolve()
-    compiled = _compile_inline(task, root, envelope)
+    compiled = _compile_inline(task, root, envelope, audience=audience)
     inline = list(compiled.evidence)
     seen_paths = set(compiled.seen_paths)
     seen_digests = set(compiled.seen_digests)
@@ -68,7 +80,9 @@ def compile_evidence(
         dropped_path_count=dropped_paths,
         dropped_digest_count=dropped_digests,
         dropped_characters=dropped_characters,
-        demoted_recovery_count=len(compiled.demoted),
+        demoted_recovery_count=compiled.demoted_recovery_count,
+        demoted_optional_count=compiled.demoted_optional_count,
+        dropped_projection_count=compiled.dropped_projection_count,
     )
 
 
@@ -76,12 +90,17 @@ def _compile_inline(
     task: TaskPackage,
     root: Path,
     envelope: ExecutionContextEnvelope,
+    *,
+    audience: str,
 ) -> _InlineCompilation:
     seen_paths: set[str] = set()
     seen_digests: set[str] = set()
+    seen_projection_digests: set[str] = set()
     inline: list[PromptEvidence] = []
     demoted: list[tuple[str, str, str]] = []
     dropped_paths = dropped_digests = dropped_characters = 0
+    demoted_recovery = demoted_optional = dropped_projections = 0
+    chapter_id = _task_chapter_id(task, root, envelope.scene_id)
     for source_ref in envelope.must_inline:
         normalized = _normalized_path(source_ref)
         if normalized in seen_paths:
@@ -90,9 +109,21 @@ def _compile_inline(
         body = _read_authorized_text(root, normalized)
         source_digest = _sha256(body)
         role, fidelity = _evidence_role(normalized, envelope.task_kind)
-        if role == "recovery" and task.payload.get("context_contract_required") is not True:
+        policy = evidence_policy(
+            task,
+            normalized,
+            role,
+            audience=audience,
+            task_kind=envelope.task_kind,
+            body=body,
+        )
+        if policy.disposition is EvidenceDisposition.ON_DEMAND:
             seen_paths.add(normalized)
             demoted.append((normalized, source_digest, role))
+            if role == "recovery":
+                demoted_recovery += 1
+            else:
+                demoted_optional += 1
             continue
         if source_digest in seen_digests:
             dropped_digests += 1
@@ -100,13 +131,30 @@ def _compile_inline(
             continue
         seen_paths.add(normalized)
         seen_digests.add(source_digest)
-        projected = project_evidence_body(normalized, body, fidelity=fidelity)
+        projected = project_evidence_body(
+            normalized,
+            body,
+            fidelity=fidelity,
+            projection=policy.projection,
+            scene_id=envelope.scene_id,
+            chapter_id=chapter_id,
+        )
+        projection_digest = _sha256(projected)
+        if _empty_projection(projected, fidelity=fidelity):
+            dropped_projections += 1
+            dropped_characters += len(body)
+            continue
+        if projection_digest in seen_projection_digests:
+            dropped_projections += 1
+            dropped_characters += len(body)
+            continue
+        seen_projection_digests.add(projection_digest)
         inline.append(
             PromptEvidence(
                 evidence_id=f"E{len(inline) + 1:03d}",
                 source_ref=normalized,
                 source_sha256=source_digest,
-                projection_sha256=_sha256(projected),
+                projection_sha256=projection_digest,
                 role=role,
                 tier="must_inline",
                 fidelity=fidelity,
@@ -116,7 +164,28 @@ def _compile_inline(
     return _InlineCompilation(
         tuple(inline), tuple(demoted), frozenset(seen_paths), frozenset(seen_digests),
         dropped_paths, dropped_digests, dropped_characters,
+        demoted_recovery, demoted_optional, dropped_projections,
     )
+
+
+def _task_chapter_id(task: TaskPackage, root: Path, scene_id: str) -> str:
+    declared = str(task.payload.get("chapter_id") or "").strip()
+    if declared:
+        return declared
+    if not scene_id:
+        return ""
+    path = root / "scenes" / f"{scene_id}.yaml"
+    try:
+        payload = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError, TypeError):
+        return ""
+    return str(payload.get("chapter_id") or "").strip() if isinstance(payload, dict) else ""
+
+
+def _empty_projection(value: str, *, fidelity: str) -> bool:
+    if fidelity != "structured":
+        return False
+    return value.strip() in {"", "{}", "[]", "null", "---"}
 
 
 def _append_summaries(
@@ -189,8 +258,16 @@ def _on_demand_reason(role: str) -> str:
 
 def _evidence_role(path: str, task_kind: str) -> tuple[str, str]:
     lowered = path.casefold()
+    if (
+        task_kind == "prose"
+        and lowered.startswith("memory/context_packets/scene_")
+        and lowered.endswith(".md")
+    ):
+        return "scene_context", "structured"
     if _is_recovery_path(lowered):
         return "recovery", "recovery"
+    if lowered.startswith("drafts/compositions/") and lowered.endswith(".json"):
+        return "composition_contract", "structured"
     if "candidate" in lowered or "/draft" in lowered or lowered.startswith("drafts/"):
         return ("candidate" if task_kind == "review" else "drafting_material", "lossless")
     if lowered == "style/creative_quality_profile.json":
@@ -213,6 +290,13 @@ def _is_recovery_path(path: str) -> bool:
         path.endswith(".agent_tasks.md")
         or path.startswith("docs/implementation/")
         or "context_packet" in path
+        or path in {"skill.md", "agents.md", "agentread.yaml"}
+        or path in {
+            "references/agent-run-protocol.md",
+            "references/cli-run-protocol.md",
+            "references/artifact-contracts.md",
+            "references/workflows.md",
+        }
     )
 
 

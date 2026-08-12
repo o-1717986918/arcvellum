@@ -189,6 +189,112 @@ POST /autopilot/start   runtime=pi-worker, authorized=true
 
 门禁：保存脱敏 E2E 报告、事件时间线、产物摘要和进程收据。
 
+### B4-P：提示词工程全量审计与持久会话分层
+
+该工作包在连续 E2E 暴露提示词或无进展问题时优先于继续重试。它不是只压缩正文
+Prompt，而是审阅从 Engine Prompt Asset、TaskPackage、context contract、sidecar、
+Prompt Program、Worker 工具描述到 repair turn 的整个提示词工程。
+
+正式审计基线与逐项整改状态见
+[`docs/quality/arcvellum-v098-prompt-engineering-audit-and-remediation.md`](../quality/arcvellum-v098-prompt-engineering-audit-and-remediation.md)。
+
+#### 实际触发证据
+
+- v7 正文任务的实际 `AGENT_TASK.md` 为 189,908 字符、5,043 行，包含 36 次
+  “平台 Agent”、32 个 `[AGENT_TASK]` 和重复的 Skill/CLI 运行说明；
+- 同一任务同时内联 Prompt Asset、生成 sidecar、三份角色资产 sidecar、context packet、
+  composition、outline、budget 和重复检索片段；
+- v8 世界观资产审查的 v2 正式 Prompt 为 27,869 字符，仍携带 Skill/平台 Agent 话术；
+  同任务 Prompt v3 影子版本已降至 20,565 字符且移除 Skill 文件，但仍包含与当前审查
+  关系较弱的整份大纲、预算和冲突矩阵；
+- v8 在该审查任务已写出并通过本地验证两个产物后，仍被 no-progress guard 判为失败，
+  说明提示词、工具停止合同和 Runtime 终止判定需要联合审计。
+
+#### 三层信息模型
+
+1. **Worker Bootstrap Profile：初始化一次**
+   - 只包含沙箱边界、工具语义、输出所有权、主创正文权和停止协议；
+   - 不包含项目路径、当前任务、Skill 文档、CLI 教程或文学资料；
+   - 用版本和 SHA-256 标识，可由 Provider prompt cache 或同角色会话复用；
+   - 对内部 Pi 使用 Worker Profile，不把宿主平台的 `SKILL.md` 当成 Pi 的 system prompt。
+2. **Durable Project Session Context：同项目、同角色有界复用**
+   - 只保存经过编译的作品身份、稳定 Canon 摘要、挂载文风身份和已确认资产摘要；
+   - 每个条目必须绑定来源 digest、事实版本和失效条件；Canon、人物状态、文风挂载、
+     creative plan 或模型变化时必须更新或新建会话；
+   - 主创、审查、规划、资产维护使用隔离会话，禁止审查者继承主创的自我解释；
+   - 会话历史只是缓存和交互连续性，不是正式事实源，不能覆盖当前任务证据。
+3. **Ephemeral Task Contract：每个任务重新签发**
+   - 只包含 objective、当前决策、Allowed Outputs、精确 schema、当前候选和任务所需证据；
+   - 输出路径、候选 digest、当前人物状态、当前 Gate 和 writeback 条件不得依赖旧会话记忆；
+   - repair turn 只发送失败项、对应产物片段和仍有效的合同摘要，不重放完整初始 Prompt。
+
+#### 兼容与隔离原则
+
+- Engine 的 `.agent_tasks.md`、`SKILL.md`、`AGENTS.md`、`agentread.yaml` 继续服务外置
+  Codex/Claude Skill 宿主，不直接删除；
+- Studio 根据 execution audience 编译提示词：`host-skill-agent`、`internal-pi-worker` 和
+  `external-coding-agent` 不共享同一渲染结果；
+- Pi Prompt 不得出现“装载本 Skill”“等待平台 Agent”“不要调用外部 LLM”“运行
+  task-submit/task-complete”等宿主话术；
+- sidecar 对 Pi 默认为 recovery/on-demand 证据。其结构化任务、schema 和输出合同由
+  TaskPackage/PromptProgram 投影，不整份内联；
+- 不以持久会话掩盖上下文选择缺陷，不把完整项目历史永久留在模型上下文中。
+
+#### 代码实施点
+
+1. `runtime/prompt_program.py`
+   - 增加 execution audience / bootstrap profile identity；
+   - Prompt digest 区分 bootstrap、project session 与 task contract digest。
+2. `runtime/prompt_compiler.py` 与 `runtime/prompt_renderer.py`
+   - 为 Pi 生成 Worker 原生 Prompt；每条边界、规则和输出合同只出现一次；
+   - Prompt Asset 正文只提取当前任务决策，不重复 frontmatter、sidecar 和 validation gate。
+3. `runtime/evidence_compiler.py` 与 `runtime/evidence_projection.py`
+   - host 文档和 sidecar 对 Pi 降为 recovery/on-demand；
+   - 按任务类型、资产类型和内容 digest 去重；
+   - asset review 不默认内联整份全书预算和与候选无关的角色模板；
+   - 保留 exact candidate、相关 Canon 和必要引用，不因压缩丢失审查依据。
+4. `runtime/prompt_materialization.py`
+   - Pi 的 structured/creative/planning/style/review/prose 全任务使用通过门禁的 v3
+     tool-worker renderer；v2 只作为显式回滚，不再作为未匹配任务的静默默认值；
+   - 保存 content-free prompt audit：各层字符数、重复率、剔除原因和 digest。
+5. `runtime/session_lease.py` 与 `workers/pi-worker/`
+   - 先实现同项目同角色的 bootstrap/session contract，再决定是否真正复用 Provider 会话；
+   - 会话必须有最大任务数、最大时间、最大 token、模型/角色/项目/digest 一致性门禁；
+   - 任一失效条件触发新会话，不在旧聊天历史上做事实增量补丁。
+6. Worker 终止语义
+   - 所有 required outputs 已写入且 `validate_output` 全部通过时，立即返回 success；
+   - no-progress guard 不能把“重复验证已通过产物”覆盖为失败；
+   - 工具失败、模型无活动、缺输出和语义预检失败使用不同错误码。
+
+#### 全量审计范围
+
+- 55+ Prompt Assets 的 frontmatter、正文、优先级和重复合同；
+- 所有 route blueprint 的 source/reference/sidecar 列表；
+- Prompt v2/v3 renderer、Task Context、Prepared Context、Context Packet、Evidence Pack；
+- Pi system/bootstrap prompt、工具说明、模型消息、repair prompt 和 stop prompt；
+- Style、标点、反 AI、字数、节奏、桥接、读者体验、Canon、状态、连续性和审查规则；
+- 用户方向、Advisor 指令和 Creative Plan 是否被重复注入或错误提升优先级；
+- 各任务类型的必要证据覆盖、冲突规则、无效历史说明和已经由代码强制的机械规则。
+
+#### 量化门禁
+
+- Pi 正式 Prompt 中 Skill/宿主残留命中数必须为 0；
+- 同一规范化规则在同一 Prompt 中只出现一次；重复率 warning < 10%，error < 15%；
+- structured/review 目标不超过 18k/30k 字符，planning/creative/style 不超过 32k/42k，
+  prose 默认不超过 65k；超过时必须给出保真证据说明，不能静默退回 180k v2；
+- 每种高风险任务至少有一个 fixture 覆盖“必要信息不丢失”和“无关资料未内联”；
+- 同模型 A/B 比较首响应时间、总输入 token、Provider 请求数、工具调用、修复次数、
+  文学盲评和正式 Gate 结果；只省 token 但质量或闭环率下降不通过；
+- 真实连续 E2E 必须在提示词修复后从干净作品重跑到下一场，不复用失败项目伪装通过。
+
+#### 明确非目标
+
+- 不把所有文学规范做成永不更新的 system prompt；
+- 不复用主创会话给独立审查 Agent；
+- 不让会话记忆替代 Canon、人物状态、候选 digest 或正式 TaskPackage；
+- 不删除外置 Skill 兼容能力；
+- 不用简单截断、摘要正文候选或降低 Gate 强度换取速度。
+
 ### B5：安装与发布
 
 - 全量 Python/Vitest/visual/architecture/prompt tests。
@@ -209,7 +315,10 @@ POST /autopilot/start   runtime=pi-worker, authorized=true
 
 - [x] 已完成 Pi 真实规划、RP、正文和审查任务矩阵。
 - [x] 已完成 Worker 终轮验证与 Studio 有界修复。
+- [x] 已迁入专用 Pi Worker 源码并建立可打包的便携运行时。
+- [x] 已接入普通用户前端配置、探测和 Runtime 选择。
+- [ ] 旧的同一作品连续全自动闭环已暂停；提示词整改后必须从干净作品重新启动，禁止在旧失败项目上续接冒充通过。
+- [x] B4-P 已完成全量 Prompt 审计、Pi 全任务原生 Prompt、稳定 Worker Profile、任务型证据策略、场景 Context Packet 投影、增量 repair、55 资产 audience lint 与真实正文 Prompt 导出。
+- [~] 受控项目会话仅完成租约/身份基础；Provider 级复用明确延后到连续 E2E 通过之后，避免会话缓存掩盖证据缺口。
 - [ ] 未完成同一作品连续全自动闭环。
-- [ ] 未迁入主仓库。
-- [ ] 未进入安装包。
-- [ ] 未接入普通用户前端配置与 Runtime 选择。
+- [ ] 未完成安装版连续闭环与发布验收。

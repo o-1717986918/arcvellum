@@ -5,6 +5,7 @@ import unittest
 from literary_engineering_studio.prompt_evaluation import HIGH_RISK_CASES, evaluate_prompt_assets, write_prompt_evaluation
 from literary_engineering_studio.runtimes.claude_code import ClaudeCodeRuntime
 from literary_engineering_studio.runtimes.opencode import OpenCodeRuntime
+from literary_engineering_studio_engine.prompting.registry import list_prompt_assets
 
 
 class PromptEvaluationTests(unittest.TestCase):
@@ -13,6 +14,11 @@ class PromptEvaluationTests(unittest.TestCase):
         self.assertEqual(report["status"], "pass", report)
         self.assertEqual(report["case_count"], len(HIGH_RISK_CASES))
         self.assertTrue(all(case["exact"] for case in report["cases"]))
+        self.assertEqual(
+            report["metrics"]["tool_audience_asset_count"],
+            len(list_prompt_assets()),
+        )
+        self.assertEqual(report["metrics"]["tool_audience_failure_count"], 0)
 
     def test_report_can_be_persisted(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -11,7 +11,7 @@ from typing import Any, Iterable, Mapping
 
 from ..contracts import TaskPackage
 from ..protocols.canonical_json import canonical_json_digest
-from .context_budget import TaskContextBudget
+from .context_budget import TaskContextBudget, classify_context_task
 from .context_selection import AgentContextSelection
 from .prompt_context import PreparedPromptContext
 
@@ -289,7 +289,15 @@ def _execution_context_identity(
         "route": task.route,
         "current_state": task.current_state,
         "scene_id": str(task.payload.get("scene_id") or ""),
-        "task_kind": budget.task_kind.value if budget is not None else task.task_type,
+        # Prompt recipes consume canonical task kinds. Old persisted task
+        # packages still carry transport names such as
+        # ``platform-agent-asset-review``; never leak those names into the
+        # Prompt Program merely because context budgeting is disabled.
+        "task_kind": (
+            budget.task_kind.value
+            if budget is not None
+            else classify_context_task(task).value
+        ),
         "agent_role": task.execution_contract.agent_role,
         "prompt_asset_id": _prompt_asset_value(task, "resolved_id"),
         "prompt_asset_version": _prompt_asset_value(task, "version"),

@@ -110,6 +110,39 @@ class AssetPromotionGateTests(unittest.TestCase):
                 (root / "workflow" / "asset_promotions" / f"{candidate.stem}_promotion.json").exists()
             )
 
+    def test_world_promotion_does_not_turn_candidate_lifecycle_into_canon(self):
+        from literary_engineering_studio_engine.literary.assets.workshop import _write_promoted_asset
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "canon").mkdir()
+            outputs = _write_promoted_asset(
+                root,
+                "world",
+                {
+                    "world_name": "测试世界",
+                    "core_rules": [
+                        {"id": "fuel_deadline", "description": "燃料限制行动。"},
+                        {
+                            "id": "candidate_not_confirmed",
+                            "description": "本候选资产未经 schema 审查与人工批准不得晋升。",
+                        },
+                    ],
+                    "constraints": ["飞船不能凭空补充燃料。", "candidate_status=ready_for_review"],
+                    "power_sources": [],
+                    "social_order": [],
+                    "taboos": [],
+                    "history_pressure": [],
+                    "open_questions": [],
+                },
+            )
+
+            rendered = outputs[0].read_text(encoding="utf-8")
+            self.assertIn("fuel_deadline", rendered)
+            self.assertIn("飞船不能凭空补充燃料", rendered)
+            self.assertNotIn("candidate_not_confirmed", rendered)
+            self.assertNotIn("ready_for_review", rendered)
+
     @staticmethod
     def _write_candidate(root: Path) -> Path:
         candidate = root / "characters" / "candidates" / "protagonist-foundation.json"

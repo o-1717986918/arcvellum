@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-CONFIG_SCHEMA = "literary-engineering-studio/config/v0.7"
+CONFIG_SCHEMA = "literary-engineering-studio/config/v0.8"
 
 
 def repository_root() -> Path:
@@ -71,11 +71,8 @@ def _default_worker_config() -> dict[str, Any]:
             "enforcement": {
                 "enabled": True,
                 "runtimes": ["pi-worker"],
-                "routes": ["scene-development"],
-                "states": ["candidate-generation-provenance"],
-                "task_kinds": ["prose"],
             },
-            "fallback": "v2",
+            "fallback": "error",
             "lint": {
                 "duplicate_warning_ratio": 0.15,
                 "duplicate_error_ratio": 0.25,
@@ -324,12 +321,12 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
             runners["pi-worker"] = pi_worker
             migrated["agent_runners"] = runners
     if source_schema != CONFIG_SCHEMA:
-        migrated = _migrate_pi_prose_prompt_rollout(migrated)
+        migrated = _migrate_pi_prompt_rollout(migrated)
     return migrated
 
 
-def _migrate_pi_prose_prompt_rollout(payload: dict[str, Any]) -> dict[str, Any]:
-    """Promote only the untouched v0.6 Pi prompt canary to the proven prose path."""
+def _migrate_pi_prompt_rollout(payload: dict[str, Any]) -> dict[str, Any]:
+    """Use the Worker-native Prompt Program for every bounded Pi task."""
 
     migrated = dict(payload)
     worker = migrated.get("worker")
@@ -344,24 +341,16 @@ def _migrate_pi_prose_prompt_rollout(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(enforcement, dict):
         return migrated
     enforcement = dict(enforcement)
-    legacy_states = {str(item) for item in enforcement.get("states") or []}
-    untouched = (
-        str(prompt.get("mode") or "") == "shadow"
-        and enforcement.get("enabled") is False
-        and {str(item) for item in enforcement.get("runtimes") or []} == {"pi-worker"}
-        and legacy_states == {"asset-creation-agent-task", "candidate-review"}
-    )
-    if not untouched:
+    runtimes = {str(item) for item in enforcement.get("runtimes") or []}
+    if runtimes and runtimes != {"pi-worker"}:
         return migrated
     prompt.update(
         {
             "mode": "enforced",
+            "fallback": "error",
             "enforcement": {
                 "enabled": True,
                 "runtimes": ["pi-worker"],
-                "routes": ["scene-development"],
-                "states": ["candidate-generation-provenance"],
-                "task_kinds": ["prose"],
             },
         }
     )

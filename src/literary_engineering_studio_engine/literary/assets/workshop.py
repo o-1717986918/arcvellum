@@ -604,8 +604,8 @@ def _write_promoted_asset(root: Path, asset_type: str, payload: dict[str, Any]) 
         path = root / "canon" / "world_rules.yaml"
         promoted = {
             "world_name": payload.get("world_name", ""),
-            "rules": payload.get("core_rules", []),
-            "constraints": payload.get("constraints", []),
+            "rules": _literary_world_entries(payload.get("core_rules")),
+            "constraints": _literary_world_entries(payload.get("constraints")),
             "power_sources": payload.get("power_sources", []),
             "social_order": payload.get("social_order", []),
             "taboos": payload.get("taboos", []),
@@ -652,6 +652,27 @@ def _public_payload(payload: dict[str, Any]) -> dict[str, Any]:
         for key, value in payload.items()
         if key not in {"schema", "candidate_id", "asset_type", "agent_run_dir", "schema_validation", "candidate_status", "created_at", "risks", "source_paths", "promotion_notes"}
     }
+
+
+def _literary_world_entries(value: Any) -> list[Any]:
+    values = value if isinstance(value, list) else []
+    return [item for item in values if not _world_workflow_metadata(item)]
+
+
+def _world_workflow_metadata(value: Any) -> bool:
+    if isinstance(value, dict):
+        entry_id = str(value.get("id") or "").strip().casefold()
+        if entry_id in {"candidate_not_confirmed", "candidate-status", "promotion-status"}:
+            return True
+    text = json.dumps(value, ensure_ascii=False).casefold()
+    signatures = (
+        "本候选资产",
+        "写入正式 canon 前",
+        "未经 schema 审查",
+        "candidate_status",
+        "ready_for_review",
+    )
+    return any(signature.casefold() in text for signature in signatures)
 
 
 def _render_yaml(data: dict[str, Any], indent: int = 0, exclude: set[str] | None = None) -> str:

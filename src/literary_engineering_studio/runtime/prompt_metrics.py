@@ -246,7 +246,15 @@ def _exact_on_demand_count(text: str) -> int:
     )
     if not match:
         return 0
-    return sum(line.lstrip().startswith("-") for line in match.group("body").splitlines())
+    count = 0
+    for line in match.group("body").splitlines():
+        if re.match(r"^\s*-\s+`D\d{3,}`\s+`", line):
+            count += 1
+            continue
+        legacy = re.match(r"^\s*-\s+`(?P<path>[^`]+)`(?:\s|$)", line)
+        if legacy and legacy.group("path").casefold() != "dxxx":
+            count += 1
+    return count
 
 
 def _ratio(numerator: int, denominator: int) -> float:

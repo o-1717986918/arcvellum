@@ -39,7 +39,7 @@ _RECIPES = {
         ("output_contract", "review_requirements"),
     ),
     ContextTaskKind.PROSE: PromptRecipe(
-        "prompt-v3/prose/v1", ContextTaskKind.PROSE, 90_000, 150_000, 2,
+        "prompt-v3/prose/v2", ContextTaskKind.PROSE, 65_000, 90_000, 2,
         ("style_constraints", "output_contract", "review_requirements"),
     ),
     ContextTaskKind.REVIEW: PromptRecipe(
