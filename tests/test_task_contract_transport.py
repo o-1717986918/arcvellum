@@ -1029,6 +1029,18 @@ class TaskContractTransportTests(unittest.TestCase):
             )
 
             self.assertEqual(preparation["task_type"], "deterministic-cli")
+            self.assertIn(
+                "drafts/compositions/scene_0001_composition.json",
+                preparation["source_paths"],
+            )
+            self.assertIn(
+                "drafts/promotions/scene_0001_promotion.json",
+                preparation["source_paths"],
+            )
+            self.assertIn(
+                "reviews/agent/scene_0001_scene_review.json",
+                preparation["source_paths"],
+            )
             self.assertIn("characters/state_patches/scene_0001_state_patch_review.json", preparation["expected_outputs"])
             self.assertNotIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", preparation["expected_outputs"])
             self.assertIn("characters/state_patches/scene_0001_state_patch_review.json", review["expected_outputs"])
