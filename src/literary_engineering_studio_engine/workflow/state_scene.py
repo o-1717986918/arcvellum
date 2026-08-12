@@ -90,15 +90,11 @@ def next_scene_workflow_state(root: Path, scene: Path | str | None = None) -> di
     if not scene_paths:
         return None
 
-    latest_scene_id = _latest_scene_task_id(root)
-    start = 0
-    if latest_scene_id:
-        start = next((index for index, path in enumerate(scene_paths) if _scene_id(path) == latest_scene_id), 0)
-    for path in scene_paths[start:]:
-        state = _scene_state(root, path)
-        if state.get("status") != "ready":
-            return state
-    for path in scene_paths[:start]:
+    # Default/autopilot execution is chronological: a later scene must not be
+    # generated from context that predates an earlier scene's state, Canon, or
+    # continuity writeback.  Explicit ``--scene`` remains the supported way to
+    # work non-linearly without weakening the automatic route invariant.
+    for path in scene_paths:
         state = _scene_state(root, path)
         if state.get("status") != "ready":
             return state
