@@ -98,6 +98,8 @@ def create_project(
     folder_name: str = "",
     work_type: str = "novel",
     target_length: int = 30000,
+    target_chapters: int = 0,
+    target_scenes: int = 0,
     premise: str = "",
     genre: str = "",
 ) -> dict[str, Any]:
@@ -116,6 +118,8 @@ def create_project(
             title=clean_title,
             work_type=work_type.strip() or "novel",
             target_length=max(1000, int(target_length)),
+            target_chapters=max(0, int(target_chapters)),
+            target_scenes=max(0, int(target_scenes)),
             premise=premise.strip(),
             genre=genre.strip(),
         )
@@ -160,6 +164,8 @@ def project_summary(project_root: Path | str) -> dict[str, Any]:
         "title": str(values.get("title") or root.name),
         "work_type": str(values.get("type") or "novel"),
         "target_length": int(values.get("target_length") or 0),
+        "target_chapters": int(values.get("target_chapters") or 0),
+        "target_scenes": int(values.get("target_scenes") or 0),
         "status": str(values.get("status") or "planning"),
         "genre": str(values.get("genre") or ""),
         "premise": str(values.get("premise") or ""),
@@ -249,10 +255,13 @@ def _read_project_yaml(path: Path) -> dict[str, Any]:
             continue
         key, value = stripped.split(":", 1)
         key = key.strip()
-        if section not in {"project", "creative_brief"}:
+        if section not in {"project", "creative_brief", "longform_budget"}:
             continue
         parsed = _parse_scalar(value.strip())
-        if key in {"title", "type", "target_length", "status", "genre", "premise"}:
+        if key in {
+            "title", "type", "target_length", "target_chapters", "target_scenes",
+            "status", "genre", "premise",
+        }:
             values[key] = parsed
     return values
 

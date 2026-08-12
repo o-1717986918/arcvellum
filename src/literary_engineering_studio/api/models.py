@@ -101,6 +101,8 @@ class ProjectCreateRequest(BaseModel):
     folder_name: str = ""
     work_type: str = "novel"
     target_length: int = 30000
+    target_chapters: int = 0
+    target_scenes: int = 0
     premise: str = ""
     genre: str = ""
 

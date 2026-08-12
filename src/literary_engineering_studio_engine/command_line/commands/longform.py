@@ -66,6 +66,8 @@ def handle(args, parser) -> int | None:
                 Path(args.project),
                 target_words=args.target_words,
                 volumes=args.volumes,
+                target_chapters=args.target_chapters,
+                target_scenes=args.target_scenes,
                 genre=args.genre,
                 time_span=args.time_span,
                 outline=Path(args.outline) if args.outline else None,

@@ -13,6 +13,22 @@ class ProjectLocationTests(unittest.TestCase):
                 result = create_project(parent_directory="", title="Default Location", target_length=1000)
         self.assertEqual(result["title"], "Default Location")
 
+    def test_create_persists_explicit_story_structure_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.dict("os.environ", {"LES_CONFIG_PATH": str(Path(temporary) / "config.json")}):
+                result = create_project(
+                    parent_directory=temporary,
+                    title="Two Scenes",
+                    target_length=6000,
+                    target_chapters=1,
+                    target_scenes=2,
+                )
+                project_text = (Path(result["path"]) / "project.yaml").read_text(encoding="utf-8")
+        self.assertEqual(result["target_chapters"], 1)
+        self.assertEqual(result["target_scenes"], 2)
+        self.assertIn("target_chapters: 1", project_text)
+        self.assertIn("target_scenes: 2", project_text)
+
     def test_create_location_reports_conflict_without_writing(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

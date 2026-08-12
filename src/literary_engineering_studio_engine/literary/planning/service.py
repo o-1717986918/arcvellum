@@ -16,7 +16,7 @@ from .common import (
     _resolve_output,
 )
 from .inventory import _budget_issues, _outline_inventory, _scene_inventory_binding
-from .allocation import _chapter_budgets, _distribute_words, _infer_volumes, _preset_for, _volume_budget
+from .allocation import _chapter_budgets, _distribute_counts, _distribute_words, _infer_volumes, _preset_for, _volume_budget
 from .rendering import (
     _render_markdown,
     _write_agent_tasks,
@@ -29,6 +29,8 @@ def build_word_budget(
     *,
     target_words: int = 0,
     volumes: int = 0,
+    target_chapters: int = 0,
+    target_scenes: int = 0,
     genre: str = "",
     time_span: str = "",
     outline: Path | None = None,
@@ -44,9 +46,28 @@ def build_word_budget(
     if resolved_target <= 0:
         raise ValueError("target Chinese-content characters must be positive")
     volume_count = max(int(volumes or _infer_volumes(project_text, resolved_target)), 1)
+    resolved_chapters = max(int(target_chapters or _project_int(project_text, "target_chapters")), 0)
+    resolved_scenes = max(int(target_scenes or _project_int(project_text, "target_scenes")), 0)
+    if resolved_chapters and resolved_chapters < volume_count:
+        raise ValueError("target chapters cannot be fewer than volumes")
+    if resolved_scenes and resolved_scenes < volume_count:
+        raise ValueError("target scenes cannot be fewer than volumes")
+    if resolved_chapters and resolved_scenes and resolved_scenes < resolved_chapters:
+        raise ValueError("target scenes cannot be fewer than target chapters")
     preset_key, preset = _preset_for(genre or _project_genre(project_text))
     volume_words = _distribute_words(resolved_target, volume_count)
-    volume_budgets = [_volume_budget(index + 1, words, preset) for index, words in enumerate(volume_words)]
+    chapter_counts = _distribute_counts(resolved_chapters, volume_count) if resolved_chapters else [0] * volume_count
+    scene_counts = _distribute_counts(resolved_scenes, volume_count) if resolved_scenes else [0] * volume_count
+    volume_budgets = [
+        _volume_budget(
+            index + 1,
+            words,
+            preset,
+            target_chapters=chapter_counts[index],
+            target_scenes=scene_counts[index],
+        )
+        for index, words in enumerate(volume_words)
+    ]
     chapter_budgets = _chapter_budgets(volume_budgets)
     totals = {
         "target_words": resolved_target,
@@ -97,6 +118,9 @@ def build_word_budget(
             "genre": preset_key,
             "genre_label": preset["label"],
             "time_span": time_span,
+            "target_chapters": resolved_chapters,
+            "target_scenes": resolved_scenes,
+            "structure_source": "explicit_project_contract" if resolved_chapters or resolved_scenes else "genre_inference",
         },
         "preset": {key: value for key, value in preset.items() if key != "aliases"},
         "totals": totals,

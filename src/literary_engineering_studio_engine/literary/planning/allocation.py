@@ -35,12 +35,25 @@ def _infer_volumes(project_text: str, target_words: int) -> int:
         return 3
     return 1
 
-def _volume_budget(index: int, words: int, preset: dict[str, object]) -> dict[str, object]:
-    chapter_count = max(round(words / int(preset["chapter_words"])), 1)
-    scene_count = max(round(words / int(preset["scene_words"])), chapter_count * int(preset["scenes_per_chapter_min"]))
-    min_scenes = chapter_count * int(preset["scenes_per_chapter_min"])
-    max_scenes = chapter_count * int(preset["scenes_per_chapter_max"])
-    scene_count = min(max(scene_count, min_scenes), max_scenes)
+def _volume_budget(
+    index: int,
+    words: int,
+    preset: dict[str, object],
+    *,
+    target_chapters: int = 0,
+    target_scenes: int = 0,
+) -> dict[str, object]:
+    inferred_chapters = max(round(words / int(preset["chapter_words"])), 1)
+    chapter_count = max(int(target_chapters), 1) if target_chapters else inferred_chapters
+    if target_scenes and not target_chapters:
+        chapter_count = min(chapter_count, max(int(target_scenes), 1))
+    if target_scenes:
+        scene_count = max(int(target_scenes), chapter_count)
+    else:
+        scene_count = max(round(words / int(preset["scene_words"])), chapter_count * int(preset["scenes_per_chapter_min"]))
+        min_scenes = chapter_count * int(preset["scenes_per_chapter_min"])
+        max_scenes = chapter_count * int(preset["scenes_per_chapter_max"])
+        scene_count = min(max(scene_count, min_scenes), max_scenes)
     ratios = {
         "mainline": float(preset["mainline_ratio"]),
         "relationship": float(preset["relationship_ratio"]),

@@ -86,10 +86,16 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
     project_text = _read_text(root / "project.yaml")
     target_words = _project_int(project_text, "target_length") or _project_int(project_text, "target_words") or 100000
     volumes = _project_int(project_text, "volumes")
+    target_chapters = _project_int(project_text, "target_chapters")
+    target_scenes = _project_int(project_text, "target_scenes")
     genre = _project_scalar(project_text, "genre")
     command = f"python -m literary_engineering_studio_engine word-budget <project> --target-words {target_words}"
     if volumes:
         command += f" --volumes {volumes}"
+    if target_chapters:
+        command += f" --target-chapters {target_chapters}"
+    if target_scenes:
+        command += f" --target-scenes {target_scenes}"
     if genre:
         command += f" --genre {genre}"
     common_sources = ["project.yaml", "plot/outline.md", "scenes/"]

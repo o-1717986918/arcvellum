@@ -19,6 +19,8 @@ const createForm = reactive({
   folder_name: "",
   work_type: "novel",
   target_length: 300000,
+  target_chapters: 0,
+  target_scenes: 0,
   premise: "",
   genre: "",
 });
@@ -156,6 +158,10 @@ async function continueProject(path: string): Promise<void> {
             </select>
           </label>
           <label class="field"><span>目标规模 · {{ targetLabel }}</span><input v-model.number="createForm.target_length" type="number" min="1000" step="10000" /></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>目标章数（可选）</span><input v-model.number="createForm.target_chapters" type="number" min="0" step="1" placeholder="自动规划" /></label>
+          <label class="field"><span>目标场景数（可选）</span><input v-model.number="createForm.target_scenes" type="number" min="0" step="1" placeholder="自动规划" /></label>
         </div>
 
         <div class="directory-picker">

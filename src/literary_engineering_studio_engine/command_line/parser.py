@@ -519,6 +519,8 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
         word_budget.add_argument("project", help="Work project directory.")
         word_budget.add_argument("--target-words", type=int, default=0, help="Target total Chinese-content character count, including Han characters and Chinese punctuation. Defaults to project.yaml target_length.")
         word_budget.add_argument("--volumes", type=int, default=0, help="Volume count. Defaults to project.yaml volumes or an inferred value.")
+        word_budget.add_argument("--target-chapters", type=int, default=0, help="Hard total chapter count. Defaults to project.yaml target_chapters; zero keeps literary inference.")
+        word_budget.add_argument("--target-scenes", type=int, default=0, help="Hard total scene count. Defaults to project.yaml target_scenes; zero keeps literary inference.")
         word_budget.add_argument("--genre", default="", help="Genre preset, such as general, mystery, speculative, urban, or literary.")
         word_budget.add_argument("--time-span", default="", help="Story time-span note for platform-agent planning.")
         word_budget.add_argument("--outline", default="", help="Existing outline path. Defaults to plot/outline.md.")

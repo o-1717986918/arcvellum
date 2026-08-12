@@ -16,6 +16,8 @@ class InitOptions:
     title: str
     work_type: str = "novel"
     target_length: int = 30000
+    target_chapters: int = 0
+    target_scenes: int = 0
     language: str = "zh-CN"
     premise: str = ""
     genre: str = ""
@@ -68,6 +70,8 @@ creative_brief:
 
 longform_budget:
   target_words: {options.target_length}
+  target_chapters: {max(0, int(options.target_chapters))}
+  target_scenes: {max(0, int(options.target_scenes))}
   volumes: 0
   status: pending_word_budget
   note: "正式长篇生成前运行 word-budget / longform-budget，并由平台 Agent 处理预算化大纲任务。"

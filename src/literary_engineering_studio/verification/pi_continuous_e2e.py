@@ -151,6 +151,8 @@ def create_acceptance_project(api: StudioApi, parent: Path, title: str) -> Path:
             "folder_name": title,
             "work_type": "novel",
             "target_length": 6000,
+            "target_chapters": 1,
+            "target_scenes": 2,
             "genre": "近未来科幻",
             "premise": "一名轨道维修员收到来自已经失联空间站的求救信号，必须在救人和保住返航燃料之间选择。",
         },

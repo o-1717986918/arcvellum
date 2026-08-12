@@ -36,6 +36,36 @@ class WordBudgetModuleBoundaryTests(unittest.TestCase):
             self.assertEqual(summary["target"]["target_chinese_chars"], 120000)
             self.assertIn("chapter_rows", summary["scene_inventory_binding"])
 
+    def test_explicit_project_structure_overrides_genre_inference(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "plot").mkdir()
+            (root / "project.yaml").write_text(
+                "target_length: 6000\ntarget_chapters: 1\ntarget_scenes: 2\ngenre: speculative\n",
+                encoding="utf-8",
+            )
+            (root / "plot" / "outline.md").write_text("# 第一章\n", encoding="utf-8")
+
+            result = build_word_budget(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(result.chapter_count, 1)
+            self.assertEqual(result.scene_count, 2)
+            self.assertEqual(payload["target"]["structure_source"], "explicit_project_contract")
+            self.assertEqual(payload["chapter_budgets"][0]["scene_count"], 2)
+
+    def test_explicit_structure_rejects_more_volumes_than_scenes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "plot").mkdir()
+            (root / "project.yaml").write_text(
+                "target_length: 6000\nvolumes: 2\ntarget_scenes: 1\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "target scenes cannot be fewer than volumes"):
+                build_word_budget(root)
+
     def test_scene_contract_preserves_chinese_character_budget_and_renderer(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

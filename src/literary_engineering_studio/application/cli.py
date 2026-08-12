@@ -59,6 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     project_create.add_argument("--folder-name", default="")
     project_create.add_argument("--work-type", default="novel")
     project_create.add_argument("--target-length", type=int, default=30000)
+    project_create.add_argument("--target-chapters", type=int, default=0)
+    project_create.add_argument("--target-scenes", type=int, default=0)
     project_create.add_argument("--premise", default="")
     project_create.add_argument("--genre", default="")
     direction = sub.add_parser("direction-add", help="Record a user creative direction for future Agent tasks.")
@@ -151,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
             folder_name=args.folder_name,
             work_type=args.work_type,
             target_length=args.target_length,
+            target_chapters=args.target_chapters,
+            target_scenes=args.target_scenes,
             premise=args.premise,
             genre=args.genre,
         )

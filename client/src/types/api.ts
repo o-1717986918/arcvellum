@@ -18,6 +18,8 @@ export interface ProjectSummary {
   title: string;
   work_type: string;
   target_length: number;
+  target_chapters?: number;
+  target_scenes?: number;
   status: string;
   genre: string;
   premise: string;
