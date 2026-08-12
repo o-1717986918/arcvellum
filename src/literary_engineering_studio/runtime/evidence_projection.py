@@ -47,6 +47,8 @@ def project_evidence_body(
                     scene_id=scene_id,
                     chapter_id=chapter_id,
                 )
+            elif projection == "revision-review":
+                payload = _revision_review_projection(payload)
             elif path.endswith("scene_review.context.json"):
                 payload = _review_context_projection(payload)
             elif path == "style/creative_quality_profile.json":
@@ -477,6 +479,63 @@ def _review_context_projection(value: object) -> object:
         for key, item in value.items()
         if key not in {"creative_quality_profile", "source_digests", "style_mount_snapshot"}
     } | {"deterministic_evidence": compact}
+
+
+def _revision_review_projection(value: object) -> object:
+    """Project a semantic review into the exact worklist needed to revise."""
+
+    if not isinstance(value, dict):
+        return value
+    style_adherence = value.get("style_adherence")
+    style_projection = {}
+    if isinstance(style_adherence, dict):
+        style_projection = {
+            key: style_adherence[key]
+            for key in ("status", "deviations")
+            if key in style_adherence
+        }
+    word_budget = value.get("word_budget_adherence")
+    word_projection = {}
+    if isinstance(word_budget, dict):
+        word_projection = {
+            key: word_budget[key]
+            for key in (
+                "status",
+                "target_chinese_chars",
+                "min_chinese_chars",
+                "max_chinese_chars",
+                "clean_body_chinese_chars",
+            )
+            if key in word_budget
+        }
+    revision_integrity = value.get("revision_integrity")
+    integrity_projection = {}
+    if isinstance(revision_integrity, dict):
+        integrity_projection = {
+            key: revision_integrity[key]
+            for key in ("required", "reason", "route")
+            if key in revision_integrity
+        }
+    return {
+        key: value[key]
+        for key in (
+            "schema",
+            "schema_id",
+            "scene_id",
+            "candidate_path",
+            "candidate_sha256",
+            "conclusion",
+            "blocking_issues",
+            "warnings",
+            "revision_actions",
+            "style_notes",
+        )
+        if key in value
+    } | {
+        "style_adherence": style_projection,
+        "word_budget_adherence": word_projection,
+        "revision_integrity": integrity_projection,
+    }
 
 
 def _compact_review_schema(value: object) -> object:

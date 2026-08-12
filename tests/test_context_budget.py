@@ -147,6 +147,20 @@ class ContextBudgetTests(unittest.TestCase):
 
             self.assertIs(budget.task_kind, ContextTaskKind.REVIEW)
 
+    def test_scene_revision_is_prose_not_generic_creative_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            budget = resolve_task_context_budget(
+                _task(
+                    Path(temporary),
+                    task_type="main-platform-agent-revision",
+                    role="main-creative-agent",
+                    current_state="candidate-revision",
+                    outputs=("drafts/revisions/scene_0001_revision.md",),
+                )
+            )
+
+            self.assertIs(budget.task_kind, ContextTaskKind.PROSE)
+
     def test_bounded_mode_fails_closed_when_mandatory_context_does_not_fit(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

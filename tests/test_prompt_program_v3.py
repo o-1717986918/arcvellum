@@ -712,6 +712,115 @@ class PromptProgramV3Tests(unittest.TestCase):
                 self.assertIn(relative, context["prompt_access"]["exact_on_demand"])
                 self.assertNotIn(relative, context["prompt_access"]["inline"])
 
+    def test_pi_revision_keeps_exact_prose_and_compacts_actionable_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = "正文原稿。" * 700
+            context_packet = (
+                "# 上下文\n\n## 硬约束：Canon 与时间线\n\n- 不得改变事实。\n\n"
+                "## 人物状态\n\n- 主角仍在现场。\n\n"
+                "## 正文生成资料\n\n" + "重复资料。" * 10_000
+            )
+            review = {
+                "schema": "scene-review/v1",
+                "scene_id": "scene_0001",
+                "candidate_path": "drafts/candidates/scene_0001-platform-agent.md",
+                "candidate_sha256": "a" * 64,
+                "conclusion": "pass_with_notes",
+                "summary": "重复正向评价" * 5_000,
+                "blocking_issues": [],
+                "warnings": [{"id": "w1", "message": "减少破折号"}],
+                "revision_actions": [{"id": "RA1", "action": "减少破折号"}],
+                "style_notes": [{"id": "s1", "message": "改为直接陈述"}],
+                "style_adherence": {
+                    "status": "notes_with_deviations",
+                    "deviations": [{"rule": "dash", "detail": "超阈值"}],
+                    "notes": ["重复正面评价" * 3_000],
+                },
+                "word_budget_adherence": {
+                    "status": "pass",
+                    "target_chinese_chars": 3000,
+                    "min_chinese_chars": 2700,
+                    "max_chinese_chars": 3300,
+                    "clean_body_chinese_chars": 3190,
+                    "note": "无需扩写",
+                },
+                "source_paths": [f"canon/source-{index}.yaml" for index in range(500)],
+            }
+            files = {
+                "drafts/candidates/scene_0001-platform-agent.md": candidate,
+                "reviews/agent/scene_0001_scene_review.json": json.dumps(review, ensure_ascii=False),
+                "reviews/agent/scene_0001_scene_review.md": "# 完整审查\n" + "重复" * 20_000,
+                "scenes/scene_0001.yaml": "scene_id: scene_0001\nchapter_id: chapter_0001\nword_count_target: 3000\n",
+                "memory/context_packets/scene_0001.md": context_packet,
+                "style/creative_quality_profile.json": '{"schema":"quality/v1","thresholds":{"dash":2}}',
+                "style/style-profile.md": "# 冷静叙事\n\n- 使用准确动作。\n",
+                "drafts/compositions/scene_0001_composition.json": '{"scene_id":"scene_0001"}',
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            task = _task(root)
+            task.payload.update(
+                {
+                    "route": "scene-development",
+                    "task_type": "main-platform-agent-revision",
+                    "current_state": "candidate-revision",
+                    "agent_role": "main-creative-agent",
+                    "scene_id": "scene_0001",
+                    "revision_source": "drafts/candidates/scene_0001-platform-agent.md",
+                    "candidate": "drafts/revisions/scene_0001_revision.md",
+                    "source_paths": list(files),
+                    "agent_source_paths": list(files),
+                    "context_must_inline_paths": [
+                        "drafts/candidates/scene_0001-platform-agent.md",
+                        "reviews/agent/scene_0001_scene_review.json",
+                        "scenes/scene_0001.yaml",
+                        "memory/context_packets/scene_0001.md",
+                        "style/creative_quality_profile.json",
+                        "style/style-profile.md",
+                    ],
+                    "expected_outputs": [
+                        "drafts/revisions/scene_0001_revision.md",
+                        "drafts/revisions/scene_0001_revision_report.md",
+                        "drafts/revisions/scene_0001_revision.json",
+                    ],
+                    "core_managed_outputs": [],
+                }
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="revision-compact",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "error",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
+            projection = manifest["prompt_program"]["formal"]
+
+            self.assertEqual(projection["program"]["task_identity"]["task_kind"], "prose")
+            self.assertEqual(projection["lint"]["status"], "pass")
+            self.assertLess(projection["metrics"]["total_characters"], 42_000)
+            self.assertIn(candidate, prompt)
+            self.assertIn("减少破折号", prompt)
+            self.assertNotIn("重复正向评价", prompt)
+            self.assertNotIn("canon/source-499.yaml", prompt)
+            self.assertIn(
+                "reviews/agent/scene_0001_scene_review.md",
+                context["prompt_access"]["exact_on_demand"],
+            )
+
     def test_pi_composition_review_uses_single_compact_composition_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

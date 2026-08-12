@@ -234,7 +234,11 @@ def classify_context_task(task: TaskPackage) -> ContextTaskKind:
     state = task.current_state.lower()
     role = task.execution_contract.agent_role.lower()
     haystack = " ".join((task_type, route, state, task.task_id.lower()))
-    if "prose" in task_type or "generation-agent-task" in state:
+    if (
+        "prose" in task_type
+        or "generation-agent-task" in state
+        or state in {"candidate-revision", "static-revision"}
+    ):
         return ContextTaskKind.PROSE
     route_kind = _route_task_kind(route, haystack)
     if route_kind is not None:

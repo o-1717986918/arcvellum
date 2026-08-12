@@ -55,6 +55,8 @@ def evidence_policy(
         return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
 
     if task_kind == "prose":
+        if task.current_state.casefold() in {"candidate-revision", "static-revision"}:
+            return _revision_evidence_policy(task, lowered)
         if lowered in {
             "plot/outline.md",
             "branches/" + str(task.payload.get("scene_id") or "").casefold() + "/branch_selection.md",
@@ -128,6 +130,35 @@ def evidence_policy(
             return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
 
     return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+
+
+def _revision_evidence_policy(
+    task: TaskPackage,
+    lowered: str,
+) -> EvidencePolicyDecision:
+    """Keep revision evidence exact and small enough to drive one focused edit."""
+
+    scene_id = str(task.payload.get("scene_id") or "").casefold()
+    if lowered.startswith("drafts/") and lowered.endswith(".md"):
+        if lowered == str(task.payload.get("revision_source") or "").casefold():
+            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+        if lowered == str(task.payload.get("candidate") or "").casefold():
+            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+    if lowered == f"reviews/agent/{scene_id}_scene_review.json":
+        return EvidencePolicyDecision(
+            EvidenceDisposition.INLINE, "revision-review"
+        )
+    if lowered == f"scenes/{scene_id}.yaml":
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, "prose-scene")
+    if lowered in {
+        "style/creative_quality_profile.json",
+        "style/style-profile.md",
+    }:
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+    # The exact review Markdown, composition trail, branch choice, budget
+    # ledger and trace remain available for a specific dispute. Replaying
+    # them on turn one competes with the actual prose and actionable notes.
+    return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
 
 
 def _unmounted_style_template(body: str) -> bool:
