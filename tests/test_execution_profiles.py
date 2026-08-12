@@ -135,6 +135,44 @@ class ExecutionProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(ExecutionProfileError, "main-creative-agent"):
                 resolve_task_execution_profile(task, {}, runtime_id="opencode")
 
+    def test_pi_prose_enforcement_uses_convergent_repair_budget(self):
+        settings = {
+            "execution_profile": {
+                "mode": "enforced",
+                "enforcement": {
+                    "enabled": True,
+                    "runtimes": ["pi-worker"],
+                    "routes": ["scene-development"],
+                    "states": ["candidate-generation-provenance"],
+                    "task_kinds": ["prose"],
+                },
+            }
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = resolve_task_execution_profile(
+                _task(
+                    Path(temporary),
+                    state="candidate-generation-provenance",
+                    task_type="main-platform-agent-prose",
+                ),
+                settings,
+                runtime_id="pi-worker",
+                capability_ids=(
+                    "bounded-repair",
+                    "total-timeout-control",
+                    "turn-limit-control",
+                    "tool-limit-control",
+                    "reasoning-policy-control",
+                    "reasoning-budget-control",
+                ),
+            )
+
+        controls = _controls(profile)
+        self.assertEqual(profile.mode, "enforced")
+        self.assertEqual(controls["max_repair_attempts"]["effective"], 4)
+        self.assertEqual(controls["max_turns"]["effective"], 6)
+        self.assertEqual(controls["max_tool_calls"]["effective"], 8)
+
     def test_deterministic_profile_has_no_agent_budget(self):
         with tempfile.TemporaryDirectory() as temporary:
             profile = resolve_task_execution_profile(

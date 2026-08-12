@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 
-CONFIG_SCHEMA = "literary-engineering-studio/config/v0.8"
+CONFIG_SCHEMA = "literary-engineering-studio/config/v0.9"
 
 
 def repository_root() -> Path:
@@ -79,13 +79,13 @@ def _default_worker_config() -> dict[str, Any]:
             },
         },
         "execution_profile": {
-            "mode": "shadow",
+            "mode": "enforced",
             "enforcement": {
-                "enabled": False,
+                "enabled": True,
                 "runtimes": ["pi-worker"],
-                "routes": ["character-and-world-assets", "scene-development"],
-                "states": ["asset-creation-agent-task", "candidate-review"],
-                "task_kinds": ["creative", "review"],
+                "routes": ["scene-development"],
+                "states": ["candidate-generation-provenance"],
+                "task_kinds": ["prose"],
             },
             "reasoning_budget": {
                 "enabled": True,
@@ -322,6 +322,7 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
             migrated["agent_runners"] = runners
     if source_schema != CONFIG_SCHEMA:
         migrated = _migrate_pi_prompt_rollout(migrated)
+        migrated = _migrate_pi_prose_execution_profile(migrated)
     return migrated
 
 
@@ -355,6 +356,52 @@ def _migrate_pi_prompt_rollout(payload: dict[str, Any]) -> dict[str, Any]:
         }
     )
     worker["prompt_program"] = prompt
+    migrated["worker"] = worker
+    return migrated
+
+
+def _migrate_pi_prose_execution_profile(payload: dict[str, Any]) -> dict[str, Any]:
+    """Replace only the untouched legacy Pi profile with the prose policy."""
+
+    migrated = dict(payload)
+    worker = migrated.get("worker")
+    if not isinstance(worker, dict):
+        return migrated
+    worker = dict(worker)
+    profile = worker.get("execution_profile")
+    if not isinstance(profile, dict):
+        return migrated
+    profile = dict(profile)
+    enforcement = profile.get("enforcement")
+    if not isinstance(enforcement, dict):
+        return migrated
+    runtimes = {str(item) for item in enforcement.get("runtimes") or []}
+    routes = {str(item) for item in enforcement.get("routes") or []}
+    states = {str(item) for item in enforcement.get("states") or []}
+    task_kinds = {str(item) for item in enforcement.get("task_kinds") or []}
+    untouched_legacy = (
+        str(profile.get("mode") or "shadow") == "shadow"
+        and enforcement.get("enabled") is False
+        and runtimes == {"pi-worker"}
+        and routes == {"character-and-world-assets", "scene-development"}
+        and states == {"asset-creation-agent-task", "candidate-review"}
+        and task_kinds == {"creative", "review"}
+    )
+    if not untouched_legacy:
+        return migrated
+    profile.update(
+        {
+            "mode": "enforced",
+            "enforcement": {
+                "enabled": True,
+                "runtimes": ["pi-worker"],
+                "routes": ["scene-development"],
+                "states": ["candidate-generation-provenance"],
+                "task_kinds": ["prose"],
+            },
+        }
+    )
+    worker["execution_profile"] = profile
     migrated["worker"] = worker
     return migrated
 

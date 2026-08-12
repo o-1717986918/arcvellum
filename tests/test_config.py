@@ -95,6 +95,76 @@ class ConfigTests(unittest.TestCase):
             config["worker"]["prompt_program"]["enforcement"],
             {"enabled": True, "runtimes": ["pi-worker"]},
         )
+        self.assertEqual(config["worker"]["execution_profile"]["mode"], "enforced")
+        self.assertEqual(
+            config["worker"]["execution_profile"]["enforcement"],
+            {
+                "enabled": True,
+                "runtimes": ["pi-worker"],
+                "routes": ["scene-development"],
+                "states": ["candidate-generation-provenance"],
+                "task_kinds": ["prose"],
+            },
+        )
+
+    def test_migrates_untouched_legacy_pi_profile_to_prose_enforcement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            target.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-studio/config/v0.8",
+                        "worker": {
+                            "execution_profile": {
+                                "mode": "shadow",
+                                "enforcement": {
+                                    "enabled": False,
+                                    "runtimes": ["pi-worker"],
+                                    "routes": ["character-and-world-assets", "scene-development"],
+                                    "states": ["asset-creation-agent-task", "candidate-review"],
+                                    "task_kinds": ["creative", "review"],
+                                },
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            profile = load_config(target)["worker"]["execution_profile"]
+
+            self.assertEqual(profile["mode"], "enforced")
+            self.assertEqual(profile["enforcement"]["states"], ["candidate-generation-provenance"])
+            self.assertEqual(profile["enforcement"]["task_kinds"], ["prose"])
+
+    def test_preserves_custom_legacy_execution_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            target.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-studio/config/v0.8",
+                        "worker": {
+                            "execution_profile": {
+                                "mode": "shadow",
+                                "enforcement": {
+                                    "enabled": False,
+                                    "runtimes": ["pi-worker"],
+                                    "routes": ["style-learning"],
+                                    "states": ["style-agent-task"],
+                                    "task_kinds": ["style"],
+                                },
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            profile = load_config(target)["worker"]["execution_profile"]
+
+            self.assertEqual(profile["mode"], "shadow")
+            self.assertEqual(profile["enforcement"]["routes"], ["style-learning"])
 
     def test_migrates_legacy_runtimes_to_agent_runners(self):
         with tempfile.TemporaryDirectory() as temporary:
