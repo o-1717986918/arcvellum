@@ -214,6 +214,7 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
                 "The inventory is a machine-readable materialization contract: use the required chapter heading and 11-column scene table, not free-form scene cards or prose summaries.",
                 "Each added scene candidate needs target Chinese-content characters, function, participants, conflict, information release, consequence, and setup/payoff role.",
                 "The participants column contains durable human/character roles only. Do not list locations, vehicles, signals, objects, organizations, camera subjects, or unnamed crowds as characters; express those through conflict, information release, consequence, or setting.",
+                "Every participant is a bare stable identity label. Parentheses, action notes, aliases, reveal timing, and descriptive clauses belong in the other scene columns, never in a character identity.",
                 "Use the stable symbolic label 主角 for the foundational protagonist before its canonical name is fixed. Any other participant listed here is a deliberate request for a reusable character asset before RP and prose.",
                 "Scene inventory remains candidate material until review and user approval.",
             ],

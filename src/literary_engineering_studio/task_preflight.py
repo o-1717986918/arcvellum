@@ -39,6 +39,9 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
 from literary_engineering_studio_engine.reader_experience import (
     chapter_obligation_contract_issues,
 )
+from literary_engineering_studio_engine.literary.planning.materializer import (
+    scene_inventory_contract_issues,
+)
 
 
 def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> PreflightResult:
@@ -80,11 +83,44 @@ def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Prefli
     validate_archaeology_chunk_output(task, sandbox, issues)
     validate_archaeology_reconstruction_output(task, sandbox, issues)
     _validate_source_extraction_revision(task, sandbox, issues)
+    _validate_scene_inventory_contract(task, sandbox, issues)
     _validate_chapter_obligation_contract(task, sandbox, issues)
     _validate_semantic_task_contract(task, sandbox, issues)
     _validate_continuity_ledger_contract(task, sandbox, issues)
     _validate_branch_selection_contract(task, sandbox, issues)
     return PreflightResult(not issues, tuple(issues))
+
+
+def _validate_scene_inventory_contract(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    issues: list[PreflightIssue],
+) -> None:
+    current_state = str(task.current_state or task.payload.get("current_state") or "")
+    if current_state not in {"scene-inventory-agent-task", "scene-inventory-review"}:
+        return
+    relative = "plot/candidates/scenes/word_budget_scene_inventory.md"
+    path = sandbox.workspace / relative
+    if not path.is_file():
+        return
+    messages = scene_inventory_contract_issues(
+        path.read_text(encoding="utf-8", errors="replace")
+    )
+    if not messages:
+        return
+    issues.append(
+        PreflightIssue(
+            "scene-inventory-contract",
+            relative,
+            "; ".join(messages),
+            (
+                f"只修复 `{relative}` 的场景库存机械合同并保留创意内容。"
+                "participants 每项必须是稳定的裸身份标签；删除身份中的圆括号、方括号、动作、别名、"
+                "揭示时机或说明从句，并把被删除的信息移入同一场景的 conflict、information_release "
+                "或 consequence 列。不要合并、删除或新增场景来规避该问题。"
+            ),
+        )
+    )
 
 
 def _validate_chapter_obligation_contract(

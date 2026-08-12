@@ -11,6 +11,25 @@ from literary_engineering_studio_engine.longform_materializer import (
 
 
 class LongformMaterializerTests(unittest.TestCase):
+
+    def test_participant_identity_rejects_explanatory_parenthetical(self):
+        from literary_engineering_studio_engine.literary.planning.materializer import (
+            scene_inventory_contract_issues,
+        )
+
+        inventory = """### Ch 0001 — 信号 |
+
+| scene_id | name | target_chars | function | participants | conflict | information_release | consequence | setup_payoff_role | rhythm_role | obligation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SC-001 | 信号 | 1200 | setup | 主角、幸存者（以信号点名身份现身） | 燃料不足 | 信号点名幸存者 | 主角必须选择 | setup | setup | 建立冲突 |
+"""
+
+        issues = scene_inventory_contract_issues(inventory)
+
+        self.assertEqual(len(issues), 1)
+        self.assertIn("bare identity", issues[0])
+        self.assertIn("幸存者（以信号点名身份现身）", issues[0])
+
     def test_reviewed_inventory_materializes_formal_outline_and_scene_contracts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

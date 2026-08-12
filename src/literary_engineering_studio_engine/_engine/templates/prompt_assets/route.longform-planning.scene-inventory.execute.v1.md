@@ -21,6 +21,7 @@ hard_constraints:
   - Balance setup escalation payoff aftermath and transition scenes.
   - Write the inventory as the exact chapter-heading plus 11-column scene table contract required for deterministic materialization.
   - The participants column contains only durable human or character roles that should own formal character assets.
+  - Every participants item is a bare stable identity label or role token. Never append parentheses, action notes, reveal timing, aliases, or descriptive clauses to an identity.
   - Never put a location vehicle signal object organization camera subject or unnamed crowd in participants.
 style_constraints:
   - Scene summaries must describe events and choices not prose decoration.
@@ -50,4 +51,4 @@ Write `plot/candidates/scenes/word_budget_scene_inventory.md` in this exact repe
 
 Use one unique `SC-###` row for every planned scene. `target_chars` must be a positive integer. The 11 data columns are mandatory, and the total row count must reconcile with `word_budget.json`.
 
-`participants` is a character contract, not a list of every noun present in the scene. Use `主角` for the foundational protagonist until a canonical name is fixed. List another participant only when the story intends that person or durable character role to receive a reusable formal character asset before roleplay and prose. Put stations, ships, signals, interfaces, organizations, objects, anonymous crowds, and scenery into the conflict, information-release, consequence, or setting wording instead.
+`participants` is a character contract, not a list of every noun present in the scene. Use `主角` for the foundational protagonist until a canonical name is fixed. List another participant only when the story intends that person or durable character role to receive a reusable formal character asset before roleplay and prose. Each item must be a bare identity such as `幸存者` or `调度员`; `幸存者（以信号点名身份现身）` is invalid because the parenthetical belongs in information release. Put stations, ships, signals, interfaces, organizations, objects, anonymous crowds, scenery, actions, aliases, and reveal notes into the conflict, information-release, consequence, or setting wording instead.

@@ -256,7 +256,38 @@ def _parse_scene_inventory(text: str) -> list[dict[str, object]]:
     ids = [str(scene["scene_id"]) for scene in scenes]
     if len(ids) != len(set(ids)):
         raise ValueError("scene inventory contains duplicate scene ids")
+    participant_errors = _scene_inventory_participant_errors(scenes)
+    if participant_errors:
+        raise ValueError("scene inventory participant contract: " + "; ".join(participant_errors))
     return scenes
+
+
+def scene_inventory_contract_issues(text: str) -> list[str]:
+    """Return materialization-contract problems before project writeback."""
+
+    try:
+        _parse_scene_inventory(text)
+    except ValueError as exc:
+        return [str(exc)]
+    return []
+
+
+def _scene_inventory_participant_errors(
+    scenes: list[dict[str, object]],
+) -> list[str]:
+    errors: list[str] = []
+    for scene in scenes:
+        scene_id = str(scene.get("scene_id") or "scene")
+        participants = scene.get("participants")
+        if not isinstance(participants, list):
+            continue
+        for raw in participants:
+            identity = str(raw or "").strip()
+            if re.search(r"[()（）\[\]【】]", identity):
+                errors.append(
+                    f"{scene_id} participant `{identity}` contains an explanatory parenthetical; keep only the bare identity and move the note to information_release or conflict"
+                )
+    return errors
 
 
 def _parse_card_scene_inventory(text: str) -> list[dict[str, object]]:
