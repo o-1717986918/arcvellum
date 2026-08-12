@@ -160,6 +160,18 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     state_patch_character_files = _state_patch_character_files(root, state_patch)
     state_apply = f"characters/state_patches/{scene_id}_state_apply"
     canon_patch = f"canon/patches/{scene_id}_canon_patch"
+    canon_formal_sources = [
+        relative
+        for relative in (
+            "canon/facts.json",
+            "canon/forbidden_changes.yaml",
+            "canon/locations.yaml",
+            "canon/organizations.yaml",
+            "canon/timeline.yaml",
+            "canon/world_rules.yaml",
+        )
+        if (root / relative).is_file()
+    ]
     direction_sources = _matching_revision_choice_sources(
         root,
         scene_id,
@@ -849,6 +861,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 f"{state_patch}.agent_tasks.md",
                 f"{state_patch}.agent_completion.json",
                 state_review,
+                *canon_formal_sources,
             ],
             "context_trace": context_trace,
             "expected_outputs": [f"{canon_patch}.md", f"{canon_patch}.json", f"{canon_patch}.agent_tasks.md", canon_review],
@@ -864,7 +877,24 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "task_type": "platform-agent-review",
             "prompt_asset_id": "route.scene-development.canon-evolve.v1",
             "command": "",
-            "source_paths": [scene_rel, context, context_trace, f"{canon_patch}.md", f"{canon_patch}.json", f"{canon_patch}.agent_tasks.md", canon_review],
+            "source_paths": list(
+                dict.fromkeys(
+                    [
+                        scene_rel,
+                        context,
+                        context_trace,
+                        f"drafts/scenes/{scene_id}.md",
+                        f"drafts/promotions/{scene_id}_promotion.json",
+                        f"{review}.json",
+                        f"{state_patch}.json",
+                        f"{canon_patch}.md",
+                        f"{canon_patch}.json",
+                        f"{canon_patch}.agent_tasks.md",
+                        canon_review,
+                        *canon_formal_sources,
+                    ]
+                )
+            ),
             "context_trace": context_trace,
             "expected_outputs": [canon_review, f"{canon_patch}.agent_completion.json"],
             "hard_constraints": [

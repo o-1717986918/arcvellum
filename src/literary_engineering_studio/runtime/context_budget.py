@@ -274,7 +274,7 @@ def _scene_task_kind(state: str) -> ContextTaskKind | None:
     # larger, less focused context and can replay the whole planning corpus.
     if state == "composition-agent-task":
         return ContextTaskKind.REVIEW
-    if state in {"state-agent-task", "canon-agent-task"}:
+    if state in {"state-agent-task", "canon-patch-json", "canon-agent-task"}:
         # These tasks emit structured JSON, but the work itself is a semantic
         # literary review of exact evidence. Treating them as simple structured
         # extraction gives them an unrealistically small Prompt recipe.

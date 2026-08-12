@@ -114,6 +114,9 @@ def _task_scoped_user_direction(user_direction: str, current_state: str) -> str:
     if current_state.casefold() in {
         "continuity-ledger-agent-task",
         "continuity-ledger-review",
+        "state-agent-task",
+        "canon-patch-json",
+        "canon-agent-task",
     }:
         return ""
     return user_direction

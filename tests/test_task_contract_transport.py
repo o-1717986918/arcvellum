@@ -1050,6 +1050,38 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertIn("drafts/promotions/scene_0001_promotion.json", review["source_paths"])
             self.assertIn("reviews/agent/scene_0001_scene_review.json", review["source_paths"])
 
+    def test_canon_generation_and_review_share_exact_durable_fact_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text("scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8")
+            (root / "canon").mkdir()
+            for relative in (
+                "facts.json",
+                "forbidden_changes.yaml",
+                "locations.yaml",
+                "organizations.yaml",
+                "timeline.yaml",
+                "world_rules.yaml",
+            ):
+                (root / "canon" / relative).write_text("{}\n", encoding="utf-8")
+
+            generation = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "canon-patch-json", ""
+            )
+            review = task_registry._blueprint_for_state(
+                root, "scene_0001", "scenes/scene_0001.yaml", "canon-agent-task", ""
+            )
+
+            for blueprint in (generation, review):
+                self.assertIn("drafts/scenes/scene_0001.md", blueprint["source_paths"])
+                self.assertIn("reviews/agent/scene_0001_scene_review.json", blueprint["source_paths"])
+                self.assertIn("characters/state_patches/scene_0001_state_patch.json", blueprint["source_paths"])
+                self.assertIn("canon/world_rules.yaml", blueprint["source_paths"])
+                self.assertIn("canon/forbidden_changes.yaml", blueprint["source_paths"])
+
     def test_state_apply_stages_the_completed_state_review_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

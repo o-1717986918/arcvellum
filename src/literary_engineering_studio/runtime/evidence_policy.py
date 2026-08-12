@@ -169,6 +169,41 @@ def evidence_policy(
         # patch, prose, composition writeback and character evidence above.
         return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
 
+    if task.current_state.casefold() in {"canon-patch-json", "canon-agent-task"}:
+        scene_id = str(task.payload.get("scene_id") or "").casefold()
+        if lowered == f"drafts/scenes/{scene_id}.md":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "canon-prose"
+            )
+        if lowered == f"scenes/{scene_id}.yaml":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "canon-scene"
+            )
+        if lowered == f"reviews/agent/{scene_id}_scene_review.json":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "canon-scene-review"
+            )
+        if lowered == f"characters/state_patches/{scene_id}_state_patch.json":
+            return EvidencePolicyDecision(
+                EvidenceDisposition.INLINE, "canon-state-boundary"
+            )
+        if lowered == f"canon/patches/{scene_id}_canon_patch.json":
+            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+        if lowered in {
+            "canon/facts.json",
+            "canon/forbidden_changes.yaml",
+            "canon/locations.yaml",
+            "canon/organizations.yaml",
+            "canon/timeline.yaml",
+            "canon/world_rules.yaml",
+        }:
+            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+        # Promotion manifests, state-review transport, context packets,
+        # candidate worldbuilding assets, reports and task sidecars stay
+        # available for a concrete dispute. They duplicate either the exact
+        # prose, the formal Canon, or the two compact semantic declarations.
+        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
     if "asset-review" in task.task_type.casefold():
         if lowered.startswith("plot/word_budget/"):
             return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)

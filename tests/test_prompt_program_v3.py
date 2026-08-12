@@ -28,6 +28,138 @@ from literary_engineering_studio_engine.prompting.agents.schema import compact_s
 
 
 class PromptProgramV3Tests(unittest.TestCase):
+    def test_pi_canon_generation_and_review_share_compact_exact_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                "scenes/scene_0001.yaml": "scene_id: scene_0001\noutput_state:\n  new_facts: [特征码已确认]\n",
+                "drafts/scenes/scene_0001.md": "## 正文草稿\n\n三组冗余校验同时吻合。沈岸确认那是八年前写入检修链路的特征码。\n",
+                "drafts/promotions/scene_0001_promotion.json": json.dumps({"nested": "p" * 30_000}),
+                "reviews/agent/scene_0001_scene_review.json": json.dumps(
+                    {
+                        "scene_id": "scene_0001",
+                        "candidate_sha256": "abc",
+                        "conclusion": "pass",
+                        "summary": "本场确立持续新事实。",
+                        "canon_writeback": {
+                            "canon_change": True,
+                            "candidate_patch": "特征码来源和校验结果成为持续事实。",
+                        },
+                        "style_adherence": {"large": "r" * 30_000},
+                    },
+                    ensure_ascii=False,
+                ),
+                "characters/state_patches/scene_0001_state_patch.json": json.dumps(
+                    {
+                        "scene_id": "scene_0001",
+                        "source_changes": {
+                            "new_facts": ["特征码已确认"],
+                            "character_changes": ["沈岸抢先行动"],
+                        },
+                        "characters": [{"character_id": "protagonist", "proposed_updates": {"arc": ["抢先行动"]}}],
+                    },
+                    ensure_ascii=False,
+                ),
+                "canon/facts.json": '{"facts":[]}',
+                "canon/world_rules.yaml": "rules:\n  - id: evidence\n    description: 事实必须经冗余校验。\n",
+                "canon/forbidden_changes.yaml": "forbidden_changes: []\n",
+                "canon/locations.yaml": "locations: []\n",
+                "canon/organizations.yaml": "organizations: []\n",
+                "canon/timeline.yaml": "timeline: []\n",
+                "canon/patches/scene_0001_canon_patch.json": json.dumps(
+                    {
+                        "scene_id": "scene_0001",
+                        "canon_change": True,
+                        "items": [{"summary": "特征码及校验结果成为持续事实"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                "memory/context_packets/scene_0001.md": "重复上下文" * 15_000,
+                "plot/word_budget/word_budget.json": json.dumps({"large": "b" * 30_000}),
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+
+            for state, role, outputs in (
+                (
+                    "canon-patch-json",
+                    "main-agent",
+                    [
+                        "canon/patches/scene_0001_canon_patch.md",
+                        "canon/patches/scene_0001_canon_patch.json",
+                    ],
+                ),
+                (
+                    "canon-agent-task",
+                    "main-review-agent",
+                    ["canon/patches/scene_0001_canon_patch_review.json"],
+                ),
+            ):
+                with self.subTest(state=state):
+                    payload = {
+                        "task_id": f"scene-development-scene-0001-{state}",
+                        "route": "scene-development",
+                        "scene_id": "scene_0001",
+                        "current_state": state,
+                        "task_type": "platform-agent-review" if state == "canon-agent-task" else "deterministic-cli-plus-platform-review",
+                        "source_paths": list(files),
+                        "agent_source_paths": list(files),
+                        "required_reading": [],
+                        "expected_outputs": outputs,
+                        "core_managed_outputs": [],
+                        "hard_constraints": ["只生成或审查 Canon 候选，不应用。"],
+                        "style_constraints": [],
+                        "validation_gates": [],
+                        "forbidden_shortcuts": [],
+                        "execution_policy": "agent-required",
+                        "agent_role": role,
+                        "human_gate": {"required": False, "reasons": [], "source": "test"},
+                        "runtime_capabilities_required": ["read", "write"],
+                        "output_contracts": [
+                            {"path": path, "kind": "semantic-artifact", "writeback_policy": "automatic"}
+                            for path in outputs
+                        ],
+                        "prompt_asset": {
+                            "exact": True,
+                            "body": "判断正文是否产生持续世界事实。",
+                            "hard_constraints": [],
+                            "style_constraints": [],
+                            "output_contract": ["输出 Canon 候选或审查"],
+                            "review_requirements": ["区分人物状态与持续世界事实"],
+                            "forbidden_shortcuts": [],
+                        },
+                    }
+                    task = TaskPackage(root, root / "task.json", root / "task.md", payload)
+                    selection = select_agent_context(task)
+                    budget = resolve_task_context_budget(task)
+                    prepared = build_prepared_prompt_context(root, selection.requested_context_paths, budget=budget)
+                    envelope = build_execution_context_envelope(
+                        task,
+                        workspace=root,
+                        selection=selection,
+                        prepared_context=prepared,
+                        budget=budget,
+                    )
+                    compiled = compile_worker_program(
+                        task,
+                        prompt_version="v3",
+                        renderer="tool-worker",
+                        workspace=root,
+                        execution_context=envelope,
+                    )
+
+                    self.assertEqual(envelope.task_kind, "review")
+                    self.assertLess(compiled.metrics.total_characters, 48_000)
+                    self.assertEqual(compiled.lint.status, "pass")
+                    self.assertIn("三组冗余校验同时吻合", compiled.text)
+                    self.assertIn("事实必须经冗余校验", compiled.text)
+                    self.assertIn("本场确立持续新事实", compiled.text)
+                    self.assertIn("沈岸抢先行动", compiled.text)
+                    self.assertNotIn("重复上下文重复上下文", compiled.text)
+                    self.assertNotIn('"large":"' + "r" * 100, compiled.text)
+
     def test_pi_state_review_uses_compact_exact_writeback_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

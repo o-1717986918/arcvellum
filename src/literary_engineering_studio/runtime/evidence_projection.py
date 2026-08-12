@@ -33,10 +33,16 @@ def project_evidence_body(
         return _continuity_prose_projection(body)
     if projection == "state-prose":
         return _continuity_prose_projection(body)
+    if projection == "canon-prose":
+        return _continuity_prose_projection(body)
     # These projections are explicitly selected by the state-review evidence
     # policy.  Character and patch files are lossless in the general role
     # table, but this task only needs their state-transition semantics.
-    if fidelity != "structured" and projection not in {"state-patch", "state-character"}:
+    if fidelity != "structured" and projection not in {
+        "state-patch",
+        "state-character",
+        "canon-state-boundary",
+    }:
         return body
     suffix = PurePosixPath(path).suffix.casefold()
     try:
@@ -60,6 +66,10 @@ def project_evidence_body(
                 payload = _state_patch_projection(payload)
             elif projection == "state-composition":
                 payload = _state_composition_projection(payload)
+            elif projection == "canon-scene-review":
+                payload = _canon_scene_review_projection(payload)
+            elif projection == "canon-state-boundary":
+                payload = _state_patch_projection(payload)
             elif path.endswith("scene_review.context.json"):
                 payload = _review_context_projection(payload)
             elif path == "style/creative_quality_profile.json":
@@ -77,6 +87,8 @@ def project_evidence_body(
             elif projection == "state-character":
                 payload = _state_character_projection(payload)
             elif projection == "state-scene":
+                payload = _state_scene_projection(payload)
+            elif projection == "canon-scene":
                 payload = _state_scene_projection(payload)
             stream = StringIO()
             writer = YAML()
@@ -238,6 +250,29 @@ def _state_scene_projection(value: object) -> object:
             "revealed_info",
             "scene_bridge",
             "output_state",
+        )
+        if key in value
+    }
+
+
+def _canon_scene_review_projection(value: object) -> object:
+    """Keep the reviewed durable-fact declaration, not the full prose audit."""
+
+    if not isinstance(value, dict):
+        return value
+    return {
+        key: value[key]
+        for key in (
+            "schema",
+            "scene_id",
+            "candidate",
+            "candidate_sha256",
+            "conclusion",
+            "summary",
+            "canon_writeback",
+            "canon_violations",
+            "blocking_issues",
+            "revision_actions",
         )
         if key in value
     }

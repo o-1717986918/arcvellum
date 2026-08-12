@@ -7,6 +7,40 @@ from literary_engineering_studio.runtime.evidence_projection import project_evid
 
 
 class EvidenceProjectionTests(unittest.TestCase):
+    def test_canon_review_projection_keeps_durable_fact_judgment(self):
+        review = json.dumps(
+            {
+                "schema": "scene-review/v1",
+                "scene_id": "scene_0001",
+                "candidate_sha256": "abc",
+                "conclusion": "pass",
+                "summary": "正文通过，并产生持续世界事实。",
+                "canon_writeback": {
+                    "canon_change": True,
+                    "candidate_patch": "特征码已被三组冗余校验确认。",
+                },
+                "canon_violations": [],
+                "revision_actions": [],
+                "style_adherence": {"large": "x" * 20_000},
+                "reader_experience_adherence": {"large": "y" * 20_000},
+            },
+            ensure_ascii=False,
+        )
+
+        projected = json.loads(
+            project_evidence_body(
+                "reviews/agent/scene_0001_scene_review.json",
+                review,
+                fidelity="structured",
+                projection="canon-scene-review",
+            )
+        )
+
+        self.assertTrue(projected["canon_writeback"]["canon_change"])
+        self.assertEqual(projected["candidate_sha256"], "abc")
+        self.assertNotIn("style_adherence", projected)
+        self.assertNotIn("reader_experience_adherence", projected)
+
     def test_state_review_projections_keep_writeback_causality_without_pipeline_replay(self):
         patch = json.dumps(
             {

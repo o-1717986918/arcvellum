@@ -55,7 +55,8 @@ class ExecutionProfileTests(unittest.TestCase):
             ("style-learning", "style-agent-task", "platform-agent", "main-agent", ContextTaskKind.STYLE),
             ("longform-planning", "story-architecture-agent-task", "platform-agent", "main-agent", ContextTaskKind.PLANNING),
             ("scene-development", "roleplay-agent-task", "platform-agent", "main-creative-agent", ContextTaskKind.CREATIVE),
-            ("scene-development", "state-agent-task", "platform-agent-review", "main-review-agent", ContextTaskKind.STRUCTURED),
+            ("scene-development", "state-agent-task", "platform-agent-review", "main-review-agent", ContextTaskKind.REVIEW),
+            ("scene-development", "canon-patch-json", "deterministic-cli-plus-platform-review", "main-agent", ContextTaskKind.REVIEW),
         )
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
