@@ -13,7 +13,11 @@ INTERNAL_HEADING_RE = re.compile(
     r"审查|审查状态|canon|Canon|上下文|提示词|Prompt|需要人工确认|新增事实候选|人物状态变化|关系变化|伏笔变化|"
     r"新角色|新角色候选|新角色候选登记)\b.*$"
 )
-PROSE_SECTION_RE = re.compile(r"(?ms)^##\s*(正文草稿|正文候选|修订正文候选)\s*\n(.*?)(?=^##\s+|\Z)")
+# Capture the full remainder after the formal prose heading. ``clean_final_body``
+# then stops at known workbench-only headings.  A generic ``^##`` stop would
+# silently truncate legitimate literary subheadings such as scene or date
+# divisions inside a long chapter.
+PROSE_SECTION_RE = re.compile(r"(?ms)^##\s*(正文草稿|正文候选|修订正文候选)\s*\n(.*)\Z")
 INTERNAL_SCENE_ID_RE = re.compile(r"\bscene[_-]?\d{1,6}\b", re.IGNORECASE)
 INTERNAL_SCENE_LINE_RE = re.compile(
     r"^\s{0,3}(?:#{1,6}\s*)?(?:[-*]\s*)?"

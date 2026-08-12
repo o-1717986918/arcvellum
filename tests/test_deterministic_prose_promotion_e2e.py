@@ -16,6 +16,9 @@ from literary_engineering_studio_engine.literary.scene.promotion.candidate impor
 from literary_engineering_studio_engine.literary.scene.promotion.historical import (
     validate_historical_promotion,
 )
+from literary_engineering_studio_engine.literary.scene.promotion.gate_support import (
+    candidate_body,
+)
 
 from tests.scene_lifecycle_support import candidate_text, prepare_promotable_candidate
 
@@ -28,6 +31,24 @@ class DeterministicProsePromotionE2ETests(unittest.TestCase):
     independent reviewer identity, quality contracts, and lint gate before it
     is allowed to promote a candidate.
     """
+
+    def test_candidate_body_accepts_pi_worker_prose_only_artifact(self):
+        prose = "# 章节题目\n\n## 第一场\n\n林舟把手电压低，沿墙找到新鲜划痕。"
+
+        self.assertEqual(candidate_body(prose), prose)
+
+    def test_candidate_body_strips_workbench_sections_but_preserves_literary_subheadings(self):
+        artifact = (
+            "## 修订正文候选\n\n"
+            "# 章节题目\n\n## 第一场\n\n林舟把手电压低。\n\n"
+            "## 第二场\n\n门从里面开了。\n\n"
+            "## 状态变化候选\n\n- 林舟改变判断。\n"
+        )
+
+        self.assertEqual(
+            candidate_body(artifact),
+            "# 章节题目\n\n## 第一场\n\n林舟把手电压低。\n\n## 第二场\n\n门从里面开了。",
+        )
 
     def test_clean_candidate_is_promoted_only_after_all_deterministic_gates_pass(self):
         with tempfile.TemporaryDirectory() as temporary:

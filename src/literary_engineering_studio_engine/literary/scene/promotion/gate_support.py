@@ -6,15 +6,18 @@ import json
 from pathlib import Path
 import re
 
+from ....foundation.draft_text import final_body_from_workbench_text
+
 
 def candidate_body(text: str) -> str:
-    body = section(text, "正文候选", stop_heading="状态变化候选")
-    if body:
-        return body
-    body = section(text, "修订正文候选", stop_heading="状态变化候选")
-    if body:
-        return body
-    return section(text, "正文草稿", stop_heading="状态变化")
+    """Extract promotable prose through the shared delivery-body contract.
+
+    Pi Worker may return a prose-only artifact, while host agents often keep
+    the workbench section headings.  Review, counting, revision, promotion,
+    and export must interpret both forms identically.
+    """
+
+    return final_body_from_workbench_text(text)
 
 
 def canon_change_value(value: object) -> bool | str | None:
