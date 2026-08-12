@@ -6,7 +6,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from ...anti_ai_style import lint_ai_style
+from ...anti_ai_style import is_style_lint_blocking, lint_ai_style
 from ...creative_quality import load_creative_quality_profile
 from ...punctuation_standard import lint_punctuation
 from ...scene_draft import extract_draft_body
@@ -17,6 +17,7 @@ class ReviewIssue:
     gate: str
     severity: str
     message: str
+    blocks_pass: bool = True
 
 
 @dataclass(frozen=True)
@@ -111,21 +112,40 @@ def review_scene_draft(project_root: Path, draft: Path, output: Path | None = No
         message = f"{punctuation_issue.message}（rule: {punctuation_issue.rule}）"
         if punctuation_issue.sample:
             message += f" 示例：{punctuation_issue.sample}"
-        issues.append(ReviewIssue("Punctuation Standard Test", punctuation_issue.severity, message))
+        issues.append(
+            ReviewIssue(
+                "Punctuation Standard Test",
+                punctuation_issue.severity,
+                message,
+                blocks_pass=punctuation_issue.severity.strip().lower() not in {"", "low"},
+            )
+        )
 
     for ai_issue in lint_ai_style(body, profile=quality_profile, scope=quality_scope):
         message = ai_issue.message
         if ai_issue.sample:
             message += f" 示例：{ai_issue.sample}"
-        issues.append(ReviewIssue("AI Trace Reduction Test", ai_issue.severity, message))
+        issues.append(
+            ReviewIssue(
+                "AI Trace Reduction Test",
+                ai_issue.severity,
+                message,
+                blocks_pass=is_style_lint_blocking(
+                    ai_issue,
+                    profile=quality_profile,
+                    scope=quality_scope,
+                ),
+            )
+        )
 
-    high_count = sum(1 for issue in issues if issue.severity == "high")
-    medium_count = sum(1 for issue in issues if issue.severity == "medium")
+    actionable = [issue for issue in issues if issue.blocks_pass]
+    high_count = sum(1 for issue in actionable if issue.severity == "high")
+    medium_count = sum(1 for issue in actionable if issue.severity == "medium")
     if high_count:
         conclusion = "reject"
     elif medium_count:
         conclusion = "revise_required"
-    elif issues:
+    elif actionable:
         conclusion = "pass_with_notes"
     else:
         conclusion = "pass"
@@ -149,11 +169,17 @@ def _issue_lines(issues: list[ReviewIssue], gate: str) -> str:
     selected = [issue for issue in issues if issue.gate == gate]
     if not selected:
         return "- 结果：pass\n- 问题：无\n- 建议：无"
-    lines = ["- 结果：failed"]
+    blocking = any(issue.blocks_pass for issue in selected)
+    lines = ["- 结果：failed" if blocking else "- 结果：notes（不阻塞）"]
     lines.append("- 问题：")
     for issue in selected:
-        lines.append(f"  - [{issue.severity}] {issue.message}")
-    lines.append("- 建议：按问题逐项修订后重新审查。")
+        suffix = "" if issue.blocks_pass else "（诊断记录，不要求修订）"
+        lines.append(f"  - [{issue.severity}] {issue.message}{suffix}")
+    lines.append(
+        "- 建议：按阻塞问题逐项修订后重新审查。"
+        if blocking
+        else "- 建议：保留为质量观察；除非另有精确文学缺陷证据，不得据此制造修订任务。"
+    )
     return "\n".join(lines)
 
 
@@ -178,7 +204,10 @@ def _review_report(draft_path: Path, conclusion: str, issues: list[ReviewIssue],
     sections = []
     for gate in gates:
         sections.append(f"## {gate}\n\n{_issue_lines(issues, gate)}")
-    issue_summary = "\n".join(f"- [{i.severity}] {i.gate}: {i.message}" for i in issues) or "- 无"
+    issue_summary = "\n".join(
+        f"- [{i.severity}] {'阻塞' if i.blocks_pass else '诊断'} {i.gate}: {i.message}"
+        for i in issues
+    ) or "- 无"
     return f"""# 场景审查报告
 
 ## 基本信息
@@ -200,5 +229,5 @@ def _review_report(draft_path: Path, conclusion: str, issues: list[ReviewIssue],
 - 新 canon 候选：参考草稿中的“新增事实候选”。
 - 人物状态变化：参考草稿中的“人物状态变化”。
 - 伏笔变化：参考草稿中的“伏笔变化”。
-- 需要人工确认：审查结论为 `pass` 后可进入下一门禁；若为 `pass_with_notes`，必须先处理 low 级 notes，或由平台 agent/用户逐条记录接受理由后再写回。
+- 需要人工确认：审查结论为 `pass` 后可进入下一门禁；非阻塞诊断可随 `pass` 保留。若为 `pass_with_notes`，说明仍有可执行问题，必须先修订或由平台 agent/用户对精确问题作候选绑定决策。
 """

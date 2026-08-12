@@ -12,6 +12,7 @@ from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, canoni
 import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.candidate_promotion import _candidate_review_content_match, _human_decision_notes, _unresolved_review_notes
 from literary_engineering_studio_engine.review_ci import review_scene_draft
+from literary_engineering_studio_engine.literary.style.anti_ai import AIStyleIssue
 from literary_engineering_studio_engine.scene_revision import _prompt_manifest
 from literary_engineering_studio_engine.literary.scene.promotion.revision_contract import revision_manifest_errors
 from literary_engineering_studio_engine.literary.review.resolution import review_semantic_consistency_issues
@@ -20,6 +21,41 @@ from literary_engineering_studio_engine.workflow_state import _review_step
 
 
 class SceneReviewRevisionLoopTests(unittest.TestCase):
+    def test_static_review_keeps_below_threshold_style_findings_nonblocking(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            body = "他沿着舱壁检查线路。" * 30
+            draft.write_text(
+                "## 正文草稿\n\n"
+                + body
+                + "\n\n## 状态变化\n\n"
+                "Canon、人物档案和时间线是硬约束。\n\n"
+                "风格约束已挂载。\n\n"
+                "### 新增事实候选\n- 无。\n"
+                "### 人物状态变化\n- 无。\n"
+                "### 伏笔变化\n- 无。\n"
+                "### 需要人工确认\n- 无。\n",
+                encoding="utf-8",
+            )
+            note = AIStyleIssue("dash-prohibited-in-plain-narration", "low", "低于阈值。")
+            with patch(
+                "literary_engineering_studio_engine.literary.review.ci.lint_ai_style",
+                return_value=[note],
+            ), patch(
+                "literary_engineering_studio_engine.literary.review.ci.is_style_lint_blocking",
+                return_value=False,
+            ), patch(
+                "literary_engineering_studio_engine.literary.review.ci.lint_punctuation",
+                return_value=[],
+            ):
+                result = review_scene_draft(root, draft)
+
+            self.assertEqual(result.conclusion, "pass")
+            report = result.report_path.read_text(encoding="utf-8")
+            self.assertIn("结果：notes（不阻塞）", report)
+
     def test_nonpass_static_review_routes_to_revision_and_stale_review_reopens(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
