@@ -278,9 +278,16 @@ def _candidate_review_gate_errors(
     if not require_pass:
         infrastructure_failures = {
             "schema_failed",
+            "semantic_contract_failed",
             "task_incomplete",
             "stale_or_wrong_source",
             "creative_quality_review_stale",
+            "word_budget_review_failed",
+            "reader_experience_review_failed",
+            "narrative_rhythm_review_failed",
+            "canon_writeback_review_failed",
+            "revision_integrity_review_failed",
+            "review_session_independence_failed",
         }
         if str(gate.get("status") or "") not in infrastructure_failures:
             return []

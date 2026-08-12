@@ -74,6 +74,21 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
         self.assertEqual(revision["key"], "candidate-revision")
         self.assertEqual(review["key"], "candidate-review")
 
+    def test_review_artifact_integrity_failure_routes_to_review_not_prose_revision(self):
+        candidate = Path("C:/project/drafts/revisions/scene_0001_revision.md")
+        with patch(
+            "literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate",
+            return_value={
+                "status": "revision_integrity_review_failed",
+                "review": "reviews/agent/scene_0001_scene_review.json",
+                "message": "anti_evasion_checked must be true",
+            },
+        ):
+            step = _review_step(Path("C:/project"), "scene_0001", candidate)
+
+        self.assertEqual(step["key"], "candidate-review")
+        self.assertIn("agent-review-scene", step["next_action"])
+
     def test_cross_asset_review_finding_stops_for_exact_candidate_decision(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -173,6 +188,11 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                 ],
                 "revision_actions": [],
             },
+            "revision_integrity": {
+                "status": "not_applicable",
+                "anti_evasion_checked": True,
+                "evasion_risks_unresolved": [],
+            },
         }
 
         issues = review_semantic_consistency_issues(payload)
@@ -189,10 +209,32 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                     {"id": "RA1", "action": "optional polish", "blocks_pass": False}
                 ],
                 "style_adherence": {"status": "pass", "deviations": []},
+                "revision_integrity": {
+                    "status": "not_applicable",
+                    "anti_evasion_checked": True,
+                    "evasion_risks_unresolved": [],
+                },
             }
         )
 
         self.assertTrue(any("blocks_pass=false" in issue for issue in issues))
+
+    def test_review_integrity_requires_explicit_anti_evasion_check(self):
+        issues = review_semantic_consistency_issues(
+            {
+                "conclusion": "pass",
+                "blocking_issues": [],
+                "warnings": [],
+                "revision_actions": [],
+                "style_adherence": {"status": "pass", "deviations": []},
+                "revision_integrity": {
+                    "status": "pass",
+                    "source_sha256_match": True,
+                },
+            }
+        )
+
+        self.assertIn("revision_integrity.anti_evasion_checked must be true", issues)
 
     def test_non_pass_scene_review_is_recordable_for_revision_routing(self):
         with patch("literary_engineering_studio_engine.scene_route_gates.candidate_review_gate", return_value={"status": "notes_unresolved", "message": "revise"}):

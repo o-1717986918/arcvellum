@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.agent-review.v1
 match: route.scene-development.agent-review.v1
-version: v5
+version: v6
 route: scene-development
 task_type: platform-agent-review
 title: Scene Agent Review Exact Prompt Asset
@@ -41,6 +41,7 @@ review_requirements:
   - Review JSON candidate_sha256 must equal the digest supplied in the task package.
   - conclusion=pass requires no actionable warning, revision action, actionable style deviation, word-budget failure, reader-experience failure, rhythm/bridge failure, or new-character issue. `style_notes` is an evidence ledger for positive or neutral observations and may be non-empty. A below-threshold lint observation or approved waiver may remain as a low/info warning or deviation only with `blocks_pass: false`; set `style_adherence.status=pass` when these are the only style observations.
   - Every revision action is blocking by definition. Do not put `blocks_pass: false` on a revision action. Move optional polish to `style_notes` or a non-blocking warning.
+  - Always emit a complete `revision_integrity` object. For an original, never-revised candidate use `status=not_applicable`, but still set `anti_evasion_checked=true` and `evasion_risks_unresolved=[]`. For a revised candidate use `status=pass` only after checking the exact revision source and current candidate; incomplete integrity evidence is a review-artifact failure, not a reason to revise the prose again.
 forbidden_shortcuts:
   - Do not call a local dry-run or external hidden reviewer.
 ---

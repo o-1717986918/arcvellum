@@ -86,6 +86,20 @@ def review_semantic_consistency_issues(payload: dict[str, Any]) -> list[str]:
             issues.append(
                 f"revision_actions[{index}] declares blocks_pass=false; move it to a non-blocking warning/style note or make it genuinely actionable"
             )
+    revision_integrity = payload.get("revision_integrity")
+    if not isinstance(revision_integrity, dict):
+        issues.append("revision_integrity must be an object")
+    else:
+        integrity_status = str(revision_integrity.get("status") or "").strip().lower()
+        if integrity_status not in {"pass", "not_applicable"}:
+            issues.append(
+                "revision_integrity.status must be pass or not_applicable for a promotable review"
+            )
+        if revision_integrity.get("anti_evasion_checked") is not True:
+            issues.append("revision_integrity.anti_evasion_checked must be true")
+        unresolved = revision_integrity.get("evasion_risks_unresolved")
+        if unresolved not in (None, False, 0, "", "false", "none", "no", "[]", "无", []):
+            issues.append("revision_integrity.evasion_risks_unresolved must be empty or false")
     return issues
 
 

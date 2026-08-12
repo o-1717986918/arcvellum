@@ -418,6 +418,12 @@ def _review_step(root: Path, scene_id: str, candidate: Path | None) -> dict[str,
         "semantic_contract_failed",
         "stale_or_wrong_source",
         "creative_quality_review_stale",
+        "word_budget_review_failed",
+        "reader_experience_review_failed",
+        "narrative_rhythm_review_failed",
+        "canon_writeback_review_failed",
+        "revision_integrity_review_failed",
+        "review_session_independence_failed",
     }
     if status == "human_decision_required":
         if _candidate_revision_direction(root, scene_id, gate):

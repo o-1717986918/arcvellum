@@ -42,6 +42,14 @@
       "introduced": "list",
       "ephemeral_waivers": "list",
       "blocking_issues": "list"
+    },
+    "revision_integrity": {
+      "status": "pass | not_applicable",
+      "anti_evasion_checked": "bool; must be true",
+      "evasion_risks_unresolved": "list; must be empty for pass",
+      "source_path": "str",
+      "source_sha256_match": "bool",
+      "notes": "str"
     }
   },
   "enums": {
