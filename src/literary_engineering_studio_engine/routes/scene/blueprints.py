@@ -772,7 +772,24 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "task_type": "platform-agent-review",
             "prompt_asset_id": "route.scene-development.state-evolve.execute.v1",
             "command": "",
-            "source_paths": [scene_rel, context, context_trace, f"{state_patch}.md", f"{state_patch}.json", f"{state_patch}.agent_tasks.md", state_review],
+            "source_paths": list(
+                dict.fromkeys(
+                    [
+                        scene_rel,
+                        context,
+                        context_trace,
+                        f"drafts/scenes/{scene_id}.md",
+                        f"drafts/promotions/{scene_id}_promotion.json",
+                        f"drafts/compositions/{scene_id}_composition.json",
+                        f"reviews/agent/{scene_id}_scene_review.json",
+                        *state_patch_character_files,
+                        f"{state_patch}.md",
+                        f"{state_patch}.json",
+                        f"{state_patch}.agent_tasks.md",
+                        state_review,
+                    ]
+                )
+            ),
             "context_trace": context_trace,
             "expected_outputs": [state_review, f"{state_patch}.agent_completion.json"],
             "hard_constraints": ["Review state patch consequences and write a schema-valid state review with exact source digest; Studio writes the completion marker after deterministic preflight passes. Do not apply state without approval."],

@@ -15,6 +15,111 @@ from literary_engineering_studio_engine.workflow.state_scene import _state_patch
 
 
 class StateWritebackContractTests(unittest.TestCase):
+    def test_symbolic_protagonist_alias_routes_named_change_to_protagonist(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir(parents=True)
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                'scene_id: scene_0001\nparticipants: ["主角", "调度员"]\n',
+                encoding="utf-8",
+            )
+            (root / "characters").mkdir(parents=True)
+            (root / "characters" / "protagonist.yaml").write_text(
+                'character_id: protagonist\nname: 沈岸\naliases: [维修员]\nrole: 主线主角\n',
+                encoding="utf-8",
+            )
+            (root / "characters" / "dispatcher.yaml").write_text(
+                'character_id: dispatcher\nname: 调度员\nrole: 配角\n',
+                encoding="utf-8",
+            )
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("## 正文草稿\n\n沈岸烧掉第一笔返航余量。\n", encoding="utf-8")
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            composition.write_text(
+                json.dumps(
+                    {
+                        "writeback_candidates": {
+                            "character_changes": ["沈岸从等待确证转为承担风险。"],
+                            "relationship_changes": ["调度员因越权烧燃而提高了对沈岸的压力。"],
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_character_state_patch(root, agent_tasks=True)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            by_id = {item["character_id"]: item for item in payload["characters"]}
+            self.assertIn("protagonist", by_id)
+            self.assertIn("dispatcher", by_id)
+            self.assertEqual(
+                by_id["protagonist"]["proposed_updates"]["arc"]["candidate_changes"],
+                ["沈岸从等待确证转为承担风险。"],
+            )
+            self.assertEqual(
+                by_id["dispatcher"]["proposed_updates"]["arc"]["candidate_changes"],
+                [],
+            )
+
+    def test_unattributed_change_stays_unresolved_instead_of_guessing_only_active_character(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir(parents=True)
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nparticipants: [李]\n",
+                encoding="utf-8",
+            )
+            (root / "characters").mkdir(parents=True)
+            (root / "characters" / "li.yaml").write_text("character_id: li\nname: 李\n", encoding="utf-8")
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("## 正文草稿\n\n有人改变了决定。\n", encoding="utf-8")
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            composition.write_text(
+                json.dumps({"writeback_candidates": {"character_changes": ["从等待转为行动。"]}}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            result = build_character_state_patch(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["characters"], [])
+            self.assertEqual(payload["unresolved_changes"][0]["text"], "从等待转为行动。")
+
+    def test_equivalent_state_patch_rebuild_preserves_digest_and_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir(parents=True)
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nparticipants: [李]\n",
+                encoding="utf-8",
+            )
+            (root / "characters").mkdir(parents=True)
+            (root / "characters" / "li.yaml").write_text("character_id: li\nname: 李\n", encoding="utf-8")
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("## 正文草稿\n\n李决定留下。\n", encoding="utf-8")
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            composition.write_text(
+                json.dumps({"writeback_candidates": {"character_changes": ["李决定留下。"]}}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            first = build_character_state_patch(root, agent_tasks=True)
+            digest = hashlib.sha256(first.json_path.read_bytes()).hexdigest()
+            review = first.json_path.with_name("scene_0001_state_patch_review.json")
+            review.write_text(json.dumps({"status": "complete", "state_patch_sha256": digest}), encoding="utf-8")
+            second = build_character_state_patch(root, agent_tasks=True)
+
+            self.assertEqual(hashlib.sha256(second.json_path.read_bytes()).hexdigest(), digest)
+            self.assertEqual(json.loads(review.read_text(encoding="utf-8"))["status"], "complete")
+
     def test_structured_composition_changes_cannot_collapse_into_empty_state_patch(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

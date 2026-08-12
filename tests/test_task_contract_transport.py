@@ -1045,6 +1045,10 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertNotIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", preparation["expected_outputs"])
             self.assertIn("characters/state_patches/scene_0001_state_patch_review.json", review["expected_outputs"])
             self.assertIn("characters/state_patches/scene_0001_state_patch.agent_completion.json", review["expected_outputs"])
+            self.assertIn("drafts/scenes/scene_0001.md", review["source_paths"])
+            self.assertIn("drafts/compositions/scene_0001_composition.json", review["source_paths"])
+            self.assertIn("drafts/promotions/scene_0001_promotion.json", review["source_paths"])
+            self.assertIn("reviews/agent/scene_0001_scene_review.json", review["source_paths"])
 
     def test_state_apply_stages_the_completed_state_review_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

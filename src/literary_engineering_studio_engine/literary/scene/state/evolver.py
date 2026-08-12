@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -99,8 +100,17 @@ def build_character_state_patch(
             "正文中新出现的持久角色不得写入既有人物状态；必须进入 characters/candidates/ 并走资产审查、用户批准和晋升。",
         ],
     }
-    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    output_path.write_text(_render_markdown(payload), encoding="utf-8")
+    previous_payload = _read_json_object(json_path)
+    patch_changed = not _same_patch_contract(previous_payload, payload)
+    if not patch_changed:
+        # Keep the exact candidate digest stable across deterministic retries.
+        # Reviews and approvals are bound to the full JSON bytes.
+        payload = previous_payload
+    else:
+        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    rendered = _render_markdown(payload)
+    if not output_path.exists() or output_path.read_text(encoding="utf-8") != rendered:
+        output_path.write_text(rendered, encoding="utf-8")
     agent_tasks_path = None
     if agent_tasks:
         write_semantic_artifact_template(
@@ -108,9 +118,9 @@ def build_character_state_patch(
             "state-agent-task",
             scene_id,
             source=json_path.relative_to(root).as_posix(),
-        # A changed patch invalidates its digest-bound review; do not erase the
-        # previous evidence just because the task was rendered again.
-        overwrite=False,
+            # Reissuing a materially different patch must invalidate the old
+            # digest-bound review. Equivalent retries preserve the conclusion.
+            overwrite=patch_changed,
         )
         agent_tasks_path = _write_state_patch_agent_tasks(root, scene_path, source_path, output_path, json_path, payload)
     return CharacterStatePatchResult(
@@ -134,6 +144,7 @@ def _write_state_patch_agent_tasks(
     payload: dict[str, Any],
 ) -> Path:
     review_rel = semantic_artifact_relative_path("state-agent-task", str(payload["scene_id"]))
+    patch_sha256 = hashlib.sha256(json_path.read_bytes()).hexdigest()
     return write_agent_tasks(
         default_agent_tasks_path(output_path),
         title=f"state-evolve {payload['scene_id']}",
@@ -142,6 +153,7 @@ def _write_state_patch_agent_tasks(
         notes=[
             "state_patch.json 是候选写回契约，不能写入 AGENT_TASK 标记。",
             "状态变化只有在用户批准后才能通过 state-apply 写回 characters/*.yaml。",
+            f"本轮审查必须绑定精确补丁摘要 `{patch_sha256}`；摘要变化表示候选已重发。",
             f"正式审查结论必须写入 `{review_rel}`；completion marker 不能替代证据、判决和批准建议。",
         ],
         tasks=[
@@ -295,14 +307,8 @@ def _has_updates(patch: dict[str, Any]) -> bool:
 
 
 def _match_cards(text: str, cards: list[CharacterCard], active_cards: list[CharacterCard]) -> list[CharacterCard]:
-    matches = [
-        card
-        for card in cards
-        if (card.name and card.name in text) or (card.character_id and card.character_id in text)
-    ]
-    if matches:
-        return matches
-    return active_cards if len(active_cards) == 1 else []
+    del active_cards  # Character changes without an explicit identity stay unresolved.
+    return [card for card in cards if any(alias and alias in text for alias in _card_aliases(card))]
 
 
 def _resolve_source(root: Path, scene_id: str, source: Path | None) -> Path:
@@ -359,7 +365,36 @@ def _active_cards(cards: list[CharacterCard], participants: list[str]) -> list[C
     if not participants:
         return cards
     wanted = set(participants)
-    return [card for card in cards if card.character_id in wanted or card.name in wanted]
+    return [card for card in cards if wanted & _card_aliases(card)]
+
+
+def _card_aliases(card: CharacterCard) -> set[str]:
+    """Return explicit and stable symbolic identities for one character card."""
+
+    text = _read(card.file)
+    aliases = {card.character_id, card.name, card.file.stem, *_list_value(text, "aliases")}
+    role = card.role.casefold()
+    if "主角" in role or "protagonist" in role or "protagonist" in card.character_id.casefold():
+        aliases.update({"主角", "protagonist"})
+    return {str(value).strip() for value in aliases if str(value).strip()}
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _same_patch_contract(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+    if not previous:
+        return False
+    volatile = {"generated_at"}
+    return (
+        {key: value for key, value in previous.items() if key not in volatile}
+        == {key: value for key, value in current.items() if key not in volatile}
+    )
 
 
 def _list_value(text: str, key: str) -> list[str]:
