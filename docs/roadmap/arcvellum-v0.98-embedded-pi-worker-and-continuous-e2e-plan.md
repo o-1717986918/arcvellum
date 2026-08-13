@@ -332,3 +332,19 @@ Prompt Program、Worker 工具描述到 repair turn 的整个提示词工程。
 - scene_0001 已存在正式晋升正文、promotion manifest、人物状态 apply receipt、Canon candidate/review/completion receipt，以及 reader-question/promise ledger apply receipt；
 - `route-audit --route scene-development` 对 scene_0001 的 context、RP、branch、composition、word budget、reader/rhythm、prose、AgentReview、promotion、state 与 Canon gate 全部给出 `pass`；报告中的剩余 blocking 属于已经开始但尚未写正文的 scene_0002；
 - 实际运行暴露并修复：Candidate 与 Review 所有权混合、脚手架被误认成本轮提交、无效 JSON 在模型得到校验反馈前被 no-progress guard 终止。
+
+### B5-P：发布前架构收敛（2026-08-13）
+
+全量回归确认文学闭环已经通过，但逐项 Architecture Baseline 发现功能开发后的债务迁移：仓库整体超大文件由 38 个降至 37 个、超大函数由 230 个降至 216 个，且保持 0 import cycle、0 forbidden dependency、0 duplicate route、0 parse error；同时，Pi Prompt 证据编译、任务语义合同和场景 Route Blueprint 等新核心路径出现局部膨胀。本阶段不能仅用重写 baseline 掩盖这些热点。
+
+执行顺序：
+
+1. 将 `runtime/evidence_projection.py` 按 prose、review、state/continuity/canon 投影职责拆分；公开 facade 保持不变。
+2. 将 `runtime/task_semantic_contract.py` 按 scene prose/revision、canon/continuity、rendering 拆分；Task Program 继续只依赖一个稳定入口。
+3. 将 `routes/scene/blueprints.py` 的巨型状态分派改为共享 context 加分组 builder；不得修改任何 source、expected output、semantic contract 或 route gate。
+4. 提炼 `preflight/canonicalization.py`、`preflight/scene.py` 和 Runtime 条件分支中的新增复杂度；机械 canonicalization 与语义判断继续分层。
+5. 每批执行定向行为测试、Architecture Audit 和 `git diff --check`，并独立提交。不得通过放宽 Gate、删除文学约束、减少正式产物或把语义验证降级为字符串存在性来换取指标。
+6. 只有在新核心热点完成拆分、总债务不高于当前基线、依赖/循环/路由审计保持全绿后，才允许重新冻结逐项质量基线；基线变更必须单独提交并记录前后债务数量。
+7. 最后重新运行 Python、Pi Worker、Vue、Rust 与安装包探测；安装版必须证明内置 Pi Worker 可被发现并能消费正式 TaskPackage。
+
+本阶段明确不做 Provider 跨任务会话复用，不改变已验收的短会话角色隔离策略，也不恢复任何宿主 Skill 残留提示词。
