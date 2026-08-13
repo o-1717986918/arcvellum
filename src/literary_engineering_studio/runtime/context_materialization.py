@@ -256,30 +256,12 @@ def _prepared_context(
 def _user_direction(task: TaskPackage) -> str:
     index = task.project_root / "workflow/studio/user_directions.jsonl"
     if index.is_file():
-        messages: list[str] = []
-        for line in index.read_text(encoding="utf-8", errors="ignore").splitlines():
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict):
-                message = str(payload.get("message") or "").strip()
-                actor = str(payload.get("actor") or "").strip()
-                if message and not _transient_delegated_direction(message, actor):
-                    messages.append(message)
+        messages = _direction_messages(index)
         if messages:
-            selected: list[str] = []
-            characters = 0
-            for message in reversed(messages):
-                if selected and (len(selected) >= 5 or characters + len(message) > 12_000):
-                    break
-                selected.append(message)
-                characters += len(message)
-            if len(selected) == 1:
-                return selected[0]
+            selected = _bounded_directions(messages, chronological=False)
             return "\n\n".join(
-                f"方向 {index}: {message}"
-                for index, message in enumerate(selected, start=1)
+                f"方向 {position}: {message}"
+                for position, message in enumerate(selected, start=1)
             )
     path = task.project_root / "workflow/studio/user_directions.md"
     if not path.is_file():
@@ -287,6 +269,37 @@ def _user_direction(task: TaskPackage) -> str:
     return _legacy_user_direction(
         path.read_text(encoding="utf-8", errors="ignore")
     )
+
+
+def _direction_messages(path: Path) -> list[str]:
+    messages: list[str] = []
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        message = str(payload.get("message") or "").strip()
+        actor = str(payload.get("actor") or "").strip()
+        if message and not _transient_delegated_direction(message, actor):
+            messages.append(message)
+    return messages
+
+
+def _bounded_directions(
+    messages: Iterable[str], *, chronological: bool = True
+) -> list[str]:
+    selected: list[str] = []
+    characters = 0
+    for message in reversed(list(messages)):
+        if selected and (len(selected) >= 5 or characters + len(message) > 12_000):
+            break
+        selected.append(message)
+        characters += len(message)
+    if chronological:
+        selected.reverse()
+    return selected
 
 
 def _legacy_user_direction(text: str) -> str:
@@ -304,14 +317,7 @@ def _legacy_user_direction(text: str) -> str:
             messages.append(message)
     if not messages:
         return ""
-    selected: list[str] = []
-    characters = 0
-    for message in reversed(messages):
-        if selected and (len(selected) >= 5 or characters + len(message) > 12_000):
-            break
-        selected.append(message)
-        characters += len(message)
-    selected.reverse()
+    selected = _bounded_directions(messages)
     return selected[0] if len(selected) == 1 else "\n\n".join(selected)
 
 

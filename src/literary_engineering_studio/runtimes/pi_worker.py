@@ -281,46 +281,8 @@ class PiWorkerRuntime(AgentRuntime):
             "reasoning_budget_receipt": self._reasoning_budget_receipt(worker_result),
         }
         if status != "completed":
-            detail = message.lower()
-            no_progress = status == "blocked" and any(
-                token in detail
-                for token in ("no-progress", "budget exhausted", "budget_exhausted")
-            )
-            provider_error = str(worker_result.get("providerError") or "").strip()
-            provider_empty = _provider_empty_response(worker_result)
-            if provider_error:
-                failure_kind, retryable, public_message = classify_model_error(
-                    provider_error
-                )
-                message = public_message
-            elif provider_empty:
-                message = (
-                    "模型供应商返回了空响应，未产生文本、推理或工具调用；"
-                    "ArcVellum 将保留当前任务并按连接故障策略重试。"
-                )
-            metadata.update(
-                {
-                    "failure_kind": (
-                        failure_kind.value
-                        if provider_error
-                        else (
-                            RuntimeFailureKind.TRANSIENT_NETWORK.value
-                            if provider_empty
-                            else (
-                                RuntimeFailureKind.NO_PROGRESS.value
-                                if no_progress
-                                else RuntimeFailureKind.VALIDATION_FAILURE.value
-                            )
-                        )
-                    ),
-                    "retryable": retryable if provider_error else not no_progress,
-                    "provider_failure_kind": (
-                        "provider_error"
-                        if provider_error
-                        else ("provider_empty_response" if provider_empty else "")
-                    ),
-                }
-            )
+            message, failure = _worker_failure_result(worker_result, status, message)
+            metadata.update(failure)
         return replace(result, message=message, metadata=metadata)
 
     def _reasoning_budget_args(self) -> list[str]:
@@ -394,6 +356,43 @@ class PiWorkerRuntime(AgentRuntime):
         if not isinstance(raw, (list, tuple)):
             return ()
         return tuple(str(item).strip() for item in raw if str(item).strip())
+
+
+def _worker_failure_result(
+    worker_result: Mapping[str, Any], status: str, message: str
+) -> tuple[str, dict[str, Any]]:
+    detail = message.lower()
+    no_progress = status == "blocked" and any(
+        token in detail
+        for token in ("no-progress", "budget exhausted", "budget_exhausted")
+    )
+    provider_error = str(worker_result.get("providerError") or "").strip()
+    provider_empty = _provider_empty_response(worker_result)
+    if provider_error:
+        failure_kind, retryable, message = classify_model_error(provider_error)
+        kind = failure_kind.value
+    else:
+        retryable = not no_progress
+        kind = (
+            RuntimeFailureKind.TRANSIENT_NETWORK.value
+            if provider_empty
+            else RuntimeFailureKind.NO_PROGRESS.value
+            if no_progress
+            else RuntimeFailureKind.VALIDATION_FAILURE.value
+        )
+    if provider_empty and not provider_error:
+        message = (
+            "模型供应商返回了空响应，未产生文本、推理或工具调用；"
+            "ArcVellum 将保留当前任务并按连接故障策略重试。"
+        )
+    provider_kind = "provider_error" if provider_error else (
+        "provider_empty_response" if provider_empty else ""
+    )
+    return message, {
+        "failure_kind": kind,
+        "retryable": retryable,
+        "provider_failure_kind": provider_kind,
+    }
 
 
 def _public_event_data(value: dict[str, Any]) -> dict[str, Any]:

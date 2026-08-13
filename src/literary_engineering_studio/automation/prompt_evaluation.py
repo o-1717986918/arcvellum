@@ -83,42 +83,10 @@ def evaluate_prompt_assets(
     model: str = "",
     timeout: int = 240,
 ) -> dict[str, Any]:
-    cases: list[dict[str, Any]] = []
-    for prompt_id, semantic_terms in HIGH_RISK_CASES.items():
-        preview = resolve_prompt_asset(prompt_id)
-        errors: list[str] = []
-        asset = preview.asset
-        if asset is None:
-            errors.append("missing prompt asset")
-            body = ""
-            metadata_text = ""
-            resolved_id = ""
-        else:
-            body = asset.body.strip()
-            metadata_text = json.dumps(asset.metadata, ensure_ascii=False).lower()
-            resolved_id = asset.prompt_asset_id
-            if not preview.exact:
-                errors.append(f"high-risk task resolved through wildcard {asset.match}")
-            for field in ("required_inputs", "hard_constraints", "output_contract", "review_requirements", "forbidden_shortcuts"):
-                value = asset.metadata.get(field)
-                if not isinstance(value, list) or not value:
-                    errors.append(f"missing non-empty {field}")
-            searchable = (metadata_text + "\n" + body.lower()).replace("-", " ")
-            for term in semantic_terms:
-                if term.lower().replace("-", " ") not in searchable:
-                    errors.append(f"missing semantic anchor: {term}")
-            if len(body) < 100:
-                errors.append("prompt body is too short for a high-risk exact asset")
-        cases.append(
-            {
-                "prompt_asset_id": prompt_id,
-                "resolved_id": resolved_id,
-                "exact": bool(preview.exact),
-                "status": "pass" if not errors else "fail",
-                "errors": errors,
-                "digest": hashlib.sha256((metadata_text + "\n" + body).encode("utf-8")).hexdigest(),
-            }
-        )
+    cases = [
+        _evaluate_prompt_asset(prompt_id, semantic_terms)
+        for prompt_id, semantic_terms in HIGH_RISK_CASES.items()
+    ]
     failures = sum(1 for case in cases if case["status"] != "pass")
     audience_cases = _tool_audience_cases()
     audience_failures = sum(
@@ -149,6 +117,53 @@ def evaluate_prompt_assets(
             "live_failure_count": live_failures,
         },
     }
+
+
+def _evaluate_prompt_asset(
+    prompt_id: str, semantic_terms: tuple[str, ...]
+) -> dict[str, Any]:
+    preview = resolve_prompt_asset(prompt_id)
+    asset = preview.asset
+    errors: list[str] = []
+    body = asset.body.strip() if asset is not None else ""
+    metadata = asset.metadata if asset is not None else {}
+    metadata_text = json.dumps(metadata, ensure_ascii=False).lower()
+    if asset is None:
+        errors.append("missing prompt asset")
+    else:
+        if not preview.exact:
+            errors.append(f"high-risk task resolved through wildcard {asset.match}")
+        _append_prompt_contract_errors(metadata, errors)
+        searchable = (metadata_text + "\n" + body.lower()).replace("-", " ")
+        for term in semantic_terms:
+            if term.lower().replace("-", " ") not in searchable:
+                errors.append(f"missing semantic anchor: {term}")
+        if len(body) < 100:
+            errors.append("prompt body is too short for a high-risk exact asset")
+    return {
+        "prompt_asset_id": prompt_id,
+        "resolved_id": asset.prompt_asset_id if asset is not None else "",
+        "exact": bool(preview.exact),
+        "status": "pass" if not errors else "fail",
+        "errors": errors,
+        "digest": hashlib.sha256((metadata_text + "\n" + body).encode("utf-8")).hexdigest(),
+    }
+
+
+def _append_prompt_contract_errors(
+    metadata: dict[str, Any], errors: list[str]
+) -> None:
+    fields = (
+        "required_inputs",
+        "hard_constraints",
+        "output_contract",
+        "review_requirements",
+        "forbidden_shortcuts",
+    )
+    for field in fields:
+        value = metadata.get(field)
+        if not isinstance(value, list) or not value:
+            errors.append(f"missing non-empty {field}")
 
 
 def _tool_audience_cases() -> list[dict[str, Any]]:

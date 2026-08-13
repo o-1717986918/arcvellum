@@ -86,9 +86,7 @@ class RepairContextCoordinator:
         maximum: int,
     ) -> PreparedRepairContext:
         if self._pending is not None:
-            raise RuntimeError(
-                "previous repair output protection was not finalized"
-            )
+            raise RuntimeError("previous repair output protection was not finalized")
         write_scope_mode, targets, protected = _repair_scope(
             self.task,
             result.issues,

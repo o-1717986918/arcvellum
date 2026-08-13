@@ -258,14 +258,23 @@ def _on_demand_reason(role: str) -> str:
 
 def _evidence_role(path: str, task_kind: str) -> tuple[str, str]:
     lowered = path.casefold()
-    if (
-        task_kind == "prose"
-        and lowered.startswith("memory/context_packets/scene_")
-        and lowered.endswith(".md")
-    ):
+    if _is_prose_context_packet(lowered, task_kind):
         return "scene_context", "structured"
     if _is_recovery_path(lowered):
         return "recovery", "recovery"
+    return _literary_evidence_role(lowered, task_kind)
+
+
+def _is_prose_context_packet(path: str, task_kind: str) -> bool:
+    return (
+        task_kind == "prose"
+        and path.startswith("memory/context_packets/scene_")
+        and path.endswith(".md")
+    )
+
+
+def _literary_evidence_role(path: str, task_kind: str) -> tuple[str, str]:
+    lowered = path
     if lowered.startswith("drafts/compositions/") and lowered.endswith(".json"):
         return "composition_contract", "structured"
     if "candidate" in lowered or "/draft" in lowered or lowered.startswith("drafts/"):
@@ -280,9 +289,13 @@ def _evidence_role(path: str, task_kind: str) -> tuple[str, str]:
         return "canon", "structured"
     if lowered.startswith("scenes/"):
         return "scene", "structured"
-    if "context.json" in lowered or "lint" in lowered or "budget" in lowered:
+    if _is_deterministic_evidence(lowered):
         return "deterministic_evidence", "structured"
     return "project_evidence", "structured"
+
+
+def _is_deterministic_evidence(path: str) -> bool:
+    return any(token in path for token in ("context.json", "lint", "budget"))
 
 
 def _is_recovery_path(path: str) -> bool:

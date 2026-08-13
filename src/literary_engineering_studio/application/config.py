@@ -375,19 +375,7 @@ def _migrate_pi_prose_execution_profile(payload: dict[str, Any]) -> dict[str, An
     enforcement = profile.get("enforcement")
     if not isinstance(enforcement, dict):
         return migrated
-    runtimes = {str(item) for item in enforcement.get("runtimes") or []}
-    routes = {str(item) for item in enforcement.get("routes") or []}
-    states = {str(item) for item in enforcement.get("states") or []}
-    task_kinds = {str(item) for item in enforcement.get("task_kinds") or []}
-    untouched_legacy = (
-        str(profile.get("mode") or "shadow") == "shadow"
-        and enforcement.get("enabled") is False
-        and runtimes == {"pi-worker"}
-        and routes == {"character-and-world-assets", "scene-development"}
-        and states == {"asset-creation-agent-task", "candidate-review"}
-        and task_kinds == {"creative", "review"}
-    )
-    if not untouched_legacy:
+    if not _is_untouched_legacy_pi_profile(profile, enforcement):
         return migrated
     profile.update(
         {
@@ -404,6 +392,26 @@ def _migrate_pi_prose_execution_profile(payload: dict[str, Any]) -> dict[str, An
     worker["execution_profile"] = profile
     migrated["worker"] = worker
     return migrated
+
+
+def _is_untouched_legacy_pi_profile(
+    profile: dict[str, Any], enforcement: dict[str, Any]
+) -> bool:
+    observed = {
+        key: {str(item) for item in enforcement.get(key) or []}
+        for key in ("runtimes", "routes", "states", "task_kinds")
+    }
+    expected = {
+        "runtimes": {"pi-worker"},
+        "routes": {"character-and-world-assets", "scene-development"},
+        "states": {"asset-creation-agent-task", "candidate-review"},
+        "task_kinds": {"creative", "review"},
+    }
+    return (
+        str(profile.get("mode") or "shadow") == "shadow"
+        and enforcement.get("enabled") is False
+        and observed == expected
+    )
 
 
 def _without_machine_local_engine_path(payload: dict[str, Any]) -> dict[str, Any]:

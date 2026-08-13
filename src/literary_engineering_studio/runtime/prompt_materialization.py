@@ -113,30 +113,41 @@ def materialize_prompt_programs(
         else None
     )
     formal = v3 if rollout["formal_version"] == "v3" and v3 is not None else v2
-    if formal is v3 and v3 is not None and v3.lint is not None and v3.lint.status == "error":
-        details = "; ".join(
-            f"{issue.code}: {issue.message}"
-            for issue in v3.lint.issues
-            if issue.severity == "error"
-        ) or "unknown prompt lint error"
-        if runtime_id == "pi-worker":
-            raise ValueError(
-                "Pi Worker Prompt v3 lint failed; refusing legacy v2 fallback "
-                "because it can reintroduce duplicated Skill and task evidence: "
-                + details
-            )
-        if rollout.get("fallback") != "v2":
-            raise ValueError(
-                "Prompt v3 lint failed and no supported fallback is configured: "
-                + details
-            )
-        formal = v2
-        rollout = {**rollout, "formal_version": "v2", "reason": "prompt-v3-lint-fallback"}
+    formal, rollout = _enforce_prompt_lint(
+        formal, v2, v3, rollout, runtime_id=runtime_id
+    )
     shadow_path: Path | None = None
     if rollout["emit_shadow"] is True and v3 is not None:
         shadow_path = run_root / "prompt-v3-shadow.md"
         shadow_path.write_text(v3.text, encoding="utf-8")
     return PromptMaterialization(formal, v3 if v3 is not formal else None, shadow_path, rollout)
+
+
+def _enforce_prompt_lint(
+    formal: CompiledWorkerProgram,
+    v2: CompiledWorkerProgram,
+    v3: CompiledWorkerProgram | None,
+    rollout: Mapping[str, object],
+    *,
+    runtime_id: str,
+) -> tuple[CompiledWorkerProgram, Mapping[str, object]]:
+    if formal is not v3 or v3 is None or v3.lint is None or v3.lint.status != "error":
+        return formal, rollout
+    details = "; ".join(
+        f"{issue.code}: {issue.message}"
+        for issue in v3.lint.issues
+        if issue.severity == "error"
+    ) or "unknown prompt lint error"
+    if runtime_id == "pi-worker":
+        raise ValueError(
+            "Pi Worker Prompt v3 lint failed; refusing legacy v2 fallback because it can "
+            "reintroduce duplicated Skill and task evidence: " + details
+        )
+    if rollout.get("fallback") != "v2":
+        raise ValueError(
+            "Prompt v3 lint failed and no supported fallback is configured: " + details
+        )
+    return v2, {**rollout, "formal_version": "v2", "reason": "prompt-v3-lint-fallback"}
 
 
 def _contract_digest(payload: Mapping[str, object]) -> str:
