@@ -26,6 +26,7 @@
       "literary_engineering_studio.projections",
       "literary_engineering_studio.projections.api_read_models"
     ],
+    "literary_engineering_studio.application.compatibility": [],
     "literary_engineering_studio.application_info": [
       "literary_engineering_studio.application",
       "literary_engineering_studio.application.application_info"
@@ -99,6 +100,7 @@
       "literary_engineering_studio.integrations.opencode",
       "literary_engineering_studio.integrations.opencode.opencode_server"
     ],
+    "literary_engineering_studio.persistence.facade": [],
     "literary_engineering_studio.process_manager": [
       "literary_engineering_studio.runtime",
       "literary_engineering_studio.runtime.process_manager"
@@ -144,18 +146,6 @@
       "literary_engineering_studio.runtime.subprocess_utils"
     ],
     "literary_engineering_studio.supervisor": [],
-    "literary_engineering_studio.task_preflight": [
-      "literary_engineering_studio.contracts",
-      "literary_engineering_studio.preflight.assets",
-      "literary_engineering_studio.preflight.canonicalization",
-      "literary_engineering_studio.preflight.common",
-      "literary_engineering_studio.preflight.review",
-      "literary_engineering_studio.preflight.scene",
-      "literary_engineering_studio.sandbox",
-      "literary_engineering_studio_engine.continuity_ledger",
-      "literary_engineering_studio_engine.flow_gates",
-      "literary_engineering_studio_engine.semantic_task_contracts"
-    ],
     "literary_engineering_studio.task_program": [],
     "literary_engineering_studio.whole_book_release": [
       "literary_engineering_studio.projections",
@@ -349,13 +339,6 @@
     "literary_engineering_studio_engine.route_audit_scene": [],
     "literary_engineering_studio_engine.route_catalog": [],
     "literary_engineering_studio_engine.route_selection": [],
-    "literary_engineering_studio_engine.routes.scene.definition": [
-      "literary_engineering_studio_engine.scene_route_blueprints",
-      "literary_engineering_studio_engine.scene_route_gates",
-      "literary_engineering_studio_engine.scene_route_support",
-      "literary_engineering_studio_engine.semantic_task_contracts",
-      "literary_engineering_studio_engine.task_paths"
-    ],
     "literary_engineering_studio_engine.scene_character_assets": [],
     "literary_engineering_studio_engine.scene_composer": [],
     "literary_engineering_studio_engine.scene_development_route": [],
@@ -397,6 +380,7 @@
       "literary_engineering_studio_engine.tasking.paths"
     ],
     "literary_engineering_studio_engine.task_registry": [],
+    "literary_engineering_studio_engine.tasking.orchestration": [],
     "literary_engineering_studio_engine.text_counts": [
       "literary_engineering_studio_engine.foundation",
       "literary_engineering_studio_engine.foundation.text_counts"
@@ -504,43 +488,38 @@
   "import_cycles": [],
   "oversized_files": {
     "client/src/components/AdvisorDock.vue": 632,
-    "client/src/features/orrery/engine/parallaxRenderer.ts": 939,
-    "src/literary_engineering_studio/automation/controller.py": 742,
-    "src/literary_engineering_studio/persistence/job_store.py": 620,
-    "src/literary_engineering_studio/preflight/canonicalization.py": 881,
+    "client/src/features/orrery/engine/parallaxRenderer.ts": 934,
+    "src/literary_engineering_studio/automation/controller.py": 541,
+    "src/literary_engineering_studio/persistence/job_store.py": 507,
+    "src/literary_engineering_studio/preflight/canonicalization.py": 838,
     "src/literary_engineering_studio/projections/narrative_projection.py": 570,
-    "src/literary_engineering_studio/projections/narrative_projection_v3.py": 504,
-    "src/literary_engineering_studio/runtime/sandbox.py": 647,
-    "src/literary_engineering_studio/runtime/worker.py": 595,
-    "src/literary_engineering_studio_engine/command_line/parser.py": 712,
-    "src/literary_engineering_studio_engine/literary/assets/canon/evolver.py": 738,
-    "src/literary_engineering_studio_engine/literary/assets/workshop.py": 929,
+    "src/literary_engineering_studio/runtime/sandbox.py": 643,
+    "src/literary_engineering_studio/runtime/worker.py": 585,
+    "src/literary_engineering_studio_engine/command_line/parser.py": 688,
+    "src/literary_engineering_studio_engine/literary/assets/canon/evolver.py": 777,
+    "src/literary_engineering_studio_engine/literary/assets/workshop.py": 897,
     "src/literary_engineering_studio_engine/literary/export/docx.py": 683,
     "src/literary_engineering_studio_engine/literary/planning/chapter_pipeline.py": 587,
-    "src/literary_engineering_studio_engine/literary/planning/materializer.py": 731,
+    "src/literary_engineering_studio_engine/literary/planning/materializer.py": 762,
     "src/literary_engineering_studio_engine/literary/planning/narrative_rhythm.py": 599,
     "src/literary_engineering_studio_engine/literary/review/longform_audit.py": 799,
-    "src/literary_engineering_studio_engine/literary/review/reader_experience.py": 604,
-    "src/literary_engineering_studio_engine/literary/scene/branching/lab.py": 722,
-    "src/literary_engineering_studio_engine/literary/scene/composition/composer.py": 903,
-    "src/literary_engineering_studio_engine/literary/scene/context/packet.py": 644,
-    "src/literary_engineering_studio_engine/literary/scene/promotion/candidate.py": 926,
-    "src/literary_engineering_studio_engine/literary/scene/roleplay/lab.py": 537,
-    "src/literary_engineering_studio_engine/literary/style/anti_ai.py": 586,
-    "src/literary_engineering_studio_engine/literary/style/lab.py": 793,
-    "src/literary_engineering_studio_engine/projections/interaction/choices.py": 644,
-    "src/literary_engineering_studio_engine/prompting/pack.py": 736,
-    "src/literary_engineering_studio_engine/prompting/platform_tasks.py": 874,
-    "src/literary_engineering_studio_engine/routes/assets/definition.py": 769,
+    "src/literary_engineering_studio_engine/literary/review/reader_experience.py": 618,
+    "src/literary_engineering_studio_engine/literary/scene/branching/lab.py": 694,
+    "src/literary_engineering_studio_engine/literary/scene/composition/composer.py": 878,
+    "src/literary_engineering_studio_engine/literary/scene/context/packet.py": 646,
+    "src/literary_engineering_studio_engine/literary/scene/state/evolver.py": 503,
+    "src/literary_engineering_studio_engine/literary/style/anti_ai.py": 590,
+    "src/literary_engineering_studio_engine/literary/style/lab.py": 774,
+    "src/literary_engineering_studio_engine/projections/interaction/choices.py": 649,
+    "src/literary_engineering_studio_engine/prompting/pack.py": 735,
+    "src/literary_engineering_studio_engine/prompting/platform_tasks.py": 869,
+    "src/literary_engineering_studio_engine/routes/assets/definition.py": 766,
     "src/literary_engineering_studio_engine/routes/review/definition.py": 793,
-    "src/literary_engineering_studio_engine/routes/scene/blueprints.py": 836,
-    "src/literary_engineering_studio_engine/routes/style/definition.py": 508,
-    "src/literary_engineering_studio_engine/tasking/package_contract.py": 570,
+    "src/literary_engineering_studio_engine/routes/scene/blueprints.py": 810,
     "src/literary_engineering_studio_engine/tasking/protocol.py": 560,
     "src/literary_engineering_studio_engine/workflow/activity.py": 723,
-    "src/literary_engineering_studio_engine/workflow/audit/scene.py": 651,
     "src/literary_engineering_studio_engine/workflow/runner.py": 754,
-    "src/literary_engineering_studio_engine/workflow/state_scene.py": 592
+    "src/literary_engineering_studio_engine/workflow/state_scene.py": 609
   },
   "oversized_functions": {
     "src/literary_engineering_studio/advisor/advisor_inbox.py::refresh_advisor_inbox": {
@@ -573,15 +552,11 @@
     },
     "src/literary_engineering_studio/api/routers/automation.py::build_automation_router": {
       "complexity": 1,
-      "lines": 97
+      "lines": 88
     },
     "src/literary_engineering_studio/api/routers/library.py::build_library_router": {
       "complexity": 1,
       "lines": 104
-    },
-    "src/literary_engineering_studio/api/routers/narrative.py::build_narrative_router": {
-      "complexity": 1,
-      "lines": 109
     },
     "src/literary_engineering_studio/api/routers/runners.py::build_runner_router": {
       "complexity": 1,
@@ -589,7 +564,7 @@
     },
     "src/literary_engineering_studio/api/routers/worker.py::build_worker_router": {
       "complexity": 1,
-      "lines": 169
+      "lines": 137
     },
     "src/literary_engineering_studio/api_server.py::create_app": {
       "complexity": 6,
@@ -600,28 +575,16 @@
       "lines": 121
     },
     "src/literary_engineering_studio/application/cli.py::main": {
-      "complexity": 31,
-      "lines": 157
+      "complexity": 22,
+      "lines": 122
     },
     "src/literary_engineering_studio/application/config.py::default_config": {
       "complexity": 2,
-      "lines": 88
-    },
-    "src/literary_engineering_studio/automation/controller.py::AutopilotService._delegate_choice": {
-      "complexity": 25,
-      "lines": 95
-    },
-    "src/literary_engineering_studio/automation/controller.py::AutopilotService._run_claimed": {
-      "complexity": 64,
-      "lines": 246
+      "lines": 83
     },
     "src/literary_engineering_studio/automation/prompt_evaluation.py::_live_payload_errors": {
       "complexity": 18,
       "lines": 28
-    },
-    "src/literary_engineering_studio/automation/prompt_evaluation.py::evaluate_prompt_assets": {
-      "complexity": 22,
-      "lines": 67
     },
     "src/literary_engineering_studio/contracts.py::_validate_optional_execution_contract": {
       "complexity": 35,
@@ -644,28 +607,16 @@
       "lines": 31
     },
     "src/literary_engineering_studio/integrations/opencode/runner_probe.py::probe_agent_runner": {
-      "complexity": 26,
+      "complexity": 25,
       "lines": 74
     },
     "src/literary_engineering_studio/observability/agent_observability.py::build_agent_observability": {
-      "complexity": 18,
-      "lines": 52
+      "complexity": 16,
+      "lines": 50
     },
     "src/literary_engineering_studio/observability/runtime_events.py::normalize_opencode_event": {
-      "complexity": 50,
-      "lines": 66
-    },
-    "src/literary_engineering_studio/observability/throughput_metrics.py::build_throughput_projection": {
-      "complexity": 55,
-      "lines": 166
-    },
-    "src/literary_engineering_studio/persistence/job_store.py::JobStore._initialize": {
-      "complexity": 6,
-      "lines": 208
-    },
-    "src/literary_engineering_studio/persistence/sessions.py::SessionStoreMixin.upsert_agent_session": {
-      "complexity": 29,
-      "lines": 89
+      "complexity": 46,
+      "lines": 64
     },
     "src/literary_engineering_studio/preflight/assets.py::_validate_asset_candidate": {
       "complexity": 26,
@@ -677,23 +628,15 @@
     },
     "src/literary_engineering_studio/preflight/canonicalization.py::_canonicalize_agent_completion_markers": {
       "complexity": 32,
-      "lines": 75
+      "lines": 69
     },
     "src/literary_engineering_studio/preflight/canonicalization.py::_canonicalize_asset_machine_metadata": {
-      "complexity": 38,
-      "lines": 74
-    },
-    "src/literary_engineering_studio/preflight/canonicalization.py::_canonicalize_scene_candidate_manifest": {
-      "complexity": 48,
-      "lines": 116
-    },
-    "src/literary_engineering_studio/preflight/canonicalization.py::_canonicalize_scene_review_metadata": {
-      "complexity": 26,
-      "lines": 65
+      "complexity": 20,
+      "lines": 64
     },
     "src/literary_engineering_studio/preflight/canonicalization.py::_canonicalize_semantic_artifact_metadata": {
       "complexity": 19,
-      "lines": 74
+      "lines": 68
     },
     "src/literary_engineering_studio/preflight/common.py::_validate_completion_markers": {
       "complexity": 18,
@@ -708,20 +651,8 @@
       "lines": 38
     },
     "src/literary_engineering_studio/preflight/scene.py::_validate_scene_candidate_generation_contract": {
-      "complexity": 35,
-      "lines": 123
-    },
-    "src/literary_engineering_studio/preflight/scene.py::_validate_scene_review_contract": {
-      "complexity": 25,
-      "lines": 79
-    },
-    "src/literary_engineering_studio/preflight/scene.py::_validate_scene_revision_contract": {
-      "complexity": 22,
-      "lines": 40
-    },
-    "src/literary_engineering_studio/projections/core_read_models.py::record_choice": {
-      "complexity": 23,
-      "lines": 51
+      "complexity": 26,
+      "lines": 100
     },
     "src/literary_engineering_studio/projections/narrative_projection.py::_append_scene_evidence": {
       "complexity": 46,
@@ -760,40 +691,20 @@
       "lines": 20
     },
     "src/literary_engineering_studio/projections/narrative_projection_v3.py::build_narrative_projection_v3": {
-      "complexity": 7,
-      "lines": 92
+      "complexity": 6,
+      "lines": 90
     },
     "src/literary_engineering_studio/projections/reader.py::build_reader_manifest": {
       "complexity": 18,
       "lines": 70
     },
     "src/literary_engineering_studio/runtime/sandbox.py::stage_task": {
-      "complexity": 16,
+      "complexity": 13,
       "lines": 102
     },
-    "src/literary_engineering_studio/runtime/task_program.py::_render_semantic_output_contract": {
-      "complexity": 27,
-      "lines": 78
-    },
-    "src/literary_engineering_studio/runtime/task_program.py::_semantic_output_contract": {
-      "complexity": 24,
-      "lines": 82
-    },
-    "src/literary_engineering_studio/runtime/task_program.py::render_worker_program": {
-      "complexity": 29,
-      "lines": 141
-    },
-    "src/literary_engineering_studio/runtime/worker.py::AgentWorker._finalize": {
-      "complexity": 5,
-      "lines": 81
-    },
     "src/literary_engineering_studio/runtime/worker.py::AgentWorker.prepare": {
-      "complexity": 14,
-      "lines": 119
-    },
-    "src/literary_engineering_studio/runtime/worker.py::AgentWorker.run_once": {
-      "complexity": 14,
-      "lines": 130
+      "complexity": 13,
+      "lines": 118
     },
     "src/literary_engineering_studio/runtimes/base.py::AgentRuntime.execute": {
       "complexity": 22,
@@ -808,16 +719,8 @@
       "lines": 69
     },
     "src/literary_engineering_studio/runtimes/opencode.py::OpenCodeRuntime.execute": {
-      "complexity": 47,
-      "lines": 332
-    },
-    "src/literary_engineering_studio/runtimes/opencode.py::OpenCodeRuntime.execute.consume_events": {
-      "complexity": 18,
-      "lines": 36
-    },
-    "src/literary_engineering_studio/task_preflight.py::_validate_branch_selection_contract": {
-      "complexity": 18,
-      "lines": 64
+      "complexity": 29,
+      "lines": 328
     },
     "src/literary_engineering_studio_engine/api/routers/agents.py::director_conversation": {
       "complexity": 18,
@@ -843,29 +746,21 @@
       "complexity": 20,
       "lines": 116
     },
-    "src/literary_engineering_studio_engine/command_line/commands/formal.py::handle": {
-      "complexity": 85,
-      "lines": 321
-    },
     "src/literary_engineering_studio_engine/command_line/commands/legacy.py::handle": {
       "complexity": 29,
       "lines": 131
     },
     "src/literary_engineering_studio_engine/command_line/commands/longform.py::handle": {
       "complexity": 58,
-      "lines": 291
+      "lines": 293
     },
     "src/literary_engineering_studio_engine/command_line/commands/projects.py::handle": {
-      "complexity": 50,
-      "lines": 303
-    },
-    "src/literary_engineering_studio_engine/command_line/commands/scene.py::handle": {
-      "complexity": 74,
-      "lines": 322
+      "complexity": 33,
+      "lines": 171
     },
     "src/literary_engineering_studio_engine/command_line/parser.py::build_parser": {
       "complexity": 7,
-      "lines": 688
+      "lines": 664
     },
     "src/literary_engineering_studio_engine/director/loop.py::_deterministic_observe_decision": {
       "complexity": 16,
@@ -896,8 +791,8 @@
       "lines": 299
     },
     "src/literary_engineering_studio_engine/literary/assets/canon/evolver.py::canon_writeback_status": {
-      "complexity": 20,
-      "lines": 75
+      "complexity": 22,
+      "lines": 93
     },
     "src/literary_engineering_studio_engine/literary/assets/canon/lint.py::_check_scenes": {
       "complexity": 20,
@@ -944,8 +839,8 @@
       "lines": 91
     },
     "src/literary_engineering_studio_engine/literary/planning/materializer.py::_parse_scene_inventory": {
-      "complexity": 19,
-      "lines": 76
+      "complexity": 20,
+      "lines": 79
     },
     "src/literary_engineering_studio_engine/literary/planning/materializer.py::_render_scene_yaml": {
       "complexity": 9,
@@ -976,20 +871,20 @@
       "lines": 30
     },
     "src/literary_engineering_studio_engine/literary/planning/rhythm_plan.py::load_rhythm_plan": {
-      "complexity": 34,
-      "lines": 62
+      "complexity": 32,
+      "lines": 61
     },
     "src/literary_engineering_studio_engine/literary/planning/rhythm_plan.py::save_rhythm_plan": {
       "complexity": 19,
       "lines": 53
     },
     "src/literary_engineering_studio_engine/literary/planning/service.py::build_word_budget": {
-      "complexity": 18,
-      "lines": 120
+      "complexity": 31,
+      "lines": 144
     },
     "src/literary_engineering_studio_engine/literary/review/ci.py::review_scene_draft": {
-      "complexity": 31,
-      "lines": 75
+      "complexity": 33,
+      "lines": 94
     },
     "src/literary_engineering_studio_engine/literary/review/creative_quality.py::normalize_creative_quality_profile": {
       "complexity": 20,
@@ -1012,12 +907,12 @@
       "lines": 104
     },
     "src/literary_engineering_studio_engine/literary/review/longform_audit.py::_scan_scenes": {
-      "complexity": 21,
-      "lines": 72
+      "complexity": 19,
+      "lines": 70
     },
     "src/literary_engineering_studio_engine/literary/review/longform_audit.py::_summary": {
-      "complexity": 24,
-      "lines": 35
+      "complexity": 20,
+      "lines": 32
     },
     "src/literary_engineering_studio_engine/literary/review/reader_experience.py::chapter_obligation_contract": {
       "complexity": 21,
@@ -1040,8 +935,8 @@
       "lines": 87
     },
     "src/literary_engineering_studio_engine/literary/review/scene_agent.py::review_scene_with_agent": {
-      "complexity": 17,
-      "lines": 107
+      "complexity": 15,
+      "lines": 101
     },
     "src/literary_engineering_studio_engine/literary/scene/branching/lab.py::_candidate": {
       "complexity": 18,
@@ -1055,25 +950,25 @@
       "complexity": 21,
       "lines": 113
     },
-    "src/literary_engineering_studio_engine/literary/scene/composition/composer.py::_load_branch_choice": {
-      "complexity": 16,
-      "lines": 74
+    "src/literary_engineering_studio_engine/literary/scene/branching/proposals.py::_proposal_errors": {
+      "complexity": 17,
+      "lines": 26
     },
     "src/literary_engineering_studio_engine/literary/scene/composition/composer.py::_render_markdown": {
-      "complexity": 26,
-      "lines": 138
+      "complexity": 23,
+      "lines": 137
     },
     "src/literary_engineering_studio_engine/literary/scene/composition/composer.py::build_scene_composition": {
       "complexity": 21,
-      "lines": 144
+      "lines": 142
     },
     "src/literary_engineering_studio_engine/literary/scene/composition/draft.py::build_scene_draft": {
       "complexity": 16,
       "lines": 118
     },
     "src/literary_engineering_studio_engine/literary/scene/context/broker.py::context_trace_status": {
-      "complexity": 28,
-      "lines": 47
+      "complexity": 22,
+      "lines": 39
     },
     "src/literary_engineering_studio_engine/literary/scene/context/packet.py::_context_trace_payload": {
       "complexity": 21,
@@ -1081,31 +976,15 @@
     },
     "src/literary_engineering_studio_engine/literary/scene/context/packet.py::build_context_packet": {
       "complexity": 9,
-      "lines": 140
+      "lines": 147
     },
     "src/literary_engineering_studio_engine/literary/scene/generation_provider.py::generate_scene_candidate": {
       "complexity": 23,
       "lines": 115
     },
-    "src/literary_engineering_studio_engine/literary/scene/promotion/candidate.py::_unresolved_review_notes": {
-      "complexity": 36,
-      "lines": 66
-    },
-    "src/literary_engineering_studio_engine/literary/scene/promotion/candidate.py::candidate_generation_gate": {
-      "complexity": 68,
-      "lines": 116
-    },
-    "src/literary_engineering_studio_engine/literary/scene/promotion/candidate.py::candidate_review_gate": {
-      "complexity": 78,
-      "lines": 201
-    },
     "src/literary_engineering_studio_engine/literary/scene/promotion/candidate.py::promote_scene_candidate": {
       "complexity": 11,
-      "lines": 103
-    },
-    "src/literary_engineering_studio_engine/literary/scene/promotion/readiness.py::_unresolved_review_notes": {
-      "complexity": 22,
-      "lines": 33
+      "lines": 86
     },
     "src/literary_engineering_studio_engine/literary/scene/promotion/readiness.py::agent_review_gate_state": {
       "complexity": 26,
@@ -1121,15 +1000,19 @@
     },
     "src/literary_engineering_studio_engine/literary/scene/roleplay/lab.py::build_roleplay_simulation": {
       "complexity": 18,
-      "lines": 153
+      "lines": 151
     },
     "src/literary_engineering_studio_engine/literary/scene/state/apply.py::apply_character_state_patch": {
       "complexity": 23,
       "lines": 106
     },
+    "src/literary_engineering_studio_engine/literary/scene/state/apply.py::state_patch_writeback_status": {
+      "complexity": 21,
+      "lines": 69
+    },
     "src/literary_engineering_studio_engine/literary/scene/state/evolver.py::build_character_state_patch": {
-      "complexity": 10,
-      "lines": 88
+      "complexity": 15,
+      "lines": 104
     },
     "src/literary_engineering_studio_engine/literary/scene/state/new_character_register.py::new_character_register_issues": {
       "complexity": 50,
@@ -1138,6 +1021,10 @@
     "src/literary_engineering_studio_engine/literary/style/anti_ai.py::_banned_phrase_issues": {
       "complexity": 20,
       "lines": 22
+    },
+    "src/literary_engineering_studio_engine/literary/style/anti_ai.py::_sentence_shape_issues": {
+      "complexity": 9,
+      "lines": 83
     },
     "src/literary_engineering_studio_engine/literary/style/compiler.py::_profile_markdown": {
       "complexity": 4,
@@ -1159,9 +1046,13 @@
       "complexity": 26,
       "lines": 30
     },
+    "src/literary_engineering_studio_engine/projections/interaction/choices.py::_revision_direction_choice": {
+      "complexity": 16,
+      "lines": 56
+    },
     "src/literary_engineering_studio_engine/projections/interaction/choices.py::build_current_human_choices": {
       "complexity": 48,
-      "lines": 79
+      "lines": 83
     },
     "src/literary_engineering_studio_engine/projections/interaction/choices.py::record_human_choice": {
       "complexity": 26,
@@ -1191,10 +1082,6 @@
       "complexity": 20,
       "lines": 48
     },
-    "src/literary_engineering_studio_engine/projects/source_ingest.py::ingest_existing_work": {
-      "complexity": 15,
-      "lines": 132
-    },
     "src/literary_engineering_studio_engine/prompting/agents/provider.py::run_agent_task": {
       "complexity": 6,
       "lines": 88
@@ -1212,8 +1099,8 @@
       "lines": 117
     },
     "src/literary_engineering_studio_engine/prompting/platform_tasks.py::write_platform_scene_review_task": {
-      "complexity": 13,
-      "lines": 202
+      "complexity": 12,
+      "lines": 201
     },
     "src/literary_engineering_studio_engine/prompting/registry.py::validate_prompt_registry": {
       "complexity": 16,
@@ -1226,10 +1113,6 @@
     "src/literary_engineering_studio_engine/routes/assets/definition.py::_asset_candidate_path_for_task": {
       "complexity": 17,
       "lines": 19
-    },
-    "src/literary_engineering_studio_engine/routes/assets/definition.py::_asset_review_gate_errors": {
-      "complexity": 21,
-      "lines": 40
     },
     "src/literary_engineering_studio_engine/routes/assets/definition.py::_asset_revision_gate_errors": {
       "complexity": 26,
@@ -1256,8 +1139,8 @@
       "lines": 31
     },
     "src/literary_engineering_studio_engine/routes/longform/definition.py::blueprint_for_state": {
-      "complexity": 6,
-      "lines": 213
+      "complexity": 8,
+      "lines": 220
     },
     "src/literary_engineering_studio_engine/routes/longform/definition.py::validate_task": {
       "complexity": 27,
@@ -1285,31 +1168,31 @@
     },
     "src/literary_engineering_studio_engine/routes/scene/blueprints.py::_blueprint_for_state": {
       "complexity": 20,
-      "lines": 782
+      "lines": 680
     },
     "src/literary_engineering_studio_engine/routes/scene/definition.py::_agent_reading_paths": {
-      "complexity": 23,
-      "lines": 103
+      "complexity": 22,
+      "lines": 100
     },
     "src/literary_engineering_studio_engine/routes/scene/definition.py::_build_task_payload": {
       "complexity": 16,
       "lines": 62
     },
     "src/literary_engineering_studio_engine/routes/scene/gates.py::_scene_revision_gate_errors": {
-      "complexity": 21,
-      "lines": 43
+      "complexity": 19,
+      "lines": 33
     },
     "src/literary_engineering_studio_engine/routes/scene/gates.py::_state_gate_validation": {
-      "complexity": 39,
-      "lines": 85
+      "complexity": 40,
+      "lines": 87
     },
     "src/literary_engineering_studio_engine/routes/style/definition.py::blueprint_for_state": {
-      "complexity": 6,
+      "complexity": 3,
       "lines": 176
     },
     "src/literary_engineering_studio_engine/routes/style/definition.py::validate_task": {
-      "complexity": 25,
-      "lines": 53
+      "complexity": 16,
+      "lines": 51
     },
     "src/literary_engineering_studio_engine/tasking/agent_tasks/inventory.py::_infer_route": {
       "complexity": 24,
@@ -1348,15 +1231,11 @@
       "lines": 46
     },
     "src/literary_engineering_studio_engine/tasking/package_contract.py::enrich_task_payload": {
-      "complexity": 40,
-      "lines": 121
-    },
-    "src/literary_engineering_studio_engine/tasking/package_contract.py::render_task_markdown": {
-      "complexity": 67,
-      "lines": 153
+      "complexity": 36,
+      "lines": 101
     },
     "src/literary_engineering_studio_engine/tasking/semantic_contracts.py::_semantic_quality_errors": {
-      "complexity": 22,
+      "complexity": 19,
       "lines": 50
     },
     "src/literary_engineering_studio_engine/tasking/workflow_contract.py::_validate_step_order": {
@@ -1396,20 +1275,8 @@
       "lines": 83
     },
     "src/literary_engineering_studio_engine/workflow/audit/review.py::_add_review_audit_route_gates": {
-      "complexity": 30,
-      "lines": 81
-    },
-    "src/literary_engineering_studio_engine/workflow/audit/scene.py::_add_scene_development_gates": {
-      "complexity": 52,
-      "lines": 417
-    },
-    "src/literary_engineering_studio_engine/workflow/audit/scene.py::_started_scene_ids": {
-      "complexity": 25,
-      "lines": 38
-    },
-    "src/literary_engineering_studio_engine/workflow/audit/service.py::build_route_gates": {
-      "complexity": 17,
-      "lines": 45
+      "complexity": 28,
+      "lines": 79
     },
     "src/literary_engineering_studio_engine/workflow/audit/task_status.py::build_route_audit": {
       "complexity": 17,
@@ -1434,10 +1301,6 @@
     "src/literary_engineering_studio_engine/workflow/runner.py::run_workflow": {
       "complexity": 16,
       "lines": 104
-    },
-    "src/literary_engineering_studio_engine/workflow/state.py::build_workflow_state": {
-      "complexity": 61,
-      "lines": 113
     },
     "src/literary_engineering_studio_engine/workflow/state_assets.py::_asset_promotion_step": {
       "complexity": 16,
