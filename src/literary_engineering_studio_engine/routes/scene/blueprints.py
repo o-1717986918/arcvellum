@@ -14,6 +14,7 @@ from ...scene_route_support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
     _read_text, _unique,
 )
+from .writeback_blueprints import SceneWritebackContext, writeback_blueprint_for_state
 
 
 def _branch_proposal_count(root: Path, scene_id: str) -> int:
@@ -233,6 +234,28 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         _rel(requirement.task_path, root)
         for requirement in scene_character_assets
     ]
+    writeback = writeback_blueprint_for_state(
+        current_state,
+        SceneWritebackContext(
+            scene_id=scene_id,
+            scene_rel=scene_rel,
+            context=context,
+            context_trace=context_trace,
+            scene_runtime_sources=tuple(scene_runtime_sources),
+            state_patch=state_patch,
+            state_patch_character_files=tuple(state_patch_character_files),
+            state_apply=state_apply,
+            state_review=state_review,
+            canon_patch=canon_patch,
+            canon_review=canon_review,
+            canon_formal_sources=tuple(canon_formal_sources),
+            review=review,
+            ledger_delta=ledger_delta,
+            ledger_task=ledger_task,
+            ledger_review=ledger_review,
+            ledger_review_task=ledger_review_task,
+        ),
+    )
     table: dict[str, dict[str, object]] = {
         "scene-character-asset-tasks": {
             "task_type": "deterministic-cli",
@@ -762,219 +785,6 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             ],
             "next_allowed_states": ["candidate-review"],
         },
-        "state-patch-json": {
-            "task_type": "deterministic-cli",
-            "prompt_asset_id": "route.scene-development.state-evolve.prepare.v1",
-            "command": f"python -m literary_engineering_studio_engine state-evolve <project> --scene {scene_rel} --agent-tasks",
-            "source_paths": [
-                *scene_runtime_sources,
-                f"drafts/scenes/{scene_id}.md",
-                f"drafts/promotions/{scene_id}_promotion.json",
-                f"drafts/compositions/{scene_id}_composition.json",
-                f"reviews/agent/{scene_id}_scene_review.json",
-            ],
-            "context_trace": context_trace,
-            "expected_outputs": [f"{state_patch}.md", f"{state_patch}.json", f"{state_patch}.agent_tasks.md", state_review],
-            "hard_constraints": ["Prepare the state patch and its review sidecar only; state review is a separate formal Agent task."],
-            "style_constraints": [],
-            "validation_gates": ["state patch JSON exists", "state-evolve sidecar exists"],
-            "next_allowed_states": ["state-agent-task"],
-        },
-        "state-agent-task": {
-            "task_type": "platform-agent-review",
-            "prompt_asset_id": "route.scene-development.state-evolve.execute.v1",
-            "command": "",
-            "source_paths": list(
-                dict.fromkeys(
-                    [
-                        scene_rel,
-                        context,
-                        context_trace,
-                        f"drafts/scenes/{scene_id}.md",
-                        f"drafts/promotions/{scene_id}_promotion.json",
-                        f"drafts/compositions/{scene_id}_composition.json",
-                        f"reviews/agent/{scene_id}_scene_review.json",
-                        *state_patch_character_files,
-                        f"{state_patch}.md",
-                        f"{state_patch}.json",
-                        f"{state_patch}.agent_tasks.md",
-                        state_review,
-                    ]
-                )
-            ),
-            "context_trace": context_trace,
-            "expected_outputs": [state_review, f"{state_patch}.agent_completion.json"],
-            "hard_constraints": ["Review state patch consequences and write a schema-valid state review with exact source digest; Studio writes the completion marker after deterministic preflight passes. Do not apply state without approval."],
-            "style_constraints": [],
-            "validation_gates": ["state-evolve sidecar completion marker exists", "state_patch_review.v1 semantic artifact passes"],
-            "next_allowed_states": ["state-patch-approval", "state-apply", "canon-patch-json", "ready"],
-        },
-        "state-patch-approval": {
-            "task_type": "human-approval-boundary",
-            "prompt_asset_id": "route.scene-development.state-approval.v1",
-            "command": f"Ask the user to approve state patch `{state_patch}.json` and record state_patch_confirmation with approval_run_id `{Path(state_patch).name}` through the platform approval mechanism.",
-            "source_paths": [scene_rel, f"{state_patch}.md", f"{state_patch}.json", state_review, "workflow/approvals/index.jsonl"],
-            "context_trace": context_trace,
-            "expected_outputs": ["workflow/approvals/index.jsonl"],
-            "hard_constraints": ["Do not apply state as part of approval. Approval must be bound to the exact state patch SHA-256."],
-            "style_constraints": [],
-            "validation_gates": ["approval decision=approve and subject_sha256 matches the current state patch"],
-            "next_allowed_states": ["state-apply"],
-        },
-        "state-apply": {
-            "task_type": "deterministic-cli",
-            "prompt_asset_id": "route.scene-development.state-apply.v1",
-            "command": f"python -m literary_engineering_studio_engine state-apply <project> --patch {state_patch}.json --approval-run-id {Path(state_patch).name}",
-            "source_paths": [
-                scene_rel,
-                f"{state_patch}.json",
-                f"{state_patch}.agent_tasks.md",
-                f"{state_patch}.agent_completion.json",
-                state_review,
-                "workflow/approvals/index.jsonl",
-                *state_patch_character_files,
-            ],
-            "context_trace": context_trace,
-            "expected_outputs": [
-                *state_patch_character_files,
-                f"{state_apply}.json",
-                f"{state_apply}.md",
-            ],
-            "hard_constraints": [
-                "State apply must keep Canon untouched, use the exact approved patch, and write every declared character record plus an atomic apply receipt.",
-                "Only character files explicitly named by the current approved patch may be modified.",
-            ],
-            "style_constraints": [],
-            "validation_gates": ["state apply receipt has the current patch digest and matching approval"],
-            "next_allowed_states": ["canon-patch-json", "ready"],
-        },
-        "canon-patch-json": {
-            "task_type": "deterministic-cli-plus-platform-review",
-            "prompt_asset_id": "route.scene-development.canon-evolve.v1",
-            "command": f"python -m literary_engineering_studio_engine canon-evolve <project> --scene {scene_rel}",
-            "source_paths": [
-                *scene_runtime_sources,
-                f"drafts/scenes/{scene_id}.md",
-                f"drafts/promotions/{scene_id}_promotion.json",
-                f"{review}.json",
-                f"{state_patch}.json",
-                f"{state_patch}.agent_tasks.md",
-                f"{state_patch}.agent_completion.json",
-                state_review,
-                *canon_formal_sources,
-            ],
-            "context_trace": context_trace,
-            "expected_outputs": [f"{canon_patch}.md", f"{canon_patch}.json", f"{canon_patch}.agent_tasks.md", canon_review],
-            "core_managed_outputs": [f"{canon_patch}.agent_tasks.md", canon_review],
-            "hard_constraints": [
-                "Canon writeback is a candidate-only judgment after state-evolve; it must not directly modify canon files.",
-                "If no durable world fact changed, the platform agent must write no_canon_change_reason instead of silently skipping.",
-            ],
-            "style_constraints": [],
-            "validation_gates": ["canon patch/no-change JSON exists", "canon-evolve sidecar exists when required"],
-            "next_allowed_states": ["canon-agent-task"],
-        },
-        "canon-agent-task": {
-            "task_type": "platform-agent-review",
-            "prompt_asset_id": "route.scene-development.canon-review.v1",
-            "command": "",
-            "source_paths": list(
-                dict.fromkeys(
-                    [
-                        scene_rel,
-                        context,
-                        context_trace,
-                        f"drafts/scenes/{scene_id}.md",
-                        f"drafts/promotions/{scene_id}_promotion.json",
-                        f"{review}.json",
-                        f"{state_patch}.json",
-                        f"{canon_patch}.md",
-                        f"{canon_patch}.json",
-                        f"{canon_patch}.agent_tasks.md",
-                        canon_review,
-                        *canon_formal_sources,
-                    ]
-                )
-            ),
-            "context_trace": context_trace,
-            "expected_outputs": [canon_review, f"{canon_patch}.agent_completion.json"],
-            "hard_constraints": [
-                "Complete canon-evolve sidecar only after writing either a candidate canon patch/no-change rationale and a schema-valid semantic canon review with exact source digest.",
-                "Do not apply canon; promotion to canon remains a separate review/approval route.",
-            ],
-            "style_constraints": [],
-            "validation_gates": ["canon-evolve sidecar completion marker exists", "canon_patch_review.v1 semantic artifact passes"],
-            "next_allowed_states": ["continuity-ledger-prepare"],
-        },
-        "continuity-ledger-prepare": {
-            "task_type": "deterministic-cli",
-            "prompt_asset_id": "route.scene-development.continuity-ledger.v1",
-            "command": f"python -m literary_engineering_studio_engine prepare-continuity-ledger <project> --scene {scene_rel}",
-            "source_paths": [scene_rel, f"drafts/scenes/{scene_id}.md", f"drafts/promotions/{scene_id}_promotion.json"],
-            "context_trace": context_trace,
-            "expected_outputs": [ledger_delta, ledger_task],
-            "hard_constraints": ["Prepare a candidate-only reader-question and promise/payoff delta from the exact promoted scene."],
-            "style_constraints": [],
-            "validation_gates": ["continuity ledger delta template and sidecar exist"],
-            "next_allowed_states": ["continuity-ledger-agent-task"],
-        },
-        "continuity-ledger-agent-task": {
-            "task_type": "platform-agent-judgment",
-            "prompt_asset_id": "route.scene-development.continuity-ledger.v1",
-            "command": "",
-            "source_paths": [scene_rel, f"drafts/scenes/{scene_id}.md", f"drafts/promotions/{scene_id}_promotion.json", ledger_delta, ledger_task, "plot/reader_questions/ledger.json", "plot/promises/ledger.json"],
-            "context_trace": context_trace,
-            "expected_outputs": [ledger_delta, f"plot/ledger_deltas/{scene_id}.agent_completion.json"],
-            "hard_constraints": [
-                "Main Agent records only prose-evidenced reader question and promise/payoff changes; do not edit formal ledgers.",
-                "The lifecycle field is a fixed enum: write status=complete after the delta is ready. Do not invent status labels such as agent_judged.",
-            ],
-            "style_constraints": [],
-            "validation_gates": ["ledger delta source digest matches promoted draft", "ledger delta has evidence or concrete no-change reason", "sidecar completion exists"],
-            "next_allowed_states": ["continuity-ledger-review-prepare"],
-        },
-        "continuity-ledger-review-prepare": {
-            "task_type": "deterministic-cli",
-            "prompt_asset_id": "route.scene-development.continuity-ledger.v1",
-            "command": f"python -m literary_engineering_studio_engine prepare-continuity-ledger-review <project> --scene {scene_rel}",
-            "source_paths": [scene_rel, f"drafts/scenes/{scene_id}.md", ledger_delta],
-            "context_trace": context_trace,
-            "expected_outputs": [ledger_review, ledger_review_task],
-            "hard_constraints": ["Bind the independent ledger review to the exact current delta digest."],
-            "style_constraints": [],
-            "validation_gates": ["ledger review template exists"],
-            "next_allowed_states": ["continuity-ledger-review"],
-        },
-        "continuity-ledger-review": {
-            "task_type": "platform-agent-review",
-            "prompt_asset_id": "route.scene-development.continuity-ledger.v1",
-            "command": "",
-            "source_paths": [scene_rel, f"drafts/scenes/{scene_id}.md", ledger_delta, ledger_review, ledger_review_task],
-            "context_trace": context_trace,
-            "expected_outputs": [ledger_review, f"reviews/continuity/{scene_id}_ledger_review.agent_completion.json"],
-            "hard_constraints": [
-                "Reviewer session differs from delta writer session; review does not edit formal ledgers.",
-                "The lifecycle field is a fixed enum: write status=complete only when verdict=pass; do not invent status labels.",
-            ],
-            "style_constraints": [],
-            "validation_gates": ["ledger review passes exact delta digest and independent session gate"],
-            "next_allowed_states": ["continuity-ledger-apply"],
-        },
-        "continuity-ledger-apply": {
-            "task_type": "deterministic-cli",
-            "prompt_asset_id": "route.scene-development.continuity-ledger.v1",
-            "command": f"python -m literary_engineering_studio_engine apply-continuity-ledger <project> --scene {scene_rel}",
-            # The deterministic apply re-validates the delta against exact
-            # promoted prose.  Stage that prose explicitly; otherwise the
-            # sandbox sees a valid delta but no draft to hash-check.
-            "source_paths": [scene_rel, f"drafts/scenes/{scene_id}.md", ledger_delta, ledger_review],
-            "context_trace": context_trace,
-            "expected_outputs": ["plot/reader_questions/ledger.json", "plot/promises/ledger.json", f"plot/ledger_deltas/{scene_id}_apply.json"],
-            "hard_constraints": ["Only deterministic apply writes formal ledgers after independent review."],
-            "style_constraints": [],
-            "validation_gates": ["continuity ledger apply receipt exists"],
-            "next_allowed_states": ["ready"],
-        },
     }
     default = {
         "task_type": "manual-route-repair",
@@ -988,4 +798,4 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         "validation_gates": ["route-specific gate resolved"],
         "next_allowed_states": [],
     }
-    return table.get(current_state, default)
+    return writeback or table.get(current_state, default)
