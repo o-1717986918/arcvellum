@@ -1,0 +1,32 @@
+{
+  "schema": "arcvellum/pi-prompt-audit/v1",
+  "task_id": "scene-development-scene-0001-candidate-generation-provenance",
+  "system_prompt": "C:/Users/26532/Documents/Codex/2026-07-16/c-users-26532-documents-codex-2026/outputs/literary-engineering-studio/docs/quality/prompt-audit-artifacts/pi-worker-main-creative-system-prompt.md",
+  "task_prompt": "C:/Users/26532/Documents/Codex/2026-07-16/c-users-26532-documents-codex-2026/outputs/literary-engineering-studio/docs/quality/prompt-audit-artifacts/scene-prose-fixed-full-prompt.md",
+  "effective_messages": "C:/Users/26532/Documents/Codex/2026-07-16/c-users-26532-documents-codex-2026/outputs/literary-engineering-studio/docs/quality/prompt-audit-artifacts/scene-prose-fixed-effective-messages.md",
+  "task_characters": 29218,
+  "task_utf8_bytes": 50549,
+  "task_lines": 850,
+  "estimated_tokens": 14631,
+  "inline_evidence_count": 7,
+  "exact_on_demand_count": 11,
+  "host_residue_counts": {
+    "SKILL.md": 0,
+    "AGENTS.md": 0,
+    "agentread.yaml": 0,
+    "平台 Agent": 0,
+    "[AGENT_TASK": 0,
+    "task-submit": 0,
+    "task-complete": 0
+  },
+  "semantic_anchor_counts": {
+    "background_story": 4,
+    "narrative_rhythm": 4,
+    "scene_bridge": 2,
+    "target_chinese_chars": 6,
+    "must_not_resolve": 2,
+    "reader_question": 1,
+    "canon_writeback": 4,
+    "new_character_register": 5
+  }
+}

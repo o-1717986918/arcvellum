@@ -317,8 +317,18 @@ Prompt Program、Worker 工具描述到 repair turn 的整个提示词工程。
 - [x] 已完成 Worker 终轮验证与 Studio 有界修复。
 - [x] 已迁入专用 Pi Worker 源码并建立可打包的便携运行时。
 - [x] 已接入普通用户前端配置、探测和 Runtime 选择。
-- [ ] 旧的同一作品连续全自动闭环已暂停；提示词整改后必须从干净作品重新启动，禁止在旧失败项目上续接冒充通过。
+- [x] 已从干净作品 `Pi连续闭环验收-v11-clean-contracts` 启动同一作品连续全自动闭环，不复用旧失败项目冒充通过。
 - [x] B4-P 已完成全量 Prompt 审计、Pi 全任务原生 Prompt、稳定 Worker Profile、任务型证据策略、场景 Context Packet 投影、增量 repair、55 资产 audience lint 与真实正文 Prompt 导出。
 - [~] 受控项目会话仅完成租约/身份基础；Provider 级复用明确延后到连续 E2E 通过之后，避免会话缓存掩盖证据缺口。
-- [ ] 未完成同一作品连续全自动闭环。
+- [x] 已完成同一作品连续全自动闭环：84 项任务后，scene_0001 正文已晋升，人物状态、Canon 候选与独立审查、连续性账本均完成，状态机正式进入 `scene-development-scene-0002-roleplay-agent-task`；验收运行随后主动暂停。
+- [x] Pi Worker 已验证本轮提交所有权、候选/独立审查职责隔离，以及无效 JSON 获得一次带精确解析反馈的修复回合。
 - [ ] 未完成安装版连续闭环与发布验收。
+
+### B4 验收记录（2026-08-13）
+
+- 运行：`autopilot-862669478b304fb9`，模式 `full_auto`，Runtime `pi-worker`；
+- 验收作品：`Pi连续闭环验收-v11-clean-contracts`；
+- 冻结点：`tasks_completed=84`、`failures=0`、当前任务 `scene-development-scene-0002-roleplay-agent-task`；
+- scene_0001 已存在正式晋升正文、promotion manifest、人物状态 apply receipt、Canon candidate/review/completion receipt，以及 reader-question/promise ledger apply receipt；
+- `route-audit --route scene-development` 对 scene_0001 的 context、RP、branch、composition、word budget、reader/rhythm、prose、AgentReview、promotion、state 与 Canon gate 全部给出 `pass`；报告中的剩余 blocking 属于已经开始但尚未写正文的 scene_0002；
+- 实际运行暴露并修复：Candidate 与 Review 所有权混合、脚手架被误认成本轮提交、无效 JSON 在模型得到校验反馈前被 no-progress guard 终止。

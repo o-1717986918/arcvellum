@@ -17,7 +17,7 @@
 - v7 正文任务实际合并 Prompt：189,908 字符、5,043 行；包含 36 次平台 Agent 话术、32 个 `[AGENT_TASK]`，并重复注入 Skill/CLI 说明、sidecar、角色资料和 context packet；
 - 正文精确 Prompt Asset 本身约 3,043 字节，说明膨胀主要发生在合并层；
 - v8 世界观审查旧正式 Prompt 约 27,869 字符；第一版 v3 约 20,565 字符；
-- 最终整改后，同一真实正文任务快照编译为 26,892 字符、592 行、约 12,939 tokens；相对旧版缩减约 85.8%，并恢复了场景相关 Canon、主要角色完整档案和上一场交接；
+- 最终整改后，发布前从真实 E2E 作品重新导出的正文任务为 29,218 字符、850 行、约 14,631 tokens；相对 189,908 字符旧版缩减约 84.6%，并保留场景相关 Canon、主要角色档案、节奏/桥接、字数、读者问题、Canon 写回和新角色登记；
 - 当前 55 份 Prompt Asset 的正文合计约 21,309 字符，单份最大约 1,553 字符；
 - 55 份资产中，20 份包含 sidecar 话术，8 份包含 CLI 话术，5 份包含平台 Agent 话术。它们服务外置 Skill 宿主，不应直接进入 Pi Worker Prompt；
 - 真实审查任务曾在两个 required outputs 已写入且本地校验通过后被 no-progress guard 判失败，证明 Prompt、工具合同与停止判定必须联合治理。
@@ -77,6 +77,9 @@
 - 旧 transport task kind 在无 context budget 时也归一为标准 recipe kind；
 - Pi Worker Profile 已独立版本化并输出绑定 digest；
 - required outputs 已通过本地验证时先成功交回 Studio，不再被 no-progress guard 覆盖。
+- Worker 现在要求所有 Agent-owned 产物在当前运行中真实经过 `write_expected_output`，已有脚手架或旧产物不能伪装为本轮提交；
+- 候选生成与独立审查已拆分所有权：Canon candidate Agent 只写候选 JSON/报告，Review Agent 只写 Review JSON，completion receipt 始终由 Studio 生成；
+- 静默本地探测不再覆盖模型可见的校验状态；无效 JSON 必须先通过 `validate_output` 获得精确解析错误，再由 Worker 强制一次定向重写，避免误判为空转；
 - 正文 context packet 已投影为 Canon/时间线、Broker 选中的人物档案和上一场交接，不再重放项目配置、场景、全书大纲、风格模板与软检索副本；
 - composition 投影不再把自动 `prose_seed`、过期 `revision_targets/guardrails` 或 `target=0/needs_expansion` 预算快照传给主创；
 - 世界资产创建、审查和确定性晋升均禁止把 candidate/schema/approval/promotion 生命周期元数据写成虚构 Canon；旧项目中已误写的此类规则不会进入正文 Prompt；
@@ -90,16 +93,16 @@
 - 清理近义但不完全同文的重复 constraints，保留一个权威表述；
 - 为 planning、creative、style、review、prose 各保存至少一个真实 Prompt fixture；
 - 建立 project-session digest 和 invalidation receipt；
-- 连续 E2E 从干净作品重跑到首场晋升、状态/连续性写回与下一场。
+- Provider 级 project-session 复用仍未启用；当前继续使用有界、角色隔离的短会话，避免缓存掩盖证据缺口。
 
 `project-session` 的 Provider 级复用继续延后到连续 E2E 通过之后。当前三层信息所有权已经明确，但不能用会话缓存掩盖任务证据选择问题。
 
 ## 6. 实际导出
 
-- System message：`build/prompt-audit/pi-worker-main-creative-system-prompt.md`；
-- User message：`build/prompt-audit/scene-prose-fixed-full-prompt.md`；
-- 实际有效消息合并审计：`build/prompt-audit/scene-prose-fixed-effective-messages.md`；
-- 指标：`build/prompt-audit/scene-prose-fixed-prompt-audit.json`。
+- System message：[`prompt-audit-artifacts/pi-worker-main-creative-system-prompt.md`](prompt-audit-artifacts/pi-worker-main-creative-system-prompt.md)；
+- User message（修复后的完整正文提示词）：[`prompt-audit-artifacts/scene-prose-fixed-full-prompt.md`](prompt-audit-artifacts/scene-prose-fixed-full-prompt.md)；
+- 实际有效消息合并审计：[`prompt-audit-artifacts/scene-prose-fixed-effective-messages.md`](prompt-audit-artifacts/scene-prose-fixed-effective-messages.md)；
+- 指标：[`prompt-audit-artifacts/scene-prose-fixed-prompt-audit.json`](prompt-audit-artifacts/scene-prose-fixed-prompt-audit.json)。
 
 这些文件由真实 TaskPackage 经过当前 `stage_task -> Prompt Program v3 -> tool-worker renderer` 生成，不是人工整理的示例 Prompt。
 
