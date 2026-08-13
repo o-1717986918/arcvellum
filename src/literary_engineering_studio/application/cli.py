@@ -205,47 +205,50 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.status in {"complete", "route_ready", "waiting_host_agent", "waiting_human"} else 1
 
     if args.command == "serve":
-        try:
-            import uvicorn
-        except ImportError as exc:
-            parser.error("serve requires pip install -e .[api]")
-            raise AssertionError from exc
-        server = config.get("server", {}) if isinstance(config.get("server"), dict) else {}
-        host = args.host or str(server.get("host") or "127.0.0.1")
-        # ``serve`` normally uses the configured port when callers omit
-        # ``--port``.  The desktop sidecar deliberately passes both
-        # ``--port 0`` and ``--ready-file`` so the operating system selects a
-        # conflict-free port; zero must therefore remain a meaningful value on
-        # that private startup path.
-        port = args.port if args.ready_file or args.port else int(server.get("port") or 8791)
-        try:
-            _validate_serve_binding(host, os.environ.get("LES_API_TOKEN", ""))
-        except ValueError as exc:
-            parser.error(str(exc))
-        # Do not give Uvicorn an import string here.  The desktop sidecar is a
-        # PyInstaller-frozen executable, where Uvicorn's secondary dynamic
-        # import cannot reliably resolve our packaged module.  Importing the
-        # factory in-process makes the frozen and source execution paths match.
-        from ..api_server import create_app
-
-        application = create_app()
-        if args.ready_file:
-            import asyncio
-
-            return asyncio.run(
-                _serve_with_ready_file(
-                    uvicorn,
-                    application,
-                    host=host,
-                    port=port,
-                    ready_file=Path(args.ready_file),
-                )
-            )
-        uvicorn.run(application, host=host, port=port)
-        return 0
+        return _serve_command(parser, args, config)
 
     parser.error(f"unknown command: {args.command}")
     return 2
+
+
+def _serve_command(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    config: dict[str, object],
+) -> int:
+    try:
+        import uvicorn
+    except ImportError as exc:
+        parser.error("serve requires pip install -e .[api]")
+        raise AssertionError from exc
+    server = config.get("server", {})
+    server = server if isinstance(server, dict) else {}
+    host = args.host or str(server.get("host") or "127.0.0.1")
+    # A desktop ready-file request deliberately preserves port zero so the OS
+    # can select a conflict-free sidecar port.
+    port = args.port if args.ready_file or args.port else int(server.get("port") or 8791)
+    try:
+        _validate_serve_binding(host, os.environ.get("LES_API_TOKEN", ""))
+    except ValueError as exc:
+        parser.error(str(exc))
+    # Frozen sidecars cannot reliably resolve Uvicorn's secondary module import.
+    from ..api_server import create_app
+
+    application = create_app()
+    if args.ready_file:
+        import asyncio
+
+        return asyncio.run(
+            _serve_with_ready_file(
+                uvicorn,
+                application,
+                host=host,
+                port=port,
+                ready_file=Path(args.ready_file),
+            )
+        )
+    uvicorn.run(application, host=host, port=port)
+    return 0
 
 
 def _task_arguments(parser: argparse.ArgumentParser, *, include_task_id: bool = True) -> None:
