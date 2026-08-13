@@ -254,18 +254,24 @@ export function desiredWorkerTool(
 	options: Pick<WorkerOptions, "mode">,
 	context: Pick<Awaited<ReturnType<typeof loadTaskContext>>, "agentRole" | "agentOwnedOutputs">,
 	repairSources: readonly string[],
-	state: Pick<WorkerState, "completed" | "readPaths" | "writtenPaths">,
+	state: Pick<WorkerState, "completed" | "readPaths" | "writtenPaths" | "lastValidation">,
 ): string {
 	const requiredOutputs = context.agentOwnedOutputs.map((item) => item.path);
 	const repairTool = desiredRepairTool(options, repairSources, state, requiredOutputs);
 	if (repairTool) return repairTool;
+	const submittedOutputFailedValidation = state.lastValidation.issues.some((issue) =>
+		requiredOutputs.includes(issue.path) && state.writtenPaths.has(issue.path),
+	);
 	if (
 		options.mode === "task"
 		&& (
 			context.agentRole === "main-creative-agent"
 			|| state.writtenPaths.size > 0
 		)
-		&& requiredOutputs.some((path) => !state.writtenPaths.has(path))
+		&& (
+			requiredOutputs.some((path) => !state.writtenPaths.has(path))
+			|| submittedOutputFailedValidation
+		)
 		&& !state.completed
 	) {
 		// Prose enters the artifact channel immediately. Other roles keep one
@@ -347,12 +353,20 @@ export async function settleValidOutputs(
 	state: WorkerState,
 ): Promise<boolean> {
 	if (state.writtenPaths.size === 0) return false;
-	state.lastValidation = await validateSubmittedOutputs(
+	const validation = await validateSubmittedOutputs(
 		context,
 		workspace,
 		state.writtenPaths,
 	);
-	if (!state.lastValidation.passed) return false;
+	if (!validation.passed) {
+		// This check is intentionally silent. The model must receive the exact
+		// parser failures through validate_output/complete_task before a forced
+		// rewrite. Publishing them only into internal state would make the next
+		// provider turn guess at a repair and could trip the no-progress guard
+		// before it had one informed correction attempt.
+		return false;
+	}
+	state.lastValidation = validation;
 	state.completed = true;
 	state.reasoningStopReason = "local_outputs_validated";
 	return true;

@@ -13,6 +13,7 @@ import {
 	settleValidOutputs,
 	settleTurnBudget,
 } from "../src/worker.ts";
+import { validateSubmittedOutputs } from "../src/tools.ts";
 import { workerProfile } from "../src/worker-profile.ts";
 
 const roots: string[] = [];
@@ -62,6 +63,12 @@ describe("bounded worker lifecycle", () => {
 		const freshReviewState = state();
 		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("");
 		freshReviewState.writtenPaths.add("other-output.md");
+		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("write_expected_output");
+		freshReviewState.writtenPaths.add("draft.md");
+		freshReviewState.lastValidation = {
+			passed: false,
+			issues: [{ path: "draft.md", code: "invalid_json", message: "missing comma" }],
+		};
 		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("write_expected_output");
 		workerState.completed = true;
 		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("");
@@ -130,13 +137,35 @@ describe("bounded worker lifecycle", () => {
 		workerState.writtenPaths.add("out/review.md");
 
 		const complete = await settleValidOutputs(context(), root, workerState);
+		const validation = await validateSubmittedOutputs(
+			context(),
+			root,
+			workerState.writtenPaths,
+		);
 
 		expect(complete).toBe(false);
 		expect(workerState.completed).toBe(false);
-		expect(workerState.lastValidation.issues).toContainEqual(expect.objectContaining({
+		expect(workerState.lastValidation).toEqual({ passed: false, issues: [] });
+		expect(validation.issues).toContainEqual(expect.objectContaining({
 			path: "out/review.json",
 			code: "not_submitted_this_run",
 		}));
+	});
+
+	it("preserves the last visible validation until the model receives parser feedback", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-invalid-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), "{broken", "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
+		const workerState = state();
+		workerState.writtenPaths.add("out/review.json");
+		workerState.writtenPaths.add("out/review.md");
+
+		const complete = await settleValidOutputs(context(), root, workerState);
+
+		expect(complete).toBe(false);
+		expect(workerState.lastValidation).toEqual({ passed: false, issues: [] });
 	});
 
 	it("keeps multi-output repair in write mode until every target was submitted", () => {
