@@ -1,0 +1,283 @@
+"""Bind Agent scene judgments to deterministic Studio-owned metadata."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from typing import Any, Callable
+
+from ..contracts import TaskPackage
+from ..sandbox import SandboxManifest
+from .style_snapshot import prompt_style_snapshot
+
+
+ReadObject = Callable[[Path], dict[str, Any] | None]
+WriteFields = Callable[[Path, str, dict[str, Any], dict[str, Any], str], list[dict[str, str]]]
+SessionIdentity = Callable[[TaskPackage, str], str]
+
+
+def canonicalize_scene_revision_manifest(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    *,
+    read_object: ReadObject,
+    session_identity: SessionIdentity,
+) -> list[dict[str, str]]:
+    if task.current_state not in {"candidate-revision", "static-revision"}:
+        return []
+    candidate_rel, manifest_rel, prompt_rel, report_rel = _revision_paths(task)
+    if not candidate_rel or not manifest_rel:
+        return []
+    candidate_path = sandbox.workspace / Path(candidate_rel)
+    manifest_path = sandbox.workspace / Path(manifest_rel)
+    payload = read_object(manifest_path)
+    if payload is None or not candidate_path.is_file():
+        return []
+    prompt = read_object(sandbox.workspace / Path(prompt_rel)) or {}
+    standards = prompt.get("generation_standards") if isinstance(prompt.get("generation_standards"), dict) else {}
+    source_rows = prompt.get("sources") if isinstance(prompt.get("sources"), list) else []
+    expected = _revision_machine_fields(
+        task,
+        sandbox,
+        candidate_rel,
+        candidate_path,
+        prompt_rel,
+        report_rel,
+        source_rows,
+        standards,
+        session_identity,
+    )
+    changed = _apply_fields(payload, expected)
+    if not changed:
+        return []
+    _write_json(manifest_path, payload)
+    return [
+        {"path": manifest_rel, "field": field, "reason": "bound deterministic exact-source revision metadata"}
+        for field in changed
+    ]
+
+
+def _revision_paths(task: TaskPackage) -> tuple[str, str, str, str]:
+    candidate = _revision_candidate(task)
+    manifest = next(
+        (item for item in task.expected_outputs if item.endswith("_revision.json")), ""
+    )
+    prompt = next(
+        (item for item in task.expected_outputs if item.endswith("_revision.prompt.json")),
+        _sibling_prompt(candidate),
+    )
+    report = next(
+        (item for item in task.expected_outputs if item.endswith("_revision_report.md")), ""
+    )
+    return candidate, manifest, prompt, report
+
+
+def _revision_machine_fields(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    candidate_rel: str,
+    candidate_path: Path,
+    prompt_rel: str,
+    report_rel: str,
+    source_rows: list[object],
+    standards: dict[str, Any],
+    session_identity: SessionIdentity,
+) -> dict[str, Any]:
+    return {
+        "schema": "literary-engineering-workbench/scene-revision/v0.1",
+        "scene_id": str(task.payload.get("scene_id") or task.scene_id or "").strip(),
+        "source_candidate": str(task.payload.get("revision_source") or "").replace("\\", "/").strip(),
+        "source_candidate_sha256": str(task.payload.get("candidate_sha256_before_revision") or "").strip().lower(),
+        "candidate": candidate_rel,
+        "candidate_sha256": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
+        "report": report_rel,
+        "source_paths": _prompt_source_paths(source_rows),
+        "prompt_manifest": prompt_rel,
+        "style_mount_snapshot": prompt_style_snapshot(sandbox.workspace / Path(prompt_rel)),
+        "creative_quality_profile_digest": str(standards.get("creative_quality_profile_digest") or "").strip(),
+        "reader_experience_contract": _dict_value(standards, "reader_experience_contract"),
+        "narrative_rhythm_contract": _dict_value(standards, "narrative_rhythm_contract"),
+        "anti_evasion_protocol_applied": True,
+        "ready_for_review": False,
+        "generated_by": "platform-agent",
+        "provider": "studio-agent-runtime",
+        "formal_contract_revision": str(task.payload.get("task_contract_revision") or "2026-07-24.8"),
+        "writer_session_id": session_identity(task, "writer"),
+    }
+
+
+def canonicalize_scene_candidate_manifest(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    *,
+    write_machine_fields: WriteFields,
+    session_identity: SessionIdentity,
+) -> list[dict[str, str]]:
+    if task.current_state not in {"candidate-generation-provenance", "generation-agent-task"}:
+        return []
+    candidate_rel = _candidate_path(task)
+    if not candidate_rel:
+        return []
+    manifest_rel = _sibling_json(candidate_rel)
+    manifest_path = sandbox.workspace / Path(manifest_rel)
+    payload = _read_json(manifest_path)
+    if payload is None:
+        return []
+    scene_id = str(task.payload.get("scene_id") or task.scene_id or "").strip()
+    prompt_rel = _sibling_prompt(candidate_rel)
+    fields: dict[str, Any] = {
+        "schema": "literary-engineering-workbench/scene-candidate/v1",
+        "scene_id": scene_id,
+        "candidate": candidate_rel,
+        "prompt_manifest": prompt_rel,
+        "generated_by": "platform-agent",
+        "provider": "studio-agent-runtime",
+        "formal_contract_revision": str(task.payload.get("task_contract_revision") or "2026-07-24.8"),
+        "writer_session_id": session_identity(task, "writer"),
+        "style_mount_snapshot": prompt_style_snapshot(sandbox.workspace / Path(prompt_rel)),
+        "style_generation_standard_applied": True,
+        "hard_constraints_applied": True,
+        "anti_evasion_protocol_applied": True,
+        "narrative_rhythm_standard_applied": True,
+    }
+    if not isinstance(payload.get("word_budget_standard_applied"), bool):
+        fields["word_budget_standard_applied"] = False
+    if not isinstance(payload.get("pass_with_notes_actions_applied"), bool):
+        fields["pass_with_notes_actions_applied"] = False
+    changes = write_machine_fields(
+        manifest_path, manifest_rel, payload, fields, "scene-candidate-manifest"
+    )
+    changes.extend(_ensure_character_register(task, sandbox, manifest_rel, payload))
+    changes.extend(_copy_prompt_standards(sandbox, manifest_rel, prompt_rel, payload))
+    if changes:
+        _write_json(manifest_path, payload)
+    return changes
+
+
+def _ensure_character_register(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    manifest_rel: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
+    if isinstance(payload.get("new_character_register"), dict):
+        return []
+    introduced: list[dict[str, object]] = []
+    ready = True
+    requirements = task.payload.get("scene_character_assets")
+    for item in requirements if isinstance(requirements, list) else []:
+        if not isinstance(item, dict):
+            continue
+        candidate_path = str(item.get("candidate_path") or "").replace("\\", "/").strip()
+        if candidate_path and not (sandbox.workspace / Path(candidate_path)).is_file():
+            ready = False
+        introduced.append(_character_row(item, candidate_path))
+    payload["new_character_register"] = {
+        "schema": "literary-engineering-workbench/new-character-register/v0.1",
+        "status": "candidates_ready" if introduced and ready else ("needs_candidate" if introduced else "none"),
+        "introduced": introduced,
+        "ephemeral_waivers": [],
+        "blocking_issues": [] if ready else ["declared scene character candidate is missing"],
+    }
+    return [{"path": manifest_rel, "field": "new_character_register", "reason": "normalized deterministic scene-character contract"}]
+
+
+def _copy_prompt_standards(
+    sandbox: SandboxManifest,
+    manifest_rel: str,
+    prompt_rel: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
+    prompt = _read_json(sandbox.workspace / Path(prompt_rel)) or {}
+    standards = prompt.get("generation_standards") if isinstance(prompt.get("generation_standards"), dict) else {}
+    sources = {
+        "creative_quality_profile_digest": standards.get("creative_quality_profile_digest"),
+        "reader_experience_contract": standards.get("reader_experience_contract"),
+        "narrative_rhythm_contract": standards.get("narrative_rhythm_contract"),
+    }
+    changes = []
+    for field, value in sources.items():
+        if field in payload or value is None or value == "" or not isinstance(value, (str, dict)):
+            continue
+        payload[field] = value
+        changes.append({"path": manifest_rel, "field": field, "reason": "copied from protected prompt manifest"})
+    return changes
+
+
+def _revision_candidate(task: TaskPackage) -> str:
+    candidate = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
+    return candidate or next(
+        (item for item in task.expected_outputs if item.endswith("_revision.md") and "report" not in item), ""
+    )
+
+
+def _candidate_path(task: TaskPackage) -> str:
+    candidate = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
+    return candidate or next(
+        (
+            item for item in task.expected_outputs
+            if item.endswith(".md") and "agent_tasks" not in item and "prompt" not in item
+        ),
+        "",
+    )
+
+
+def _prompt_source_paths(rows: list[object]) -> list[str]:
+    return [
+        str(item.get("path") or "").replace("\\", "/").strip()
+        for item in rows if isinstance(item, dict) and str(item.get("path") or "").strip()
+    ]
+
+
+def _character_row(item: dict[str, Any], candidate_path: str) -> dict[str, object]:
+    return {
+        "name": str(item.get("name") or item.get("candidate_id") or "").strip(),
+        "character_id": str(item.get("candidate_id") or "").strip(),
+        "scene_function": "declared scene participant",
+        "persistence": "named",
+        "already_in_characters": False,
+        "formal_character_path": str(item.get("formal_character_path") or "").strip(),
+        "candidate_path": candidate_path,
+        "review_path": "",
+        "approval_run_id": "",
+        "promotion_manifest": "",
+        "waiver_reason": "",
+    }
+
+
+def _dict_value(value: dict[str, Any], key: str) -> dict[str, Any]:
+    nested = value.get(key)
+    return nested if isinstance(nested, dict) else {}
+
+
+def _apply_fields(payload: dict[str, Any], fields: dict[str, Any]) -> list[str]:
+    changed = []
+    for field, value in fields.items():
+        if payload.get(field) != value:
+            payload[field] = value
+            changed.append(field)
+    return changed
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _sibling_json(candidate: str) -> str:
+    return candidate[:-3] + ".json" if candidate.endswith(".md") else candidate + ".json"
+
+
+def _sibling_prompt(candidate: str) -> str:
+    return candidate[:-3] + ".prompt.json" if candidate.endswith(".md") else candidate + ".prompt.json"
+
+
+__all__ = ["canonicalize_scene_candidate_manifest", "canonicalize_scene_revision_manifest"]

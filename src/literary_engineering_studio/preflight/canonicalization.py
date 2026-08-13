@@ -12,6 +12,10 @@ from ..contracts import TaskPackage
 from .archaeology import canonicalize_archaeology_metadata
 from .asset_evidence import review_machine_fields
 from .common import REVIEW_CONCLUSION, REVIEW_CONCLUSION_VARIANT
+from .scene_manifest_metadata import (
+    canonicalize_scene_candidate_manifest,
+    canonicalize_scene_revision_manifest,
+)
 from .scene_review_metadata import canonicalize_scene_review_metadata
 from .style_snapshot import prompt_style_snapshot
 from .style_metadata import canonicalize_style_machine_metadata
@@ -46,8 +50,22 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(canonicalize_style_machine_metadata(task, sandbox))
     changes.extend(_canonicalize_project_review_metadata(task, sandbox))
     changes.extend(_canonicalize_agent_completion_markers(task, sandbox))
-    changes.extend(_canonicalize_scene_revision_manifest(task, sandbox))
-    changes.extend(_canonicalize_scene_candidate_manifest(task, sandbox))
+    changes.extend(
+        canonicalize_scene_revision_manifest(
+            task,
+            sandbox,
+            read_object=_read_object,
+            session_identity=_session_identity,
+        )
+    )
+    changes.extend(
+        canonicalize_scene_candidate_manifest(
+            task,
+            sandbox,
+            write_machine_fields=_write_machine_fields,
+            session_identity=_session_identity,
+        )
+    )
     changes.extend(canonicalize_scene_review_metadata(task, sandbox))
     gates = " ".join(str(item) for item in task.payload.get("validation_gates") or []).lower()
     if (
@@ -408,14 +426,7 @@ def _normalize_complete_status(payload: dict[str, Any], expected: dict[str, Any]
 
 
 def _canonicalize_agent_completion_markers(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Emit lifecycle receipts for every Agent task after substantive output exists.
-
-    A completion marker is an execution receipt, never creative evidence.  A
-    missing receipt used to make a successful creative response consume extra
-    model retries. Semantic artifacts, reviews, prose, and planning outputs
-    remain independently validated by their route gates after this helper
-    creates the receipt.
-    """
+    """Emit machine-owned lifecycle receipts after substantive output exists."""
 
     task_type = str(task.payload.get("task_type") or "")
     legacy_agent_states = {
@@ -434,7 +445,8 @@ def _canonicalize_agent_completion_markers(task: TaskPackage, sandbox: SandboxMa
         return []
     non_markers = [item for item in task.expected_outputs if not item.endswith(".agent_completion.json")]
     if not non_markers or any(
-        not (sandbox.workspace / Path(item)).is_file() or (sandbox.workspace / Path(item)).stat().st_size == 0
+        not (sandbox.workspace / Path(item)).is_file()
+        or (sandbox.workspace / Path(item)).stat().st_size == 0
         for item in non_markers
     ):
         return []
@@ -450,7 +462,10 @@ def _canonicalize_agent_completion_markers(task: TaskPackage, sandbox: SandboxMa
     for relative in marker_outputs:
         contract = receipt_by_path.get(relative.replace("\\", "/"), {})
         base = relative[: -len(".agent_completion.json")]
-        source_task = str(contract.get("source_task") or base + (".md" if base.endswith(".agent_tasks") else ".agent_tasks.md"))
+        source_task = str(
+            contract.get("source_task")
+            or base + (".md" if base.endswith(".agent_tasks") else ".agent_tasks.md")
+        )
         status = str(contract.get("status") or "complete")
         checked = bool(contract.get("expected_artifacts_checked", status == "complete"))
         payload = {
@@ -469,12 +484,9 @@ def _canonicalize_agent_completion_markers(task: TaskPackage, sandbox: SandboxMa
         existing_comparable = dict(existing or {})
         existing_comparable.pop("completed_at", None)
         source_task_path = sandbox.workspace / Path(source_task)
-        # The receipt is intentionally Worker-owned and commonly does not
-        # exist on the first successful Agent submission.  Do not inspect its
-        # timestamp until it exists; the missing-file case must flow through
-        # to the deterministic write below.
         receipt_is_fresh = path.is_file() and (
-            not source_task_path.is_file() or path.stat().st_mtime_ns >= source_task_path.stat().st_mtime_ns
+            not source_task_path.is_file()
+            or path.stat().st_mtime_ns >= source_task_path.stat().st_mtime_ns
         )
         if existing_comparable == comparable and receipt_is_fresh:
             continue
@@ -484,77 +496,142 @@ def _canonicalize_agent_completion_markers(task: TaskPackage, sandbox: SandboxMa
     return changes
 
 
-def _canonicalize_asset_machine_metadata(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Restore task-owned asset IDs, paths and marker values before validation.
-
-    Asset content is written by the Agent.  The candidate identity, declared
-    asset type, schema discriminator, review subject and completion marker are
-    state-machine facts.  Leaving those values in a free-form model response
-    creates avoidable failures such as ``protagonist-foundation-v1`` drifting
-    away from the candidate path reserved by the task package.
-    """
+def _canonicalize_asset_machine_metadata(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+) -> list[dict[str, str]]:
+    """Restore task-owned asset IDs, paths and marker values before validation."""
 
     if task.route != "character-and-world-assets":
         return []
     task_type = str(task.payload.get("task_type") or "")
-    if task_type not in {"platform-agent-asset-creation", "platform-agent-asset-review", "platform-agent-revision"}:
+    if task_type not in {
+        "platform-agent-asset-creation",
+        "platform-agent-asset-review",
+        "platform-agent-revision",
+    }:
         return []
-
     owned = task.payload.get("system_owned_fields")
     owned = owned if isinstance(owned, dict) else {}
     candidate_contract = owned.get("candidate") if isinstance(owned.get("candidate"), dict) else {}
     review_contract = owned.get("review") if isinstance(owned.get("review"), dict) else {}
     completion_contract = owned.get("completion") if isinstance(owned.get("completion"), dict) else {}
-    candidate_rel = str(candidate_contract.get("path") or task.payload.get("candidate") or "").replace("\\", "/").strip()
-    candidate_id = str(candidate_contract.get("candidate_id") or task.payload.get("candidate_id") or task.payload.get("target_id") or "").strip()
-    asset_type = str(candidate_contract.get("asset_type") or task.payload.get("asset_type") or "").strip()
+    candidate_rel = str(
+        candidate_contract.get("path") or task.payload.get("candidate") or ""
+    ).replace("\\", "/").strip()
+    candidate_id = str(
+        candidate_contract.get("candidate_id")
+        or task.payload.get("candidate_id")
+        or task.payload.get("target_id")
+        or ""
+    ).strip()
+    asset_type = str(
+        candidate_contract.get("asset_type") or task.payload.get("asset_type") or ""
+    ).strip()
     source_paths = candidate_contract.get("source_paths")
     if not isinstance(source_paths, list):
         source_paths = [str(item).replace("\\", "/") for item in task.source_paths]
     else:
         source_paths = [str(item).replace("\\", "/") for item in source_paths]
-
     changes: list[dict[str, str]] = []
-    if task_type == "platform-agent-asset-creation" and candidate_rel:
-        candidate_path = sandbox.workspace / Path(candidate_rel)
-        payload = _read_object(candidate_path)
-        if payload is not None:
-            expected = {
-                "schema": str(candidate_contract.get("schema") or payload.get("schema") or ""),
-                "candidate_id": candidate_id,
-                "asset_type": asset_type,
-                "source_paths": source_paths,
-            }
-            if not isinstance(payload.get("promotion_notes"), str) or not str(payload.get("promotion_notes") or "").strip():
-                expected["promotion_notes"] = "Promotion requires a clean independent review and a matching approval record."
-            changes.extend(_write_machine_fields(candidate_path, candidate_rel, payload, expected, "asset-candidate"))
-
+    if task_type == "platform-agent-asset-creation":
+        changes.extend(
+            _canonicalize_asset_candidate(
+                sandbox,
+                candidate_contract,
+                candidate_rel,
+                candidate_id,
+                asset_type,
+                source_paths,
+            )
+        )
     if task_type in {"platform-agent-asset-review", "platform-agent-revision"}:
-        review_rel = str(review_contract.get("path") or "").replace("\\", "/").strip()
-        if not review_rel:
-            review_rel = next(
-                (
-                    relative
-                    for relative in task.expected_outputs
-                    if relative.replace("\\", "/").startswith("reviews/assets/")
-                    and relative.endswith("_review.json")
-                ),
-                "",
+        changes.extend(
+            _canonicalize_asset_review(
+                task,
+                sandbox,
+                review_contract,
+                candidate_rel,
+                candidate_id,
+                asset_type,
             )
-        review_path = sandbox.workspace / Path(review_rel)
-        payload = _read_object(review_path)
-        if payload is not None:
-            expected = review_machine_fields(
-                task, sandbox, payload, review_contract,
-                candidate=candidate_rel, candidate_id=candidate_id, asset_type=asset_type,
-            )
-            if task.current_state in {"asset-review-pass", "asset-approval-revision"}:
-                expected["status"] = "recheck_required"
-            changes.extend(_write_machine_fields(review_path, review_rel, payload, expected, "asset-review"))
-            changes.extend(_canonicalize_asset_review_action_targets(review_path, review_rel, payload, candidate_rel))
-            changes.extend(_canonicalize_asset_approval_revision(task, sandbox, review_path, review_rel, payload, candidate_rel))
+        )
+    changes.extend(
+        _canonicalize_asset_completion_markers(task, sandbox, completion_contract)
+    )
+    return changes
 
-    changes.extend(_canonicalize_asset_completion_markers(task, sandbox, completion_contract))
+
+def _canonicalize_asset_candidate(
+    sandbox: SandboxManifest,
+    contract: dict[str, Any],
+    relative: str,
+    candidate_id: str,
+    asset_type: str,
+    source_paths: list[str],
+) -> list[dict[str, str]]:
+    if not relative:
+        return []
+    path = sandbox.workspace / Path(relative)
+    payload = _read_object(path)
+    if payload is None:
+        return []
+    expected = {
+        "schema": str(contract.get("schema") or payload.get("schema") or ""),
+        "candidate_id": candidate_id,
+        "asset_type": asset_type,
+        "source_paths": source_paths,
+    }
+    if not isinstance(payload.get("promotion_notes"), str) or not str(
+        payload.get("promotion_notes") or ""
+    ).strip():
+        expected["promotion_notes"] = (
+            "Promotion requires a clean independent review and a matching approval record."
+        )
+    return _write_machine_fields(path, relative, payload, expected, "asset-candidate")
+
+
+def _canonicalize_asset_review(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    contract: dict[str, Any],
+    candidate_rel: str,
+    candidate_id: str,
+    asset_type: str,
+) -> list[dict[str, str]]:
+    review_rel = str(contract.get("path") or "").replace("\\", "/").strip()
+    if not review_rel:
+        review_rel = next(
+            (
+                relative
+                for relative in task.expected_outputs
+                if relative.replace("\\", "/").startswith("reviews/assets/")
+                and relative.endswith("_review.json")
+            ),
+            "",
+        )
+    path = sandbox.workspace / Path(review_rel)
+    payload = _read_object(path)
+    if payload is None:
+        return []
+    expected = review_machine_fields(
+        task,
+        sandbox,
+        payload,
+        contract,
+        candidate=candidate_rel,
+        candidate_id=candidate_id,
+        asset_type=asset_type,
+    )
+    if task.current_state in {"asset-review-pass", "asset-approval-revision"}:
+        expected["status"] = "recheck_required"
+    changes = _write_machine_fields(path, review_rel, payload, expected, "asset-review")
+    changes.extend(_canonicalize_asset_review_action_targets(path, review_rel, payload, candidate_rel))
+    changes.extend(
+        _canonicalize_asset_approval_revision(
+            task, sandbox, path, review_rel, payload, candidate_rel
+        )
+    )
     return changes
 
 
@@ -759,211 +836,3 @@ def _canonicalize_asset_completion_markers(
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         changed.append({"path": relative, "field": "completion", "reason": "generated deterministic asset-task completion metadata"})
     return changed
-
-
-def _canonicalize_scene_revision_manifest(
-    task: TaskPackage,
-    sandbox: SandboxManifest,
-) -> list[dict[str, str]]:
-    """Bind an Agent-authored revision judgment to exact Studio evidence."""
-
-    if task.current_state not in {"candidate-revision", "static-revision"}:
-        return []
-    candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
-    if not candidate_rel:
-        candidate_rel = next(
-            (
-                item
-                for item in task.expected_outputs
-                if item.endswith("_revision.md") and "report" not in item
-            ),
-            "",
-        )
-    manifest_rel = next(
-        (item for item in task.expected_outputs if item.endswith("_revision.json")),
-        "",
-    )
-    if not candidate_rel or not manifest_rel:
-        return []
-    candidate_path = sandbox.workspace / Path(candidate_rel)
-    manifest_path = sandbox.workspace / Path(manifest_rel)
-    payload = _read_object(manifest_path)
-    if payload is None or not candidate_path.is_file():
-        return []
-
-    prompt_rel = next(
-        (item for item in task.expected_outputs if item.endswith("_revision.prompt.json")),
-        candidate_rel[:-3] + ".prompt.json" if candidate_rel.endswith(".md") else candidate_rel + ".prompt.json",
-    )
-    prompt = _read_object(sandbox.workspace / Path(prompt_rel)) or {}
-    standards = prompt.get("generation_standards") if isinstance(prompt.get("generation_standards"), dict) else {}
-    source_rel = str(task.payload.get("revision_source") or "").replace("\\", "/").strip()
-    source_digest = str(task.payload.get("candidate_sha256_before_revision") or "").strip().lower()
-    report_rel = next(
-        (item for item in task.expected_outputs if item.endswith("_revision_report.md")),
-        "",
-    )
-    source_rows = prompt.get("sources") if isinstance(prompt.get("sources"), list) else []
-    source_paths = [
-        str(item.get("path") or "").replace("\\", "/").strip()
-        for item in source_rows
-        if isinstance(item, dict) and str(item.get("path") or "").strip()
-    ]
-    expected: dict[str, Any] = {
-        "schema": "literary-engineering-workbench/scene-revision/v0.1",
-        "scene_id": str(task.payload.get("scene_id") or task.scene_id or "").strip(),
-        "source_candidate": source_rel,
-        "source_candidate_sha256": source_digest,
-        "candidate": candidate_rel,
-        "candidate_sha256": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
-        "report": report_rel,
-        "source_paths": source_paths,
-        "prompt_manifest": prompt_rel,
-        "style_mount_snapshot": prompt_style_snapshot(sandbox.workspace / Path(prompt_rel)),
-        "creative_quality_profile_digest": str(standards.get("creative_quality_profile_digest") or "").strip(),
-        "reader_experience_contract": standards.get("reader_experience_contract") if isinstance(standards.get("reader_experience_contract"), dict) else {},
-        "narrative_rhythm_contract": standards.get("narrative_rhythm_contract") if isinstance(standards.get("narrative_rhythm_contract"), dict) else {},
-        "anti_evasion_protocol_applied": True,
-        "ready_for_review": False,
-        "generated_by": "platform-agent",
-        "provider": "studio-agent-runtime",
-        "formal_contract_revision": str(task.payload.get("task_contract_revision") or "2026-07-24.8"),
-        "writer_session_id": _session_identity(task, "writer"),
-    }
-    changed: list[str] = []
-    for field, value in expected.items():
-        if payload.get(field) == value:
-            continue
-        payload[field] = value
-        changed.append(field)
-    if not changed:
-        return []
-    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return [
-        {
-            "path": manifest_rel,
-            "field": field,
-            "reason": "bound deterministic exact-source revision metadata",
-        }
-        for field in changed
-    ]
-
-
-def _canonicalize_scene_candidate_manifest(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Fill system-owned candidate metadata that an Agent must not improvise.
-
-    The prose and its creative decisions remain Agent-authored.  Stable paths,
-    the prompt fingerprint, and the registration of already-emitted candidate
-    character assets are deterministic task facts, so normalizing them prevents
-    avoidable JSON-shape failures without weakening the downstream review gate.
-    """
-    if task.current_state not in {"candidate-generation-provenance", "generation-agent-task"}:
-        return []
-    candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
-    if not candidate_rel:
-        candidate_rel = next(
-            (
-                relative
-                for relative in task.expected_outputs
-                if relative.endswith(".md") and "agent_tasks" not in relative and "prompt" not in relative
-            ),
-            "",
-        )
-    if not candidate_rel:
-        return []
-    manifest_rel = candidate_rel[:-3] + ".json" if candidate_rel.endswith(".md") else candidate_rel + ".json"
-    manifest_path = sandbox.workspace / Path(manifest_rel)
-    if not manifest_path.is_file():
-        return []
-    try:
-        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return []
-    if not isinstance(payload, dict):
-        return []
-
-    changes: list[dict[str, str]] = []
-    scene_id = str(task.payload.get("scene_id") or task.scene_id or "").strip()
-    prompt_rel = candidate_rel[:-3] + ".prompt.json" if candidate_rel.endswith(".md") else candidate_rel + ".prompt.json"
-    machine_manifest_fields: dict[str, Any] = {
-        "schema": "literary-engineering-workbench/scene-candidate/v1",
-        "scene_id": scene_id,
-        "candidate": candidate_rel,
-        "prompt_manifest": prompt_rel,
-        "generated_by": "platform-agent",
-        "provider": "studio-agent-runtime",
-        "formal_contract_revision": str(task.payload.get("task_contract_revision") or "2026-07-24.8"),
-        "writer_session_id": _session_identity(task, "writer"),
-    }
-    machine_manifest_fields["style_mount_snapshot"] = prompt_style_snapshot(sandbox.workspace / Path(prompt_rel))
-    if task.current_state in {"candidate-generation-provenance", "generation-agent-task"}:
-        machine_manifest_fields.update(
-            {
-                "style_generation_standard_applied": True,
-                "hard_constraints_applied": True,
-                "anti_evasion_protocol_applied": True,
-                "narrative_rhythm_standard_applied": True,
-            }
-        )
-        if not isinstance(payload.get("word_budget_standard_applied"), bool):
-            machine_manifest_fields["word_budget_standard_applied"] = False
-        if not isinstance(payload.get("pass_with_notes_actions_applied"), bool):
-            machine_manifest_fields["pass_with_notes_actions_applied"] = False
-    changes.extend(_write_machine_fields(manifest_path, manifest_rel, payload, machine_manifest_fields, "scene-candidate-manifest"))
-
-    required_assets = task.payload.get("scene_character_assets")
-    if not isinstance(payload.get("new_character_register"), dict):
-        introduced = []
-        ready = True
-        if isinstance(required_assets, list):
-            for item in required_assets:
-                if not isinstance(item, dict):
-                    continue
-                candidate_path = str(item.get("candidate_path") or "").replace("\\", "/").strip()
-                if candidate_path and not (sandbox.workspace / Path(candidate_path)).is_file():
-                    ready = False
-                introduced.append(
-                    {
-                        "name": str(item.get("name") or item.get("candidate_id") or "").strip(),
-                        "character_id": str(item.get("candidate_id") or "").strip(),
-                        "scene_function": "declared scene participant",
-                        "persistence": "named",
-                        "already_in_characters": False,
-                        "formal_character_path": str(item.get("formal_character_path") or "").strip(),
-                        "candidate_path": candidate_path,
-                        "review_path": "",
-                        "approval_run_id": "",
-                        "promotion_manifest": "",
-                        "waiver_reason": "",
-                    }
-                )
-        payload["new_character_register"] = {
-            "schema": "literary-engineering-workbench/new-character-register/v0.1",
-            "status": "candidates_ready" if introduced and ready else ("needs_candidate" if introduced else "none"),
-            "introduced": introduced,
-            "ephemeral_waivers": [],
-            "blocking_issues": [] if ready else ["declared scene character candidate is missing"],
-        }
-        changes.append({"path": manifest_rel, "field": "new_character_register", "reason": "normalized deterministic scene-character contract"})
-
-    prompt_path = sandbox.workspace / Path(prompt_rel)
-    if prompt_path.is_file():
-        try:
-            prompt = json.loads(prompt_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            prompt = {}
-        standards = prompt.get("generation_standards") if isinstance(prompt, dict) and isinstance(prompt.get("generation_standards"), dict) else {}
-        digest = str(standards.get("creative_quality_profile_digest") or "").strip()
-        if digest and not str(payload.get("creative_quality_profile_digest") or "").strip():
-            payload["creative_quality_profile_digest"] = digest
-            changes.append({"path": manifest_rel, "field": "creative_quality_profile_digest", "reason": "copied from protected prompt manifest"})
-        if "reader_experience_contract" not in payload and isinstance(standards.get("reader_experience_contract"), dict):
-            payload["reader_experience_contract"] = standards["reader_experience_contract"]
-            changes.append({"path": manifest_rel, "field": "reader_experience_contract", "reason": "copied from protected prompt manifest"})
-        if "narrative_rhythm_contract" not in payload and isinstance(standards.get("narrative_rhythm_contract"), dict):
-            payload["narrative_rhythm_contract"] = standards["narrative_rhythm_contract"]
-            changes.append({"path": manifest_rel, "field": "narrative_rhythm_contract", "reason": "copied from protected prompt manifest"})
-
-    if changes:
-        manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return changes
