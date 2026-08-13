@@ -151,7 +151,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v$($StudioVersion.Trim()) improves the narrative orrery, audited creative planning, and bounded Agent task throughput."
+        --notes "ArcVellum v$($StudioVersion.Trim()) bundles the bounded Pi literary Worker and closes continuous scene promotion, state, Canon, and continuity writeback."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

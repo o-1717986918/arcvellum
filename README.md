@@ -128,8 +128,8 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 | 产品界面 | Vue 3 + TypeScript + Vite | 星仪、阅读器、决策、设置与流式项目视图 |
 | 应用服务 | FastAPI + SSE | 本地认证 API、实时读模型、事件流与项目控制 |
 | 文学工程内核 | Python CLI | 路线状态机、任务包、Schema、门禁、审计与交付准备 |
-| Agent Runtime | 内置 OpenCode Runner | 权限不同的 Worker/Advisor 会话与隔离 Profile |
-| 模型连接 | OpenCode Provider Catalog | 常用厂商预设、按角色选模、OpenAI 兼容自定义端点 |
+| Agent Runtime | 内置 Pi Worker + OpenCode Runner | 受控文学任务执行、权限隔离、独立主创与审查 Profile |
+| 模型连接 | Runner Provider Catalog | 常用厂商预设、按角色选模、OpenAI 兼容自定义端点 |
 | 项目格式 | 人类可读文件 + 账本 | Canon、人物、场景、Review 和交付物的长期保存 |
 | 交付 | Markdown/DOCX 管线 | 过滤流程痕迹后的完整作品输出 |
 
@@ -143,17 +143,17 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### Windows 桌面端
 
-1. 下载 [ArcVellum v0.97.4 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.97.4/ArcVellum_0.97.4_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
+1. 下载 [ArcVellum v0.98.0 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.98.0/ArcVellum_0.98.0_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
 2. 启动 ArcVellum。默认作品库为 `Documents/ArcVellum/Works`，也可在设置中调整。
 3. 打开 **设置 -> 连接与模型**，连接模型服务并为不同角色选择模型。
 4. 新建作品，写下创作大方向与约束，再选择协作、监督自动或全自动推进方式。
 5. 通过星仪理解项目，通过阅读器阅读已晋升正文，通过“交付”导出完整作品。
 
-安装包包含本地应用服务、文学工程内核和 OpenCode Runner；无需预先安装 Python、Node.js、Rust、浏览器或其他 Agent 平台。模型推理仍需要用户自行选择并授权的模型服务或本地端点。
+安装包包含本地应用服务、文学工程内核、Pi Worker 及其固定运行时和 OpenCode Runner；无需预先安装 Python、Node.js、Rust、浏览器或其他 Agent 平台。模型推理仍需要用户自行选择并授权的模型服务或本地端点。
 
 ### 自动更新
 
-ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.97.4**。
+ArcVellum 的 Windows Release 包含签名安装包、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.98.0**。
 
 ## 开发者入口
 
@@ -216,7 +216,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 
 ## 项目状态与 v1.0 方向
 
-ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.97.4 增加实验性的 Pi 专用文学 Worker，完成规划、角色推演、正文与独立审查的真实模型任务矩阵验证，并用 Studio 权威预检和有界修复继续守住正式写回边界；叙事星仪同时改善了高密度关系和多窗口工作台体验。
+ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.98.0 将 Pi 专用文学 Worker 正式内置进安装包，并以同一作品连续完成第一场正文晋升、人物状态、Canon、连续性写回和下一场领取；同时完成 Prompt 分层与架构收敛，减少重复上下文和确定性预检空转。
 
 走向 v1.0 的重点不是继续堆功能，而是积累证据：更多题材的长期项目样本、无人值守恢复验证、Windows 10/11 干净环境下的安装/覆盖升级矩阵、更强的模型连接诊断，以及在真实稿件上的创作质量评估。
 
@@ -226,6 +226,7 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、签名自动更新、本�
 - [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
+- [v0.98.0 发行说明](docs/releases/v0.98.0.md)
 - [v0.97.4 发行说明](docs/releases/v0.97.4.md)
 - [v0.97.2 发行说明](docs/releases/v0.97.2.md)
 - [v0.97.1 发行说明](docs/releases/v0.97.1.md)

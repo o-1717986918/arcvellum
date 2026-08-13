@@ -2,6 +2,29 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.98.0] - 2026-08-14
+
+### Added
+
+- Productized the bounded Pi literary Worker as a versioned, tested, and bundled Windows runtime with a fixed Node executable, dependency receipt, license notice, model selection, connection probe, and explicit execution profile.
+- Added native Pi task programs for planning, asset creation, roleplay, branch simulation, composition, prose, independent review, revision, state evolution, Canon evolution, and continuity writeback.
+- Added content-safe prompt audit artifacts and a deterministic exporter that preserves exact literary evidence while removing host-Skill, CLI lifecycle, and duplicate sidecar instructions.
+
+### Changed
+
+- Reduced a real prose task prompt from 189,908 to 29,218 characters while retaining exact candidate, relevant Canon, character state, style, rhythm, bridge, word-budget, reader-question, and writeback contracts.
+- Separated Agent-authored creative artifacts from Studio-owned identities, digests, lifecycle receipts, validation metadata, promotion, and formal writeback.
+- Split prompt evidence projection, semantic task contracts, scene writeback blueprints, preflight metadata, scene review validation, and Autopilot result contracts into narrower modules.
+- Ratcheted the architecture baseline from 38 to 33 oversized files and from 230 to 201 oversized functions, with zero import cycles, forbidden dependencies, duplicate routes, or parse errors.
+
+### Fixed
+
+- Prevented stale scaffold files and inherited artifacts from being accepted as a current Worker submission.
+- Fixed repeated deterministic-preflight loops across scene review, candidate revision, state review, Canon review, and continuity-ledger application.
+- Fixed candidate/review ownership conflicts, exact revision-source drift, invalid JSON repair termination, and false no-progress results after valid outputs were written.
+- Ensured a successful scene closes in chronology: prose promotion, state and Canon review/writeback, continuity application, and the next scene task are all part of one continuous Autopilot path.
+- Updated DOMPurify and affected transitive build dependencies within their existing major-version ranges; the release dependency audit now reports zero known npm vulnerabilities.
+
 ## [0.97.4] - 2026-08-11
 
 ### Added
