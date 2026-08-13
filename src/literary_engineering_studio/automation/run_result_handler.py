@@ -2,93 +2,23 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 import threading
 import time
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 from ..advisor.creative_steward import CreativeSteward
 from ..orchestration import RecoveryDecision, RecoveryStep, recovery_step
-from ..persistence.job_store import JobStore
-from ..runtime.worker import AgentWorker, WorkerRunResult
+from ..runtime.worker import WorkerRunResult
 from .campaign_runtime import CampaignRuntimeCoordinator, FormalProgressEvidence
 from .policy import DelegationPolicy, next_revision_count
+from .run_result_contracts import RouteCycle, RunLoopHost
 from .support import _now, _operational_decision, _project_progress_fingerprint
 
 
 _TRANSPORT_FAILURE_KINDS = frozenset(
     {"transient_network", "first_event_timeout", "idle_timeout"}
 )
-
-
-@dataclass(frozen=True)
-class RouteCycle:
-    """The route identity and lock owner for one worker cycle."""
-
-    route_index: int
-    planned_route: str
-    route: str
-    dependency_route: bool
-    owner: str
-
-
-class RunLoopHost(Protocol):
-    """Narrow controller capabilities shared by loop and result handler."""
-
-    store: JobStore
-    execution_coordinator: Any
-
-    def _worker(
-        self,
-        run_id: str,
-        *,
-        cancel_event: threading.Event | None = None,
-    ) -> AgentWorker: ...
-
-    def _resolve_proactive_choice(
-        self,
-        run_id: str,
-        project: Path,
-        route: str,
-        policy: DelegationPolicy,
-        steward: CreativeSteward,
-        *,
-        stop: threading.Event | None = None,
-    ) -> bool: ...
-
-    def _delegate_choice(
-        self,
-        run_id: str,
-        project: Path,
-        route: str,
-        policy: DelegationPolicy,
-        steward: CreativeSteward,
-        choice: dict[str, Any],
-        *,
-        task_id: str = "",
-        stop: threading.Event | None = None,
-    ) -> bool: ...
-
-    def _current_choices(self, project: Path, route: str) -> list[dict[str, Any]]: ...
-
-    def _complete_release(
-        self,
-        run_id: str,
-        project: Path,
-        run: dict[str, Any],
-        policy: DelegationPolicy,
-    ) -> None: ...
-
-    def _register_no_progress(
-        self,
-        run_id: str,
-        task_id: str,
-        route: str,
-        message: str,
-    ) -> bool: ...
-
-    def _pause_for(self, run_id: str, reason: str, message: str) -> None: ...
 
 
 class ClaimedRunResultHandler:
