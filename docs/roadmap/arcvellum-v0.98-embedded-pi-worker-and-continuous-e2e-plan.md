@@ -322,7 +322,7 @@ Prompt Program、Worker 工具描述到 repair turn 的整个提示词工程。
 - [~] 受控项目会话仅完成租约/身份基础；Provider 级复用明确延后到连续 E2E 通过之后，避免会话缓存掩盖证据缺口。
 - [x] 已完成同一作品连续全自动闭环：84 项任务后，scene_0001 正文已晋升，人物状态、Canon 候选与独立审查、连续性账本均完成，状态机正式进入 `scene-development-scene-0002-roleplay-agent-task`；验收运行随后主动暂停。
 - [x] Pi Worker 已验证本轮提交所有权、候选/独立审查职责隔离，以及无效 JSON 获得一次带精确解析反馈的修复回合。
-- [ ] 未完成安装版连续闭环与发布验收。
+- [x] 已完成 v0.98.0 生产构建、安装布局、内置 Pi/sidecar 探测与桌面子进程生命周期验收；连续文学闭环通过产品 API 与同一内置 Pi Runtime 完成，未把“已安装 GUI 内重跑整条闭环”冒充为已执行证据。
 
 ### B4 验收记录（2026-08-13）
 
@@ -372,3 +372,16 @@ CLI 的 API/桌面 sidecar 启动也已从主命令分派中抽离。所有拆�
 不继续扩大改动范围。新的逐项质量基线按 33/201 冻结，比旧基线更严格；任何既有条目继续
 膨胀或新增结构错误都会重新令审计失败。后续版本应以行为测试保护下的领域拆分逐项偿还，
 不得整体放宽预算。
+
+### B5 发布验收记录（2026-08-14）
+
+- 完成 Python 1,097 项测试（1 项预期跳过）、Pi Worker 43 项测试、Vue 163 项测试、
+  Rust/Tauri 测试构建、Prompt Registry、Prompt audience、架构与版本同步审计；
+- 完成正式 Windows 生产构建，安装包大小 127,566,160 字节，SHA-256 为
+  `5ADF6F377F79B330DDFDFF9E395266E57BBE9B9A51126B006AB273BC6FBE005A`；
+- 安装布局中的固定 Node Runtime、Pi Worker bundle、Worker 安装回执与 Python sidecar
+  provenance 均通过版本和摘要校验，Pi 与 sidecar 的 `--version` 探测退出码为 0；
+- 正式 release 桌面可执行文件能够启动随包 sidecar，主进程退出两秒后子进程已回收，
+  未留下不会复用的后台进程；
+- 发布包包含 Tauri updater 签名、`latest.json` 与 `SHA256SUMS.txt`。本版本不宣称
+  Windows Authenticode 代码签名，避免把更新验签与系统级可执行文件签名混为一谈。
