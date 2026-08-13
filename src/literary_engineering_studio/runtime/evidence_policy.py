@@ -31,189 +31,175 @@ def evidence_policy(
     """Choose first-turn placement and projection without changing source truth."""
 
     lowered = path.casefold()
-    if (
-        audience == "tool-worker"
-        and task_kind == "prose"
-        and lowered.startswith("memory/context_packets/scene_")
-        and lowered.endswith(".md")
-    ):
+    if _is_prose_context_packet(audience, task_kind, lowered):
         return EvidencePolicyDecision(
             EvidenceDisposition.INLINE, "prose-context-packet"
         )
     if role == "recovery":
-        return EvidencePolicyDecision(
-            EvidenceDisposition.ON_DEMAND
-            if audience == "tool-worker"
-            or task.payload.get("context_contract_required") is not True
-            else EvidenceDisposition.INLINE
-        )
-
+        return _recovery_policy(task, audience)
     if audience != "tool-worker":
         return EvidencePolicyDecision(EvidenceDisposition.INLINE)
-
     if lowered == "style/style-profile.md" and _unmounted_style_template(body):
         return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+    decision = _task_specific_policy(task, lowered, task_kind)
+    return decision or EvidencePolicyDecision(EvidenceDisposition.INLINE)
 
+
+def _is_prose_context_packet(audience: str, task_kind: str, path: str) -> bool:
+    return (
+        audience == "tool-worker"
+        and task_kind == "prose"
+        and path.startswith("memory/context_packets/scene_")
+        and path.endswith(".md")
+    )
+
+
+def _recovery_policy(task: TaskPackage, audience: str) -> EvidencePolicyDecision:
+    on_demand = (
+        audience == "tool-worker"
+        or task.payload.get("context_contract_required") is not True
+    )
+    return EvidencePolicyDecision(
+        EvidenceDisposition.ON_DEMAND if on_demand else EvidenceDisposition.INLINE
+    )
+
+
+def _task_specific_policy(
+    task: TaskPackage,
+    path: str,
+    task_kind: str,
+) -> EvidencePolicyDecision | None:
+    state = task.current_state.casefold()
     if task_kind == "prose":
-        if task.current_state.casefold() in {"candidate-revision", "static-revision"}:
-            return _revision_evidence_policy(task, lowered)
-        if lowered in {
-            "plot/outline.md",
-            "branches/" + str(task.payload.get("scene_id") or "").casefold() + "/branch_selection.md",
-            "references/punctuation-standard.md",
-        }:
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-        if lowered.endswith("_composition_review.json"):
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-        if lowered.endswith("_composition.md"):
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-        if lowered.endswith("/roleplay_result.json"):
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-        if lowered.endswith("/branch_manifest.json"):
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-        if lowered.endswith("_composition.json"):
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "prose-composition"
-            )
-        if lowered.startswith("plot/chapter_obligations/") and lowered.endswith(".json"):
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "prose-chapter-obligation"
-            )
-        if lowered == "plot/word_budget/word_budget.json":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "prose-word-budget"
-            )
-        if lowered.startswith("scenes/") and lowered.endswith((".yaml", ".yml")):
-            return EvidencePolicyDecision(EvidenceDisposition.INLINE, "prose-scene")
-        if lowered == "project.yaml":
-            return EvidencePolicyDecision(EvidenceDisposition.INLINE, "project-identity")
+        return _prose_evidence_policy(task, path)
+    policies = {
+        "composition-agent-task": _composition_evidence_policy,
+        "continuity-ledger-agent-task": _continuity_evidence_policy,
+        "state-agent-task": _state_evidence_policy,
+        "canon-patch-json": _canon_evidence_policy,
+        "canon-agent-task": _canon_evidence_policy,
+    }
+    if policy := policies.get(state):
+        return policy(task, path)
+    return _asset_review_evidence_policy(task, path)
 
-    if task.current_state.casefold() == "composition-agent-task":
-        scene_id = str(task.payload.get("scene_id") or "").casefold()
-        if lowered == f"drafts/compositions/{scene_id}_composition.json":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "composition-review"
-            )
-        if lowered == f"scenes/{scene_id}.yaml":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "prose-scene"
-            )
-        if lowered == "plot/word_budget/word_budget.json":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "prose-word-budget"
-            )
-        if lowered.startswith("plot/chapter_obligations/") and lowered.endswith(".json"):
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "prose-chapter-obligation"
-            )
-        if lowered == "project.yaml":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "project-identity"
-            )
-        if lowered in {
-            "style/creative_quality_profile.json",
-            "references/punctuation-standard.md",
-        }:
-            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
-        # The composition JSON has already consumed branch, RP, character,
-        # chapter and budget inputs. Keep their exact originals available for
-        # a concrete dispute, but do not replay the entire project on turn one.
+
+def _prose_evidence_policy(
+    task: TaskPackage,
+    path: str,
+) -> EvidencePolicyDecision:
+    if task.current_state.casefold() in {"candidate-revision", "static-revision"}:
+        return _revision_evidence_policy(task, path)
+    scene_id = _scene_id(task)
+    on_demand = {
+        "plot/outline.md", f"branches/{scene_id}/branch_selection.md",
+        "references/punctuation-standard.md",
+    }
+    if path in on_demand or path.endswith(
+        ("_composition_review.json", "_composition.md", "/roleplay_result.json", "/branch_manifest.json")
+    ):
         return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-
-    if task.current_state.casefold() == "continuity-ledger-agent-task":
-        scene_id = str(task.payload.get("scene_id") or "").casefold()
-        if lowered == f"drafts/scenes/{scene_id}.md":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "continuity-prose"
-            )
-        if lowered == f"scenes/{scene_id}.yaml":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "continuity-scene"
-            )
-        if lowered in {
-            "plot/reader_questions/ledger.json",
-            "plot/promises/ledger.json",
-        }:
-            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
-        # Promotion already proved provenance and quality gates. Replaying its
-        # nested review/generation snapshots cannot improve a ledger delta.
-        # The template, style profiles, and recovery sidecar likewise remain
-        # available only for a concrete evidence dispute.
-        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-
-    if task.current_state.casefold() == "state-agent-task":
-        scene_id = str(task.payload.get("scene_id") or "").casefold()
-        if lowered == f"characters/state_patches/{scene_id}_state_patch.json":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "state-patch"
-            )
-        if lowered == f"drafts/scenes/{scene_id}.md":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "state-prose"
-            )
-        if lowered == f"drafts/compositions/{scene_id}_composition.json":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "state-composition"
-            )
-        if lowered.startswith("characters/") and lowered.endswith((".yaml", ".yml")):
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "state-character"
-            )
-        if lowered == f"scenes/{scene_id}.yaml":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "state-scene"
-            )
-        # Context packets, trace/provenance, promotion manifests, earlier prose
-        # reviews, style manuals and the generated sidecar remain available for
-        # one concrete dispute. Replaying them all would duplicate the exact
-        # patch, prose, composition writeback and character evidence above.
-        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-
-    if task.current_state.casefold() in {"canon-patch-json", "canon-agent-task"}:
-        scene_id = str(task.payload.get("scene_id") or "").casefold()
-        if lowered == f"drafts/scenes/{scene_id}.md":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "canon-prose"
-            )
-        if lowered == f"scenes/{scene_id}.yaml":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "canon-scene"
-            )
-        if lowered == f"reviews/agent/{scene_id}_scene_review.json":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "canon-scene-review"
-            )
-        if lowered == f"characters/state_patches/{scene_id}_state_patch.json":
-            return EvidencePolicyDecision(
-                EvidenceDisposition.INLINE, "canon-state-boundary"
-            )
-        if lowered == f"canon/patches/{scene_id}_canon_patch.json":
-            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
-        if lowered in {
-            "canon/facts.json",
-            "canon/forbidden_changes.yaml",
-            "canon/locations.yaml",
-            "canon/organizations.yaml",
-            "canon/timeline.yaml",
-            "canon/world_rules.yaml",
-        }:
-            return EvidencePolicyDecision(EvidenceDisposition.INLINE)
-        # Promotion manifests, state-review transport, context packets,
-        # candidate worldbuilding assets, reports and task sidecars stay
-        # available for a concrete dispute. They duplicate either the exact
-        # prose, the formal Canon, or the two compact semantic declarations.
-        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-
-    if "asset-review" in task.task_type.casefold():
-        if lowered.startswith("plot/word_budget/"):
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-        if lowered in {"plot/conflict_matrix.md", "plot/foreshadowing.csv"}:
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-        asset_type = str(task.payload.get("asset_type") or "").strip().casefold()
-        if lowered == "characters/_template.yaml" and asset_type != "character":
-            return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
-
+    projections = {
+        "plot/word_budget/word_budget.json": "prose-word-budget",
+        "project.yaml": "project-identity",
+    }
+    if projection := projections.get(path):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, projection)
+    if path.endswith("_composition.json"):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, "prose-composition")
+    if path.startswith("plot/chapter_obligations/") and path.endswith(".json"):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, "prose-chapter-obligation")
+    if path.startswith("scenes/") and path.endswith((".yaml", ".yml")):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, "prose-scene")
     return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+
+
+def _composition_evidence_policy(task: TaskPackage, path: str) -> EvidencePolicyDecision:
+    scene_id = _scene_id(task)
+    projections = {
+        f"drafts/compositions/{scene_id}_composition.json": "composition-review",
+        f"scenes/{scene_id}.yaml": "prose-scene",
+        "plot/word_budget/word_budget.json": "prose-word-budget",
+        "project.yaml": "project-identity",
+    }
+    if projection := projections.get(path):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, projection)
+    if path.startswith("plot/chapter_obligations/") and path.endswith(".json"):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, "prose-chapter-obligation")
+    if path in {"style/creative_quality_profile.json", "references/punctuation-standard.md"}:
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+    return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
+
+def _continuity_evidence_policy(task: TaskPackage, path: str) -> EvidencePolicyDecision:
+    scene_id = _scene_id(task)
+    projections = {
+        f"drafts/scenes/{scene_id}.md": "continuity-prose",
+        f"scenes/{scene_id}.yaml": "continuity-scene",
+    }
+    if projection := projections.get(path):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, projection)
+    if path in {"plot/reader_questions/ledger.json", "plot/promises/ledger.json"}:
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+    return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
+
+def _state_evidence_policy(task: TaskPackage, path: str) -> EvidencePolicyDecision:
+    scene_id = _scene_id(task)
+    projections = {
+        f"characters/state_patches/{scene_id}_state_patch.json": "state-patch",
+        f"drafts/scenes/{scene_id}.md": "state-prose",
+        f"drafts/compositions/{scene_id}_composition.json": "state-composition",
+        f"scenes/{scene_id}.yaml": "state-scene",
+    }
+    if projection := projections.get(path):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, projection)
+    if path.startswith("characters/") and path.endswith((".yaml", ".yml")):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, "state-character")
+    return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
+
+def _canon_evidence_policy(task: TaskPackage, path: str) -> EvidencePolicyDecision:
+    scene_id = _scene_id(task)
+    projections = {
+        f"drafts/scenes/{scene_id}.md": "canon-prose",
+        f"scenes/{scene_id}.yaml": "canon-scene",
+        f"reviews/agent/{scene_id}_scene_review.json": "canon-scene-review",
+        f"characters/state_patches/{scene_id}_state_patch.json": "canon-state-boundary",
+    }
+    if projection := projections.get(path):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, projection)
+    if path == f"canon/patches/{scene_id}_canon_patch.json" or path in _CANON_SOURCES:
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+    return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+
+
+_CANON_SOURCES = frozenset(
+    {
+        "canon/facts.json", "canon/forbidden_changes.yaml", "canon/locations.yaml",
+        "canon/organizations.yaml", "canon/timeline.yaml", "canon/world_rules.yaml",
+    }
+)
+
+
+def _asset_review_evidence_policy(
+    task: TaskPackage,
+    path: str,
+) -> EvidencePolicyDecision | None:
+    if "asset-review" not in task.task_type.casefold():
+        return None
+    asset_type = str(task.payload.get("asset_type") or "").strip().casefold()
+    if (
+        path.startswith("plot/word_budget/")
+        or path in {"plot/conflict_matrix.md", "plot/foreshadowing.csv"}
+        or (path == "characters/_template.yaml" and asset_type != "character")
+    ):
+        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+    return None
+
+
+def _scene_id(task: TaskPackage) -> str:
+    return str(task.payload.get("scene_id") or "").casefold()
 
 
 def _revision_evidence_policy(

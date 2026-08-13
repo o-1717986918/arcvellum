@@ -798,4 +798,13 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         "validation_gates": ["route-specific gate resolved"],
         "next_allowed_states": [],
     }
-    return writeback or table.get(current_state, default)
+    return _select_blueprint(current_state, writeback, table, default)
+
+
+def _select_blueprint(
+    current_state: str,
+    writeback: dict[str, object] | None,
+    table: dict[str, dict[str, object]],
+    default: dict[str, object],
+) -> dict[str, object]:
+    return writeback if writeback is not None else table.get(current_state, default)
