@@ -52,12 +52,14 @@ class ContextTraceV2Tests(unittest.TestCase):
             (root / "canon" / "world_rules.yaml").write_text("rule: changed\n", encoding="utf-8")
             stale = _scene_state(root, scene)
             self.assertEqual(stale["current_step"], "context-trace")
-            self.assertEqual(stale["steps"][1]["status"], "stale")
+            stale_steps = {step["key"]: step for step in stale["steps"]}
+            self.assertEqual(stale_steps["context-trace"]["status"], "stale")
 
             build_context_packet(root, scene=scene, rebuild_index=True)
             rewound = _scene_state(root, scene)
             self.assertEqual(rewound["current_step"], "roleplay-simulation")
-            self.assertEqual(rewound["steps"][2]["status"], "stale")
+            rewound_steps = {step["key"]: step for step in rewound["steps"]}
+            self.assertEqual(rewound_steps["roleplay-simulation"]["status"], "stale")
 
 
 if __name__ == "__main__":

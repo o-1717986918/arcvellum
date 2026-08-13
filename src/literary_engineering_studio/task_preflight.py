@@ -1,4 +1,4 @@
-"""Stable facade for deterministic sandbox checks before formal writeback."""
+"""Deterministic sandbox checks before formal writeback."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_errors,
     semantic_artifact_relative_path,
 )
-from literary_engineering_studio_engine.reader_experience import (
+from literary_engineering_studio_engine.literary.review.reader_experience import (
     chapter_obligation_contract_issues,
 )
 from literary_engineering_studio_engine.literary.planning.materializer import (

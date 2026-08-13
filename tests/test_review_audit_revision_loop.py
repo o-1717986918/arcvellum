@@ -65,7 +65,10 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
             review_dir = sandbox.workspace / "reviews" / "agent"
             review_dir.mkdir(parents=True, exist_ok=True)
             (review_dir / "canon_review.json").write_text(json.dumps(_canon_review(), ensure_ascii=False), encoding="utf-8")
-            (review_dir / "canon_review.md").write_text("# Canon Review\n\n需要修订。\n", encoding="utf-8")
+            (review_dir / "canon_review.md").write_text(
+                "# Canon Review\n\n- 结论： revise_required\n\n需要修订。\n",
+                encoding="utf-8",
+            )
             (review_dir / "canon_review.agent_completion.json").write_text(
                 json.dumps({"schema": COMPLETION_SCHEMA, "source_task": "reviews/agent/canon_review.agent_tasks.md", "status": "complete", "handled_by": "reviewer", "completed_at": "2026-07-21T00:00:00Z", "expected_artifacts_checked": True, "notes": []}, ensure_ascii=False),
                 encoding="utf-8",

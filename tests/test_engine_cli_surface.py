@@ -73,6 +73,7 @@ class EngineCliSurfaceTests(unittest.TestCase):
                 "draft-scene",
                 "review-scene",
                 "generate-scene",
+                "prepare-scene-character-assets",
                 "revise-scene",
                 "promote-candidate",
                 "state-evolve",
