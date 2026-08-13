@@ -114,12 +114,12 @@ def build_canon_patch_task(
         notes=[
             "本任务只生成 canon 写回候选，不得直接修改 canon/world_rules.yaml、canon/forbidden_changes.yaml 或正式世界观文件。",
             "如果没有 canon 变化，也必须写出 no_canon_change_reason，避免静默跳过。",
-            f"正式审查结论必须写入 `{review_rel}`；completion marker 不能替代可验证的证据、判决和批准建议。",
+            f"候选生成与独立审查分属两个状态；候选作者不得写 `{review_rel}` 或 completion marker。",
         ],
         tasks=[
             (
                 "判断本场是否产生 canon 变化",
-                f"""读取 promoted draft、scene.yaml、promotion manifest、AgentReview、state patch 和 canon 目录。区分人物临时状态、关系变化、场景事实、世界规则、组织/地点/历史事实、伏笔状态。只有会跨场景持续约束未来创作的事实才属于 canon_change=true。把证据路径和批判性发现写入 `{review_rel}`。""",
+                """读取 promoted draft、scene.yaml、promotion manifest、AgentReview、state patch 和 canon 目录。区分人物临时状态、关系变化、场景事实、世界规则、组织/地点/历史事实、伏笔状态。只有会跨场景持续约束未来创作的事实才属于 canon_change=true。""",
             ),
             (
                 "写入 canon patch JSON",
@@ -127,7 +127,7 @@ def build_canon_patch_task(
             ),
             (
                 "写入 canon patch 报告",
-                f"""创建或覆盖 `{_rel(report, root)}`，用普通语言说明：本场是否产生持续世界事实、证据来自哪段正文、会影响哪些未来创作、为什么暂不直接写入 canon、是否需要用户审批。不要写入 `[AGENT_TASK: ...]`。然后在 `{review_rel}` 写 source_artifact={_rel(json_path, root)}、canon_patch_sha256（精确 SHA-256）、verdict、approval_recommendation、required_changes；仅当 verdict=pass 且 status=complete 时可完成本任务。""",
+                f"""创建或覆盖 `{_rel(report, root)}`，用普通语言说明：本场是否产生持续世界事实、证据来自哪段正文、会影响哪些未来创作、为什么暂不直接写入 canon、是否需要用户审批。不要写入 `[AGENT_TASK: ...]`。候选写完后交还 Studio，由下一状态的独立 Reviewer 写 `{review_rel}` 并完成 sidecar。""",
             ),
         ],
     )
@@ -246,7 +246,12 @@ def apply_canon_patch(
     return CanonApplyResult(root, patch_path, report, json_path, changelog, "applied", len(items))
 
 
-def canon_writeback_status(root: Path, scene_id: str) -> dict[str, Any]:
+def canon_writeback_status(
+    root: Path,
+    scene_id: str,
+    *,
+    require_review: bool = True,
+) -> dict[str, Any]:
     """Inspect canon writeback state for route/status gates."""
 
     json_path = root / "canon" / "patches" / f"{scene_id}_canon_patch.json"
@@ -310,6 +315,10 @@ def canon_writeback_status(root: Path, scene_id: str) -> dict[str, Any]:
         if item_errors:
             result["status"] = "invalid_patch"
             result["message"] = "canon patch items are incomplete: " + "; ".join(item_errors[:6])
+            return result
+        if not require_review:
+            result["status"] = "pass"
+            result["message"] = "canon change candidate patch is ready for independent review"
             return result
         if completion.get("complete") is not True:
             result["status"] = "task_incomplete"

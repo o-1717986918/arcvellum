@@ -26,9 +26,10 @@ hard_constraints:
 style_constraints:
   - none
 output_contract:
-  - Write canon/patches/{scene_id}_canon_patch.json and Markdown report, then complete the sidecar.
+  - Write only canon/patches/{scene_id}_canon_patch.json and its Markdown report; Studio owns the sidecar and pending review template.
 review_requirements:
-  - Canon patch remains candidate-only until reviewed and approved.
+  - Return control after the candidate files are written; a separate Reviewer handles the next state.
+  - Canon patch remains candidate-only until independently reviewed and approved.
   - No-change decisions must include no_canon_change_reason.
 forbidden_shortcuts:
   - Do not silently skip unknown canon_change.
@@ -37,3 +38,5 @@ forbidden_shortcuts:
 # Exact Canon Evolve Prompt Asset
 
 Classify whether the scene changed durable world facts. Character mood and temporary relation shifts belong to state patches; persistent rules, locations, organizations, history, and cross-scene facts belong in canon patch candidates.
+
+This task authors a candidate, not its review. Do not write the Canon review JSON, complete a sidecar, apply the patch, or modify formal Canon files.

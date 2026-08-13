@@ -40,6 +40,7 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(canonicalize_archaeology_metadata(task, sandbox))
     changes.extend(_canonicalize_asset_machine_metadata(task, sandbox))
     changes.extend(_canonicalize_semantic_artifact_metadata(task, sandbox))
+    changes.extend(_canonicalize_canon_patch_candidate_metadata(task, sandbox))
     changes.extend(_canonicalize_story_architecture_metadata(task, sandbox))
     changes.extend(_canonicalize_continuity_ledger_metadata(task, sandbox))
     changes.extend(canonicalize_style_machine_metadata(task, sandbox))
@@ -177,6 +178,43 @@ def _canonicalize_semantic_artifact_metadata(task: TaskPackage, sandbox: Sandbox
     # fields remain invalid so the Worker never invents creative evidence.
     list_changes = _canonicalize_declared_list_fields(path, relative, payload, schema_spec)
     return [*changes, *list_changes]
+
+
+def _canonicalize_canon_patch_candidate_metadata(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+) -> list[dict[str, str]]:
+    """Bind Canon candidate transport fields without changing its judgment."""
+
+    if str(task.current_state or "") != "canon-patch-json":
+        return []
+    scene_id = str(task.payload.get("scene_id") or "").strip()
+    relative = next(
+        (item for item in task.expected_outputs if item.endswith("_canon_patch.json")),
+        "",
+    )
+    if not scene_id or not relative:
+        return []
+    path = sandbox.workspace / relative
+    payload = _read_object(path)
+    if payload is None:
+        return []
+    scene = str(task.payload.get("scene") or f"scenes/{scene_id}.yaml")
+    source = f"drafts/scenes/{scene_id}.md"
+    expected = {
+        "schema": "literary-engineering-workbench/canon-patch-candidate/v0.1",
+        "formal_contract_revision": "2026-07-23.3",
+        "scene_id": scene_id,
+        "scene": scene,
+        "source": source,
+        "status": "candidate",
+        "applied": False,
+        "requires_user_approval": True,
+        "source_paths": [scene, source],
+    }
+    return _write_machine_fields(
+        path, relative, payload, expected, "canon-patch-candidate"
+    )
 
 
 def _canonicalize_declared_list_fields(

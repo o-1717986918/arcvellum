@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TaskContext } from "../src/contracts.ts";
-import { createWorkerTools, progressDigest, validateOutputs } from "../src/tools.ts";
+import { createWorkerTools, progressDigest, validateOutputs, validateSubmittedOutputs } from "../src/tools.ts";
 import type { WorkerOptions, WorkerState } from "../src/contracts.ts";
 
 const roots: string[] = [];
@@ -30,6 +30,26 @@ describe("local output validation", () => {
 		await writeFile(join(root, "out", "review.json"), "{}\n", "utf8");
 		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
 		expect((await validateOutputs(context(), root)).passed).toBe(true);
+	});
+
+	it("distinguishes an existing scaffold from a current Worker submission", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-tools-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), "{}\n", "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
+
+		const result = await validateSubmittedOutputs(
+			context(),
+			root,
+			new Set(["out/review.md"]),
+		);
+
+		expect(result.passed).toBe(false);
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			path: "out/review.json",
+			code: "not_submitted_this_run",
+		}));
 	});
 
 	it("writes all authorized outputs in one bounded batch", async () => {

@@ -6,7 +6,7 @@ import unittest
 
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.approval import record_workflow_approval
-from literary_engineering_studio_engine.canon_evolver import apply_canon_patch
+from literary_engineering_studio_engine.canon_evolver import apply_canon_patch, canon_writeback_status
 from literary_engineering_studio_engine.review_audit_route import build_task_payload
 from literary_engineering_studio_engine.workflow_state import _review_audit_state
 
@@ -49,6 +49,33 @@ def _write_patch(root: Path) -> Path:
 
 
 class CanonPatchRouteTests(unittest.TestCase):
+    def test_candidate_generation_gate_does_not_require_its_future_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _write_patch(root)
+            promotion = root / "drafts/promotions/scene_0001_promotion.json"
+            promotion.parent.mkdir(parents=True)
+            promotion.write_text(
+                json.dumps(
+                    {
+                        "candidate": "drafts/candidates/scene_0001-platform-agent.md",
+                        "canon_writeback": {
+                            "canon_change": True,
+                            "no_canon_change_reason": "",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            candidate = canon_writeback_status(root, "scene_0001", require_review=False)
+            reviewed = canon_writeback_status(root, "scene_0001", require_review=True)
+
+            self.assertEqual(candidate["status"], "pass")
+            self.assertIn("independent review", candidate["message"])
+            self.assertNotEqual(reviewed["status"], "pass")
+
     def test_patch_moves_from_content_bound_approval_to_apply_and_audit(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

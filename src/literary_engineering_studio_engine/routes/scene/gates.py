@@ -97,8 +97,10 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
             errors.append(str(state_status.get("message") or "state patch approval is incomplete"))
         if current_state == "state-apply" and value != "pass":
             errors.append(str(state_status.get("message") or "state apply is incomplete"))
-    if current_state in {"canon-patch-json", "canon-agent-task"}:
-        errors.extend(_canon_writeback_gate_errors(root, scene_id))
+    if current_state == "canon-patch-json":
+        errors.extend(_canon_writeback_gate_errors(root, scene_id, require_review=False))
+    if current_state == "canon-agent-task":
+        errors.extend(_canon_writeback_gate_errors(root, scene_id, require_review=True))
     if current_state == "canon-agent-task":
         errors.extend(semantic_artifact_errors(root, current_state, scene_id))
     if current_state in {"continuity-ledger-agent-task", "continuity-ledger-review", "continuity-ledger-apply"}:
@@ -440,8 +442,13 @@ def _state_patch_gate_errors(root: Path, scene_id: str) -> list[str]:
     return errors
 
 
-def _canon_writeback_gate_errors(root: Path, scene_id: str) -> list[str]:
-    status = canon_writeback_status(root, scene_id)
+def _canon_writeback_gate_errors(
+    root: Path,
+    scene_id: str,
+    *,
+    require_review: bool = True,
+) -> list[str]:
+    status = canon_writeback_status(root, scene_id, require_review=require_review)
     state = str(status.get("status") or "")
     if state in {"pass", "not_required"}:
         return []

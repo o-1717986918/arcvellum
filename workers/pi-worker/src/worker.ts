@@ -12,7 +12,7 @@ import {
 	safeThinkingLevel,
 } from "./reasoning-budget.ts";
 import { loadTaskContext } from "./task-context.ts";
-import { createWorkerTools, progressDigest, validateOutputs } from "./tools.ts";
+import { createWorkerTools, progressDigest, validateSubmittedOutputs } from "./tools.ts";
 import { workerProfile } from "./worker-profile.ts";
 import { readAuthorizedFile } from "./path-policy.ts";
 
@@ -144,7 +144,11 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			const budgetStop = reasoningStopReason(options.reasoningBudget, state);
 			if (budgetStop) {
 				state.reasoningStopReason = budgetStop;
-				state.lastValidation = await validateOutputs(context, options.workspace);
+				state.lastValidation = await validateSubmittedOutputs(
+					context,
+					options.workspace,
+					state.writtenPaths,
+				);
 				if (state.lastValidation.passed && options.reasoningBudget.overBudgetAction === "validate_then_stop") {
 					state.completed = true;
 					return true;
@@ -238,10 +242,11 @@ export function desiredRepairTool(
 	options: Pick<WorkerOptions, "mode">,
 	repairSources: readonly string[],
 	state: Pick<WorkerState, "readPaths" | "writtenPaths">,
+	requiredOutputs: readonly string[] = repairSources,
 ): string {
 	if (options.mode !== "repair") return "";
 	if (repairSources.some((path) => !state.readPaths.has(path))) return "read_authorized_source";
-	if (state.writtenPaths.size === 0) return "write_expected_output";
+	if (requiredOutputs.some((path) => !state.writtenPaths.has(path))) return "write_expected_output";
 	return "complete_task";
 }
 
@@ -251,17 +256,22 @@ export function desiredWorkerTool(
 	repairSources: readonly string[],
 	state: Pick<WorkerState, "completed" | "readPaths" | "writtenPaths">,
 ): string {
-	const repairTool = desiredRepairTool(options, repairSources, state);
+	const requiredOutputs = context.agentOwnedOutputs.map((item) => item.path);
+	const repairTool = desiredRepairTool(options, repairSources, state, requiredOutputs);
 	if (repairTool) return repairTool;
 	if (
 		options.mode === "task"
-		&& context.agentRole === "main-creative-agent"
-		&& context.agentOwnedOutputs.length > 0
+		&& (
+			context.agentRole === "main-creative-agent"
+			|| state.writtenPaths.size > 0
+		)
+		&& requiredOutputs.some((path) => !state.writtenPaths.has(path))
 		&& !state.completed
 	) {
-		// The model may reason internally, but prose must enter the artifact
-		// channel on every turn. This prevents a long draft from exhausting the
-		// response budget as chat text before any file is written.
+		// Prose enters the artifact channel immediately. Other roles keep one
+		// chance to inspect exact-on-demand evidence, but after a partial write
+		// they must finish every active output before doing anything else. This
+		// prevents deterministic scaffolds from masquerading as submitted work.
 		return "write_expected_output";
 	}
 	return "";
@@ -312,7 +322,11 @@ export async function settleTurnBudget(
 	workspace: string,
 	state: WorkerState,
 ): Promise<void> {
-	state.lastValidation = await validateOutputs(context, workspace);
+	state.lastValidation = await validateSubmittedOutputs(
+		context,
+		workspace,
+		state.writtenPaths,
+	);
 	if (state.lastValidation.passed) {
 		state.completed = true;
 		state.reasoningStopReason = "turn_limit_validated";
@@ -333,7 +347,11 @@ export async function settleValidOutputs(
 	state: WorkerState,
 ): Promise<boolean> {
 	if (state.writtenPaths.size === 0) return false;
-	state.lastValidation = await validateOutputs(context, workspace);
+	state.lastValidation = await validateSubmittedOutputs(
+		context,
+		workspace,
+		state.writtenPaths,
+	);
 	if (!state.lastValidation.passed) return false;
 	state.completed = true;
 	state.reasoningStopReason = "local_outputs_validated";

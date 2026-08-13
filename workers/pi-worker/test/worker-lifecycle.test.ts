@@ -48,7 +48,7 @@ describe("bounded worker lifecycle", () => {
 		expect(desiredRepairTool({ mode: "task" }, ["out/review.md"], workerState)).toBe("");
 	});
 
-	it("forces main creative task turns into the artifact channel", () => {
+	it("forces prose immediately and makes partial review submissions converge", () => {
 		const workerState = state();
 		const creative = {
 			agentRole: "main-creative-agent",
@@ -58,8 +58,11 @@ describe("bounded worker lifecycle", () => {
 
 		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("write_expected_output");
 		workerState.writtenPaths.add("draft.md");
-		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("write_expected_output");
-		expect(desiredWorkerTool({ mode: "task" }, review, [], workerState)).toBe("");
+		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("");
+		const freshReviewState = state();
+		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("");
+		freshReviewState.writtenPaths.add("other-output.md");
+		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("write_expected_output");
 		workerState.completed = true;
 		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("");
 	});
@@ -106,6 +109,8 @@ describe("bounded worker lifecycle", () => {
 		await writeFile(join(root, "out", "review.json"), "{}\n", "utf8");
 		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
 		const workerState = state();
+		workerState.writtenPaths.add("out/review.json");
+		workerState.writtenPaths.add("out/review.md");
 
 		await settleTurnBudget(context(), root, workerState);
 
@@ -113,6 +118,39 @@ describe("bounded worker lifecycle", () => {
 		expect(workerState.blocked).toBe(false);
 		expect(workerState.lastValidation.passed).toBe(true);
 		expect(workerState.reasoningStopReason).toBe("turn_limit_validated");
+	});
+
+	it("does not accept valid scaffold files that were not submitted this run", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-scaffold-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), "{}\n", "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Scaffold\n", "utf8");
+		const workerState = state();
+		workerState.writtenPaths.add("out/review.md");
+
+		const complete = await settleValidOutputs(context(), root, workerState);
+
+		expect(complete).toBe(false);
+		expect(workerState.completed).toBe(false);
+		expect(workerState.lastValidation.issues).toContainEqual(expect.objectContaining({
+			path: "out/review.json",
+			code: "not_submitted_this_run",
+		}));
+	});
+
+	it("keeps multi-output repair in write mode until every target was submitted", () => {
+		const workerState = state();
+		const targets = ["out/review.json", "out/review.md"];
+		workerState.readPaths.add("out/review.json");
+		workerState.readPaths.add("out/review.md");
+		workerState.writtenPaths.add("out/review.md");
+
+		expect(desiredRepairTool({ mode: "repair" }, targets, workerState, targets))
+			.toBe("write_expected_output");
+		workerState.writtenPaths.add("out/review.json");
+		expect(desiredRepairTool({ mode: "repair" }, targets, workerState, targets))
+			.toBe("complete_task");
 	});
 
 	it("fails closed at the turn boundary when an output is missing", async () => {

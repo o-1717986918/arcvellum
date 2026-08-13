@@ -865,6 +865,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             ],
             "context_trace": context_trace,
             "expected_outputs": [f"{canon_patch}.md", f"{canon_patch}.json", f"{canon_patch}.agent_tasks.md", canon_review],
+            "core_managed_outputs": [f"{canon_patch}.agent_tasks.md", canon_review],
             "hard_constraints": [
                 "Canon writeback is a candidate-only judgment after state-evolve; it must not directly modify canon files.",
                 "If no durable world fact changed, the platform agent must write no_canon_change_reason instead of silently skipping.",
@@ -875,7 +876,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         },
         "canon-agent-task": {
             "task_type": "platform-agent-review",
-            "prompt_asset_id": "route.scene-development.canon-evolve.v1",
+            "prompt_asset_id": "route.scene-development.canon-review.v1",
             "command": "",
             "source_paths": list(
                 dict.fromkeys(

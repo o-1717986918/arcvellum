@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.contracts import load_task_package
+from literary_engineering_studio.runtime.task_program import build_task_context
 from literary_engineering_studio_engine.agent_task_status import build_agent_task_status, build_route_audit
 import literary_engineering_studio_engine.agent_task_status as agent_task_status
 import literary_engineering_studio_engine.agent_task_inventory as agent_task_inventory
@@ -1081,6 +1082,55 @@ class TaskContractTransportTests(unittest.TestCase):
                 self.assertIn("characters/state_patches/scene_0001_state_patch.json", blueprint["source_paths"])
                 self.assertIn("canon/world_rules.yaml", blueprint["source_paths"])
                 self.assertIn("canon/forbidden_changes.yaml", blueprint["source_paths"])
+
+            sidecar = "canon/patches/scene_0001_canon_patch.agent_tasks.md"
+            review_json = "canon/patches/scene_0001_canon_patch_review.json"
+            self.assertEqual(
+                generation["core_managed_outputs"],
+                [sidecar, review_json],
+            )
+            self.assertEqual(
+                review["prompt_asset_id"],
+                "route.scene-development.canon-review.v1",
+            )
+
+            payload = _enrich_task_payload(
+                {
+                    "schema": "literary-engineering-workbench/agent-task/v1",
+                    "task_id": "scene-development-scene-0001-canon-patch-json",
+                    "status": "issued",
+                    "route": "scene-development",
+                    "scene_id": "scene_0001",
+                    "scene": "scenes/scene_0001.yaml",
+                    "current_state": "canon-patch-json",
+                    **generation,
+                    "required_reading": [],
+                    "forbidden_shortcuts": [],
+                    "submission_command": "lew task-submit",
+                    "completion_command": "lew task-complete",
+                }
+            )
+            task_path = root / "task.json"
+            task_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            task_markdown = root / "workflow/tasks/scene-development-scene-0001-canon-patch-json.agent_tasks.md"
+            task_markdown.parent.mkdir(parents=True, exist_ok=True)
+            task_markdown.write_text("# Canon candidate task\n", encoding="utf-8")
+            task = load_task_package(root, task_path)
+            context = build_task_context(task)
+
+            self.assertEqual(
+                [item["path"] for item in context["completion_contract"]["agent_owned_outputs"]],
+                [
+                    "canon/patches/scene_0001_canon_patch.md",
+                    "canon/patches/scene_0001_canon_patch.json",
+                ],
+            )
+            semantic = context["semantic_output_contract"]
+            self.assertEqual(semantic["schema_name"], "canon-patch-candidate/v0.1")
+            self.assertEqual(
+                semantic["model_owned_fields"],
+                ["canon_change", "no_canon_change_reason", "items"],
+            )
 
     def test_state_apply_stages_the_completed_state_review_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

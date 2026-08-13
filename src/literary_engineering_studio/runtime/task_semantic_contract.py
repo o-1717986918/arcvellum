@@ -23,6 +23,11 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
     candidate = _scene_candidate_output_contract(task, current_state, scene_id)
     if candidate:
         return candidate
+    canon_candidate = _canon_patch_candidate_output_contract(
+        task, current_state, scene_id
+    )
+    if canon_candidate:
+        return canon_candidate
     continuity = _continuity_ledger_output_contract(current_state, scene_id)
     if continuity:
         return continuity
@@ -225,6 +230,71 @@ def _scene_candidate_output_contract(
             "narrative_rhythm_standard_applied",
         ],
         "locked_values": {"scene_id": scene_id},
+    }
+
+
+def _canon_patch_candidate_output_contract(
+    task: TaskPackage,
+    current_state: str,
+    scene_id: str,
+) -> dict[str, Any]:
+    """Keep Canon judgment separate from deterministic identity and review."""
+
+    if current_state != "canon-patch-json" or not scene_id:
+        return {}
+    path = next(
+        (item for item in task.expected_outputs if item.endswith("_canon_patch.json")),
+        "",
+    )
+    if not path:
+        return {}
+    scene = str(task.payload.get("scene") or f"scenes/{scene_id}.yaml")
+    source = f"drafts/scenes/{scene_id}.md"
+    return {
+        "path": path,
+        "schema_name": "canon-patch-candidate/v0.1",
+        "required_fields": ["canon_change", "no_canon_change_reason", "items"],
+        "field_types": {
+            "canon_change": "bool",
+            "no_canon_change_reason": "str",
+            "items": "list",
+        },
+        "allowed_values": {"canon_change": [True, False]},
+        "object_shapes": {
+            "items[]": {
+                "type": "durable fact category",
+                "summary": "one precise persistent world fact",
+                "source_evidence": "exact prose evidence or precise evidence locator",
+                "target_files": "non-empty list of project-relative Canon targets",
+                "risk_level": "low | medium | high",
+                "requires_user_approval": "bool",
+            }
+        },
+        "model_owned_fields": ["canon_change", "no_canon_change_reason", "items"],
+        "studio_owned_fields": [
+            "schema",
+            "formal_contract_revision",
+            "scene_id",
+            "created_at",
+            "scene",
+            "source",
+            "status",
+            "applied",
+            "requires_user_approval",
+            "source_paths",
+        ],
+        "locked_values": {
+            "schema": "literary-engineering-workbench/canon-patch-candidate/v0.1",
+            "formal_contract_revision": "2026-07-23.3",
+            "scene_id": scene_id,
+            "scene": scene,
+            "source": source,
+            "status": "candidate",
+            "applied": False,
+            "requires_user_approval": True,
+            "source_paths": [scene, source],
+        },
+        "canon_candidate_kind": "durable-world-fact-classification",
     }
 
 

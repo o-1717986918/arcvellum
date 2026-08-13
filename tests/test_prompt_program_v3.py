@@ -327,6 +327,41 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertNotIn("candidate_sha256", contract["required_fields"])
         self.assertNotIn("anti_evasion_not_applicable_reason", contract["required_fields"])
 
+    def test_canon_candidate_contract_separates_judgment_from_review_and_identity(self):
+        root = Path("C:/fixture")
+        task = TaskPackage(
+            project_root=root,
+            task_json_path=root / "task.json",
+            task_markdown_path=root / "task.md",
+            payload={
+                "task_id": "canon-candidate",
+                "route": "scene-development",
+                "current_state": "canon-patch-json",
+                "task_type": "deterministic-cli-plus-platform-review",
+                "scene_id": "scene_0001",
+                "scene": "scenes/scene_0001.yaml",
+                "required_reading": [],
+                "source_paths": [],
+                "expected_outputs": [
+                    "canon/patches/scene_0001_canon_patch.md",
+                    "canon/patches/scene_0001_canon_patch.json",
+                ],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+            },
+        )
+
+        contract = semantic_output_contract(task)
+
+        self.assertEqual(contract["schema_name"], "canon-patch-candidate/v0.1")
+        self.assertEqual(
+            contract["model_owned_fields"],
+            ["canon_change", "no_canon_change_reason", "items"],
+        )
+        self.assertIn("requires_user_approval", contract["studio_owned_fields"])
+        self.assertEqual(contract["locked_values"]["scene_id"], "scene_0001")
+        self.assertIn("items[]", contract["object_shapes"])
+
     def test_prose_constraints_make_scene_budget_override_project_total(self):
         constraints = _constraints(
             {"word_count": {"target": 1350, "minimum": 1215, "maximum": 1485}},

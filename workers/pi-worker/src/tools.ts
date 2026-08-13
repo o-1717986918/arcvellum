@@ -98,7 +98,12 @@ export function createWorkerTools(
 				const input = params as { path?: string };
 				const path = input.path ? normalizeRelativePath(input.path) : undefined;
 				if (path && !ownedPaths.has(path)) throw new Error("path is not an Agent-owned expected output");
-				state.lastValidation = await validateOutputs(context, options.workspace, path);
+				state.lastValidation = await validateSubmittedOutputs(
+					context,
+					options.workspace,
+					state.writtenPaths,
+					path,
+				);
 				return result(state.lastValidation, { checked: path ?? "all" });
 			},
 		},
@@ -109,7 +114,11 @@ export function createWorkerTools(
 			parameters: EMPTY_PARAMETERS,
 			executionMode: "sequential",
 			execute: async () => {
-				state.lastValidation = await validateOutputs(context, options.workspace);
+				state.lastValidation = await validateSubmittedOutputs(
+					context,
+					options.workspace,
+					state.writtenPaths,
+				);
 				if (!state.lastValidation.passed) {
 					throw new Error(`outputs are incomplete: ${state.lastValidation.issues.map((item) => `${item.path}:${item.code}`).join(", ")}`);
 				}
@@ -127,7 +136,11 @@ export function createWorkerTools(
 				const input = params as { reason: string };
 				if (state.repairRequests >= options.maxRepairs) throw new Error("local repair budget exhausted");
 				state.repairRequests += 1;
-				state.lastValidation = await validateOutputs(context, options.workspace);
+				state.lastValidation = await validateSubmittedOutputs(
+					context,
+					options.workspace,
+					state.writtenPaths,
+				);
 				return result({ reason: input.reason, validation: state.lastValidation }, { repair: state.repairRequests });
 			},
 		},
@@ -176,6 +189,35 @@ export async function validateOutputs(context: TaskContext, workspace: string, o
 	return { passed: issues.length === 0, issues };
 }
 
+/**
+ * Validate both file shape and this Worker's submission provenance.
+ *
+ * Deterministic preparation is allowed to scaffold Agent-owned paths. Those
+ * files are useful templates, but their presence cannot prove that the Agent
+ * completed the current task. A successful handoff therefore requires every
+ * active output to have passed through write_expected_output in this run.
+ */
+export async function validateSubmittedOutputs(
+	context: TaskContext,
+	workspace: string,
+	submittedPaths: ReadonlySet<string>,
+	onlyPath?: string,
+): Promise<ValidationResult> {
+	const base = await validateOutputs(context, workspace, onlyPath);
+	const contracts = onlyPath
+		? context.agentOwnedOutputs.filter((item) => item.path === onlyPath)
+		: context.agentOwnedOutputs;
+	const submissionIssues: ValidationIssue[] = contracts
+		.filter((contract) => !submittedPaths.has(contract.path))
+		.map((contract) => ({
+			path: contract.path,
+			code: "not_submitted_this_run",
+			message: "output exists only as prior/scaffold state and was not submitted by this Worker run",
+		}));
+	const issues = [...base.issues, ...submissionIssues];
+	return { passed: issues.length === 0, issues };
+}
+
 export async function progressDigest(context: TaskContext, workspace: string, state: WorkerState): Promise<string> {
 	const hash = createHash("sha256");
 	for (const contract of context.agentOwnedOutputs) {
@@ -187,6 +229,7 @@ export async function progressDigest(context: TaskContext, workspace: string, st
 		}
 	}
 	hash.update([...state.readPaths].sort().join("\n"));
+	hash.update([...state.writtenPaths].sort().join("\n"));
 	hash.update(state.lastValidation.passed ? "validation:passed" : "validation:not-passed");
 	hash.update(state.lastValidation.issues.map((item) => `${item.path}:${item.code}`).sort().join("\n"));
 	hash.update(
