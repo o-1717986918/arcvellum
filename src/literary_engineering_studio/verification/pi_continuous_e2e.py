@@ -69,6 +69,52 @@ class LoopEvidence:
         return all(asdict(self).values())
 
 
+@dataclass(frozen=True)
+class FullWorkAcceptance:
+    target_chapters: int
+    target_scenes: int
+    target_chinese_chars: int
+
+
+@dataclass(frozen=True)
+class FullWorkEvidence:
+    runtime_is_pi: bool
+    pi_session_seen: bool
+    provider_request_seen: bool
+    formal_chapter_count: int
+    formal_scene_count: int
+    promoted_scene_count: int
+    passed_promotion_count: int
+    reviewed_scene_count: int
+    state_applied_count: int
+    continuity_applied_count: int
+    total_chinese_content_chars: int
+    delivery_file_count: int
+    delivery_status: str
+    run_status: str
+    acceptance: FullWorkAcceptance
+
+    @property
+    def complete(self) -> bool:
+        expected_scenes = max(self.acceptance.target_scenes, self.formal_scene_count)
+        return (
+            self.runtime_is_pi
+            and self.pi_session_seen
+            and self.provider_request_seen
+            and self.formal_chapter_count >= self.acceptance.target_chapters
+            and self.formal_scene_count >= self.acceptance.target_scenes
+            and self.promoted_scene_count >= expected_scenes
+            and self.passed_promotion_count >= expected_scenes
+            and self.reviewed_scene_count >= expected_scenes
+            and self.state_applied_count >= expected_scenes
+            and self.continuity_applied_count >= expected_scenes
+            and self.total_chinese_content_chars >= self.acceptance.target_chinese_chars
+            and self.delivery_file_count > 0
+            and self.delivery_status == "ready"
+            and self.run_status == "complete"
+        )
+
+
 def collect_evidence(
     project_root: Path,
     run: dict[str, Any],
@@ -87,6 +133,46 @@ def collect_evidence(
         state_applied=(project_root / "characters" / "state_patches" / "scene_0001_state_apply.json").is_file(),
         continuity_applied=(project_root / "plot" / "ledger_deltas" / "scene_0001_apply.json").is_file(),
         next_scene_claimed="scene_0002" in current_task or any("scene_0002" in task_id for task_id in task_ids),
+    )
+
+
+def collect_full_work_evidence(
+    project_root: Path,
+    run: dict[str, Any],
+    events: list[dict[str, Any]],
+    observability: dict[str, Any],
+    reader: dict[str, Any],
+    delivery: dict[str, Any],
+    acceptance: FullWorkAcceptance,
+) -> FullWorkEvidence:
+    """Collect black-box delivery evidence without trusting run narration."""
+
+    event_names, _ = _event_evidence(events)
+    formal_scenes = tuple(sorted((project_root / "scenes").glob("scene_*.yaml")))
+    promoted_scenes = tuple(sorted((project_root / "drafts" / "scenes").glob("scene_*.md")))
+    return FullWorkEvidence(
+        runtime_is_pi=str(run.get("runtime") or "") == "pi-worker",
+        pi_session_seen=_pi_session_seen(observability),
+        provider_request_seen="worker.runner.provider.request.started" in event_names,
+        formal_chapter_count=len(tuple((project_root / "outline" / "chapters").glob("chapter_*.yaml"))),
+        formal_scene_count=len(formal_scenes),
+        promoted_scene_count=len(promoted_scenes),
+        passed_promotion_count=sum(
+            _promotion_passed(project_root, _read_json(path))
+            for path in (project_root / "drafts" / "promotions").glob("scene_*_promotion.json")
+        ),
+        reviewed_scene_count=len(tuple((project_root / "reviews" / "agent").glob("scene_*_scene_review.json"))),
+        state_applied_count=len(
+            tuple((project_root / "characters" / "state_patches").glob("scene_*_state_apply.json"))
+        ),
+        continuity_applied_count=len(
+            tuple((project_root / "plot" / "ledger_deltas").glob("scene_*_apply.json"))
+        ),
+        total_chinese_content_chars=int(reader.get("total_chinese_content_chars") or 0),
+        delivery_file_count=len(delivery.get("files") or []),
+        delivery_status=str(delivery.get("status") or ""),
+        run_status=str(run.get("status") or ""),
+        acceptance=acceptance,
     )
 
 
@@ -141,7 +227,15 @@ def configure_pi(api: StudioApi) -> str:
     return model
 
 
-def create_acceptance_project(api: StudioApi, parent: Path, title: str) -> Path:
+def create_acceptance_project(
+    api: StudioApi,
+    parent: Path,
+    title: str,
+    *,
+    target_length: int = 6000,
+    target_chapters: int = 1,
+    target_scenes: int = 2,
+) -> Path:
     project = api.send(
         "POST",
         "/projects/create",
@@ -150,11 +244,11 @@ def create_acceptance_project(api: StudioApi, parent: Path, title: str) -> Path:
             "title": title,
             "folder_name": title,
             "work_type": "novel",
-            "target_length": 6000,
-            "target_chapters": 1,
-            "target_scenes": 2,
+            "target_length": target_length,
+            "target_chapters": target_chapters,
+            "target_scenes": target_scenes,
             "genre": "近未来科幻",
-            "premise": "一名轨道维修员收到来自已经失联空间站的求救信号，必须在救人和保住返航燃料之间选择。",
+            "premise": "一名轨道维修员收到来自已经失联空间站的求救信号，在救人、保住返航燃料和查明事故真相之间作出会改变两个家庭命运的选择。",
         },
     ).get("project")
     if not isinstance(project, dict) or not project.get("path"):
@@ -165,7 +259,12 @@ def create_acceptance_project(api: StudioApi, parent: Path, title: str) -> Path:
         "/projects/directions",
         {
             "project_root": str(root),
-            "message": "写成一章两场的完整近未来科幻短篇。第一场建立求救信号与燃料冲突，第二场完成选择及其代价；人物行为必须符合技术职业背景，正文总计约六千汉字。",
+            "message": (
+                f"写成完整的近未来科幻小说，共 {target_chapters} 章、{target_scenes} 个场景，"
+                f"正式正文不少于 {target_length} 个中文内容字符。故事必须逐章推进求救信号、燃料困境、"
+                "事故真相与家庭代价；人物行为符合轨道维修职业逻辑，场景之间存在明确因果和情绪承接，"
+                "结局完成核心选择并兑现主要读者承诺。"
+            ),
         },
     )
     return root
@@ -213,18 +312,34 @@ def monitor(
     timeout_seconds: int,
     poll_seconds: float,
     stall_seconds: int,
-) -> tuple[dict[str, Any], list[dict[str, Any]], LoopEvidence]:
+    full_work_acceptance: FullWorkAcceptance | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], LoopEvidence | FullWorkEvidence]:
     started = time.monotonic()
     changed = started
     previous_signature = ""
     latest_run: dict[str, Any] = {}
     latest_events: list[dict[str, Any]] = []
-    evidence = LoopEvidence(False, False, False, False, False, False, False, False)
+    evidence: LoopEvidence | FullWorkEvidence = LoopEvidence(
+        False, False, False, False, False, False, False, False
+    )
     while time.monotonic() - started < timeout_seconds:
         latest_run = api.get("/autopilot/status", project_root=str(project_root)).get("run") or {}
         latest_events = api.get(f"/autopilot/runs/{run_id}/events", after=0, limit=2000).get("items") or []
         observability = api.get("/agent-observability", project_root=str(project_root))
-        evidence = collect_evidence(project_root, latest_run, latest_events, observability)
+        if full_work_acceptance is None:
+            evidence = collect_evidence(project_root, latest_run, latest_events, observability)
+        else:
+            reader = api.get("/reader/manifest", project_root=str(project_root))
+            delivery = api.get("/project/delivery", project_root=str(project_root))
+            evidence = collect_full_work_evidence(
+                project_root,
+                latest_run,
+                latest_events,
+                observability,
+                reader,
+                delivery,
+                full_work_acceptance,
+            )
         signature = json.dumps(
             {
                 "status": latest_run.get("status"),
@@ -259,7 +374,7 @@ def write_report(
     model: str,
     run: dict[str, Any],
     events: list[dict[str, Any]],
-    evidence: LoopEvidence,
+    evidence: LoopEvidence | FullWorkEvidence,
 ) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -298,6 +413,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default="http://127.0.0.1:8798")
     parser.add_argument("--projects-root", type=Path, required=True)
     parser.add_argument("--title", default=f"Pi连续闭环验收-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+    parser.add_argument("--acceptance", choices=("first-loop", "full-work"), default="first-loop")
+    parser.add_argument("--target-length", type=int, default=6000)
+    parser.add_argument("--target-chapters", type=int, default=1)
+    parser.add_argument("--target-scenes", type=int, default=2)
     parser.add_argument("--timeout", type=int, default=7200)
     parser.add_argument("--poll", type=float, default=2.0)
     parser.add_argument("--stall", type=int, default=600)
@@ -305,8 +424,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     api = StudioApi(args.base_url)
     model = configure_pi(api)
-    project = create_acceptance_project(api, args.projects_root.resolve(), args.title)
+    project = create_acceptance_project(
+        api,
+        args.projects_root.resolve(),
+        args.title,
+        target_length=max(1000, args.target_length),
+        target_chapters=max(1, args.target_chapters),
+        target_scenes=max(1, args.target_scenes),
+    )
     run = authorize_and_start(api, project)
+    full_work_acceptance = (
+        FullWorkAcceptance(
+            target_chapters=max(1, args.target_chapters),
+            target_scenes=max(1, args.target_scenes),
+            target_chinese_chars=max(1000, args.target_length),
+        )
+        if args.acceptance == "full-work"
+        else None
+    )
     final_run, events, evidence = monitor(
         api,
         project,
@@ -314,11 +449,21 @@ def main(argv: list[str] | None = None) -> int:
         timeout_seconds=args.timeout,
         poll_seconds=args.poll,
         stall_seconds=args.stall,
+        full_work_acceptance=full_work_acceptance,
     )
-    api.send("POST", f"/autopilot/runs/{run['run_id']}/pause", {"reason": "pi-continuous-e2e-complete"})
+    if args.acceptance == "first-loop":
+        api.send("POST", f"/autopilot/runs/{run['run_id']}/pause", {"reason": "pi-continuous-e2e-complete"})
     report = write_report(args.report_root, project_root=project, model=model, run=final_run, events=events, evidence=evidence)
     print(json.dumps({"ok": True, "project_root": str(project), "report": str(report)}, ensure_ascii=False))
     return 0
 
 
-__all__ = ["LoopEvidence", "StudioApi", "collect_evidence", "main"]
+__all__ = [
+    "FullWorkAcceptance",
+    "FullWorkEvidence",
+    "LoopEvidence",
+    "StudioApi",
+    "collect_evidence",
+    "collect_full_work_evidence",
+    "main",
+]
