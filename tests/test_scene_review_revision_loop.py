@@ -43,6 +43,16 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                         "anti_evasion_rows": [
                             valid_row,
                             {
+                                **valid_row,
+                                "issue": "同一对照证据的重复说明",
+                            },
+                            {
+                                "issue": "二节末重复谓语需要删除",
+                                "source_excerpt": "停下来又停下来",
+                                "revised_excerpt": "停在原处",
+                                "verdict": "resolved",
+                            },
+                            {
                                 "issue": "candidate-word-budget-invalid：4027 中文字符净增量不足",
                                 "source_excerpt": "正文 4027 中文字符，低于下限",
                                 "revised_excerpt": "正文已扩充至目标范围",

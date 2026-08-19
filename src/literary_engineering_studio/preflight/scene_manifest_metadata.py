@@ -18,6 +18,26 @@ SessionIdentity = Callable[[TaskPackage, str], str]
 
 
 _NON_ANTI_EVASION_ISSUE_CODES = frozenset({"candidate-word-budget-invalid"})
+_NON_ANTI_EVASION_ISSUE_MARKERS = (
+    "重复谓语",
+    "字数",
+    "错别字",
+    "逗号密度",
+    "破折号密度",
+    "比喻密度",
+    "抽象总结",
+)
+_ANTI_EVASION_ISSUE_MARKERS = (
+    "反规避",
+    "机械转折",
+    "显式转折",
+    "换皮",
+    "对照",
+    "对比",
+    "contrast",
+    "evasion",
+    "transition",
+)
 
 
 def canonicalize_scene_revision_manifest(
@@ -141,12 +161,19 @@ def _remove_misclassified_anti_evasion_rows(payload: dict[str, Any]) -> list[str
         return []
     kept: list[object] = []
     removed: list[str] = []
+    evidence_pairs: set[tuple[str, str]] = set()
     for row in rows:
         issue = str(row.get("issue") or "").strip() if isinstance(row, dict) else ""
         if _is_non_anti_evasion_issue(issue):
             removed.append(issue)
-        else:
-            kept.append(row)
+            continue
+        pair = _evidence_pair(row)
+        if pair is not None and pair in evidence_pairs:
+            removed.append(f"duplicate evidence: {issue}")
+            continue
+        if pair is not None:
+            evidence_pairs.add(pair)
+        kept.append(row)
     if removed:
         payload["anti_evasion_rows"] = kept
     return removed
@@ -154,13 +181,24 @@ def _remove_misclassified_anti_evasion_rows(payload: dict[str, Any]) -> list[str
 
 def _is_non_anti_evasion_issue(issue: str) -> bool:
     normalized = issue.casefold()
-    return any(
+    if any(marker in normalized for marker in _ANTI_EVASION_ISSUE_MARKERS):
+        return False
+    has_code = any(
         normalized == code
         or normalized.startswith(f"{code}:")
         or normalized.startswith(f"{code}：")
         or normalized.startswith(f"{code} ")
         for code in _NON_ANTI_EVASION_ISSUE_CODES
     )
+    return has_code or any(marker in normalized for marker in _NON_ANTI_EVASION_ISSUE_MARKERS)
+
+
+def _evidence_pair(row: object) -> tuple[str, str] | None:
+    if not isinstance(row, dict):
+        return None
+    source = str(row.get("source_excerpt") or "").strip()
+    revised = str(row.get("revised_excerpt") or "").strip()
+    return (source, revised) if source and revised else None
 
 
 def _revision_paths(task: TaskPackage) -> tuple[str, str, str, str]:
