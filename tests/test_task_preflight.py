@@ -968,6 +968,18 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertIn("drafts/candidates/scene_0001-platform-agent.md", program)
 
     def test_scene_review_canon_status_is_derived_from_agent_judgment(self):
+        cases = (
+            ("unknown", "unknown"),
+            ("true", "pending_canon_evolve"),
+            (True, "pending_canon_evolve"),
+            ("false", "not_required"),
+            (False, "not_required"),
+        )
+        for change, expected_status in cases:
+            with self.subTest(change=change):
+                self._assert_scene_review_canon_status(change, expected_status)
+
+    def _assert_scene_review_canon_status(self, change, expected_status):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             workspace = root / "workspace"
@@ -985,7 +997,7 @@ class TaskPreflightTests(unittest.TestCase):
                         "summary": "候选通过审查。",
                         "canon_writeback": {
                             "status": "declared",
-                            "canon_change": "unknown",
+                            "canon_change": change,
                             "candidate_patch": "待后续 canon-evolve 判断",
                             "no_canon_change_reason": "尚不能确认是否形成持续事实。",
                         },
@@ -1022,7 +1034,9 @@ class TaskPreflightTests(unittest.TestCase):
             changes = canonicalize_task_outputs(task, sandbox)
             normalized = json.loads(review.read_text(encoding="utf-8"))
 
-            self.assertEqual(normalized["canon_writeback"]["status"], "unknown")
+            self.assertEqual(
+                normalized["canon_writeback"]["status"], expected_status
+            )
             self.assertTrue(
                 any(item.get("field") == "canon_writeback" for item in changes)
             )

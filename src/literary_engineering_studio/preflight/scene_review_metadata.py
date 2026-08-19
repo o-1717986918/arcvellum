@@ -147,8 +147,14 @@ def _canon_writeback_status(value: object) -> str:
         return "pending_canon_evolve"
     if change is False:
         return "not_required"
-    if isinstance(change, str) and change.strip().lower() == "unknown":
-        return "unknown"
+    if isinstance(change, str):
+        normalized = change.strip().lower()
+        if normalized == "true":
+            return "pending_canon_evolve"
+        if normalized == "false":
+            return "not_required"
+        if normalized == "unknown":
+            return "unknown"
     return ""
 
 
