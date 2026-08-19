@@ -11,6 +11,7 @@ from .common import PreflightIssue
 from .scene_review_contract import (
     validate_scene_review_contract as _validate_scene_review_contract,
 )
+from .scene_manifest_metadata import scene_revision_paths
 from ..sandbox import SandboxManifest
 
 
@@ -272,11 +273,8 @@ def _validate_scene_revision_contract(
     if task.current_state not in {"candidate-revision", "static-revision"}:
         return
 
-    candidate_rel = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
-    if not candidate_rel:
-        candidate_rel = next((item for item in task.expected_outputs if item.endswith("_revision.md") and "report" not in item), "")
+    candidate_rel, manifest_rel, _prompt_rel, _report_rel = scene_revision_paths(task)
     candidate = sandbox.workspace / Path(candidate_rel)
-    manifest_rel = next((item for item in task.expected_outputs if item.endswith("_revision.json")), "")
     if not manifest_rel:
         return
     manifest_path = sandbox.workspace / Path(manifest_rel)
@@ -328,7 +326,7 @@ def _revision_preflight_errors(
             scene_id=str(task.payload.get("scene_id") or task.scene_id or ""),
         ),
     )
-    manifest_rel = next((item for item in task.expected_outputs if item.endswith("_revision.json")), "")
+    manifest_rel = scene_revision_paths(task)[1]
     errors.extend(
         (manifest_rel, message, "按 revision prompt 的 exact-source 与 anti_evasion_rows 契约修正 manifest；不得伪造摘要或换皮修订。")
         for message in contract_errors

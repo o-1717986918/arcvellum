@@ -437,18 +437,18 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             root = Path(temporary)
             project = root / "project"
             source_rel = "drafts/candidates/scene_0001-platform-agent.md"
-            candidate_rel = "drafts/revisions/scene_0001_revision.md"
+            candidate_rel = "drafts/revisions/scene_0001_revision_02.md"
             source = project / source_rel
             source.parent.mkdir(parents=True)
             source.write_text("## 正文候选\n\n她停在门口。\n", encoding="utf-8")
             before = hashlib.sha256(source.read_bytes()).hexdigest()
             expected = [
                 candidate_rel,
-                "drafts/revisions/scene_0001_revision_report.md",
-                "drafts/revisions/scene_0001_revision.json",
-                "drafts/revisions/scene_0001_revision.prompt.json",
-                "drafts/revisions/scene_0001_revision.agent_tasks.md",
-                "drafts/revisions/scene_0001_revision.agent_completion.json",
+                "drafts/revisions/scene_0001_revision_02_report.md",
+                "drafts/revisions/scene_0001_revision_02.json",
+                "drafts/revisions/scene_0001_revision_02.prompt.json",
+                "drafts/revisions/scene_0001_revision_02.agent_tasks.md",
+                "drafts/revisions/scene_0001_revision_02.agent_completion.json",
             ]
             task_dir = project / "workflow" / "tasks"
             task_dir.mkdir(parents=True)
@@ -484,9 +484,9 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             for relative in expected:
                 path = sandbox.workspace / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
-                if relative.endswith("_revision.md"):
+                if relative == candidate_rel:
                     path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-                elif relative.endswith("_revision.json"):
+                elif relative == "drafts/revisions/scene_0001_revision_02.json":
                     path.write_text(json.dumps({
                         "revision_actions_applied": ["修正动作"],
                         "warnings_addressed": [],
@@ -506,7 +506,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                         "waivers": [],
                     }, ensure_ascii=False), encoding="utf-8")
                 elif relative.endswith("agent_completion.json"):
-                    path.write_text(json.dumps({"schema": COMPLETION_SCHEMA, "source_task": "drafts/revisions/scene_0001_revision.agent_tasks.md", "status": "complete", "handled_by": "main-agent", "completed_at": "2026-07-21T00:00:00Z", "expected_artifacts_checked": True, "notes": []}, ensure_ascii=False), encoding="utf-8")
+                    path.write_text(json.dumps({"schema": COMPLETION_SCHEMA, "source_task": "drafts/revisions/scene_0001_revision_02.agent_tasks.md", "status": "complete", "handled_by": "main-agent", "completed_at": "2026-07-21T00:00:00Z", "expected_artifacts_checked": True, "notes": []}, ensure_ascii=False), encoding="utf-8")
                 elif relative.endswith(".json"):
                     path.write_text("{}\n", encoding="utf-8")
                 else:
@@ -520,7 +520,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             revised.write_text("## 修订正文候选\n\n她没有停。门已经从里面打开。\n", encoding="utf-8")
             changes = canonicalize_task_outputs(task, sandbox)
             self.assertTrue(any(change.get("field") == "candidate_sha256" for change in changes))
-            revision_manifest = sandbox.workspace / "drafts/revisions/scene_0001_revision.json"
+            revision_manifest = sandbox.workspace / "drafts/revisions/scene_0001_revision_02.json"
             revision_payload = json.loads(revision_manifest.read_text(encoding="utf-8"))
             self.assertEqual(revision_payload["schema"], "literary-engineering-workbench/scene-revision/v0.1")
             self.assertEqual(revision_payload["source_candidate_sha256"], before)

@@ -141,9 +141,9 @@ class IncrementalRepairContextTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            candidate = "drafts/revisions/scene_0003_revision.md"
-            manifest = "drafts/revisions/scene_0003_revision.json"
-            report = "drafts/revisions/scene_0003_revision_report.md"
+            candidate = "drafts/revisions/scene_0003_revision_02.md"
+            manifest = "drafts/revisions/scene_0003_revision_02.json"
+            report = "drafts/revisions/scene_0003_revision_02_report.md"
             task = _task(
                 root,
                 (candidate, manifest, report),

@@ -81,4 +81,9 @@ def _is_revision_transaction_output(path: str) -> bool:
     normalized = path.replace("\\", "/")
     if not normalized.startswith("drafts/revisions/"):
         return False
-    return normalized.endswith("_revision.md") or normalized.endswith("_revision.json")
+    name = normalized.rsplit("/", 1)[-1]
+    if not (name.endswith(".md") or name.endswith(".json")):
+        return False
+    stem = name.rsplit(".", 1)[0]
+    suffix = stem.rpartition("_revision")[2]
+    return "_revision" in stem and (not suffix or suffix.startswith("_") and suffix[1:].isdigit())

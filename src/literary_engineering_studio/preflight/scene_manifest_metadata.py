@@ -49,7 +49,7 @@ def canonicalize_scene_revision_manifest(
 ) -> list[dict[str, str]]:
     if task.current_state not in {"candidate-revision", "static-revision"}:
         return []
-    candidate_rel, manifest_rel, prompt_rel, report_rel = _revision_paths(task)
+    candidate_rel, manifest_rel, prompt_rel, report_rel = scene_revision_paths(task)
     if not candidate_rel or not manifest_rel:
         return []
     candidate_path = sandbox.workspace / Path(candidate_rel)
@@ -201,18 +201,17 @@ def _evidence_pair(row: object) -> tuple[str, str] | None:
     return (source, revised) if source and revised else None
 
 
-def _revision_paths(task: TaskPackage) -> tuple[str, str, str, str]:
+def scene_revision_paths(task: TaskPackage) -> tuple[str, str, str, str]:
+    """Resolve the exact versioned candidate, manifest, prompt, and report paths."""
+
     candidate = _revision_candidate(task)
-    manifest = next(
-        (item for item in task.expected_outputs if item.endswith("_revision.json")), ""
-    )
-    prompt = next(
-        (item for item in task.expected_outputs if item.endswith("_revision.prompt.json")),
-        _sibling_prompt(candidate),
-    )
-    report = next(
-        (item for item in task.expected_outputs if item.endswith("_revision_report.md")), ""
-    )
+    expected = set(task.expected_outputs)
+    manifest_path = _sibling_json(candidate)
+    prompt_path = _sibling_prompt(candidate)
+    report_path = _sibling_report(candidate)
+    manifest = manifest_path if manifest_path in expected else ""
+    prompt = prompt_path
+    report = report_path if report_path in expected else ""
     return candidate, manifest, prompt, report
 
 
@@ -353,8 +352,17 @@ def _copy_prompt_standards(
 def _revision_candidate(task: TaskPackage) -> str:
     candidate = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
     return candidate or next(
-        (item for item in task.expected_outputs if item.endswith("_revision.md") and "report" not in item), ""
+        (item for item in task.expected_outputs if _is_revision_candidate_path(item)), ""
     )
+
+
+def _is_revision_candidate_path(path: str) -> bool:
+    normalized = path.replace("\\", "/")
+    if not normalized.endswith(".md") or "/drafts/revisions/" not in f"/{normalized}":
+        return False
+    stem = normalized.rsplit("/", 1)[-1][:-3]
+    suffix = stem.rpartition("_revision")[2]
+    return "_revision" in stem and (not suffix or suffix.startswith("_") and suffix[1:].isdigit())
 
 
 def _candidate_path(task: TaskPackage) -> str:
@@ -425,4 +433,12 @@ def _sibling_prompt(candidate: str) -> str:
     return candidate[:-3] + ".prompt.json" if candidate.endswith(".md") else candidate + ".prompt.json"
 
 
-__all__ = ["canonicalize_scene_candidate_manifest", "canonicalize_scene_revision_manifest"]
+def _sibling_report(candidate: str) -> str:
+    return candidate[:-3] + "_report.md" if candidate.endswith(".md") else candidate + "_report.md"
+
+
+__all__ = [
+    "canonicalize_scene_candidate_manifest",
+    "canonicalize_scene_revision_manifest",
+    "scene_revision_paths",
+]
