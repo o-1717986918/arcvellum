@@ -14,10 +14,13 @@ ArcVellum is a local literary-engineering studio. Contributions should preserve 
 ```powershell
 python -m unittest discover -s tests -v
 python -m compileall -q src
+python scripts/architecture_audit.py
+python scripts/generate_module_map.py --check
 python scripts/verify_version_sync.py
 python -m literary_engineering_studio_engine prompt-registry-validate --json
 npm run client:test
 npm run client:build
+npm run pi-worker:check
 ```
 
 For changes to packaging, Tauri resources, sidecars, or updater metadata, also run:

@@ -25,6 +25,7 @@ else:
 
 __all__ = [
     "audit_repository",
+    "baseline_from_report",
     "compare_with_baseline",
     "load_baseline",
     "scan_dependency_violations",
@@ -65,7 +66,8 @@ def main(argv: list[str] | None = None) -> int:
             "Architecture audit passed: "
             f"{len(report['oversized_files'])} file debts, "
             f"{len(report['oversized_functions'])} function debts, "
-            f"{len(report['import_cycles'])} existing cycles."
+            f"{len(report['import_cycles'])} existing cycles, "
+            f"{len(report['studio_engine_dependencies'])} Studio files with Engine imports."
         )
     return 1 if violations else 0
 

@@ -1,5 +1,10 @@
 # ArcVellum 模块边界与渐进拆分准则
 
+> v0.99 的统一接口化差距、完整模块清单和分批实施路线见
+> `docs/roadmap/arcvellum-v0.99-modular-interface-development-plan.md`。本文继续记录已经落地的
+> 模块所有权与拆分准则，不把规划中的目标接口视为现状。
+> 当前机器生成的目录所有权摘要见 `docs/architecture/generated-module-map.md`。
+
 > 本文服务于 Studio 维护者。普通创作 Agent 不应把本文件当作操作入口；正式执行仍由 `task-next → task-open → task-submit → task-complete` 的任务包驱动。
 
 v0.96 - v1.0 的功能扩展必须同时遵守本文件与[统一工程实施方案](../roadmap/arcvellum-v0.96-v1.0-integrated-engineering-implementation-plan.md)。统一方案决定新增模块和施工顺序，本文件继续拥有依赖方向、compatibility facade 和目录归位纪律；任何产品路线不得以功能需要为由绕过这些边界。

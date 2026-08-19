@@ -8,8 +8,29 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+if __package__:
+    from .architecture_boundaries import (
+        application_adapter_dependencies,
+        boundary_dependency_reason,
+        client_cross_feature_component_dependencies,
+        compare_dependency_map,
+        imported_module_bases,
+        projection_application_dependencies,
+        studio_engine_dependencies,
+    )
+else:
+    from architecture_boundaries import (
+        application_adapter_dependencies,
+        boundary_dependency_reason,
+        client_cross_feature_component_dependencies,
+        compare_dependency_map,
+        imported_module_bases,
+        projection_application_dependencies,
+        studio_engine_dependencies,
+    )
 
-SCHEMA = "arcvellum/architecture-quality-baseline/v1"
+
+SCHEMA = "arcvellum/architecture-quality-baseline/v2"
 PYTHON_FILE_LINE_BUDGET = 500
 CLIENT_FILE_LINE_BUDGET = 500
 FUNCTION_LINE_BUDGET = 80
@@ -39,6 +60,10 @@ def audit_repository(repository_root: Path) -> dict[str, Any]:
         "import_cycles": _import_cycles(modules, imports),
         "facade_dependencies": _facade_dependencies(modules, parsed, imports),
         "duplicate_routes": _duplicate_routes(root, parsed),
+        "application_adapter_dependencies": application_adapter_dependencies(root, parsed),
+        "studio_engine_dependencies": studio_engine_dependencies(root, parsed),
+        "projection_application_dependencies": projection_application_dependencies(root, parsed),
+        "client_cross_feature_component_dependencies": client_cross_feature_component_dependencies(root),
         "dependency_violations": scan_dependency_violations(root, parsed=parsed),
         "parse_errors": parse_errors,
     }
@@ -61,7 +86,12 @@ def scan_dependency_violations(
         if tree is None or not path.is_relative_to(source_root):
             continue
         source = _module_name(path, source_root)
-        for target in _module_imports(source, tree):
+        # Hard dependency rules deliberately inspect both module bases and
+        # imported names. ``from package import writeback`` may refer to a
+        # submodule even though Python's AST cannot distinguish it from a
+        # symbol without importing the package. Debt inventories remain on
+        # exact module bases to avoid inflating migration counts.
+        for target in _module_imports(source, tree) | imported_module_bases(source, tree):
             reason = _forbidden_dependency(source, target)
             if reason:
                 relative = path.relative_to(root).as_posix()
@@ -89,6 +119,34 @@ def compare_with_baseline(report: dict[str, Any], baseline: dict[str, Any]) -> l
     )
     violations.extend(_compare_facades(report, baseline))
     violations.extend(_compare_duplicate_routes(report, baseline))
+    violations.extend(
+        compare_dependency_map(
+            "new application-to-adapter dependency",
+            report.get("application_adapter_dependencies") or {},
+            baseline.get("application_adapter_dependencies") or {},
+        )
+    )
+    violations.extend(
+        compare_dependency_map(
+            "new Studio-to-Engine dependency",
+            report.get("studio_engine_dependencies") or {},
+            baseline.get("studio_engine_dependencies") or {},
+        )
+    )
+    violations.extend(
+        compare_dependency_map(
+            "new projection-to-application dependency",
+            report.get("projection_application_dependencies") or {},
+            baseline.get("projection_application_dependencies") or {},
+        )
+    )
+    violations.extend(
+        compare_dependency_map(
+            "new cross-feature Vue component dependency",
+            report.get("client_cross_feature_component_dependencies") or {},
+            baseline.get("client_cross_feature_component_dependencies") or {},
+        )
+    )
     return sorted(set(violations))
 
 
@@ -113,6 +171,12 @@ def baseline_from_report(report: dict[str, Any]) -> dict[str, Any]:
         "import_cycles": report["import_cycles"],
         "facade_dependencies": report["facade_dependencies"],
         "duplicate_routes": report["duplicate_routes"],
+        "application_adapter_dependencies": report["application_adapter_dependencies"],
+        "studio_engine_dependencies": report["studio_engine_dependencies"],
+        "projection_application_dependencies": report["projection_application_dependencies"],
+        "client_cross_feature_component_dependencies": report[
+            "client_cross_feature_component_dependencies"
+        ],
     }
 
 
@@ -182,6 +246,9 @@ def _module_imports(source: str, tree: ast.AST) -> set[str]:
 
 
 def _forbidden_dependency(source: str, target: str) -> str:
+    layered_reason = boundary_dependency_reason(source, target)
+    if layered_reason:
+        return layered_reason
     if source.startswith("literary_engineering_studio_engine") and (
         target == "literary_engineering_studio"
         or target.startswith("literary_engineering_studio.")

@@ -1,9 +1,25 @@
 {
+  "application_adapter_dependencies": {
+    "src/literary_engineering_studio/application/cli.py": [
+      "literary_engineering_studio.api_server"
+    ]
+  },
   "budgets": {
     "client_file_lines": 500,
     "function_complexity": 15,
     "function_lines": 80,
     "python_file_lines": 500
+  },
+  "client_cross_feature_component_dependencies": {
+    "client/src/features/archive/ArchiveView.vue": [
+      "@/features/onboarding/components/GuidedTour.vue"
+    ],
+    "client/src/features/orrery/SpatialWindowLayer.vue": [
+      "@/features/quality/RulesInstrument.vue"
+    ],
+    "client/src/features/workflow/OverviewView.vue": [
+      "@/features/orrery/OrreryWorkbench.vue"
+    ]
   },
   "duplicate_routes": {},
   "facade_dependencies": {
@@ -1327,5 +1343,241 @@
       "lines": 23
     }
   },
-  "schema": "arcvellum/architecture-quality-baseline/v1"
+  "projection_application_dependencies": {
+    "src/literary_engineering_studio/projections/api_read_models.py": [
+      "literary_engineering_studio.application.project_progress"
+    ],
+    "src/literary_engineering_studio/projections/archive/detail.py": [
+      "literary_engineering_studio.application.assets.contracts",
+      "literary_engineering_studio.application.assets.registry"
+    ],
+    "src/literary_engineering_studio/projections/archive/history.py": [
+      "literary_engineering_studio.application.assets.loader",
+      "literary_engineering_studio.application.assets.revisions"
+    ],
+    "src/literary_engineering_studio/projections/archive/service.py": [
+      "literary_engineering_studio.application.assets.loader",
+      "literary_engineering_studio.application.assets.recycle_bin",
+      "literary_engineering_studio.application.assets.registry",
+      "literary_engineering_studio.application.assets.revisions"
+    ],
+    "src/literary_engineering_studio/projections/archive/tree.py": [
+      "literary_engineering_studio.application.assets.contracts",
+      "literary_engineering_studio.application.assets.registry"
+    ],
+    "src/literary_engineering_studio/projections/core_read_models.py": [
+      "literary_engineering_studio.application.choice_effects"
+    ]
+  },
+  "schema": "arcvellum/architecture-quality-baseline/v2",
+  "studio_engine_dependencies": {
+    "src/literary_engineering_studio/api/routers/style_lab.py": [
+      "literary_engineering_studio_engine.literary.style.mount",
+      "literary_engineering_studio_engine.literary.style.session"
+    ],
+    "src/literary_engineering_studio/api_server.py": [
+      "literary_engineering_studio_engine.literary.planning.rhythm_plan",
+      "literary_engineering_studio_engine.literary.review.creative_quality",
+      "literary_engineering_studio_engine.literary.style.anti_ai",
+      "literary_engineering_studio_engine.literary.style.punctuation"
+    ],
+    "src/literary_engineering_studio/application/archaeology/contracts.py": [
+      "literary_engineering_studio_engine.projects.source_ingest"
+    ],
+    "src/literary_engineering_studio/application/archaeology/import_service.py": [
+      "literary_engineering_studio_engine.projects.source_ingest"
+    ],
+    "src/literary_engineering_studio/application/archaeology/projection.py": [
+      "literary_engineering_studio_engine.literary.ingest",
+      "literary_engineering_studio_engine.tasking.agent_tasks.writer",
+      "literary_engineering_studio_engine.workflow.state"
+    ],
+    "src/literary_engineering_studio/application/assets/loader.py": [
+      "literary_engineering_studio_engine.foundation.display_cleaner"
+    ],
+    "src/literary_engineering_studio/application/assets/promotion.py": [
+      "literary_engineering_studio_engine.literary.assets.promotion",
+      "literary_engineering_studio_engine.literary.assets.workshop",
+      "literary_engineering_studio_engine.workflow.state_assets"
+    ],
+    "src/literary_engineering_studio/application/assets/staleness.py": [
+      "literary_engineering_studio_engine.literary.scene.context.broker"
+    ],
+    "src/literary_engineering_studio/application/project_manager.py": [
+      "literary_engineering_studio_engine.projects.init"
+    ],
+    "src/literary_engineering_studio/application/style/formal_version_projection.py": [
+      "literary_engineering_studio_engine.literary.style.session",
+      "literary_engineering_studio_engine.literary.style.version"
+    ],
+    "src/literary_engineering_studio/application/style/impact_projection.py": [
+      "literary_engineering_studio_engine.literary.scene.promotion.historical",
+      "literary_engineering_studio_engine.literary.style.snapshot"
+    ],
+    "src/literary_engineering_studio/application/style/mount_service.py": [
+      "literary_engineering_studio_engine.literary.style.mount",
+      "literary_engineering_studio_engine.literary.style.snapshot"
+    ],
+    "src/literary_engineering_studio/application/style/service.py": [
+      "literary_engineering_studio_engine.literary.style.lab",
+      "literary_engineering_studio_engine.literary.style.session"
+    ],
+    "src/literary_engineering_studio/application/style/task_service.py": [
+      "literary_engineering_studio_engine.literary.style.lab",
+      "literary_engineering_studio_engine.literary.style.session",
+      "literary_engineering_studio_engine.literary.style.version",
+      "literary_engineering_studio_engine.tasking.registry"
+    ],
+    "src/literary_engineering_studio/application/style/transactions.py": [
+      "literary_engineering_studio_engine.literary.style.lab",
+      "literary_engineering_studio_engine.literary.style.session"
+    ],
+    "src/literary_engineering_studio/application/style/version_service.py": [
+      "literary_engineering_studio_engine.literary.style.prompt"
+    ],
+    "src/literary_engineering_studio/automation/campaign_runtime.py": [
+      "literary_engineering_studio_engine.foundation.display_cleaner",
+      "literary_engineering_studio_engine.foundation.draft_text"
+    ],
+    "src/literary_engineering_studio/automation/prompt_evaluation.py": [
+      "literary_engineering_studio_engine.prompting.registry"
+    ],
+    "src/literary_engineering_studio/automation/support.py": [
+      "literary_engineering_studio_engine.workflow.state"
+    ],
+    "src/literary_engineering_studio/observability/runtime_benchmark.py": [
+      "literary_engineering_studio_engine.projects.init"
+    ],
+    "src/literary_engineering_studio/observability/runtime_benchmark_preparation.py": [
+      "literary_engineering_studio_engine.tasking.registry"
+    ],
+    "src/literary_engineering_studio/observability/runtime_benchmark_scene.py": [
+      "literary_engineering_studio_engine.foundation.draft_text",
+      "literary_engineering_studio_engine.tasking.agent_tasks.writer",
+      "literary_engineering_studio_engine.tasking.semantic_contracts"
+    ],
+    "src/literary_engineering_studio/orchestration/agent_transport.py": [
+      "literary_engineering_studio_engine.foundation.atomic_io"
+    ],
+    "src/literary_engineering_studio/orchestration/bundles.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/candidate.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/compiler.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/compiler_registry.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/constitution.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/contracts.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/defaults.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/lint.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/literary_policy.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/normalizer.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/persistence.py": [
+      "literary_engineering_studio_engine.foundation.atomic_io"
+    ],
+    "src/literary_engineering_studio/orchestration/scene_binding.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/scene_strategy_policy.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/orchestration/shadow_audit.py": [
+      "literary_engineering_studio_engine.foundation.atomic_io"
+    ],
+    "src/literary_engineering_studio/orchestration/writer_policy.py": [
+      "literary_engineering_studio_engine.orchestration"
+    ],
+    "src/literary_engineering_studio/persistence/creative_plan_activation.py": [
+      "literary_engineering_studio_engine.foundation.atomic_io"
+    ],
+    "src/literary_engineering_studio/preflight/archaeology.py": [
+      "literary_engineering_studio_engine.literary.ingest",
+      "literary_engineering_studio_engine.literary.ingest.evidence"
+    ],
+    "src/literary_engineering_studio/preflight/assets.py": [
+      "literary_engineering_studio_engine.literary.assets.registry",
+      "literary_engineering_studio_engine.prompting.agents.schema"
+    ],
+    "src/literary_engineering_studio/preflight/canonicalization.py": [
+      "literary_engineering_studio_engine.literary.assets.continuity.architecture",
+      "literary_engineering_studio_engine.prompting.agents.schema",
+      "literary_engineering_studio_engine.semantic_task_contracts"
+    ],
+    "src/literary_engineering_studio/preflight/scene.py": [
+      "literary_engineering_studio_engine.foundation.draft_text",
+      "literary_engineering_studio_engine.literary.assets.continuity.ledger",
+      "literary_engineering_studio_engine.literary.assets.registry",
+      "literary_engineering_studio_engine.literary.planning.contracts",
+      "literary_engineering_studio_engine.literary.review.creative_quality",
+      "literary_engineering_studio_engine.literary.review.reader_experience",
+      "literary_engineering_studio_engine.literary.scene.promotion.generation_gate",
+      "literary_engineering_studio_engine.literary.scene.promotion.revision_contract",
+      "literary_engineering_studio_engine.literary.style.anti_ai",
+      "literary_engineering_studio_engine.prompting.agents.schema",
+      "literary_engineering_studio_engine.semantic_task_contracts",
+      "literary_engineering_studio_engine.tasking.gates"
+    ],
+    "src/literary_engineering_studio/preflight/scene_review_contract.py": [
+      "literary_engineering_studio_engine.literary.review.resolution",
+      "literary_engineering_studio_engine.prompting.agents.schema"
+    ],
+    "src/literary_engineering_studio/preflight/scene_review_metadata.py": [
+      "literary_engineering_studio_engine.literary.review.creative_quality"
+    ],
+    "src/literary_engineering_studio/preflight/style_metadata.py": [
+      "literary_engineering_studio_engine.literary.style.review"
+    ],
+    "src/literary_engineering_studio/preflight/style_snapshot.py": [
+      "literary_engineering_studio_engine.literary.style.snapshot"
+    ],
+    "src/literary_engineering_studio/projections/narrative_projection_v3.py": [
+      "literary_engineering_studio_engine.literary.planning.rhythm_plan"
+    ],
+    "src/literary_engineering_studio/projections/reader.py": [
+      "literary_engineering_studio_engine.foundation.display_cleaner",
+      "literary_engineering_studio_engine.foundation.draft_text"
+    ],
+    "src/literary_engineering_studio/projections/whole_book_release.py": [
+      "literary_engineering_studio_engine.foundation.draft_text",
+      "literary_engineering_studio_engine.literary.export.docx"
+    ],
+    "src/literary_engineering_studio/runtime/capabilities/context.py": [
+      "literary_engineering_studio_engine.foundation.resources"
+    ],
+    "src/literary_engineering_studio/runtime/capabilities/handlers/project.py": [
+      "literary_engineering_studio_engine.prompting.agents.schema"
+    ],
+    "src/literary_engineering_studio/runtime/evidence_projection_writeback.py": [
+      "literary_engineering_studio_engine.foundation.draft_text"
+    ],
+    "src/literary_engineering_studio/runtime/sandbox.py": [
+      "literary_engineering_studio_engine.foundation.resources"
+    ],
+    "src/literary_engineering_studio/runtime/task_semantic_contract.py": [
+      "literary_engineering_studio_engine.literary.scene.branching.proposals",
+      "literary_engineering_studio_engine.prompting.agents.schema"
+    ],
+    "src/literary_engineering_studio/task_preflight.py": [
+      "literary_engineering_studio_engine.literary.planning.materializer",
+      "literary_engineering_studio_engine.literary.review.reader_experience",
+      "literary_engineering_studio_engine.semantic_task_contracts"
+    ]
+  }
 }

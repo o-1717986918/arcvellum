@@ -6,6 +6,7 @@ import unittest
 
 from scripts.architecture_audit import (
     audit_repository,
+    baseline_from_report,
     compare_with_baseline,
     load_baseline,
     scan_dependency_violations,
@@ -36,14 +37,68 @@ class ArchitectureAuditTests(unittest.TestCase):
                 root / "src/literary_engineering_studio_engine/bad.py",
                 "from literary_engineering_studio.runtime import worker\n",
             )
+            _write(
+                root / "src/literary_engineering_studio/projections/write_bad.py",
+                "from ..application.assets.promotion import promote\n",
+            )
+            _write(
+                root / "src/literary_engineering_studio/runtimes/route_bad.py",
+                "from literary_engineering_studio_engine.routes.scene import definition\n",
+            )
 
             violations = scan_dependency_violations(root)
 
-        self.assertEqual(len(violations), 4)
+        self.assertEqual(len(violations), 6)
         self.assertTrue(any("Engine must not import Studio" in item for item in violations))
         self.assertTrue(any("projections must not import writeback/promotion" in item for item in violations))
         self.assertTrue(any("orchestration must not import API" in item for item in violations))
         self.assertTrue(any("automation must not import Engine route implementations" in item for item in violations))
+        self.assertTrue(any("projections must not import application write services" in item for item in violations))
+        self.assertTrue(any("Runtime adapters must not import Engine route implementations" in item for item in violations))
+
+    def test_new_layer_debt_is_rejected_while_existing_debt_can_shrink(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root / "src/literary_engineering_studio/application/legacy.py",
+                "from literary_engineering_studio.api_server import create_app\n",
+            )
+            _write(
+                root / "src/literary_engineering_studio/legacy_engine.py",
+                "from literary_engineering_studio_engine.literary.style import style_status\n",
+            )
+            _write(
+                root / "src/literary_engineering_studio/projections/legacy.py",
+                "from ..application.assets.loader import AssetLoader\n",
+            )
+            _write(
+                root / "client/src/features/alpha/Alpha.vue",
+                'import Beta from "@/features/beta/Beta.vue";\n',
+            )
+            baseline = baseline_from_report(audit_repository(root))
+
+            _write(
+                root / "src/literary_engineering_studio/application/new_debt.py",
+                "from literary_engineering_studio.runtimes.opencode import OpenCodeRuntime\n",
+            )
+            _write(
+                root / "src/literary_engineering_studio/new_engine.py",
+                "from literary_engineering_studio_engine.workflow.runner import run_workflow\n",
+            )
+            _write(
+                root / "src/literary_engineering_studio/projections/new_debt.py",
+                "from ..application.assets.loader import AssetLoader\n",
+            )
+            _write(
+                root / "client/src/features/alpha/New.vue",
+                'import Gamma from "@/features/gamma/Gamma.vue";\n',
+            )
+            violations = compare_with_baseline(audit_repository(root), baseline)
+
+        self.assertTrue(any("new application-to-adapter dependency" in item for item in violations))
+        self.assertTrue(any("new Studio-to-Engine dependency" in item for item in violations))
+        self.assertTrue(any("new projection-to-application dependency" in item for item in violations))
+        self.assertTrue(any("new cross-feature Vue component dependency" in item for item in violations))
 
     def test_synthetic_repository_exposes_budget_cycle_facade_and_route_debt(self):
         with TemporaryDirectory() as tmp:

@@ -65,6 +65,7 @@ jobs:
           python -m unittest discover -s tests -v
           python -m compileall -q src
           python scripts/architecture_audit.py
+          python scripts/generate_module_map.py --check
           python scripts/verify_version_sync.py
           python -m literary_engineering_studio_engine prompt-registry-validate --json
           # Live model evaluation is intentionally opt-in. A release runner has no

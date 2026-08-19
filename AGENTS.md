@@ -30,8 +30,12 @@ This repository is a standalone Literary Engineering Studio. It embeds the workf
 python -m unittest discover -s tests -v
 python -m literary_engineering_studio doctor
 python -m literary_engineering_studio --help
+python scripts/architecture_audit.py
+python scripts/generate_module_map.py --check
 python -m literary_engineering_studio_engine prompt-registry-validate --json
-node --check src/literary_engineering_studio/frontend/app.js
+npm run client:test
+npm run client:build
+npm run pi-worker:check
 ```
 
 API work should verify `/health`, `/projects`, `/runtime/adapters`, one read-model endpoint, and one SSE endpoint against a real or freshly initialized work project. Frontend changes require desktop and mobile screenshots plus overlap and horizontal-overflow checks.
