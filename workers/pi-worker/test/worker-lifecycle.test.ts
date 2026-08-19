@@ -32,7 +32,7 @@ describe("bounded worker lifecycle", () => {
 		expect(writer.digest).toBe(writerAgain.digest);
 		expect(writer.digest).not.toBe(reviewer.digest);
 		expect(writer.systemPrompt).toContain("FIRST assistant action");
-		expect(reviewer.systemPrompt).not.toContain("FIRST assistant action");
+		expect(reviewer.systemPrompt).toContain("FIRST assistant action");
 		expect(writer.systemPrompt).not.toContain("SKILL.md");
 		const repair = workerProfile("main-creative-agent", "repair");
 		expect(repair.systemPrompt).toContain("incremental-repair Worker");
@@ -50,7 +50,7 @@ describe("bounded worker lifecycle", () => {
 		expect(desiredRepairTool({ mode: "task" }, ["out/review.md"], workerState)).toBe("");
 	});
 
-	it("forces prose immediately and makes partial review submissions converge", () => {
+	it("forces every normal task directly into the artifact channel", () => {
 		const workerState = state();
 		const creative = {
 			agentRole: "main-creative-agent",
@@ -62,7 +62,7 @@ describe("bounded worker lifecycle", () => {
 		workerState.writtenPaths.add("draft.md");
 		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("");
 		const freshReviewState = state();
-		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("");
+		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("write_expected_output");
 		freshReviewState.taskContextReads = 1;
 		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("write_expected_output");
 		freshReviewState.writtenPaths.add("other-output.md");

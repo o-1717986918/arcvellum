@@ -273,21 +273,16 @@ export function desiredWorkerTool(
 	if (
 		options.mode === "task"
 		&& (
-			context.agentRole === "main-creative-agent"
-			|| state.taskContextReads > 0
-			|| state.readPaths.size > 0
-			|| state.writtenPaths.size > 0
-		)
-		&& (
 			requiredOutputs.some((path) => !state.writtenPaths.has(path))
 			|| submittedOutputFailedValidation
 		)
 		&& !state.completed
 	) {
-		// Prose enters the artifact channel immediately. Other roles keep one
-		// chance to inspect exact-on-demand evidence, but after a partial write
-		// they must finish every active output before doing anything else. This
-		// prevents deterministic scaffolds from masquerading as submitted work.
+		// A normal task prompt is a compiled, self-contained evidence program.
+		// Enter the artifact channel immediately for every role; optional reads
+		// here would contradict that contract, add a full provider round trip,
+		// and let models oscillate between read and write phases. Repair mode is
+		// the sole read-before-write path because it must inspect prior outputs.
 		return "write_expected_output";
 	}
 	return "";
