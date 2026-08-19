@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .character_identity import is_formal_character
+
 
 REGISTER_KEY = "new_character_register"
 SCHEMA = "literary-engineering-workbench/new-character-register/v0.1"
@@ -37,62 +39,115 @@ def new_character_register_issues(payload: dict[str, Any], root: Path, *, mode: 
         return [f"{REGISTER_KEY} is missing"]
 
     status = str(register.get("status") or "").strip().lower()
-    allowed = GENERATION_ALLOWED_STATUSES if mode == "generation" else REVIEW_ALLOWED_STATUSES
-    issues: list[str] = []
-    if status in BLOCKING_STATUSES or status not in allowed:
-        if mode == "review" and status == "candidates_ready":
-            issues.append("new_character_register.status=candidates_ready still needs user approval/promotion before clean pass")
-        else:
-            issues.append(f"new_character_register.status={status or 'missing'} is not clean for {mode}")
-
+    issues = _status_issues(status, mode)
     blocking = register.get("blocking_issues")
     if isinstance(blocking, list) and blocking:
         issues.append("new_character_register.blocking_issues is not empty")
-
-    introduced = register.get("introduced")
-    if introduced is None:
-        introduced = []
-    if not isinstance(introduced, list):
-        issues.append("new_character_register.introduced must be a list")
-        introduced = []
-
+    introduced = _introduced_rows(register, issues)
     for index, item in enumerate(introduced, 1):
         if not isinstance(item, dict):
             issues.append(f"new_character_register.introduced[{index}] must be an object")
             continue
-        name = str(item.get("name") or item.get("character_id") or f"#{index}").strip()
-        persistence = str(item.get("persistence") or item.get("scope") or "").strip().lower()
-        already_formal = _truthy(item.get("already_in_characters")) or _path_exists(root, item.get("formal_character_path"))
-        candidate_path = str(item.get("candidate_path") or "").strip()
-        review_path = str(item.get("review_path") or "").strip()
-        promotion_manifest = str(item.get("promotion_manifest") or "").strip()
-        approval_run_id = str(item.get("approval_run_id") or "").strip()
-        waiver = str(item.get("waiver_reason") or "").strip()
-        persistent = persistence in PERSISTENT_VALUES
-        ephemeral = persistence in EPHEMERAL_VALUES
-
-        if persistent and not already_formal:
-            if not candidate_path:
-                issues.append(f"persistent new character `{name}` has no candidate_path")
-            elif not _path_exists(root, candidate_path):
-                issues.append(f"persistent new character `{name}` candidate_path does not exist: {candidate_path}")
-            if mode == "review":
-                review_ok = bool(review_path and _path_exists(root, review_path))
-                promotion_ok = bool(promotion_manifest and _path_exists(root, promotion_manifest))
-                approval_ok = bool(approval_run_id and _has_approval(root, approval_run_id))
-                if not (promotion_ok or approval_ok):
-                    issues.append(f"persistent new character `{name}` lacks approve record or promotion manifest")
-                if not review_ok and not promotion_ok:
-                    issues.append(f"persistent new character `{name}` lacks candidate asset review")
-        elif not persistent and not ephemeral and not already_formal:
-            issues.append(f"new character `{name}` has unclear persistence `{persistence or 'missing'}`")
-        elif ephemeral and mode == "review" and status == "ephemeral_only" and not waiver:
-            issues.append(f"ephemeral new character `{name}` needs waiver_reason explaining why no character asset is required")
+        issues.extend(_character_row_issues(item, index, root, mode, status))
 
     if status == "none" and introduced:
         issues.append("new_character_register.status=none but introduced is not empty")
     if status == "ephemeral_only" and not introduced and not register.get("ephemeral_waivers"):
         issues.append("new_character_register.status=ephemeral_only needs introduced entries or ephemeral_waivers")
+    return issues
+
+
+def _status_issues(status: str, mode: str) -> list[str]:
+    allowed = (
+        GENERATION_ALLOWED_STATUSES
+        if mode == "generation"
+        else REVIEW_ALLOWED_STATUSES
+    )
+    if status not in BLOCKING_STATUSES and status in allowed:
+        return []
+    if mode == "review" and status == "candidates_ready":
+        return [
+            "new_character_register.status=candidates_ready still needs user approval/promotion before clean pass"
+        ]
+    return [
+        f"new_character_register.status={status or 'missing'} is not clean for {mode}"
+    ]
+
+
+def _introduced_rows(
+    register: dict[str, Any], issues: list[str]
+) -> list[object]:
+    introduced = register.get("introduced")
+    if introduced is None:
+        return []
+    if isinstance(introduced, list):
+        return introduced
+    issues.append("new_character_register.introduced must be a list")
+    return []
+
+
+def _character_row_issues(
+    item: dict[str, Any], index: int, root: Path, mode: str, status: str
+) -> list[str]:
+    name = _first_text(item, "name", "character", "character_id") or f"#{index}"
+    if _row_is_formal(item, root, name):
+        return []
+    persistence = _first_text(item, "persistence", "scope").lower()
+    if persistence in PERSISTENT_VALUES:
+        return _persistent_character_issues(item, root, name, mode)
+    if persistence not in EPHEMERAL_VALUES:
+        return [
+            f"new character `{name}` has unclear persistence `{persistence or 'missing'}`"
+        ]
+    waiver = _first_text(item, "waiver_reason", "waiver", "reason")
+    if mode == "review" and status == "ephemeral_only" and not waiver:
+        return [
+            f"ephemeral new character `{name}` needs waiver_reason explaining why no character asset is required"
+        ]
+    return []
+
+
+def _first_text(item: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = str(item.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _row_is_formal(item: dict[str, Any], root: Path, name: str) -> bool:
+    return (
+        _truthy(item.get("already_in_characters"))
+        or _path_exists(root, item.get("formal_character_path"))
+        or is_formal_character(root, name)
+    )
+
+
+def _persistent_character_issues(
+    item: dict[str, Any], root: Path, name: str, mode: str
+) -> list[str]:
+    candidate_path = str(item.get("candidate_path") or "").strip()
+    issues: list[str] = []
+    if not candidate_path:
+        issues.append(f"persistent new character `{name}` has no candidate_path")
+    elif not _path_exists(root, candidate_path):
+        issues.append(
+            f"persistent new character `{name}` candidate_path does not exist: {candidate_path}"
+        )
+    if mode != "review":
+        return issues
+    review_path = str(item.get("review_path") or "").strip()
+    promotion = str(item.get("promotion_manifest") or "").strip()
+    approval = str(item.get("approval_run_id") or "").strip()
+    review_ok = bool(review_path and _path_exists(root, review_path))
+    promotion_ok = bool(promotion and _path_exists(root, promotion))
+    approval_ok = bool(approval and _has_approval(root, approval))
+    if not (promotion_ok or approval_ok):
+        issues.append(
+            f"persistent new character `{name}` lacks approve record or promotion manifest"
+        )
+    if not review_ok and not promotion_ok:
+        issues.append(f"persistent new character `{name}` lacks candidate asset review")
     return issues
 
 

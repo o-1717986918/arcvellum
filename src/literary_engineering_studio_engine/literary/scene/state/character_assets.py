@@ -12,6 +12,12 @@ from pathlib import Path
 import re
 
 from ....platform_agent_tasks import write_platform_asset_creation_task
+from .character_identity import (
+    character_field_value,
+    character_slug,
+    formal_character_aliases,
+    read_character_text,
+)
 
 
 @dataclass(frozen=True)
@@ -50,14 +56,14 @@ def scene_character_asset_requirements(project_root: Path, scene_path: Path) -> 
 
     root = project_root.resolve()
     resolved_scene = scene_path if scene_path.is_absolute() else root / scene_path
-    scene_text = _read(resolved_scene)
-    aliases = _formal_character_aliases(root)
+    scene_text = read_character_text(resolved_scene)
+    aliases = formal_character_aliases(root)
     scene_id = _scene_id(resolved_scene, scene_text)
     requirements: list[SceneCharacterAssetRequirement] = []
     used_ids: set[str] = set()
     for name in _list_value(scene_text, "participants"):
         normalized = name.strip()
-        if not normalized or normalized in aliases or _slug(normalized) in aliases:
+        if not normalized or normalized in aliases or character_slug(normalized) in aliases:
             continue
         candidate_id = _stable_candidate_id(scene_id, normalized, used_ids)
         candidate = root / "characters" / "candidates" / f"{candidate_id}.json"
@@ -99,78 +105,12 @@ def ensure_scene_character_asset_tasks(project_root: Path, scene_path: Path) -> 
     return requirements
 
 
-def _formal_character_aliases(root: Path) -> set[str]:
-    aliases: set[str] = set()
-    characters = root / "characters"
-    for path in sorted([*characters.glob("*.yaml"), *characters.glob("*.yml")]):
-        if path.name.startswith("_"):
-            continue
-        text = _read(path)
-        _add_alias(aliases, path.stem)
-        character_id = _field_value(text, "character_id")
-        for key in ("character_id", "name"):
-            value = _field_value(text, key)
-            if value:
-                _add_alias(aliases, value)
-        for value in _list_value(text, "aliases"):
-            _add_alias(aliases, value)
-        # Longform planning happens before the foundational character asset is
-        # promoted, so early scene inventories legitimately use the symbolic
-        # label ``主角``.  Bind that label to the promoted protagonist instead
-        # of creating a duplicate ``scene-xxxx-主角`` character candidate.
-        role = _field_value(text, "role").lower()
-        if _is_protagonist_identity(path.stem, character_id, role):
-            _add_alias(aliases, "主角")
-            _add_alias(aliases, "protagonist")
-    promotions = root / "workflow" / "asset_promotions"
-    if promotions.is_dir():
-        for path in promotions.glob("*_promotion.json"):
-            text = _read(path)
-            candidate_id = _field_value(text, "candidate_id")
-            if not candidate_id:
-                match = re.search(r'"candidate_id"\s*:\s*"([^"]+)"', text)
-                candidate_id = match.group(1).strip() if match else path.stem.removesuffix("_promotion")
-            _add_alias(aliases, candidate_id)
-            if "protagonist" in candidate_id.lower():
-                _add_alias(aliases, "主角")
-                _add_alias(aliases, "protagonist")
-            # Scene-created character candidates preserve the original
-            # participant spelling in their deterministic candidate id.  The
-            # promoted character may choose a more specific canonical name;
-            # retaining this slug as an alias keeps the originating scene
-            # reference resolved without mutating user-authored prose facts.
-            match = re.match(r"scene-\d+-(.+)", candidate_id)
-            if match:
-                _add_alias(aliases, match.group(1))
-    return aliases
-
-
-def _is_protagonist_identity(path_stem: str, character_id: str, role: str) -> bool:
-    normalized_role = role.strip().lower()
-    return (
-        "protagonist" in path_stem.lower()
-        or "protagonist" in character_id.lower()
-        or normalized_role.startswith("protagonist")
-        or normalized_role.startswith("主角")
-    )
-
-
-def _add_alias(aliases: set[str], value: str) -> None:
-    normalized = str(value or "").strip()
-    if not normalized:
-        return
-    aliases.add(normalized)
-    slug = _slug(normalized)
-    if slug:
-        aliases.add(slug)
-
-
 def _scene_id(path: Path, text: str) -> str:
-    return _field_value(text, "scene_id") or path.stem
+    return character_field_value(text, "scene_id") or path.stem
 
 
 def _stable_candidate_id(scene_id: str, name: str, used_ids: set[str]) -> str:
-    base = _slug(f"{scene_id}-{name}")[:72] or "scene-character"
+    base = character_slug(f"{scene_id}-{name}")[:72] or "scene-character"
     candidate_id = base
     index = 2
     while candidate_id in used_ids:
@@ -205,21 +145,15 @@ def _list_value(text: str, key: str) -> list[str]:
     return values
 
 
-def _field_value(text: str, key: str) -> str:
-    match = re.search(rf"(?m)^\s*{re.escape(key)}:\s*(.+?)\s*$", text)
-    return match.group(1).strip().strip("'\"") if match else ""
-
-
-def _slug(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9\u4e00-\u9fff]+", "-", value.strip()).strip("-")
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
-
-
 def _rel(path: Path, root: Path) -> str:
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return str(path)
+
+
+__all__ = [
+    "SceneCharacterAssetRequirement",
+    "ensure_scene_character_asset_tasks",
+    "scene_character_asset_requirements",
+]
