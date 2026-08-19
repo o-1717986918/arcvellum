@@ -25,7 +25,9 @@ def validate_scene_review_contract(
     payload = _read_review(sandbox.workspace / Path(review_rel)) if review_rel else None
     if payload is None:
         return
-    _append_schema_and_semantic_issues(payload, review_rel, issues)
+    _append_schema_and_semantic_issues(
+        payload, review_rel, sandbox.workspace, issues
+    )
     candidate_rel = _candidate_source(task)
     candidate_path = sandbox.workspace / Path(candidate_rel)
     if candidate_rel and candidate_path.is_file():
@@ -60,9 +62,11 @@ def _read_review(path: Path) -> dict[str, Any] | None:
 def _append_schema_and_semantic_issues(
     payload: dict[str, Any],
     review_rel: str,
+    workspace: Path,
     issues: list[PreflightIssue],
 ) -> None:
     from literary_engineering_studio_engine.literary.review.resolution import (
+        review_new_character_issues,
         review_semantic_consistency_issues,
     )
     from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
@@ -86,6 +90,16 @@ def _append_schema_and_semantic_issues(
                 message,
                 "重新判断审查语义：低于阈值且 blocks_pass=false 的观察保留在 clean pass 的 warning/style_notes；"
                 "只有精确、可执行且尚未解决的问题才能进入 revision_actions 并使用 pass_with_notes/revise_required。",
+            )
+        )
+    for message in review_new_character_issues(payload, workspace):
+        issues.append(
+            PreflightIssue(
+                "scene-review-new-character-unresolved",
+                f"{review_rel}#new_character_register",
+                message,
+                "按任务中的正式 characters 与正文实际出场情况修正 new_character_register；"
+                "既有人物不得重复登记，一次性人物必须写 waiver_reason，持续人物必须走候选资产流程。",
             )
         )
 

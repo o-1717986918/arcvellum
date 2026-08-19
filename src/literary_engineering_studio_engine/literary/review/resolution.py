@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+from ..scene.state.new_character_register import new_character_register_issues
 
 
 NON_BLOCKING_RESOLUTIONS = {
@@ -103,8 +106,17 @@ def review_semantic_consistency_issues(payload: dict[str, Any]) -> list[str]:
     return issues
 
 
+def review_new_character_issues(
+    payload: dict[str, Any], project_root: Path
+) -> list[str]:
+    """Expose the formal review-mode character gate through review semantics."""
+
+    return new_character_register_issues(payload, project_root, mode="review")
+
+
 __all__ = [
     "actionable_review_findings",
     "finding_requires_followup",
+    "review_new_character_issues",
     "review_semantic_consistency_issues",
 ]

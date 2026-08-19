@@ -46,11 +46,7 @@ def canonicalize_scene_review_metadata(
     quality_identity = _creative_quality_identity(sandbox.workspace)
     if quality_identity:
         expected["creative_quality_profile"] = quality_identity
-    canon_status = _canon_writeback_status(payload.get("canon_writeback"))
-    if canon_status:
-        canon_writeback = dict(payload.get("canon_writeback") or {})
-        canon_writeback["status"] = canon_status
-        expected["canon_writeback"] = canon_writeback
+    expected.update(_derived_review_fields(payload, sandbox.workspace))
 
     changed = [
         field for field, value in expected.items() if payload.get(field) != value
@@ -156,6 +152,94 @@ def _canon_writeback_status(value: object) -> str:
         if normalized == "unknown":
             return "unknown"
     return ""
+
+
+def _derived_review_fields(
+    payload: dict[str, object], workspace: Path
+) -> dict[str, object]:
+    fields: dict[str, object] = {}
+    canon = payload.get("canon_writeback")
+    status = _canon_writeback_status(canon)
+    if status and isinstance(canon, dict):
+        normalized_canon = dict(canon)
+        normalized_canon["status"] = status
+        fields["canon_writeback"] = normalized_canon
+    register = _normalize_character_register(
+        payload.get("new_character_register"), workspace
+    )
+    if register:
+        fields["new_character_register"] = register
+    return fields
+
+
+def _normalize_character_register(value: object, workspace: Path) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    register = dict(value)
+    formal = _formal_character_paths(workspace)
+    introduced = register.get("introduced")
+    if isinstance(introduced, list):
+        register["introduced"] = [
+            _normalize_character_row(item, formal) if isinstance(item, dict) else item
+            for item in introduced
+        ]
+    waivers = register.get("ephemeral_waivers")
+    if isinstance(waivers, list):
+        register["ephemeral_waivers"] = [
+            _normalize_character_row(item, formal) if isinstance(item, dict) else item
+            for item in waivers
+        ]
+    return register
+
+
+def _normalize_character_row(
+    value: dict[str, object], formal: dict[str, str]
+) -> dict[str, object]:
+    row = dict(value)
+    name = str(
+        row.get("name") or row.get("character") or row.get("display_name") or ""
+    ).strip()
+    if name:
+        row["name"] = name
+    if not row.get("waiver_reason"):
+        reason = str(row.get("waiver") or row.get("reason") or "").strip()
+        if reason:
+            row["waiver_reason"] = reason
+    kind = str(row.get("type") or "").strip().lower()
+    if not row.get("persistence"):
+        if "existing" in kind:
+            row["persistence"] = "main"
+        elif kind in {"referenced_only", "reference_only", "cameo", "ephemeral"}:
+            row["persistence"] = "ephemeral"
+    formal_path = formal.get(name) or formal.get(_character_token(name))
+    if formal_path:
+        row["already_in_characters"] = True
+        row["formal_character_path"] = formal_path
+    return row
+
+
+def _formal_character_paths(workspace: Path) -> dict[str, str]:
+    result: dict[str, str] = {}
+    characters = workspace / "characters"
+    for path in sorted([*characters.glob("*.yaml"), *characters.glob("*.yml")]):
+        if path.name.startswith("_"):
+            continue
+        relative = path.relative_to(workspace).as_posix()
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        aliases = [path.stem]
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("name:", "character_id:")):
+                aliases.append(stripped.split(":", 1)[1].strip().strip("'\""))
+        for alias in aliases:
+            if alias:
+                result[alias] = relative
+                result[_character_token(alias)] = relative
+    return result
+
+
+def _character_token(value: str) -> str:
+    return "".join(character.lower() for character in value if character.isalnum())
 
 
 __all__ = ["canonicalize_scene_review_metadata"]

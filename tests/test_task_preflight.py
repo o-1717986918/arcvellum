@@ -944,6 +944,7 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertIn("scene-review-schema-invalid", codes)
             self.assertIn("scene-review-candidate-digest-mismatch", codes)
             self.assertIn("scene-review-candidate-source-missing", codes)
+            self.assertIn("scene-review-new-character-unresolved", codes)
 
             changes = canonicalize_task_outputs(task, sandbox)
             self.assertTrue(changes)
@@ -987,6 +988,12 @@ class TaskPreflightTests(unittest.TestCase):
             candidate = workspace / candidate_rel
             candidate.parent.mkdir(parents=True)
             candidate.write_text("她确认信号来自失踪飞船。\n", encoding="utf-8")
+            character = workspace / "characters" / "lin-huan.yaml"
+            character.parent.mkdir(parents=True)
+            character.write_text(
+                "character_id: lin-huan\nname: 林桓\nrole: 主角——轨道维修员\n",
+                encoding="utf-8",
+            )
             review_rel = "reviews/agent/scene_0001_scene_review.json"
             review = workspace / review_rel
             review.parent.mkdir(parents=True)
@@ -1000,6 +1007,24 @@ class TaskPreflightTests(unittest.TestCase):
                             "canon_change": change,
                             "candidate_patch": "待后续 canon-evolve 判断",
                             "no_canon_change_reason": "尚不能确认是否形成持续事实。",
+                        },
+                        "new_character_register": {
+                            "schema": "literary-engineering-workbench/new-character-register/v0.1",
+                            "status": "ephemeral_only",
+                            "introduced": [
+                                {
+                                    "character": "林桓",
+                                    "type": "existing_major_participant",
+                                }
+                            ],
+                            "ephemeral_waivers": [
+                                {
+                                    "character": "林曦",
+                                    "type": "referenced_only",
+                                    "waiver": "仅在记忆中被提及。",
+                                }
+                            ],
+                            "blocking_issues": [],
                         },
                     },
                     ensure_ascii=False,
@@ -1037,6 +1062,15 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertEqual(
                 normalized["canon_writeback"]["status"], expected_status
             )
+            introduced = normalized["new_character_register"]["introduced"][0]
+            self.assertEqual(introduced["name"], "林桓")
+            self.assertIs(introduced["already_in_characters"], True)
+            self.assertEqual(
+                introduced["formal_character_path"], "characters/lin-huan.yaml"
+            )
+            waiver = normalized["new_character_register"]["ephemeral_waivers"][0]
+            self.assertEqual(waiver["name"], "林曦")
+            self.assertEqual(waiver["waiver_reason"], "仅在记忆中被提及。")
             self.assertTrue(
                 any(item.get("field") == "canon_writeback" for item in changes)
             )
