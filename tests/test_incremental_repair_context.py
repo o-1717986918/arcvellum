@@ -221,6 +221,45 @@ class IncrementalRepairContextTests(unittest.TestCase):
             self.assertIn("不是保持原长度的局部改词", prepared.prompt)
             self.assertIn("安全目标约 3000", prepared.prompt)
 
+    def test_prose_repair_keeps_style_and_budget_as_cross_turn_guards(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root, ("out/scene.md",))
+            task.payload.update(
+                {
+                    "word_count_target": 3000,
+                    "word_count_min": 2700,
+                    "word_count_max": 3300,
+                }
+            )
+            sandbox = _sandbox(root)
+            output = sandbox.workspace / "out" / "scene.md"
+            output.parent.mkdir(parents=True)
+            output.write_text("正文" * 1500, encoding="utf-8")
+            coordinator = RepairContextCoordinator(task, sandbox)
+            first = PreflightResult(
+                False,
+                (
+                    PreflightIssue("candidate-style-lint-blocking", "out/scene.md", "逗号链。", "拆句。"),
+                    PreflightIssue("candidate-word-budget-invalid", "out/scene.md", "字数不足。", "扩写。"),
+                ),
+            )
+            coordinator.prepare(first, 1, 3)
+            coordinator.finalize()
+            second = PreflightResult(
+                False,
+                (PreflightIssue("candidate-word-budget-invalid", "out/scene.md", "字数不足。", "扩写。"),),
+            )
+
+            prepared = coordinator.prepare(second, 2, 3)
+            payload = json.loads(prepared.artifact_path.read_text(encoding="utf-8"))
+            coordinator.finalize()
+
+            self.assertEqual(payload["regression_guard"]["word_count_min"], 2700)
+            self.assertIn("candidate-style-lint-blocking", payload["regression_guard"]["seen_issue_codes"])
+            self.assertIn("每个完整句不超过三个逗号", prepared.prompt)
+            self.assertIn("中文内容字符必须保持在 2700-3300", prepared.prompt)
+
     def test_issue_identity_is_stable_across_attempts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

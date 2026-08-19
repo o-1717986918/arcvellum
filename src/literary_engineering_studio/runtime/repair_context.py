@@ -16,6 +16,7 @@ from .repair_rendering import (
     bounded_output_excerpt,
     render_repair_prompt,
 )
+from .repair_stability import regression_guard
 from .repair_snapshots import (
     file_sha256,
     restore_outputs,
@@ -30,7 +31,7 @@ from .reasoning_policy import (
 
 
 REPAIR_CONTEXT_SCHEMA = "arcvellum/repair-context/v1"
-REPAIR_CONTEXT_REVISION = "2026-07-28.1"
+REPAIR_CONTEXT_REVISION = "2026-08-20.2"
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ class RepairContextCoordinator:
         self.reasoning_budget = reasoning_budget
         self.same_session_required = same_session_required
         self._pending: dict[str, object] | None = None
+        self._seen_issue_codes: set[str] = set()
 
     def prepare(
         self,
@@ -112,7 +114,7 @@ class RepairContextCoordinator:
             self.sandbox.workspace,
             protected,
         )
-        semantic_payload = _semantic_payload(
+        semantic_payload = _semantic_payload_with_guard(
             self.task,
             result,
             attempt,
@@ -124,6 +126,7 @@ class RepairContextCoordinator:
             protected_outputs,
             excerpt_characters,
             _reasoning_repair_contract(self.reasoning_budget, result, attempt),
+            self._seen_issue_codes,
         )
         semantic_payload["repair_session"] = (
             "same-session" if self.same_session_required else "fresh-bounded-session"
@@ -218,6 +221,31 @@ def _semantic_payload(
         },
         "preflight_issue_count": len(result.issues),
     }
+
+
+def _semantic_payload_with_guard(
+    task: TaskPackage,
+    result: PreflightResult,
+    attempt: int,
+    maximum: int,
+    write_scope_mode: str,
+    targets: tuple[str, ...],
+    issue_rows: list[dict[str, str]],
+    invalid_outputs: list[dict[str, object]],
+    protected_outputs: list[dict[str, object]],
+    excerpt_characters: int,
+    reasoning_contract: Mapping[str, object],
+    seen_issue_codes: set[str],
+) -> dict[str, object]:
+    current_codes = {item.code for item in result.issues}
+    payload = _semantic_payload(
+        task, result, attempt, maximum, write_scope_mode, targets,
+        issue_rows, invalid_outputs, protected_outputs, excerpt_characters,
+        reasoning_contract,
+    )
+    payload["regression_guard"] = regression_guard(task, seen_issue_codes | current_codes)
+    seen_issue_codes.update(current_codes)
+    return payload
 
 
 def _reasoning_repair_contract(

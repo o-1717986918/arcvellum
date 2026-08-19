@@ -63,6 +63,7 @@ def render_repair_prompt(payload: Mapping[str, object]) -> str:
     ) or "- 无可映射目标。"
     reasoning_text = _reasoning_budget_text(payload)
     quantitative_repair_text = _quantitative_repair_text(issue_rows)
+    regression_guard_text = _regression_guard_text(payload)
     session_text = (
         "这是同一 Agent session 内的有界修复回合。"
         if payload.get("repair_session") == "same-session"
@@ -88,7 +89,7 @@ Repair Context: `{payload.get('context_digest')}`
 
 {reasoning_text}
 
-机械格式、字段、路径、缺文件和确定性 lint 问题不得通过提高推理等级解决；默认只做 issue 指向的最小充分修复。{quantitative_repair_text}仅当上方策略动作明确为 `escalate` 时，Runtime 才可在能力与总预算允许范围内升一级。
+机械格式、字段、路径、缺文件和确定性 lint 问题不得通过提高推理等级解决；默认只做 issue 指向的最小充分修复。{quantitative_repair_text}{regression_guard_text}仅当上方策略动作明确为 `escalate` 时，Runtime 才可在能力与总预算允许范围内升一级。
 
 ## 无效输出的有界片段
 
@@ -113,6 +114,30 @@ def _quantitative_repair_text(issue_rows: list[Mapping[str, object]]) -> str:
     return (
         "本回合含量化字数缺口：这里的“最小充分”指达到修复要求给出的安全目标，"
         "不是保持原长度的局部改词；必须写回完整正文，并让新增材料承担已有事件链中的叙事功能。"
+    )
+
+
+def _regression_guard_text(payload: Mapping[str, object]) -> str:
+    raw = payload.get("regression_guard")
+    guard = raw if isinstance(raw, Mapping) else {}
+    if guard.get("active") is not True:
+        return ""
+    target = int(guard.get("word_count_target") or 0)
+    minimum = int(guard.get("word_count_min") or 0)
+    maximum = int(guard.get("word_count_max") or 0)
+    range_text = (
+        f"中文内容字符必须保持在 {minimum}-{maximum}，并尽量接近 {target}；"
+        if minimum and maximum
+        else "必须继续满足当前正文的字数预算；"
+    )
+    rules = guard.get("style_rules")
+    rule_rows = rules if isinstance(rules, list) else []
+    return (
+        "\n\n## 跨回合稳定性合同\n\n"
+        "本任务此前已触发正文 Style/字数联合门禁。即使本轮只剩其中一类问题，另一类仍是回归防线。"
+        f"{range_text}"
+        + "；".join(str(item) for item in rule_rows)
+        + "。修订应优先等量替换，不得用删减换 Style 通过，也不得用失控扩写换字数通过。\n\n"
     )
 
 
