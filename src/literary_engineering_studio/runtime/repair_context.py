@@ -16,6 +16,7 @@ from .repair_rendering import (
     bounded_output_excerpt,
     render_repair_prompt,
 )
+from .repair_scope import repair_scope
 from .repair_stability import regression_guard
 from .repair_snapshots import (
     file_sha256,
@@ -89,7 +90,7 @@ class RepairContextCoordinator:
     ) -> PreparedRepairContext:
         if self._pending is not None:
             raise RuntimeError("previous repair output protection was not finalized")
-        write_scope_mode, targets, protected = _repair_scope(
+        write_scope_mode, targets, protected = repair_scope(
             self.task,
             result.issues,
         )
@@ -289,51 +290,6 @@ def _write_context_artifact(
         encoding="utf-8",
     )
     return artifact_path
-
-
-def _agent_writable_outputs(task: TaskPackage) -> tuple[str, ...]:
-    core = set(task.core_managed_outputs)
-    completion = {
-        item.path
-        for item in task.execution_contract.outputs
-        if item.kind == "completion-evidence"
-    }
-    return tuple(
-        path
-        for path in task.expected_outputs
-        if path not in core and path not in completion
-    )
-
-
-def _repair_scope(
-    task: TaskPackage,
-    issues: tuple[PreflightIssue, ...],
-) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
-    writable = _agent_writable_outputs(task)
-    targets = _issue_targets(issues, writable)
-    if targets:
-        mode = "targeted"
-    else:
-        targets = writable
-        mode = "all_declared_outputs_fallback"
-    target_set = set(targets)
-    protected = tuple(
-        path for path in writable if path not in target_set
-    )
-    return mode, targets, protected
-
-
-def _issue_targets(
-    issues: tuple[PreflightIssue, ...],
-    writable: tuple[str, ...],
-) -> tuple[str, ...]:
-    allowed = set(writable)
-    targets: list[str] = []
-    for issue in issues:
-        relative, _selector = _split_issue_path(issue.path)
-        if relative in allowed and relative not in targets:
-            targets.append(relative)
-    return tuple(targets)
 
 
 def _issue_rows(

@@ -23,7 +23,12 @@ from literary_engineering_studio.runtime.reasoning_policy import resolve_reasoni
 from literary_engineering_studio.runtime.sandbox import SandboxManifest
 
 
-def _task(root: Path, outputs: tuple[str, ...]) -> TaskPackage:
+def _task(
+    root: Path,
+    outputs: tuple[str, ...],
+    *,
+    current_state: str = "candidate-review",
+) -> TaskPackage:
     core = "out/core.agent_tasks.md"
     completion = "out/result.agent_completion.json"
     all_outputs = (*outputs, core, completion)
@@ -48,7 +53,7 @@ def _task(root: Path, outputs: tuple[str, ...]) -> TaskPackage:
         {
             "task_id": "scene-development-scene-0001-review",
             "route": "scene-development",
-            "current_state": "candidate-review",
+            "current_state": current_state,
             "task_type": "platform-agent",
             "execution_policy": "agent-required",
             "agent_role": "independent-review-agent",
@@ -87,6 +92,50 @@ def _sandbox(root: Path) -> SandboxManifest:
 
 
 class IncrementalRepairContextTests(unittest.TestCase):
+    def test_scene_revision_repairs_candidate_and_manifest_as_one_transaction(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = "drafts/revisions/scene_0003_revision.md"
+            manifest = "drafts/revisions/scene_0003_revision.json"
+            report = "drafts/revisions/scene_0003_revision_report.md"
+            task = _task(
+                root,
+                (candidate, manifest, report),
+                current_state="static-revision",
+            )
+            sandbox = _sandbox(root)
+            for relative in (candidate, manifest, report):
+                path = sandbox.workspace / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("正文" if relative == candidate else "{}", encoding="utf-8")
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "scene-revision-invalid",
+                        f"{manifest}#anti_evasion_rows[1].revised_excerpt",
+                        "revised_excerpt is not present in revision candidate body",
+                        "同步修改候选正文和反规避清单。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(task, sandbox)
+
+            prepared = coordinator.prepare(result, 2, 3)
+            payload = json.loads(prepared.artifact_path.read_text(encoding="utf-8"))
+            coordinator.finalize()
+
+            self.assertEqual(payload["write_scope_mode"], "targeted")
+            self.assertEqual(payload["repair_targets"], [manifest, candidate])
+            self.assertEqual(
+                [item["path"] for item in payload["protected_outputs"]],
+                [report],
+            )
+            self.assertIn(candidate, prepared.prompt)
+            self.assertIn(manifest, prepared.prompt)
+
     def test_targeted_context_is_bounded_and_restores_passed_output(
         self,
     ) -> None:
