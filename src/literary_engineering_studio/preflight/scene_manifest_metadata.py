@@ -51,24 +51,88 @@ def canonicalize_scene_revision_manifest(
         standards,
         session_identity,
     )
-    changed = _apply_fields(payload, expected)
-    removed_rows = _remove_misclassified_anti_evasion_rows(payload)
-    if not changed and not removed_rows:
+    changes = _canonicalize_revision_payload(payload, expected, standards)
+    if not changes:
         return []
     _write_json(manifest_path, payload)
+    return [{"path": manifest_rel, **change} for change in changes]
+
+
+def _canonicalize_revision_payload(
+    payload: dict[str, Any],
+    expected: dict[str, Any],
+    standards: dict[str, Any],
+) -> list[dict[str, str]]:
     changes = [
-        {"path": manifest_rel, "field": field, "reason": "bound deterministic exact-source revision metadata"}
-        for field in changed
+        {"field": field, "reason": "bound deterministic exact-source revision metadata"}
+        for field in _apply_fields(payload, expected)
     ]
+    removed_rows = _remove_misclassified_anti_evasion_rows(payload)
     if removed_rows:
         changes.append(
             {
-                "path": manifest_rel,
                 "field": "anti_evasion_rows",
                 "reason": "removed deterministic non-anti-evasion repairs from the evidence table",
             }
         )
+    if _normalize_anti_evasion_boolean_fields(payload):
+        changes.append(
+            {
+                "field": "anti_evasion_rows",
+                "reason": "normalized unambiguous boolean transport values",
+            }
+        )
+    if _ensure_anti_evasion_not_applicable_reason(payload, standards):
+        changes.append(
+            {
+                "field": "anti_evasion_not_applicable_reason",
+                "reason": "derived from protected anti-evasion requirement flag",
+            }
+        )
     return changes
+
+
+def _normalize_anti_evasion_boolean_fields(payload: dict[str, Any]) -> bool:
+    rows = payload.get("anti_evasion_rows")
+    if not isinstance(rows, list):
+        return False
+    changed = False
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for field in ("still_uses_explicit_transition", "suspected_rephrase"):
+            normalized = _transport_bool(row.get(field))
+            if normalized is not None and row.get(field) is not normalized:
+                row[field] = normalized
+                changed = True
+    return changed
+
+
+def _transport_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value or "").strip().casefold()
+    if normalized in {"true", "yes", "y", "1", "是"}:
+        return True
+    if normalized in {"false", "no", "n", "0", "否"}:
+        return False
+    return None
+
+
+def _ensure_anti_evasion_not_applicable_reason(
+    payload: dict[str, Any],
+    standards: dict[str, Any],
+) -> bool:
+    rows = payload.get("anti_evasion_rows")
+    if rows not in (None, []) or standards.get("anti_evasion_rows_required") is not False:
+        return False
+    if str(payload.get("anti_evasion_not_applicable_reason") or "").strip():
+        return False
+    payload["anti_evasion_not_applicable_reason"] = (
+        "Protected source lint found no mechanical contrast or evasion row requirement; "
+        "no additional semantic transition risk was recorded by the revising Agent."
+    )
+    return True
 
 
 def _remove_misclassified_anti_evasion_rows(payload: dict[str, Any]) -> list[str]:

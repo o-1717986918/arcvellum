@@ -89,6 +89,80 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             self.assertEqual(normalized["anti_evasion_rows"], [valid_row])
             self.assertTrue(any(item.get("field") == "anti_evasion_rows" for item in changes))
 
+    def test_revision_canonicalizer_normalizes_boolean_transport_and_empty_reason(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            candidate_rel = "drafts/revisions/scene_0001_revision.md"
+            manifest_rel = "drafts/revisions/scene_0001_revision.json"
+            prompt_rel = "drafts/revisions/scene_0001_revision.prompt.json"
+            candidate = workspace / candidate_rel
+            manifest = workspace / manifest_rel
+            prompt = workspace / prompt_rel
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("他把记录放回桌上。", encoding="utf-8")
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "anti_evasion_rows": [
+                            {
+                                "still_uses_explicit_transition": "no",
+                                "suspected_rephrase": "false",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            prompt.write_text(
+                json.dumps({"generation_standards": {"anti_evasion_rows_required": False}}),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=workspace,
+                task_json_path=workspace / "task.json",
+                task_markdown_path=workspace / "task.md",
+                payload={
+                    "task_id": "revision",
+                    "current_state": "static-revision",
+                    "scene_id": "scene_0001",
+                    "candidate": candidate_rel,
+                    "expected_outputs": [candidate_rel, manifest_rel, prompt_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="run-1",
+                run_root=workspace.parent,
+                workspace=workspace,
+                prompt_path=workspace / "prompt.md",
+                manifest_path=workspace / "sandbox.json",
+                baseline_path=workspace / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            canonicalize_scene_revision_manifest(
+                task,
+                sandbox,
+                read_object=lambda path: json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None,
+                session_identity=lambda _task, role: f"studio:{role}:session",
+            )
+
+            normalized = json.loads(manifest.read_text(encoding="utf-8"))
+            row = normalized["anti_evasion_rows"][0]
+            self.assertIs(row["still_uses_explicit_transition"], False)
+            self.assertIs(row["suspected_rephrase"], False)
+
+            normalized["anti_evasion_rows"] = []
+            normalized.pop("anti_evasion_not_applicable_reason", None)
+            manifest.write_text(json.dumps(normalized), encoding="utf-8")
+            canonicalize_scene_revision_manifest(
+                task,
+                sandbox,
+                read_object=lambda path: json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None,
+                session_identity=lambda _task, role: f"studio:{role}:session",
+            )
+            normalized = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertTrue(normalized["anti_evasion_not_applicable_reason"])
+
     def test_static_review_keeps_below_threshold_style_findings_nonblocking(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -516,6 +590,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             standards = prompt["generation_standards"]
             self.assertEqual(prompt["source_candidate_sha256"], hashlib.sha256(draft.read_bytes()).hexdigest())
             self.assertIn("reader_experience_contract", standards)
+            self.assertIs(standards["anti_evasion_rows_required"], False)
             self.assertIn("narrative_rhythm_contract", standards)
             self.assertIn(standards["reader_experience_contract"]["status"], {"not_required", "pass", "blocked", "incomplete"})
             self.assertIn(standards["narrative_rhythm_contract"]["status"], {"defaulted", "pass", "incomplete"})

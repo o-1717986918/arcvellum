@@ -31,6 +31,7 @@ from ...style.snapshot import (
     active_style_mount_snapshot_payload,
     active_style_prompt_path,
 )
+from .revision_contract import revision_source_requires_anti_evasion_rows
 
 
 @dataclass(frozen=True)
@@ -105,7 +106,7 @@ def build_scene_revision_task(
         manifest,
     )
     prompt_manifest.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    _write_revision_task(root, scene_id, task_path, prompt_manifest, sources, draft_path, candidate, report, manifest)
+    _write_revision_task(root, scene_id, task_path, prompt_manifest, sources, draft_path, candidate, report, manifest, prompt_payload=payload)
     return SceneRevisionTaskResult(
         project_root=root,
         scene_id=scene_id,
@@ -136,6 +137,11 @@ def _prompt_manifest(
     review_payload = _read_json(review_path) if review_path and review_path.suffix.lower() == ".json" else {}
     style_adherence = review_payload.get("style_adherence") if isinstance(review_payload.get("style_adherence"), dict) else {}
     quality_profile = load_creative_quality_profile(root)
+    anti_evasion_rows_required = revision_source_requires_anti_evasion_rows(
+        draft_path,
+        quality_profile=quality_profile,
+        scene_id=scene_id,
+    )
     composition_path = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
     rhythm = narrative_rhythm_contract(root, scene_path, composition_path if composition_path.exists() else None)
     reader = reader_experience_contract(root, scene_path)
@@ -176,6 +182,7 @@ def _prompt_manifest(
             "creative_quality_profile_digest": quality_profile.get("digest"),
             "creative_quality_prompt": render_creative_quality_prompt(quality_profile, scope=scene_id),
             "anti_evasion": ANTI_EVASION_REVISION_PROTOCOL,
+            "anti_evasion_rows_required": anti_evasion_rows_required,
             "output_boundary": "修订候选不得写入 AGENT_TASK、prompt manifest、canon 解释、审查过程或内部 scene 编号。",
             "notes_resolution": "逐条处理 revision_actions / warnings / style_notes / style_adherence；无法处理时写入 waiver reason。",
         },
@@ -193,7 +200,12 @@ def _write_revision_task(
     candidate: Path,
     report: Path,
     manifest: Path,
+    *,
+    prompt_payload: dict[str, Any],
 ) -> None:
+    anti_evasion_rows_required = bool(
+        prompt_payload["generation_standards"]["anti_evasion_rows_required"]
+    )
     source_paths = list(sources)
     source_paths.append(prompt_manifest)
     write_agent_tasks(
@@ -221,7 +233,7 @@ def _write_revision_task(
                 "执行反规避修订协议",
                 f"""读取 prompt manifest 的 generation_standards.style_lint_before 和 generation_standards.anti_evasion。{ANTI_EVASION_SHORT_RULE}
 
-修订时必须建立“反规避表”：原句 / 原问题 / 修订句 / 是否仍含转折 / 是否换皮 / 保留理由 / 批判性反驳 / 结论。默认从“不合理”开始挑刺；不要用“增强节奏”“体现复杂心理”“更有文学感”作为充分理由。若原句承担信息反转、误判校正或因果揭示，优先改为动作、事实顺序、信息差、物证、对话错位或人物选择，而不是换成另一种显式转折。""",
+本次 `anti_evasion_rows_required={str(anti_evasion_rows_required).lower()}`。只有实际修订了机械对照、换皮转折或保留了相关显式转折时，才建立逐字证据行：原句 / 原问题 / 修订句 / 是否仍含转折 / 是否换皮 / 批判性反驳 / 结论。不得把一般写作要求、全文合规检查、字数修复或未改动句子写成 anti_evasion_rows。若该值为 false 且本次没有额外发现真实转折风险，anti_evasion_rows 必须为空，并说明不适用原因。默认从“不合理”开始挑刺；不要用“增强节奏”“体现复杂心理”“更有文学感”作为充分理由。若原句承担信息反转、误判校正或因果揭示，优先改为动作、事实顺序、信息差、物证、对话错位或人物选择，而不是换成另一种显式转折。""",
             ),
             (
                 "生成修订候选",
@@ -237,7 +249,7 @@ def _write_revision_task(
 
 schema、scene_id、source_candidate、source_candidate_sha256、candidate、candidate_sha256、report、source_paths、prompt_manifest、style_mount_snapshot、creative_quality_profile_digest、reader_experience_contract、narrative_rhythm_contract、anti_evasion_protocol_applied、ready_for_review、generated_by、provider、formal_contract_revision 和 writer_session_id 由 Studio 在提交前按精确任务证据绑定；不得猜测、复制或覆盖这些机器字段。
 
-anti_evasion_rows 每项固定填写 source_excerpt、issue、revised_excerpt、still_uses_explicit_transition（布尔）、suspected_rephrase（布尔）、critical_objection、verdict（resolved 或 retained_with_proof）。摘录必须逐字存在于精确源正文和修订候选正文。若源文没有机械对照/换皮转折风险且列表为空，必须填写 anti_evasion_not_applicable_reason；不得只写布尔值宣称完成。
+anti_evasion_rows 每项固定填写 source_excerpt、issue、revised_excerpt、still_uses_explicit_transition（JSON 布尔 true/false，不是字符串）、suspected_rephrase（JSON 布尔 true/false，不是字符串）、critical_objection、verdict（resolved 或 retained_with_proof）。摘录必须逐字存在于精确源正文和修订候选正文，且该行必须对应一次真实修订或有负担证明的保留；不得复制通用 requirements/checklist 充当证据。若源文没有机械对照/换皮转折风险且列表为空，必须填写 anti_evasion_not_applicable_reason；不得只写布尔值宣称完成。
 
 {render_new_character_register_contract()}""",
             ),
