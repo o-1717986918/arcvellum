@@ -10,6 +10,8 @@ from ....creative_quality import creative_quality_profile_exists, load_creative_
 from ....new_character_register import new_character_register_issues
 from ....narrative_rhythm import narrative_rhythm_contract
 from ....reader_experience import reader_experience_adherence_for_body
+from ...style.anti_ai import style_lint_gate
+from ...style.punctuation import lint_punctuation
 from .gate_support import (
     candidate_body,
     canon_change_value,
@@ -22,6 +24,44 @@ from .gate_support import (
     relative_path,
 )
 from .style_gate import generation_style_snapshot_errors
+
+
+def candidate_language_gate(
+    body: str,
+    *,
+    profile: dict[str, object] | None = None,
+    scope: str = "",
+) -> dict[str, object]:
+    """Return the Engine-owned language-quality gate for a prose candidate."""
+
+    punctuation = [
+        {
+            "rule": issue.rule,
+            "severity": issue.severity,
+            "message": issue.message,
+            "sample": issue.sample,
+        }
+        for issue in lint_punctuation(body, profile=profile, scope=scope)
+        if issue.severity.strip().lower() not in {"", "low"}
+    ]
+    style = style_lint_gate(body, profile=profile, scope=scope)
+    blocking = [
+        {"category": "punctuation", **item}
+        for item in punctuation
+    ]
+    style_rows = style.get("blocking")
+    if isinstance(style_rows, list):
+        blocking.extend(
+            {"category": "style", **item}
+            for item in style_rows
+            if isinstance(item, dict)
+        )
+    return {
+        "status": "blocking" if blocking else "pass",
+        "blocking": blocking,
+        "punctuation": punctuation,
+        "style": style,
+    }
 
 
 def candidate_generation_gate(root: Path, scene_id: str, candidate_path: Path) -> dict[str, object]:

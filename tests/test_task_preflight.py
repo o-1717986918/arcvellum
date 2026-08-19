@@ -20,7 +20,11 @@ from literary_engineering_studio.task_preflight import (
     canonicalize_task_outputs,
     validate_task_outputs,
 )
-from literary_engineering_studio.preflight.scene import _word_budget_repair_instruction
+from literary_engineering_studio.preflight.common import PreflightIssue
+from literary_engineering_studio.preflight.scene import (
+    _validate_candidate_language_gates,
+    _word_budget_repair_instruction,
+)
 from literary_engineering_studio_engine.projects.source_ingest import (
     ingest_existing_work,
 )
@@ -37,6 +41,22 @@ from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELD
 
 
 class TaskPreflightTests(unittest.TestCase):
+    def test_candidate_language_gate_blocks_punctuation_before_writeback(self):
+        issues: list[PreflightIssue] = []
+        body = "\n".join([f"——第{index}条调度信息已经完成核对。" for index in range(20)])
+
+        _validate_candidate_language_gates(
+            body,
+            "drafts/revisions/scene_0001_revision.md",
+            "scene_0001",
+            default_creative_quality_profile(),
+            issues,
+        )
+
+        punctuation = [item for item in issues if item.code == "candidate-punctuation-lint-blocking"]
+        self.assertTrue(punctuation)
+        self.assertTrue(any("dash-overuse" in item.message for item in punctuation))
+
     def test_reader_contract_canonicalizes_machine_fields_and_renders_markdown(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

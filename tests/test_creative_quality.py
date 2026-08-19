@@ -9,7 +9,7 @@ except ImportError:  # pragma: no cover
 
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.config import default_config
-from literary_engineering_studio.preflight.scene import _append_style_lint_issues
+from literary_engineering_studio.preflight.scene import _append_candidate_language_issue
 from literary_engineering_studio_engine.anti_ai_style import style_lint_gate, style_lint_gate_message
 from literary_engineering_studio_engine.creative_quality import (
     creative_quality_profile_path,
@@ -18,6 +18,9 @@ from literary_engineering_studio_engine.creative_quality import (
     save_creative_quality_profile,
 )
 from literary_engineering_studio_engine.punctuation_standard import lint_punctuation
+from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
+    candidate_language_gate,
+)
 
 
 class CreativeQualityProfileTests(unittest.TestCase):
@@ -60,6 +63,18 @@ class CreativeQualityProfileTests(unittest.TestCase):
         self.assertEqual(gate["status"], "blocking")
         self.assertEqual(gate["blocking"][0]["rule"], "custom-banned-phrase")
 
+    def test_candidate_language_gate_combines_punctuation_and_style_evidence(self):
+        profile = default_creative_quality_profile()
+        text = "\n".join([f"——第{index}项不是误差，而是既定结果。" for index in range(20)])
+
+        gate = candidate_language_gate(text, profile=profile, scope="scene_0001")
+
+        self.assertEqual(gate["status"], "blocking")
+        categories = {item["category"] for item in gate["blocking"]}
+        self.assertEqual(categories, {"punctuation", "style"})
+        self.assertTrue(any(item["rule"] == "dash-overuse" for item in gate["blocking"]))
+        self.assertTrue(any(item["rule"] == "mechanical-contrast-frame" for item in gate["blocking"]))
+
     def test_comma_overload_reports_multiple_sentences_in_one_repair_batch(self):
         profile = default_creative_quality_profile()
         text = (
@@ -97,7 +112,12 @@ class CreativeQualityProfileTests(unittest.TestCase):
         }
         issues = []
 
-        _append_style_lint_issues(lint, "drafts/candidates/scene_0001.md", issues)
+        for item in lint["blocking"]:
+            _append_candidate_language_issue(
+                {"category": "style", **item},
+                "drafts/candidates/scene_0001.md",
+                issues,
+            )
 
         self.assertEqual(len(issues), 2)
         self.assertTrue(all(item.code == "candidate-style-lint-blocking" for item in issues))

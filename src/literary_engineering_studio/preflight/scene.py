@@ -19,13 +19,7 @@ def _validate_scene_candidate_generation_contract(
     sandbox: SandboxManifest,
     issues: list[PreflightIssue],
 ) -> None:
-    """Run candidate-specific quality gates before a worker can request writeback.
-
-    Candidate generation is an Agent-authored task.  Its provenance, new
-    character declaration, punctuation/style lint, word budget, and reader
-    contract must therefore be visible to the runner's repair loop instead of
-    first failing after temporary files have been imported into the project.
-    """
+    """Expose candidate provenance and quality failures to the repair loop."""
     supported_states = {"candidate-generation-provenance", "generation-agent-task", "candidate-revision", "static-revision"}
     if task.current_state not in supported_states:
         return
@@ -47,9 +41,6 @@ def _validate_scene_candidate_generation_contract(
     if not candidate_rel or not candidate.is_file():
         return
 
-    from literary_engineering_studio_engine.literary.style.anti_ai import (
-        style_lint_gate,
-    )
     from literary_engineering_studio_engine.literary.planning.contracts import (
         word_budget_adherence_for_body,
     )
@@ -62,6 +53,7 @@ def _validate_scene_candidate_generation_contract(
     )
     from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
         candidate_generation_gate,
+        candidate_language_gate,
     )
 
     _validate_scene_character_candidates(task, sandbox, issues)
@@ -85,9 +77,15 @@ def _validate_scene_candidate_generation_contract(
     body = final_body_from_draft_path(candidate)
     if not body:
         return
-    lint = style_lint_gate(body, profile=load_creative_quality_profile(sandbox.workspace), scope=scene_id)
-    if lint.get("status") == "blocking":
-        _append_style_lint_issues(lint, candidate_rel, issues)
+    quality_profile = load_creative_quality_profile(sandbox.workspace)
+    _validate_candidate_language_gates(
+        body,
+        candidate_rel,
+        scene_id,
+        quality_profile,
+        issues,
+        gate=candidate_language_gate,
+    )
     scene_path = sandbox.workspace / "scenes" / f"{scene_id}.yaml"
     budget = word_budget_adherence_for_body(
         sandbox.workspace,
@@ -116,30 +114,57 @@ def _validate_scene_candidate_generation_contract(
         )
 
 
-def _append_style_lint_issues(
-    lint: dict[str, object],
+def _validate_candidate_language_gates(
+    body: str,
+    candidate_rel: str,
+    scene_id: str,
+    quality_profile: dict[str, object],
+    issues: list[PreflightIssue],
+    *,
+    gate=None,
+) -> None:
+    if gate is None:
+        from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
+            candidate_language_gate,
+        )
+
+        gate = candidate_language_gate
+    result = gate(body, profile=quality_profile, scope=scene_id)
+    blocking = result.get("blocking")
+    rows = blocking if isinstance(blocking, list) else []
+    for item in rows[:24]:
+        if not isinstance(item, dict):
+            continue
+        _append_candidate_language_issue(item, candidate_rel, issues)
+
+
+def _append_candidate_language_issue(
+    item: dict[str, object],
     candidate_rel: str,
     issues: list[PreflightIssue],
 ) -> None:
-    blocking = lint.get("blocking")
-    rows = blocking if isinstance(blocking, list) else []
-    for item in rows[:12]:
-        if not isinstance(item, dict):
-            continue
-        rule = str(item.get("rule") or "unknown")
-        severity = str(item.get("severity") or "")
-        sample = str(item.get("sample") or "").strip()
-        detail = str(item.get("message") or "").strip()
-        sample_text = f" 示例：{sample}" if sample else ""
-        issues.append(
-            PreflightIssue(
-                "candidate-style-lint-blocking",
-                candidate_rel,
-                f"{rule}[{severity}]{sample_text}。{detail}".strip("。"),
-                "只重写该条发现命中的句段，同时复核同类变体。不得只替换标点、把“不是……而是……”改成同义对照，"
-                "或用另一种模板转折规避检测；修改后保持事件事实、人物意图和正文长度合同。",
-            )
+    category = str(item.get("category") or "style")
+    rule = str(item.get("rule") or "unknown")
+    severity = str(item.get("severity") or "")
+    sample = str(item.get("sample") or "").strip()
+    detail = str(item.get("message") or "").strip()
+    sample_text = f" 示例：{sample}" if sample else ""
+    code = "candidate-punctuation-lint-blocking" if category == "punctuation" else "candidate-style-lint-blocking"
+    repair = (
+        "修正该标点规则的全部命中变体并重新统计密度；优先重组句法、改用规范引语或动作承接，"
+        "不得机械删除标点造成语义反转，且必须保持字数、事件事实和人物意图合同。"
+        if category == "punctuation"
+        else "只重写该条发现命中的句段，同时复核同类变体。不得只替换标点、把“不是……而是……”改成同义对照，"
+        "或用另一种模板转折规避检测；修改后保持事件事实、人物意图和正文长度合同。"
+    )
+    issues.append(
+        PreflightIssue(
+            code,
+            candidate_rel,
+            f"{rule}[{severity}]{sample_text}。{detail}".strip("。"),
+            repair,
         )
+    )
 
 
 def _word_budget_repair_instruction(budget: dict[str, object]) -> str:
