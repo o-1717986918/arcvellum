@@ -153,7 +153,10 @@ def _constraints(
         maximum = int(word_count.get("maximum") or 0)
         budget_rule = (
             f"本任务只写当前场景，清洁正文目标为 {target} 个中文内容字符，"
-            f"可接受范围 {minimum}-{maximum}；作品总字数只决定全书分配，不得在本场一次写完。"
+            f"可接受范围 {minimum}-{maximum}；动笔前按 composition 的事件节拍分配篇幅，"
+            f"提交前自行估算完整正文不得少于 {minimum} 个中文内容字符，不得因情节已经讲完而提前结束；"
+            "不足篇幅只能展开已有动作、阻力、核验和代价，不能灌水。作品总字数只决定全书分配，"
+            "不得在本场一次写完。"
             if target and minimum and maximum
             else "本任务只写当前场景；作品总字数只决定全书分配，不得在本场一次写完。"
         )

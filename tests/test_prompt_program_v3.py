@@ -373,6 +373,8 @@ class PromptProgramV3Tests(unittest.TestCase):
         budget = next(item for item in constraints if "清洁正文目标" in item)
         self.assertIn("1350", budget)
         self.assertIn("1215-1485", budget)
+        self.assertIn("不得少于 1215", budget)
+        self.assertIn("不得因情节已经讲完而提前结束", budget)
         self.assertIn("不得在本场一次写完", budget)
 
     def test_legacy_direction_digest_exposes_messages_not_ui_boilerplate(self):

@@ -196,13 +196,15 @@ def _copy_prompt_standards(
         "reader_experience_contract": standards.get("reader_experience_contract"),
         "narrative_rhythm_contract": standards.get("narrative_rhythm_contract"),
     }
-    changes = []
-    for field, value in sources.items():
-        if field in payload or value is None or value == "" or not isinstance(value, (str, dict)):
-            continue
-        payload[field] = value
-        changes.append({"path": manifest_rel, "field": field, "reason": "copied from protected prompt manifest"})
-    return changes
+    expected = {
+        field: value
+        for field, value in sources.items()
+        if value is not None and value != "" and isinstance(value, (str, dict))
+    }
+    return [
+        {"path": manifest_rel, "field": field, "reason": "copied from protected prompt manifest"}
+        for field in _apply_fields(payload, expected)
+    ]
 
 
 def _revision_candidate(task: TaskPackage) -> str:

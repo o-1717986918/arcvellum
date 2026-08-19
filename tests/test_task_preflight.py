@@ -20,6 +20,7 @@ from literary_engineering_studio.task_preflight import (
     canonicalize_task_outputs,
     validate_task_outputs,
 )
+from literary_engineering_studio.preflight.scene import _word_budget_repair_instruction
 from literary_engineering_studio_engine.projects.source_ingest import (
     ingest_existing_work,
 )
@@ -1470,7 +1471,31 @@ class TaskPreflightTests(unittest.TestCase):
             sandbox = stage_task(task, root / "runs", runtime="opencode")
             candidate = sandbox.workspace / "drafts" / "candidates" / "scene_0001-platform-agent.json"
             candidate.parent.mkdir(parents=True, exist_ok=True)
-            candidate.write_text(json.dumps({"new_character_register": []}, ensure_ascii=False), encoding="utf-8")
+            candidate.write_text(
+                json.dumps(
+                    {
+                        "creative_quality_profile_digest": "system",
+                        "reader_experience_contract": "system",
+                        "new_character_register": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            prompt_manifest = candidate.with_name("scene_0001-platform-agent.prompt.json")
+            prompt_manifest.write_text(
+                json.dumps(
+                    {
+                        "generation_standards": {
+                            "creative_quality_profile_digest": "digest-from-protected-prompt",
+                            "reader_experience_contract": {"status": "pass", "scene_id": "scene_0001"},
+                            "narrative_rhythm_contract": {"status": "pass", "scene_id": "scene_0001"},
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
             character = sandbox.workspace / "characters" / "candidates" / "scene-0001-林正.json"
             character.parent.mkdir(parents=True, exist_ok=True)
             character.write_text("{}\n", encoding="utf-8")
@@ -1481,8 +1506,24 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertTrue(changes)
             self.assertEqual(normalized["schema"], "literary-engineering-workbench/scene-candidate/v1")
             self.assertEqual(normalized["provider"], "studio-agent-runtime")
+            self.assertEqual(normalized["creative_quality_profile_digest"], "digest-from-protected-prompt")
+            self.assertEqual(normalized["reader_experience_contract"]["status"], "pass")
             self.assertEqual(normalized["new_character_register"]["status"], "candidates_ready")
             self.assertEqual(normalized["new_character_register"]["introduced"][0]["candidate_path"], "characters/candidates/scene-0001-林正.json")
+
+    def test_near_threshold_word_budget_repair_preserves_valid_body(self):
+        instruction = _word_budget_repair_instruction(
+            {
+                "clean_body_chinese_chars": 3948,
+                "min_chinese_chars": 4050,
+                "target_chinese_chars": 4500,
+                "max_chinese_chars": 4950,
+            }
+        )
+
+        self.assertIn("保留现有完整正文", instruction)
+        self.assertIn("净增约 552", instruction)
+        self.assertIn("不要从头改写已通过段落", instruction)
 
     def test_longform_sessions_and_completion_receipt_are_worker_owned(self):
         with tempfile.TemporaryDirectory() as temporary:

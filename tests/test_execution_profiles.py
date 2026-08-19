@@ -170,7 +170,7 @@ class ExecutionProfileTests(unittest.TestCase):
 
         controls = _controls(profile)
         self.assertEqual(profile.mode, "enforced")
-        self.assertEqual(controls["max_repair_attempts"]["effective"], 6)
+        self.assertEqual(controls["max_repair_attempts"]["effective"], 8)
         self.assertEqual(controls["max_turns"]["effective"], 6)
         self.assertEqual(controls["max_tool_calls"]["effective"], 8)
 

@@ -148,8 +148,13 @@ def _word_budget_repair_instruction(budget: dict[str, object]) -> str:
     maximum = int(budget.get("max_chinese_chars") or 0)
     target = int(budget.get("target_chinese_chars") or 0)
     if minimum and current < minimum:
-        safe_target = target if target >= minimum and (not maximum or target <= maximum) else minimum
+        safe_target = _safe_word_target(target, minimum, maximum)
         deficit = max(0, minimum - current)
+        near_threshold = _near_threshold_word_budget_repair(
+            current, minimum, maximum, safe_target, deficit
+        )
+        if near_threshold:
+            return near_threshold
         return (
             f"当前清洁正文为 {current} 个中文内容字符，下限 {minimum}，"
             f"安全目标约 {safe_target}，至少仍缺 {deficit}。必须重写完整目标并做足量扩写，"
@@ -168,6 +173,32 @@ def _word_budget_repair_instruction(budget: dict[str, object]) -> str:
         )
     return (
         "在不灌水、不重复情绪描写的前提下扩写或压缩正文，使清洁正文达到当前场景的中文内容字符预算。"
+    )
+
+
+def _safe_word_target(target: int, minimum: int, maximum: int) -> int:
+    if target < minimum or maximum and target > maximum:
+        return minimum
+    return target
+
+
+def _near_threshold_word_budget_repair(
+    current: int,
+    minimum: int,
+    maximum: int,
+    safe_target: int,
+    deficit: int,
+) -> str:
+    if deficit > max(200, int(minimum * 0.08)):
+        return ""
+    net_growth = max(deficit + 120, safe_target - current)
+    return (
+        f"当前清洁正文为 {current} 个中文内容字符，下限 {minimum}，"
+        f"安全目标约 {safe_target}，距下限 {deficit}。正文已接近合格区间：读取并保留现有完整正文，"
+        f"修正已命中的句法问题，再围绕既有动作链净增约 {net_growth} 个中文内容字符；"
+        "优先展开一个尚未充分呈现的信息核验、程序性动作、对话阻力或选择代价，不要从头改写已通过段落。"
+        "写回时仍须提交完整正文，不得只提交补丁或新增片段；不得重复心理解释、堆叠景物、"
+        f"引入未经授权的 canon，且不得超过上限 {maximum or '未设置'}。"
     )
 
 
