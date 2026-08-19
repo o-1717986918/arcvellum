@@ -283,7 +283,7 @@ def lint_ai_style(text: str, profile: dict[str, object] | None = None, *, scope:
     evasion_issues = _contrast_evasion_issues(clean)
     issues.extend(evasion_issues)
     issues.extend(_sentence_shape_issues(clean, profile=profile, skip_dash=bool(contrast_issues or evasion_issues)))
-    issues.extend(_abstract_summary_issues(clean))
+    issues.extend(_abstract_summary_issues(clean, profile))
     issues.extend(_explanatory_mind_issues(clean))
     issues.extend(_slogan_ending_issues(clean))
     return _apply_profile_modes(issues, profile, scope=scope)
@@ -426,7 +426,7 @@ def _sentence_shape_issues(
                 )
             )
             break
-    simile_count = len(re.findall(r"(?:好像|仿佛|如同|像[^。！？\n]{1,18}(?:一样|似的))", text))
+    simile_count = len(re.findall(r"(?:好像|仿佛|如同|像是|像[^。！？\n]{1,18}(?:一样|似的))", text))
     simile_minimum = max(1, int(quality_threshold(profile, "simile_minimum_hits", 2)))
     if simile_count >= simile_minimum:
         severity, density_note = _soft_density_verdict(
@@ -447,30 +447,30 @@ def _sentence_shape_issues(
     return issues
 
 
-def _abstract_summary_issues(text: str) -> list[AIStyleIssue]:
-    terms = [
-        "某种意义",
-        "某种",
-        "一种",
-        "答案",
-        "真相",
-        "命运",
-        "存在",
-        "本身",
-        "这一刻",
-        "此刻",
-        "仿佛",
-        "像是",
+def _abstract_summary_issues(
+    text: str,
+    profile: dict[str, object] | None = None,
+) -> list[AIStyleIssue]:
+    patterns = [
+        r"某种意义(?:上)?",
+        r"某种(?:说不清|难以言说|无法形容|莫名的)[^。！？\n]{0,12}",
+        r"一种(?:说不清|难以言说|无法形容|莫名的)[^。！？\n]{0,12}",
+        r"(?:答案|真相|命运|存在)本身",
+        r"(?:这一刻|此刻)[^。！？\n]{0,20}(?:终于|才|忽然|突然|明白|意识到|知道)",
     ]
-    hits = [term for term in terms for _ in range(text.count(term))]
-    if len(hits) < 8:
+    hits = [match.group(0) for pattern in patterns for match in re.finditer(pattern, text)]
+    if not hits:
+        return []
+    severity, density_note = _soft_density_verdict(len(hits), text, profile)
+    if severity != "medium":
         return []
     return [
         AIStyleIssue(
             "abstract-summary-density",
             "medium",
-            "抽象总结和氛围词密度偏高，可能用概念替代了具体叙事。",
-            _first_present_sample(text, terms),
+            "抽象总结模板密度偏高，可能用概念替代了具体叙事。"
+            f"{density_note}；请逐项改为可观察的动作、事实或后果。",
+            _first_present_sample(text, hits),
         )
     ]
 
