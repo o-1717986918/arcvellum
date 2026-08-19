@@ -16,10 +16,72 @@ import literary_engineering_studio_engine.asset_route as asset_route
 import literary_engineering_studio_engine.export_release_route as export_release_route
 import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.platform_agent_tasks import write_project_seed_asset_tasks
+from literary_engineering_studio_engine.routes.scene.definition import _agent_reading_paths
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload, _render_task_markdown, complete_task, submit_task
 
 
 class TaskContractTransportTests(unittest.TestCase):
+    def test_agent_task_sidecars_are_always_studio_managed(self):
+        sidecar = "plot/chapter_obligations/chapter_0001.agent_tasks.md"
+        task = _enrich_task_payload(
+            {
+                "task_id": "scene-development-scene_0001-reader-experience-contract",
+                "route": "scene-development",
+                "scene_id": "scene_0001",
+                "current_state": "reader-experience-contract",
+                "task_type": "deterministic-cli-plus-platform-review",
+                "prompt_asset_id": "route.longform-planning.reader-experience.v1",
+                "expected_outputs": [
+                    "plot/chapter_obligations/chapter_0001.json",
+                    sidecar,
+                    "plot/chapter_obligations/chapter_0001.agent_completion.json",
+                ],
+            }
+        )
+
+        self.assertEqual(task["core_managed_outputs"], [sidecar])
+        contracts = {item["path"]: item for item in task["output_contracts"]}
+        self.assertEqual(contracts[sidecar]["kind"], "deterministic")
+        self.assertEqual(contracts[sidecar]["writeback_policy"], "automatic")
+
+    def test_reader_experience_agent_context_is_current_chapter_only(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative, body in (
+                ("project.yaml", "project:\n  title: 潮线\n"),
+                ("plot/word_budget/word_budget.json", "{}\n"),
+                ("plot/chapter_obligations/chapter_0001.json", "{}\n"),
+                ("plot/chapter_obligations/chapter_0001.md", "# 契约\n"),
+                ("scenes/scene_0001.yaml", "scene_id: scene_0001\nchapter_id: chapter_0001\n"),
+                ("scenes/scene_0002.yaml", "scene_id: scene_0002\nchapter_id: chapter_0001\n"),
+                ("scenes/scene_0003.yaml", "scene_id: scene_0003\nchapter_id: chapter_0002\n"),
+                ("memory/context_packets/scene_0001.md", "不应进入章节契约提示词\n"),
+                ("canon/world_rules.yaml", "rules: []\n"),
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+
+            selected = _agent_reading_paths(
+                root,
+                [
+                    "project.yaml",
+                    "scenes",
+                    "plot/word_budget/word_budget.json",
+                    "plot/chapter_obligations/",
+                    "memory/context_packets/scene_0001.md",
+                    "canon/world_rules.yaml",
+                ],
+                current_state="reader-experience-contract",
+                scene_id="scene_0001",
+            )
+
+            self.assertIn("scenes/scene_0001.yaml", selected)
+            self.assertIn("scenes/scene_0002.yaml", selected)
+            self.assertNotIn("scenes/scene_0003.yaml", selected)
+            self.assertNotIn("memory/context_packets/scene_0001.md", selected)
+            self.assertNotIn("canon/world_rules.yaml", selected)
+
     def test_project_asset_intake_is_a_concrete_deterministic_command(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -13,7 +13,7 @@ from .context_contract import CONTEXT_CONTRACT_FINGERPRINT_FIELDS, normalize_con
 from .markdown_renderer import render_task_markdown
 from .prompt_projection import project_prompt_asset
 from ..prompt_registry import resolve_prompt_asset
-TASK_CONTRACT_REVISION = "2026-08-12.31"
+TASK_CONTRACT_REVISION = "2026-08-20.32"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 RECHECK_REQUIRED_STATES = {
     "asset-review-pass",
@@ -125,7 +125,19 @@ def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
     enriched["prompt_asset"] = project_prompt_asset(preview, prompt_id)
 
     expected_outputs = [str(item) for item in enriched.get("expected_outputs") or []]
-    core_managed_outputs = {str(item) for item in enriched.get("core_managed_outputs") or []}
+    core_managed_outputs = {
+        str(item) for item in enriched.get("core_managed_outputs") or []
+    }
+    # Agent-task sidecars are executable instructions emitted by deterministic
+    # commands.  They are evidence for the Worker, never creative deliverables
+    # that the Agent may rewrite.  Infer this ownership centrally so every
+    # route receives the same fail-closed contract.
+    core_managed_outputs.update(
+        item for item in expected_outputs if item.endswith(".agent_tasks.md")
+    )
+    enriched["core_managed_outputs"] = [
+        item for item in expected_outputs if item in core_managed_outputs
+    ]
     _normalize_context_contract(enriched)
     semantic = enriched.get("semantic_artifact") if isinstance(enriched.get("semantic_artifact"), dict) else None
     if semantic is not None:

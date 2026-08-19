@@ -181,10 +181,12 @@ class TaskPackage:
         """Outputs created by the deterministic command, never by the Agent."""
 
         declared = {str(item) for item in self.expected_outputs}
+        protected = {
+            str(item) for item in self.payload.get("core_managed_outputs") or []
+        }
+        protected.update(item for item in declared if item.endswith(".agent_tasks.md"))
         return tuple(
-            str(item)
-            for item in self.payload.get("core_managed_outputs") or []
-            if str(item) in declared
+            item for item in self.expected_outputs if item in protected
         )
 
     @property
@@ -426,7 +428,10 @@ def _derive_capabilities(policy: str, outputs: tuple[str, ...]) -> tuple[str, ..
 def _derive_output_contract(path: str, execution_policy: str) -> OutputContract:
     normalized = str(normalize_relative_path(path))
     lower = normalized.lower()
-    if lower.endswith("agent_completion.json") or ".agent_completion." in lower:
+    if lower.endswith(".agent_tasks.md"):
+        kind = "deterministic"
+        policy = "automatic"
+    elif lower.endswith("agent_completion.json") or ".agent_completion." in lower:
         kind = "completion-evidence"
         policy = "automatic"
     elif "approval" in lower or lower.startswith("decisions/"):

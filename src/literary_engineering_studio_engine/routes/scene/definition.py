@@ -130,6 +130,23 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         "static-review",
         "static-revision",
     }
+    if current_state == "reader-experience-contract":
+        chapter_id = _scene_chapter_id(root, scene_id)
+        chapter_scenes = [
+            _normalize_rel(path.relative_to(root))
+            for path in sorted((root / "scenes").glob("*.yaml"))
+            if _yaml_scalar(path, "chapter_id") == chapter_id
+        ]
+        reader_minimum = [
+            "project.yaml",
+            "plot/word_budget/word_budget.json",
+            f"plot/chapter_obligations/{chapter_id}.json",
+            f"plot/chapter_obligations/{chapter_id}.md",
+            *chapter_scenes,
+        ]
+        return _unique(
+            [relative for relative in reader_minimum if (root / relative).is_file()]
+        )
     prose_minimum = {
         "project.yaml",
         f"scenes/{scene_id}.yaml",
@@ -212,6 +229,16 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         if (root / relative).is_file():
             curated.append(relative)
     return _unique(curated)
+
+
+def _scene_chapter_id(root: Path, scene_id: str) -> str:
+    return _yaml_scalar(root / "scenes" / f"{scene_id}.yaml", "chapter_id") or "chapter_0001"
+
+
+def _yaml_scalar(path: Path, key: str) -> str:
+    text = path.read_text(encoding="utf-8", errors="ignore") if path.is_file() else ""
+    match = re.search(rf"(?m)^\s*{re.escape(key)}:\s*['\"]?([^'\"\n#]+)", text)
+    return match.group(1).strip().strip("\"'") if match else ""
 
 
 def _is_revision_input(relative: str, scene_id: str) -> bool:

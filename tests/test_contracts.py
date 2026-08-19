@@ -67,6 +67,34 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(contract.writeback_policy, "preview-required")
             self.assertTrue(contract.compatibility_derived)
 
+    def test_legacy_task_sidecar_is_never_agent_authored(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task_dir = root / "workflow" / "tasks"
+            task_dir.mkdir(parents=True)
+            (task_dir / "legacy.agent_tasks.md").write_text("# task\n", encoding="utf-8")
+            payload = {
+                "schema": "literary-engineering-workbench/agent-task/v1",
+                "task_id": "legacy",
+                "route": "scene-development",
+                "current_state": "reader-experience-contract",
+                "task_type": "deterministic-cli-plus-platform-review",
+                "prompt_asset_id": "route.longform-planning.reader-experience.v1",
+                "required_reading": [],
+                "source_paths": [],
+                "expected_outputs": ["plot/chapter_0001.agent_tasks.md"],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+                "task_markdown": "workflow/tasks/legacy.agent_tasks.md",
+            }
+            task_json = task_dir / "legacy.task.json"
+            task_json.write_text(json.dumps(payload), encoding="utf-8")
+
+            task = load_task_package(root, task_json)
+
+            self.assertEqual(task.core_managed_outputs, ("plot/chapter_0001.agent_tasks.md",))
+            self.assertEqual(task.execution_contract.outputs[0].kind, "deterministic")
+
     def test_prefers_explicit_execution_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
