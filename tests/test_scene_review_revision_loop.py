@@ -6,8 +6,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.contracts import TASK_SCHEMA, load_task_package
-from literary_engineering_studio.sandbox import stage_task
+from literary_engineering_studio.contracts import TASK_SCHEMA, TaskPackage, load_task_package
+from literary_engineering_studio.sandbox import SandboxManifest, stage_task
+from literary_engineering_studio.preflight.scene_manifest_metadata import canonicalize_scene_revision_manifest
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, canonicalize_task_outputs, validate_task_outputs
 import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.candidate_promotion import _candidate_review_content_match, _human_decision_notes, _unresolved_review_notes
@@ -21,6 +22,73 @@ from literary_engineering_studio_engine.workflow_state import _review_step
 
 
 class SceneReviewRevisionLoopTests(unittest.TestCase):
+    def test_revision_canonicalizer_removes_only_misclassified_word_budget_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            candidate_rel = "drafts/revisions/scene_0001_revision.md"
+            manifest_rel = "drafts/revisions/scene_0001_revision.json"
+            candidate = workspace / candidate_rel
+            manifest = workspace / manifest_rel
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("他先把磨痕当成检修。他认得那个批次。", encoding="utf-8")
+            valid_row = {
+                "issue": "机械对照直接替读者下判断",
+                "source_excerpt": "本该先报故障。可他认得那个批次。",
+                "revised_excerpt": "他先把磨痕当成检修。他认得那个批次。",
+                "verdict": "resolved",
+            }
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "anti_evasion_rows": [
+                            valid_row,
+                            {
+                                "issue": "candidate-word-budget-invalid：4027 中文字符净增量不足",
+                                "source_excerpt": "正文 4027 中文字符，低于下限",
+                                "revised_excerpt": "正文已扩充至目标范围",
+                                "verdict": "resolved",
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=workspace,
+                task_json_path=workspace / "task.json",
+                task_markdown_path=workspace / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0001-static-revision",
+                    "route": "scene-development",
+                    "scene_id": "scene_0001",
+                    "current_state": "static-revision",
+                    "candidate": candidate_rel,
+                    "revision_source": "drafts/scenes/scene_0001.md",
+                    "expected_outputs": [candidate_rel, manifest_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="run-1",
+                run_root=workspace.parent,
+                workspace=workspace,
+                prompt_path=workspace / "prompt.md",
+                manifest_path=workspace / "sandbox.json",
+                baseline_path=workspace / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            changes = canonicalize_scene_revision_manifest(
+                task,
+                sandbox,
+                read_object=lambda path: json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None,
+                session_identity=lambda _task, role: f"studio:{role}:session",
+            )
+
+            normalized = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(normalized["anti_evasion_rows"], [valid_row])
+            self.assertTrue(any(item.get("field") == "anti_evasion_rows" for item in changes))
+
     def test_static_review_keeps_below_threshold_style_findings_nonblocking(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

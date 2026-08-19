@@ -17,6 +17,9 @@ WriteFields = Callable[[Path, str, dict[str, Any], dict[str, Any], str], list[di
 SessionIdentity = Callable[[TaskPackage, str], str]
 
 
+_NON_ANTI_EVASION_ISSUE_CODES = frozenset({"candidate-word-budget-invalid"})
+
+
 def canonicalize_scene_revision_manifest(
     task: TaskPackage,
     sandbox: SandboxManifest,
@@ -49,13 +52,51 @@ def canonicalize_scene_revision_manifest(
         session_identity,
     )
     changed = _apply_fields(payload, expected)
-    if not changed:
+    removed_rows = _remove_misclassified_anti_evasion_rows(payload)
+    if not changed and not removed_rows:
         return []
     _write_json(manifest_path, payload)
-    return [
+    changes = [
         {"path": manifest_rel, "field": field, "reason": "bound deterministic exact-source revision metadata"}
         for field in changed
     ]
+    if removed_rows:
+        changes.append(
+            {
+                "path": manifest_rel,
+                "field": "anti_evasion_rows",
+                "reason": "removed deterministic non-anti-evasion repairs from the evidence table",
+            }
+        )
+    return changes
+
+
+def _remove_misclassified_anti_evasion_rows(payload: dict[str, Any]) -> list[str]:
+    rows = payload.get("anti_evasion_rows")
+    if not isinstance(rows, list):
+        return []
+    kept: list[object] = []
+    removed: list[str] = []
+    for row in rows:
+        issue = str(row.get("issue") or "").strip() if isinstance(row, dict) else ""
+        if _is_non_anti_evasion_issue(issue):
+            removed.append(issue)
+        else:
+            kept.append(row)
+    if removed:
+        payload["anti_evasion_rows"] = kept
+    return removed
+
+
+def _is_non_anti_evasion_issue(issue: str) -> bool:
+    normalized = issue.casefold()
+    return any(
+        normalized == code
+        or normalized.startswith(f"{code}:")
+        or normalized.startswith(f"{code}：")
+        or normalized.startswith(f"{code} ")
+        for code in _NON_ANTI_EVASION_ISSUE_CODES
+    )
 
 
 def _revision_paths(task: TaskPackage) -> tuple[str, str, str, str]:
