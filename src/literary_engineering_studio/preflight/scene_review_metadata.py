@@ -46,6 +46,11 @@ def canonicalize_scene_review_metadata(
     quality_identity = _creative_quality_identity(sandbox.workspace)
     if quality_identity:
         expected["creative_quality_profile"] = quality_identity
+    canon_status = _canon_writeback_status(payload.get("canon_writeback"))
+    if canon_status:
+        canon_writeback = dict(payload.get("canon_writeback") or {})
+        canon_writeback["status"] = canon_status
+        expected["canon_writeback"] = canon_writeback
 
     changed = [
         field for field, value in expected.items() if payload.get(field) != value
@@ -125,6 +130,26 @@ def _creative_quality_identity(workspace: Path) -> dict[str, object]:
 
 def _session_identity(task: TaskPackage, role: str) -> str:
     return f"studio:{role}:{task.task_id}"
+
+
+def _canon_writeback_status(value: object) -> str:
+    """Derive lifecycle status from the Agent-owned Canon judgment.
+
+    ``canon_change`` is semantic judgment.  ``status`` only routes that
+    judgment through the deterministic state machine and must not become a
+    second model-authored vocabulary that can disagree with it.
+    """
+
+    if not isinstance(value, dict):
+        return ""
+    change = value.get("canon_change")
+    if change is True:
+        return "pending_canon_evolve"
+    if change is False:
+        return "not_required"
+    if isinstance(change, str) and change.strip().lower() == "unknown":
+        return "unknown"
+    return ""
 
 
 __all__ = ["canonicalize_scene_review_metadata"]

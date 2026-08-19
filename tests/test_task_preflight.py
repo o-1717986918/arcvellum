@@ -967,6 +967,66 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertIn("## Prepared Context Snapshot", program)
             self.assertIn("drafts/candidates/scene_0001-platform-agent.md", program)
 
+    def test_scene_review_canon_status_is_derived_from_agent_judgment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            candidate_rel = "drafts/candidates/scene_0001-platform-agent.md"
+            candidate = workspace / candidate_rel
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("她确认信号来自失踪飞船。\n", encoding="utf-8")
+            review_rel = "reviews/agent/scene_0001_scene_review.json"
+            review = workspace / review_rel
+            review.parent.mkdir(parents=True)
+            review.write_text(
+                json.dumps(
+                    {
+                        "conclusion": "pass",
+                        "summary": "候选通过审查。",
+                        "canon_writeback": {
+                            "status": "declared",
+                            "canon_change": "unknown",
+                            "candidate_patch": "待后续 canon-evolve 判断",
+                            "no_canon_change_reason": "尚不能确认是否形成持续事实。",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0001-candidate-review",
+                    "route": "scene-development",
+                    "scene_id": "scene_0001",
+                    "current_state": "candidate-review",
+                    "task_type": "platform-agent-review",
+                    "candidate": candidate_rel,
+                    "source_paths": [candidate_rel],
+                    "expected_outputs": [review_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            normalized = json.loads(review.read_text(encoding="utf-8"))
+
+            self.assertEqual(normalized["canon_writeback"]["status"], "unknown")
+            self.assertTrue(
+                any(item.get("field") == "canon_writeback" for item in changes)
+            )
+
     def test_asset_schema_is_rejected_before_writeback(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
