@@ -270,6 +270,38 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertFalse(result.metadata["retryable"])
         self.assertIn("余额或额度不足", result.message)
 
+    def test_provider_request_timeout_is_a_retryable_transport_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "runtime.output.log"
+            output.write_text(
+                json.dumps(
+                    {
+                        "event": "runner.worker.result",
+                        "data": {
+                            "status": "blocked",
+                            "message": "provider request failed",
+                            "failureKind": "provider_error",
+                            "providerError": "Request timed out.",
+                            "providerRequests": 1,
+                            "toolCalls": 0,
+                            "reasoningCharacters": 0,
+                            "textCharacters": 0,
+                            "writtenOutputs": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = PiWorkerRuntime({})._with_worker_result(
+                RuntimeResult("pi-worker", "failed", 2, (), output, "failed")
+            )
+
+        self.assertEqual(result.metadata["failure_kind"], "transient_network")
+        self.assertTrue(result.metadata["retryable"])
+        self.assertIn("自动重试", result.message)
+
     def test_studio_preflight_can_request_one_bounded_fresh_process_repair(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

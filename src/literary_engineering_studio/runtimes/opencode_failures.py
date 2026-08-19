@@ -18,6 +18,9 @@ def is_transient_stream_failure(value: str) -> bool:
             "stream connection",
             "connection reset",
             "messageabortederror",
+            "request timed out",
+            "request timeout",
+            "timeouterror",
         )
     )
 
