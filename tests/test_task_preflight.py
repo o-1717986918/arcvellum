@@ -10,6 +10,7 @@ from literary_engineering_studio.contracts import TASK_SCHEMA, TaskPackage, load
 from literary_engineering_studio.sandbox import SandboxManifest, stage_task
 from literary_engineering_studio.runtime.sandbox import (
     control_sandbox_view,
+    refresh_sandbox_baseline,
     sync_agent_outputs_to_control,
 )
 from literary_engineering_studio.task_preflight import (
@@ -652,6 +653,76 @@ class TaskPreflightTests(unittest.TestCase):
 
             normalized = json.loads(review.read_text(encoding="utf-8"))
             self.assertEqual(normalized["revision_actions"][0]["target"], candidate_rel + "#psychology.secret")
+
+    def test_asset_review_nested_response_envelope_is_flattened_before_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            candidate_rel = "characters/candidates/scene-0002-dispatcher.json"
+            review_rel = "reviews/assets/scene-0002-dispatcher_review.json"
+            candidate = workspace / candidate_rel
+            review = workspace / review_rel
+            candidate.parent.mkdir(parents=True)
+            review.parent.mkdir(parents=True)
+            candidate.write_text('{"name":"dispatcher"}\n', encoding="utf-8")
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/candidate-asset-review/v0.1",
+                        "candidate": candidate_rel,
+                        "candidate_id": "scene-0002-dispatcher",
+                        "asset_type": "character",
+                        "review": {
+                            "status": "pass",
+                            "checked": ["schema", "canon", "character_logic"],
+                            "blocking_issues": [],
+                            "warnings": ["Keep the role bounded to this scene."],
+                            "revision_actions": [],
+                            "promotion_risks": ["Do not promote a generic role without recurrence."],
+                            "conclusion": "The candidate is coherent and may pass.",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "character-and-world-assets-scene-0002-dispatcher-asset-review-agent-task",
+                    "route": "character-and-world-assets",
+                    "task_type": "platform-agent-asset-review",
+                    "current_state": "asset-review-agent-task",
+                    "candidate": candidate_rel,
+                    "candidate_id": "scene-0002-dispatcher",
+                    "asset_type": "character",
+                    "expected_outputs": [review_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            sandbox.manifest_path.write_text("{}\n", encoding="utf-8")
+            refresh_sandbox_baseline(sandbox)
+            changes = canonicalize_task_outputs(task, sandbox)
+            normalized = json.loads(review.read_text(encoding="utf-8"))
+
+            self.assertNotIn("review", normalized)
+            self.assertEqual(normalized["status"], "pass")
+            self.assertEqual(normalized["blocking_issues"], [])
+            self.assertEqual(normalized["warnings"], ["Keep the role bounded to this scene."])
+            self.assertTrue(any(item["field"] == "status" for item in changes))
+            result = validate_task_outputs(task, sandbox)
+            self.assertTrue(result.passed, result.issues)
 
     def test_branch_completion_marker_is_worker_owned_after_selection_exists(self):
         with tempfile.TemporaryDirectory() as temporary:

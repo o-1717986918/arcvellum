@@ -11,6 +11,10 @@ from typing import Any
 from ..contracts import TaskPackage
 from .archaeology import canonicalize_archaeology_metadata
 from .asset_evidence import review_machine_fields
+from .asset_review_metadata import (
+    canonicalize_asset_review_action_targets,
+    flatten_asset_review_envelope,
+)
 from .common import REVIEW_CONCLUSION, REVIEW_CONCLUSION_VARIANT
 from .scene_manifest_metadata import (
     canonicalize_scene_candidate_manifest,
@@ -35,7 +39,6 @@ SEMANTIC_SOURCE_PATTERNS = {
     "state-agent-task": "characters/state_patches/{scene_id}_state_patch.json",
     "canon-agent-task": "canon/patches/{scene_id}_canon_patch.json",
 }
-
 
 def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
     """Normalize semantically identical machine markers without changing a review verdict."""
@@ -614,6 +617,7 @@ def _canonicalize_asset_review(
     payload = _read_object(path)
     if payload is None:
         return []
+    changes = flatten_asset_review_envelope(path, review_rel, payload)
     expected = review_machine_fields(
         task,
         sandbox,
@@ -625,57 +629,14 @@ def _canonicalize_asset_review(
     )
     if task.current_state in {"asset-review-pass", "asset-approval-revision"}:
         expected["status"] = "recheck_required"
-    changes = _write_machine_fields(path, review_rel, payload, expected, "asset-review")
-    changes.extend(_canonicalize_asset_review_action_targets(path, review_rel, payload, candidate_rel))
+    changes.extend(_write_machine_fields(path, review_rel, payload, expected, "asset-review"))
+    changes.extend(canonicalize_asset_review_action_targets(path, review_rel, payload, candidate_rel))
     changes.extend(
         _canonicalize_asset_approval_revision(
             task, sandbox, path, review_rel, payload, candidate_rel
         )
     )
     return changes
-
-
-def _canonicalize_asset_review_action_targets(
-    path: Path,
-    relative: str,
-    payload: dict[str, Any],
-    candidate_rel: str,
-) -> list[dict[str, str]]:
-    """Attach a current-candidate path to a reviewer's bare JSON field anchor.
-
-    ``psychology.secret`` is an intelligible creative review target, but the
-    formal artifact contract represents it as
-    ``characters/candidates/<id>.json#psychology.secret``.  The file prefix is
-    system-owned routing data.  Preserve the reviewer-selected field while
-    adding that prefix, and deliberately leave explicit file paths untouched
-    so the cross-task write guard still catches them.
-    """
-
-    if not candidate_rel:
-        return []
-    actions = payload.get("revision_actions")
-    if not isinstance(actions, list):
-        return []
-    changed = False
-    for action in actions:
-        if not isinstance(action, dict):
-            continue
-        target = str(action.get("target") or "").replace("\\", "/").strip()
-        if not target:
-            continue
-        if target.startswith(candidate_rel):
-            continue
-        if target.startswith("#"):
-            action["target"] = candidate_rel + target
-            changed = True
-            continue
-        if "/" not in target:
-            action["target"] = f"{candidate_rel}#{target}"
-            changed = True
-    if not changed:
-        return []
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return [{"path": relative, "field": "revision_actions.target", "reason": "attached task-owned candidate path to review field anchor"}]
 
 
 def _canonicalize_asset_approval_revision(
