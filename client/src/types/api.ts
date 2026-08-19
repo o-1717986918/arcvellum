@@ -381,6 +381,26 @@ export interface DelegationPolicy {
   expires_at: string;
 }
 
+export interface FailureRecoveryAction {
+  action_id: string;
+  label: string;
+  kind: "retry" | "navigate" | "diagnostics" | string;
+  target: string;
+}
+
+export interface FailurePresentation {
+  schema: "arcvellum/failure-presentation/v1";
+  code: string;
+  category: string;
+  title: string;
+  summary: string;
+  impact: string;
+  recovery_actions: FailureRecoveryAction[];
+  retryable: boolean;
+  requires_user_action: boolean;
+  technical_detail: string;
+}
+
 export interface AutopilotRun {
   run_id: string;
   project_root: string;
@@ -403,6 +423,7 @@ export interface AutopilotRun {
   created_at: string;
   started_at: string;
   updated_at: string;
+  failure?: FailurePresentation | null;
 }
 
 export interface HumanChoiceReceipt {

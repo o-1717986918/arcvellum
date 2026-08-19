@@ -39,6 +39,7 @@ from .support import (
 )
 from ..projections.core_read_models import current_choices
 from ..application.style.mount_service import StyleMountApplicationService
+from ..application.failures import present_run
 from ..advisor.creative_steward import CreativeSteward
 from ..persistence.job_store import JobStore
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
@@ -59,7 +60,6 @@ PROACTIVE_DECISIONS = {
 }
 TERMINAL_STATUSES = {"complete", "paused", "blocked", "cancelled", "failed"}
 NO_PROGRESS_LIMIT = 3
-
 class AutopilotService:
     def __init__(
         self,
@@ -182,9 +182,9 @@ class AutopilotService:
         root = str(project_root.expanduser().resolve())
         return {
             "ok": True,
-            "schema": "arcvellum/autopilot-status/v0.1",
+            "schema": "arcvellum/autopilot-status/v0.2",
             "policy": self.policy(project_root)["policy"],
-            "run": self.store.latest_autopilot_run(root),
+            "run": present_run(self.store.latest_autopilot_run(root)),
         }
 
     def shutdown(self) -> None:

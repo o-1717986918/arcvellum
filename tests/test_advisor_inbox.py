@@ -97,6 +97,26 @@ class AdvisorInboxStoreTests(unittest.TestCase):
             self.assertEqual(snapshot["items"][0]["message"], "先完成全书到场景的字数预算。")
             self.assertNotIn("word-budget", snapshot["items"][0]["message"])
 
+    def test_snapshot_collapses_legacy_wording_based_blocking_duplicates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            root.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            for suffix, message in (("a", "sidecar incomplete: 2 files"), ("b", "sidecar incomplete: 5 files")):
+                store.upsert_advisor_inbox(
+                    str(root.resolve()),
+                    dedupe_key=f"blocking:scene-development:{suffix}",
+                    kind="workflow_blocked",
+                    severity="blocking",
+                    title="创作流程在等待补齐",
+                    message=message,
+                )
+
+            snapshot = inbox_snapshot(store, root)
+
+            blocking = [item for item in snapshot["items"] if item["kind"] == "workflow_blocked"]
+            self.assertEqual(len(blocking), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

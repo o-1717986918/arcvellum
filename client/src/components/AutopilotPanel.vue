@@ -4,7 +4,7 @@ import { Bot, CircleCheck, CirclePause, Gauge, Pause, Play, RefreshCw, ShieldAle
 import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
 import { readCreativeRuntime, saveCreativeRuntime, type CreativeRuntime } from "@/services/runtimePreference";
 import { friendlyError, useAppStore } from "@/stores/app";
-import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy } from "@/types/api";
+import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy, FailureRecoveryAction } from "@/types/api";
 
 const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
 const store = useAppStore();
@@ -26,6 +26,7 @@ let events: EventStreamConnection | null = null;
 let clock = 0;
 
 const run = computed(() => snapshot.value?.run || null);
+const failure = computed(() => run.value?.failure || null);
 const running = computed(() => run.value?.status === "running");
 const mode = computed(() => selectedMode.value);
 const needsFullAutoAuthorization = computed(() => mode.value === "full_auto" && (!run.value || authorizationConfirmationRequired.value));
@@ -53,9 +54,22 @@ const statusText = computed(() => {
   if (!run.value) return "还没有开始连续创作";
   if (run.value.status === "running") return "作品正在持续向前推进";
   if (run.value.status === "complete") return "完整作品已经交付";
-  if (run.value.status === "paused") return run.value.last_error || "已暂停，等待你的决定";
+  if (run.value.status === "paused") return failure.value?.summary || run.value.last_error || "已暂停，等待你的决定";
   return run.value.last_error || "遇到需要处理的问题";
 });
+
+function handleFailureAction(action: FailureRecoveryAction): void {
+  if (action.kind === "retry") {
+    void resume();
+    return;
+  }
+  const routes: Record<string, string> = {
+    settings: "/settings",
+    overview: "/overview",
+    "agent-observability": "/observatory",
+  };
+  window.location.hash = `#${routes[action.target] || "/overview"}`;
+}
 
 const modes: Array<{ id: AutopilotMode; title: string; text: string }> = [
   { id: "collaborative", title: "一起创作", text: "每个重要选择都由你决定，ArcVellum 负责准备和检查。" },
@@ -380,6 +394,16 @@ function routeText(route: string): string {
         <button v-else-if="run?.status !== 'complete'" class="primary-button" :disabled="busy || (needsFullAutoAuthorization && !authorized)" @click="start"><Play :size="16" />{{ needsFullAutoAuthorization ? '确认授权并开始' : '开始' }}</button>
       </div>
     </div>
+
+    <section v-if="failure && !running && !authorizationLimit" class="autopilot-failure-card" :data-category="failure.category" aria-live="polite">
+      <header><ShieldAlert :size="18" /><div><small>{{ failure.code }}</small><strong>{{ failure.title }}</strong></div></header>
+      <p>{{ failure.summary }}</p>
+      <p class="failure-impact">{{ failure.impact }}</p>
+      <div class="failure-actions">
+        <button v-for="action in failure.recovery_actions" :key="action.action_id" :class="action.kind === 'retry' ? 'primary-button' : 'secondary-button'" :disabled="busy" @click="handleFailureAction(action)">{{ action.label }}</button>
+      </div>
+      <details v-if="failure.technical_detail"><summary>技术详情</summary><code>{{ failure.technical_detail }}</code></details>
+    </section>
 
     <div v-if="running" class="autopilot-live-evidence" aria-live="polite">
       <span><Timer :size="14" />本次连续运行 {{ elapsedText }}</span>

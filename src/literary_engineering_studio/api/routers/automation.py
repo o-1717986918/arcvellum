@@ -13,6 +13,7 @@ from ..streaming import numeric_resume_cursor, sse_headers, stream_terminal
 
 from ..common import call_handler, project_root as resolve_project_root
 from ..models import AutopilotControlRequest, AutopilotPolicyRequest, AutopilotStartRequest
+from ...application.failures import present_run
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,42 @@ def _observability_payload(deps: AutomationRouterDependencies, root: Path) -> tu
     return payload, run
 
 
+def _save_policy(deps: AutomationRouterDependencies, payload: AutopilotPolicyRequest) -> dict[str, Any]:
+    saved = deps.autopilot.save_policy(
+        resolve_project_root(payload.project_root), payload.policy
+    )
+    if isinstance(saved.get("run"), dict):
+        saved["run"] = present_run(saved["run"])
+    return {"ok": True, **saved}
+
+
+def _start_run(deps: AutomationRouterDependencies, payload: AutopilotStartRequest) -> dict[str, Any]:
+    root = resolve_project_root(payload.project_root)
+    policy = deps.autopilot.policy(root).get("policy", {})
+    if policy.get("mode") == "full_auto" and not payload.authorized:
+        raise ValueError("全自动交付需要用户在创作总控中明确确认授权。")
+    return {
+        "ok": True,
+        "run": present_run(deps.autopilot.start(root, runtime=payload.runtime)),
+    }
+
+
+def _resume_run(
+    deps: AutomationRouterDependencies,
+    run_id: str,
+    payload: AutopilotControlRequest | None,
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "run": present_run(
+            deps.autopilot.resume(
+                run_id,
+                authorized=bool(payload and payload.authorized),
+            )
+        ),
+    }
+
+
 def _autopilot_stream_response(
     deps: AutomationRouterDependencies,
     run_id: str,
@@ -55,13 +92,14 @@ def _autopilot_stream_response(
                 cursor = max(cursor, int(item["sequence"]))
                 yield deps.sse(str(item["event"]), item, item["sequence"])
             run = deps.jobs.read_autopilot_run(run_id)
+            projected_run = present_run(run) or run
             status_revision = ":".join(
                 str(run.get(key) or "")
                 for key in ("updated_at", "status", "current_task_id")
             )
             if status_revision != previous_status_revision:
                 yield deps.sse(
-                    "autopilot.status", {"run": run, "cursor": cursor}, None
+                    "autopilot.status", {"run": projected_run, "cursor": cursor}, None
                 )
                 previous_status_revision = status_revision
             if run["status"] in {
@@ -128,31 +166,24 @@ def build_automation_router(deps: AutomationRouterDependencies) -> APIRouter:
 
     @router.put("/autopilot/policy")
     def autopilot_policy_save(payload: AutopilotPolicyRequest):
-        return call_handler(lambda: {"ok": True, **deps.autopilot.save_policy(resolve_project_root(payload.project_root), payload.policy)})
+        return call_handler(lambda: _save_policy(deps, payload))
 
     @router.post("/autopilot/start")
     def autopilot_start(payload: AutopilotStartRequest):
-        def start():
-            root = resolve_project_root(payload.project_root)
-            policy = deps.autopilot.policy(root).get("policy", {})
-            if policy.get("mode") == "full_auto" and not payload.authorized:
-                raise ValueError("全自动交付需要用户在创作总控中明确确认授权。")
-            return {"ok": True, "run": deps.autopilot.start(root, runtime=payload.runtime)}
-
-        return call_handler(start)
+        return call_handler(lambda: _start_run(deps, payload))
 
     @router.post("/autopilot/runs/{run_id}/pause")
     def autopilot_pause(run_id: str, payload: AutopilotControlRequest):
-        return call_handler(lambda: {"ok": True, "run": deps.autopilot.pause(run_id, reason=payload.reason)})
-
-    @router.post("/autopilot/runs/{run_id}/resume")
-    def autopilot_resume(run_id: str, payload: AutopilotControlRequest | None = None):
         return call_handler(
             lambda: {
                 "ok": True,
-                "run": deps.autopilot.resume(run_id, authorized=bool(payload and payload.authorized)),
+                "run": present_run(deps.autopilot.pause(run_id, reason=payload.reason)),
             }
         )
+
+    @router.post("/autopilot/runs/{run_id}/resume")
+    def autopilot_resume(run_id: str, payload: AutopilotControlRequest | None = None):
+        return call_handler(lambda: _resume_run(deps, run_id, payload))
 
     @router.get("/autopilot/runs/{run_id}/events")
     def autopilot_events(run_id: str, after: int = 0, limit: int = 300):

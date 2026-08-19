@@ -12,6 +12,7 @@ from typing import Any
 from ..projections.core_read_models import build_dashboard, current_choices
 from ..jobs import JobStore
 from ..projections.reader import build_reader_manifest
+from ..application.failures import failure_identity, present_failure
 
 
 INBOX_SCHEMA = "arcvellum/advisor-inbox/v1"
@@ -57,20 +58,7 @@ def refresh_advisor_inbox(
     audits = dashboard.get("route_audits") if isinstance(dashboard.get("route_audits"), list) else []
     blocked = [item for item in audits if isinstance(item, dict) and int(item.get("blocking_count") or 0) > 0]
     for audit in blocked[:2]:
-        gates = audit.get("top_blocking_gates") if isinstance(audit.get("top_blocking_gates"), list) else []
-        gate = gates[0] if gates and isinstance(gates[0], dict) else {}
-        raw_message = str(gate.get("message") or "这条创作路线还有必要步骤没有完成。")
-        message = _friendly_action(raw_message)
-        route = str(audit.get("route") or "auto")
-        store.upsert_advisor_inbox(
-            str(root),
-            dedupe_key=f"blocking:{route}:{hashlib.sha256(raw_message.encode('utf-8')).hexdigest()[:12]}",
-            kind="workflow_blocked",
-            severity="blocking",
-            title="创作流程在等待补齐",
-            message=message,
-            action={"type": "open_view", "target": "overview", "label": "查看阻塞"},
-        )
+        _upsert_blocking_notice(store, root, audit)
 
     if mode == "active":
         next_actions = dashboard.get("next_actions") if isinstance(dashboard.get("next_actions"), list) else []
@@ -91,18 +79,7 @@ def refresh_advisor_inbox(
 
     run = store.latest_autopilot_run(str(root))
     if run and str(run.get("status") or "") in {"paused", "blocked", "failed"}:
-        run_id = str(run.get("run_id") or "")
-        status = str(run.get("status") or "")
-        reason = str(run.get("stop_reason") or run.get("last_error") or "连续创作已经停下，正在等你确认下一步。")
-        store.upsert_advisor_inbox(
-            str(root),
-            dedupe_key=f"autopilot:{run_id}:{status}:{_digest(reason)}",
-            kind="autopilot",
-            severity="blocking" if status in {"blocked", "failed"} else "notice",
-            title="连续创作已暂停" if status == "paused" else "连续创作需要处理",
-            message=_friendly_action(reason),
-            action={"type": "open_view", "target": "overview", "label": "查看进度"},
-        )
+        _upsert_autopilot_notice(store, root, run)
 
     if mode in {"standard", "active"}:
         try:
@@ -133,10 +110,11 @@ def inbox_snapshot(
     limit: int = 80,
 ) -> dict[str, Any]:
     stored_items = store.advisor_inbox(str(project_root.resolve()), limit=limit)
-    items = [
+    normalized_items = [
         {**item, "message": _friendly_action(str(item.get("message") or ""))}
         for item in stored_items
     ]
+    items = _dedupe_snapshot(normalized_items)
     active_settings = settings or {}
     quiet = _is_quiet(active_settings)
     unread = sum(1 for item in items if item.get("unread"))
@@ -234,6 +212,69 @@ def _friendly_action(value: str) -> str:
     if "--" in value or lowered.startswith("lew ") or lowered.startswith("run ") or ".agent_tasks" in lowered:
         return "下一项创作工作已经准备好。"
     return value
+
+
+def _upsert_blocking_notice(store: JobStore, root: Path, audit: dict[str, Any]) -> None:
+    gates = audit.get("top_blocking_gates") if isinstance(audit.get("top_blocking_gates"), list) else []
+    gate = gates[0] if gates and isinstance(gates[0], dict) else {}
+    raw_message = str(gate.get("message") or "这条创作路线还有必要步骤没有完成。")
+    route = str(audit.get("route") or "auto")
+    gate_id = str(
+        gate.get("gate_id")
+        or gate.get("gate")
+        or gate.get("id")
+        or failure_identity(raw_message, route=route)
+    )
+    store.upsert_advisor_inbox(
+        str(root),
+        dedupe_key=f"blocking:{route}:{gate_id}",
+        kind="workflow_blocked",
+        severity="blocking",
+        title="创作流程在等待补齐",
+        message=_friendly_action(raw_message),
+        action={"type": "open_view", "target": "overview", "label": "查看阻塞"},
+    )
+
+
+def _upsert_autopilot_notice(store: JobStore, root: Path, run: dict[str, Any]) -> None:
+    run_id = str(run.get("run_id") or "")
+    status = str(run.get("status") or "")
+    reason = str(run.get("stop_reason") or run.get("last_error") or "连续创作已经停下，正在等你确认下一步。")
+    failure = present_failure(
+        str(run.get("last_error") or reason),
+        stop_reason=str(run.get("stop_reason") or ""),
+        status=status,
+    )
+    store.upsert_advisor_inbox(
+        str(root),
+        dedupe_key=f"autopilot:{run_id}:{failure.code if failure else status}",
+        kind="autopilot",
+        severity="blocking" if status in {"blocked", "failed"} else "notice",
+        title=(failure.title if failure else "连续创作已暂停" if status == "paused" else "连续创作需要处理"),
+        message=(failure.summary if failure else _friendly_action(reason)),
+        action={"type": "open_view", "target": "overview", "label": "查看进度"},
+    )
+
+
+def _dedupe_snapshot(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hide historical duplicates created by pre-v0.99 wording-based keys."""
+
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:
+        key = str(item.get("dedupe_key") or item.get("item_id") or "")
+        parts = key.split(":")
+        if item.get("kind") == "workflow_blocked" and len(parts) >= 2:
+            identity = f"workflow_blocked:{parts[1]}"
+        elif item.get("kind") == "autopilot" and len(parts) >= 2:
+            identity = f"autopilot:{parts[1]}"
+        else:
+            identity = key
+        if identity in seen:
+            continue
+        seen.add(identity)
+        deduped.append(item)
+    return deduped
 
 
 def _is_quiet(settings: dict[str, Any]) -> bool:

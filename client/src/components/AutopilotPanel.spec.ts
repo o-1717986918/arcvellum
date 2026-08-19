@@ -138,4 +138,54 @@ describe("AutopilotPanel", () => {
     expect(wrapper.text()).toContain("已通过正式门禁 85 次");
     expect(wrapper.text()).not.toContain("已经完成 85 项创作任务");
   });
+
+  it("renders a recovery card instead of exposing a raw runtime failure as the headline", async () => {
+    apiMock.mockImplementation(async (path: string) => {
+      if (path.startsWith("/autopilot/status")) {
+        return {
+          ok: true,
+          policy,
+          run: {
+            run_id: "run-failure",
+            project_root: "C:\\ArcVellum\\作品",
+            mode: "collaborative",
+            runtime: "pi-worker",
+            status: "paused",
+            current_route: "longform-planning",
+            current_task_id: "scene-inventory",
+            tasks_completed: 5,
+            failures: 1,
+            consecutive_revisions: 0,
+            estimated_cost: 0.01,
+            last_error: "ArcVellum 在调用模型前发现任务资料超过安全上限，已阻止超长提示词继续消耗额度。",
+            stop_reason: "repeated-task-failure",
+            failure: {
+              schema: "arcvellum/failure-presentation/v1",
+              code: "prompt_input_over_budget",
+              category: "task_context",
+              title: "本次任务携带的资料过多",
+              summary: "ArcVellum 在调用模型前发现任务资料超过安全上限，已阻止超长提示词继续消耗额度。",
+              impact: "当前任务尚未写入正式作品；已有正文和设定不会丢失。",
+              recovery_actions: [{ action_id: "compact-and-resume", label: "精简本次资料并继续", kind: "retry", target: "overview" }],
+              retryable: true,
+              requires_user_action: false,
+              technical_detail: "Pi Worker Prompt v3 lint failed: 67021 > 48000",
+            },
+          },
+        };
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const { useAppStore } = await import("@/stores/app");
+    useAppStore().setCurrentProject("C:\\ArcVellum\\作品", false);
+
+    const wrapper = mount(AutopilotPanel, { global: { plugins: [pinia] } });
+    await flushPromises();
+
+    expect(wrapper.find(".autopilot-failure-card").exists()).toBe(true);
+    expect(wrapper.find(".autopilot-failure-card strong").text()).toContain("资料过多");
+    expect(wrapper.text()).toContain("精简本次资料并继续");
+  });
 });
