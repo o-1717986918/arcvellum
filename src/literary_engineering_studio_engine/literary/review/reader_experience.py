@@ -11,6 +11,10 @@ from typing import Any
 
 from ...agent_tasks import agent_task_completion_status, write_agent_tasks
 from ...text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
+from .reader_contract_validation import (
+    chapter_obligation_issues,
+    reader_contract_issues,
+)
 
 
 CHAPTER_OBLIGATION_SCHEMA = "literary-engineering-workbench/chapter-obligation-contract/v1"
@@ -102,55 +106,6 @@ def chapter_obligation_path(root: Path, obligation_id: str) -> Path:
     return root.resolve() / "plot" / "chapter_obligations" / f"{obligation_id}.json"
 
 
-def chapter_obligation_machine_contract(root: Path, chapter_id: str) -> dict[str, Any]:
-    """Return immutable identity and inventory fields for an Agent-authored contract."""
-
-    root = root.resolve()
-    json_path = chapter_obligation_path(root, chapter_id)
-    scaffold = _chapter_obligation_scaffold(root, chapter_id, json_path)
-    locked_fields = {
-        key: scaffold[key]
-        for key in (
-            "schema",
-            "chapter_id",
-            "count_unit",
-            "machine_count_unit",
-            "target_chinese_chars",
-            "scene_count_target",
-            "source_paths",
-            "output_path",
-        )
-    }
-    scene_rows = [
-        {
-            key: row[key]
-            for key in (
-                "scene_id",
-                "word_count_target",
-                "word_count_min",
-                "word_count_max",
-            )
-        }
-        for row in scaffold["reader_experience_by_scene"]
-    ]
-    return {
-        "path": _rel(json_path, root),
-        "markdown_path": _rel(json_path.with_suffix(".md"), root),
-        "fields": locked_fields,
-        "scene_rows": scene_rows,
-    }
-
-
-def render_chapter_obligation_markdown(
-    root: Path,
-    payload: dict[str, Any],
-    json_path: Path,
-) -> str:
-    """Render the user-facing mirror from the authoritative JSON contract."""
-
-    return _render_obligation_markdown(root.resolve(), payload, json_path)
-
-
 def scene_chapter_obligation_id(root: Path, scene_path: Path) -> str:
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
     text = _read(scene_path)
@@ -202,15 +157,7 @@ def chapter_obligation_contract(root: Path, scene_path: Path) -> dict[str, Any]:
     if str(payload.get("chapter_id") or "") != chapter_id:
         base.update({"status": "invalid", "message": f"chapter obligation chapter_id mismatch: expected {chapter_id}"})
         return base
-    expected_scene_ids = tuple(
-        str(row.get("scene_id") or "")
-        for row in _scenes_for_chapter(root, chapter_id)
-        if str(row.get("scene_id") or "")
-    )
-    issues = chapter_obligation_contract_issues(
-        payload,
-        expected_scene_ids=expected_scene_ids,
-    )
+    issues = chapter_obligation_contract_issues(payload, expected_scene_ids=_planned_scene_ids(root, chapter_id))
     task_path = path.with_suffix(".agent_tasks.md")
     completion = agent_task_completion_status(task_path, root=root)
     if completion.get("complete") is not True:
@@ -265,7 +212,7 @@ def reader_experience_contract(root: Path, scene_path: Path) -> dict[str, Any]:
     scene_contract = _scene_reader_contract(payload, scene_id)
     if not scene_contract:
         scene_contract = _scene_yaml_reader_contract(scene_text)
-    issues = _reader_contract_issues(scene_contract)
+    issues = reader_contract_issues(scene_contract, REQUIRED_READER_FIELDS)
     return {
         "schema": READER_EXPERIENCE_SCHEMA,
         "scene_id": scene_id,
@@ -487,55 +434,13 @@ def chapter_obligation_contract_issues(
     validator so an invalid Agent artifact is repaired before formal writeback.
     """
 
-    issues: list[str] = []
-    for field in REQUIRED_CHAPTER_FIELDS:
-        value = payload.get(field)
-        if value in ("", None, [], {}):
-            issues.append(f"chapter obligation field missing: {field}")
-    # An opening chapter can legitimately have no earlier hook to inherit and no
-    # due payoff. Require these fields to be explicit lists, not non-empty lists.
-    for field in CHAPTER_LIST_FIELDS:
-        value = payload.get(field)
-        if not isinstance(value, list):
-            issues.append(f"chapter obligation field must be a list: {field}")
-    scenes = payload.get("reader_experience_by_scene")
-    if not isinstance(scenes, list) or not scenes:
-        issues.append("reader_experience_by_scene must contain at least one scene contract")
-        return issues
-    actual_scene_ids = [
-        str(row.get("scene_id") or "").strip()
-        for row in scenes
-        if isinstance(row, dict)
-    ]
-    if len(actual_scene_ids) != len(set(actual_scene_ids)):
-        issues.append("reader_experience_by_scene contains duplicate scene_id values")
-    if expected_scene_ids and set(actual_scene_ids) != set(expected_scene_ids):
-        missing = sorted(set(expected_scene_ids) - set(actual_scene_ids))
-        extra = sorted(set(actual_scene_ids) - set(expected_scene_ids))
-        issues.append(
-            "reader_experience_by_scene must match the planned chapter scenes: "
-            f"missing={missing or []}, extra={extra or []}"
-        )
-    for row in scenes:
-        if not isinstance(row, dict):
-            issues.append("reader_experience_by_scene entries must be objects")
-            continue
-        for message in _reader_contract_issues(row):
-            issues.append(
-                f"reader experience {row.get('scene_id') or 'unknown'}: {message}"
-            )
-    return issues
-
-
-def _reader_contract_issues(payload: dict[str, Any]) -> list[str]:
-    if not payload:
-        return ["reader experience contract missing for scene"]
-    issues = []
-    for field in REQUIRED_READER_FIELDS:
-        value = payload.get(field)
-        if value in ("", None, [], {}):
-            issues.append(f"reader experience field missing: {field}")
-    return issues
+    return chapter_obligation_issues(
+        payload,
+        expected_scene_ids=expected_scene_ids,
+        required_chapter_fields=REQUIRED_CHAPTER_FIELDS,
+        chapter_list_fields=CHAPTER_LIST_FIELDS,
+        required_reader_fields=REQUIRED_READER_FIELDS,
+    )
 
 
 def _scene_reader_contract(payload: dict[str, Any], scene_id: str) -> dict[str, Any]:
@@ -546,6 +451,14 @@ def _scene_reader_contract(payload: dict[str, Any], scene_id: str) -> dict[str, 
         if isinstance(row, dict) and str(row.get("scene_id") or "") == scene_id:
             return row
     return {}
+
+
+def _planned_scene_ids(root: Path, chapter_id: str) -> tuple[str, ...]:
+    return tuple(
+        str(row.get("scene_id") or "")
+        for row in _scenes_for_chapter(root, chapter_id)
+        if str(row.get("scene_id") or "")
+    )
 
 
 def _scene_yaml_reader_contract(scene_text: str) -> dict[str, Any]:

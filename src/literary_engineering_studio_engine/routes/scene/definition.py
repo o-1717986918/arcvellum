@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 from .context_contract import scene_context_contract
-from ...literary.review.reader_experience import chapter_obligation_machine_contract
+from ...literary.review.chapter_obligation_machine import chapter_obligation_machine_contract
 from ...scene_route_blueprints import _blueprint_for_state
 from ...scene_route_gates import (
     _candidate_review_gate_errors,
@@ -70,6 +70,18 @@ def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) 
         ],
         "next_allowed_states": blueprint["next_allowed_states"],
     }
+    _apply_blueprint_contracts(payload, blueprint, root, current_state, scene_id)
+    payload.update(scene_context_contract(root, payload))
+    return payload
+
+
+def _apply_blueprint_contracts(
+    payload: dict[str, object],
+    blueprint: dict[str, object],
+    root: Path,
+    current_state: str,
+    scene_id: str,
+) -> None:
     for key in ("candidate", "revision_source"):
         if blueprint.get(key):
             payload[key] = blueprint[key]
@@ -80,8 +92,7 @@ def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) 
     if current_state == "reader-experience-contract":
         payload["system_owned_fields"] = {
             "chapter_obligation": chapter_obligation_machine_contract(
-                root,
-                _scene_chapter_id(root, scene_id),
+                root, _scene_chapter_id(root, scene_id)
             )
         }
     semantic = semantic_artifact_contract(current_state, scene_id)
@@ -91,8 +102,6 @@ def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) 
         source = _resolve_project_path(root, str(blueprint["revision_source"]))
         if source.is_file():
             payload["candidate_sha256_before_revision"] = _file_sha256(source)
-    payload.update(scene_context_contract(root, payload))
-    return payload
 
 
 def _scene_word_count_contract(root: Path, scene_rel: str, blueprint: dict[str, object]) -> tuple[int, int, int]:
@@ -139,26 +148,7 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         "static-revision",
     }
     if current_state == "reader-experience-contract":
-        chapter_id = _scene_chapter_id(root, scene_id)
-        chapter_scenes = [
-            _normalize_rel(path.relative_to(root))
-            for path in sorted((root / "scenes").glob("*.yaml"))
-            if _yaml_scalar(path, "chapter_id") == chapter_id
-        ]
-        reader_minimum = [
-            "project.yaml",
-            "plot/word_budget/word_budget.json",
-            f"plot/chapter_obligations/{chapter_id}.json",
-            *chapter_scenes,
-        ]
-        generated_scaffold = f"plot/chapter_obligations/{chapter_id}.json"
-        return _unique(
-            [
-                relative
-                for relative in reader_minimum
-                if relative == generated_scaffold or (root / relative).is_file()
-            ]
-        )
+        return _reader_experience_reading_paths(root, scene_id)
     prose_minimum = {
         "project.yaml",
         f"scenes/{scene_id}.yaml",
@@ -177,24 +167,7 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         "style/style-profile.md",
     }
     if current_state == "candidate-review":
-        candidate_paths = [
-            relative
-            for relative in source_paths
-            if relative.startswith(("drafts/candidates/", "drafts/revisions/"))
-            and relative.endswith((".md", ".json"))
-        ]
-        review_minimum = [
-            *candidate_paths,
-            f"scenes/{scene_id}.yaml",
-            f"drafts/compositions/{scene_id}_composition_review.json",
-            f"branches/{scene_id}/branch_selection.md",
-            f"memory/context_packets/{scene_id}.md",
-            f"memory/context_packets/{scene_id}.trace.json",
-            "style/creative_quality_profile.json",
-            "style/style-profile.md",
-            "plot/word_budget/word_budget.json",
-        ]
-        return _unique([relative for relative in review_minimum if (root / relative).is_file()])
+        return _candidate_review_reading_paths(root, source_paths, scene_id)
 
     if current_state in {"candidate-revision", "static-revision"}:
         # revise-scene receives these paths as explicit command arguments before
@@ -241,6 +214,49 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         if (root / relative).is_file():
             curated.append(relative)
     return _unique(curated)
+
+
+def _candidate_review_reading_paths(root: Path, source_paths: list[str], scene_id: str) -> list[str]:
+    candidates = [
+        relative
+        for relative in source_paths
+        if relative.startswith(("drafts/candidates/", "drafts/revisions/"))
+        and relative.endswith((".md", ".json"))
+    ]
+    required = [
+        *candidates,
+        f"scenes/{scene_id}.yaml",
+        f"drafts/compositions/{scene_id}_composition_review.json",
+        f"branches/{scene_id}/branch_selection.md",
+        f"memory/context_packets/{scene_id}.md",
+        f"memory/context_packets/{scene_id}.trace.json",
+        "style/creative_quality_profile.json",
+        "style/style-profile.md",
+        "plot/word_budget/word_budget.json",
+    ]
+    return _unique([relative for relative in required if (root / relative).is_file()])
+
+
+def _reader_experience_reading_paths(root: Path, scene_id: str) -> list[str]:
+    chapter_id = _scene_chapter_id(root, scene_id)
+    generated_scaffold = f"plot/chapter_obligations/{chapter_id}.json"
+    candidates = [
+        "project.yaml",
+        "plot/word_budget/word_budget.json",
+        generated_scaffold,
+        *(
+            _normalize_rel(path.relative_to(root))
+            for path in sorted((root / "scenes").glob("*.yaml"))
+            if _yaml_scalar(path, "chapter_id") == chapter_id
+        ),
+    ]
+    return _unique(
+        [
+            relative
+            for relative in candidates
+            if relative == generated_scaffold or (root / relative).is_file()
+        ]
+    )
 
 
 def _scene_chapter_id(root: Path, scene_id: str) -> str:

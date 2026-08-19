@@ -8,7 +8,7 @@ import re
 
 from .contracts import TaskPackage
 from .preflight.assets import _validate_asset_candidate, _validate_asset_review_contract
-from .preflight.canonicalization import canonicalize_task_outputs
+from .preflight.service import canonicalize_task_outputs
 from .preflight.common import (
     COMPLETION_SCHEMA,
     PreflightIssue,
@@ -142,18 +142,9 @@ def _validate_chapter_obligation_contract(
         return
     if not isinstance(payload, dict):
         return
-    owned = task.payload.get("system_owned_fields")
-    owned = owned if isinstance(owned, dict) else {}
-    contract = owned.get("chapter_obligation")
-    contract = contract if isinstance(contract, dict) else {}
-    expected_scene_ids = tuple(
-        str(row.get("scene_id") or "")
-        for row in contract.get("scene_rows") or []
-        if isinstance(row, dict) and str(row.get("scene_id") or "")
-    )
     messages = chapter_obligation_contract_issues(
         payload,
-        expected_scene_ids=expected_scene_ids,
+        expected_scene_ids=_reader_contract_scene_ids(task),
     )
     if not messages:
         return
@@ -170,6 +161,18 @@ def _validate_chapter_obligation_contract(
                 "reader_experience_by_scene 必须是非空数组。不要自行创建 completion marker。"
             ),
         )
+    )
+
+
+def _reader_contract_scene_ids(task: TaskPackage) -> tuple[str, ...]:
+    owned = task.payload.get("system_owned_fields")
+    owned = owned if isinstance(owned, dict) else {}
+    contract = owned.get("chapter_obligation")
+    contract = contract if isinstance(contract, dict) else {}
+    return tuple(
+        str(row.get("scene_id") or "")
+        for row in contract.get("scene_rows") or []
+        if isinstance(row, dict) and str(row.get("scene_id") or "")
     )
 
 

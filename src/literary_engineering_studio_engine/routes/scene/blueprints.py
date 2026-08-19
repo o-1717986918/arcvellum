@@ -119,6 +119,9 @@ def _next_revision_base(root: Path, scene_id: str, revision_source: str) -> str:
     return f"drafts/revisions/{scene_id}_revision_{highest + 1:02d}"
 
 
+def _reader_obligation_outputs(chapter_id: str) -> list[str]:
+    base = f"plot/chapter_obligations/{chapter_id}"
+    return [f"{base}.json", f"{base}.md", f"{base}.agent_tasks.md", f"{base}.agent_completion.json"]
 def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_state: str, next_action: str) -> dict[str, object]:
     scene_path = _resolve_project_path(root, scene_rel)
     scene_text = _read_text(scene_path)
@@ -463,16 +466,8 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 )
             ),
             "context_trace": context_trace,
-            "expected_outputs": [
-                f"plot/chapter_obligations/{chapter_id}.json",
-                f"plot/chapter_obligations/{chapter_id}.md",
-                f"plot/chapter_obligations/{chapter_id}.agent_tasks.md",
-                f"plot/chapter_obligations/{chapter_id}.agent_completion.json",
-            ],
-            "core_managed_outputs": [
-                f"plot/chapter_obligations/{chapter_id}.md",
-                f"plot/chapter_obligations/{chapter_id}.agent_tasks.md",
-            ],
+            "expected_outputs": _reader_obligation_outputs(chapter_id),
+            "core_managed_outputs": [f"plot/chapter_obligations/{chapter_id}.md", f"plot/chapter_obligations/{chapter_id}.agent_tasks.md"],
             "hard_constraints": [
                 "Longform scenes must have a ready chapter obligation and reader-experience contract before prose generation.",
                 "The platform agent must fill reader_question, promised_reward, withheld_information, payoff_or_delay, emotional_curve, tension_source, curiosity_hook, freshness_requirement, anti_summary_requirement, and reader_aftertaste for this scene.",

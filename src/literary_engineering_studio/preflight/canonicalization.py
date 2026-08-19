@@ -26,9 +26,6 @@ from literary_engineering_studio_engine.semantic_task_contracts import (
     semantic_artifact_relative_path,
 )
 from literary_engineering_studio_engine.literary.assets.continuity.architecture import REQUIRED_FIELDS
-from literary_engineering_studio_engine.literary.review.reader_experience import (
-    render_chapter_obligation_markdown,
-)
 
 
 SEMANTIC_SOURCE_PATTERNS = {
@@ -49,7 +46,6 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(_canonicalize_semantic_artifact_metadata(task, sandbox))
     changes.extend(_canonicalize_canon_patch_candidate_metadata(task, sandbox))
     changes.extend(_canonicalize_story_architecture_metadata(task, sandbox))
-    changes.extend(_canonicalize_chapter_obligation_metadata(task, sandbox))
     changes.extend(_canonicalize_continuity_ledger_metadata(task, sandbox))
     changes.extend(canonicalize_style_machine_metadata(task, sandbox))
     changes.extend(_canonicalize_project_review_metadata(task, sandbox))
@@ -318,56 +314,6 @@ def _canonicalize_story_architecture_metadata(task: TaskPackage, sandbox: Sandbo
             }:
                 expected["status"] = "complete"
             changes.extend(_write_machine_fields(path, review_rel, payload, expected, "story-architecture-review"))
-    return changes
-
-
-def _canonicalize_chapter_obligation_metadata(
-    task: TaskPackage,
-    sandbox: SandboxManifest,
-) -> list[dict[str, str]]:
-    """Restore task-owned chapter identity and render its Markdown mirror."""
-
-    if task.current_state != "reader-experience-contract":
-        return []
-    owned = task.payload.get("system_owned_fields")
-    owned = owned if isinstance(owned, dict) else {}
-    contract = owned.get("chapter_obligation")
-    contract = contract if isinstance(contract, dict) else {}
-    relative = str(contract.get("path") or "").replace("\\", "/")
-    fields = contract.get("fields") if isinstance(contract.get("fields"), dict) else {}
-    if not relative or not fields:
-        return []
-    path = sandbox.workspace / Path(relative)
-    payload = _read_object(path)
-    if payload is None:
-        return []
-    changes = _write_machine_fields(
-        path,
-        relative,
-        payload,
-        fields,
-        "chapter-obligation",
-    )
-    markdown_rel = str(contract.get("markdown_path") or "").replace("\\", "/")
-    if markdown_rel:
-        markdown_path = sandbox.workspace / Path(markdown_rel)
-        markdown_path.parent.mkdir(parents=True, exist_ok=True)
-        rendered = render_chapter_obligation_markdown(
-            sandbox.workspace,
-            payload,
-            path,
-        )
-        if not markdown_path.is_file() or markdown_path.read_text(
-            encoding="utf-8", errors="replace"
-        ) != rendered:
-            markdown_path.write_text(rendered, encoding="utf-8")
-            changes.append(
-                {
-                    "path": markdown_rel,
-                    "field": "rendered_markdown",
-                    "reason": "rendered Studio-owned Markdown from authoritative chapter JSON",
-                }
-            )
     return changes
 
 
