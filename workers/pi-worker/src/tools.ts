@@ -50,7 +50,7 @@ export function createWorkerTools(
 		{
 			name: "write_expected_output",
 			label: "Write Expected Output",
-			description: "Atomically write one or several Agent-owned expected outputs. Prefer one batch call for all ready artifacts. Completion receipts are never writable by the Agent.",
+			description: "Atomically write one or several Agent-owned expected outputs. Batch only compact artifacts whose combined content is safely below 12000 characters; otherwise write one complete artifact per call. The result includes aggregate local validation. Completion receipts are never writable by the Agent.",
 			parameters: Type.Object({
 				path: Type.Optional(Type.String()),
 				content: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000_000 })),
@@ -82,9 +82,18 @@ export function createWorkerTools(
 					state.writtenPaths.add(item.path);
 					emit("file.changed", { path: item.path });
 				}
-				return result("outputs written", {
+				state.lastValidation = await validateSubmittedOutputs(
+					context,
+					options.workspace,
+					state.writtenPaths,
+				);
+				return result({
+					message: "outputs written",
+					validation: state.lastValidation,
+				}, {
 					paths: normalized.map((item) => item.path),
 					characters: normalized.reduce((total, item) => total + item.content.length, 0),
+					validationPassed: state.lastValidation.passed,
 				});
 			},
 		},
@@ -98,13 +107,19 @@ export function createWorkerTools(
 				const input = params as { path?: string };
 				const path = input.path ? normalizeRelativePath(input.path) : undefined;
 				if (path && !ownedPaths.has(path)) throw new Error("path is not an Agent-owned expected output");
-				state.lastValidation = await validateSubmittedOutputs(
+				const requestedValidation = await validateSubmittedOutputs(
 					context,
 					options.workspace,
 					state.writtenPaths,
 					path,
 				);
-				return result(state.lastValidation, { checked: path ?? "all" });
+				state.lastValidation = path
+					? await validateSubmittedOutputs(context, options.workspace, state.writtenPaths)
+					: requestedValidation;
+				return result({
+					requested: requestedValidation,
+					aggregate: state.lastValidation,
+				}, { checked: path ?? "all", aggregatePassed: state.lastValidation.passed });
 			},
 		},
 		{

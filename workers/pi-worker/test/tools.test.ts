@@ -69,6 +69,51 @@ describe("local output validation", () => {
 
 		expect((await validateOutputs(context(), root)).passed).toBe(true);
 		expect([...workerState.writtenPaths].sort()).toEqual(["out/review.json", "out/review.md"]);
+		expect(workerState.lastValidation.passed).toBe(true);
+	});
+
+	it("returns aggregate validation immediately after a partial or malformed write", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-write-feedback-"));
+		roots.push(root);
+		const workerState = state();
+		const write = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		const response = await write?.execute("call", {
+			path: "out/review.json",
+			content: "{broken",
+		});
+		const payload = JSON.parse(response?.content[0]?.text ?? "{}");
+
+		expect(payload.validation.passed).toBe(false);
+		expect(payload.validation.issues).toEqual(expect.arrayContaining([
+			expect.objectContaining({ path: "out/review.json", code: "invalid_json" }),
+			expect.objectContaining({ path: "out/review.md", code: "missing" }),
+		]));
+		expect(workerState.lastValidation).toEqual(payload.validation);
+	});
+
+	it("keeps aggregate failures when validating one passing sibling output", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-aggregate-validation-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), "{broken", "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
+		const workerState = state();
+		workerState.writtenPaths.add("out/review.json");
+		workerState.writtenPaths.add("out/review.md");
+		const validate = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "validate_output");
+
+		const response = await validate?.execute("call", { path: "out/review.md" });
+		const payload = JSON.parse(response?.content[0]?.text ?? "{}");
+
+		expect(payload.requested.passed).toBe(true);
+		expect(payload.aggregate.passed).toBe(false);
+		expect(workerState.lastValidation.issues).toContainEqual(expect.objectContaining({
+			path: "out/review.json",
+			code: "invalid_json",
+		}));
 	});
 
 	it("rereads an Agent-owned output for a bounded repair turn", async () => {

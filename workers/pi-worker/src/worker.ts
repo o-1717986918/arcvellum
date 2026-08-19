@@ -96,6 +96,7 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 	}
 	const eventAdapter = new WorkerEventAdapter(sessionId, state, emit);
 	const tools = createWorkerTools(context, options, state, emit);
+	let requiredToolLease = "";
 	const agent = new Agent({
 		initialState: {
 			systemPrompt: profile.systemPrompt,
@@ -110,17 +111,19 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			?? { minimal: 128, low: 512, medium: 1024, high: 2048 },
 		onPayload: (payload) => {
 			eventAdapter.providerRequest(provider, modelId);
-			const requiredTool = desiredWorkerTool(options, context, repairSources, state);
-			return requiredTool ? bindRequiredTool(payload, model.api, requiredTool) : payload;
+			requiredToolLease = desiredWorkerTool(options, context, repairSources, state);
+			return requiredToolLease ? bindRequiredTool(payload, model.api, requiredToolLease) : payload;
 		},
 		beforeToolCall: async ({ toolCall }) => {
 			if (!TOOL_NAMES.has(toolCall.name)) return { block: true, reason: "tool is outside the ArcVellum whitelist", terminate: true };
 			if (state.completed || state.blocked) return { block: true, reason: "worker is already terminal", terminate: true };
-			const requiredTool = desiredWorkerTool(options, context, repairSources, state);
-			if (requiredTool && toolCall.name !== requiredTool) {
+			// A model may emit several sibling tool calls in one response. Freeze the
+			// protocol requirement at provider-request time so the first sibling
+			// cannot mutate state and retroactively invalidate the remaining calls.
+			if (!toolMatchesLease(requiredToolLease, toolCall.name)) {
 				return {
 					block: true,
-					reason: `worker protocol requires ${requiredTool} at this stage`,
+					reason: `worker protocol requires ${requiredToolLease} at this stage`,
 					terminate: true,
 				};
 			}
@@ -220,6 +223,10 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		return buildResult("blocked", state.blockerReason || "worker reported a blocker", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
 	}
 	return buildResult("incomplete", "model stopped without calling complete_task", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
+}
+
+export function toolMatchesLease(requiredToolLease: string, toolName: string): boolean {
+	return !requiredToolLease || toolName === requiredToolLease;
 }
 
 async function existingRepairSources(

@@ -12,6 +12,7 @@ import {
 	desiredWorkerTool,
 	settleValidOutputs,
 	settleTurnBudget,
+	toolMatchesLease,
 } from "../src/worker.ts";
 import { validateSubmittedOutputs } from "../src/tools.ts";
 import { workerProfile } from "../src/worker-profile.ts";
@@ -81,6 +82,13 @@ describe("bounded worker lifecycle", () => {
 		expect(bindRequiredTool({ options: { reasoning: "low" } }, "pi-messages", "complete_task")).toEqual({
 			options: { reasoning: "low", toolChoice: { type: "function", function: { name: "complete_task" } } },
 		});
+	});
+
+	it("holds one required-tool lease for every sibling call in a provider response", () => {
+		expect(toolMatchesLease("", "validate_output")).toBe(true);
+		expect(toolMatchesLease("", "complete_task")).toBe(true);
+		expect(toolMatchesLease("write_expected_output", "write_expected_output")).toBe(true);
+		expect(toolMatchesLease("write_expected_output", "validate_output")).toBe(false);
 	});
 
 	it("allows one bounded landing turn only for the main prose agent", () => {
