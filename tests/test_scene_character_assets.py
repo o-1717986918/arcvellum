@@ -118,3 +118,20 @@ class SceneCharacterAssetTests(unittest.TestCase):
             )
 
             self.assertEqual(scene_character_asset_requirements(root, scene), [])
+
+    def test_descriptive_protagonist_role_resolves_inside_minimal_sandbox(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "characters").mkdir()
+            (root / "characters" / "lin-huan.yaml").write_text(
+                "character_id: lin-huan\nname: 林桓\nrole: 主角——轨道维修员\n",
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text(
+                "scene_id: scene_0001\nparticipants: [主角]\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(scene_character_asset_requirements(root, scene), [])

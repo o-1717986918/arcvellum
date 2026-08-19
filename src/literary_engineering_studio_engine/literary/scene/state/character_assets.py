@@ -119,11 +119,7 @@ def _formal_character_aliases(root: Path) -> set[str]:
         # label ``主角``.  Bind that label to the promoted protagonist instead
         # of creating a duplicate ``scene-xxxx-主角`` character candidate.
         role = _field_value(text, "role").lower()
-        if (
-            "protagonist" in path.stem.lower()
-            or "protagonist" in character_id.lower()
-            or role in {"protagonist", "主角"}
-        ):
+        if _is_protagonist_identity(path.stem, character_id, role):
             _add_alias(aliases, "主角")
             _add_alias(aliases, "protagonist")
     promotions = root / "workflow" / "asset_promotions"
@@ -147,6 +143,16 @@ def _formal_character_aliases(root: Path) -> set[str]:
             if match:
                 _add_alias(aliases, match.group(1))
     return aliases
+
+
+def _is_protagonist_identity(path_stem: str, character_id: str, role: str) -> bool:
+    normalized_role = role.strip().lower()
+    return (
+        "protagonist" in path_stem.lower()
+        or "protagonist" in character_id.lower()
+        or normalized_role.startswith("protagonist")
+        or normalized_role.startswith("主角")
+    )
 
 
 def _add_alias(aliases: set[str], value: str) -> None:
