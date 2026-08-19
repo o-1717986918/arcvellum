@@ -1,7 +1,7 @@
-"""Compatibility alias for :mod:`.application.lifecycle`."""
+"""Compatibility alias for the infrastructure-owned legacy lifecycle."""
 
 import sys
 
-from .application import lifecycle as _implementation
+from .infrastructure import legacy_lifecycle as _implementation
 
 sys.modules[__name__] = _implementation

@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
-from .application.style import StyleMountApplicationService
+from .application.container import ApplicationContainer
 from .application.strategy_projection import strategy_projection as _strategy_projection, typed_plan_events as _typed_plan_events
 from .api.dependencies import archaeology_router_dependencies, style_lab_dependencies
 from .api.common import call_handler as _call, friendly_error as _friendly_error, frontend_file as _frontend_file, project_root as _project
@@ -70,20 +70,17 @@ from .api.routers.style_lab import build_style_lab_router
 from .api.routers.strategy import StrategyRouterDependencies, build_strategy_router
 from .api.routers.project_details import ProjectDetailRouterDependencies, build_project_detail_router
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
-from .advisor import ProjectAdvisor
 from .agent_observability import build_agent_observability
 from .api_read_models import ProjectReadModels
 from .agent_session_tracking import track_agent_session_event
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
 from .advisor_personas import persona_catalog, save_custom_persona, select_persona
-from .autopilot import AutopilotService
-from .bootstrap import ApplicationBootstrapService
 from .config import default_projects_root, load_config, save_config
 from .core_bridge import CoreBridge
 from .core_read_models import build_activity, build_dashboard, build_library, build_task_summary, current_choices
 from .core_read_models import record_choice, record_ui_note, save_display_field
 from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
-from .lifecycle import ApplicationLifecycleManager
+from .infrastructure.composition import resolve_application_container
 from .live_events import EPHEMERAL_WORKER_EVENTS, coalesce_live_events
 from .model_connections import model_connection_status
 from .narrative_projection import build_narrative_projection, projection_delta, projection_motion_events
@@ -124,9 +121,6 @@ from literary_engineering_studio_engine.literary.review.creative_quality import 
 )
 from literary_engineering_studio_engine.literary.style.punctuation import lint_punctuation
 from literary_engineering_studio_engine.literary.planning.rhythm_plan import load_rhythm_plan, save_rhythm_plan
-
-_STYLE_MOUNTS = StyleMountApplicationService()
-
 
 def _register_strategy_router(app, config) -> None:
     app.include_router(
@@ -205,25 +199,17 @@ def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any) -> W
     )
 
 
-def _record_choice(config: dict[str, Any], root: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    return record_choice(config, root, payload, style_mount_service=_STYLE_MOUNTS)
-
-
-def create_app(config_override: dict[str, Any] | None = None):
+def create_app(
+    config_override: dict[str, Any] | None = None,
+    *,
+    container: ApplicationContainer | None = None,
+):
     if FastAPI is None:
         raise RuntimeError("Studio API requires pip install -e .[api]")
-    config = config_override or load_config()
-    lifecycle = ApplicationLifecycleManager(config)
-    bootstrap = ApplicationBootstrapService(config, lifecycle)
-    jobs = lifecycle.store
-    advisor = ProjectAdvisor(config, jobs, runtime_pool=lifecycle.opencode_pool)
-    autopilot = AutopilotService(
-        config,
-        jobs,
-        runtime_pool=lifecycle.opencode_pool,
-        execution_coordinator=lifecycle.execution_coordinator,
-        style_mount_service=_STYLE_MOUNTS, prepared_context_cache=lifecycle.prepared_context_cache,
-    )
+    container = resolve_application_container(config_override, container)
+    config, services = container.config, container.services
+    lifecycle, bootstrap = services.lifecycle, services.bootstrap
+    jobs, advisor, autopilot, style_mounts = lifecycle.store, services.advisor, services.autopilot, services.style_mounts
     narrative_stream_state: dict[str, dict[str, Any]] = {}
     narrative_v3_stream_state: dict[str, dict[str, Any]] = {}
     narrative_stream_lock = threading.Lock()
@@ -257,6 +243,7 @@ def create_app(config_override: dict[str, Any] | None = None):
     app.state.lifecycle = lifecycle
     app.state.bootstrap = bootstrap
     app.state.autopilot = autopilot
+    app.state.container = container
     read_models = ProjectReadModels(
         config,
         lifecycle,
@@ -275,9 +262,7 @@ def create_app(config_override: dict[str, Any] | None = None):
     workspace_snapshot = read_models.workspace
 
     def shutdown_application():
-        autopilot.shutdown()
-        bootstrap.shutdown()
-        lifecycle.shutdown()
+        container.shutdown()
 
     if hasattr(app, "add_event_handler"):
         app.add_event_handler("shutdown", shutdown_application)
@@ -400,7 +385,12 @@ def create_app(config_override: dict[str, Any] | None = None):
                 build_activity=lambda *args, **kwargs: build_activity(*args, **kwargs),
                 build_task_summary=lambda *args, **kwargs: build_task_summary(*args, **kwargs),
                 current_choices=lambda *args, **kwargs: current_choices(*args, **kwargs),
-                record_choice=_record_choice,
+                record_choice=lambda settings, root, payload: record_choice(
+                    settings,
+                    root,
+                    payload,
+                    style_mount_service=style_mounts,
+                ),
                 stream_read_model=_stream_read_model,
             )
         )
@@ -469,7 +459,7 @@ def create_app(config_override: dict[str, Any] | None = None):
         build_style_lab_router(
             style_lab_dependencies(
                 config,
-                mounts=_STYLE_MOUNTS,
+                mounts=style_mounts,
                 launch_style_worker=lambda request: launch_worker(
                     worker_dependencies,
                     WorkerRequest(**request),

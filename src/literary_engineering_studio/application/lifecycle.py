@@ -5,20 +5,10 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 import threading
 from typing import Any
 
-from ..jobs import JobStore
-from ..execution_coordinator import ProjectExecutionCoordinator
-from ..live_events import LiveEventBus
-from ..model_connections import model_connection_status
-from ..opencode_runtime_pool import OpenCodeRuntimePool
-from ..process_manager import ProcessManager, ProcessRecord, ProcessSpec
-from ..read_model_cache import ReadModelCache
-from ..runtime.prepared_context_cache import PreparedContextCache
-from ..runtimes import RUNTIME_TYPES, agent_runner_status
-from ..supervisor import WorkerSupervisor
+from .ports import ApplicationPorts
 
 
 @dataclass(frozen=True)
@@ -37,38 +27,22 @@ class ManagedProcessState:
 
 
 class ApplicationLifecycleManager:
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any], ports: ApplicationPorts):
         self.config = config
-        application = config.get("application", {}) if isinstance(config.get("application"), dict) else {}
-        database = Path(str(application.get("database_path") or "studio.sqlite3"))
-        data_root = Path(str(application.get("data_root") or database.parent)).expanduser().resolve()
-        self.store = JobStore(database)
-        self.live_events = LiveEventBus()
-        self.read_models = ReadModelCache()
-        worker_config = config.get("worker")
-        worker_config = worker_config if isinstance(worker_config, dict) else {}
-        cache_value = worker_config.get("prepared_context_cache")
-        cache_config = cache_value if isinstance(cache_value, dict) else {}
-        self.prepared_context_cache = PreparedContextCache(
-            enabled=bool(cache_config.get("enabled", False)),
-            max_entries=int(cache_config.get("max_entries") or 32),
-            routes=tuple(str(item) for item in cache_config.get("routes") or []),
-            states=tuple(str(item) for item in cache_config.get("states") or []),
-        )
-        self.process_manager = ProcessManager(data_root / "logs" / "sidecars")
-        self.opencode_pool = OpenCodeRuntimePool(config, self.process_manager)
-        self.execution_coordinator = ProjectExecutionCoordinator()
-        self.supervisor = WorkerSupervisor(
-            self.store,
-            max_workers=int(application.get("max_workers") or 2),
-            lease_seconds=int(application.get("lease_seconds") or 90),
-            execution_coordinator=self.execution_coordinator,
-        )
+        self.ports = ports
+        self.store = ports.store
+        self.live_events = ports.live_events
+        self.read_models = ports.read_models
+        self.prepared_context_cache = ports.prepared_context_cache
+        self.process_manager = ports.process_manager
+        self.opencode_pool = ports.runtime_pool
+        self.execution_coordinator = ports.execution_coordinator
+        self.supervisor = ports.supervisor
         self._processes: dict[str, ManagedProcessState] = {}
         self._lock = threading.RLock()
         self._runner_states = [
             _pending_runner_state(runner_id, _runner_enabled(config, runner_id))
-            for runner_id in RUNTIME_TYPES
+            for runner_id in ports.runtime_ids
         ]
         self._runner_error = ""
         self._runner_refresh_thread: threading.Thread | None = None
@@ -97,13 +71,13 @@ class ApplicationLifecycleManager:
                 updated_at=_now(),
             )
 
-    def start_sidecar(self, spec: ProcessSpec) -> ProcessRecord:
+    def start_sidecar(self, spec: Any) -> Any:
         return self.process_manager.start(spec)
 
-    def stop_sidecar(self, component_id: str, *, force: bool = False) -> ProcessRecord | None:
+    def stop_sidecar(self, component_id: str, *, force: bool = False) -> Any:
         return self.process_manager.stop(component_id, force=force)
 
-    def restart_sidecar(self, component_id: str) -> ProcessRecord:
+    def restart_sidecar(self, component_id: str) -> Any:
         return self.process_manager.restart(component_id)
 
     def health(self) -> dict[str, Any]:
@@ -124,7 +98,7 @@ class ApplicationLifecycleManager:
             "agent_runners": runner_states,
             "agent_runner_refreshing": runner_refreshing,
             "agent_runner_error": runner_error,
-            "model_connections": model_connection_status(self.config),
+            "model_connections": self.ports.model_connection_status_loader(self.config),
             "opencode_runtime_pool": self.opencode_pool.status(),
             "prepared_context_cache": self.prepared_context_cache.status(),
             "managed_processes": processes,
@@ -155,7 +129,7 @@ class ApplicationLifecycleManager:
 
     def _load_agent_runner_states(self, force: bool) -> None:
         try:
-            states = agent_runner_status(self.config, force_refresh=force)
+            states = self.ports.runner_status_loader(self.config, force_refresh=force)
             error = ""
         except Exception as exc:
             states = []

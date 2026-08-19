@@ -73,8 +73,8 @@
     ],
     "literary_engineering_studio.jobs": [],
     "literary_engineering_studio.lifecycle": [
-      "literary_engineering_studio.application",
-      "literary_engineering_studio.application.lifecycle"
+      "literary_engineering_studio.infrastructure",
+      "literary_engineering_studio.infrastructure.legacy_lifecycle"
     ],
     "literary_engineering_studio.live_events": [
       "literary_engineering_studio.observability",
