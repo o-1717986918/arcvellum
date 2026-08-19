@@ -68,7 +68,11 @@ def _coupled_targets(
 
     if task.current_state not in _SCENE_REVISION_STATES:
         return ()
-    if not any(issue.code == "scene-revision-invalid" for issue in issues):
+    issue_paths = tuple(issue.path.partition("#")[0] for issue in issues)
+    if not (
+        any(issue.code == "scene-revision-invalid" for issue in issues)
+        or any(_is_revision_transaction_output(path) for path in issue_paths)
+    ):
         return ()
     return tuple(path for path in writable if _is_revision_transaction_output(path))
 

@@ -136,6 +136,47 @@ class IncrementalRepairContextTests(unittest.TestCase):
             self.assertIn(candidate, prepared.prompt)
             self.assertIn(manifest, prepared.prompt)
 
+    def test_scene_revision_word_budget_repair_keeps_manifest_in_transaction(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = "drafts/revisions/scene_0003_revision.md"
+            manifest = "drafts/revisions/scene_0003_revision.json"
+            report = "drafts/revisions/scene_0003_revision_report.md"
+            task = _task(
+                root,
+                (candidate, manifest, report),
+                current_state="static-revision",
+            )
+            sandbox = _sandbox(root)
+            for relative in (candidate, manifest, report):
+                path = sandbox.workspace / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("正文" if relative == candidate else "{}", encoding="utf-8")
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "candidate-word-budget-invalid",
+                        candidate,
+                        "cleaned body is below min_chinese_chars",
+                        "扩写正文并同步修订语义清单。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(task, sandbox)
+
+            prepared = coordinator.prepare(result, 1, 2)
+            payload = json.loads(prepared.artifact_path.read_text(encoding="utf-8"))
+            coordinator.finalize()
+
+            self.assertEqual(payload["repair_targets"], [candidate, manifest])
+            self.assertEqual(
+                [item["path"] for item in payload["protected_outputs"]],
+                [report],
+            )
+
     def test_targeted_context_is_bounded_and_restores_passed_output(
         self,
     ) -> None:
