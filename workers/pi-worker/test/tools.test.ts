@@ -172,6 +172,21 @@ describe("local output validation", () => {
 		expect(after).not.toBe(before);
 		expect(repeated).toBe(after);
 	});
+
+	it("counts one task-contract inspection as progress", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-contract-read-"));
+		roots.push(root);
+		const workerState = state();
+		const before = await progressDigest(context(), root, workerState);
+		const read = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "read_task_context");
+
+		await read?.execute("call", {});
+		const after = await progressDigest(context(), root, workerState);
+
+		expect(workerState.taskContextReads).toBe(1);
+		expect(after).not.toBe(before);
+	});
 });
 
 function options(workspace: string): WorkerOptions {
@@ -207,6 +222,7 @@ function state(): WorkerState {
 		turns: 0,
 		toolCalls: 0,
 		repairRequests: 0,
+		taskContextReads: 0,
 		reasoningCharacters: 0,
 		textCharacters: 0,
 		readPaths: new Set(),
@@ -240,6 +256,7 @@ function context(): TaskContext {
 		wordCount: {},
 		semanticPassCondition: {},
 		promptAsset: {},
+		promptAccess: {},
 		maxResultChars: 4000,
 		raw: {},
 	};

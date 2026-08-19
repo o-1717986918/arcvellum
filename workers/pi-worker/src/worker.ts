@@ -61,6 +61,7 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		turns: 0,
 		toolCalls: 0,
 		repairRequests: 0,
+		taskContextReads: 0,
 		reasoningCharacters: 0,
 		reasoningTokens: 0,
 		reasoningTokensReported: false,
@@ -124,7 +125,7 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 				return {
 					block: true,
 					reason: `worker protocol requires ${requiredToolLease} at this stage`,
-					terminate: true,
+					terminate: false,
 				};
 			}
 			if (state.toolCalls > options.maxToolCalls) {
@@ -261,7 +262,7 @@ export function desiredWorkerTool(
 	options: Pick<WorkerOptions, "mode">,
 	context: Pick<Awaited<ReturnType<typeof loadTaskContext>>, "agentRole" | "agentOwnedOutputs">,
 	repairSources: readonly string[],
-	state: Pick<WorkerState, "completed" | "readPaths" | "writtenPaths" | "lastValidation">,
+	state: Pick<WorkerState, "completed" | "taskContextReads" | "readPaths" | "writtenPaths" | "lastValidation">,
 ): string {
 	const requiredOutputs = context.agentOwnedOutputs.map((item) => item.path);
 	const repairTool = desiredRepairTool(options, repairSources, state, requiredOutputs);
@@ -273,6 +274,8 @@ export function desiredWorkerTool(
 		options.mode === "task"
 		&& (
 			context.agentRole === "main-creative-agent"
+			|| state.taskContextReads > 0
+			|| state.readPaths.size > 0
 			|| state.writtenPaths.size > 0
 		)
 		&& (

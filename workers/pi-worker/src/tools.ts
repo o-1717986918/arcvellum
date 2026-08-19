@@ -23,7 +23,10 @@ export function createWorkerTools(
 			description: "Return the safe, machine-readable ArcVellum task contract and completion checklist.",
 			parameters: EMPTY_PARAMETERS,
 			executionMode: "sequential",
-			execute: async () => result(publicTaskProjection(context), { taskId: context.taskId }),
+			execute: async () => {
+				state.taskContextReads += 1;
+				return result(publicTaskProjection(context), { taskId: context.taskId });
+			},
 		},
 		{
 			name: "read_authorized_source",
@@ -245,6 +248,7 @@ export async function progressDigest(context: TaskContext, workspace: string, st
 	}
 	hash.update([...state.readPaths].sort().join("\n"));
 	hash.update([...state.writtenPaths].sort().join("\n"));
+	hash.update(`task-context-reads:${state.taskContextReads}`);
 	hash.update(state.lastValidation.passed ? "validation:passed" : "validation:not-passed");
 	hash.update(state.lastValidation.issues.map((item) => `${item.path}:${item.code}`).sort().join("\n"));
 	hash.update(

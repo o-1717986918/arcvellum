@@ -63,6 +63,8 @@ describe("bounded worker lifecycle", () => {
 		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("");
 		const freshReviewState = state();
 		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("");
+		freshReviewState.taskContextReads = 1;
+		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("write_expected_output");
 		freshReviewState.writtenPaths.add("other-output.md");
 		expect(desiredWorkerTool({ mode: "task" }, review, [], freshReviewState)).toBe("write_expected_output");
 		freshReviewState.writtenPaths.add("draft.md");
@@ -229,6 +231,7 @@ function state(): WorkerState {
 		turns: 6,
 		toolCalls: 0,
 		repairRequests: 0,
+		taskContextReads: 0,
 		reasoningCharacters: 0,
 		reasoningTokens: 0,
 		reasoningTokensReported: false,
