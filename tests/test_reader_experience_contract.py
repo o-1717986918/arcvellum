@@ -39,7 +39,21 @@ class ReaderExperienceContractTests(unittest.TestCase):
                         "ending_hook": "门后传来陌生声音",
                         "inventory_sufficiency": "sufficient",
                         "expansion_needed": [],
-                        "reader_experience_by_scene": [{"scene_id": "scene_0001"}],
+                        "reader_experience_by_scene": [
+                            {
+                                "scene_id": "scene_0001",
+                                "reader_question": "门后是谁？",
+                                "promised_reward": "确认陌生声音的来源",
+                                "withheld_information": ["来者目的"],
+                                "payoff_or_delay": "本场确认身份，目的后延",
+                                "emotional_curve": ["平静", "警觉"],
+                                "tension_source": "陌生声音逼近",
+                                "curiosity_hook": "门后的身份",
+                                "freshness_requirement": "以行动核验声音",
+                                "anti_summary_requirement": "完整呈现开门前的选择",
+                                "reader_aftertaste": "人物必须面对来者",
+                            }
+                        ],
                     },
                     ensure_ascii=False,
                 ),

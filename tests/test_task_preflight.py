@@ -35,6 +35,104 @@ from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELD
 
 
 class TaskPreflightTests(unittest.TestCase):
+    def test_reader_contract_canonicalizes_machine_fields_and_renders_markdown(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            relative = "plot/chapter_obligations/chapter_0001.json"
+            markdown_relative = "plot/chapter_obligations/chapter_0001.md"
+            output = workspace / relative
+            output.parent.mkdir(parents=True)
+            output.write_text(
+                json.dumps(
+                    {
+                        "schema": "invented/legacy-schema/v1",
+                        "chapter_id": "wrong-chapter",
+                        "status": "pass",
+                        "chapter_function": "建立开场冲突",
+                        "must_payoff": [],
+                        "must_setup": ["异常信号"],
+                        "must_change": ["主角改变航迹"],
+                        "must_not_resolve": ["信号来源"],
+                        "inherited_hooks": [],
+                        "ending_hook": "燃料警报响起",
+                        "inventory_sufficiency": "sufficient",
+                        "expansion_needed": [],
+                        "reader_experience_by_scene": [
+                            {
+                                "scene_id": "scene_0001",
+                                "reader_question": "信号来自谁？",
+                                "promised_reward": "确认信号来源",
+                                "withheld_information": ["事故真相"],
+                                "payoff_or_delay": "本场确认坐标，真相后延",
+                                "emotional_curve": ["警觉", "决定"],
+                                "tension_source": "燃料不足",
+                                "curiosity_hook": "信号身份",
+                                "freshness_requirement": "职业核验动作",
+                                "anti_summary_requirement": "用动作完成核验",
+                                "reader_aftertaste": "决定改道",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0001-reader-experience-contract",
+                    "route": "scene-development",
+                    "current_state": "reader-experience-contract",
+                    "scene_id": "scene_0001",
+                    "source_paths": [],
+                    "expected_outputs": [relative, markdown_relative],
+                    "system_owned_fields": {
+                        "chapter_obligation": {
+                            "path": relative,
+                            "markdown_path": markdown_relative,
+                            "fields": {
+                                "schema": "literary-engineering-workbench/chapter-obligation-contract/v1",
+                                "chapter_id": "chapter_0001",
+                                "count_unit": "chinese_content_chars_including_chinese_punctuation",
+                                "machine_count_unit": "machine_nonspace_chars",
+                                "target_chinese_chars": 13500,
+                                "scene_count_target": 1,
+                                "source_paths": ["project.yaml", "scenes/"],
+                                "output_path": relative,
+                            },
+                            "scene_rows": [
+                                {"scene_id": "scene_0001", "word_count_target": 13500}
+                            ],
+                        }
+                    },
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="reader-contract-canonicalization",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+            sandbox.baseline_path.write_text("{}", encoding="utf-8")
+
+            changes = canonicalize_task_outputs(task, sandbox)
+
+            normalized = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(
+                normalized["schema"],
+                "literary-engineering-workbench/chapter-obligation-contract/v1",
+            )
+            self.assertEqual(normalized["chapter_id"], "chapter_0001")
+            self.assertEqual(normalized["target_chinese_chars"], 13500)
+            self.assertTrue((workspace / markdown_relative).is_file())
+            self.assertIn("rendered_markdown", {item.get("field") for item in changes})
+
     def test_reader_contract_preflight_rejects_boolean_expansion_before_writeback(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

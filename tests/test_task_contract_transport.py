@@ -50,8 +50,6 @@ class TaskContractTransportTests(unittest.TestCase):
             for relative, body in (
                 ("project.yaml", "project:\n  title: 潮线\n"),
                 ("plot/word_budget/word_budget.json", "{}\n"),
-                ("plot/chapter_obligations/chapter_0001.json", "{}\n"),
-                ("plot/chapter_obligations/chapter_0001.md", "# 契约\n"),
                 ("scenes/scene_0001.yaml", "scene_id: scene_0001\nchapter_id: chapter_0001\n"),
                 ("scenes/scene_0002.yaml", "scene_id: scene_0002\nchapter_id: chapter_0001\n"),
                 ("scenes/scene_0003.yaml", "scene_id: scene_0003\nchapter_id: chapter_0002\n"),
@@ -78,9 +76,23 @@ class TaskContractTransportTests(unittest.TestCase):
 
             self.assertIn("scenes/scene_0001.yaml", selected)
             self.assertIn("scenes/scene_0002.yaml", selected)
+            self.assertIn("plot/chapter_obligations/chapter_0001.json", selected)
             self.assertNotIn("scenes/scene_0003.yaml", selected)
+            self.assertNotIn("plot/chapter_obligations/chapter_0001.md", selected)
             self.assertNotIn("memory/context_packets/scene_0001.md", selected)
             self.assertNotIn("canon/world_rules.yaml", selected)
+
+            blueprint = task_registry._blueprint_for_state(
+                root,
+                "scene_0001",
+                "scenes/scene_0001.yaml",
+                "reader-experience-contract",
+                "",
+            )
+            self.assertIn(
+                "plot/chapter_obligations/chapter_0001.md",
+                blueprint["core_managed_outputs"],
+            )
 
     def test_project_asset_intake_is_a_concrete_deterministic_command(self):
         with tempfile.TemporaryDirectory() as temporary:

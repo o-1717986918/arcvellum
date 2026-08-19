@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 
 from .context_contract import scene_context_contract
+from ...literary.review.reader_experience import chapter_obligation_machine_contract
 from ...scene_route_blueprints import _blueprint_for_state
 from ...scene_route_gates import (
     _candidate_review_gate_errors,
@@ -76,6 +77,13 @@ def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) 
         payload["scene_character_assets"] = blueprint["scene_character_assets"]
     if blueprint.get("core_managed_outputs"):
         payload["core_managed_outputs"] = [str(item) for item in blueprint["core_managed_outputs"]]
+    if current_state == "reader-experience-contract":
+        payload["system_owned_fields"] = {
+            "chapter_obligation": chapter_obligation_machine_contract(
+                root,
+                _scene_chapter_id(root, scene_id),
+            )
+        }
     semantic = semantic_artifact_contract(current_state, scene_id)
     if semantic is not None:
         payload["semantic_artifact"] = semantic
@@ -141,11 +149,15 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
             "project.yaml",
             "plot/word_budget/word_budget.json",
             f"plot/chapter_obligations/{chapter_id}.json",
-            f"plot/chapter_obligations/{chapter_id}.md",
             *chapter_scenes,
         ]
+        generated_scaffold = f"plot/chapter_obligations/{chapter_id}.json"
         return _unique(
-            [relative for relative in reader_minimum if (root / relative).is_file()]
+            [
+                relative
+                for relative in reader_minimum
+                if relative == generated_scaffold or (root / relative).is_file()
+            ]
         )
     prose_minimum = {
         "project.yaml",

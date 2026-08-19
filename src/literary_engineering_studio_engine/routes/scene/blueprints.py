@@ -469,9 +469,14 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 f"plot/chapter_obligations/{chapter_id}.agent_tasks.md",
                 f"plot/chapter_obligations/{chapter_id}.agent_completion.json",
             ],
+            "core_managed_outputs": [
+                f"plot/chapter_obligations/{chapter_id}.md",
+                f"plot/chapter_obligations/{chapter_id}.agent_tasks.md",
+            ],
             "hard_constraints": [
                 "Longform scenes must have a ready chapter obligation and reader-experience contract before prose generation.",
                 "The platform agent must fill reader_question, promised_reward, withheld_information, payoff_or_delay, emotional_curve, tension_source, curiosity_hook, freshness_requirement, anti_summary_requirement, and reader_aftertaste for this scene.",
+                "Write only the authoritative chapter obligation JSON; Studio renders the Markdown mirror and lifecycle evidence.",
             ],
             "style_constraints": ["Do not turn reader-experience notes into visible workflow text inside prose."],
             "validation_gates": ["reader-experience contract passes or is not required"],

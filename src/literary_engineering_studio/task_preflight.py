@@ -142,7 +142,19 @@ def _validate_chapter_obligation_contract(
         return
     if not isinstance(payload, dict):
         return
-    messages = chapter_obligation_contract_issues(payload)
+    owned = task.payload.get("system_owned_fields")
+    owned = owned if isinstance(owned, dict) else {}
+    contract = owned.get("chapter_obligation")
+    contract = contract if isinstance(contract, dict) else {}
+    expected_scene_ids = tuple(
+        str(row.get("scene_id") or "")
+        for row in contract.get("scene_rows") or []
+        if isinstance(row, dict) and str(row.get("scene_id") or "")
+    )
+    messages = chapter_obligation_contract_issues(
+        payload,
+        expected_scene_ids=expected_scene_ids,
+    )
     if not messages:
         return
     issues.append(
