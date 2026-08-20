@@ -8,10 +8,10 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
-from literary_engineering_studio_engine.literary.style.snapshot import (
+from literary_engineering_studio_engine.public.literary import (
     artifact_style_mount_snapshot,
 )
-from literary_engineering_studio_engine.literary.scene.promotion.historical import (
+from literary_engineering_studio_engine.public.literary import (
     validate_historical_promotion,
 )
 

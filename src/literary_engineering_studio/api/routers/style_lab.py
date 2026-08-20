@@ -23,11 +23,11 @@ from ...application.style.mount_service import (
     StyleMountChoiceError,
     StyleMountPreviewError,
 )
-from literary_engineering_studio_engine.literary.style.mount import (
+from literary_engineering_studio_engine.public.literary import (
     StyleVersionMountConflictError,
     StyleVersionMountError,
 )
-from literary_engineering_studio_engine.literary.style.session import (
+from literary_engineering_studio_engine.public.literary import (
     StyleSessionConflictError,
     StyleSessionError,
 )

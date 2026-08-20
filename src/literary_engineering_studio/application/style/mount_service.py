@@ -7,13 +7,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.literary.style.mount import (
+from literary_engineering_studio_engine.public.literary import (
     StyleMountPriority,
     StyleMountScope,
     inspect_active_style_mount,
     mount_style_profile_version,
 )
-from literary_engineering_studio_engine.literary.style.snapshot import (
+from literary_engineering_studio_engine.public.literary import (
     active_style_mount_snapshot_payload,
     style_version_mount_snapshot,
 )

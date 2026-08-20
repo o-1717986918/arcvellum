@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.public.literary import context_trace_status
 
 
 _DOWNSTREAM_STAGES = (

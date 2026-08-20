@@ -11,13 +11,13 @@ import threading
 from typing import Any
 import uuid
 
-from literary_engineering_studio_engine.literary.style.lab import (
+from literary_engineering_studio_engine.public.literary import (
     create_author_project,
     create_author_work,
     ensure_style_library,
     import_work_source,
 )
-from literary_engineering_studio_engine.literary.style.session import (
+from literary_engineering_studio_engine.public.literary import (
     source_content_digest,
 )
 

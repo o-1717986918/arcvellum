@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
+from literary_engineering_studio_engine.public.tasking import (
     agent_task_completion_status,
 )
-from literary_engineering_studio_engine.literary.ingest import reconstruction_paths
+from literary_engineering_studio_engine.public.literary import reconstruction_paths
 from literary_engineering_studio_engine.public.workflow import build_workflow_state
 
 from ...protocols.canonical_json import canonical_json_digest

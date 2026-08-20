@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.literary.style.session import (
+from literary_engineering_studio_engine.public.literary import (
     formal_style_profile_dirs,
     load_style_session,
 )
-from literary_engineering_studio_engine.literary.style.version import (
+from literary_engineering_studio_engine.public.literary import (
     inspect_style_profile_version,
     inspect_style_version_directory,
     plan_style_profile_version,

@@ -6,11 +6,11 @@ import hashlib
 import json
 from pathlib import Path
 
-from literary_engineering_studio_engine.literary.style.lab import (
+from literary_engineering_studio_engine.public.literary import (
     active_project_style,
     default_style_library_root,
 )
-from literary_engineering_studio_engine.literary.style.session import (
+from literary_engineering_studio_engine.public.literary import (
     source_content_digest,
 )
 

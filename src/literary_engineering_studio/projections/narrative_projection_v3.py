@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from literary_engineering_studio_engine.literary.planning.rhythm_plan import load_rhythm_plan
+from literary_engineering_studio_engine.public.literary import load_rhythm_plan
 from literary_engineering_studio.projections.narrative.layout_hints import build_layout_hints
 
 from . import narrative_projection as narrative_projection_v2

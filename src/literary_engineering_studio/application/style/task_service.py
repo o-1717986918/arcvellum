@@ -6,17 +6,17 @@ import hashlib
 from pathlib import Path
 from typing import Callable
 
-from literary_engineering_studio_engine.tasking.registry import issue_next_task
-from literary_engineering_studio_engine.literary.style.lab import (
+from literary_engineering_studio_engine.public.tasking import issue_next_task
+from literary_engineering_studio_engine.public.literary import (
     ensure_style_library,
 )
-from literary_engineering_studio_engine.literary.style.session import (
+from literary_engineering_studio_engine.public.literary import (
     StyleSessionResult,
     StyleSourceSelection,
     prepare_style_engineering_session,
     resolve_formal_style_profile,
 )
-from literary_engineering_studio_engine.literary.style.version import (
+from literary_engineering_studio_engine.public.literary import (
     inspect_style_profile_version,
     plan_style_profile_version,
 )

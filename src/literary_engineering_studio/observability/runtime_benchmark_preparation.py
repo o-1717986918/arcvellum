@@ -11,7 +11,7 @@ from .runtime_benchmark_scene import (
     complete_synthetic_scene_task,
     supports_synthetic_completion,
 )
-from literary_engineering_studio_engine.tasking.registry import issue_next_task
+from literary_engineering_studio_engine.public.tasking import issue_next_task
 
 
 def drive_benchmark_preparation(

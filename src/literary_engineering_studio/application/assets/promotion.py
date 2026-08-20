@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.literary.assets.workshop import ASSET_CANDIDATE_DIRS
-from literary_engineering_studio_engine.literary.assets.promotion import (
+from literary_engineering_studio_engine.public.literary import ASSET_CANDIDATE_DIRS
+from literary_engineering_studio_engine.public.literary import (
     file_sha256,
     latest_approval,
     promotion_eligibility_errors,

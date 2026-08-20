@@ -11,7 +11,7 @@ import re
 import tempfile
 from typing import Any
 
-from literary_engineering_studio_engine.prompting.registry import (
+from literary_engineering_studio_engine.public.prompting import (
     list_prompt_assets,
     resolve_prompt_asset,
 )
