@@ -522,6 +522,17 @@ Workflow Dashboard 必须保持显式 command/query 分离：
 不得为了复用而让 projection 调用 materialized command，也不得让 renderer 自行推断 Gate。`route-audit` 始终是正式通过/阻塞事实，
 `workflow-state` 和 Dashboard 只负责导航与展示。
 
+Export Route 的职责边界为：
+
+- `routes/export/blueprints.py` 声明 chapter workspace、package、approval、revision 与 publish 的不可变任务合同；
+- `routes/export/task_payload.py` 负责 TaskPackage 封装，不执行导出或批准；
+- `routes/export/evidence.py` 只读取交付文件、批准记录和流程痕迹；
+- `routes/export/gates.py` 组合正式交付 Gate，不写正文、审批或 release；
+- `routes/export/definition.py` 只公开 route operation，并为迁移期保留历史 helper 名称。
+
+真正的 DOCX/Markdown 生成、发布复制和 fingerprint 计算仍由既有 literary export/release 服务拥有；Route 不得复制 writer，也不得
+自行产生 approve 事实。
+
 - `persistence.primitives`：schema 常量、ID 校验、序列化和脱敏；
 - `persistence.autopilot_runs`：run、lease、policy snapshot、delegated decision 与 autopilot event；
 - `persistence.sessions`：顾问对话、Agent session、通知收件箱、delegation policy 和阅读位置/书签；
