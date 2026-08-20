@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-import difflib
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -20,27 +17,31 @@ from .context_materialization import materialize_agent_context_contract
 from .context_selection import select_agent_context
 from .prepared_context_cache import PreparedContextCache
 from .execution_boundaries import prepare_execution_boundaries
+from .run_manifest import update_run_manifest
 from .run_manifest_factory import build_run_manifest_payload
+from .sandbox_contracts import SandboxManifest
+from .sandbox_files import (
+    agent_workspace as _agent_workspace,
+    control_workspace as _control_workspace,
+    copy_path as _copy_path,
+    path_digest as _path_digest,
+    remove_path as _remove_path,
+    unique_paths as _unique,
+    utc_now as _now,
+    workspace_hashes as _workspace_hashes,
+)
+from .sandbox_writeback import (
+    apply_expected_outputs,
+    control_sandbox_view,
+    inspect_expected_outputs as _inspect_expected_outputs,
+    load_writeback_preview,
+    rollback_expected_outputs,
+    sync_agent_outputs_to_control,
+)
 from .task_snapshot import materialize_task_snapshot
 from .writeback_contracts import WritebackPreview
 
 IGNORED_RUNTIME_PATHS = {"AGENT_TASK.md", "_task", ".claude", ".codex", ".git"}
-
-@dataclass(frozen=True)
-class SandboxManifest:
-    run_id: str
-    run_root: Path
-    # ``workspace`` remains the Agent-visible workspace for compatibility with
-    # runtimes and existing run links.  The control workspace is never handed
-    # to a model; it exists solely for formal CLI commands and preflight.
-    workspace: Path
-    prompt_path: Path
-    manifest_path: Path
-    baseline_path: Path
-    expected_outputs: tuple[str, ...]
-    control_workspace: Path | None = None
-    agent_workspace: Path | None = None
-
 
 def stage_task(
     task: TaskPackage,
@@ -228,187 +229,17 @@ def refresh_sandbox_baseline(sandbox: SandboxManifest) -> None:
     )
 
 
-def sync_agent_outputs_to_control(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
-    """Copy only declared Agent outputs back into the validation workspace."""
-
-    if task.execution_contract.execution_policy != "agent-required":
-        return ()
-    imported: list[str] = []
-    for relative in task.expected_outputs:
-        source = _agent_workspace(sandbox) / Path(relative)
-        if not source.exists():
-            continue
-        _copy_path(source, _control_workspace(sandbox) / Path(relative))
-        imported.append(relative)
-    update_run_manifest(sandbox.manifest_path, agent_outputs_staged_to_control=imported)
-    return tuple(imported)
-
-
-def control_sandbox_view(sandbox: SandboxManifest) -> SandboxManifest:
-    """Return a preflight view whose artifact root is the control workspace."""
-
-    return replace(sandbox, workspace=_control_workspace(sandbox))
-
-
 def inspect_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> WritebackPreview:
-    issues = sandbox_change_issues(sandbox)
-    if issues:
-        raise ValueError(
-            issues[0]
-        )
-    sync_agent_outputs_to_control(task, sandbox)
-    workspace = _control_workspace(sandbox)
-
-    missing: list[str] = []
-    for relative in sandbox.expected_outputs:
-        if not (workspace / Path(relative)).exists():
-            missing.append(relative)
-    if missing:
-        raise FileNotFoundError("Agent runtime did not create expected outputs: " + ", ".join(missing))
-
-    contracts = {item.path: item for item in task.execution_contract.outputs}
-    changes: list[dict[str, object]] = []
-    for relative in sandbox.expected_outputs:
-        source = workspace / Path(relative)
-        target = task.resolve_project_path(relative)
-        contract = contracts.get(relative)
-        changes.append(
-            {
-                "path": relative,
-                "kind": contract.kind if contract else "agent-authored",
-                "writeback_policy": contract.writeback_policy if contract else "preview-required",
-                "change_type": "modified" if target.exists() else "created",
-                "before_sha256": _path_digest(target),
-                "after_sha256": _path_digest(source),
-                "before_bytes": _path_size(target),
-                "after_bytes": _path_size(source),
-                "diff": _readable_diff(target, source, relative),
-            }
-        )
-    preview_path = sandbox.run_root / "writeback.preview.json"
-    payload = {
-        "schema": "literary-engineering-studio/writeback-preview/v0.1",
-        "task_id": task.task_id,
-        "project_root": str(task.project_root),
-        "policy": task.execution_contract.writeback_policy,
-        "created_at": _now(),
-        "changes": changes,
-    }
-    preview_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    update_run_manifest(
-        sandbox.manifest_path,
-        status="writeback_preview_ready",
-        writeback_policy=task.execution_contract.writeback_policy,
-        writeback_preview=str(preview_path),
+    return _inspect_expected_outputs(
+        task,
+        sandbox,
+        change_issues=sandbox_change_issues,
     )
-    return WritebackPreview(task.execution_contract.writeback_policy, preview_path, tuple(changes))
-
-
-def apply_expected_outputs(task: TaskPackage, sandbox: SandboxManifest, preview: WritebackPreview) -> tuple[str, ...]:
-    for change in preview.changes:
-        relative = str(change["path"])
-        target = task.resolve_project_path(relative)
-        if _path_digest(target) != str(change.get("before_sha256") or ""):
-            raise RuntimeError(f"formal project changed after writeback preview: {relative}")
-
-    backup_root = sandbox.run_root / "backups"
-    backup_root.mkdir(parents=True, exist_ok=True)
-    backup_index: list[dict[str, object]] = []
-    for relative in sandbox.expected_outputs:
-        target = task.resolve_project_path(relative)
-        existed = target.exists()
-        backup = backup_root / Path(relative)
-        if existed:
-            _copy_path(target, backup)
-        backup_index.append(
-            {
-                "path": relative,
-                "existed": existed,
-                "before_sha256": _path_digest(target),
-            }
-        )
-    (backup_root / "index.json").write_text(
-        json.dumps(
-            {
-                "schema": "literary-engineering-studio/writeback-backup/v0.2",
-                "task_id": task.task_id,
-                "created_at": _now(),
-                "outputs": backup_index,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    update_run_manifest(
-        sandbox.manifest_path,
-        status="writeback_prepared",
-        writeback_transaction={"state": "prepared", "backup_index": str(backup_root / "index.json"), "outputs": backup_index},
-    )
-
-    imported: list[str] = []
-    try:
-        for relative in sandbox.expected_outputs:
-            source = _control_workspace(sandbox) / Path(relative)
-            target = task.resolve_project_path(relative)
-            _copy_path_atomically(source, target)
-            imported.append(relative)
-    except Exception as exc:
-        rollback_expected_outputs(task, sandbox, imported)
-        update_run_manifest(
-            sandbox.manifest_path,
-            status="writeback_import_failed",
-            writeback_transaction={"state": "rolled_back_after_import_failure", "error": str(exc), "imported_outputs": imported},
-        )
-        raise
-    update_run_manifest(
-        sandbox.manifest_path,
-        status="outputs_imported",
-        imported_outputs=imported,
-        writeback_transaction={"state": "imported", "imported_outputs": imported},
-    )
-    return tuple(imported)
 
 
 def import_expected_outputs(task: TaskPackage, sandbox: SandboxManifest) -> tuple[str, ...]:
     preview = inspect_expected_outputs(task, sandbox)
     return apply_expected_outputs(task, sandbox, preview)
-
-
-def rollback_expected_outputs(task: TaskPackage, sandbox: SandboxManifest, imported: Iterable[str]) -> None:
-    backup_root = sandbox.run_root / "backups"
-    restored = list(imported)
-    for relative in restored:
-        target = task.resolve_project_path(relative)
-        backup = backup_root / Path(relative)
-        _remove_path(target)
-        if backup.exists():
-            _copy_path_atomically(backup, target)
-    update_run_manifest(
-        sandbox.manifest_path,
-        status="writeback_rolled_back",
-        writeback_transaction={"state": "rolled_back", "outputs": restored},
-    )
-
-
-def _copy_path_atomically(source: Path, target: Path) -> None:
-    """Replace one expected output through a same-directory staging path.
-
-    A cross-file transaction cannot be atomic on a normal filesystem, but each
-    target replacement is atomic where supported and the complete backup index
-    lets the Worker restore every already-replaced path if a later step fails.
-    """
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    staged = target.with_name(f".{target.name}.arcvellum-write-{os.getpid()}-{datetime.now(timezone.utc).strftime('%f')}")
-    _remove_path(staged)
-    try:
-        _copy_path(source, staged)
-        _remove_path(target)
-        os.replace(staged, target)
-    finally:
-        _remove_path(staged)
 
 
 def _remove_path(path: Path) -> None:
@@ -434,19 +265,6 @@ def sandbox_from_run(run_root: Path) -> SandboxManifest:
         expected_outputs=tuple(str(item) for item in payload.get("expected_outputs") or []),
         control_workspace=control_workspace,
         agent_workspace=workspace,
-    )
-
-
-def load_writeback_preview(run_root: Path) -> WritebackPreview:
-    path = run_root.expanduser().resolve() / "writeback.preview.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    changes = payload.get("changes")
-    if not isinstance(changes, list):
-        raise ValueError(f"invalid writeback preview: {path}")
-    return WritebackPreview(
-        str(payload.get("policy") or "preview-required"),
-        path,
-        tuple(item for item in changes if isinstance(item, dict)),
     )
 
 
@@ -494,13 +312,6 @@ def restore_core_managed_outputs(sandbox: SandboxManifest) -> tuple[str, ...]:
         _copy_path(source, target)
         restored.append(relative)
     return tuple(restored)
-
-
-def update_run_manifest(path: Path, **updates: object) -> None:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    payload.update(updates)
-    payload["updated_at"] = _now()
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def sandbox_change_issues(sandbox: SandboxManifest) -> list[str]:
@@ -551,82 +362,6 @@ def _unexpected_changes(
     return unexpected
 
 
-def _control_workspace(sandbox: SandboxManifest) -> Path:
-    return sandbox.control_workspace or sandbox.workspace
-
-
-def _agent_workspace(sandbox: SandboxManifest) -> Path:
-    return sandbox.agent_workspace or sandbox.workspace
-
-
-def _workspace_hashes(root: Path) -> dict[str, str]:
-    hashes: dict[str, str] = {}
-    for path in sorted(item for item in root.rglob("*") if item.is_file()):
-        relative = path.relative_to(root).as_posix()
-        hashes[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return hashes
-
-
-def _path_digest(path: Path) -> str:
-    if not path.exists():
-        return ""
-    if path.is_file():
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    hashes = _workspace_hashes(path)
-    return hashlib.sha256(json.dumps(hashes, sort_keys=True).encode("utf-8")).hexdigest()
-
-
-def _path_size(path: Path) -> int:
-    if not path.exists():
-        return 0
-    if path.is_file():
-        return path.stat().st_size
-    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
-
-
-def _readable_diff(before: Path, after: Path, relative: str) -> str:
-    if not after.is_file() or (before.exists() and not before.is_file()):
-        return "目录内容发生变化；请查看文件清单。"
-    if after.suffix.lower() not in {".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".py"}:
-        return "二进制或不可读文本文件；请核对文件大小与摘要。"
-    before_lines = before.read_text(encoding="utf-8", errors="replace").splitlines() if before.is_file() else []
-    after_lines = after.read_text(encoding="utf-8", errors="replace").splitlines()
-    diff = list(
-        difflib.unified_diff(
-            before_lines,
-            after_lines,
-            fromfile="正式项目/" + relative,
-            tofile="候选写回/" + relative,
-            lineterm="",
-            n=3,
-        )
-    )
-    if len(diff) > 180:
-        diff = diff[:180] + ["... 差异过长，已在预览中截断 ..."]
-    return "\n".join(diff)
-
-
-def _copy_path(source: Path, destination: Path) -> None:
-    if source.is_symlink():
-        raise ValueError(f"symbolic links are not allowed in task sandboxes: {source}")
-    if source.is_dir():
-        shutil.copytree(source, destination, dirs_exist_ok=True)
-    else:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-
-
-def _unique(values: Iterable[str]) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        normalized = str(value).replace("\\", "/")
-        if normalized not in seen:
-            result.append(normalized)
-            seen.add(normalized)
-    return result
-
-
 def _run_id(task_id: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", task_id).strip("-")[:48]
@@ -637,7 +372,3 @@ def _project_key(project: Path) -> str:
     digest = hashlib.sha256(str(project.resolve()).encode("utf-8")).hexdigest()[:10]
     safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", project.name).strip("-") or "project"
     return f"{safe[:36]}-{digest}"
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()

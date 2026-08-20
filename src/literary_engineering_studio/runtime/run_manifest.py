@@ -15,3 +15,19 @@ def load_run(run_root: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"invalid Studio run manifest: {path}")
     return payload
+
+
+def update_run_manifest(path: Path, **updates: object) -> None:
+    """Update the logical fields and freshness timestamp of one run manifest."""
+    from .sandbox_files import utc_now
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload.update(updates)
+    payload["updated_at"] = utc_now()
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+__all__ = ["load_run", "update_run_manifest"]

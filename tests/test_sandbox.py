@@ -233,9 +233,9 @@ class SandboxTests(unittest.TestCase):
             (sandbox.workspace / "drafts/candidates/scene_0001.json").write_text('{"new": true}\n', encoding="utf-8")
             preview = inspect_expected_outputs(task, sandbox)
 
-            from literary_engineering_studio import sandbox as sandbox_module
+            from literary_engineering_studio.runtime import sandbox_writeback
 
-            original = sandbox_module._copy_path_atomically
+            original = sandbox_writeback.copy_path_atomically
             calls = 0
 
             def fail_second(source, target):
@@ -245,7 +245,10 @@ class SandboxTests(unittest.TestCase):
                     raise OSError("simulated second output failure")
                 return original(source, target)
 
-            with patch("literary_engineering_studio.sandbox._copy_path_atomically", side_effect=fail_second):
+            with patch(
+                "literary_engineering_studio.runtime.sandbox_writeback.copy_path_atomically",
+                side_effect=fail_second,
+            ):
                 with self.assertRaises(OSError):
                     apply_expected_outputs(task, sandbox, preview)
 
