@@ -33,7 +33,7 @@
 
 | Feature | 文件数 | 规则 |
 |---|---:|---|
-| `advisor` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `advisor` | 8 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `archaeology` | 14 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `archive` | 24 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `delivery` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |

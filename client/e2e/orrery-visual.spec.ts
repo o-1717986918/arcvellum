@@ -77,6 +77,20 @@ test("reduced motion preserves every exploration control", async ({ page }) => {
   await expect(page.locator(".orrery-heat-legend")).toContainText("叙事呼吸");
 });
 
+test("advisor remains a phone-like floating conversation over the Orrery", async ({ page }, testInfo) => {
+  await openVisualProject(page, visualProjectRoot(100));
+  await page.locator(".advisor-orb").click();
+  const dock = page.locator(".advisor-dock");
+  await expect(dock).toBeVisible();
+  const bounds = await dock.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds?.width).toBeGreaterThanOrEqual(336);
+  expect(bounds?.height).toBeGreaterThanOrEqual(460);
+  expect((bounds?.height || 1) / (bounds?.width || 1)).toBeGreaterThan(1.45);
+  await expect(page.locator(".orrery-v3-stage")).toBeVisible();
+  await captureVisualEvidence(page, testInfo, "advisor-over-orrery.png");
+});
+
 test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ page }) => {
   await openVisualProject(page, visualProjectRoot(1000));
   await page.locator(".orrery-v3-levels button", { hasText: "章节" }).dispatchEvent("click");

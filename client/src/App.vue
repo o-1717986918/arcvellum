@@ -21,7 +21,7 @@ import {
   Waypoints,
 } from "lucide-vue-next";
 import StartupScene from "@/components/StartupScene.vue";
-import AdvisorDock from "@/components/AdvisorDock.vue";
+import AdvisorDock from "@/features/advisor/components/AdvisorDock.vue";
 import OnboardingTour from "@/components/OnboardingTour.vue";
 import { projectsClient } from "@/features/projects/services/projectsClient";
 import { workflowClient } from "@/features/workflow/services/workflowClient";

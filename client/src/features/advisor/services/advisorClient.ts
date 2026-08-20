@@ -71,4 +71,5 @@ export function createAdvisorClient(transport: ApiTransport = featureTransport) 
 }
 
 export type AdvisorStreamAnswer = AdvisorAnswer;
+export type AdvisorClient = ReturnType<typeof createAdvisorClient>;
 export const advisorClient = createAdvisorClient();
