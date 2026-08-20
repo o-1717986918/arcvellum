@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ..application.persistence_ports import Clock
+from .system_primitives import SystemClock, iso_now
 from .creative_plan_activation import (
     apply_creative_plan_activation,
     capture_active_projection,
@@ -15,7 +17,7 @@ from .creative_plan_artifacts import verify_indexed_plan_artifacts
 from .creative_plan_authorization import prepare_revision_authorization
 from .creative_plan_events import append_creative_plan_event_tx, read_creative_plan_events
 from .creative_plan_primitives import positive_revision, project_key, validate_plan_id
-from .primitives import _json, _now
+from .primitives import _json
 from .sqlite_uow import SqliteUnitOfWork
 from ..orchestration.plan_events import CreativePlanEventType
 
@@ -58,11 +60,12 @@ CREATE TABLE IF NOT EXISTS creative_plan_revisions (
 class CreativePlanRepository:
     """Persist plan revisions, activation, and their append-only events."""
 
-    def __init__(self, uow: SqliteUnitOfWork):
+    def __init__(self, uow: SqliteUnitOfWork, *, clock: Clock | None = None):
         self._uow = uow
+        self._clock = clock or SystemClock()
 
     def reserve_creative_plan_revision(self, record: dict[str, Any]) -> dict[str, Any]:
-        normalized = _normalize_revision_record(record)
+        normalized = _normalize_revision_record(record, created_at=iso_now(self._clock))
         with self._uow.write(immediate=True) as connection:
             plan = connection.execute(
                 "SELECT * FROM creative_plans WHERE plan_id = ?",
@@ -91,11 +94,9 @@ class CreativePlanRepository:
                 normalized["revision"],
                 CreativePlanEventType.REVISION_RESERVED,
                 {"digest": normalized["digest"], "status": normalized["status"]},
+                at=iso_now(self._clock),
             )
-        return self.read_creative_plan_revision(
-            normalized["plan_id"],
-            normalized["revision"],
-        )
+        return self.read_creative_plan_revision(normalized["plan_id"], normalized["revision"])
 
     def finalize_creative_plan_revision(
         self,
@@ -137,6 +138,7 @@ class CreativePlanRepository:
                     revision,
                     CreativePlanEventType.REVISION_READY,
                     {"digest": digest},
+                    at=iso_now(self._clock),
                 )
         return self.read_creative_plan_revision(plan_id, revision)
 
@@ -218,7 +220,7 @@ class CreativePlanRepository:
                 authorized_by=authorized_by,
                 reason=reason,
                 verified_revision_digest=verified_revision_digest,
-                authorized_at=_now(),
+                authorized_at=iso_now(self._clock),
             )
             if prepared is None:
                 return revision_payload
@@ -241,6 +243,7 @@ class CreativePlanRepository:
                     "revision_digest": verified_revision_digest,
                 },
                 session_id=authorization["authorized_by"],
+                at=iso_now(self._clock),
             )
         return self.read_creative_plan_revision(plan_id, requested_revision)
 
@@ -266,6 +269,7 @@ class CreativePlanRepository:
                 verified_revision_digest=verified_revision_digest,
                 active_plan_path=active_plan_path,
                 active_plan_payload=active_plan_payload,
+                at=iso_now(self._clock),
             )
         return self.read_creative_plan(plan_id)
 
@@ -279,6 +283,7 @@ class CreativePlanRepository:
         verified_revision_digest: str,
         active_plan_path: Path,
         active_plan_payload: dict[str, Any],
+        at: str,
     ) -> None:
         connection = self._uow.connect()
         previous: str | None = None
@@ -309,6 +314,7 @@ class CreativePlanRepository:
                 current_project_fingerprint=current_project_fingerprint,
                 active_plan_path=active_plan_path,
                 active_plan_payload=active_plan_payload,
+                at=at,
             )
             connection.commit()
         except Exception:
@@ -378,7 +384,7 @@ def _validate_activation_request(
         raise RuntimeError("creative plan audit artifacts are not ready")
 
 
-def _normalize_revision_record(record: dict[str, Any]) -> dict[str, Any]:
+def _normalize_revision_record(record: dict[str, Any], *, created_at: str) -> dict[str, Any]:
     plan_id = str(record.get("plan_id") or "").strip()
     validate_plan_id(plan_id)
     _validate_initial_status(record.get("status"))
@@ -400,7 +406,7 @@ def _normalize_revision_record(record: dict[str, Any]) -> dict[str, Any]:
         "simulation": _mapping(record.get("simulation")),
         "review": _mapping(record.get("review")),
         "digest": _validated_digest(record.get("digest")),
-        "created_at": str(record.get("created_at") or _now()),
+        "created_at": str(record.get("created_at") or created_at),
     }
     if not normalized["scope_kind"] or not normalized["scope_key"]:
         raise ValueError("creative plan scope is required")

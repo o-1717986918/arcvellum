@@ -11,7 +11,7 @@ from ..orchestration.plan_events import (
     CreativePlanEventType,
 )
 from .creative_plan_primitives import validate_plan_id
-from .primitives import _json, _now
+from .primitives import _json
 
 
 CREATIVE_PLAN_EVENT_SCHEMA_SQL = """
@@ -59,6 +59,7 @@ def append_creative_plan_event_tx(
     data: dict[str, Any],
     *,
     session_id: str = "studio-store",
+    at: str,
 ) -> None:
     normalized_type = (
         event_type
@@ -86,7 +87,7 @@ def append_creative_plan_event_tx(
             revision,
             typed.event_type.value,
             typed.session_id,
-            _now(),
+            str(at),
             _json(data),
         ),
     )

@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from contextlib import contextmanager
 import json
 from pathlib import Path
-import shutil
 import sqlite3
-import uuid
 from typing import Any
 
-from .asset_history import AssetHistoryRepository
-from .autopilot_runs import AutopilotRepository
-from .creative_plans import CreativePlanRepository
-from .context_ledgers import ContextLedgerRepository
+from ..application.persistence_ports import Clock, IdGenerator
+from .system_primitives import (
+    SystemClock,
+    UuidIdGenerator,
+    iso_now,
+    utc_now,
+)
 from .facade import RepositoryMethod
-from .mutation_receipts import MutationReceiptRepository
-from .recycle_bin import RecycleBinRepository
-from .resource_leases import ResourceLeaseRepository
+from .migration_backup import backup_before_migration
+from .repository_composition import compose_sqlite_repositories
 from .schema import initialize_schema
-from .sessions import SessionRepository
 from .sqlite_uow import SqliteUnitOfWork
 from .primitives import (
     ACTIVE_STATUSES,
@@ -30,7 +29,6 @@ from .primitives import (
     JOB_SCHEMA,
     TERMINAL_STATUSES,
     _json,
-    _now,
     _public_request,
     _redact,
     _validate_advisor_id,
@@ -40,21 +38,36 @@ from .primitives import (
 
 
 class JobStore:
-    def __init__(self, location: Path):
+    def __init__(
+        self,
+        location: Path,
+        *,
+        clock: Clock | None = None,
+        ids: IdGenerator | None = None,
+    ):
         resolved = location.expanduser().resolve()
         self.path = resolved if resolved.suffix in {".db", ".sqlite", ".sqlite3"} else resolved / "studio.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._clock = clock or SystemClock()
+        self._ids = ids or UuidIdGenerator()
         self.unit_of_work = SqliteUnitOfWork(self.path)
         self._write_lock = self.unit_of_work.write_lock
-        self.autopilot_runs = AutopilotRepository(self.unit_of_work)
-        self.sessions = SessionRepository(self.unit_of_work)
-        self.context_ledgers = ContextLedgerRepository(self.unit_of_work)
-        self.mutation_receipts = MutationReceiptRepository(self.unit_of_work)
-        self.creative_plans = CreativePlanRepository(self.unit_of_work)
-        self.recycle_bin = RecycleBinRepository(self.unit_of_work)
-        self.resource_leases = ResourceLeaseRepository(self.unit_of_work)
-        self.asset_history = AssetHistoryRepository(self.unit_of_work)
-        self.migration_backup = self._backup_before_migration()
+        repositories = compose_sqlite_repositories(
+            self.unit_of_work, clock=self._clock, ids=self._ids
+        )
+        self.autopilot_runs = repositories.autopilot_runs
+        self.sessions = repositories.sessions
+        self.context_ledgers = repositories.context_ledgers
+        self.mutation_receipts = repositories.mutation_receipts
+        self.creative_plans = repositories.creative_plans
+        self.recycle_bin = repositories.recycle_bin
+        self.resource_leases = repositories.resource_leases
+        self.asset_history = repositories.asset_history
+        self.migration_backup = backup_before_migration(
+            self.path,
+            schema_version=DATABASE_SCHEMA_VERSION,
+            clock=self._clock,
+        )
         self._initialize()
 
     def create(self, request: dict[str, Any], *, idempotency_key: str = "") -> dict[str, Any]:
@@ -68,8 +81,8 @@ class JobStore:
                 ).fetchone()
                 if existing is not None:
                     return self._job_row(existing)
-            job_id = f"job-{uuid.uuid4().hex[:16]}"
-            now = _now()
+            job_id = self._ids.new_id("job")
+            now = iso_now(self._clock)
             connection.execute(
                 """
                 INSERT INTO jobs (
@@ -180,7 +193,7 @@ class JobStore:
             assignments.append(f"{column} = ?")
             values.append(_json(value) if key == "result" else value)
         assignments.extend(["updated_at = ?", "revision = revision + 1"])
-        values.append(_now())
+        values.append(iso_now(self._clock))
         values.append(job_id)
         with self._write_lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -199,7 +212,7 @@ class JobStore:
             return self._job_row(row)
 
     def claim(self, job_id: str, worker_id: str, *, lease_seconds: int = 60) -> bool:
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         expires = (now + timedelta(seconds=max(10, lease_seconds))).isoformat()
         with self._write_lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -221,7 +234,7 @@ class JobStore:
             return True
 
     def heartbeat(self, job_id: str, worker_id: str, *, lease_seconds: int = 60) -> None:
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         expires = (now + timedelta(seconds=max(10, lease_seconds))).isoformat()
         with self._write_lock, self._connection() as connection:
             cursor = connection.execute(
@@ -247,7 +260,7 @@ class JobStore:
         _validate_job_id(job_id)
         if not lock_key.strip():
             raise ValueError("lock key must not be empty")
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         job_expires = (now + timedelta(seconds=max(10, lease_seconds))).isoformat()
         lock_expires = (now + timedelta(seconds=max(30, lease_seconds * 2))).isoformat()
         with self._write_lock, self._connection() as connection:
@@ -296,7 +309,7 @@ class JobStore:
 
     def recover_interrupted(self) -> list[str]:
         recovered: list[str] = []
-        now = _now()
+        now = iso_now(self._clock)
         with self._write_lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             rows = connection.execute(
@@ -319,7 +332,7 @@ class JobStore:
     def acquire_lock(self, lock_key: str, job_id: str, worker_id: str, *, lease_seconds: int = 120) -> bool:
         if not lock_key.strip():
             raise ValueError("lock key must not be empty")
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         expires = (now + timedelta(seconds=max(30, lease_seconds))).isoformat()
         with self._write_lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -363,7 +376,7 @@ class JobStore:
         run_workspace: str,
         state: str = "prepared",
     ) -> None:
-        now = _now()
+        now = iso_now(self._clock)
         with self._write_lock, self._connection() as connection:
             connection.execute(
                 """
@@ -409,27 +422,6 @@ class JobStore:
             "migration_backup": str(self.migration_backup) if self.migration_backup else "",
         }
 
-    def _backup_before_migration(self) -> Path | None:
-        if not self.path.exists() or self.path.stat().st_size == 0:
-            return None
-        connection = sqlite3.connect(self.path, timeout=10)
-        try:
-            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-        finally:
-            connection.close()
-        if version > DATABASE_SCHEMA_VERSION:
-            raise RuntimeError(
-                f"Studio database schema {version} is newer than supported {DATABASE_SCHEMA_VERSION}"
-            )
-        if version == DATABASE_SCHEMA_VERSION:
-            return None
-        backup_root = self.path.parent / "backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        backup = backup_root / f"{self.path.stem}-schema-{version}-{stamp}{self.path.suffix}"
-        shutil.copy2(self.path, backup)
-        return backup
-
     def _initialize(self) -> None:
         with self._write_lock, self._connection() as connection:
             initialize_schema(connection)
@@ -451,7 +443,7 @@ class JobStore:
     ) -> dict[str, Any]:
         if not event_type or any(char.isspace() for char in event_type):
             raise ValueError(f"invalid event type: {event_type}")
-        at = _now()
+        at = iso_now(self._clock)
         cursor = connection.execute(
             "INSERT INTO run_events (job_id, event_type, at, data_json) VALUES (?, ?, ?, ?)",
             (job_id, event_type, at, _json(_redact(data))),

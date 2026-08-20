@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 import hashlib
 import json
 from typing import Any
 
+from ..application.persistence_ports import Clock
+from .system_primitives import SystemClock, utc_now
 from .sqlite_uow import SqliteUnitOfWork
 
 
@@ -32,8 +34,9 @@ CREATE INDEX IF NOT EXISTS resource_leases_job_idx
 class ResourceLeaseRepository:
     """Persist leases while delegating domain conflicts to one callback."""
 
-    def __init__(self, uow: SqliteUnitOfWork):
+    def __init__(self, uow: SqliteUnitOfWork, *, clock: Clock | None = None):
         self._uow = uow
+        self._clock = clock or SystemClock()
 
     def acquire_resource_lease(
         self,
@@ -48,7 +51,7 @@ class ResourceLeaseRepository:
         if not job_id.strip() or not lease_owner.strip():
             raise ValueError("resource lease job_id and lease_owner are required")
         lease_id = _lease_id(job_id, task_node_id)
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         expires = now + timedelta(seconds=max(30, int(lease_seconds)))
         encoded = _canonical(claim)
         with self._uow.write(immediate=True) as connection:
@@ -102,7 +105,7 @@ class ResourceLeaseRepository:
         lease_owner: str,
         lease_seconds: int,
     ) -> bool:
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         expires = now + timedelta(seconds=max(30, int(lease_seconds)))
         with self._uow.write() as connection:
             cursor = connection.execute(
@@ -129,7 +132,7 @@ class ResourceLeaseRepository:
         *,
         lease_seconds: int,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         job_expires = now + timedelta(seconds=max(10, int(lease_seconds)))
         resource_expires = now + timedelta(seconds=max(30, int(lease_seconds) * 2))
         with self._uow.write(immediate=True) as connection:

@@ -4,22 +4,35 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import uuid
 from typing import Any
 
-from .primitives import _json, _now, _validate_advisor_id, _validate_agent_session_id
+from ..application.persistence_ports import Clock, IdGenerator
+from .system_primitives import (
+    SystemClock,
+    UuidIdGenerator,
+    iso_now,
+)
+from .primitives import _json, _validate_advisor_id, _validate_agent_session_id
 from .sqlite_uow import SqliteUnitOfWork
 
 
 class SessionRepository:
     """Persist user and Agent sessions through an explicit unit of work."""
 
-    def __init__(self, uow: SqliteUnitOfWork):
+    def __init__(
+        self,
+        uow: SqliteUnitOfWork,
+        *,
+        clock: Clock | None = None,
+        ids: IdGenerator | None = None,
+    ):
         self._uow = uow
+        self._clock = clock or SystemClock()
+        self._ids = ids or UuidIdGenerator()
 
     def create_advisor_session(self, project_root: str, snapshot_digest: str, *, title: str = "项目问答") -> dict[str, Any]:
-        session_id = f"advisor-{uuid.uuid4().hex[:16]}"
-        now = _now()
+        session_id = self._ids.new_id("advisor")
+        now = iso_now(self._clock)
         with self._uow.write() as connection:
             connection.execute(
                 """
@@ -112,7 +125,7 @@ class SessionRepository:
             "complete", "failed", "cancelled", "stopped",
         }:
             raise ValueError(f"unsupported Agent session status: {status}")
-        now = _now()
+        now = iso_now(self._clock)
         terminal = normalized_status in {"complete", "failed", "cancelled", "stopped"}
         with self._uow.write() as connection:
             existing = connection.execute(
@@ -185,7 +198,7 @@ class SessionRepository:
         _validate_advisor_id(session_id)
         if role not in {"user", "advisor"}:
             raise ValueError("advisor message role must be user or advisor")
-        now = _now()
+        now = iso_now(self._clock)
         with self._uow.write(immediate=True) as connection:
             existing = connection.execute("SELECT 1 FROM advisor_sessions WHERE session_id = ?", (session_id,)).fetchone()
             if existing is None:
@@ -205,7 +218,7 @@ class SessionRepository:
 
     def save_advisor_memory(self, session_id: str, *, summary: str, preferences: list[str]) -> dict[str, Any]:
         _validate_advisor_id(session_id)
-        now = _now()
+        now = iso_now(self._clock)
         safe_summary = str(summary or "").strip()[:6000]
         safe_preferences = list(
             dict.fromkeys(str(item).strip()[:500] for item in preferences if str(item).strip())
@@ -231,7 +244,7 @@ class SessionRepository:
         return {"session_id": session_id, "session_summary": safe_summary, "pinned_user_preferences": safe_preferences, "updated_at": now}
 
     def save_delegation_policy(self, project_root: str, policy: dict[str, Any]) -> dict[str, Any]:
-        now = _now()
+        now = iso_now(self._clock)
         with self._uow.write() as connection:
             connection.execute(
                 """
@@ -254,8 +267,8 @@ class SessionRepository:
         message: str,
         action: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        now = _now()
-        item_id = f"notice-{uuid.uuid4().hex[:16]}"
+        now = iso_now(self._clock)
+        item_id = self._ids.new_id("notice")
         with self._uow.write() as connection:
             existing = connection.execute(
                 "SELECT item_id FROM advisor_inbox WHERE project_root = ? AND dedupe_key = ?",
@@ -294,7 +307,10 @@ class SessionRepository:
 
     def mark_advisor_inbox_read(self, item_id: str, *, read: bool = True) -> dict[str, Any]:
         with self._uow.write() as connection:
-            connection.execute("UPDATE advisor_inbox SET read_at = ? WHERE item_id = ?", (_now() if read else "", item_id))
+            connection.execute(
+                "UPDATE advisor_inbox SET read_at = ? WHERE item_id = ?",
+                (iso_now(self._clock) if read else "", item_id),
+            )
             row = connection.execute("SELECT * FROM advisor_inbox WHERE item_id = ?", (item_id,)).fetchone()
         if row is None:
             raise FileNotFoundError(f"Advisor inbox item not found: {item_id}")
@@ -319,7 +335,7 @@ class SessionRepository:
 
     def save_reader_position(self, project_root: str, unit_id: str, scroll_ratio: float) -> dict[str, Any]:
         ratio = max(0.0, min(1.0, float(scroll_ratio)))
-        now = _now()
+        now = iso_now(self._clock)
         with self._uow.write() as connection:
             connection.execute(
                 """
@@ -336,7 +352,7 @@ class SessionRepository:
             if enabled:
                 connection.execute(
                     "INSERT OR IGNORE INTO reader_bookmarks (project_root, unit_id, created_at) VALUES (?, ?, ?)",
-                    (project_root, unit_id, _now()),
+                    (project_root, unit_id, iso_now(self._clock)),
                 )
             else:
                 connection.execute("DELETE FROM reader_bookmarks WHERE project_root = ? AND unit_id = ?", (project_root, unit_id))

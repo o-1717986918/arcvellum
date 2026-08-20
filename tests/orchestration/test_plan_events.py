@@ -71,6 +71,7 @@ class CreativePlanEventTests(unittest.TestCase):
                         CreativePlanEventType.CANDIDATE_DELTA,
                         {"text": "partial"},
                         session_id="planner-session-a",
+                        at="2026-08-20T00:00:00+00:00",
                     )
 
             events = store.creative_plan_events("plan-event-store")
@@ -92,6 +93,7 @@ class CreativePlanEventTests(unittest.TestCase):
                         1,
                         "plan.agent-invented-shortcut",
                         {},
+                        at="2026-08-20T00:00:00+00:00",
                     )
 
 

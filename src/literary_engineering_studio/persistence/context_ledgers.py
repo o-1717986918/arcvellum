@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..application.persistence_ports import Clock
+from .system_primitives import SystemClock, iso_now
 from ..observability.context_ledger import CONTEXT_LEDGER_SCHEMA, parse_context_ledger
-from .primitives import _now
 from .sqlite_uow import SqliteUnitOfWork
 
 
@@ -60,8 +61,9 @@ CREATE INDEX IF NOT EXISTS context_ledger_entries_source_idx
 class ContextLedgerRepository:
     """Persist bounded ledger metadata without copying source text into SQLite."""
 
-    def __init__(self, uow: SqliteUnitOfWork):
+    def __init__(self, uow: SqliteUnitOfWork, *, clock: Clock | None = None):
         self._uow = uow
+        self._clock = clock or SystemClock()
 
     def record_context_ledger(
         self,
@@ -83,7 +85,7 @@ class ContextLedgerRepository:
                 if str(existing["digest"]) != ledger.digest:
                     raise ValueError("context ledger conflicts with an existing digest")
                 return self._read_context_ledger_tx(connection, ledger.ledger_id)
-            created_at = _now()
+            created_at = iso_now(self._clock)
             connection.execute(
                 """
                 INSERT INTO context_ledgers (

@@ -2,21 +2,35 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 import json
 import sqlite3
 from typing import Any
-import uuid
 
-from .primitives import _json, _now, _redact, _validate_autopilot_id
+from ..application.persistence_ports import Clock, IdGenerator
+from .system_primitives import (
+    SystemClock,
+    UuidIdGenerator,
+    iso_now,
+    utc_now,
+)
+from .primitives import _json, _redact, _validate_autopilot_id
 from .sqlite_uow import SqliteUnitOfWork
 
 
 class AutopilotRepository:
     """Persist autopilot lifecycle state through an explicit unit of work."""
 
-    def __init__(self, uow: SqliteUnitOfWork):
+    def __init__(
+        self,
+        uow: SqliteUnitOfWork,
+        *,
+        clock: Clock | None = None,
+        ids: IdGenerator | None = None,
+    ):
         self._uow = uow
+        self._clock = clock or SystemClock()
+        self._ids = ids or UuidIdGenerator()
 
     def create_autopilot_run(
         self,
@@ -26,8 +40,8 @@ class AutopilotRepository:
         runtime: str,
         policy: dict[str, Any],
     ) -> dict[str, Any]:
-        run_id = f"autopilot-{uuid.uuid4().hex[:16]}"
-        now = _now()
+        run_id = self._ids.new_id("autopilot")
+        now = iso_now(self._clock)
         with self._uow.write() as connection:
             connection.execute(
                 """
@@ -67,7 +81,7 @@ class AutopilotRepository:
         values = {key: value for key, value in changes.items() if key in allowed}
         if not values:
             return self.read_autopilot_run(run_id)
-        values["updated_at"] = _now()
+        values["updated_at"] = iso_now(self._clock)
         assignments = ", ".join(f"{key} = ?" for key in values)
         with self._uow.write() as connection:
             cursor = connection.execute(
@@ -90,7 +104,12 @@ class AutopilotRepository:
         with self._uow.write() as connection:
             cursor = connection.execute(
                 "UPDATE autopilot_runs SET policy_json = ?, mode = ?, updated_at = ? WHERE run_id = ?",
-                (_json(policy), str(policy.get("mode") or "collaborative"), _now(), run_id),
+                (
+                    _json(policy),
+                    str(policy.get("mode") or "collaborative"),
+                    iso_now(self._clock),
+                    run_id,
+                ),
             )
             if not cursor.rowcount:
                 raise FileNotFoundError(f"Autopilot run not found: {run_id}")
@@ -106,7 +125,7 @@ class AutopilotRepository:
             "stalled_cycles", "last_progress_at", "last_recovery_at",
         }
         values = {key: value for key, value in changes.items() if key in allowed}
-        values["updated_at"] = _now()
+        values["updated_at"] = iso_now(self._clock)
         assignments = ", ".join(["tasks_completed = tasks_completed + 1", *[f"{key} = ?" for key in values]])
         with self._uow.write() as connection:
             cursor = connection.execute(
@@ -124,7 +143,7 @@ class AutopilotRepository:
         owner = str(owner_id or "").strip()
         if not owner:
             raise ValueError("autopilot lease owner must not be empty")
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         expires = (now + timedelta(seconds=max(30, lease_seconds))).isoformat()
         with self._uow.write(immediate=True) as connection:
             connection.execute("DELETE FROM autopilot_leases WHERE lease_expires_at < ?", (now.isoformat(),))
@@ -150,7 +169,7 @@ class AutopilotRepository:
         """Extend a lease only when this controller still owns it."""
 
         _validate_autopilot_id(run_id)
-        now = datetime.now(timezone.utc)
+        now = utc_now(self._clock)
         expires = (now + timedelta(seconds=max(30, lease_seconds))).isoformat()
         with self._uow.write() as connection:
             cursor = connection.execute(
@@ -223,8 +242,8 @@ class AutopilotRepository:
 
     def record_delegated_decision(self, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         _validate_autopilot_id(run_id)
-        decision_id = f"decision-{uuid.uuid4().hex[:16]}"
-        now = _now()
+        decision_id = self._ids.new_id("decision")
+        now = iso_now(self._clock)
         record = {**payload, "decision_id": decision_id, "run_id": run_id, "created_at": now, "revoked_at": ""}
         with self._uow.write() as connection:
             connection.execute(
@@ -249,7 +268,7 @@ class AutopilotRepository:
         return records
 
     def recover_autopilot_runs(self) -> int:
-        now = _now()
+        now = iso_now(self._clock)
         with self._uow.write() as connection:
             rows = connection.execute("SELECT run_id FROM autopilot_runs WHERE status IN ('running','stopping')").fetchall()
             for row in rows:
@@ -269,7 +288,7 @@ class AutopilotRepository:
     ) -> dict[str, Any]:
         if not event or any(char.isspace() for char in event):
             raise ValueError(f"invalid autopilot event: {event}")
-        at = _now()
+        at = iso_now(self._clock)
         cursor = connection.execute(
             "INSERT INTO autopilot_events (run_id, event_type, at, data_json) VALUES (?, ?, ?, ?)",
             (run_id, event, at, _json(_redact(data))),

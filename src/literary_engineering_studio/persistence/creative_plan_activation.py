@@ -10,7 +10,6 @@ from literary_engineering_studio_engine.public.projects import atomic_write_text
 
 from .creative_plan_events import append_creative_plan_event_tx
 from .creative_plan_primitives import project_key
-from .primitives import _now
 from ..orchestration.plan_events import CreativePlanEventType
 
 
@@ -25,6 +24,7 @@ def apply_creative_plan_activation(
     verified_revision_digest: str,
     active_plan_path: Path,
     active_plan_payload: dict[str, Any],
+    at: str,
 ) -> None:
     _validate_activation_evidence(revision)
     _validate_active_plan_target(
@@ -46,6 +46,7 @@ def apply_creative_plan_activation(
         plan=plan,
         requested_revision=requested_revision,
         expected_active_revision=expected_active_revision,
+        at=at,
     )
 
 
@@ -59,15 +60,15 @@ def _activate_index_rows(
     plan: dict[str, Any],
     requested_revision: int,
     expected_active_revision: int,
+    at: str,
 ) -> None:
-    now = _now()
     connection.execute(
         """
         UPDATE creative_plans
         SET status = 'superseded', updated_at = ?
         WHERE project_root = ? AND status = 'active' AND plan_id <> ?
         """,
-        (now, str(plan["project_root"]), str(plan["plan_id"])),
+        (at, str(plan["project_root"]), str(plan["plan_id"])),
     )
     connection.execute(
         """
@@ -75,7 +76,7 @@ def _activate_index_rows(
         SET status = 'active', active_revision = ?, updated_at = ?
         WHERE plan_id = ?
         """,
-        (requested_revision, now, str(plan["plan_id"])),
+        (requested_revision, at, str(plan["plan_id"])),
     )
     append_creative_plan_event_tx(
         connection,
@@ -83,6 +84,7 @@ def _activate_index_rows(
         requested_revision,
         CreativePlanEventType.ACTIVATED,
         {"previous_revision": int(expected_active_revision)},
+        at=at,
     )
 
 
