@@ -243,11 +243,15 @@ def classify_context_task(task: TaskPackage) -> ContextTaskKind:
     route_kind = _route_task_kind(route, haystack)
     if route_kind is not None:
         return route_kind
+    # Project and scene semantic-review states must keep the review budget even
+    # when their names also begin with ``canon-`` or ``state-``.  The broader
+    # scene classifier below intentionally maps ordinary deterministic
+    # canon/state lifecycle work to STRUCTURED, so review has to win first.
+    if "review" in task_type or "review" in state:
+        return ContextTaskKind.REVIEW
     scene_kind = _scene_task_kind(state)
     if scene_kind is not None:
         return scene_kind
-    if "review" in task_type or "review" in state:
-        return ContextTaskKind.REVIEW
     if "creative" in role:
         return ContextTaskKind.CREATIVE
     if "review" in role:

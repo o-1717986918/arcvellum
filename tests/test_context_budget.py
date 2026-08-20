@@ -157,6 +157,21 @@ class ContextBudgetTests(unittest.TestCase):
 
             self.assertIs(budget.task_kind, ContextTaskKind.REVIEW)
 
+    def test_project_canon_revision_is_review_not_generic_canon_structure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            budget = resolve_task_context_budget(
+                _task(
+                    Path(temporary),
+                    route="review-and-audit",
+                    task_type="platform-agent-revision",
+                    role="main-creative-agent",
+                    current_state="canon-review-pass",
+                    outputs=("canon/timeline.yaml",),
+                )
+            )
+
+            self.assertIs(budget.task_kind, ContextTaskKind.REVIEW)
+
     def test_scene_revision_is_prose_not_generic_creative_work(self):
         with tempfile.TemporaryDirectory() as temporary:
             budget = resolve_task_context_budget(

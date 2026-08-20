@@ -11,6 +11,7 @@ from ...task_paths import (
     resolve_project_path as _resolve_project_path,
     task_id as _task_id,
 )
+from ...tasking.context_contract import CONTEXT_CONTRACT_SCHEMA
 from .blueprints import review_audit_blueprint_for_state
 from .evidence import file_sha256, unique
 
@@ -56,6 +57,7 @@ def build_review_audit_task_payload(root: Path, route: str, state: dict[str, obj
         expected_outputs=expected_outputs,
     )
     _attach_repair_provenance(root, payload, blueprint)
+    _attach_repair_context_contract(payload, blueprint)
     return payload
 
 
@@ -116,3 +118,49 @@ def _attach_repair_provenance(
         for relative in repair_targets
         if _resolve_project_path(root, relative).is_file()
     }
+
+
+def _attach_repair_context_contract(
+    payload: dict[str, object],
+    blueprint: dict[str, object],
+) -> None:
+    """Keep exact repair evidence available without replaying it all inline."""
+
+    targets = unique([str(item) for item in blueprint.get("repair_targets", [])])
+    if not targets:
+        return
+    sources = unique([str(item) for item in blueprint.get("source_paths", [])])
+    primary_review = next(
+        (
+            item
+            for item in sources
+            if item.startswith("reviews/agent/") and item.endswith(".json")
+        ),
+        "",
+    )
+    if not primary_review:
+        return
+    agent_sources = unique(
+        [
+            primary_review,
+            *(
+                item
+                for item in sources
+                if item.endswith(".json") and item != primary_review
+            ),
+            *targets,
+        ]
+    )
+    payload.update(
+        {
+            "agent_source_paths": agent_sources,
+            "context_contract_required": True,
+            "context_contract_schema": CONTEXT_CONTRACT_SCHEMA,
+            "context_contract_revision": "project-review-revision-v1",
+            "context_contract_status": "bounded-ready",
+            "context_must_inline_paths": [primary_review],
+            "context_exact_on_demand_paths": [
+                item for item in agent_sources if item != primary_review
+            ],
+        }
+    )

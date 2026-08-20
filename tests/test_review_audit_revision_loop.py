@@ -5,10 +5,13 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.contracts import TASK_SCHEMA, load_task_package
+from literary_engineering_studio.runtime.context_budget import resolve_task_context_budget
 from literary_engineering_studio.sandbox import stage_task
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, validate_task_outputs
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.review_audit_route import _review_audit_blueprint_for_state
+from literary_engineering_studio_engine.routes.review.task_payload import build_review_audit_task_payload
+from literary_engineering_studio_engine.tasking.package_contract import enrich_task_payload
 
 
 def _canon_review(conclusion: str = "revise_required") -> dict[str, object]:
@@ -97,6 +100,27 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
 
             blueprint = _review_audit_blueprint_for_state(project, "canon-review-pass", "repair")
             self.assertEqual(blueprint["repair_targets"], ["canon/world_rules.yaml"])
+            payload = build_review_audit_task_payload(
+                project,
+                "review-and-audit",
+                {
+                    "current_step": "canon-review-pass",
+                    "next_action": "repair",
+                },
+            )
+            self.assertEqual(
+                payload["context_must_inline_paths"],
+                ["reviews/agent/canon_review.json"],
+            )
+            self.assertIn(
+                "canon/world_rules.yaml",
+                payload["context_exact_on_demand_paths"],
+            )
+            self.assertNotIn(
+                "reviews/agent/canon_review.md",
+                payload["agent_source_paths"],
+            )
+            self.assertEqual(payload["context_contract_status"], "bounded-ready")
             before = hashlib.sha256(target.read_bytes()).hexdigest()
             task_json = self._write_task(
                 project,
@@ -127,6 +151,138 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
             result = validate_task_outputs(task, sandbox)
 
             self.assertTrue(result.passed, result.as_dict())
+
+    def test_large_canon_revision_compiles_as_target_sliced_review_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text("project:\n  title: 测试\n", encoding="utf-8")
+            review_dir = root / "reviews" / "agent"
+            review_dir.mkdir(parents=True)
+            targets = ["canon/timeline.yaml", *[f"scenes/scene_{index:04d}.yaml" for index in range(1, 7)]]
+            recommendations = [
+                {
+                    "target_path": target,
+                    "action": "补齐精确时间或地点事实。",
+                    "verification": "重新审查后缺口消失。",
+                }
+                for target in targets
+            ]
+            review = _canon_review()
+            review["blocking_issues"] = recommendations
+            review["recommendations"] = recommendations
+            (review_dir / "canon_review.json").write_text(
+                json.dumps(review, ensure_ascii=False), encoding="utf-8"
+            )
+            (review_dir / "canon_review.md").write_text("审查说明" * 2_000, encoding="utf-8")
+            lint_dir = root / "reviews"
+            (lint_dir / "canon_lint.json").write_text(
+                json.dumps({**_lint_payload(), "details": "诊断" * 4_000}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            for target in targets:
+                path = root / target
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("scene: evidence\n" + "事实" * 1_300, encoding="utf-8")
+
+            payload = enrich_task_payload(
+                build_review_audit_task_payload(
+                    root,
+                    "review-and-audit",
+                    {"current_step": "canon-review-pass", "next_action": "repair"},
+                )
+            )
+            task = load_task_package(
+                root,
+                self._write_task(root, payload, "canon-fix-prompt"),
+            )
+            budget = resolve_task_context_budget(task)
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                context_budget=budget,
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "error",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            run = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(budget.task_kind.value, "review")
+            self.assertLess(
+                run["prompt_program"]["formal"]["metrics"]["total_characters"],
+                12_000,
+            )
+            self.assertEqual(
+                context["prompt_access"]["inline"],
+                ["reviews/agent/canon_review.json"],
+            )
+            for target in targets:
+                self.assertIn(target, context["prompt_access"]["exact_on_demand"])
+
+    def test_committee_revision_uses_the_same_target_sliced_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "plot" / "outline.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("# 大纲\n", encoding="utf-8")
+            review_dir = root / "reviews" / "agent"
+            review_dir.mkdir(parents=True)
+            (review_dir / "committee_project-final-audit.json").write_text(
+                json.dumps(
+                    {
+                        "final_recommendation": "revise",
+                        "action_items": [
+                            {
+                                "target_path": "plot/outline.md",
+                                "action": "补足结尾因果。",
+                                "verification": "长篇审计不再报告缺口。",
+                            }
+                        ],
+                        "disagreements": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (review_dir / "committee_project-final-audit.md").write_text(
+                "# 委员会审查\n", encoding="utf-8"
+            )
+            (review_dir / "canon_review.json").write_text(
+                json.dumps(_canon_review("pass"), ensure_ascii=False), encoding="utf-8"
+            )
+            longform = root / "reviews" / "longform" / "longform_audit.json"
+            longform.parent.mkdir(parents=True)
+            longform.write_text("{}\n", encoding="utf-8")
+
+            payload = build_review_audit_task_payload(
+                root,
+                "review-and-audit",
+                {"current_step": "committee-pass", "next_action": "repair"},
+            )
+
+            self.assertEqual(
+                payload["context_must_inline_paths"],
+                ["reviews/agent/committee_project-final-audit.json"],
+            )
+            self.assertIn(
+                "reviews/agent/canon_review.json",
+                payload["context_exact_on_demand_paths"],
+            )
+            self.assertIn(
+                "reviews/longform/longform_audit.json",
+                payload["context_exact_on_demand_paths"],
+            )
+            self.assertIn(
+                "plot/outline.md",
+                payload["context_exact_on_demand_paths"],
+            )
 
 
 if __name__ == "__main__":
