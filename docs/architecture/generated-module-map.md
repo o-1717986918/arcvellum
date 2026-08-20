@@ -20,7 +20,7 @@
 | `src/literary_engineering_studio/runtime` | 92 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
 | `src/literary_engineering_studio/runtimes` | 18 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
 | `src/literary_engineering_studio/persistence` | 27 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
-| `src/literary_engineering_studio/projections` | 27 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
+| `src/literary_engineering_studio/projections` | 32 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
 | `src/literary_engineering_studio/preflight` | 18 | Writeback validation | `task_preflight facade` | contracts and deterministic validators | Agent creativity |
 | `src/literary_engineering_studio/observability` | 24 | Events and telemetry | `observability projections` | event contracts | task mutation |
 | `src/literary_engineering_studio/integrations` | 17 | External integrations | `integration-specific facades` | external SDKs and ports | literary policy |
