@@ -224,6 +224,8 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新�
 
 - [当前内核审查](docs/architecture/current-core-review.md)
 - [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
+- [模块目录](docs/architecture/module-catalog.md)
+- [Agent 面向接口开发标准](docs/architecture/agent-interface-development-standard.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
 - [v0.98.0 发行说明](docs/releases/v0.98.0.md)

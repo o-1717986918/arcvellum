@@ -10,6 +10,18 @@ This repository is a standalone Literary Engineering Studio. It embeds the workf
 - Do not add a model-provider abstraction, API-key store, direct HTTP LLM client, or hidden fallback model call. Intelligence comes from a connected host Agent or an installed Agent runtime such as Claude Code or Codex CLI.
 - The frontend is the primary user client. New project-management or human-decision capabilities should be exposed there instead of requiring users to edit project files.
 
+## Development Entry
+
+Do not discover architecture by searching the whole repository and editing the first matching file.
+
+1. Locate the owning module in `docs/architecture/module-catalog.md`.
+2. Follow `docs/architecture/agent-interface-development-standard.md` and write a Module Change Packet before editing.
+3. Import Engine behavior only through `literary_engineering_studio_engine.public` surfaces.
+4. Compose replaceable infrastructure only through `ApplicationContainer` and Studio-owned ports.
+5. Use the owning Vue feature client; components must not call the generic transport directly.
+
+`docs/architecture/module-boundaries.md` contains detailed implementation history. `docs/architecture/generated-module-map.md` is a machine-generated ownership inventory, not a substitute for the stable public interfaces above.
+
 ## Worker Constitution
 
 1. Obtain formal work only through embedded `task-next` and `task-open` state-machine operations.
@@ -23,6 +35,8 @@ This repository is a standalone Literary Engineering Studio. It embeds the workf
 9. Never enable a debug waiver or `LEW_MAINTAINER_MODE`.
 10. The selected external CLI instance is the main Agent for creative tasks. It must not delegate body prose to subagents.
 11. Never expose legacy embedded provider commands through Studio API, UI, or public CLI.
+
+These Worker rules describe product execution. They do not authorize code Agents to bypass the module and interface rules in the Development Entry.
 
 ## Verification
 

@@ -4,10 +4,12 @@ ArcVellum is a local literary-engineering studio. Contributions should preserve 
 
 ## Before opening a pull request
 
-1. Create a focused branch from `main`; keep mechanical moves, behavior changes, tests, and release metadata reviewable.
-2. Do not commit credentials, generated installers, local work projects, full prose fixtures, model transcripts, or private paths.
-3. Update tests whenever a task contract, API response, route gate, prompt asset, or desktop resource contract changes.
-4. Update user-facing documentation when behavior, installation, privacy, or release steps change.
+1. Locate the owner and stable entry in `docs/architecture/module-catalog.md`.
+2. Follow `docs/architecture/agent-interface-development-standard.md` and record a Module Change Packet before editing.
+3. Create a focused branch from `main`; keep contract changes, adapter migrations, behavior changes, tests, and release metadata reviewable.
+4. Do not commit credentials, generated installers, local work projects, full prose fixtures, model transcripts, or private paths.
+5. Update tests whenever a task contract, API response, route gate, prompt asset, or desktop resource contract changes.
+6. Update user-facing documentation when behavior, installation, privacy, or release steps change.
 
 ## Required local checks
 
@@ -32,10 +34,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 ## Pull request expectations
 
 - Explain the user-visible behavior and the route or task contract affected.
+- Name one primary owning module, its stable public entry, allowed dependencies, and invariants.
 - State which checks were run and what was not run.
 - Keep generated build outputs out of Git unless they are explicit source resources required by the desktop bundle.
 - Never weaken a formal gate, review, approval, sandbox, or path-validation rule merely to make a task advance.
+- Do not raise `architecture/quality-baseline.json` to admit new debt. Existing oversized-file and function counts are a ratchet, not an allowance.
 
 ## Development boundary
 
-`AGENTS.md` defines the operational constraints for tool-layer agents. The detailed engine architecture is maintained under `docs/architecture/`; release-specific requirements live in `docs/releases/RELEASING.md`.
+`AGENTS.md` defines the operational constraints for tool-layer agents. Module ownership is in `docs/architecture/module-catalog.md`; the required development loop is in `docs/architecture/agent-interface-development-standard.md`; detailed implementation history is maintained in `docs/architecture/module-boundaries.md`. Release-specific requirements live in `docs/releases/RELEASING.md`.
