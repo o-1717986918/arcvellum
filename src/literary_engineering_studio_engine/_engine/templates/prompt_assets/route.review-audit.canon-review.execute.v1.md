@@ -24,6 +24,8 @@ style_constraints:
   - Prefer exact contradictions and downstream consequences over generic advice.
 output_contract:
   - Write canon_review.v1 JSON Markdown and the declared completion marker.
+  - JSON must contain schema conclusion summary blocking_issues warnings unresolved_facts timeline_risks source_paths recommendations and next_gate; all collection fields are arrays even when empty.
+  - Do not replace conclusion and recommendations with generic verdict and findings fields.
 review_requirements:
   - Pass requires no blocking issues warnings unresolved facts or timeline risks.
   - Non-pass findings must remain visible until a separate repair task changes their declared targets.
@@ -35,3 +37,22 @@ forbidden_shortcuts:
 # Canon Review
 
 Treat the project as a versioned narrative system. Report the real verdict, identify exact repair ownership, and leave implementation to the separately sandboxed repair task.
+
+Use this exact top-level JSON shape:
+
+```json
+{
+  "schema": "literary-engineering-workbench/canon-review-agent/v1",
+  "conclusion": "pass | pass_with_notes | revise_required | reject",
+  "summary": "evidence-based conclusion",
+  "blocking_issues": [],
+  "warnings": [],
+  "unresolved_facts": [],
+  "timeline_risks": [],
+  "source_paths": [],
+  "recommendations": [
+    {"target_path": "canon/example.yaml", "action": "exact repair", "verification": "observable proof"}
+  ],
+  "next_gate": "repair | longform-audit"
+}
+```

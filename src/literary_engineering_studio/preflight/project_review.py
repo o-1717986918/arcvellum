@@ -113,8 +113,9 @@ def _validate_initial(
     allowed = {"approve", "approve_with_notes", "revise", "reject"} if committee else {"pass", "pass_with_notes", "revise_required", "reject"}
     if verdict not in allowed:
         _add_issue(issues, relative, verdict_field, f"审查结论必须是 {sorted(allowed)} 之一。", "如实记录结论；非通过结论本身可以完成本轮审查。")
-        return
-    if (committee and verdict == "approve") or (not committee and verdict == "pass"):
+    _validate_required_fields(payload, relative, committee, issues)
+    clean_pass = (committee and verdict == "approve") or (not committee and verdict == "pass")
+    if clean_pass:
         return
     action_fields = ("action_items", "disagreements") if committee else ("recommendations",)
     actionable = _actionable_items(payload, action_fields)
@@ -122,6 +123,37 @@ def _validate_initial(
         _add_issue(issues, relative, action_fields[0], "非通过结论必须提供至少一个结构化修复动作。", "为修复动作写出 target_path、action 和 verification。")
         return
     _validate_action_targets(actionable, action_fields[0], relative, issues)
+
+
+def _validate_required_fields(
+    payload: dict[str, object],
+    relative: str,
+    committee: bool,
+    issues: list[PreflightIssue],
+) -> None:
+    list_fields = (
+        ("reviewers", "disagreements", "action_items", "source_paths")
+        if committee
+        else (
+            "blocking_issues",
+            "warnings",
+            "unresolved_facts",
+            "timeline_risks",
+            "source_paths",
+            "recommendations",
+        )
+    )
+    for field in list_fields:
+        if not isinstance(payload.get(field), list):
+            _add_issue(
+                issues,
+                relative,
+                field,
+                f"必填字段 `{field}` 必须是数组，即使为空也不能省略。",
+                f"保留真实判断并补写 `{field}: []` 或对应的结构化条目。",
+            )
+    if not committee and not str(payload.get("summary") or "").strip():
+        _add_issue(issues, relative, "summary", "Canon 审查缺少结论摘要。", "用一段证据化摘要说明结论与主要风险。")
 
 
 def _actionable_items(payload: dict[str, object], fields: tuple[str, ...]) -> list[dict[str, object]]:
@@ -134,7 +166,7 @@ def _actionable_items(payload: dict[str, object], fields: tuple[str, ...]) -> li
 
 def _validate_action_targets(
     actionable: list[dict[str, object]],
-    field: str,
+    collection_field: str,
     relative: str,
     issues: list[PreflightIssue],
 ) -> None:
@@ -152,7 +184,16 @@ def _validate_action_targets(
             _add_issue(
                 issues,
                 relative,
-                f"{field}[{index}].target_path",
+                f"{collection_field}[{index}].target_path",
                 f"修复目标 `{target or 'missing'}` 不是允许的精确项目文件。",
                 "使用 canon/、characters/、plot/、scenes/ 或 drafts/candidates/ 下的单个文本文件路径；不能写目录或 review/workflow 路径。",
             )
+        for action_field in ("action", "verification"):
+            if not str(item.get(action_field) or "").strip():
+                _add_issue(
+                    issues,
+                    relative,
+                    f"{collection_field}[{index}].{action_field}",
+                    f"修复动作缺少非空 `{action_field}`。",
+                    "写明要做的精确修改及其可观察验证证据。",
+                )

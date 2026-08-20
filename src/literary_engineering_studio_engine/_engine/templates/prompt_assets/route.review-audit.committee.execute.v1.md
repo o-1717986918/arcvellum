@@ -25,6 +25,8 @@ style_constraints:
   - Be adversarial toward flattering generic feedback and unsupported praise.
 output_contract:
   - Write committee JSON report Markdown and completion marker at declared paths.
+  - JSON must contain schema subject final_recommendation reviewers disagreements action_items source_paths and minority_opinions; all collection fields are arrays even when empty.
+  - Do not replace final_recommendation and action_items with generic verdict and findings fields.
 review_requirements:
   - Verdict accounts for all blocking lenses and exact-source provenance.
   - target_path must name one allowed project text file rather than a directory review artifact or workflow artifact.
@@ -35,3 +37,20 @@ forbidden_shortcuts:
 # Review Committee
 
 Run each editorial lens independently, expose disagreement, then synthesize. A minority blocking finding remains visible until explicitly resolved.
+
+Use this exact top-level JSON shape:
+
+```json
+{
+  "schema": "literary-engineering-workbench/committee-review-agent/v1",
+  "subject": "project-final-audit",
+  "final_recommendation": "approve | approve_with_notes | revise | reject",
+  "reviewers": [],
+  "disagreements": [],
+  "action_items": [
+    {"target_path": "plot/example.md", "action": "exact repair", "verification": "observable proof"}
+  ],
+  "source_paths": [],
+  "minority_opinions": []
+}
+```

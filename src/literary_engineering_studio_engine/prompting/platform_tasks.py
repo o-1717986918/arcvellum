@@ -543,7 +543,7 @@ def write_platform_canon_review_task(root: Path) -> PlatformAgentTaskResult:
             ),
             (
                 "写入正式 canon review",
-                """按 `canon_review.v1` 写入 JSON，并在 Markdown 报告中给出需要修复、保留候选或请求用户确认的事项。pass_with_notes / revise_required / reject 都是合法结论，不得伪造 pass；非通过结论的 recommendations 必须为对象数组，每项包含位于 canon/、characters/、plot/、scenes/ 或 drafts/candidates/ 下的单个文本文件 target_path，以及 action、verification。""",
+                """按 `canon_review.v1` 写入 JSON，并在 Markdown 报告中给出需要修复、保留候选或请求用户确认的事项。JSON 顶层必须包含：schema=`literary-engineering-workbench/canon-review-agent/v1`、conclusion、summary、blocking_issues、warnings、unresolved_facts、timeline_risks、source_paths、recommendations、next_gate。五个集合字段必须始终写成数组，即使为空也不能省略。pass_with_notes / revise_required / reject 都是合法结论，不得伪造 pass；非通过结论的 recommendations 必须为对象数组，每项包含位于 canon/、characters/、plot/、scenes/ 或 drafts/candidates/ 下的单个文本文件 target_path，以及非空 action、verification。不要使用通用 verdict/findings 代替上述正式字段。""",
             ),
         ],
     )
@@ -580,7 +580,7 @@ def write_platform_committee_task(
             ),
             (
                 "形成综合建议",
-                """按 `committee_review.v1` 写出最终建议、分歧、行动项和少数意见。approve_with_notes / revise / reject 均可如实提交；需要修复的 action_items / disagreements 必须写成对象并包含单个允许项目文本文件的 target_path、action、verification。不要把建议直接晋升为 canon 或发布决定。""",
+                """按 `committee_review.v1` 写出最终建议、分歧、行动项和少数意见。JSON 顶层必须包含：schema=`literary-engineering-workbench/committee-review-agent/v1`、subject、final_recommendation、reviewers、disagreements、action_items、source_paths、minority_opinions；所有集合字段必须始终写成数组。approve_with_notes / revise / reject 均可如实提交；需要修复的 action_items / disagreements 必须写成对象并包含单个允许项目文本文件的 target_path、非空 action、verification。不要用 verdict/findings 代替正式字段，也不要把建议直接晋升为 canon 或发布决定。""",
             ),
         ],
     )

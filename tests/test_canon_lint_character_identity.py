@@ -27,6 +27,26 @@ class CanonLintCharacterIdentityTests(unittest.TestCase):
             self.assertEqual(len(issues), 1)
             self.assertEqual(issues[0]["evidence"], "主角")
 
+    def test_explicit_no_change_sections_do_not_create_canon_debt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_minimum_project(root, role="主角——轨道维修员")
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text(
+                "# Draft\n\n## 正文草稿\n\n正文。\n\n## 状态变化\n\n"
+                "### 新增事实候选\n\n- 无。\n\n"
+                "### 人物状态变化\n\n- none\n\n"
+                "### 关系变化\n\n- no change\n\n"
+                "### 伏笔变化\n\n- N/A\n\n"
+                "### 需要人工确认\n\n- not applicable\n",
+                encoding="utf-8",
+            )
+
+            result = build_canon_lint(root)
+
+            self.assertEqual(self._issues(result.json_path, "draft-unconfirmed-candidate"), [])
+
     @staticmethod
     def _write_minimum_project(root: Path, *, role: str) -> None:
         files = {

@@ -296,8 +296,16 @@ def _draft_candidates(text: str) -> list[str]:
         for line in section.splitlines():
             stripped = line.strip()
             if stripped.startswith("-") and stripped.strip("- ").strip():
-                candidates.append(stripped.strip("- ").strip())
+                candidate = stripped.strip("- ").strip()
+                if _is_no_change_candidate(candidate) or candidate in candidates:
+                    continue
+                candidates.append(candidate)
     return candidates
+
+
+def _is_no_change_candidate(value: str) -> bool:
+    normalized = value.strip().strip("。.!！").strip().lower()
+    return normalized in {"无", "none", "no change", "n/a", "not applicable"}
 
 
 def _render_report(root: Path, payload: dict[str, object]) -> str:
