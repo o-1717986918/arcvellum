@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from ..contracts import TaskPackage
-from .evidence_compiler import compile_evidence
+from .evidence_provider import DEFAULT_EVIDENCE_PROVIDER, EvidenceProvider
 from .execution_context import ExecutionContextEnvelope
+from .literary_briefs import compile_literary_brief
 from .prompt_program import (
     PROMPT_PROGRAM_SCHEMA,
     PromptProgram,
@@ -24,10 +25,11 @@ def compile_prompt_program(
     execution_context: ExecutionContextEnvelope,
     user_direction: str,
     audience: str = "file-agent",
+    evidence_provider: EvidenceProvider | None = None,
 ) -> PromptProgram:
     recipe = prompt_recipe(execution_context.task_kind)
     asset = _mapping(task_context.get("prompt_asset"))
-    evidence = compile_evidence(
+    evidence = (evidence_provider or DEFAULT_EVIDENCE_PROVIDER).provide(
         task,
         workspace,
         execution_context,
@@ -46,6 +48,9 @@ def compile_prompt_program(
         audience=audience,
     )
     output_contract = _output_contract(task_context)
+    literary_brief = _literary_brief(
+        task, task_context, execution_context, evidence.inline, output_contract
+    )
     stop_contract = (
         "写完所有 Agent-owned outputs 并逐项检查格式与内容。",
         "不要创建或修改 Studio 管理的 completion evidence。",
@@ -70,6 +75,7 @@ def compile_prompt_program(
         evidence=evidence.inline,
         exact_on_demand=evidence.exact_on_demand,
         stop_contract=stop_contract,
+        literary_brief=literary_brief,
     )
     return PromptProgram(
         schema=PROMPT_PROGRAM_SCHEMA,
@@ -89,7 +95,21 @@ def compile_prompt_program(
             "max_on_demand_reads": recipe.max_on_demand_reads,
         },
         digest=digest,
+        literary_brief=literary_brief,
     )
+
+
+def _literary_brief(
+    task: TaskPackage,
+    context: Mapping[str, Any],
+    execution_context: ExecutionContextEnvelope,
+    evidence: tuple[Any, ...],
+    output_contract: Mapping[str, object],
+) -> Mapping[str, object]:
+    brief = compile_literary_brief(
+        task, context, execution_context, evidence, output_contract
+    )
+    return brief.as_dict() if brief is not None else {}
 
 
 def _objective(

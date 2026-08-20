@@ -47,7 +47,7 @@ def _render(program: PromptProgram, boundaries: str, *, tool_worker: bool) -> st
 
 {program.objective}
 
-{decisions}## Allowed Outputs
+{decisions}{_brief(program)}## Allowed Outputs
 
 {_outputs(program.output_contract)}
 
@@ -101,6 +101,19 @@ def _outputs(contract: object) -> str:
     if machine:
         lines.append("- machine-owned fields: `" + json.dumps(machine, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "`")
     return "\n".join(lines) or "- 无文件输出"
+
+
+def _brief(program: PromptProgram) -> str:
+    if not program.literary_brief:
+        return ""
+    compact = {
+        key: value
+        for key, value in program.literary_brief.items()
+        if key not in {"schema", "output_contract", "provenance"}
+    }
+    return "## Literary Task Brief\n\n`" + json.dumps(
+        compact, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ) + "`\n\n"
 
 
 def _constraints(values: tuple[str, ...]) -> str:

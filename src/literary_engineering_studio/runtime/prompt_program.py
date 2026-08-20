@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from typing import Any, Mapping
@@ -51,6 +51,7 @@ class PromptProgram:
     stop_contract: tuple[str, ...]
     compile_metrics: Mapping[str, object]
     digest: str
+    literary_brief: Mapping[str, object] = field(default_factory=dict)
 
     def safe_projection(self) -> dict[str, object]:
         return {
@@ -62,6 +63,7 @@ class PromptProgram:
             "constraint_count": len(self.constraints),
             "decision_count": len(self.decisions),
             "output_count": len(self.output_contract.get("outputs", [])),
+            "literary_brief": dict(self.literary_brief),
             "compile_metrics": dict(self.compile_metrics),
             "digest": self.digest,
         }
@@ -78,6 +80,7 @@ def prompt_program_digest(
     evidence: tuple[PromptEvidence, ...],
     exact_on_demand: tuple[OnDemandEvidence, ...],
     stop_contract: tuple[str, ...],
+    literary_brief: Mapping[str, object] | None = None,
 ) -> str:
     payload = {
         "schema": PROMPT_PROGRAM_SCHEMA,
@@ -90,6 +93,7 @@ def prompt_program_digest(
         "evidence": [item.identity() for item in evidence],
         "exact_on_demand": [asdict(item) for item in exact_on_demand],
         "stop_contract": list(stop_contract),
+        "literary_brief": dict(literary_brief or {}),
     }
     serialized = json.dumps(
         payload,
