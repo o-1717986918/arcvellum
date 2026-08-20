@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,17 +24,13 @@ from ....creative_quality import (
 )
 from ....flow_gates import (
     FlowGateError,
-    branch_selection_status,
     ensure_agent_task_completed,
-    fallback_selection_reason_error,
-    selected_branch_from,
 )
-from ....narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
+from ....narrative_rhythm import narrative_rhythm_contract
 from ....reader_experience import reader_experience_contract
 from ....roleplay_lab import CharacterCard, _load_characters
 from ....semantic_task_contracts import (
     semantic_artifact_relative_path,
-    validated_branch_proposals,
     write_semantic_artifact_template,
 )
 from ....word_budget import scene_word_budget_contract
@@ -44,20 +40,25 @@ from ...style.snapshot import (
 )
 from ..facts import SceneFacts, load_scene_facts
 from .beats import build_beats as _build_beats, composition_obligations
-from .execution_contract import build_prose_execution_contract, render_prose_execution_contract
+from .branch_choice import fallback_writeback, load_branch_choice
+from .contracts import SceneCompositionResult, SceneCompositionSources
+from .creative_plan import (
+    build_dialogue_intents,
+    build_prose_seed,
+    build_sensory_palette,
+    build_subtext_map,
+    character_payload,
+    flow_gate,
+    guardrails,
+    revision_targets,
+    serializable_branch,
+)
+from .execution_contract import build_prose_execution_contract
+from .rendering import render_composition_report
 
-@dataclass(frozen=True)
-class SceneCompositionResult:
-    project_root: Path
-    output_path: Path
-    json_path: Path
-    agent_tasks_path: Path | None
-    context_path: Path
-    context_trace_path: Path
-    scene_id: str
-    selected_branch: str
-    character_count: int
-    beat_count: int
+# Compatibility name retained for existing extension/tests; implementation is
+# owned by branch_choice.
+_load_branch_choice = load_branch_choice
 
 
 def build_scene_composition(
@@ -76,132 +77,250 @@ def build_scene_composition(
 ) -> SceneCompositionResult:
     """Build a scene composition packet and JSON manifest."""
 
+    sources = _prepare_sources(
+        project_root,
+        scene,
+        context,
+        query=query,
+        rebuild_context=rebuild_context,
+        branch_manifest=branch_manifest,
+        branch_selection=branch_selection,
+        agent_tasks=agent_tasks,
+        allow_recommended_branch=allow_recommended_branch,
+        allow_missing_branch=allow_missing_branch,
+    )
+    payload = _composition_payload(sources, agent_tasks=agent_tasks)
+    _attach_prose_execution_contract(payload, allow_incomplete=allow_missing_branch)
+    output_path, json_path = _composition_paths(sources, output, json_output)
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(
+        render_composition_report(
+            sources.root,
+            sources.scene_path,
+            sources.context_path,
+            sources.context_trace_path,
+            payload,
+        ),
+        encoding="utf-8",
+    )
+    agent_tasks_path = None
+    if agent_tasks:
+        write_semantic_artifact_template(
+            sources.root,
+            "composition-agent-task",
+            sources.facts.scene_id,
+            source=json_path.relative_to(sources.root).as_posix(),
+            # Preserve a completed review until the changed composition digest
+            # makes it stale. Rebuilding must not erase reviewer evidence.
+            overwrite=False,
+        )
+        agent_tasks_path = _write_composition_agent_tasks(
+            sources.root,
+            sources.scene_path,
+            sources.context_path,
+            sources.context_trace_path,
+            output_path,
+            json_path,
+            payload,
+        )
+
+    return SceneCompositionResult(
+        project_root=sources.root,
+        output_path=output_path,
+        json_path=json_path,
+        agent_tasks_path=agent_tasks_path,
+        context_path=sources.context_path,
+        context_trace_path=sources.context_trace_path,
+        scene_id=sources.facts.scene_id,
+        selected_branch=str(sources.branch["branch_id"] or "none"),
+        character_count=len(sources.writing_cards),
+        beat_count=len(payload["beats"]),
+    )
+
+
+def _prepare_sources(
+    project_root: Path,
+    scene: Path | None,
+    context: Path | None,
+    *,
+    query: str,
+    rebuild_context: bool,
+    branch_manifest: Path | None,
+    branch_selection: Path | None,
+    agent_tasks: bool,
+    allow_recommended_branch: bool,
+    allow_missing_branch: bool,
+) -> SceneCompositionSources:
     root = project_root.resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"project root not found: {root}")
-
-    scene_path = root / "scenes" / "scene_0001.yaml" if scene is None else _resolve(root, scene)
+    scene_path = _resolve(root, scene, root / "scenes" / "scene_0001.yaml")
     if not scene_path.exists():
         raise FileNotFoundError(f"scene file not found: {scene_path}")
-
     facts = load_scene_facts(scene_path)
     context_path = _resolve(
         root,
         context,
         root / "memory" / "context_packets" / f"{facts.scene_id}.md",
     )
-    context_trace_path = default_context_trace_path(context_path)
-    if (
-        rebuild_context
-        or not context_path.exists()
-        or not context_trace_path.exists()
-        or not context_trace_status(root, facts.scene_id, context_path).passed
-    ):
-        context_result = build_context_packet(root, scene=scene_path, query=query, rebuild_index=True, output=context_path)
-        context_path = context_result.output_path
-        context_trace_path = context_result.trace_path or default_context_trace_path(context_path)
-
-    all_cards = _load_characters(root)
-    active_cards = _active_cards(all_cards, facts.participants)
+    context_path, trace_path = _ensure_context(
+        root, scene_path, facts, context_path, query, rebuild_context
+    )
     if agent_tasks and not allow_missing_branch:
         ensure_agent_task_completed(
             root,
             root / "branches" / facts.scene_id / "branch_manifest.agent_tasks.md",
             label="compose-scene --agent-tasks",
         )
-    branch = _load_branch_choice(root, facts.scene_id, branch_manifest, branch_selection, allow_recommended_branch, allow_missing_branch)
-    beats = _build_beats(facts, active_cards, branch)
-    subtext_map = _build_subtext_map(facts, active_cards or all_cards)
-    dialogue_intents = _build_dialogue_intents(facts, active_cards or all_cards)
-    sensory_palette = _build_sensory_palette(facts, branch)
-    prose_seed = _build_prose_seed(facts, active_cards or all_cards, branch, sensory_palette)
-    revision_targets = _revision_targets(facts, active_cards, branch)
-    guardrails = _guardrails()
-    word_budget_contract = scene_word_budget_contract(root, scene_path)
-    reader_contract = reader_experience_contract(root, scene_path)
-    rhythm_contract = narrative_rhythm_contract(root, scene_path)
-    obligations = composition_obligations(facts, branch, rhythm_contract, word_budget_contract)
-    quality_profile = load_creative_quality_profile(root)
-    input_contract_digest = composition_input_digest(root, scene_path)
+    cards = _load_characters(root)
+    return SceneCompositionSources(
+        root=root,
+        scene_path=scene_path,
+        facts=facts,
+        context_path=context_path,
+        context_trace_path=trace_path,
+        all_cards=cards,
+        active_cards=_active_cards(cards, facts.participants),
+        branch=load_branch_choice(
+            root,
+            facts.scene_id,
+            branch_manifest,
+            branch_selection,
+            allow_recommended_branch,
+            allow_missing_branch,
+        ),
+    )
 
-    default_dir = root / "drafts" / "compositions"
-    output_path = _resolve(root, output, default_dir / f"{facts.scene_id}_composition.md")
-    json_path = _resolve(root, json_output, default_dir / f"{facts.scene_id}_composition.json")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.parent.mkdir(parents=True, exist_ok=True)
 
-    branch_payload = _serializable_branch(branch, root)
-    payload: dict[str, Any] = {
+def _ensure_context(
+    root: Path,
+    scene_path: Path,
+    facts: SceneFacts,
+    context_path: Path,
+    query: str,
+    rebuild_context: bool,
+) -> tuple[Path, Path]:
+    trace_path = default_context_trace_path(context_path)
+    if not (
+        rebuild_context
+        or not context_path.exists()
+        or not trace_path.exists()
+        or not context_trace_status(root, facts.scene_id, context_path).passed
+    ):
+        return context_path, trace_path
+    result = build_context_packet(
+        root,
+        scene=scene_path,
+        query=query,
+        rebuild_index=True,
+        output=context_path,
+    )
+    rebuilt = result.output_path
+    return rebuilt, result.trace_path or default_context_trace_path(rebuilt)
+
+
+def _composition_payload(
+    sources: SceneCompositionSources,
+    *,
+    agent_tasks: bool,
+) -> dict[str, Any]:
+    facts = sources.facts
+    branch = sources.branch
+    cards = sources.writing_cards
+    sensory = build_sensory_palette(facts, branch)
+    word_contract = scene_word_budget_contract(sources.root, sources.scene_path)
+    reader_contract = reader_experience_contract(sources.root, sources.scene_path)
+    rhythm_contract = narrative_rhythm_contract(sources.root, sources.scene_path)
+    beats = _build_beats(facts, sources.active_cards, branch)
+    quality_profile = load_creative_quality_profile(sources.root)
+    return {
         "schema": "literary-engineering-workbench/scene-composition/v0.1",
         "generated_at": _now(),
-        "project_root": str(root),
-        "formal_cli_provenance": {
-            "created_by": "compose-scene",
-            "agent_tasks_requested": bool(agent_tasks),
-            "semantic_review_required": bool(agent_tasks),
-            "manual_file_creation_allowed": False,
-            "input_contract_digest": input_contract_digest,
-            "required_predecessors": ["context", "simulate-scene --agent", "branch-simulate --agent", "branch_selection.md decision:selected"],
-        },
+        "project_root": str(sources.root),
+        "formal_cli_provenance": _provenance(sources, agent_tasks),
         "scene_id": facts.scene_id,
-        "scene_file": _rel(scene_path, root),
-        "context_packet": _rel(context_path, root),
-        "context_trace": _rel(context_trace_path, root),
-        "branch_manifest": _rel(branch["manifest_path"], root) if branch.get("manifest_path") else "",
-        "branch_selection": _rel(branch["selection_path"], root) if branch.get("selection_path") else "",
+        "scene_file": _rel(sources.scene_path, sources.root),
+        "context_packet": _rel(sources.context_path, sources.root),
+        "context_trace": _rel(sources.context_trace_path, sources.root),
+        "branch_manifest": _branch_path(branch, "manifest_path", sources.root),
+        "branch_selection": _branch_path(branch, "selection_path", sources.root),
         "selected_branch": branch["branch_id"],
         "selection_source": branch["source"],
-        "flow_gate": _flow_gate(branch),
+        "flow_gate": flow_gate(branch),
         "scene_facts": asdict(facts),
-        "characters": [_character_payload(card, root) for card in active_cards or all_cards],
-        "branch": branch_payload,
+        "characters": [character_payload(card, sources.root) for card in cards],
+        "branch": serializable_branch(branch, sources.root),
         "beats": beats,
-        "composition_obligations": obligations,
-        "subtext_map": subtext_map,
-        "dialogue_intents": dialogue_intents,
-        "sensory_palette": sensory_palette,
-        "prose_seed": prose_seed,
-        "word_budget_contract": word_budget_contract,
+        "composition_obligations": composition_obligations(
+            facts, branch, rhythm_contract, word_contract
+        ),
+        "subtext_map": build_subtext_map(facts, cards),
+        "dialogue_intents": build_dialogue_intents(facts, cards),
+        "sensory_palette": sensory,
+        "prose_seed": build_prose_seed(facts, cards, branch, sensory),
+        "word_budget_contract": word_contract,
         "reader_experience_contract": reader_contract,
         "narrative_rhythm_contract": rhythm_contract,
         "narrative_rhythm": rhythm_contract.get("narrative_rhythm", {}),
         "scene_bridge": rhythm_contract.get("scene_bridge", {}),
         "creative_quality_profile": quality_profile,
         "creative_quality_profile_digest": quality_profile.get("digest"),
-        "style_mount_snapshot": active_style_mount_snapshot_payload(root),
-        "revision_targets": revision_targets,
-        "writeback_candidates": branch.get("writeback_candidates", _fallback_writeback(facts)),
-        "guardrails": guardrails,
+        "style_mount_snapshot": active_style_mount_snapshot_payload(sources.root),
+        "revision_targets": revision_targets(facts, sources.active_cards, branch),
+        "writeback_candidates": branch.get(
+            "writeback_candidates", fallback_writeback(facts)
+        ),
+        "guardrails": guardrails(),
     }
-    _attach_prose_execution_contract(payload, allow_incomplete=allow_missing_branch)
-    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    output_path.write_text(_render_markdown(root, scene_path, context_path, context_trace_path, payload), encoding="utf-8")
-    agent_tasks_path = None
-    if agent_tasks:
-        write_semantic_artifact_template(
-            root,
-            "composition-agent-task",
-            facts.scene_id,
-            source=json_path.relative_to(root).as_posix(),
-        # Preserve a completed review until the changed composition digest makes
-        # it stale.  Rebuilding a deterministic task must not silently erase a
-        # reviewer\'s evidence.
-        overwrite=False,
-        )
-        agent_tasks_path = _write_composition_agent_tasks(root, scene_path, context_path, context_trace_path, output_path, json_path, payload)
 
-    return SceneCompositionResult(
-        project_root=root,
-        output_path=output_path,
-        json_path=json_path,
-        agent_tasks_path=agent_tasks_path,
-        context_path=context_path,
-        context_trace_path=context_trace_path,
-        scene_id=facts.scene_id,
-        selected_branch=str(branch["branch_id"] or "none"),
-        character_count=len(active_cards or all_cards),
-        beat_count=len(beats),
+
+def _provenance(
+    sources: SceneCompositionSources,
+    agent_tasks: bool,
+) -> dict[str, Any]:
+    return {
+        "created_by": "compose-scene",
+        "agent_tasks_requested": bool(agent_tasks),
+        "semantic_review_required": bool(agent_tasks),
+        "manual_file_creation_allowed": False,
+        "input_contract_digest": composition_input_digest(
+            sources.root, sources.scene_path
+        ),
+        "required_predecessors": [
+            "context",
+            "simulate-scene --agent",
+            "branch-simulate --agent",
+            "branch_selection.md decision:selected",
+        ],
+    }
+
+
+def _branch_path(branch: dict[str, Any], key: str, root: Path) -> str:
+    path = branch.get(key)
+    return _rel(path, root) if isinstance(path, Path) else ""
+
+
+def _composition_paths(
+    sources: SceneCompositionSources,
+    output: Path | None,
+    json_output: Path | None,
+) -> tuple[Path, Path]:
+    default = sources.root / "drafts" / "compositions"
+    paths = (
+        _resolve(
+            sources.root,
+            output,
+            default / f"{sources.facts.scene_id}_composition.md",
+        ),
+        _resolve(
+            sources.root,
+            json_output,
+            default / f"{sources.facts.scene_id}_composition.json",
+        ),
     )
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    return paths
 
 
 def composition_input_digest(project_root: Path, scene_path: Path) -> str:
@@ -308,460 +427,6 @@ def _write_composition_agent_tasks(
     )
 
 
-def _load_branch_choice(
-    root: Path,
-    scene_id: str,
-    manifest: Path | None,
-    selection: Path | None,
-    allow_recommended_branch: bool,
-    allow_missing_branch: bool,
-) -> dict[str, Any]:
-    manifest_path = _resolve(root, manifest, root / "branches" / scene_id / "branch_manifest.json")
-    selection_path = _resolve(root, selection, root / "branches" / scene_id / "branch_selection.md")
-    selection_gate = branch_selection_status(selection_path)
-    selected = selected_branch_from(selection_path)
-    if not manifest_path.exists():
-        if not allow_missing_branch:
-            raise FlowGateError(
-                "branch simulation required before compose-scene: "
-                f"missing {_rel(manifest_path, root)}. Run simulate-scene --agent, branch-simulate --agent, "
-                "then record branch_selection.md before composing. For internal experiments only, pass allow_missing_branch=True or the CLI flag."
-            )
-        return {
-            "branch_id": "",
-            "title": "未加载分支",
-            "strategy": "no_branch_manifest",
-            "premise": "当前场景尚未生成 branch-simulate 产物，compose-scene 将使用场景目标和人物档案生成保守编排。",
-            "action_chain": [],
-            "scores": {},
-            "status": "no_manifest",
-            "source": "fallback",
-            "manifest_path": manifest_path,
-            "selection_path": selection_path if selection_path.exists() else None,
-            "selection_gate": selection_gate,
-            "risks": ["缺少 branch_manifest.json，剧情方向未经过多分支评分。"],
-            "writeback_candidates": _fallback_writeback_by_id(scene_id),
-        }
-    data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    fallback_branches = data.get("branches", [])
-    proposal_branches, proposal_path = _proposal_branch_inputs(root, scene_id, data)
-    branches = [*proposal_branches, *fallback_branches]
-    recommended = str(data.get("recommended_branch") or "")
-    if not selected and not allow_recommended_branch:
-        raise FlowGateError(
-            "formal branch selection required before compose-scene: "
-            f"fill {_rel(selection_path, root)} with decision: selected and selected_branch. "
-            f"recommended_branch={recommended or 'n/a'} is only a scoring hint."
-        )
-    target_id = selected or recommended
-    chosen = _find_branch(branches, target_id)
-    if target_id and chosen is None:
-        raise FlowGateError(
-            f"selected branch {target_id} is not present in {_rel(manifest_path, root)}; "
-            "rerun branch-simulate or correct branch_selection.md."
-        )
-    chosen = chosen or {}
-    if not chosen:
-        return {
-            "branch_id": target_id,
-            "title": "空分支清单",
-            "strategy": "empty_manifest",
-            "premise": "branch_manifest.json 存在，但没有可用分支。",
-            "action_chain": [],
-            "scores": {},
-            "status": "needs_detail",
-            "source": "manifest_empty",
-            "manifest_path": manifest_path,
-            "selection_path": selection_path if selection_path.exists() else None,
-            "selection_gate": selection_gate,
-            "risks": ["branch_manifest.json 无分支。"],
-            "writeback_candidates": data.get("writeback_candidates", _fallback_writeback_by_id(scene_id)),
-        }
-    _ensure_fallback_selection_allowed(selection_gate, target_id, proposal_branches, fallback_branches)
-    return _selected_branch_result(chosen, selected, manifest_path, selection_path, selection_gate, recommended, proposal_path)
-
-
-def _proposal_branch_inputs(root: Path, scene_id: str, manifest: dict[str, Any]) -> tuple[list[dict[str, Any]], Path | None]:
-    try:
-        return validated_branch_proposals(root, scene_id, manifest)
-    except ValueError as exc:
-        raise FlowGateError(str(exc)) from exc
-
-
-def _ensure_fallback_selection_allowed(
-    selection: dict[str, str],
-    selected: str,
-    proposals: list[dict[str, Any]],
-    fallbacks: list[Any],
-) -> None:
-    proposal_ids = {str(item.get("branch_id") or "") for item in proposals}
-    fallback_ids = {str(item.get("branch_id") or "") for item in fallbacks if isinstance(item, dict)}
-    error = fallback_selection_reason_error(selection, selected, proposal_ids, fallback_ids)
-    if error:
-        raise FlowGateError(error)
-
-
-def _selected_branch_result(
-    chosen: dict[str, Any],
-    selected: str,
-    manifest_path: Path,
-    selection_path: Path,
-    selection_gate: dict[str, str],
-    recommended: str,
-    proposal_path: Path | None,
-) -> dict[str, Any]:
-    result = dict(chosen)
-    origin = str(chosen.get("branch_origin") or "deterministic-fallback")
-    reason = str(selection_gate.get("fallback_reason") or "").strip()
-    if origin == "deterministic-fallback" and proposal_path is None:
-        reason = "no-validated-agent-proposal"
-    result.update(
-        {
-            "branch_origin": origin,
-            "fallback_reason": reason if origin == "deterministic-fallback" else "",
-            "validated_agent_proposals_available": proposal_path is not None,
-            "source": "selection" if selected else "recommended",
-            "manifest_path": manifest_path,
-            "selection_path": selection_path if selection_path.exists() else None,
-            "selection_gate": selection_gate,
-            "recommended_branch": recommended,
-            "proposal_path": proposal_path,
-        }
-    )
-    return result
-
-
-def _find_branch(branches: list[Any], branch_id: str) -> dict[str, Any] | None:
-    if not branch_id:
-        return None
-    for branch in branches:
-        if isinstance(branch, dict) and branch.get("branch_id") == branch_id:
-            return branch
-    return None
-
-
-def _build_subtext_map(facts: SceneFacts, cards: list[CharacterCard]) -> list[dict[str, Any]]:
-    if not cards:
-        return [
-            {
-                "character_id": "unknown",
-                "name": "未建档角色",
-                "public_action": facts.scene_goal or "按场景目标行动。",
-                "hidden_pressure": facts.internal_conflict or "人物隐性压力未填写。",
-                "background_influence": "缺少正式人物 background_story，建议先补人物档案。",
-                "do_not_write_directly": ["不要用万能旁白替代人物动机。"],
-            }
-        ]
-    entries = []
-    for card in cards:
-        entries.append(
-            {
-                "character_id": card.character_id,
-                "name": card.name,
-                "public_action": _first_nonempty(card.intention) or facts.scene_goal or "完成当前场景任务。",
-                "hidden_pressure": _first_nonempty(card.fear + card.secret) or facts.internal_conflict or "隐性压力未填写。",
-                "background_influence": _first_nonempty(card.behavior_influences)
-                or "以选择、回避、误判、语气或沉默体现过往影响。",
-                "reveal_policy": card.reveal_policy or "implicit_only",
-                "do_not_write_directly": [
-                    "不得直白交代人物背景故事。",
-                    "不得把人物心理写成设定说明书。",
-                    "不得为了推进剧情让角色无解释违背 BDI。",
-                ],
-            }
-        )
-    return entries
-
-
-def _build_dialogue_intents(facts: SceneFacts, cards: list[CharacterCard]) -> list[dict[str, str]]:
-    if not cards:
-        return [
-            {
-                "speaker": "未建档角色",
-                "wants": facts.scene_goal or "推进场景。",
-                "avoids": facts.internal_conflict or "未填写。",
-                "speech_strategy": "先补人物 speech_style，再生成对白。",
-                "forbidden_exposition": "不得用对白直接解释世界观和背景故事。",
-            }
-        ]
-    intents = []
-    for card in cards:
-        wants = _first_nonempty(card.desire + card.intention) or facts.scene_goal or "推进当前场景目标。"
-        avoids = _first_nonempty(card.fear + card.secret) or facts.internal_conflict or "避免暴露过多信息。"
-        intents.append(
-            {
-                "speaker": card.name or card.character_id,
-                "wants": wants,
-                "avoids": avoids,
-                "speech_strategy": card.speech_style or "让语气服务关系压力，少解释，多留白。",
-                "forbidden_exposition": "不得借对白直接讲述 background_story；只能让语气、停顿和避词泄露压力。",
-            }
-        )
-    return intents
-
-
-def _build_sensory_palette(facts: SceneFacts, branch: dict[str, Any]) -> dict[str, list[str] | str]:
-    motif = facts.active_foreshadowing[0] if facts.active_foreshadowing else "未登记伏笔"
-    branch_title = branch.get("title") or "无分支标题"
-    return {
-        "location_anchor": facts.location or "未指定地点",
-        "motifs": [motif, branch_title],
-        "sound": _sensory_sound(facts),
-        "texture": _sensory_texture(facts),
-        "light": _sensory_light(facts),
-        "style_filters": facts.style_constraints or ["克制", "准确", "人物行动优先"],
-    }
-
-
-def _build_prose_seed(
-    facts: SceneFacts,
-    cards: list[CharacterCard],
-    branch: dict[str, Any],
-    sensory: dict[str, list[str] | str],
-) -> list[str]:
-    lead = _lead_name(cards)
-    location = facts.location or "这个地点"
-    goal = facts.scene_goal or "眼前的目标"
-    external = facts.external_conflict or "外部阻碍"
-    hook = facts.next_hooks[0] if facts.next_hooks else "新的后果"
-    premise = branch.get("premise") or "人物必须按自己的逻辑行动"
-    sound = _first_nonempty(list(sensory.get("sound", []))) if isinstance(sensory.get("sound"), list) else str(sensory.get("sound", ""))
-    texture = _first_nonempty(list(sensory.get("texture", []))) if isinstance(sensory.get("texture"), list) else str(sensory.get("texture", ""))
-
-    return [
-        f"{location} 先给了 {lead} 一个不肯退让的细节：{sound or '细小的动静'}。{lead} 先停住动作，确认 `{goal}` 会把局面推向哪里。",
-        f"`{external}` 没有突然爆发，它只是一步一步逼近。{lead} 伸手碰到{texture or '发冷的边缘'}时，旧习惯先一步收紧了他的判断；他避开最顺手的办法，选择了更慢、更难、但仍属于他的路。",
-        f"这一版正文种子采用 `{premise}` 的分支前提。结尾不要替读者总结答案，只让 `{hook}` 成为下一场景可以接住的输入。新增事实仍是候选，不能在本场景自动写入 canon。",
-    ]
-
-
-def _revision_targets(facts: SceneFacts, cards: list[CharacterCard], branch: dict[str, Any]) -> list[str]:
-    targets = [
-        "把每个节拍改写成具体动作、可观察细节和状态变化。",
-        "删掉解释性背景段落，让 background_story 只通过选择、回避、误判、语气和关系压力体现。",
-        "生成正文后运行 review-scene；涉及新增事实时继续运行 canon-lint。",
-    ]
-    if not cards and facts.participants:
-        targets.append("participants 没有匹配正式人物档案，先补人物卡或修正 scene.yaml。")
-    if branch.get("status") == "no_manifest":
-        targets.append("建议先运行 branch-simulate，再基于评分分支重建 compose-scene。")
-    if branch.get("source") != "selection":
-        targets.append("当前分支未经过正式 branch_selection，不能直接进入 generate-scene。")
-    if not facts.canon_refs:
-        targets.append("scene.yaml 缺少 canon_refs，正稿前应补硬约束引用。")
-    return targets
-
-
-def _guardrails() -> list[str]:
-    return [
-        "composition 是写作编排，不是正稿。",
-        "不得新增未经确认的 canon。",
-        "不得改变人物、地点、时间线或规则的适用范围。",
-        "不得把角色 background_story 直接写成说明段落。",
-        "不得让分支推荐绕过人工选择、审查和发布门禁。",
-        "只有 selection_source=selection 的 composition 才能进入 generate-scene；内部实验必须显式放行。",
-    ]
-
-
-def _flow_gate(branch: dict[str, Any]) -> dict[str, Any]:
-    source = str(branch.get("source") or "")
-    return {
-        "branch_selection_required": True,
-        "ready_for_generation": source == "selection",
-        "selection_source": source,
-        "selection_gate": branch.get("selection_gate", {}),
-        "blocking_reason": "" if source == "selection" else "branch_selection.md has not recorded a formal selected branch",
-    }
-
-
-def _character_payload(card: CharacterCard, root: Path) -> dict[str, Any]:
-    return {
-        "file": _rel(card.file, root),
-        "character_id": card.character_id,
-        "name": card.name,
-        "role": card.role,
-        "belief": card.belief,
-        "desire": card.desire,
-        "intention": card.intention,
-        "fear": card.fear,
-        "secret": card.secret,
-        "background_story": {
-            "summary": card.background_summary,
-            "formative_events": card.formative_events,
-            "behavior_influences": card.behavior_influences,
-            "reveal_policy": card.reveal_policy,
-        },
-        "moral_line": card.moral_line,
-        "speech_style": card.speech_style,
-    }
-
-
-def _serializable_branch(branch: dict[str, Any], root: Path) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in branch.items():
-        if isinstance(value, Path):
-            result[key] = _rel(value, root)
-        else:
-            result[key] = value
-    return result
-
-
-def _render_markdown(root: Path, scene_path: Path, context_path: Path, context_trace_path: Path, payload: dict[str, Any]) -> str:
-    facts = payload["scene_facts"]
-    branch = payload["branch"]
-    lines = [
-        f"# 场景创作编排：{payload['scene_id']}",
-        "",
-        f"- 生成时间：{payload['generated_at']}",
-        f"- 场景文件：`{_rel(scene_path, root)}`",
-        f"- 上下文包：`{_rel(context_path, root)}`",
-        f"- 上下文 Trace：`{_rel(context_trace_path, root)}`",
-        f"- 选用分支：`{payload['selected_branch'] or 'none'}`（{payload['selection_source']}）",
-        f"- JSON：`drafts/compositions/{payload['scene_id']}_composition.json`",
-        "",
-        "## 使用边界",
-        "",
-        _md_list(payload["guardrails"]),
-        "",
-        "## 输入摘要",
-        "",
-        *_scene_identity_lines(facts),
-        f"- 场景目标：{facts['scene_goal'] or '未填写'}",
-        f"- 外部冲突：{facts['external_conflict'] or '未填写'}",
-        f"- 内部冲突：{facts['internal_conflict'] or '未填写'}",
-        "",
-        "## 选用分支",
-        "",
-        f"- 标题：{branch.get('title') or '未填写'}",
-        f"- 策略：{branch.get('strategy') or '未填写'}",
-        *_branch_identity_lines(branch),
-        f"- 状态：`{branch.get('status') or 'n/a'}`",
-        f"- 前提：{branch.get('premise') or '未填写'}",
-        "",
-        "行动链：",
-        "",
-        _md_list([str(item) for item in branch.get("action_chain", [])]),
-        "",
-        "## 场景节拍",
-        "",
-    ]
-    for beat in payload["beats"]:
-        lines.extend(
-            [
-                f"### {beat['beat_id']}：{beat['function']}",
-                "",
-                f"- 可见动作：{beat['visible_action']}",
-                f"- 潜台词：{beat['subtext']}",
-                f"- 写作提示：{beat['craft_note']}",
-                "",
-            ]
-        )
-    lines.extend([*_execution_contract_markdown(payload), "## 人物潜台词", ""])
-    for item in payload["subtext_map"]:
-        lines.extend(
-            [
-                f"### {item['name']} `{item['character_id']}`",
-                "",
-                f"- 表层行动：{item['public_action']}",
-                f"- 隐性压力：{item['hidden_pressure']}",
-                f"- 背景影响：{item['background_influence']}",
-                f"- 呈现策略：{item.get('reveal_policy', 'implicit_only')}",
-                "",
-                "禁止写法：",
-                "",
-                _md_list(item["do_not_write_directly"]),
-                "",
-            ]
-        )
-    lines.extend(["## 对白意图", ""])
-    for item in payload["dialogue_intents"]:
-        lines.extend(
-            [
-                f"- `{item['speaker']}` 想要：{item['wants']}",
-                f"  避免：{item['avoids']}",
-                f"  话语策略：{item['speech_strategy']}",
-                f"  禁区：{item['forbidden_exposition']}",
-            ]
-        )
-    sensory = payload["sensory_palette"]
-    lines.extend(
-        [
-        "",
-        "## 感官与意象",
-        "",
-            f"- 地点锚点：{sensory['location_anchor']}",
-            f"- 意象：{', '.join(sensory['motifs'])}",
-            f"- 声音：{', '.join(sensory['sound'])}",
-            f"- 触感：{', '.join(sensory['texture'])}",
-            f"- 光线：{', '.join(sensory['light'])}",
-            f"- 风格过滤：{', '.join(sensory['style_filters'])}",
-            "",
-            "## 字数预算硬属性",
-            "",
-            f"- 状态：`{payload.get('word_budget_contract', {}).get('status', 'missing')}`",
-            f"- 目标中文内容字符：{payload.get('word_budget_contract', {}).get('target_chinese_chars') or payload.get('word_budget_contract', {}).get('target_words', 0)}",
-            f"- 最低中文内容字符：{payload.get('word_budget_contract', {}).get('min_chinese_chars') or payload.get('word_budget_contract', {}).get('min_words', 0)}",
-            f"- 最高中文内容字符：{payload.get('word_budget_contract', {}).get('max_chinese_chars') or payload.get('word_budget_contract', {}).get('max_words', 0)}",
-            f"- 叙事负载：{', '.join(str(item) for item in payload.get('word_budget_contract', {}).get('narrative_load', [])) or '未要求'}",
-            "",
-            "## 读者体验硬属性",
-            "",
-            f"- 状态：`{payload.get('reader_experience_contract', {}).get('status', 'missing')}`",
-            f"- 信息：{payload.get('reader_experience_contract', {}).get('message', '')}",
-            f"- 本场读者问题：{payload.get('reader_experience_contract', {}).get('reader_experience', {}).get('reader_question', '未填写') if isinstance(payload.get('reader_experience_contract', {}).get('reader_experience'), dict) else '未填写'}",
-            f"- 承诺回报：{payload.get('reader_experience_contract', {}).get('reader_experience', {}).get('promised_reward', '未填写') if isinstance(payload.get('reader_experience_contract', {}).get('reader_experience'), dict) else '未填写'}",
-            f"- 兑现或延迟：{payload.get('reader_experience_contract', {}).get('reader_experience', {}).get('payoff_or_delay', '未填写') if isinstance(payload.get('reader_experience_contract', {}).get('reader_experience'), dict) else '未填写'}",
-            f"- 反摘要要求：{payload.get('reader_experience_contract', {}).get('reader_experience', {}).get('anti_summary_requirement', '未填写') if isinstance(payload.get('reader_experience_contract', {}).get('reader_experience'), dict) else '未填写'}",
-            "",
-            "## 叙事节奏与场景桥接硬属性",
-            "",
-            render_narrative_rhythm_contract(root, scene_path).strip(),
-            "",
-            "## 正文种子",
-            "",
-            "以下不是正稿，只是用于启动真实正文生成的可改写种子：",
-            "",
-        ]
-    )
-    for paragraph in payload["prose_seed"]:
-        lines.extend([paragraph, ""])
-    lines.extend(
-        [
-            "## 改写目标",
-            "",
-            _md_list(payload["revision_targets"]),
-            "",
-            "## 写回候选",
-            "",
-            _writeback_markdown(payload["writeback_candidates"]),
-            "",
-            "## 下一步",
-            "",
-            "- 将正文种子扩写或交给 provider 生成候选。",
-            "- 把候选正文放入 `drafts/scenes/` 后运行 `review-scene`。",
-            "- 通过审查和人工确认后，再进入章节工作台、导出和发布链路。",
-        ]
-    )
-    return "\n".join(lines) + "\n"
-
-
-def _branch_identity_lines(branch: dict[str, Any]) -> list[str]:
-    return [
-        f"- 来源：`{branch.get('branch_origin') or 'missing'}`",
-        f"- 固定回退理由：{branch.get('fallback_reason') or '不适用'}",
-    ]
-
-
-def _scene_identity_lines(facts: dict[str, Any]) -> list[str]:
-    participants = ", ".join(facts["participants"]) if facts["participants"] else "未填写"
-    return [
-        f"- 章节：`{facts['chapter_id'] or 'n/a'}`",
-        f"- 地点：{facts['location'] or '未填写'}",
-        f"- 叙事视角：{facts.get('viewpoint') or '未显式配置'}",
-        f"- 参与者：{participants}",
-    ]
-
-
 def _active_cards(cards: list[CharacterCard], participants: list[str]) -> list[CharacterCard]:
     if not participants:
         return cards
@@ -774,89 +439,6 @@ def _attach_prose_execution_contract(payload: dict[str, Any], *, allow_incomplet
     payload["prose_execution_contract"] = contract
     if contract["errors"] and not allow_incomplete:
         raise FlowGateError("composition prose execution contract is incomplete: " + "; ".join(contract["errors"]))
-
-
-def _execution_contract_markdown(payload: dict[str, Any]) -> list[str]:
-    return [render_prose_execution_contract(payload["prose_execution_contract"]).strip(), ""]
-
-
-def _sensory_sound(facts: SceneFacts) -> list[str]:
-    text = " ".join([facts.location, facts.external_conflict, " ".join(facts.active_foreshadowing)])
-    if "电" in text:
-        return ["断续电流声", "远处脚步被空墙放大"]
-    if "雨" in text:
-        return ["雨点敲击硬物", "压低的呼吸声"]
-    return ["低频环境声", "被刻意压住的脚步或语气"]
-
-
-def _sensory_texture(facts: SceneFacts) -> list[str]:
-    text = facts.location + facts.external_conflict
-    if "旧" in text or "档案" in text:
-        return ["纸页边缘发脆", "灰尘贴在指腹"]
-    if "地下" in text:
-        return ["潮湿墙面", "发凉的金属边缘"]
-    return ["温度变化", "粗糙边缘", "被反复触碰的物件"]
-
-
-def _sensory_light(facts: SceneFacts) -> list[str]:
-    text = facts.location + facts.external_conflict
-    if "停电" in text or "夜" in text:
-        return ["低光", "手电余光", "门缝暗影"]
-    return ["局部光源", "遮挡形成的阴影", "人物视线避开的亮处"]
-
-
-def _fallback_writeback(facts: SceneFacts) -> dict[str, list[str]]:
-    return {
-        "new_facts": [f"{facts.scene_id} 的新增事实必须在正文生成后人工确认。"],
-        "character_changes": ["人物状态变化先保持候选。"],
-        "relationship_changes": ["关系变化先保持候选。"],
-        "foreshadowing_changes": ["伏笔新增、加固或回收需进入审查清单。"],
-        "next_scene_inputs": facts.next_hooks or ["补充下一场景输入。"],
-    }
-
-
-def _fallback_writeback_by_id(scene_id: str) -> dict[str, list[str]]:
-    return {
-        "new_facts": [f"{scene_id} 的新增事实必须在正文生成后人工确认。"],
-        "character_changes": ["人物状态变化先保持候选。"],
-        "relationship_changes": ["关系变化先保持候选。"],
-        "foreshadowing_changes": ["伏笔新增、加固或回收需进入审查清单。"],
-        "next_scene_inputs": ["补充下一场景输入。"],
-    }
-
-
-def _writeback_markdown(data: dict[str, list[str]]) -> str:
-    lines: list[str] = []
-    for key, values in data.items():
-        lines.append(f"- `{key}`")
-        for value in values:
-            lines.append(f"  - {value}")
-    return "\n".join(lines) if lines else "- 无。"
-
-
-def _md_list(items: list[str]) -> str:
-    if not items:
-        return "- 无。"
-    return "\n".join(f"- {item}" for item in items)
-
-
-def _pick(items: list[str], index: int, default: str) -> str:
-    if 0 <= index < len(items) and items[index]:
-        return items[index]
-    return default
-
-
-def _lead_name(cards: list[CharacterCard]) -> str:
-    if not cards:
-        return "核心角色"
-    return cards[0].name or cards[0].character_id or "核心角色"
-
-
-def _first_nonempty(items: list[str]) -> str:
-    for item in items:
-        if item:
-            return item
-    return ""
 
 
 def _resolve(root: Path, value: Path | None, default: Path | None = None) -> Path:
