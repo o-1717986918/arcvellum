@@ -64,6 +64,7 @@ def render_repair_prompt(payload: Mapping[str, object]) -> str:
     reasoning_text = _reasoning_budget_text(payload)
     quantitative_repair_text = _quantitative_repair_text(issue_rows)
     regression_guard_text = _regression_guard_text(payload)
+    stagnation_text = _stagnation_text(payload)
     session_text = (
         "这是同一 Agent session 内的有界修复回合。"
         if payload.get("repair_session") == "same-session"
@@ -89,7 +90,7 @@ Repair Context: `{payload.get('context_digest')}`
 
 {reasoning_text}
 
-机械格式、字段、路径、缺文件和确定性 lint 问题不得通过提高推理等级解决；默认只做 issue 指向的最小充分修复。{quantitative_repair_text}{regression_guard_text}仅当上方策略动作明确为 `escalate` 时，Runtime 才可在能力与总预算允许范围内升一级。
+机械格式、字段、路径、缺文件和确定性 lint 问题不得通过提高推理等级解决；默认只做 issue 指向的最小充分修复。{quantitative_repair_text}{regression_guard_text}{stagnation_text}仅当上方策略动作明确为 `escalate` 时，Runtime 才可在能力与总预算允许范围内升一级。
 
 ## 无效输出的有界片段
 
@@ -105,6 +106,19 @@ Repair Context: `{payload.get('context_digest')}`
 
 把完整修复结果写入目标后立即结束；不要在模型上下文中重新读取或重复解释。Worker 会做本地格式验证，Studio 会再次运行完整确定性预检；不得伪造 pass、完成回执或审查结论。
 """
+
+
+def _stagnation_text(payload: Mapping[str, object]) -> str:
+    raw = payload.get("stagnation")
+    stagnation = raw if isinstance(raw, Mapping) else {}
+    if stagnation.get("active") is not True:
+        return ""
+    return (
+        "\n\n## 停滞恢复合同\n\n"
+        "上一回合写回后，待修复目标的 SHA-256 与修复前完全相同，说明没有产生任何有效修改。"
+        "原样提交必定再次失败。本回合必须逐条定位上方剩余 issue，在完整产物中实际改写每个命中句段，"
+        "并在调用写入工具前自查原命中表达已不存在；不得只宣称已修复。\n\n"
+    )
 
 
 def _quantitative_repair_text(issue_rows: list[Mapping[str, object]]) -> str:

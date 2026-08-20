@@ -83,6 +83,7 @@ class RepairContextCoordinator:
         self.same_session_required = same_session_required
         self._pending: dict[str, object] | None = None
         self._seen_issue_codes: set[str] = set()
+        self._previous_target_digests: dict[str, str] = {}
 
     def prepare(
         self,
@@ -96,11 +97,7 @@ class RepairContextCoordinator:
             self.task,
             result.issues,
         )
-        attempt_root = (
-            self.sandbox.run_root
-            / "repairs"
-            / f"attempt-{max(1, int(attempt)):02d}"
-        )
+        attempt_root = _repair_attempt_root(self.sandbox.run_root, attempt)
         snapshot_root = attempt_root / "protected"
         snapshot = snapshot_outputs(
             self.sandbox.workspace,
@@ -116,6 +113,9 @@ class RepairContextCoordinator:
         protected_outputs = _protected_output_rows(
             self.sandbox.workspace,
             protected,
+        )
+        stagnation, target_digests = _stagnation_contract(
+            invalid_outputs, self._previous_target_digests
         )
         reasoning_contract = _reasoning_repair_contract(self.reasoning_budget, result, attempt)
         semantic_payload = _semantic_payload_with_guard(
@@ -133,6 +133,8 @@ class RepairContextCoordinator:
             self._seen_issue_codes,
         )
         semantic_payload["repair_session"] = "same-session" if self.same_session_required else "fresh-bounded-session"
+        semantic_payload["stagnation"] = stagnation
+        self._previous_target_digests = target_digests
         digest = _canonical_sha256(semantic_payload)
         payload = {**semantic_payload, "context_digest": digest}
         prompt = render_repair_prompt(payload)
@@ -141,10 +143,7 @@ class RepairContextCoordinator:
             "same_session_required": self.same_session_required,
             "full_task_replay": False,
         }
-        artifact_path = _write_context_artifact(
-            attempt_root,
-            payload,
-        )
+        artifact_path = _write_context_artifact(attempt_root, payload)
         self._pending = {
             "context_digest": digest,
             "snapshot": snapshot,
@@ -154,9 +153,7 @@ class RepairContextCoordinator:
             prompt=prompt,
             context_digest=digest,
             artifact_path=artifact_path,
-            issue_ids=tuple(
-                str(item["issue_id"]) for item in issue_rows
-            ),
+            issue_ids=_issue_ids(issue_rows),
             write_scope_mode=write_scope_mode,
             target_count=len(targets),
             protected_count=len(protected),
@@ -184,6 +181,36 @@ class RepairContextCoordinator:
             "restored_output_count": len(restored),
             "restored_outputs": list(restored),
         }
+
+
+def _repair_attempt_root(run_root: Path, attempt: int) -> Path:
+    return run_root / "repairs" / f"attempt-{max(1, int(attempt)):02d}"
+
+
+def _stagnation_contract(
+    invalid_outputs: list[dict[str, object]],
+    previous_target_digests: Mapping[str, str],
+) -> tuple[dict[str, object], dict[str, str]]:
+    target_digests = {
+        str(item.get("path") or ""): str(item.get("sha256") or "")
+        for item in invalid_outputs
+        if str(item.get("path") or "")
+    }
+    unchanged = bool(
+        previous_target_digests and target_digests == previous_target_digests
+    )
+    return {
+        "active": unchanged,
+        "target_digests": target_digests,
+        "instruction": (
+            "previous repair wrote the target without changing its bytes"
+            if unchanged else ""
+        ),
+    }, target_digests
+
+
+def _issue_ids(issue_rows: list[dict[str, str]]) -> tuple[str, ...]:
+    return tuple(str(item["issue_id"]) for item in issue_rows)
 
 
 def _semantic_payload(

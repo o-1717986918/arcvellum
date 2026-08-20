@@ -92,6 +92,28 @@ def _sandbox(root: Path) -> SandboxManifest:
 
 
 class IncrementalRepairContextTests(unittest.TestCase):
+
+    def test_unchanged_target_is_exposed_as_an_explicit_stagnation_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root, ("result.md",))
+            sandbox = _sandbox(root)
+            target = sandbox.workspace / "result.md"
+            target.write_text("unchanged output\n", encoding="utf-8")
+            coordinator = RepairContextCoordinator(task, sandbox)
+            failed = PreflightResult(
+                False,
+                (PreflightIssue("style", "result.md", "rewrite this", "change it"),),
+            )
+
+            first = coordinator.prepare(failed, 1, 3)
+            coordinator.finalize()
+            second = coordinator.prepare(failed, 2, 3)
+
+        self.assertNotIn("停滞恢复合同", first.prompt)
+        self.assertIn("停滞恢复合同", second.prompt)
+        self.assertIn("SHA-256", second.prompt)
+
     def test_scene_revision_repairs_candidate_and_manifest_as_one_transaction(
         self,
     ) -> None:

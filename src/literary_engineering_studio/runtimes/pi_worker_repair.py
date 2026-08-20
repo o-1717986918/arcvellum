@@ -29,6 +29,7 @@ def run_pi_worker_repairs(
     maximum = max(0, int(max_repairs))
     result = initial_result
     previous_digest = ""
+    consecutive_stalls = 0
     for completed_repairs in range(maximum + 1):
         preflight = output_validator()
         payload = _preflight_payload(preflight, completed_repairs, maximum)
@@ -44,23 +45,12 @@ def run_pi_worker_repairs(
                 preflight=payload,
             )
         digest = _preflight_digest(payload)
-        if completed_repairs and digest == previous_digest:
-            emit(
-                "repair.no_progress",
-                {
-                    "attempt": completed_repairs,
-                    "reason": "identical-preflight-digest",
-                    **payload,
-                },
-            )
-            return _repair_failure(
-                result,
-                message="Pi repair made no deterministic preflight progress",
-                repairs=completed_repairs,
-                preflight=payload,
-                failure_kind=RuntimeFailureKind.NO_PROGRESS,
-                retryable=False,
-            )
+        consecutive_stalls, stalled = _evaluate_repair_stall(
+            result, payload, completed_repairs, maximum,
+            digest == previous_digest, consecutive_stalls, emit,
+        )
+        if stalled is not None:
+            return stalled
         previous_digest = digest
         if completed_repairs >= maximum or repair_prompt_builder is None:
             return _repair_failure(
@@ -91,6 +81,38 @@ def run_pi_worker_repairs(
                 preflight=payload,
             )
     return result
+
+
+def _evaluate_repair_stall(
+    result: RuntimeResult,
+    payload: dict[str, Any],
+    completed_repairs: int,
+    maximum: int,
+    digest_matches: bool,
+    consecutive_stalls: int,
+    emit: Callable[[str, dict[str, Any]], None],
+) -> tuple[int, RuntimeResult | None]:
+    if not completed_repairs or not digest_matches:
+        return 0, None
+    stalls = consecutive_stalls + 1
+    retry_scheduled = stalls == 1 and completed_repairs < maximum
+    emit("repair.no_progress", {
+        "attempt": completed_repairs,
+        "reason": "identical-preflight-digest",
+        "consecutive_stalls": stalls,
+        "retry_scheduled": retry_scheduled,
+        **payload,
+    })
+    if retry_scheduled:
+        return stalls, None
+    return stalls, _repair_failure(
+        result,
+        message="Pi repair made no deterministic preflight progress",
+        repairs=completed_repairs,
+        preflight=payload,
+        failure_kind=RuntimeFailureKind.NO_PROGRESS,
+        retryable=False,
+    )
 
 
 def _execute_repair_turn(
