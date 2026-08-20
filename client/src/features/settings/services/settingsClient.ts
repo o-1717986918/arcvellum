@@ -20,9 +20,12 @@ export interface PiCatalog extends Record<string, unknown> {
   selected_models?: Record<string, string>;
 }
 
-export function createSettingsClient(transport: ApiTransport = featureTransport) {
+export function createSettingsClient(
+  transport: ApiTransport = featureTransport,
+  bootstrapSession?: () => Promise<void>,
+) {
   return {
-    bootstrapDesktopSession: () => bootstrapDesktopSession(),
+    bootstrapDesktopSession: () => (bootstrapSession ? bootstrapSession() : bootstrapDesktopSession()),
     bootstrap: () => transport.request<BootstrapSnapshot>("/application/bootstrap"),
     observeBootstrap: (onSnapshot: (snapshot: BootstrapSnapshot) => void) => transport.connect(
       "/application/bootstrap/stream?interval_seconds=1",
