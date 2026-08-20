@@ -105,6 +105,40 @@ class HistoricalScenePromotionTests(unittest.TestCase):
             self.assertTrue(superseded.passed, superseded.errors)
             self.assertFalse(superseded.current)
 
+    def test_numbered_static_revision_supersedes_historical_promotion(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, manifest, _candidate, _draft = self._sealed_promotion(
+                Path(temporary)
+            )
+            promotion_path = (
+                root
+                / "drafts"
+                / "promotions"
+                / "scene_0001_promotion.json"
+            )
+            numbered = (
+                root
+                / "drafts"
+                / "revisions"
+                / "scene_0001_revision_02.md"
+            )
+            numbered.parent.mkdir(parents=True, exist_ok=True)
+            numbered.write_text(
+                "## 修订正文候选\n\n静态审查后的新候选。\n",
+                encoding="utf-8",
+            )
+            future = promotion_path.stat().st_mtime_ns + 10_000_000
+            os.utime(numbered, ns=(future, future))
+
+            superseded = validate_historical_promotion(
+                root,
+                "scene_0001",
+                manifest,
+            )
+
+            self.assertTrue(superseded.passed, superseded.errors)
+            self.assertFalse(superseded.current)
+
     def test_state_and_audit_only_seal_declared_historical_style_gates(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, manifest, candidate, draft = self._sealed_promotion(

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
+import re
 
 
 HISTORICAL_PROMOTION_SCHEMA = "arcvellum/historical-scene-promotion/v1"
@@ -251,18 +252,26 @@ def _has_newer_candidate(
         return False
     promoted_resolved = promoted_candidate.resolve()
     promoted_at = promotion_manifest.stat().st_mtime_ns
-    for directory, pattern in (
-        (root / "drafts" / "candidates", f"{scene_id}-*.md"),
-        (root / "drafts" / "revisions", f"{scene_id}_revision.md"),
-    ):
-        if not directory.is_dir():
-            continue
-        for path in directory.glob(pattern):
-            if path.name.endswith((".agent_tasks.md", ".prompt.md")):
-                continue
-            if path.resolve() != promoted_resolved and path.stat().st_mtime_ns > promoted_at:
-                return True
+    for path in _formal_scene_candidates(root, scene_id):
+        if path.resolve() != promoted_resolved and path.stat().st_mtime_ns > promoted_at:
+            return True
     return False
+
+
+def _formal_scene_candidates(root: Path, scene_id: str) -> tuple[Path, ...]:
+    candidates = root / "drafts" / "candidates"
+    revisions = root / "drafts" / "revisions"
+    paths = list(candidates.glob(f"{scene_id}-*.md")) if candidates.is_dir() else []
+    revision_name = re.compile(
+        rf"^{re.escape(scene_id)}_revision(?:_[0-9]+)?\.md$"
+    )
+    if revisions.is_dir():
+        paths.extend(
+            path
+            for path in revisions.glob(f"{scene_id}_revision*.md")
+            if revision_name.fullmatch(path.name)
+        )
+    return tuple(paths)
 
 
 def _relative_path(root: Path, path: Path) -> str:
