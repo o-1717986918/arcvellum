@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import threading
 from typing import Any, Callable, Literal, TypedDict
 
-from ..persistence.job_store import JobStore
+from ..application.persistence_ports import AutopilotRepositoryPort
 
 
 class LeaseFailureEvidence(TypedDict):
@@ -24,7 +24,7 @@ class LeaseRenewalResult:
 
 
 def renew_or_reclaim_lease(
-    store: JobStore,
+    store: AutopilotRepositoryPort,
     run_id: str,
     lease_owner: str,
     *,
@@ -49,7 +49,7 @@ def renew_or_reclaim_lease(
 
 
 def run_lease_heartbeat(
-    store: JobStore,
+    store: AutopilotRepositoryPort,
     *,
     run_id: str,
     lease_owner: str,
@@ -89,7 +89,7 @@ def run_lease_heartbeat(
 
 
 def _flush_events(
-    store: JobStore,
+    store: AutopilotRepositoryPort,
     run_id: str,
     pending: list[tuple[str, dict[str, Any]]],
 ) -> list[tuple[str, dict[str, Any]]]:

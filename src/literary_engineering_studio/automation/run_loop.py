@@ -57,7 +57,7 @@ class ClaimedRunLoop:
 
     def run(self) -> None:
         while not self.stop.is_set():
-            run = self.host.store.read_autopilot_run(self.run_id)
+            run = self.host.runs.read_autopilot_run(self.run_id)
             if self._pause_at_authorization_limit(run):
                 return
             if self._campaign_stopped(run):
@@ -117,7 +117,7 @@ class ClaimedRunLoop:
         )
         route = "character-and-world-assets" if dependency_route else planned_route
         route_changed = str(run.get("current_route") or "") != route
-        self.host.store.update_autopilot_run(
+        self.host.runs.update_autopilot_run(
             self.run_id,
             current_route=route,
             current_task_id="" if route_changed else str(run.get("current_task_id") or ""),
@@ -127,7 +127,7 @@ class ClaimedRunLoop:
             data = {"route": route}
             if dependency_route:
                 data["resume_route"] = planned_route
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "route.dependency_entered" if dependency_route else "route.entered",
                 data,
@@ -149,7 +149,7 @@ class ClaimedRunLoop:
             self.steward,
             stop=self.stop,
         )
-        current = self.host.store.read_autopilot_run(self.run_id)
+        current = self.host.runs.read_autopilot_run(self.run_id)
         return self.stop.is_set() or (
             handled
             and current["status"] in {"complete", "paused", "blocked", "cancelled", "failed"}
@@ -181,7 +181,7 @@ class ClaimedRunLoop:
         finally:
             if coordinator is not None:
                 coordinator.release(self.project, cycle.owner)
-        self.host.store.update_autopilot_run(
+        self.host.runs.update_autopilot_run(
             self.run_id,
             current_task_id=result.task_id,
         )

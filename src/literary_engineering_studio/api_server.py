@@ -209,7 +209,7 @@ def create_app(
     container = resolve_application_container(config_override, container)
     config, services = container.config, container.services
     lifecycle, bootstrap = services.lifecycle, services.bootstrap
-    jobs, advisor, autopilot, style_mounts = lifecycle.store, services.advisor, services.autopilot, services.style_mounts
+    jobs, advisor, autopilot, style_mounts = lifecycle.persistence.facade, services.advisor, services.autopilot, services.style_mounts
     narrative_stream_state: dict[str, dict[str, Any]] = {}
     narrative_v3_stream_state: dict[str, dict[str, Any]] = {}
     narrative_stream_lock = threading.Lock()

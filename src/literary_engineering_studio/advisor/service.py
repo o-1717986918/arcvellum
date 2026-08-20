@@ -11,8 +11,8 @@ from typing import Any, Callable
 
 from .advisor_snapshot import create_advisor_snapshot, project_hashes
 from .advisor_personas import active_persona
+from ..application.persistence_ports import SessionRepositoryPort
 from ..observability.agent_session_tracking import track_agent_session_event
-from ..jobs import JobStore
 from ..integrations.opencode.opencode_binary import locate_opencode
 from ..integrations.opencode.opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
@@ -35,19 +35,29 @@ ALLOWED_ACTIONS = {
 
 
 class ProjectAdvisor:
-    def __init__(self, config: dict[str, Any], store: JobStore, *, runtime_pool=None):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        sessions: SessionRepositoryPort,
+        *,
+        runtime_pool=None,
+        data_root: Path | None = None,
+        session_event_tracker: Callable[..., object] | None = None,
+    ):
         self.config = config
-        self.store = store
+        self.sessions = sessions
         self.runtime_pool = runtime_pool
+        self._configured_data_root = data_root.expanduser().resolve() if data_root is not None else None
+        self._session_event_tracker = session_event_tracker or (lambda **fields: track_agent_session_event(sessions, **fields))
         self._remote_sessions: dict[str, tuple[str, str, int]] = {}
         self._remote_lock = threading.RLock()
 
     def create_session(self, project_root: Path, *, title: str = "项目问答") -> dict[str, Any]:
         snapshot = self._snapshot(project_root)
-        return self.store.create_advisor_session(str(snapshot.project_root), snapshot.digest, title=title)
+        return self.sessions.create_advisor_session(str(snapshot.project_root), snapshot.digest, title=title)
 
     def list_sessions(self, project_root: Path) -> list[dict[str, Any]]:
-        return self.store.list_advisor_sessions(str(project_root.expanduser().resolve()))
+        return self.sessions.list_advisor_sessions(str(project_root.expanduser().resolve()))
 
     def ask(
         self,
@@ -61,13 +71,13 @@ class ProjectAdvisor:
         normalized = str(question or "").strip()
         if not normalized:
             raise ValueError("advisor question must not be empty")
-        session = self.store.read_advisor_session(session_id)
+        session = self.sessions.read_advisor_session(session_id)
         project = Path(session["project_root"]).resolve()
         before = project_hashes(project)
         snapshot = self._snapshot(project)
         persona = active_persona(self._data_root(), project)
         stale = snapshot.digest != session["snapshot_digest"]
-        self.store.append_advisor_message(session_id, "user", {"question": normalized})
+        self.sessions.append_advisor_message(session_id, "user", {"question": normalized})
         answer = self._run(
             snapshot.workspace,
             normalized,
@@ -91,12 +101,12 @@ class ProjectAdvisor:
         answer["project_unchanged"] = True
         answer["persona"] = {key: persona[key] for key in ("persona_id", "name", "version", "accent")}
         memory = answer.pop("memory", {}) if isinstance(answer.get("memory"), dict) else {}
-        self.store.save_advisor_memory(
+        self.sessions.save_advisor_memory(
             session_id,
             summary=str(memory.get("session_summary") or session.get("session_summary") or ""),
             preferences=list(memory.get("pinned_preferences") or session.get("pinned_user_preferences") or []),
         )
-        self.store.append_advisor_message(session_id, "advisor", answer)
+        self.sessions.append_advisor_message(session_id, "advisor", answer)
         return answer
 
     def _snapshot(self, project_root: Path):
@@ -104,7 +114,11 @@ class ProjectAdvisor:
 
     def _data_root(self) -> Path:
         application = self.config.get("application") if isinstance(self.config.get("application"), dict) else {}
-        return Path(str(application.get("data_root") or self.store.path.parent)).expanduser().resolve()
+        configured = application.get("data_root") or self._configured_data_root
+        if configured:
+            return Path(str(configured)).expanduser().resolve()
+        path = getattr(self.sessions, "path", None)
+        return Path(path).parent.resolve() if path else Path(".").resolve()
 
     def _run(
         self,
@@ -144,8 +158,7 @@ class ProjectAdvisor:
         session_idle = False
 
         def observe(event: str, data: dict[str, Any]) -> None:
-            track_agent_session_event(
-                self.store,
+            self._session_event_tracker(
                 project_root=str(project_root),
                 role="advisor",
                 runtime="opencode",

@@ -31,7 +31,6 @@ class ApplicationLifecycleManager:
         self.config = config
         self.ports = ports
         self.persistence = ports.persistence
-        self.store = ports.store
         self.live_events = ports.live_events
         self.read_models = ports.read_models
         self.prepared_context_cache = ports.prepared_context_cache
@@ -50,6 +49,12 @@ class ApplicationLifecycleManager:
         self._started_at = _now()
         self._closed = False
         self.refresh_agent_runners(wait=False, force=False)
+
+    @property
+    def store(self) -> Any:
+        """Compatibility view; new use cases depend on named persistence ports."""
+
+        return self.persistence.facade
 
     def register_process(self, state: ManagedProcessState) -> None:
         if not state.component_id.strip():
@@ -91,10 +96,10 @@ class ApplicationLifecycleManager:
             runner_error = self._runner_error
         processes.extend(self.process_manager.status())
         return {
-            "ready": not self._closed and self.store.health()["ready"],
+            "ready": not self._closed and self.persistence.jobs.health()["ready"],
             "started_at": self._started_at,
             "closed": self._closed,
-            "job_store": self.store.health(),
+            "job_store": self.persistence.jobs.health(),
             "worker_supervisor": self.supervisor.health(),
             "agent_runners": runner_states,
             "agent_runner_refreshing": runner_refreshing,

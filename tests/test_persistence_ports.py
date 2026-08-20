@@ -13,6 +13,7 @@ from literary_engineering_studio.application.persistence_ports import (
     PlanRepositoryPort,
     SessionRepositoryPort,
     UnitOfWorkPort,
+    WorkerPersistencePort,
 )
 from literary_engineering_studio.persistence.composition import sqlite_persistence_ports
 from literary_engineering_studio.persistence.job_store import JobStore
@@ -32,6 +33,7 @@ class PersistencePortCompositionTests(unittest.TestCase):
             self.assertIsInstance(ports.asset_revisions, AssetRevisionIndexPort)
             self.assertIsInstance(ports.events, DurableEventStorePort)
             self.assertIsInstance(ports.unit_of_work, UnitOfWorkPort)
+            self.assertIsInstance(ports.worker, WorkerPersistencePort)
 
     def test_composition_reuses_existing_repositories_and_plan_event_aggregate(self):
         with tempfile.TemporaryDirectory() as temporary:

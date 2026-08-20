@@ -72,7 +72,10 @@ class ProjectReadModels:
 
         autopilot_status = self._autopilot.status(root)
         run = autopilot_status.get("run") if isinstance(autopilot_status.get("run"), dict) else {}
-        events = self._lifecycle.store.autopilot_events_since(str(run.get("run_id") or ""), limit=80) if run.get("run_id") else []
+        events = self._lifecycle.persistence.autopilot.autopilot_events_since(
+            str(run.get("run_id") or ""),
+            limit=80,
+        ) if run.get("run_id") else []
         dashboard = self.dashboard(root)
         sections = {
             "dashboard": dashboard,
@@ -86,7 +89,7 @@ class ProjectReadModels:
                 autopilot_status,
                 events,
                 dashboard,
-                self._lifecycle.store.list_agent_sessions(str(root), limit=30),
+                self._lifecycle.persistence.sessions.list_agent_sessions(str(root), limit=30),
                 self._lifecycle.opencode_pool.status(),
             ),
         }

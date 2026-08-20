@@ -9,7 +9,6 @@ import time
 from typing import Any
 import uuid
 
-from ..observability.agent_session_tracking import track_agent_session_event
 from ..observability.event_policy import is_ephemeral_runtime_event
 from .decision_delegation import DecisionDelegator
 from .lease_heartbeat import (
@@ -39,14 +38,13 @@ from .support import (
 )
 from ..projections.core_read_models import current_choices
 from ..application.style.mount_service import StyleMountApplicationService
+from ..application.autopilot_dependencies import resolve_autopilot_persistence
 from ..application.failures import present_run
 from ..advisor.creative_steward import CreativeSteward
-from ..persistence.job_store import JobStore
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
 from ..runtime.prepared_context_cache import PreparedContextCache
-from ..orchestration import orchestration_settings
-from ..orchestration import recovery_step
+from ..orchestration import orchestration_settings, recovery_step
 
 
 ROUTE_ORDER = (
@@ -64,26 +62,30 @@ class AutopilotService:
     def __init__(
         self,
         config: dict[str, Any],
-        store: JobStore,
+        store: Any | None = None,
         *,
+        runs=None, sessions=None, plans=None, session_event_tracker=None,
         runtime_pool=None,
         execution_coordinator=None,
         style_mount_service: StyleMountApplicationService | None = None,
         prepared_context_cache: PreparedContextCache | None = None,
     ):
         self.config = config
-        self.store = store
+        persistence = resolve_autopilot_persistence(
+            store, runs=runs, sessions=sessions, plans=plans, session_event_tracker=session_event_tracker)
+        self.runs, self.sessions, self.plans = persistence.runs, persistence.sessions, persistence.plans
+        self._session_event_tracker = persistence.session_event_tracker
         self.runtime_pool = runtime_pool
         self.execution_coordinator = execution_coordinator
         self.style_mount_service = style_mount_service or StyleMountApplicationService()
         self.prepared_context_cache = prepared_context_cache
         self._choice_delegator = DecisionDelegator(
             config,
-            store,
+            self.runs,
             self.style_mount_service,
             self._pause_for,
         )
-        self.store.recover_autopilot_runs()
+        self.runs.recover_autopilot_runs()
         self._lock = threading.RLock()
         self._threads: dict[str, threading.Thread] = {}
         self._stops: dict[str, threading.Event] = {}
@@ -91,16 +93,16 @@ class AutopilotService:
 
     def policy(self, project_root: Path) -> dict[str, Any]:
         root = str(project_root.expanduser().resolve())
-        stored = self.store.read_delegation_policy(root)
-        return stored or self.store.save_delegation_policy(root, default_policy())
+        stored = self.sessions.read_delegation_policy(root)
+        return stored or self.sessions.save_delegation_policy(root, default_policy())
 
     def save_policy(self, project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         root = str(project_root.expanduser().resolve())
-        active = self.store.latest_autopilot_run(root)
+        active = self.runs.latest_autopilot_run(root)
         if active and active["status"] == "running":
             raise ValueError("请先暂停自动创作，再修改授权范围。")
         policy = normalize_policy(payload)
-        saved = self.store.save_delegation_policy(root, policy)
+        saved = self.sessions.save_delegation_policy(root, policy)
         # A paused run keeps a policy snapshot for auditability. Updating the
         # project default alone cannot renew a cap that already stopped this
         # particular run, so reflect an explicit user change into the paused
@@ -108,7 +110,7 @@ class AutopilotService:
         if active and active["status"] in {"paused", "blocked", "failed"}:
             runtime_window_started_at = _now()
             run_policy = {**policy, "runtime_window_started_at": runtime_window_started_at}
-            renewed = self.store.update_autopilot_run_policy(active["run_id"], run_policy)
+            renewed = self.runs.update_autopilot_run_policy(active["run_id"], run_policy)
             # A revision cap is deliberately a per-authorization safety window:
             # its purpose is to stop an unattended run and request fresh human
             # consent, not to permanently poison the run.  Without resetting
@@ -116,13 +118,13 @@ class AutopilotService:
             # renewed policy only for the controller to pause again before it
             # is allowed to claim another task.
             if str(active.get("stop_reason") or "") == "revision-limit":
-                renewed = self.store.update_autopilot_run(
+                renewed = self.runs.update_autopilot_run(
                     active["run_id"],
                     consecutive_revisions=0,
                     last_error="",
                     stop_reason="",
                 )
-            self.store.append_autopilot_event(
+            self.runs.append_autopilot_event(
                 active["run_id"],
                 "autopilot.authorization_updated",
                 {
@@ -138,16 +140,16 @@ class AutopilotService:
     def start(self, project_root: Path, *, runtime: str = "opencode") -> dict[str, Any]:
         root = project_root.expanduser().resolve()
         _validate_autopilot_project(root, runtime)
-        active = self.store.latest_autopilot_run(str(root))
+        active = self.runs.latest_autopilot_run(str(root))
         if active and active["status"] == "running":
             return active
         policy = self.policy(root)["policy"]
-        run = self.store.create_autopilot_run(str(root), mode=policy["mode"], runtime=runtime, policy=policy)
+        run = self.runs.create_autopilot_run(str(root), mode=policy["mode"], runtime=runtime, policy=policy)
         self._launch(run["run_id"])
         return run
 
     def resume(self, run_id: str, *, authorized: bool = False) -> dict[str, Any]:
-        run = self.store.read_autopilot_run(run_id)
+        run = self.runs.read_autopilot_run(run_id)
         if run["status"] == "running":
             return run
         if run["status"] == "complete":
@@ -156,27 +158,27 @@ class AutopilotService:
         if str(run_policy.get("mode") or run.get("mode") or "") == "full_auto" and not authorized:
             raise ValueError("全自动交付需要在推进仪表中明确确认授权后才能继续。")
         _validate_autopilot_project(Path(run["project_root"]), str(run.get("runtime") or ""))
-        self.store.update_autopilot_run(
+        self.runs.update_autopilot_run(
             run_id,
             status="running",
             stop_reason="",
             last_error="",
             finished_at="",
         )
-        self.store.append_autopilot_event(run_id, "autopilot.resumed", {})
+        self.runs.append_autopilot_event(run_id, "autopilot.resumed", {})
         self._launch(run_id)
-        return self.store.read_autopilot_run(run_id)
+        return self.runs.read_autopilot_run(run_id)
 
     def pause(self, run_id: str, *, reason: str = "user-request") -> dict[str, Any]:
-        run = self.store.read_autopilot_run(run_id)
+        run = self.runs.read_autopilot_run(run_id)
         with self._lock:
             stop = self._stops.get(run_id)
             if stop:
                 stop.set()
         if run["status"] not in TERMINAL_STATUSES:
-            self.store.update_autopilot_run(run_id, status="paused", stop_reason=reason)
-            self.store.append_autopilot_event(run_id, "autopilot.paused", {"reason": reason})
-        return self.store.read_autopilot_run(run_id)
+            self.runs.update_autopilot_run(run_id, status="paused", stop_reason=reason)
+            self.runs.append_autopilot_event(run_id, "autopilot.paused", {"reason": reason})
+        return self.runs.read_autopilot_run(run_id)
 
     def status(self, project_root: Path) -> dict[str, Any]:
         root = str(project_root.expanduser().resolve())
@@ -184,7 +186,7 @@ class AutopilotService:
             "ok": True,
             "schema": "arcvellum/autopilot-status/v0.2",
             "policy": self.policy(project_root)["policy"],
-            "run": present_run(self.store.latest_autopilot_run(root)),
+            "run": present_run(self.runs.latest_autopilot_run(root)),
         }
 
     def shutdown(self) -> None:
@@ -193,9 +195,9 @@ class AutopilotService:
         for run_id, stop in runs:
             stop.set()
             try:
-                run = self.store.read_autopilot_run(run_id)
+                run = self.runs.read_autopilot_run(run_id)
                 if run["status"] == "running":
-                    self.store.update_autopilot_run(run_id, status="paused", stop_reason="application-shutdown")
+                    self.runs.update_autopilot_run(run_id, status="paused", stop_reason="application-shutdown")
             except (FileNotFoundError, ValueError):
                 pass
         for thread in list(self._threads.values()):
@@ -216,8 +218,8 @@ class AutopilotService:
         """Run one controller only while this process owns the durable lease."""
 
         lease_owner = f"{self._controller_id}:{run_id}"
-        if not self.store.acquire_autopilot_lease(run_id, lease_owner, lease_seconds=self._lease_seconds()):
-            self.store.append_autopilot_event(
+        if not self.runs.acquire_autopilot_lease(run_id, lease_owner, lease_seconds=self._lease_seconds()):
+            self.runs.append_autopilot_event(
                 run_id,
                 "autopilot.controller_busy",
                 {"controller_id": self._controller_id},
@@ -237,7 +239,7 @@ class AutopilotService:
         finally:
             renew_stop.set()
             heartbeat.join(timeout=1)
-            self.store.release_autopilot_lease(run_id, lease_owner)
+            self.runs.release_autopilot_lease(run_id, lease_owner)
 
     def _lease_seconds(self) -> int:
         application = self.config.get("application") if isinstance(self.config.get("application"), dict) else {}
@@ -259,7 +261,7 @@ class AutopilotService:
         """
 
         return renew_or_reclaim_lease(
-            self.store,
+            self.runs,
             run_id,
             lease_owner,
             lease_seconds=self._lease_seconds(),
@@ -273,7 +275,7 @@ class AutopilotService:
         renew_stop: threading.Event,
     ) -> None:
         run_lease_heartbeat(
-            self.store,
+            self.runs,
             run_id=run_id,
             lease_owner=lease_owner,
             controller_id=self._controller_id,
@@ -286,20 +288,20 @@ class AutopilotService:
         self, run_id: str, *, cancel_event: threading.Event | None = None,
     ) -> AgentWorker:
         return AgentWorker(
-            self.config, plan_store=self.store,
+            self.config, plan_store=self.plans,
             event_sink=lambda event, data: self._worker_event(run_id, event, data),
             cancel_event=cancel_event, runtime_pool=self.runtime_pool,
             prepared_context_cache=self.prepared_context_cache,
         )
 
     def _run_claimed(self, run_id: str, stop: threading.Event) -> None:
-        run = self.store.read_autopilot_run(run_id)
+        run = self.runs.read_autopilot_run(run_id)
         project = Path(run["project_root"])
         policy = DelegationPolicy(run["policy"])
         settings = orchestration_settings(self.config)
         campaign = (
             CampaignRuntimeCoordinator(
-                self.store,
+                self.runs,
                 project,
                 run_id,
                 max_autonomous_steps=int(policy.payload["limits"]["max_tasks"]),
@@ -333,8 +335,8 @@ class AutopilotService:
                 campaign=campaign,
             ).run()
         except Exception as exc:
-            self.store.update_autopilot_run(run_id, status="blocked", last_error=str(exc), stop_reason="controller-error", finished_at=_now())
-            self.store.append_autopilot_event(run_id, "autopilot.blocked", {"message": str(exc)})
+            self.runs.update_autopilot_run(run_id, status="blocked", last_error=str(exc), stop_reason="controller-error", finished_at=_now())
+            self.runs.append_autopilot_event(run_id, "autopilot.blocked", {"message": str(exc)})
         finally:
             with self._lock:
                 self._stops.pop(run_id, None)
@@ -364,14 +366,14 @@ class AutopilotService:
             approved_by="delegated-agent:creative-steward",
             autopilot_run_id=run_id,
         )
-        self.store.append_autopilot_event(run_id, "release.completed", release)
-        self.store.update_autopilot_run(
+        self.runs.append_autopilot_event(run_id, "release.completed", release)
+        self.runs.update_autopilot_run(
             run_id,
             status="complete",
             finished_at=_now(),
             stop_reason="",
         )
-        self.store.append_autopilot_event(
+        self.runs.append_autopilot_event(
             run_id,
             "autopilot.completed",
             {"tasks_completed": run["tasks_completed"]},
@@ -390,7 +392,7 @@ class AutopilotService:
         choices = payload.get("choices") if isinstance(payload.get("choices"), list) else []
         prior = {
             str(item.get("choice_fingerprint") or "")
-            for item in self.store.delegated_decisions(run_id)
+            for item in self.runs.delegated_decisions(run_id)
             if not item.get("revoked_at")
         }
         choice = next(
@@ -433,9 +435,8 @@ class AutopilotService:
         )
 
     def _worker_event(self, run_id: str, event: str, data: dict[str, Any]) -> None:
-        run = self.store.read_autopilot_run(run_id)
-        track_agent_session_event(
-            self.store,
+        run = self.runs.read_autopilot_run(run_id)
+        self._session_event_tracker(
             project_root=str(run.get("project_root") or ""),
             role="worker",
             runtime=str(run.get("runtime") or "opencode"),
@@ -446,24 +447,23 @@ class AutopilotService:
             data=data,
         )
         if event == "task.opened":
-            self.store.update_autopilot_run(
+            self.runs.update_autopilot_run(
                 run_id,
                 current_task_id=str(data.get("task_id") or ""),
                 current_route=str(data.get("route") or run.get("current_route") or ""),
             )
         if is_ephemeral_runtime_event(event):
             return
-        self.store.append_autopilot_event(run_id, f"worker.{event}", data)
+        self.runs.append_autopilot_event(run_id, f"worker.{event}", data)
         if event == "usage.updated":
             cost = float(data.get("cost_usd") or 0)
             if cost > 0:
-                run = self.store.read_autopilot_run(run_id)
-                self.store.update_autopilot_run(run_id, estimated_cost=float(run["estimated_cost"]) + cost)
+                run = self.runs.read_autopilot_run(run_id)
+                self.runs.update_autopilot_run(run_id, estimated_cost=float(run["estimated_cost"]) + cost)
 
     def _steward_event(self, run_id: str, event: str, data: dict[str, Any]) -> None:
-        run = self.store.read_autopilot_run(run_id)
-        track_agent_session_event(
-            self.store,
+        run = self.runs.read_autopilot_run(run_id)
+        self._session_event_tracker(
             project_root=str(run.get("project_root") or ""),
             role="steward",
             runtime="opencode",
@@ -473,10 +473,10 @@ class AutopilotService:
             event=event,
             data=data,
         )
-        self.store.append_autopilot_event(run_id, event, data)
+        self.runs.append_autopilot_event(run_id, event, data)
 
     def _register_no_progress(self, run_id: str, task_id: str, route: str, message: str) -> bool:
-        run = self.store.read_autopilot_run(run_id)
+        run = self.runs.read_autopilot_run(run_id)
         stalled_cycles = int(run.get("stalled_cycles") or 0) + 1
         changes: dict[str, Any] = {
             "stalled_cycles": stalled_cycles,
@@ -487,8 +487,8 @@ class AutopilotService:
             changes["last_recovery_at"] = _now()
             if self._campaign_runtime_enabled():
                 changes["current_task_id"] = ""
-        self.store.update_autopilot_run(run_id, **changes)
-        self.store.append_autopilot_event(
+        self.runs.update_autopilot_run(run_id, **changes)
+        self.runs.append_autopilot_event(
             run_id,
             "progress.stalled",
             {
@@ -499,7 +499,7 @@ class AutopilotService:
             },
         )
         if stalled_cycles == 2:
-            self.store.append_autopilot_event(
+            self.runs.append_autopilot_event(
                 run_id,
                 "task.recovery_requested",
                 {
@@ -511,7 +511,7 @@ class AutopilotService:
         if self._campaign_runtime_enabled() and stalled_cycles >= 2:
             attempt = 1 if stalled_cycles < NO_PROGRESS_LIMIT else 2
             decision = recovery_step("no_progress", attempt)
-            self.store.append_autopilot_event(
+            self.runs.append_autopilot_event(
                 run_id,
                 "campaign.recovery.selected",
                 {
@@ -537,5 +537,5 @@ class AutopilotService:
         return settings.enabled and settings.campaign_runtime
 
     def _pause_for(self, run_id: str, reason: str, message: str) -> None:
-        self.store.update_autopilot_run(run_id, status="paused", stop_reason=reason, last_error=message)
-        self.store.append_autopilot_event(run_id, "autopilot.paused", {"reason": reason, "message": message})
+        self.runs.update_autopilot_run(run_id, status="paused", stop_reason=reason, last_error=message)
+        self.runs.append_autopilot_event(run_id, "autopilot.paused", {"reason": reason, "message": message})

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from ..advisor.service import ProjectAdvisor
@@ -11,6 +12,7 @@ from .bootstrap import ApplicationBootstrapService
 from .lifecycle import ApplicationLifecycleManager
 from .ports import ApplicationPorts
 from .style.mount_service import StyleMountApplicationService
+from ..observability.agent_session_tracking import track_agent_session_event
 
 
 @dataclass(frozen=True)
@@ -43,10 +45,22 @@ def build_application_container(
     lifecycle = ApplicationLifecycleManager(config, ports)
     style_mounts = StyleMountApplicationService()
     bootstrap = ApplicationBootstrapService(config, lifecycle)
-    advisor = ProjectAdvisor(config, ports.store, runtime_pool=ports.runtime_pool)
+    application = config.get("application") if isinstance(config.get("application"), dict) else {}
+    data_root = Path(str(application.get("data_root") or "."))
+    session_event_tracker = lambda **fields: track_agent_session_event(ports.store, **fields)
+    advisor = ProjectAdvisor(
+        config,
+        ports.persistence.sessions,
+        runtime_pool=ports.runtime_pool,
+        data_root=data_root,
+        session_event_tracker=session_event_tracker,
+    )
     autopilot = AutopilotService(
         config,
-        ports.store,
+        runs=ports.persistence.autopilot,
+        sessions=ports.persistence.sessions,
+        plans=ports.persistence.plans,
+        session_event_tracker=session_event_tracker,
         runtime_pool=ports.runtime_pool,
         execution_coordinator=ports.execution_coordinator,
         style_mount_service=style_mounts,

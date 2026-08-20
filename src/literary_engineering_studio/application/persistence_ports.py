@@ -29,6 +29,56 @@ class JobRepositoryPort(Protocol):
 
 
 @runtime_checkable
+class WorkerPersistencePort(JobRepositoryPort, Protocol):
+    """Atomic job, lock, resource-lease, and event surface for one worker."""
+
+    def append_event(self, job_id: str, event_type: str, data: dict[str, Any]) -> dict[str, Any]: ...
+
+    def events_since(self, job_id: str, after: int = 0, *, limit: int = 200) -> list[dict[str, Any]]: ...
+
+    def acquire_lock(
+        self,
+        lock_key: str,
+        job_id: str,
+        worker_id: str,
+        *,
+        lease_seconds: int = 120,
+    ) -> bool: ...
+
+    def release_lock(self, lock_key: str, job_id: str) -> None: ...
+
+    def heartbeat_execution(
+        self,
+        job_id: str,
+        worker_id: str,
+        lock_key: str,
+        *,
+        lease_seconds: int = 60,
+    ) -> None: ...
+
+    def acquire_resource_lease(
+        self,
+        claim: dict[str, Any],
+        *,
+        job_id: str,
+        lease_owner: str,
+        lease_seconds: int,
+        conflicts: Callable[[dict[str, Any], dict[str, Any]], bool],
+    ) -> str: ...
+
+    def heartbeat_resource_execution(
+        self,
+        job_id: str,
+        lease_owner: str,
+        lease_id: str,
+        *,
+        lease_seconds: int,
+    ) -> None: ...
+
+    def release_resource_lease(self, lease_id: str, *, job_id: str) -> bool: ...
+
+
+@runtime_checkable
 class AutopilotRepositoryPort(Protocol):
     def create_autopilot_run(
         self,
@@ -44,6 +94,32 @@ class AutopilotRepositoryPort(Protocol):
     def latest_autopilot_run(self, project_root: str) -> dict[str, Any] | None: ...
 
     def update_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]: ...
+
+    def update_autopilot_run_policy(self, run_id: str, policy: dict[str, Any]) -> dict[str, Any]: ...
+
+    def advance_autopilot_run(self, run_id: str, **changes: Any) -> dict[str, Any]: ...
+
+    def acquire_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool: ...
+
+    def renew_autopilot_lease(self, run_id: str, owner_id: str, *, lease_seconds: int = 90) -> bool: ...
+
+    def release_autopilot_lease(self, run_id: str, owner_id: str) -> None: ...
+
+    def append_autopilot_event(self, run_id: str, event: str, data: dict[str, Any]) -> dict[str, Any]: ...
+
+    def autopilot_events_since(
+        self,
+        run_id: str,
+        after: int = 0,
+        *,
+        limit: int = 300,
+    ) -> list[dict[str, Any]]: ...
+
+    def latest_autopilot_event(self, run_id: str, event: str) -> dict[str, Any] | None: ...
+
+    def record_delegated_decision(self, run_id: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def delegated_decisions(self, run_id: str) -> list[dict[str, Any]]: ...
 
     def recover_autopilot_runs(self) -> int: ...
 
@@ -63,6 +139,24 @@ class SessionRepositoryPort(Protocol):
     def list_advisor_sessions(self, project_root: str, *, limit: int = 30) -> list[dict[str, Any]]: ...
 
     def list_agent_sessions(self, project_root: str, *, limit: int = 30) -> list[dict[str, Any]]: ...
+
+    def append_advisor_message(self, session_id: str, role: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def save_advisor_memory(
+        self,
+        session_id: str,
+        *,
+        summary: str,
+        preferences: list[str],
+    ) -> dict[str, Any]: ...
+
+    def save_delegation_policy(self, project_root: str, policy: dict[str, Any]) -> dict[str, Any]: ...
+
+    def read_delegation_policy(self, project_root: str) -> dict[str, Any] | None: ...
+
+    def upsert_agent_session(self, session_id: str, **fields: Any) -> dict[str, Any]: ...
+
+    def read_agent_session(self, session_id: str) -> dict[str, Any]: ...
 
 
 @runtime_checkable
@@ -116,6 +210,16 @@ class PlanRepositoryPort(Protocol):
         after: int = 0,
         limit: int = 200,
     ) -> list[dict[str, Any]]: ...
+
+    def authorize_creative_plan_revision(
+        self,
+        plan_id: str,
+        revision: int,
+        *,
+        authorized_by: str,
+        reason: str,
+        verified_revision_digest: str,
+    ) -> dict[str, Any]: ...
 
 
 @runtime_checkable
@@ -192,6 +296,12 @@ class PersistencePorts:
     unit_of_work: UnitOfWorkPort
     facade: Any
 
+    @property
+    def worker(self) -> WorkerPersistencePort:
+        """Return the atomic worker control aggregate during facade migration."""
+
+        return self.facade
+
 
 __all__ = [
     "AssetRevisionIndexPort",
@@ -205,4 +315,5 @@ __all__ = [
     "PlanRepositoryPort",
     "SessionRepositoryPort",
     "UnitOfWorkPort",
+    "WorkerPersistencePort",
 ]

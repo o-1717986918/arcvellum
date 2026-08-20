@@ -98,7 +98,7 @@ class ClaimedRunResultHandler:
         attempt = self.failure_by_task.get(task_key, 0) + 1
         if not self._checkpoint_restore_allowed(task_key, attempt, failure_kind):
             return result
-        self.host.store.append_autopilot_event(
+        self.host.runs.append_autopilot_event(
             self.run_id,
             "task.recovery_started",
             {"task_id": result.task_id, "run_root": str(result.run_root)},
@@ -108,14 +108,14 @@ class ClaimedRunResultHandler:
             return result
         try:
             recovered = self.host._worker(self.run_id).resume_from_run(result.run_root)
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "task.recovery_succeeded",
                 {"task_id": recovered.task_id, "status": recovered.status},
             )
             return recovered
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "task.recovery_rejected",
                 {"task_id": result.task_id, "message": str(exc)},
@@ -141,7 +141,7 @@ class ClaimedRunResultHandler:
             return False
         allowed, reason = self.campaign.restore_allowed()
         if not allowed:
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "task.recovery_rejected",
                 {"task_id": task_id, "reason": reason, "attempt": attempt},
@@ -157,14 +157,14 @@ class ClaimedRunResultHandler:
                     cycle.route,
                     "依赖路线报告完成，但候选资产门禁仍未解除。",
                 )
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "route.dependency_ready",
                 {"route": cycle.route, "resume_route": cycle.planned_route},
             )
             self._reset_route_progress(cycle.route_index)
             return False
-        self.host.store.append_autopilot_event(
+        self.host.runs.append_autopilot_event(
             self.run_id, "route.ready", {"route": cycle.route}
         )
         self._reset_route_progress(cycle.route_index + 1)
@@ -172,7 +172,7 @@ class ClaimedRunResultHandler:
 
     def _reset_route_progress(self, route_index: int) -> None:
         fingerprint, _ = self.progress_identity()
-        self.host.store.update_autopilot_run(
+        self.host.runs.update_autopilot_run(
             self.run_id,
             route_index=route_index,
             current_task_id="",
@@ -197,7 +197,7 @@ class ClaimedRunResultHandler:
         progress_after, evidence = self.progress_identity()
         if progress_after == progress_before:
             return self._record_stall(cycle, result, emit_event)
-        advanced = self.host.store.advance_autopilot_run(
+        advanced = self.host.runs.advance_autopilot_run(
             self.run_id,
             consecutive_revisions=next_revision_count(run, result.task_id),
             failures=0,
@@ -208,7 +208,7 @@ class ClaimedRunResultHandler:
         )
         self._commit_checkpoint(advanced, cycle, result, evidence)
         if emit_event:
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "progress.advanced",
                 {
@@ -253,7 +253,7 @@ class ClaimedRunResultHandler:
         )
         if checkpoint is None:
             return
-        self.host.store.append_autopilot_event(
+        self.host.runs.append_autopilot_event(
             self.run_id,
             "campaign.checkpoint.committed",
             {
@@ -290,7 +290,7 @@ class ClaimedRunResultHandler:
         finally:
             if coordinator is not None:
                 coordinator.release(self.project, cycle.owner)
-        self.host.store.record_delegated_decision(
+        self.host.runs.record_delegated_decision(
             self.run_id,
             _operational_decision(
                 run,
@@ -349,10 +349,10 @@ class ClaimedRunResultHandler:
             return self._handle_transport_failure(cycle, result, task_key)
         failure_count = self.failure_by_task.get(task_key, 0) + 1
         self.failure_by_task[task_key] = failure_count
-        self.host.store.update_autopilot_run(
+        self.host.runs.update_autopilot_run(
             self.run_id, failures=failure_count, last_error=result.message
         )
-        self.host.store.append_autopilot_event(
+        self.host.runs.append_autopilot_event(
             self.run_id,
             "task.failed",
             {
@@ -399,8 +399,8 @@ class ClaimedRunResultHandler:
         attempt = self.transport_failure_by_task.get(task_key, 0) + 1
         self.transport_failure_by_task[task_key] = attempt
         decision = self._recovery_decision(result.failure_kind, attempt, task_key)
-        self.host.store.update_autopilot_run(self.run_id, last_error=result.message)
-        self.host.store.append_autopilot_event(
+        self.host.runs.update_autopilot_run(self.run_id, last_error=result.message)
+        self.host.runs.append_autopilot_event(
             self.run_id,
             "task.transport_interrupted",
             {
@@ -421,13 +421,13 @@ class ClaimedRunResultHandler:
             )
             return True
         if decision.step is RecoveryStep.SESSION_RENEW:
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "runner.session.renew_requested",
                 {"task_id": task_key, "route": cycle.route, "attempt": attempt},
             )
         delay = min(10, 2 ** (attempt - 1))
-        self.host.store.append_autopilot_event(
+        self.host.runs.append_autopilot_event(
             self.run_id,
             "task.transport_retry_scheduled",
             {"task_id": task_key, "attempt": attempt, "delay_seconds": delay},
@@ -444,10 +444,10 @@ class ClaimedRunResultHandler:
     ) -> bool | None:
         decision = self._recovery_decision(failure_kind, attempt, task_id)
         if decision.step is RecoveryStep.BOUNDED_REPLAN:
-            self.host.store.update_autopilot_run(
+            self.host.runs.update_autopilot_run(
                 self.run_id, current_task_id="", last_recovery_at=_now()
             )
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "campaign.replan.requested",
                 {"task_id": task_id, "route": cycle.route, "reason": failure_kind},
@@ -469,7 +469,7 @@ class ClaimedRunResultHandler:
         identity = (task_id, failure_code, attempt)
         if identity not in self._recorded_recovery_decisions:
             self._recorded_recovery_decisions.add(identity)
-            self.host.store.append_autopilot_event(
+            self.host.runs.append_autopilot_event(
                 self.run_id,
                 "campaign.recovery.selected",
                 {

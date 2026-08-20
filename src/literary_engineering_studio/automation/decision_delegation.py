@@ -7,8 +7,8 @@ from typing import Any, Callable
 
 from ..advisor.creative_steward import CreativeSteward, CreativeStewardCancelled
 from ..application.project_manager import record_direction
+from ..application.persistence_ports import AutopilotRepositoryPort
 from ..application.style.mount_service import StyleMountApplicationService
-from ..persistence.job_store import JobStore
 from ..projections.core_read_models import record_choice
 from .policy import DelegationPolicy
 from .support import (
@@ -37,12 +37,12 @@ class DecisionDelegator:
     def __init__(
         self,
         config: dict[str, Any],
-        store: JobStore,
+        store: AutopilotRepositoryPort,
         style_mount_service: StyleMountApplicationService,
         pause_for: Callable[[str, str, str], None],
     ) -> None:
         self.config = config
-        self.store = store
+        self.runs = store
         self.style_mount_service = style_mount_service
         self.pause_for = pause_for
 
@@ -72,7 +72,7 @@ class DecisionDelegator:
             self.pause_for(run_id, "steward-escalation", decision["human_reason"] or "创作代理认为需要你来决定。")
             return True
         evidence = self._materialize(project, choice, decision, decision_type, task_id)
-        self.store.record_delegated_decision(
+        self.runs.record_delegated_decision(
             run_id,
             _decision_record(run_id, project, route, task_id, policy, choice, decision, evidence),
         )
@@ -86,7 +86,7 @@ class DecisionDelegator:
         decision_type: str,
         choice: dict[str, Any],
     ) -> None:
-        self.store.append_autopilot_event(
+        self.runs.append_autopilot_event(
             run_id,
             "decision.started",
             {
@@ -117,7 +117,7 @@ class DecisionDelegator:
         return decision
 
     def _cancelled(self, run_id: str, decision_type: str) -> None:
-        self.store.append_autopilot_event(run_id, "decision.cancelled", {"decision_type": decision_type})
+        self.runs.append_autopilot_event(run_id, "decision.cancelled", {"decision_type": decision_type})
 
     def _materialize(
         self,

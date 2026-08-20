@@ -29,10 +29,11 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
     cache = worker.get("prepared_context_cache") if isinstance(worker.get("prepared_context_cache"), dict) else {}
 
     store = JobStore(database)
+    persistence = sqlite_persistence_ports(store)
     process_manager = ProcessManager(data_root / "logs" / "sidecars")
     execution_coordinator = ProjectExecutionCoordinator()
     return ApplicationPorts(
-        persistence=sqlite_persistence_ports(store),
+        persistence=persistence,
         live_events=LiveEventBus(),
         read_models=ReadModelCache(),
         prepared_context_cache=PreparedContextCache(
@@ -45,7 +46,7 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
         runtime_pool=OpenCodeRuntimePool(config, process_manager),
         execution_coordinator=execution_coordinator,
         supervisor=WorkerSupervisor(
-            store,
+            persistence.worker,
             max_workers=int(application.get("max_workers") or 2),
             lease_seconds=int(application.get("lease_seconds") or 90),
             execution_coordinator=execution_coordinator,

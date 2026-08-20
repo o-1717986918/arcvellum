@@ -74,7 +74,7 @@ class CampaignRuntimeCoordinator:
         max_autonomous_steps: int,
         checkpoint_interval_steps: int,
     ) -> None:
-        self.store = store
+        self.runs = store
         self.project = project.expanduser().resolve()
         self.run_id = run_id
         self.scope_key = _book_scope_key(self.project)
@@ -107,7 +107,7 @@ class CampaignRuntimeCoordinator:
         if current is not None:
             return current
         evidence = self.progress_evidence()
-        return self.store.append_autopilot_event(
+        return self.runs.append_autopilot_event(
             self.run_id,
             "campaign.checkpoint.created",
             build_checkpoint_payload(
@@ -135,7 +135,7 @@ class CampaignRuntimeCoordinator:
             state, self.policy
         ):
             return None
-        return self.store.append_autopilot_event(
+        return self.runs.append_autopilot_event(
             self.run_id,
             "campaign.checkpoint.created",
             build_checkpoint_payload(
@@ -159,7 +159,7 @@ class CampaignRuntimeCoordinator:
         return True, "checkpoint-matched"
 
     def latest_checkpoint(self) -> dict[str, Any] | None:
-        return self.store.latest_autopilot_event(
+        return self.runs.latest_autopilot_event(
             self.run_id,
             "campaign.checkpoint.created",
         )

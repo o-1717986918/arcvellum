@@ -16,13 +16,13 @@ from .execution_admission import (
     release_execution_admission,
 )
 from .resources import ResourceClaim
-from ..persistence.job_store import JobStore
+from ..application.persistence_ports import WorkerPersistencePort
 
 
 class WorkerSupervisor:
     def __init__(
         self,
-        store: JobStore,
+        store: WorkerPersistencePort,
         *,
         max_workers: int = 2,
         lease_seconds: int = 90,

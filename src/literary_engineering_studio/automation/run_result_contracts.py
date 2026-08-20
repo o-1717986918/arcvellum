@@ -8,7 +8,7 @@ import threading
 from typing import Any, Protocol
 
 from ..advisor.creative_steward import CreativeSteward
-from ..persistence.job_store import JobStore
+from ..application.persistence_ports import AutopilotRepositoryPort
 from ..runtime.worker import AgentWorker
 from .policy import DelegationPolicy
 
@@ -27,7 +27,7 @@ class RouteCycle:
 class RunLoopHost(Protocol):
     """Narrow controller capabilities shared by loop and result handler."""
 
-    store: JobStore
+    runs: AutopilotRepositoryPort
     execution_coordinator: Any
 
     def _worker(
