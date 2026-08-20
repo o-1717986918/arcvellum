@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from literary_engineering_studio_engine.literary.style.snapshot import (
+from literary_engineering_studio_engine.public.literary import (
     read_artifact_style_mount_snapshot,
 )
 

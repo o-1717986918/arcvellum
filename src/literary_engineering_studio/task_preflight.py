@@ -31,15 +31,15 @@ from .preflight.scene import (
     _validate_scene_revision_contract,
 )
 from .sandbox import SandboxManifest, sandbox_change_issues
-from literary_engineering_studio_engine.semantic_task_contracts import (
+from literary_engineering_studio_engine.public.tasking import (
     semantic_artifact_definition,
     semantic_artifact_errors,
     semantic_artifact_relative_path,
 )
-from literary_engineering_studio_engine.literary.review.reader_experience import (
+from literary_engineering_studio_engine.public.literary import (
     chapter_obligation_contract_issues,
 )
-from literary_engineering_studio_engine.literary.planning.materializer import (
+from literary_engineering_studio_engine.public.literary import (
     scene_inventory_contract_issues,
 )
 

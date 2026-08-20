@@ -268,6 +268,14 @@ def _forbidden_dependency(source: str, target: str) -> str:
         "literary_engineering_studio_engine.routes."
     ):
         return "automation must not import Engine route implementations"
+    if source.startswith("literary_engineering_studio.") and (
+        target == "literary_engineering_studio_engine"
+        or target.startswith("literary_engineering_studio_engine.")
+    ) and not (
+        target == "literary_engineering_studio_engine.public"
+        or target.startswith("literary_engineering_studio_engine.public.")
+    ):
+        return "Studio must use Engine public API"
     return ""
 
 

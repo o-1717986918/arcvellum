@@ -65,11 +65,11 @@ def _append_schema_and_semantic_issues(
     workspace: Path,
     issues: list[PreflightIssue],
 ) -> None:
-    from literary_engineering_studio_engine.literary.review.resolution import (
+    from literary_engineering_studio_engine.public.literary import (
         review_new_character_issues,
         review_semantic_consistency_issues,
     )
-    from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+    from literary_engineering_studio_engine.public.prompting import validate_payload
 
     schema_errors, _warnings = validate_payload(payload, "scene_review.v1")
     for error in schema_errors:

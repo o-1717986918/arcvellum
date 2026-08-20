@@ -42,17 +42,17 @@ def _validate_scene_candidate_generation_contract(
     if not candidate_rel or not candidate.is_file():
         return
 
-    from literary_engineering_studio_engine.literary.planning.contracts import (
+    from literary_engineering_studio_engine.public.literary import (
         word_budget_adherence_for_body,
     )
-    from literary_engineering_studio_engine.foundation.draft_text import final_body_from_draft_path
-    from literary_engineering_studio_engine.literary.review.creative_quality import (
+    from literary_engineering_studio_engine.public.literary import final_body_from_draft_path
+    from literary_engineering_studio_engine.public.literary import (
         load_creative_quality_profile,
     )
-    from literary_engineering_studio_engine.literary.review.reader_experience import (
+    from literary_engineering_studio_engine.public.literary import (
         reader_experience_adherence_for_body,
     )
-    from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
+    from literary_engineering_studio_engine.public.literary import (
         candidate_generation_gate,
         candidate_language_gate,
     )
@@ -125,7 +125,7 @@ def _validate_candidate_language_gates(
     gate=None,
 ) -> None:
     if gate is None:
-        from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
+        from literary_engineering_studio_engine.public.literary import (
             candidate_language_gate,
         )
 
@@ -233,10 +233,10 @@ def _validate_scene_character_candidates(
     sandbox: SandboxManifest,
     issues: list[PreflightIssue],
 ) -> None:
-    from literary_engineering_studio_engine.literary.assets.registry import (
+    from literary_engineering_studio_engine.public.literary import (
         ASSET_SCHEMA_NAMES,
     )
-    from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+    from literary_engineering_studio_engine.public.prompting import validate_payload
 
     scene_assets = task.payload.get("scene_character_assets")
     if not isinstance(scene_assets, list):
@@ -297,11 +297,11 @@ def _revision_preflight_errors(
     candidate: Path,
     payload: dict[str, object],
 ) -> list[tuple[str, str, str]]:
-    from literary_engineering_studio_engine.foundation.draft_text import final_body_from_draft_path
-    from literary_engineering_studio_engine.literary.review.creative_quality import (
+    from literary_engineering_studio_engine.public.literary import final_body_from_draft_path
+    from literary_engineering_studio_engine.public.literary import (
         load_creative_quality_profile,
     )
-    from literary_engineering_studio_engine.literary.scene.promotion.revision_contract import (
+    from literary_engineering_studio_engine.public.literary import (
         revision_manifest_errors,
         revision_source_requires_anti_evasion_rows,
     )
@@ -356,7 +356,7 @@ def _validate_continuity_ledger_contract(
 ) -> None:
     """Reject pending continuity records before formal writeback."""
 
-    from literary_engineering_studio_engine.literary.assets.continuity.ledger import (
+    from literary_engineering_studio_engine.public.literary import (
         continuity_ledger_status,
     )
 
@@ -412,7 +412,7 @@ def _validate_branch_selection_contract(
 ) -> None:
     """Validate the machine handoff of a creative branch decision."""
 
-    from literary_engineering_studio_engine.tasking.gates import branch_selection_status
+    from literary_engineering_studio_engine.public.tasking import branch_selection_status
 
     state = str(task.current_state or task.payload.get("current_state") or "")
     if state not in {"branch-agent-task", "branch-selection"}:
@@ -481,7 +481,7 @@ def _selectable_branch_ids(
     scene_id: str,
     manifest: dict[str, object],
 ) -> set[str]:
-    from literary_engineering_studio_engine.semantic_task_contracts import (
+    from literary_engineering_studio_engine.public.tasking import (
         validated_branch_proposal_ids,
     )
 

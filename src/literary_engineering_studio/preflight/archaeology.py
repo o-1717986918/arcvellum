@@ -8,7 +8,7 @@ from pathlib import Path
 from ..contracts import TaskPackage
 from ..sandbox import SandboxManifest
 from .common import PreflightIssue
-from literary_engineering_studio_engine.literary.ingest import (
+from literary_engineering_studio_engine.public.literary import (
     DOMAIN_REVIEW_SCHEMA,
     IDENTITY_RESOLUTION_SCHEMA,
     RECONSTRUCTION_CANDIDATE_SCHEMA,
@@ -18,7 +18,7 @@ from literary_engineering_studio_engine.literary.ingest import (
     validate_reconstruction_candidate,
     validate_chunk_extraction,
 )
-from literary_engineering_studio_engine.literary.ingest.evidence import canonical_digest
+from literary_engineering_studio_engine.public.literary import canonical_digest
 
 
 def validate_archaeology_chunk_output(

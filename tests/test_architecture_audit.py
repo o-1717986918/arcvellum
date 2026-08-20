@@ -112,6 +112,19 @@ class ArchitectureAuditTests(unittest.TestCase):
 
         self.assertEqual(report["studio_engine_dependencies"], {})
 
+    def test_studio_engine_internal_import_is_a_zero_tolerance_violation(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root / "src/literary_engineering_studio/internal_consumer.py",
+                "from literary_engineering_studio_engine.workflow.state import build_workflow_state\n",
+            )
+
+            violations = scan_dependency_violations(root)
+
+        self.assertEqual(len(violations), 1)
+        self.assertIn("Studio must use Engine public API", violations[0])
+
     def test_synthetic_repository_exposes_budget_cycle_facade_and_route_debt(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

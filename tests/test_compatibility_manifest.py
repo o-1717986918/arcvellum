@@ -40,6 +40,16 @@ class CompatibilityManifestTests(unittest.TestCase):
         }
         self.assertFalse(providers["http-chat"]["production_default"])
         self.assertFalse(providers["dry-run"]["production_default"])
+        public_api = manifest["engine_public_api"]
+        self.assertEqual(public_api["status"], "stable-cross-package-surface")
+        self.assertFalse(public_api["internal_imports_allowed"])
+        self.assertEqual(len(public_api["modules"]), 7)
+        self.assertTrue(
+            all(
+                module.startswith("literary_engineering_studio_engine.public.")
+                for module in public_api["modules"]
+            )
+        )
 
     def test_summary_does_not_expose_a_second_runtime_default(self):
         summary = compatibility_summary()

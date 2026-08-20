@@ -9,7 +9,7 @@ from typing import Any
 
 from ..contracts import TaskPackage
 from ..sandbox import SandboxManifest
-from literary_engineering_studio_engine.literary.style.review import (
+from literary_engineering_studio_engine.public.literary import (
     style_review_machine_values,
 )
 

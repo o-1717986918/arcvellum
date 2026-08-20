@@ -6,8 +6,8 @@ import json
 from typing import Any
 
 from ..contracts import TaskPackage
-from literary_engineering_studio_engine.prompting.agents.schema import load_schema_spec
-from literary_engineering_studio_engine.literary.scene.branching.proposals import (
+from literary_engineering_studio_engine.public.prompting import load_schema_spec
+from literary_engineering_studio_engine.public.literary import (
     branch_proposal_contract,
 )
 from .task_semantic_rendering import render_semantic_output_contract

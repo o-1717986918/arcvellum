@@ -6,7 +6,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from literary_engineering_studio_engine.prompting.agents.schema import load_schema_spec
+from literary_engineering_studio_engine.public.prompting import load_schema_spec
 
 from ..context import CapabilityContext
 from ..contracts import HandlerOutput

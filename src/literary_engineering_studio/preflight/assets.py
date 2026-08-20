@@ -43,8 +43,8 @@ def _validate_asset_candidate(
     if not isinstance(payload, dict):
         return
 
-    from literary_engineering_studio_engine.literary.assets.registry import ASSET_SCHEMA_NAMES
-    from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+    from literary_engineering_studio_engine.public.literary import ASSET_SCHEMA_NAMES
+    from literary_engineering_studio_engine.public.prompting import validate_payload
 
     asset_type = str(task.payload.get("asset_type") or payload.get("asset_type") or "").strip()
     schema_name = ASSET_SCHEMA_NAMES.get(asset_type, "")

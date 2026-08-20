@@ -14,6 +14,21 @@
     "external_imports_supported": true,
     "removal_requires": "one published deprecation window and a fresh external-consumer audit"
   },
+  "engine_public_api": {
+    "status": "stable-cross-package-surface",
+    "consumer": "literary_engineering_studio",
+    "internal_imports_allowed": false,
+    "modules": [
+      "literary_engineering_studio_engine.public.projects",
+      "literary_engineering_studio_engine.public.tasking",
+      "literary_engineering_studio_engine.public.workflow",
+      "literary_engineering_studio_engine.public.literary",
+      "literary_engineering_studio_engine.public.prompting",
+      "literary_engineering_studio_engine.public.projections",
+      "literary_engineering_studio_engine.public.orchestration"
+    ],
+    "removal_requires": "one published deprecation window and a public symbol migration guide"
+  },
   "deprecated_aliases": [
     {
       "module": "literary_engineering_studio_engine.generation_provider",
