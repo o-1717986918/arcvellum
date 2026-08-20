@@ -12,7 +12,7 @@
 | `src/literary_engineering_studio_engine/literary` | 143 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
 | `src/literary_engineering_studio_engine/prompting` | 11 | Prompt programs | `prompt registry/compiler` | literary contracts | Provider transport |
 | `src/literary_engineering_studio_engine/orchestration` | 6 | Read-only orchestration catalog | `orchestration/__init__.py` | task and Gate catalogs | Planner execution |
-| `src/literary_engineering_studio_engine/projections` | 13 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |
+| `src/literary_engineering_studio_engine/projections` | 17 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |
 | `src/literary_engineering_studio_engine/command_line` | 22 | Engine CLI adapter | `command_line/main.py` | Engine public services | literary business rules |
 | `src/literary_engineering_studio/application` | 47 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
 | `src/literary_engineering_studio/automation` | 11 | Campaign control | `automation/controller.py` | application/runtime ports | Engine route implementations |
