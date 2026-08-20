@@ -3,6 +3,10 @@
 from ..foundation.draft_text import final_body_from_draft_path
 from ..literary.assets.continuity.architecture import REQUIRED_FIELDS
 from ..literary.assets.continuity.ledger import continuity_ledger_status
+from ..literary.assets.canon.contracts import (
+    CanonPatchCandidateIssue,
+    canon_patch_candidate_issues,
+)
 from ..literary.assets.promotion import (
     file_sha256,
     latest_approval,
@@ -98,6 +102,7 @@ from ..literary.style.version import (
 __all__ = [
     "ASSET_CANDIDATE_DIRS",
     "ASSET_SCHEMA_NAMES",
+    "CanonPatchCandidateIssue",
     "DOMAIN_REVIEW_SCHEMA",
     "IDENTITY_RESOLUTION_SCHEMA",
     "RECONSTRUCTION_CANDIDATE_SCHEMA",
@@ -116,6 +121,7 @@ __all__ = [
     "branch_proposal_contract",
     "candidate_generation_gate",
     "candidate_language_gate",
+    "canon_patch_candidate_issues",
     "canonical_digest",
     "chapter_obligation_contract_issues",
     "context_trace_status",

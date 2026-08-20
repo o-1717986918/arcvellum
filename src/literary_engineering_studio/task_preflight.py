@@ -17,6 +17,7 @@ from .preflight.common import (
     _validate_json,
     _validate_review_conclusions,
 )
+from .preflight.canon_candidate import validate_canon_patch_candidate
 from .preflight.review import (
     _validate_project_review_contract,
     _validate_source_extraction_revision,
@@ -76,6 +77,7 @@ def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Prefli
     _validate_review_conclusions(task, sandbox, issues)
     _validate_asset_candidate(task, sandbox, issues)
     _validate_asset_review_contract(task, sandbox, issues)
+    validate_canon_patch_candidate(task, sandbox, issues)
     _validate_project_review_contract(task, sandbox, issues)
     _validate_scene_review_contract(task, sandbox, issues)
     _validate_scene_candidate_generation_contract(task, sandbox, issues)

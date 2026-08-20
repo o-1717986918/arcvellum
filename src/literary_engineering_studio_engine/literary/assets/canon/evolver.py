@@ -14,13 +14,14 @@ from ....agent_tasks import agent_task_completion_status, write_agent_tasks
 from ....atomic_io import atomic_write_batch
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
 from ....semantic_task_contracts import semantic_artifact_errors
+from .contracts import (
+    CANON_PATCH_SCHEMA,
+    canon_patch_candidate_issues,
+)
 
 
-CANON_PATCH_SCHEMA = "literary-engineering-workbench/canon-patch-candidate/v0.1"
 CANON_APPLY_SCHEMA = "literary-engineering-workbench/canon-patch-apply/v0.1"
 CANON_BACKLOG_SCHEMA = "literary-engineering-workbench/canon-patch-backlog/v0.1"
-CANON_PATCH_ITEM_REQUIRED = ("type", "summary", "source_evidence", "target_files", "risk_level", "requires_user_approval")
-CANON_PATCH_RISK_LEVELS = {"low", "medium", "high"}
 
 
 @dataclass(frozen=True)
@@ -711,27 +712,16 @@ def _canon_change_value(value: object) -> bool | str | None:
 
 
 def _canon_patch_item_errors(items: list[Any]) -> list[str]:
-    errors: list[str] = []
-    for index, item in enumerate(items, start=1):
-        if not isinstance(item, dict):
-            errors.append(f"items[{index}] is not an object")
-            continue
-        for field in CANON_PATCH_ITEM_REQUIRED:
-            value = item.get(field)
-            if field == "requires_user_approval":
-                if not isinstance(value, bool):
-                    errors.append(f"items[{index}].requires_user_approval must be boolean")
-                continue
-            if field == "target_files":
-                if not isinstance(value, list) or not any(str(path).strip() for path in value):
-                    errors.append(f"items[{index}].target_files must be a non-empty list")
-                continue
-            if not str(value or "").strip():
-                errors.append(f"items[{index}].{field} is required")
-        risk = str(item.get("risk_level") or "").strip().lower()
-        if risk and risk not in CANON_PATCH_RISK_LEVELS:
-            errors.append(f"items[{index}].risk_level must be low|medium|high")
-    return errors
+    payload = {
+        "schema": CANON_PATCH_SCHEMA,
+        "canon_change": True,
+        "items": items,
+    }
+    return [
+        f"{issue.path} {issue.message}"
+        for issue in canon_patch_candidate_issues(payload)
+        if issue.path.startswith("items[")
+    ]
 
 
 def _scene_id(path: Path) -> str:
