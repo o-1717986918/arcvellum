@@ -1,0 +1,384 @@
+{
+  "schema": "arcvellum/prompt-compile-canary/v1",
+  "mode": "compile-only",
+  "runtime_renderer": "pi-worker",
+  "sample_count": 6,
+  "status": "pass",
+  "samples": [
+    {
+      "case_id": "structured-world-foundation",
+      "benchmark_class": "structured",
+      "runtime_task_kind": "creative",
+      "task_contract_sha256": "77f10de789300b0fa5c889d14d82aea29700d7c9f70bd0bc94317728451d0cb0",
+      "status": "pass",
+      "required_character_reduction": 0.3,
+      "actual_character_reduction": 0.442835,
+      "v2": {
+        "total_characters": 17467,
+        "estimated_input_tokens": 6139,
+        "instruction_characters": 6390,
+        "evidence_characters": 11077,
+        "unique_source_count": 14,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 31,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 0,
+        "prompt_sha256": "6d30dafff50e98e3738ec4414eea8e4e9c6884e416a301158aeece4b41ac8a7e"
+      },
+      "v3": {
+        "total_characters": 9732,
+        "estimated_input_tokens": 2589,
+        "instruction_characters": 7566,
+        "evidence_characters": 2166,
+        "unique_source_count": 5,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 5,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 3,
+        "prompt_sha256": "f4c0ecb04e97153ba14f584e19b3de780a6873663490dccb8b7c45b8d793e4ec"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "92fc00f32af33d9857592c8e7e607d9fc1ad38560a7b06fec574af9f4341c991",
+      "compile_metrics": {
+        "inline_count": 5,
+        "exact_on_demand_count": 3,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 179,
+        "demoted_recovery_count": 3,
+        "demoted_optional_count": 0,
+        "dropped_projection_count": 6,
+        "soft_character_limit": 42000,
+        "hard_character_limit": 60000,
+        "max_on_demand_reads": 2,
+        "cache_contract": {
+          "schema": "arcvellum/prompt-cache-partition/v1",
+          "stable_prefix_digest": "3f580fce57c2a2c37853a96168c8ce99ae78f4b4af7034792a8ce4e57a4efb38",
+          "dynamic_suffix_digest": "92fc00f32af33d9857592c8e7e607d9fc1ad38560a7b06fec574af9f4341c991",
+          "stable_identity": {
+            "recipe_id": "prompt-v3/creative/v1",
+            "profile_digest": "e567941c994bf9a7faa0c79a8b279d5d42c745aa0733345ce06888cd3988cf86",
+            "prompt_asset_id": "route.character-world-assets.create.v1",
+            "prompt_asset_version": "v2"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "analysis-scene-roleplay",
+      "benchmark_class": "analysis",
+      "runtime_task_kind": "creative",
+      "task_contract_sha256": "47263eb255260c451fe995c9ce915e0725e67e6fb4b267239943619b43d22126",
+      "status": "pass",
+      "required_character_reduction": 0.6,
+      "actual_character_reduction": 0.714422,
+      "v2": {
+        "total_characters": 45028,
+        "estimated_input_tokens": 16378,
+        "instruction_characters": 5745,
+        "evidence_characters": 39283,
+        "unique_source_count": 9,
+        "duplicate_character_ratio": 0.240495,
+        "constraint_count": 23,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 0,
+        "prompt_sha256": "2fb2e31ea55d88aab22a550e87ac80b96d118820664f84a54f64c1cceae47a8e"
+      },
+      "v3": {
+        "total_characters": 12859,
+        "estimated_input_tokens": 5392,
+        "instruction_characters": 3434,
+        "evidence_characters": 9425,
+        "unique_source_count": 5,
+        "duplicate_character_ratio": 0.022475,
+        "constraint_count": 0,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 4,
+        "prompt_sha256": "a1bd365b9c6298f24113b32ef8c9d0b8dccbb29afe3e772d785de569459e2904"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "1e76db7581fed9fde402585a2996b3c19af6f12c99d5790d13b70d5253d97629",
+      "compile_metrics": {
+        "inline_count": 5,
+        "exact_on_demand_count": 4,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 3,
+        "demoted_optional_count": 1,
+        "dropped_projection_count": 0,
+        "soft_character_limit": 42000,
+        "hard_character_limit": 60000,
+        "max_on_demand_reads": 2,
+        "cache_contract": {
+          "schema": "arcvellum/prompt-cache-partition/v1",
+          "stable_prefix_digest": "e0a6fde5d29a066f13e5c122b84938f9a31aab2b51eaa74a6201e4ae2fda33c6",
+          "dynamic_suffix_digest": "1e76db7581fed9fde402585a2996b3c19af6f12c99d5790d13b70d5253d97629",
+          "stable_identity": {
+            "recipe_id": "prompt-v3/creative/v1",
+            "profile_digest": "15dd526f754c5273f265e9ebe2d7093eb8f5bbb55e39c99a770ba32050e0a14b",
+            "prompt_asset_id": "route.scene-development.roleplay.execute.v1",
+            "prompt_asset_version": "v1"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "prose-scene-generation",
+      "benchmark_class": "prose",
+      "runtime_task_kind": "prose",
+      "task_contract_sha256": "4de2216af4f1b1ec2918d4791c0afd25ee1b8227488451708266084949f8a17f",
+      "status": "pass",
+      "required_character_reduction": 0.8,
+      "actual_character_reduction": 0.914927,
+      "v2": {
+        "total_characters": 173556,
+        "estimated_input_tokens": 60054,
+        "instruction_characters": 6536,
+        "evidence_characters": 167020,
+        "unique_source_count": 17,
+        "duplicate_character_ratio": 0.163653,
+        "constraint_count": 39,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 0,
+        "prompt_sha256": "033b3801da62d41ddcf7840d3ccb8b0b4390cec9e609c1c97fe818e4b5d87872"
+      },
+      "v3": {
+        "total_characters": 14765,
+        "estimated_input_tokens": 4878,
+        "instruction_characters": 6268,
+        "evidence_characters": 8497,
+        "unique_source_count": 6,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 8,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 11,
+        "prompt_sha256": "fcd4f5682204b49424f3ad00c647692ea2d1c4d75fcac5d0f19283d1963bfc97"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "da3bcd2afa6c8f914d808baf6fd9bc08000d7c306c1e55a9d06c077ac02c1013",
+      "compile_metrics": {
+        "inline_count": 6,
+        "exact_on_demand_count": 11,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 3,
+        "demoted_optional_count": 8,
+        "dropped_projection_count": 0,
+        "soft_character_limit": 65000,
+        "hard_character_limit": 90000,
+        "max_on_demand_reads": 2,
+        "cache_contract": {
+          "schema": "arcvellum/prompt-cache-partition/v1",
+          "stable_prefix_digest": "00aa3daab38d6195565d5e663b985ebe596eb7d93a5da173491f2db3bcbae4e9",
+          "dynamic_suffix_digest": "da3bcd2afa6c8f914d808baf6fd9bc08000d7c306c1e55a9d06c077ac02c1013",
+          "stable_identity": {
+            "recipe_id": "prompt-v3/prose/v2",
+            "profile_digest": "e73c9cfd1537a73e7748a300e60e799a4216f15705ba33102ef00e43107fb4a4",
+            "prompt_asset_id": "route.scene-development.prose.generate.v1",
+            "prompt_asset_version": "v5"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "review-project-canon",
+      "benchmark_class": "review",
+      "runtime_task_kind": "structured",
+      "task_contract_sha256": "618946a9b3894c26fece5faa6a3dd7ba3a86a49ba85c603a021ee25402617a52",
+      "status": "pass",
+      "required_character_reduction": 0.4,
+      "actual_character_reduction": 0.611994,
+      "v2": {
+        "total_characters": 15358,
+        "estimated_input_tokens": 5659,
+        "instruction_characters": 5658,
+        "evidence_characters": 9700,
+        "unique_source_count": 6,
+        "duplicate_character_ratio": 0.008074,
+        "constraint_count": 27,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 4,
+        "prompt_sha256": "f19bf9dbaed5bb63210279e81afb625e859f120a9d1490899788a038a608cad1"
+      },
+      "v3": {
+        "total_characters": 5959,
+        "estimated_input_tokens": 1786,
+        "instruction_characters": 2968,
+        "evidence_characters": 2991,
+        "unique_source_count": 2,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 5,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 8,
+        "prompt_sha256": "793580f5a0aada8f39ddb219ce294f56b4a0650d0f00a22b8a16049ff02e1ff7"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "5523477d6f842b2aa1f6c043788a54ad4aa3030269a0066d8589b2121aa3c62e",
+      "compile_metrics": {
+        "inline_count": 2,
+        "exact_on_demand_count": 8,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 4,
+        "demoted_optional_count": 0,
+        "dropped_projection_count": 0,
+        "soft_character_limit": 12000,
+        "hard_character_limit": 18000,
+        "max_on_demand_reads": 1,
+        "cache_contract": {
+          "schema": "arcvellum/prompt-cache-partition/v1",
+          "stable_prefix_digest": "7e1b8ace70273843bfdf6f6ee07d270d864de9f2deaf08ddddfb1d1414835eb4",
+          "dynamic_suffix_digest": "5523477d6f842b2aa1f6c043788a54ad4aa3030269a0066d8589b2121aa3c62e",
+          "stable_identity": {
+            "recipe_id": "prompt-v3/structured/v1",
+            "profile_digest": "303cd1504700cf0af903947fca923f279489da60971599ef8f768ad959da3186",
+            "prompt_asset_id": "route.review-audit.canon-review.execute.v1",
+            "prompt_asset_version": "v1"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "review-scene-candidate",
+      "benchmark_class": "review",
+      "runtime_task_kind": "review",
+      "task_contract_sha256": "74d3e29cdef387697a9c7363bf9c436cd5c5c71d9976267238f6d97bb228d6ea",
+      "status": "pass",
+      "required_character_reduction": 0.4,
+      "actual_character_reduction": 0.401067,
+      "v2": {
+        "total_characters": 25674,
+        "estimated_input_tokens": 8899,
+        "instruction_characters": 8885,
+        "evidence_characters": 16789,
+        "unique_source_count": 8,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 31,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 2,
+        "prompt_sha256": "796b872d6fae3f735a0bd53e2d7d3314d3ff1c5c45f7c4b68dc50eeb0ba5ee9e"
+      },
+      "v3": {
+        "total_characters": 15377,
+        "estimated_input_tokens": 5399,
+        "instruction_characters": 5637,
+        "evidence_characters": 9740,
+        "unique_source_count": 7,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 5,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 3,
+        "prompt_sha256": "d00b254d164f65b39c92b25ad50ac0132710a84a15d3822df164d4e814dcec2d"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "4595a2217a68564f3c12280e6d815f83be9c3b69cb869b0d6c962032f786cad1",
+      "compile_metrics": {
+        "inline_count": 7,
+        "exact_on_demand_count": 3,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 0,
+        "demoted_optional_count": 1,
+        "dropped_projection_count": 0,
+        "soft_character_limit": 36000,
+        "hard_character_limit": 48000,
+        "max_on_demand_reads": 2,
+        "cache_contract": {
+          "schema": "arcvellum/prompt-cache-partition/v1",
+          "stable_prefix_digest": "3fe3cceff999928dd6950d67066e73358f2fa7c7cfab2e4851c40138b6475d1d",
+          "dynamic_suffix_digest": "4595a2217a68564f3c12280e6d815f83be9c3b69cb869b0d6c962032f786cad1",
+          "stable_identity": {
+            "recipe_id": "prompt-v3/review/v1",
+            "profile_digest": "70244c0171f8d4e35806f3c776eefeadc302dc642df793fde6795f5fd73dbe83",
+            "prompt_asset_id": "route.scene-development.agent-review.v1",
+            "prompt_asset_version": "v6"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "planning-story-architecture",
+      "benchmark_class": "planning",
+      "runtime_task_kind": "planning",
+      "task_contract_sha256": "f9538860d856b2dafb038e88f1d1f39e607dd92b11e223fd7cbb5e06663d52bb",
+      "status": "pass",
+      "required_character_reduction": 0.4,
+      "actual_character_reduction": 0.461241,
+      "v2": {
+        "total_characters": 6992,
+        "estimated_input_tokens": 2509,
+        "instruction_characters": 4617,
+        "evidence_characters": 2375,
+        "unique_source_count": 3,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 20,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 0,
+        "prompt_sha256": "ce9287ef7a60425b0b2837df52d6b4d614770f45ac97b280a1228e96214591f9"
+      },
+      "v3": {
+        "total_characters": 3767,
+        "estimated_input_tokens": 1018,
+        "instruction_characters": 1982,
+        "evidence_characters": 1785,
+        "unique_source_count": 3,
+        "duplicate_character_ratio": 0.0,
+        "constraint_count": 4,
+        "constraint_repetition_ratio": 0.0,
+        "exact_on_demand_count": 0,
+        "prompt_sha256": "42a30c98b17d6e88df27f5cdb36716d7d4cba6ff1daf0eec9a0e7003b951241a"
+      },
+      "v3_lint_status": "pass",
+      "prompt_program_digest": "a4d7ef645a7a3ae0b078c5a37c63f7943ff9293161563bbc7024f83632743f6d",
+      "compile_metrics": {
+        "inline_count": 3,
+        "exact_on_demand_count": 0,
+        "dropped_path_count": 0,
+        "dropped_digest_count": 0,
+        "dropped_characters": 0,
+        "demoted_recovery_count": 0,
+        "demoted_optional_count": 0,
+        "dropped_projection_count": 0,
+        "soft_character_limit": 32000,
+        "hard_character_limit": 48000,
+        "max_on_demand_reads": 2,
+        "cache_contract": {
+          "schema": "arcvellum/prompt-cache-partition/v1",
+          "stable_prefix_digest": "e9424de64b32f6f851095aaaf9c1c6c6d83482305c3f92babd0a661818244cd8",
+          "dynamic_suffix_digest": "a4d7ef645a7a3ae0b078c5a37c63f7943ff9293161563bbc7024f83632743f6d",
+          "stable_identity": {
+            "recipe_id": "prompt-v3/planning/v1",
+            "profile_digest": "087f90427bbcbb3d00cbb3abaeae552e062361a181a1c594fd52c76ea17e6055",
+            "prompt_asset_id": "route.longform-planning.story-architecture.execute.v1",
+            "prompt_asset_version": "v1"
+          }
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "No model was invoked; quality, preflight pass rate, latency, and provider token usage remain unproven.",
+    "A live interleaved A/B gate is still required before Prompt v3 enforcement is enabled."
+  ],
+  "live_quality_gate": {
+    "status": "pending-current-live-ab",
+    "historical_baseline": "docs/benchmarks/prompt-v3-final-ab-gate-2026-08-11.json",
+    "historical_coverage": [
+      "structured",
+      "review"
+    ],
+    "required_dimensions": [
+      "closure_rate",
+      "time_to_first_artifact",
+      "total_cost",
+      "repair_count",
+      "blind_literary_quality"
+    ]
+  },
+  "content_policy": "no prompt bodies, prose, reasoning, credentials, or absolute paths",
+  "revision": "f916859976b011532dd6"
+}

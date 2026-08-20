@@ -14,7 +14,13 @@ from .runtime_benchmark import BenchmarkCase, reconstruct_benchmark_case
 
 
 PROMPT_CANARY_SCHEMA = "arcvellum/prompt-compile-canary/v1"
-_REDUCTION_GATES = {"structured": 0.30, "review": 0.40}
+_REDUCTION_GATES = {
+    "structured": 0.30,
+    "analysis": 0.60,
+    "prose": 0.80,
+    "review": 0.40,
+    "planning": 0.40,
+}
 
 
 def run_prompt_compile_canary(
@@ -41,6 +47,18 @@ def run_prompt_compile_canary(
             "No model was invoked; quality, preflight pass rate, latency, and provider token usage remain unproven.",
             "A live interleaved A/B gate is still required before Prompt v3 enforcement is enabled.",
         ],
+        "live_quality_gate": {
+            "status": "pending-current-live-ab",
+            "historical_baseline": "docs/benchmarks/prompt-v3-final-ab-gate-2026-08-11.json",
+            "historical_coverage": ["structured", "review"],
+            "required_dimensions": [
+                "closure_rate",
+                "time_to_first_artifact",
+                "total_cost",
+                "repair_count",
+                "blind_literary_quality",
+            ],
+        },
         "content_policy": "no prompt bodies, prose, reasoning, credentials, or absolute paths",
     }
     report["revision"] = _digest(report)[:20]
@@ -64,6 +82,12 @@ def render_prompt_canary_markdown(report: Mapping[str, object]) -> str:
         lines.append(_markdown_canary_row(value))
     lines.extend(
         (
+            "",
+            "## Live Quality Gate",
+            "",
+            f"- current: `{_mapping(report.get('live_quality_gate')).get('status', 'pending')}`",
+            "- historical baseline: `docs/benchmarks/prompt-v3-final-ab-gate-2026-08-11.json`",
+            "- compile pass does not authorize broad Prompt v3 enforcement.",
             "",
             "## Limitations",
             "",

@@ -171,6 +171,33 @@ describe("local output validation", () => {
 			.rejects.toThrow("not an exact-on-demand source");
 	});
 
+	it("lists and reads a member of directory evidence without widening authorization", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-directory-evidence-"));
+		roots.push(root);
+		await mkdir(join(root, "canon"), { recursive: true });
+		await writeFile(join(root, "canon", "world_rules.yaml"), "rules: [bounded]\n", "utf8");
+		await writeFile(join(root, "outside.md"), "forbidden\n", "utf8");
+		const taskContext = {
+			...context(),
+			exactOnDemand: ["canon"],
+			readablePaths: ["canon"],
+			evidenceIndex: { D001: "canon" },
+		};
+		const read = createWorkerTools(taskContext, options(root), state(), () => undefined)
+			.find((tool) => tool.name === "read_authorized_source");
+
+		const listing = await read?.execute("call", { evidence_id: "D001" });
+		const member = await read?.execute("call", {
+			evidence_id: "D001",
+			member_path: "canon/world_rules.yaml",
+		});
+
+		expect(listing?.content[0]?.text).toContain("canon/world_rules.yaml");
+		expect(member?.content[0]?.text).toContain("bounded");
+		await expect(read?.execute("call", { evidence_id: "D001", member_path: "outside.md" }))
+			.rejects.toThrow("outside the authorized directory evidence");
+	});
+
 	it("still rejects a path outside exact context and Agent-owned outputs", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-tools-"));
 		roots.push(root);

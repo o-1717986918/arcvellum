@@ -523,6 +523,31 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertIn("`D001` (recovery)", rendered)
         self.assertNotIn("exact.md", rendered)
 
+    def test_tool_renderer_does_not_repeat_brief_forbidden_constraints(self):
+        program = PromptProgram(
+            schema="arcvellum/prompt-program/v3",
+            recipe_id="prompt-v3/prose/v2",
+            task_identity={"task_id": "one", "route": "route", "current_state": "state", "agent_role": "agent"},
+            objective="完成任务。",
+            decisions=(),
+            constraints=("不得使用机械对照。",),
+            output_contract={"outputs": []},
+            evidence=(),
+            exact_on_demand=(),
+            stop_contract=("完成后停止。",),
+            compile_metrics={},
+            digest="digest",
+            literary_brief={
+                "schema": "arcvellum/literary-brief/v1",
+                "kind": "scene-writing",
+                "forbidden": ["不得使用机械对照。"],
+            },
+        )
+
+        rendered = render_tool_worker_program(program)
+
+        self.assertEqual(rendered.count("不得使用机械对照。"), 1)
+
     def test_tool_renderer_omits_studio_owned_sidecar_work(self):
         program = PromptProgram(
             schema="arcvellum/prompt-program/v3",
@@ -1384,6 +1409,96 @@ class PromptProgramV3Tests(unittest.TestCase):
                 "Prompt Program v3",
                 sandbox.prompt_path.read_text(encoding="utf-8"),
             )
+
+    def test_exact_directory_is_one_machine_indexed_on_demand_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "project:\n  title: 测试\n", encoding="utf-8"
+            )
+            (root / "source.md").write_text("候选。\n", encoding="utf-8")
+            (root / "source-copy.md").write_text("证据。\n", encoding="utf-8")
+            canon = root / "canon"
+            canon.mkdir()
+            (canon / "world_rules.yaml").write_text(
+                "rules:\n  - id: bounded\n", encoding="utf-8"
+            )
+            task = _task(root)
+            task.payload["source_paths"] = ["source.md", "source-copy.md", "canon"]
+            task.payload["agent_source_paths"] = ["source.md", "source-copy.md", "canon"]
+            task.payload["context_exact_on_demand_paths"] = ["canon"]
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="directory-evidence",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "v2",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            access = context["prompt_access"]
+
+            self.assertEqual(access["exact_on_demand"], ["canon"])
+            indexed = [
+                item
+                for item in access["evidence_index"].values()
+                if item["tier"] == "exact_on_demand"
+            ]
+            self.assertEqual(len(indexed), 1)
+            self.assertEqual(indexed[0]["source_ref"], "canon")
+
+    def test_prose_prompt_manifest_is_recovery_evidence_not_inline_drafting_material(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "project:\n  title: 测试\n", encoding="utf-8"
+            )
+            (root / "source.md").write_text("候选。\n", encoding="utf-8")
+            (root / "source-copy.md").write_text("证据。\n", encoding="utf-8")
+            prompt = root / "drafts/candidates/scene_0001-platform-agent.prompt.json"
+            prompt.parent.mkdir(parents=True)
+            prompt.write_text('{"host":"transport"}', encoding="utf-8")
+            task = _task(root)
+            task.payload["task_type"] = "platform-agent-prose"
+            task.payload["current_state"] = "candidate-generation-provenance"
+            task.payload["scene_id"] = "scene_0001"
+            task.payload["source_paths"].append(
+                "drafts/candidates/scene_0001-platform-agent.prompt.json"
+            )
+            task.payload["agent_source_paths"] = list(task.payload["source_paths"])
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="pi-worker",
+                run_id="prompt-manifest-recovery",
+                execution_profile={"runtime_id": "pi-worker"},
+                prompt_program_config={
+                    "mode": "enforced",
+                    "fallback": "v2",
+                    "enforcement": {"enabled": True, "runtimes": ["pi-worker"]},
+                },
+            )
+            context = json.loads(
+                (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
+            )
+            indexed = context["prompt_access"]["evidence_index"]
+            manifest_rows = [
+                item
+                for item in indexed.values()
+                if item["source_ref"].endswith(".prompt.json")
+            ]
+
+            self.assertEqual(len(manifest_rows), 1)
+            self.assertEqual(manifest_rows[0]["role"], "recovery")
+            self.assertEqual(manifest_rows[0]["tier"], "exact_on_demand")
 
 
 def _task(root: Path) -> TaskPackage:

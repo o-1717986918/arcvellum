@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from literary_engineering_studio.observability.prompt_canary import (
+    _REDUCTION_GATES,
     _reduction,
     _safe_metrics,
     render_prompt_canary_markdown,
@@ -10,6 +11,13 @@ from literary_engineering_studio.observability.prompt_canary import (
 
 
 class PromptCanaryTests(unittest.TestCase):
+    def test_every_benchmark_class_has_a_nonzero_reduction_gate(self):
+        self.assertEqual(
+            set(_REDUCTION_GATES),
+            {"structured", "analysis", "prose", "review", "planning"},
+        )
+        self.assertTrue(all(value > 0 for value in _REDUCTION_GATES.values()))
+
     def test_reduction_uses_fair_post_tier_baseline(self):
         self.assertEqual(
             _reduction({"total_characters": 20000}, {"total_characters": 12000}),
@@ -52,6 +60,7 @@ class PromptCanaryTests(unittest.TestCase):
         )
         self.assertIn("40.0%", markdown)
         self.assertIn("live pending", markdown)
+        self.assertIn("compile pass does not authorize", markdown)
 
 
 if __name__ == "__main__":

@@ -153,7 +153,9 @@ def _review_brief(
             evidence, "scene", "composition_contract", "character_state", "canon",
             "mounted_style", "creative_quality_profile", "scene_context",
         ),
-        review_requirements=_unique((*_strings(asset.get("review_requirements")), *_strings(context.get("validation_gates")))),
+        review_requirements=_review_requirements(
+            (*_strings(asset.get("review_requirements")), *_strings(context.get("validation_gates")))
+        ),
         output_contract=output,
         provenance=_provenance(evidence),
     )
@@ -252,6 +254,26 @@ def _strings(value: object) -> tuple[str, ...]:
 
 def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
+
+
+def _review_requirements(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Keep literary review semantics, not duplicate transport receipts."""
+
+    duplicate_fragments = (
+        "cite the exact candidate path",
+        "candidate_sha256 must equal",
+        "scene_review.v1 json exists",
+        "review cites exact candidate",
+        "review conclusion is recorded",
+        "new_character_register is recorded",
+    )
+    return _unique(
+        tuple(
+            value
+            for value in values
+            if not any(fragment in value.casefold() for fragment in duplicate_fragments)
+        )
+    )
 
 
 __all__ = [

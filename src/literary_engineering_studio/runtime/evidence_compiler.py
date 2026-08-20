@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import json
 from pathlib import Path
 from typing import Iterable
 
@@ -227,7 +228,7 @@ def _declared_exact(
     seen_paths: set[str],
 ) -> list[tuple[str, str, str]]:
     return [
-        (normalized, _sha256(_read_authorized_text(root, normalized)), _evidence_role(normalized, envelope.task_kind)[0])
+        (normalized, _authorized_digest(root, normalized), _evidence_role(normalized, envelope.task_kind)[0])
         for normalized in _unique(_normalized_path(item) for item in envelope.exact_on_demand)
         if normalized not in seen_paths
     ]
@@ -301,6 +302,7 @@ def _is_deterministic_evidence(path: str) -> bool:
 def _is_recovery_path(path: str) -> bool:
     return (
         path.endswith(".agent_tasks.md")
+        or path.endswith(".prompt.json")
         or path.startswith("docs/implementation/")
         or "context_packet" in path
         or path in {"skill.md", "agents.md", "agentread.yaml"}
@@ -323,6 +325,45 @@ def _read_authorized_text(root: Path, relative: str) -> str:
     if b"\x00" in data:
         raise ValueError(f"prompt evidence is not text: {relative}")
     return data.decode("utf-8")
+
+
+def _authorized_digest(root: Path, relative: str) -> str:
+    """Digest one exact source without forcing directory roots into file APIs."""
+
+    path = (root / Path(relative)).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError(f"prompt evidence escapes workspace: {relative}")
+    if path.is_symlink():
+        raise ValueError(f"prompt evidence cannot be a symbolic link: {relative}")
+    if path.is_file():
+        return _sha256(_read_authorized_text(root, relative))
+    if not path.is_dir():
+        raise ValueError(f"prompt evidence is missing: {relative}")
+    manifest: dict[str, str] = {}
+    for item in sorted(path.rglob("*")):
+        if item.is_symlink():
+            raise ValueError(
+                "prompt evidence directory contains a symbolic link: "
+                + item.relative_to(root).as_posix()
+            )
+        if not item.is_file():
+            continue
+        data = item.read_bytes()
+        if b"\x00" in data:
+            continue
+        try:
+            body = data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        manifest[item.relative_to(path).as_posix()] = _sha256(body)
+    return _sha256(
+        json.dumps(
+            manifest,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
 
 
 def _normalized_path(value: str) -> str:

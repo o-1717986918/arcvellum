@@ -109,7 +109,7 @@ def _brief(program: PromptProgram) -> str:
     compact = {
         key: value
         for key, value in program.literary_brief.items()
-        if key not in {"schema", "output_contract", "provenance"}
+        if key not in {"schema", "output_contract", "provenance", "forbidden"}
     }
     return "## Literary Task Brief\n\n`" + json.dumps(
         compact, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -184,7 +184,8 @@ def _on_demand(program: PromptProgram, *, tool_worker: bool) -> str:
         return "- 无。"
     access = (
         "- 按需读取时将 `Dxxx` 原样传给 `read_authorized_source.evidence_id`；"
-        "来源路径与摘要由机器合同校验。"
+        "来源路径与摘要由机器合同校验。目录证据会先返回授权成员目录；"
+        "需要正文时继续传同一 evidence_id 与目录中给出的 member_path。"
         if tool_worker
         else ""
     )

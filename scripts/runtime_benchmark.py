@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         "--case",
         action="append",
         default=[],
-        help="Benchmark case id; defaults to structured-world-foundation and review-scene-candidate.",
+        help="Benchmark case id; defaults to every ready catalog case.",
     )
     prompt_canary.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     prompt_canary.add_argument("--runtime", default="pi-worker")
@@ -158,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
             args.markdown.write_text(render_prompt_audit_markdown(payload), encoding="utf-8")
     elif args.command == "prompt-canary":
         catalog_cases = {item.case_id: item for item in load_benchmark_catalog(args.catalog)}
-        selected_ids = args.case or ["structured-world-foundation", "review-scene-candidate"]
+        selected_ids = args.case or [
+            case_id
+            for case_id, case in catalog_cases.items()
+            if case.availability == "ready"
+        ]
         missing = [case_id for case_id in selected_ids if case_id not in catalog_cases]
         if missing:
             parser.error("unknown benchmark case: " + ", ".join(missing))

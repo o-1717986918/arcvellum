@@ -1,6 +1,9 @@
-import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, posix, relative, resolve, sep, win32 } from "node:path";
 import { randomUUID } from "node:crypto";
+
+const MAX_AUTHORIZED_SOURCE_BYTES = 4 * 1024 * 1024;
+const MAX_DIRECTORY_MEMBERS = 500;
 
 export function normalizeRelativePath(value: string): string {
 	const replaced = value.trim().replaceAll("\\", "/");
@@ -18,7 +21,56 @@ export async function readAuthorizedFile(root: string, relativePath: string): Pr
 	const target = await resolveWorkspacePath(root, relativePath, false);
 	const info = await lstat(target);
 	if (!info.isFile() || info.isSymbolicLink()) throw new Error("authorized source must be a regular file");
-	return readFile(target, "utf8");
+	if (info.size > MAX_AUTHORIZED_SOURCE_BYTES) throw new Error("authorized source exceeds the bounded file limit");
+	const data = await readFile(target);
+	if (data.includes(0)) throw new Error("authorized source must be UTF-8 text");
+	try {
+		return new TextDecoder("utf-8", { fatal: true }).decode(data);
+	} catch {
+		throw new Error("authorized source must be UTF-8 text");
+	}
+}
+
+export async function readAuthorizedSource(root: string, relativePath: string): Promise<string> {
+	const target = await resolveWorkspacePath(root, relativePath, false);
+	const info = await lstat(target);
+	if (info.isSymbolicLink()) throw new Error("authorized source cannot be a symbolic link");
+	if (info.isFile()) return readAuthorizedFile(root, relativePath);
+	if (!info.isDirectory()) throw new Error("authorized source must be a regular file or directory");
+	const members = await directoryMembers(root, relativePath, target);
+	const listed = members.slice(0, MAX_DIRECTORY_MEMBERS);
+	const lines = [
+		`# Authorized directory evidence: ${relativePath}`,
+		"Use the same evidence_id with member_path set to one exact file below.",
+		`Discovered members: ${members.length}; listed: ${listed.length}; truncated: ${members.length > listed.length}`,
+		"",
+		...listed.map((item) => `- ${item}`),
+	];
+	return lines.join("\n") + "\n";
+}
+
+async function directoryMembers(root: string, relativeRoot: string, absoluteRoot: string): Promise<string[]> {
+	const result: string[] = [];
+	const pending = [absoluteRoot];
+	while (pending.length > 0) {
+		const directory = pending.pop();
+		if (!directory) break;
+		const entries = await readdir(directory, { withFileTypes: true });
+		for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+			if (entry.isSymbolicLink()) throw new Error("authorized directory contains a symbolic link");
+			const child = resolve(directory, entry.name);
+			if (entry.isDirectory()) {
+				pending.push(child);
+				continue;
+			}
+			if (!entry.isFile()) continue;
+			const relation = relative(resolve(root), child).split(sep).join("/");
+			if (!relation || relation.startsWith("../")) throw new Error("authorized directory member escapes the workspace");
+			result.push(relation);
+			if (result.length > MAX_DIRECTORY_MEMBERS) return result.sort();
+		}
+	}
+	return result.sort();
 }
 
 export async function atomicWriteAuthorizedFile(root: string, relativePath: string, content: string): Promise<void> {
