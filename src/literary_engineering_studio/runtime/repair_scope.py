@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..contracts import TaskPackage
 from ..preflight.common import PreflightIssue
+from ..protocols.scene_artifacts import is_scene_revision_transaction_path
 
 
 _SCENE_REVISION_STATES = frozenset({"candidate-revision", "static-revision"})
@@ -71,19 +72,9 @@ def _coupled_targets(
     issue_paths = tuple(issue.path.partition("#")[0] for issue in issues)
     if not (
         any(issue.code == "scene-revision-invalid" for issue in issues)
-        or any(_is_revision_transaction_output(path) for path in issue_paths)
+        or any(is_scene_revision_transaction_path(path) for path in issue_paths)
     ):
         return ()
-    return tuple(path for path in writable if _is_revision_transaction_output(path))
-
-
-def _is_revision_transaction_output(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    if not normalized.startswith("drafts/revisions/"):
-        return False
-    name = normalized.rsplit("/", 1)[-1]
-    if not (name.endswith(".md") or name.endswith(".json")):
-        return False
-    stem = name.rsplit(".", 1)[0]
-    suffix = stem.rpartition("_revision")[2]
-    return "_revision" in stem and (not suffix or suffix.startswith("_") and suffix[1:].isdigit())
+    return tuple(
+        path for path in writable if is_scene_revision_transaction_path(path)
+    )

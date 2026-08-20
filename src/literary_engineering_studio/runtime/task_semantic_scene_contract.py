@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..contracts import TaskPackage
+from ..protocols.scene_artifacts import is_scene_revision_manifest_path
 
 
 def scene_revision_contract(
@@ -14,7 +15,10 @@ def scene_revision_contract(
 ) -> dict[str, Any]:
     if current_state not in {"candidate-revision", "static-revision"}:
         return {}
-    path = next((item for item in task.expected_outputs if item.endswith("_revision.json")), "")
+    path = next(
+        (item for item in task.expected_outputs if is_scene_revision_manifest_path(item)),
+        "",
+    )
     if not path:
         return {}
     required_fields = [

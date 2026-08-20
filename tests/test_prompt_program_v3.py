@@ -327,6 +327,40 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertNotIn("candidate_sha256", contract["required_fields"])
         self.assertNotIn("anti_evasion_not_applicable_reason", contract["required_fields"])
 
+    def test_versioned_revision_contract_keeps_semantic_fields_visible(self):
+        root = Path("C:/fixture")
+        task = TaskPackage(
+            project_root=root,
+            task_json_path=root / "task.json",
+            task_markdown_path=root / "task.md",
+            payload={
+                "task_id": "revision-round-2",
+                "route": "scene-development",
+                "current_state": "static-revision",
+                "task_type": "main-platform-agent-prose-revision",
+                "scene_id": "scene_0001",
+                "revision_source": "drafts/scenes/scene_0001.md",
+                "candidate": "drafts/revisions/scene_0001_revision_02.md",
+                "required_reading": [],
+                "source_paths": [],
+                "expected_outputs": [
+                    "drafts/revisions/scene_0001_revision_02.md",
+                    "drafts/revisions/scene_0001_revision_02.json",
+                ],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+            },
+        )
+
+        contract = semantic_output_contract(task)
+
+        self.assertEqual(
+            contract["path"],
+            "drafts/revisions/scene_0001_revision_02.json",
+        )
+        self.assertIn("revision_actions_applied", contract["required_fields"])
+        self.assertIn("new_character_register", contract["required_fields"])
+
     def test_canon_candidate_contract_separates_judgment_from_review_and_identity(self):
         root = Path("C:/fixture")
         task = TaskPackage(

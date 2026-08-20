@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..contracts import TaskPackage
+from ..protocols.scene_artifacts import is_scene_revision_candidate_path
 from ..sandbox import SandboxManifest
 from .style_snapshot import prompt_style_snapshot
 
@@ -352,17 +353,8 @@ def _copy_prompt_standards(
 def _revision_candidate(task: TaskPackage) -> str:
     candidate = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
     return candidate or next(
-        (item for item in task.expected_outputs if _is_revision_candidate_path(item)), ""
+        (item for item in task.expected_outputs if is_scene_revision_candidate_path(item)), ""
     )
-
-
-def _is_revision_candidate_path(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    if not normalized.endswith(".md") or "/drafts/revisions/" not in f"/{normalized}":
-        return False
-    stem = normalized.rsplit("/", 1)[-1][:-3]
-    suffix = stem.rpartition("_revision")[2]
-    return "_revision" in stem and (not suffix or suffix.startswith("_") and suffix[1:].isdigit())
 
 
 def _candidate_path(task: TaskPackage) -> str:
