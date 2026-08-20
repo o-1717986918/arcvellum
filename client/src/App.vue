@@ -23,7 +23,11 @@ import {
 import StartupScene from "@/components/StartupScene.vue";
 import AdvisorDock from "@/components/AdvisorDock.vue";
 import OnboardingTour from "@/components/OnboardingTour.vue";
+import { projectsClient } from "@/features/projects/services/projectsClient";
+import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { applyOrreryExperience } from "@/services/orreryPreferences";
+import { createWorkspaceCommandHandler } from "@/services/workspaceCommandHandler";
+import { workspaceCommandBus } from "@/services/workspaceCommands";
 import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
@@ -33,6 +37,7 @@ const showStartup = ref(true);
 const startupMinimumElapsed = ref(false);
 const startupVisualSkippable = ref(false);
 const showOnboarding = ref(false);
+let removeWorkspaceCommandHandler: (() => void) | null = null;
 applyOrreryExperience({});
 
 const nav = [
@@ -70,6 +75,17 @@ async function enterImmersiveOrrery(): Promise<void> {
 }
 
 onMounted(async () => {
+  removeWorkspaceCommandHandler = workspaceCommandBus.install(createWorkspaceCommandHandler({
+    projectRoot: () => store.currentProjectPath,
+    navigate: async (view) => { await router.push(`/${view}`); },
+    recordDirection: (root, message) => projectsClient.addDirection(root, message),
+    runRoute: async (root, routeName, runtime) => await workflowClient.runWorker(root, routeName, runtime),
+    startAutopilot: async (root, runtime) => await workflowClient.startAutopilot({ project_root: root, runtime }) as unknown as Record<string, unknown>,
+    autopilotStatus: async (root) => await workflowClient.autopilotStatus(root),
+    pauseAutopilot: (runId, reason) => workflowClient.pauseAutopilot(runId, reason),
+    resumeAutopilot: (runId) => workflowClient.resumeAutopilot(runId),
+    refresh: () => store.refreshWorkspace(),
+  }));
   window.addEventListener("arcvellum:onboarding", openOnboarding);
   window.addEventListener("arcvellum:startup-error", handleStartupError);
   const startupError = window.__ARCVELLUM_STARTUP_ERROR?.message;
@@ -116,6 +132,8 @@ function closeOnboarding(): void {
 }
 
 onBeforeUnmount(() => {
+  removeWorkspaceCommandHandler?.();
+  removeWorkspaceCommandHandler = null;
   store.stopProjectStreams();
   window.removeEventListener("arcvellum:onboarding", openOnboarding);
   window.removeEventListener("arcvellum:startup-error", handleStartupError);

@@ -181,6 +181,11 @@ class ArchitectureAuditTests(unittest.TestCase):
 
         self.assertNotIn("client/src/types/generated/api-schema.d.ts", report["oversized_files"])
 
+    def test_client_features_do_not_import_each_others_concrete_components(self):
+        report = audit_repository(REPOSITORY_ROOT)
+
+        self.assertEqual(report["client_cross_feature_component_dependencies"], {})
+
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -27,12 +27,12 @@ import RevisionTimeline from "./components/RevisionTimeline.vue";
 import { useArchiveStore } from "./stores/archive";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
-import GuidedTour from "@/features/onboarding/components/GuidedTour.vue";
+import GuidedTour from "@/onboarding/components/GuidedTour.vue";
 import {
   hasCompletedTour,
   markTourCompleted,
-} from "@/features/onboarding/services/tourState";
-import type { GuidedTourStep } from "@/features/onboarding/types";
+} from "@/onboarding/services/tourState";
+import type { GuidedTourStep } from "@/onboarding/types";
 import type { RecycleEntry } from "./types";
 import type { ArchiveCreationPayload } from "./types";
 import { fetchArchiveWorkerJob } from "./services/archiveClient";

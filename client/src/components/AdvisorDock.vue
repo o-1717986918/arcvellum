@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import {
   ArrowUp,
   Bell,
@@ -19,15 +19,13 @@ import {
   X,
 } from "lucide-vue-next";
 import { advisorClient } from "@/features/advisor/services/advisorClient";
-import { projectsClient } from "@/features/projects/services/projectsClient";
-import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { renderSafeMarkdown } from "@/services/markdown";
 import { readCreativeRuntime } from "@/services/runtimePreference";
+import { workspaceCommandBus, type WorkspaceCommand, type WorkspaceView } from "@/services/workspaceCommands";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AdvisorAction, AdvisorAnswer, AdvisorMessage, AdvisorSession } from "@/types/api";
 const store = useAppStore();
 const route = useRoute();
-const router = useRouter();
 const open = ref(false);
 const loadingSession = ref(false);
 const thinking = ref(false);
@@ -386,44 +384,41 @@ async function runAction(action: AdvisorAction): Promise<void> {
   if (!store.currentProjectPath || actionBusy.value) return;
   actionBusy.value = action.label;
   try {
+    let command: WorkspaceCommand;
     if (action.type === "open_view") {
-      await router.push(`/${action.target || "overview"}`);
-      open.value = false;
+      command = { type: "navigate", view: workspaceView(action.target) };
     } else if (action.type === "record_direction") {
-      await projectsClient.addDirection(store.currentProjectPath, action.message || action.label);
-      store.notice = "这条想法已经交给创作流程。";
+      command = { type: "record-direction", message: action.message || action.label };
     } else if (action.type === "run_next_task" || action.type === "prepare_next_task") {
-      const allowedRoutes = new Set(["auto", "scene-development", "longform-planning", "style-engineering", "character-and-world-assets", "review-and-audit", "export-and-release"]);
-      await workflowClient.runWorker(store.currentProjectPath, allowedRoutes.has(action.route || "") ? String(action.route) : "auto", readCreativeRuntime());
-      store.notice = "下一项创作任务已经启动。";
-      await store.loadDashboard();
+      command = { type: "run-route", route: action.route || "auto", runtime: readCreativeRuntime() };
     } else if (action.type === "start_autopilot") {
-      await workflowClient.startAutopilot({ project_root: store.currentProjectPath, runtime: readCreativeRuntime() });
-      store.notice = "连续创作已经开始。";
-      await store.loadDashboard();
+      command = { type: "start-autopilot", runtime: readCreativeRuntime() };
     } else if (action.type === "pause_autopilot") {
-      const state = await workflowClient.autopilotStatus(store.currentProjectPath);
-      if (state.run?.run_id && state.run.status === "running") {
-        await workflowClient.pauseAutopilot(state.run.run_id, "advisor-user-request");
-        store.notice = "连续创作已经暂停。";
-      }
+      command = { type: "pause-autopilot", reason: "advisor-user-request" };
     } else if (action.type === "resume_autopilot") {
-      const state = await workflowClient.autopilotStatus(store.currentProjectPath);
-      if (state.run?.run_id && ["paused", "blocked", "failed"].includes(state.run.status)) {
-        await workflowClient.resumeAutopilot(state.run.run_id);
-        store.notice = "连续创作已经继续。";
-      } else {
-        store.notice = "当前没有可以恢复的连续创作任务。";
-      }
+      command = { type: "resume-autopilot" };
     } else if (action.type === "request_revision") {
-      await projectsClient.addDirection(store.currentProjectPath, `修订方向：${action.message || action.label}`);
-      store.notice = "修订要求已经加入创作方向。";
+      command = { type: "record-direction", message: `修订方向：${action.message || action.label}` };
+    } else {
+      throw new Error("这个顾问动作尚未接入工作区控制台。");
     }
+    const result = await workspaceCommandBus.dispatch(command);
+    store.notice = result.message;
+    if (command.type === "navigate" && result.ok) open.value = false;
   } catch (cause) {
     store.error = friendlyError(cause, "这个动作暂时无法完成。");
   } finally {
     actionBusy.value = "";
   }
+}
+
+function workspaceView(value?: string): WorkspaceView {
+  const candidate = String(value || "overview") as WorkspaceView;
+  const allowed = new Set<WorkspaceView>([
+    "projects", "overview", "reader", "archive", "archaeology", "style", "quality",
+    "strategy", "observatory", "delivery", "settings", "help", "details", "legal",
+  ]);
+  return allowed.has(candidate) ? candidate : "overview";
 }
 
 function stopAnswer(): void {

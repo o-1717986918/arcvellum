@@ -2,10 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Activity, ArrowUpRight, BookOpenText, CircleAlert, CircleCheck, Download, FileCheck2, Focus, GitBranch, PackageOpen, RefreshCw, Route, ScanSearch } from "lucide-vue-next";
 import SpatialWindowFrame from "@/features/orrery/SpatialWindowFrame.vue";
-import RulesInstrument from "@/features/quality/RulesInstrument.vue";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
+import WorkspaceRulesInstrument from "@/components/WorkspaceRulesInstrument.vue";
 import { deliveryClient } from "@/features/delivery/services/deliveryClient";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
@@ -338,7 +338,7 @@ onBeforeUnmount(() => {
         <div class="spatial-decision-window"><header><span class="instrument-overline">HUMAN CHOICE</span><strong class="instrument-title">由你决定的创作分岔</strong></header><div v-if="choices.length" class="spatial-decision-list"><article v-for="choice in choices" :key="String(choice.choice_id || choice.id)"><GitBranch :size="16" /><div><span v-if="choice.recommended" class="decision-recommendation">建议方向</span><strong>{{ choice.title || choice.prompt || '创作方向选择' }}</strong><SafeMarkdown :source="choice.summary || choice.description || '查看候选方向和它对后续创作的影响。'" /><ul v-if="choiceOptions(choice).length"><li v-for="option in choiceOptions(choice)" :key="String(option.id)">{{ option.label || option.id }}</li></ul></div><button class="text-button" @click="emit('choose', choice)">比较</button></article></div><p v-else>当前没有需要你决定的分支、设定或修订方向。正在运行的任务会出现在“推进”中，不会被误当成人工选择。</p></div>
       </template>
       <template v-else-if="item.kind === 'rules'">
-        <div class="spatial-rules-window"><div class="spatial-instrument-content"><span class="instrument-overline">NARRATIVE CONSTRAINTS</span><strong class="instrument-title">创作规则与叙事呼吸</strong><p>文风、Canon、字数预算、标点与表达规则会写入正式任务包，并在审查与晋升前复核。</p><div class="rule-signal-grid"><span :class="{ ready: Number(libraryCounts.style || 0) > 0 }">文风挂载 <b>{{ Number(libraryCounts.style || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.word_budget || 0) > 0 }">字数预算 <b>{{ Number(libraryCounts.word_budget || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.rhythm || 0) > 0 }">节奏合同 <b>{{ Number(libraryCounts.rhythm || 0) > 0 ? '已就绪' : '待补齐' }}</b></span></div></div><RulesInstrument /></div>
+        <div class="spatial-rules-window"><div class="spatial-instrument-content"><span class="instrument-overline">NARRATIVE CONSTRAINTS</span><strong class="instrument-title">创作规则与叙事呼吸</strong><p>文风、Canon、字数预算、标点与表达规则会写入正式任务包，并在审查与晋升前复核。</p><div class="rule-signal-grid"><span :class="{ ready: Number(libraryCounts.style || 0) > 0 }">文风挂载 <b>{{ Number(libraryCounts.style || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.word_budget || 0) > 0 }">字数预算 <b>{{ Number(libraryCounts.word_budget || 0) > 0 ? '已就绪' : '待补齐' }}</b></span><span :class="{ ready: Number(libraryCounts.rhythm || 0) > 0 }">节奏合同 <b>{{ Number(libraryCounts.rhythm || 0) > 0 ? '已就绪' : '待补齐' }}</b></span></div></div><WorkspaceRulesInstrument /></div>
       </template>
       <template v-else>
         <div class="spatial-instrument-content"><span class="instrument-overline">COMING INTO VIEW</span><strong class="instrument-title">{{ item.title }}</strong><p>这个仪表正在迁入新的空间工作台；它不会替代任何正式流程。</p></div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import GuidedTour from "@/features/onboarding/components/GuidedTour.vue";
-import type { GuidedTourStep } from "@/features/onboarding/types";
+import GuidedTour from "@/onboarding/components/GuidedTour.vue";
+import type { GuidedTourStep } from "@/onboarding/types";
 
 const props = defineProps<{ active: boolean; hasProject: boolean }>();
 const emit = defineEmits<{ complete: []; dismiss: [] }>();

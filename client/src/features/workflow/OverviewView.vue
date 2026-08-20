@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { ArrowRight, CircleAlert, CircleCheck, Clock3, Eye, EyeOff, Image, Maximize2, Minimize2, Palette, Play, Route, X } from "lucide-vue-next";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ImmersiveConsole from "@/components/ImmersiveConsole.vue";
 import StoryTrace from "@/components/StoryTrace.vue";
+import WorkspaceOrreryHost from "@/components/WorkspaceOrreryHost.vue";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { readCreativeRuntime } from "@/services/runtimePreference";
 import { asList, asRecord, describeGate, describeWorkflowAction, formatCount, labelFor, manuscriptItems, targetLabel, workflowStepLabel } from "@/services/presentation";
@@ -14,8 +15,6 @@ import { loadOrreryBackground } from "@/services/orreryAssets";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
 import type { ImmersivePanel } from "@/types/immersive";
-
-const OrreryWorkbench = defineAsyncComponent(() => import("@/features/orrery/OrreryWorkbench.vue"));
 
 const store = useAppStore();
 const humanChoices = useHumanChoicesStore();
@@ -210,7 +209,7 @@ function advanceSpatialRun(): void {
 <template>
   <div class="overview-view" :class="{ 'is-immersive': immersive, 'instruments-hidden': immersive && !instrumentsVisible, 'console-open': immersive && immersivePanels.length, 'spatial-active': engine === 'spatial' }" :data-orrery-background="background" :data-orrery-engine="engine">
     <section class="orrery-hero" :style="heroStyle">
-      <OrreryWorkbench v-if="engine === 'spatial'" :dashboard="dashboard" :immersive="immersive" @advance="advanceSpatialRun" @inspect-task="inspectSpatialTask" @open-reader="openSpatialReader" @choose="openChoice" />
+      <WorkspaceOrreryHost v-if="engine === 'spatial'" :dashboard="dashboard" :immersive="immersive" @advance="advanceSpatialRun" @inspect-task="inspectSpatialTask" @open-reader="openSpatialReader" @choose="openChoice" />
       <StoryTrace v-else :dashboard="dashboard" :immersive="immersive" />
 
       <div class="orrery-view-tools" aria-label="叙事星仪视图">
