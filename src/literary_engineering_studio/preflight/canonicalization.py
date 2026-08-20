@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -27,21 +26,10 @@ from .scene_review_metadata import canonicalize_scene_review_metadata
 from .style_snapshot import prompt_style_snapshot
 from .style_metadata import canonicalize_style_machine_metadata
 from ..sandbox import SandboxManifest
-from literary_engineering_studio_engine.public.prompting import load_schema_spec
-from literary_engineering_studio_engine.public.tasking import (
-    semantic_artifact_definition,
-    semantic_artifact_relative_path,
-)
 from literary_engineering_studio_engine.public.literary import REQUIRED_FIELDS
+from .completion_receipts import canonicalize_agent_completion_markers
+from .semantic_metadata import canonicalize_semantic_artifact_metadata
 
-
-SEMANTIC_SOURCE_PATTERNS = {
-    "roleplay-agent-task": "branches/{scene_id}/roleplay_simulation.md",
-    "branch-agent-task": "branches/{scene_id}/branch_manifest.json",
-    "composition-agent-task": "drafts/compositions/{scene_id}_composition.json",
-    "state-agent-task": "characters/state_patches/{scene_id}_state_patch.json",
-    "canon-agent-task": "canon/patches/{scene_id}_canon_patch.json",
-}
 
 def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
     """Normalize semantically identical machine markers without changing a review verdict."""
@@ -134,73 +122,13 @@ def _canonicalize_archaeology_chunk_metadata(
 
 
 def _canonicalize_semantic_artifact_metadata(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Normalize task-owned semantic artifact identity without editing judgment.
-
-    Agents own the roleplay/composition/state/canon reasoning.  The schema
-    discriminator, scene identity and standard spelling of a finished status
-    are state-machine facts.  In particular, a model spelling ``completed``
-    must not turn a complete roleplay into a dead-end route failure.
-    """
-
-    current_state = str(task.current_state or task.payload.get("current_state") or "")
-    scene_id = str(task.payload.get("scene_id") or "").strip()
-    definition = semantic_artifact_definition(current_state)
-    relative = semantic_artifact_relative_path(current_state, scene_id)
-    if definition is None or not relative:
-        return []
-    path = sandbox.workspace / Path(relative)
-    payload = _read_object(path)
-    if payload is None:
-        return []
-
-    schema_spec = load_schema_spec(definition["schema_name"])
-    expected = {
-        "schema": str(schema_spec.get("schema_value") or payload.get("schema") or ""),
-        "scene_id": scene_id,
-    }
-    expected_source = SEMANTIC_SOURCE_PATTERNS.get(current_state, "").format(scene_id=scene_id)
-    if expected_source:
-        expected["source_artifact"] = expected_source
-        source_path = sandbox.workspace / Path(expected_source)
-        if source_path.is_file():
-            digest_key = {
-                "composition-agent-task": "composition_sha256",
-                "state-agent-task": "state_patch_sha256",
-                "canon-agent-task": "canon_patch_sha256",
-            }.get(current_state, "")
-            if digest_key:
-                expected[digest_key] = hashlib.sha256(source_path.read_bytes()).hexdigest()
-    status_aliases = {
-        "completed": "complete",
-        "done": "complete",
-        "passed": "complete",
-        # Review Agents commonly use their verdict vocabulary in the lifecycle
-        # field.  ``status`` is bookkeeping, so this is safe to normalize.
-        "pass": "complete",
-    }
-    actual_status = str(payload.get("status") or "").strip().lower()
-    if actual_status in status_aliases:
-        expected["status"] = status_aliases[actual_status]
-    # ``verdict`` is creative judgment and is normally left untouched.  The
-    # one harmless mismatch is a review that has stated it is ready and has no
-    # required changes, but wrote the lifecycle word "complete" as its
-    # verdict.  Canonicalize that representation rather than consuming a full
-    # repair turn on a field swap.
-    if (
-        current_state == "composition-agent-task"
-        and str(payload.get("verdict") or "").strip().lower() in {"complete", "completed"}
-        and payload.get("ready_for_generation") is True
-        and not payload.get("required_changes")
-    ):
-        expected["verdict"] = "pass"
-    changes = _write_machine_fields(path, relative, payload, expected, "semantic-artifact")
-    # Agent output frequently represents one finding as an object and several
-    # findings as a list.  For a schema-declared list field, wrapping an
-    # existing non-empty value preserves the Agent's judgment exactly while
-    # removing a purely mechanical container mismatch.  Missing/null/blank
-    # fields remain invalid so the Worker never invents creative evidence.
-    list_changes = _canonicalize_declared_list_fields(path, relative, payload, schema_spec)
-    return [*changes, *list_changes]
+    return canonicalize_semantic_artifact_metadata(
+        task,
+        sandbox,
+        read_object=_read_object,
+        write_machine_fields=_write_machine_fields,
+        canonicalize_declared_list_fields=_canonicalize_declared_list_fields,
+    )
 
 
 def _canonicalize_canon_patch_candidate_metadata(
@@ -400,71 +328,4 @@ def _canonicalize_project_review_metadata(task: TaskPackage, sandbox: SandboxMan
 
 
 def _canonicalize_agent_completion_markers(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:
-    """Emit machine-owned lifecycle receipts after substantive output exists."""
-
-    task_type = str(task.payload.get("task_type") or "")
-    legacy_agent_states = {
-        "roleplay-agent-task", "branch-agent-task", "branch-selection", "composition-agent-task",
-        "state-agent-task", "canon-agent-task", "continuity-ledger-agent-task", "continuity-ledger-review",
-    }
-    agent_required = (
-        str(task.payload.get("execution_policy") or "") == "agent-required"
-        or task_type.startswith(("platform-agent", "main-platform-agent"))
-        or task.current_state in legacy_agent_states
-    )
-    if not agent_required or task.route == "character-and-world-assets":
-        return []
-    marker_outputs = [item for item in task.expected_outputs if item.endswith(".agent_completion.json")]
-    if not marker_outputs:
-        return []
-    non_markers = [item for item in task.expected_outputs if not item.endswith(".agent_completion.json")]
-    if not non_markers or any(
-        not (sandbox.workspace / Path(item)).is_file()
-        or (sandbox.workspace / Path(item)).stat().st_size == 0
-        for item in non_markers
-    ):
-        return []
-    owned = task.payload.get("system_owned_fields") if isinstance(task.payload.get("system_owned_fields"), dict) else {}
-    lifecycle = owned.get("lifecycle") if isinstance(owned.get("lifecycle"), dict) else {}
-    receipts = lifecycle.get("completion_receipts") if isinstance(lifecycle.get("completion_receipts"), list) else []
-    receipt_by_path = {
-        str(item.get("path") or "").replace("\\", "/"): item
-        for item in receipts
-        if isinstance(item, dict)
-    }
-    changes: list[dict[str, str]] = []
-    for relative in marker_outputs:
-        contract = receipt_by_path.get(relative.replace("\\", "/"), {})
-        base = relative[: -len(".agent_completion.json")]
-        source_task = str(
-            contract.get("source_task")
-            or base + (".md" if base.endswith(".agent_tasks") else ".agent_tasks.md")
-        )
-        status = str(contract.get("status") or "complete")
-        checked = bool(contract.get("expected_artifacts_checked", status == "complete"))
-        payload = {
-            "schema": str(contract.get("schema") or "literary-engineering-workbench/agent-task-completion/v1"),
-            "source_task": source_task,
-            "status": status,
-            "handled_by": "studio-worker",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "expected_artifacts_checked": checked,
-            "notes": ["Machine-owned completion receipt; route gates validate the Agent-authored result separately."],
-        }
-        path = sandbox.workspace / Path(relative)
-        existing = _read_object(path)
-        comparable = dict(payload)
-        comparable.pop("completed_at")
-        existing_comparable = dict(existing or {})
-        existing_comparable.pop("completed_at", None)
-        source_task_path = sandbox.workspace / Path(source_task)
-        receipt_is_fresh = path.is_file() and (
-            not source_task_path.is_file()
-            or path.stat().st_mtime_ns >= source_task_path.stat().st_mtime_ns
-        )
-        if existing_comparable == comparable and receipt_is_fresh:
-            continue
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        changes.append({"path": relative, "field": "completion", "reason": "generated deterministic Agent-task completion metadata"})
-    return changes
+    return canonicalize_agent_completion_markers(task, sandbox, read_object=_read_object)

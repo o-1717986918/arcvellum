@@ -1,4 +1,4 @@
-"""Pure compatibility parser for advisor answers and action metadata."""
+"""Pure parser for advisor answers and action metadata."""
 
 from __future__ import annotations
 

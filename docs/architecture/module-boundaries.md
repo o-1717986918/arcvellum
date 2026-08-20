@@ -581,10 +581,16 @@ Studio Advisor 分为：
 顶层 facade 固定保留 `PreflightIssue`、`PreflightResult`、`canonicalize_task_outputs` 与 `validate_task_outputs`。具体实现位于 `preflight/`：
 
 - `common`：DTO、completion evidence、通用 JSON 与 review conclusion 检查；
-- `canonicalization`：只补 task-owned deterministic metadata；
-- `scene`、`assets`、`review`：各自 route 的 Gate，只向统一 issue list 追加结果。
+- `canonicalization`：按固定顺序编排 task-owned deterministic metadata；
+- `semantic_metadata`：只绑定 semantic artifact 的 schema、scene/source identity、digest 与 lifecycle alias；
+- `completion_receipts`：只在全部实质产物存在后写 machine-owned completion receipt；
+- `asset_candidate`、`asset_review`：分别验证资产候选 schema/metadata 与资产审查/修订契约；
+- `project_review`、`declared_repair`：分别验证项目级审查结论与声明修复目标的实质变化；
+- `scene`、`assets`、`review`：保留各 route 的稳定导入面，只向统一 issue list 追加结果。
 
 规范化和验证不能互相绕过：任何新 Gate 都要由 facade 纳入固定顺序，并用 Worker sandbox 真实链路覆盖。
+semantic/list canonicalization 只能规范已有值的机器表示，不能补造缺失的文学证据；project/asset validator 只能报告问题，不能替
+Agent 改 verdict、action 或候选内容。
 
 ### `autopilot.py`
 
