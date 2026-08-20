@@ -282,7 +282,39 @@ class IncrementalRepairContextTests(unittest.TestCase):
         reasoning = payload["budgets"]["reasoning"]
         self.assertEqual(reasoning["action"], "retry_same")
         self.assertEqual(reasoning["level"], "low")
+        self.assertEqual(prepared.reasoning_level, "low")
         self.assertIn("机械格式", prepared.prompt)
+
+    def test_semantic_conflict_exposes_a_real_next_worker_level(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root, ("out/result.json",))
+            coordinator = RepairContextCoordinator(
+                task,
+                _sandbox(root),
+                reasoning_budget=resolve_reasoning_budget(
+                    ContextTaskKind.REVIEW,
+                    "agent-required",
+                ),
+            )
+            prepared = coordinator.prepare(
+                PreflightResult(
+                    False,
+                    (
+                        PreflightIssue(
+                            "canon-conflict",
+                            "out/result.json",
+                            "结论与 Canon 冲突。",
+                            "重新进行语义判断。",
+                        ),
+                    ),
+                ),
+                1,
+                2,
+            )
+
+        self.assertEqual(prepared.reasoning_level, "medium")
+        self.assertEqual(prepared.event_fields()["repair_reasoning_level"], "medium")
 
     def test_quantitative_word_budget_repair_overrides_same_length_local_edit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

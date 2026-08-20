@@ -48,6 +48,7 @@ class PreparedRepairContext:
     protected_count: int
     excerpt_characters: int
     repair_targets: tuple[str, ...]
+    reasoning_level: str
 
     def event_fields(self) -> dict[str, object]:
         return {
@@ -57,6 +58,7 @@ class PreparedRepairContext:
             "repair_target_count": self.target_count,
             "repair_protected_count": self.protected_count,
             "repair_write_scope_mode": self.write_scope_mode,
+            "repair_reasoning_level": self.reasoning_level,
             "repair_context_artifact": (
                 f"repairs/{self.artifact_path.parent.name}/"
                 f"{self.artifact_path.name}"
@@ -115,6 +117,7 @@ class RepairContextCoordinator:
             self.sandbox.workspace,
             protected,
         )
+        reasoning_contract = _reasoning_repair_contract(self.reasoning_budget, result, attempt)
         semantic_payload = _semantic_payload_with_guard(
             self.task,
             result,
@@ -126,12 +129,10 @@ class RepairContextCoordinator:
             invalid_outputs,
             protected_outputs,
             excerpt_characters,
-            _reasoning_repair_contract(self.reasoning_budget, result, attempt),
+            reasoning_contract,
             self._seen_issue_codes,
         )
-        semantic_payload["repair_session"] = (
-            "same-session" if self.same_session_required else "fresh-bounded-session"
-        )
+        semantic_payload["repair_session"] = "same-session" if self.same_session_required else "fresh-bounded-session"
         digest = _canonical_sha256(semantic_payload)
         payload = {**semantic_payload, "context_digest": digest}
         prompt = render_repair_prompt(payload)
@@ -161,6 +162,7 @@ class RepairContextCoordinator:
             protected_count=len(protected),
             excerpt_characters=excerpt_characters,
             repair_targets=targets,
+            reasoning_level=str(reasoning_contract.get("level") or ""),
         )
 
     def finalize(self) -> dict[str, object]:

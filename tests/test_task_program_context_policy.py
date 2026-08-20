@@ -6,6 +6,7 @@ import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.runtime.task_program import (
+    build_task_context,
     render_worker_program,
 )
 
@@ -26,6 +27,16 @@ class _Envelope:
 
 
 class TaskProgramContextPolicyTests(unittest.TestCase):
+    def test_task_context_uses_a_stable_non_path_project_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = build_task_context(_task(root))
+            second = build_task_context(_task(root))
+
+        self.assertEqual(first["project_id"], second["project_id"])
+        self.assertRegex(str(first["project_id"]), r"^project-[0-9a-f]{16}$")
+        self.assertNotIn(str(root), str(first["project_id"]))
+
     def test_exact_protected_sidecar_is_recovery_evidence_not_forced_read(self):
         with tempfile.TemporaryDirectory() as temporary:
             task = _task(Path(temporary))

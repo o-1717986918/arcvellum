@@ -8,6 +8,7 @@ export interface OutputContract {
 export interface TaskContext {
 	schema: string;
 	taskId: string;
+	projectId: string;
 	route: string;
 	currentState: string;
 	agentRole: string;

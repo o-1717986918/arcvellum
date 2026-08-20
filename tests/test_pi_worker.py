@@ -389,6 +389,7 @@ class PiWorkerRuntimeTests(unittest.TestCase):
                 repair_prompt_builder=lambda _result, attempt, maximum: SimpleNamespace(
                     prompt=f"# Studio Incremental Repair {attempt}/{maximum}\nfix the fixture output",
                     repair_targets=("result.md",),
+                    reasoning_level="medium",
                     event_fields=lambda: {"repair_context_digest": "fixture"},
                 ),
                 repair_turn_finalizer=lambda: {"restored_output_count": 0},
@@ -408,6 +409,8 @@ class PiWorkerRuntimeTests(unittest.TestCase):
             invocation[invocation.index("--repair-target") + 1],
             "result.md",
         )
+        self.assertEqual(invocation[invocation.index("--thinking") + 1], "medium")
+        self.assertEqual(result.metadata["repair_reasoning_level"], "medium")
 
     def test_reasoning_budget_exhaustion_is_non_retryable_no_progress(self):
         with tempfile.TemporaryDirectory() as temporary:

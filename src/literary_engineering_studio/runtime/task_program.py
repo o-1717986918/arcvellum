@@ -22,6 +22,7 @@ from .prompt_metrics import PromptLintReport, PromptMetrics, lint_prompt, measur
 from .prompt_program import PromptProgram
 from .prompt_recipes import prompt_recipe
 from .prompt_renderer import render_file_agent_program, render_tool_worker_program
+from .resources import project_identity
 from .task_completion import (
     build_task_completion_contract,
     completion_program_fields,
@@ -72,6 +73,7 @@ def build_task_context(
         "schema": "literary-engineering-studio/task-context/v0.2",
         "compatible_with": ["literary-engineering-studio/task-context/v0.1"],
         "task_id": task.task_id,
+        "project_id": project_identity(task.project_root),
         "route": task.route,
         "current_state": task.current_state,
         "scene_id": str(task.payload.get("scene_id") or ""),

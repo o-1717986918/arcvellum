@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { RuntimeEventSink, WorkerOptions, WorkerState } from "./contracts.ts";
@@ -15,6 +14,8 @@ import { loadTaskContext } from "./task-context.ts";
 import { createWorkerTools, progressDigest, validateSubmittedOutputs } from "./tools.ts";
 import { workerProfile } from "./worker-profile.ts";
 import { readAuthorizedFile } from "./path-policy.ts";
+import { executionIdentities, type ExecutionIdentities } from "./execution-identity.ts";
+import { workerExecutionStrategy } from "./worker-strategy.ts";
 import {
 	ProviderReliabilitySession,
 	classifyProviderFailure,
@@ -51,6 +52,9 @@ export interface WorkerResult {
 	validationPassed: boolean;
 	reasoning_budget: ReturnType<typeof reasoningBudgetReceipt>;
 	provider_reliability: ProviderReliabilityReceipt;
+	runSessionId: string;
+	promptCacheKey: string;
+	executionStrategy: string;
 }
 
 export async function runWorker(options: WorkerOptions, prompt: string, emit: RuntimeEventSink): Promise<WorkerResult> {
@@ -84,8 +88,10 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		lastToolError: null,
 		progressDigests: [],
 	};
-	const sessionId = sessionIdentity(context.taskId, options.model);
 	const profile = workerProfile(context.agentRole, options.mode);
+	const identities = executionIdentities(context, profile, options.model, options.mode);
+	const sessionId = identities.runSessionId;
+	const strategy = workerExecutionStrategy(context.agentRole);
 	const repairSources = options.mode === "repair"
 		? await existingRepairSources(context, options.workspace)
 		: [];
@@ -94,6 +100,14 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		version: profile.version,
 		role: profile.role,
 		digest: profile.digest,
+	});
+	emit("runner.execution.identity", {
+		run_session_id: identities.runSessionId,
+		prompt_cache_key: identities.promptCacheKey,
+	});
+	emit("runner.strategy.bound", {
+		strategy: strategy.id,
+		semantic_judgment: strategy.semanticJudgment,
 	});
 	const budgetSupport = providerBudgetSupport(model, options.reasoningBudget);
 	const effectiveThinking = safeThinkingLevel(model, options.thinking);
@@ -122,7 +136,7 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			streamContext,
 			{ ...streamOptions, ...streamControls },
 		),
-		sessionId,
+		sessionId: identities.promptCacheKey,
 		toolExecution: "sequential",
 		thinkingBudgets: reasoningThinkingBudgets(options.reasoningBudget)
 			?? { minimal: 128, low: 512, medium: 1024, high: 2048 },
@@ -189,7 +203,7 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			if (state.progressDigests.length > 3) state.progressDigests.shift();
 			const last = state.progressDigests;
 			const repeated = repeatedProgressCount(last);
-			if (repeated >= noProgressTurnLimit(context.agentRole)) {
+			if (repeated >= strategy.noProgressTurnLimit) {
 				state.blocked = true;
 				state.blockerReason = state.lastToolError
 					? `no-progress guard stopped repeated tool failure: ${state.lastToolError.tool}: ${state.lastToolError.reason}`
@@ -236,6 +250,8 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			sanitizeProviderError(providerFailure.message),
 			providerFailure.retryable,
 			reliability.receipt(),
+			identities,
+			strategy.id,
 		);
 	}
 	if (isProviderEmptyResponse(state)) {
@@ -253,15 +269,17 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			undefined,
 			true,
 			reliability.receipt(),
+			identities,
+			strategy.id,
 		);
 	}
 	if (state.completed) {
-		return buildResult("completed", "outputs submitted for Studio preflight", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt());
+		return buildResult("completed", "outputs submitted for Studio preflight", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt(), identities, strategy.id);
 	}
 	if (state.blocked) {
-		return buildResult("blocked", state.blockerReason || "worker reported a blocker", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt());
+		return buildResult("blocked", state.blockerReason || "worker reported a blocker", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt(), identities, strategy.id);
 	}
-	return buildResult("incomplete", "model stopped without calling complete_task", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt());
+	return buildResult("incomplete", "model stopped without calling complete_task", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt(), identities, strategy.id);
 }
 
 export function toolMatchesLease(requiredToolLease: string, toolName: string): boolean {
@@ -493,6 +511,8 @@ function buildResult(
 	providerError?: string,
 	providerFailureRetryable?: boolean,
 	providerReliability?: ProviderReliabilityReceipt,
+	identities: ExecutionIdentities = { runSessionId: "", promptCacheKey: "" },
+	executionStrategy = "artifact",
 ): WorkerResult {
 	const reliability = providerReliability ?? {
 		policy: { ...options.providerReliability },
@@ -519,6 +539,9 @@ function buildResult(
 		validationPassed: state.lastValidation.passed,
 		reasoning_budget: reasoningBudgetReceipt(options.reasoningBudget, state, budgetSupport, effectiveThinking),
 		provider_reliability: reliability,
+		runSessionId: identities.runSessionId,
+		promptCacheKey: identities.promptCacheKey,
+		executionStrategy,
 	};
 }
 
@@ -548,10 +571,7 @@ function parseModelId(value: string): [string, string] {
 }
 
 export function noProgressTurnLimit(agentRole: string): number {
-	// A prose model may form a long draft before emitting its tool call. Three
-	// identical digests leave one bounded landing opportunity; all non-prose
-	// roles remain fail-closed at two.
-	return agentRole === "main-creative-agent" ? 3 : 2;
+	return workerExecutionStrategy(agentRole).noProgressTurnLimit;
 }
 
 function repeatedProgressCount(values: readonly string[]): number {
@@ -560,9 +580,4 @@ function repeatedProgressCount(values: readonly string[]): number {
 	let count = 0;
 	for (let index = values.length - 1; index >= 0 && values[index] === latest; index -= 1) count += 1;
 	return count;
-}
-
-function sessionIdentity(taskId: string, model: string): string {
-	const digest = createHash("sha256").update(`${taskId}\0${model}\0${process.pid}\0${Date.now()}`).digest("hex").slice(0, 24);
-	return `arcvellum-${digest}`;
 }

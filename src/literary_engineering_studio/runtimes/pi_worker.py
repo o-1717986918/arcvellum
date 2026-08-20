@@ -25,6 +25,8 @@ from .pi_worker_repair import run_pi_worker_repairs
 _WORKER_EVENTS = frozenset(
     {
         "runner.ready",
+        "runner.execution.identity",
+        "runner.strategy.bound",
         "runner.session.created",
         "runner.session.finished",
         "runner.session.status",
@@ -248,7 +250,7 @@ class PiWorkerRuntime(AgentRuntime):
                 max_repairs=int(max_repairs or 0),
                 repair_prompt_builder=repair_prompt_builder,
                 repair_turn_finalizer=repair_turn_finalizer,
-                run_turn=lambda repair_prompt, repair_root, repair_targets: self._execute_once(
+                run_turn=lambda repair_prompt, repair_root, repair_targets, repair_reasoning: self._execute_once(
                     workspace,
                     repair_prompt,
                     repair_root,
@@ -256,6 +258,7 @@ class PiWorkerRuntime(AgentRuntime):
                     event_sink=event_sink,
                     cancel_event=cancel_event,
                     repair_targets=repair_targets,
+                    reasoning_policy=repair_reasoning,
                 ),
                 emit=event_sink or (lambda _event, _data: None),
             )
@@ -272,6 +275,7 @@ class PiWorkerRuntime(AgentRuntime):
         event_sink=None,
         cancel_event=None,
         repair_targets: Sequence[str] = (),
+        reasoning_policy: str = "",
     ) -> RuntimeResult:
         previous = dict(self._execution_overrides)
         if repair_targets:
@@ -281,6 +285,8 @@ class PiWorkerRuntime(AgentRuntime):
                     "repair_targets": tuple(repair_targets),
                 }
             )
+        if reasoning_policy:
+            self._execution_overrides["reasoning_policy"] = reasoning_policy
         try:
             result = super().execute(
                 workspace,

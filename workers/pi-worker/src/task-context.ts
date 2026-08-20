@@ -66,6 +66,7 @@ export async function loadTaskContext(
 	return {
 		schema,
 		taskId,
+		projectId: stringValue(raw.project_id) || "project-legacy",
 		route,
 		currentState,
 		agentRole: requiredString(raw, "agent_role"),
@@ -92,6 +93,7 @@ export function publicTaskProjection(context: TaskContext): Record<string, unkno
 	return {
 		schema: context.schema,
 		task_id: context.taskId,
+		project_id: context.projectId,
 		route: context.route,
 		current_state: context.currentState,
 		agent_role: context.agentRole,
