@@ -13,7 +13,7 @@ import re
 import shutil
 from typing import Any, Iterable, Mapping
 
-from literary_engineering_studio_engine.foundation.resources import engine_root
+from literary_engineering_studio_engine.public.projects import engine_root
 from ..contracts import TaskPackage
 from .context_budget import TaskContextBudget
 from .context_materialization import materialize_agent_context_contract

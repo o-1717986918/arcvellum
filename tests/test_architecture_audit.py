@@ -100,6 +100,18 @@ class ArchitectureAuditTests(unittest.TestCase):
         self.assertTrue(any("new projection-to-application dependency" in item for item in violations))
         self.assertTrue(any("new cross-feature Vue component dependency" in item for item in violations))
 
+    def test_engine_public_api_is_not_counted_as_internal_layout_debt(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root / "src/literary_engineering_studio/public_consumer.py",
+                "from literary_engineering_studio_engine.public.projects import init_work_project\n",
+            )
+
+            report = audit_repository(root)
+
+        self.assertEqual(report["studio_engine_dependencies"], {})
+
     def test_synthetic_repository_exposes_budget_cycle_facade_and_route_debt(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

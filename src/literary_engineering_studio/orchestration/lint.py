@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from literary_engineering_studio_engine.orchestration import (
+from literary_engineering_studio_engine.public.orchestration import (
     PlanNodeKind,
     formal_task_capability,
     mandatory_gates_for,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 
-from literary_engineering_studio_engine.orchestration import default_route_macro
+from literary_engineering_studio_engine.public.orchestration import default_route_macro
 
 from .constitution import constitution_v1
 from .contracts import (

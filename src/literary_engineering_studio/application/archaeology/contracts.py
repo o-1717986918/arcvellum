@@ -6,7 +6,7 @@ import base64
 from dataclasses import dataclass
 from pathlib import Path
 
-from literary_engineering_studio_engine.projects.source_ingest import (
+from literary_engineering_studio_engine.public.projects import (
     INGEST_MODES,
     TEXT_EXTENSIONS,
 )

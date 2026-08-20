@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from literary_engineering_studio_engine.orchestration import PlanNodeKind
+from literary_engineering_studio_engine.public.orchestration import PlanNodeKind
 
 from ..protocols.violations import RelatedContractViolation
 from .contracts import PlanTaskNode

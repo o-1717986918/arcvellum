@@ -14,7 +14,7 @@ from ..runtime.engine_bridge import CoreBridge
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
 )
-from literary_engineering_studio_engine.foundation.draft_text import (
+from literary_engineering_studio_engine.public.projections import (
     count_delivery_chars,
     count_delivery_chinese_content_chars,
 )

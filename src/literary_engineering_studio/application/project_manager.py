@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.public.projects import InitOptions, init_work_project
 
 from .config import default_config_path, default_projects_root
 

@@ -15,7 +15,7 @@ from .runtime_benchmark_preparation import drive_benchmark_preparation
 from .runtime_benchmark_scene import seed_synthetic_scene
 from .prompt_benchmark_projection import prompt_program_projection
 from .reasoning_benchmark_projection import reasoning_budget_projection
-from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.public.projects import InitOptions, init_work_project
 
 
 CATALOG_SCHEMA = "arcvellum/runtime-benchmark-catalog/v1"

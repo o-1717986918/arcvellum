@@ -12,7 +12,7 @@ from typing import Any
 
 from ..creative_steward import CreativeSteward
 from ..project_manager import read_directions
-from literary_engineering_studio_engine.workflow.state import build_workflow_state
+from literary_engineering_studio_engine.public.workflow import build_workflow_state
 
 
 PROGRESS_ROOTS = (

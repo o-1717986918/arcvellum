@@ -8,7 +8,7 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from literary_engineering_studio_engine.foundation.atomic_io import (
+from literary_engineering_studio_engine.public.projects import (
     atomic_write_batch,
 )
 

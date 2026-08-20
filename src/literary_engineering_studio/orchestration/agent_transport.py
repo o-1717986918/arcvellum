@@ -9,7 +9,7 @@ import re
 from time import perf_counter
 from typing import Any, Protocol
 
-from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
+from literary_engineering_studio_engine.public.projects import atomic_write_text
 
 from ..runtimes import build_runtime
 from .profiles import OrchestrationAgentRole

@@ -7,7 +7,7 @@ from enum import Enum
 import hashlib
 import json
 
-from literary_engineering_studio_engine.orchestration import PlanNodeKind
+from literary_engineering_studio_engine.public.orchestration import PlanNodeKind
 
 from .contracts import to_primitive
 

@@ -12,7 +12,7 @@ from .evidence_projection_common import positive_int
 
 
 def continuity_prose(body: str) -> str:
-    from literary_engineering_studio_engine.foundation.draft_text import (
+    from literary_engineering_studio_engine.public.projections import (
         final_body_from_workbench_text,
     )
 

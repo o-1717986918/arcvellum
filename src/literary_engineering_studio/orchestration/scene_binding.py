@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from literary_engineering_studio_engine.orchestration import (
+from literary_engineering_studio_engine.public.orchestration import (
     PlanNodeKind,
     scene_plan_node_kind,
 )

@@ -14,7 +14,7 @@ from literary_engineering_studio_engine.literary.assets.promotion import (
     promotion_eligibility_errors,
     promotion_output_paths,
 )
-from literary_engineering_studio_engine.workflow.state_assets import asset_candidate_states
+from literary_engineering_studio_engine.public.workflow import asset_candidate_states
 
 from .staleness import build_formal_stale_preview, build_formal_stale_propagation
 

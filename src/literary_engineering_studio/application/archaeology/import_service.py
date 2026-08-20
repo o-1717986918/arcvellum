@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from literary_engineering_studio_engine.projects.source_ingest import (
+from literary_engineering_studio_engine.public.projects import (
     ingest_existing_work,
 )
 

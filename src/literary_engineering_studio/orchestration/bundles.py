@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import hashlib
 from typing import Literal, Sequence
 
-from literary_engineering_studio_engine.orchestration import PlanNodeKind
+from literary_engineering_studio_engine.public.orchestration import PlanNodeKind
 
 from ..protocols.violations import ContractViolation
 from .contracts import CompiledTaskGraph

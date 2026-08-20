@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from literary_engineering_studio_engine.foundation.atomic_io import (
+from literary_engineering_studio_engine.public.projects import (
     atomic_write_batch,
     atomic_write_text,
 )

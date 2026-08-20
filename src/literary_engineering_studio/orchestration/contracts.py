@@ -6,7 +6,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from typing import Any
 
-from literary_engineering_studio_engine.orchestration import PlanNodeKind
+from literary_engineering_studio_engine.public.orchestration import PlanNodeKind
 
 
 CANDIDATE_SCHEMA = "arcvellum/creative-execution-plan-candidate/v1"

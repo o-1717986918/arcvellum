@@ -12,12 +12,12 @@ import threading
 from typing import Any
 from urllib.parse import quote
 
-from literary_engineering_studio_engine.foundation.display_cleaner import (
+from literary_engineering_studio_engine.public.projections import (
     display_counts,
     markdown_to_display_text,
     scalar_from_yaml_text,
 )
-from literary_engineering_studio_engine.foundation.draft_text import final_body_from_workbench_text
+from literary_engineering_studio_engine.public.projections import final_body_from_workbench_text
 
 
 READER_SCHEMA = "arcvellum/reader-manifest/v1"

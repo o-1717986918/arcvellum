@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import re
 from typing import Mapping
 
-from literary_engineering_studio_engine.orchestration import mandatory_gates_for
+from literary_engineering_studio_engine.public.orchestration import mandatory_gates_for
 
 from ..protocols.canonical_json import canonical_json_digest
 from .constitution import constitution_v1

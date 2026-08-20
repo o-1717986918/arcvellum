@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from literary_engineering_studio_engine.orchestration import (
+from literary_engineering_studio_engine.public.orchestration import (
     DEFAULT_ROUTE_ORDER,
     FormalTaskCapability,
     PlanNodeKind,

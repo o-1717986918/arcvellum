@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from literary_engineering_studio_engine.orchestration import PlanNodeKind
+from literary_engineering_studio_engine.public.orchestration import PlanNodeKind
 
 from .contracts import (
     CANDIDATE_SCHEMA,

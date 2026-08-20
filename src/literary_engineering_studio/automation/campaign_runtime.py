@@ -13,10 +13,10 @@ from pathlib import Path
 import re
 from typing import Any, Protocol
 
-from literary_engineering_studio_engine.foundation.display_cleaner import (
+from literary_engineering_studio_engine.public.projections import (
     scalar_from_yaml_text,
 )
-from literary_engineering_studio_engine.foundation.draft_text import (
+from literary_engineering_studio_engine.public.projections import (
     count_delivery_chinese_content_chars,
 )
 

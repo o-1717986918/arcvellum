@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
+from literary_engineering_studio_engine.public.projects import atomic_write_text
 
 from .creative_plan_events import append_creative_plan_event_tx
 from .creative_plan_primitives import project_key

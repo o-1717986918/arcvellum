@@ -87,7 +87,7 @@ def studio_engine_dependencies(
     root: Path,
     parsed: dict[Path, ast.AST],
 ) -> dict[str, list[str]]:
-    """Record existing Studio-to-Engine imports so they can only decrease."""
+    """Record Studio imports that bypass the Engine public API."""
 
     source_root = root / "src"
     result: dict[str, list[str]] = {}
@@ -100,11 +100,20 @@ def studio_engine_dependencies(
         dependencies = sorted(
             target
             for target in imported_module_bases(source, tree)
-            if target == ENGINE_PACKAGE or target.startswith(f"{ENGINE_PACKAGE}.")
+            if _is_engine_internal_target(target)
         )
         if dependencies:
             result[path.relative_to(root).as_posix()] = dependencies
     return result
+
+
+def _is_engine_internal_target(target: str) -> bool:
+    if not (target == ENGINE_PACKAGE or target.startswith(f"{ENGINE_PACKAGE}.")):
+        return False
+    return not (
+        target == f"{ENGINE_PACKAGE}.public"
+        or target.startswith(f"{ENGINE_PACKAGE}.public.")
+    )
 
 
 def projection_application_dependencies(
