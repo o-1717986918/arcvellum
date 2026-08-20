@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 from ..application.config import load_config
 from ..contracts import TaskPackage, load_task_package
-from ..core_bridge import CoreBridge, task_command_parameters
+from ..core_bridge import CoreBridge
 from ..orchestration.active_plan import ActivePlanLoader, ActiveScenePlan
 from ..orchestration.chapter_facts_io import load_production_chapter_policy
 from ..orchestration.project_fingerprint import planning_project_fingerprint
@@ -18,13 +18,10 @@ from ..orchestration.settings import OrchestrationMode, orchestration_settings
 from ..persistence.job_store import JobStore
 from ..runtimes import build_runtime
 from .bundle_executor import dispatch_serial_bundle
-from .context_budget import resolve_task_context_budget
 from .prepared_context_cache import PreparedContextCache
 from .sandbox import (
     SandboxManifest,
-    capture_core_managed_outputs,
     changed_agent_outputs,
-    materialize_agent_workspace,
     sandbox_from_run,
     update_run_manifest,
 )
@@ -32,33 +29,14 @@ from .run_manifest import load_run
 from .task_snapshot import load_run_task_snapshot
 from .task_roles import runtime_role_for_task
 from .worker_observability import WorkerObserver
-from .worker_execution_profile import (
-    activate_execution_profile,
-    build_runtime_kwargs,
-    prompt_program_settings,
-    stage_profiled_task,
-)
+from .worker_execution_profile import activate_execution_profile, build_runtime_kwargs
 from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
     validate_project as _validate_project,
 )
 from .worker_results import WorkerRunResult, runtime_failure_fields
+from .worker_preparation import prepare_worker_task
 from .worker_writeback import WritebackCoordinator
-
-
-def _materialize_agent_view_immediately(task: TaskPackage) -> bool:
-    return task.execution_contract.execution_policy == "agent-required" and not task.command
-
-
-def _task_opened_payload(task: TaskPackage) -> dict[str, Any]:
-    return {
-        "task_id": task.task_id,
-        "route": task.route,
-        "current_state": task.current_state,
-        "scene_id": str(task.payload.get("scene_id") or ""),
-        "agent_role": task.execution_contract.agent_role,
-        "execution_contract": task.execution_contract.as_dict(),
-    }
 
 
 class AgentWorker:
@@ -106,120 +84,18 @@ class AgentWorker:
         self, project_root: Path, *, route: str, runtime_id: str,
         task_id: str = "", scene: str = "",
     ) -> tuple[TaskPackage | None, SandboxManifest | None, WorkerRunResult | None]:
-        self.observer.reset_context_ledger()
-        project = _validate_project(project_root)
-        self.observer.emit("task.selecting", {"project_root": str(project), "route": route})
-        task, ready_message = self._select_task_package(
-            project,
+        return prepare_worker_task(
+            project_root,
             route=route,
+            runtime_id=runtime_id,
             task_id=task_id,
             scene=scene,
-            emit_binding_events=True,
+            config=self.config,
+            bridge=self.bridge,
+            observer=self.observer,
+            select_task=self._select_task_package,
+            prepared_context_cache=self.prepared_context_cache,
         )
-        if task is None:
-            return None, None, WorkerRunResult(
-                "route_ready",
-                project,
-                route,
-                "",
-                runtime_id,
-                None,
-                None,
-                ready_message or "route has no pending task",
-                audit_fields={"status": "route-ready", "scope": "route-terminal-scan"},
-            )
-        context_budget = resolve_task_context_budget(task, self.config.get("worker"))
-        self.observer.emit("task.opened", _task_opened_payload(task))
-        if task.human_gate_reasons:
-            self.observer.emit("human.required", {"reasons": list(task.human_gate_reasons), "task_id": task.task_id})
-            return task, None, WorkerRunResult(
-                "waiting_human",
-                project,
-                task.route,
-                task.task_id,
-                runtime_id,
-                None,
-                None,
-                "human approval gate: " + ", ".join(task.human_gate_reasons),
-            )
-
-        runs_root = Path(str(self.config.get("worker", {}).get("runs_root") or ""))
-        initial_profile, sandbox = stage_profiled_task(
-            task, runs_root,
-            worker_config=self.config.get("worker", {}), runtime_id=runtime_id,
-            materialize_agent_view=_materialize_agent_view_immediately(task),
-            context_budget=context_budget, prepared_context_cache=self.prepared_context_cache,
-        )
-        active_runtime = "deterministic-engine" if task.execution_contract.execution_policy == "deterministic" else runtime_id
-        self.observer.bind_run_root(sandbox.run_root)
-        self.observer.emit(
-            "sandbox.prepared",
-            {
-                "run_id": sandbox.run_id,
-                "run_root": str(sandbox.run_root),
-                "workspace": str(sandbox.workspace),
-                "control_workspace": str(sandbox.control_workspace or sandbox.workspace),
-                "project_root": str(task.project_root),
-                "runner_id": active_runtime,
-                "task_id": task.task_id,
-            },
-        )
-        if task.command:
-            unresolved = task_command_parameters(task.command)
-            if unresolved:
-                message = "当前任务需要先确定：" + "、".join(unresolved)
-                self.observer.emit(
-                    "task.parameters_required",
-                    {"task_id": task.task_id, "parameters": list(unresolved), "message": message},
-                )
-                return task, None, WorkerRunResult(
-                    "waiting_human",
-                    project,
-                    task.route,
-                    task.task_id,
-                    runtime_id,
-                    None,
-                    None,
-                    message,
-                )
-            self.observer.emit("core.command_started", {"task_id": task.task_id})
-            try:
-                command_result = self.bridge.execute_task_command(task.command, sandbox.control_workspace or sandbox.workspace)
-            except (RuntimeError, ValueError, FileNotFoundError) as exc:
-                update_run_manifest(
-                    sandbox.manifest_path,
-                    status="core_command_failed",
-                    core_command_error=str(exc),
-                )
-                self.observer.emit("core.command_failed", {"task_id": task.task_id, "error": str(exc)})
-                return task, sandbox, WorkerRunResult(
-                    "core_command_failed",
-                    project,
-                    task.route,
-                    task.task_id,
-                    active_runtime,
-                    sandbox.run_root,
-                    sandbox.workspace,
-                    str(exc),
-                )
-            update_run_manifest(
-                sandbox.manifest_path,
-                status="core_command_completed",
-                core_command_returncode=command_result.returncode,
-            )
-            protected = capture_core_managed_outputs(task, sandbox)
-            if protected:
-                self.observer.emit("core.outputs_protected", {"task_id": task.task_id, "paths": list(protected)})
-            if task.execution_contract.execution_policy == "agent-required":
-                visible = materialize_agent_workspace(
-                    task, sandbox, context_budget=context_budget, prepared_context_cache=self.prepared_context_cache,
-                    execution_profile=initial_profile.as_dict(),
-                    prompt_program_config=prompt_program_settings(self.config.get("worker", {})),
-                )
-                self.observer.emit("sandbox.agent_workspace_ready", {"task_id": task.task_id, "visible_count": len(visible)})
-            self.observer.emit("core.command_completed", {"task_id": task.task_id, "returncode": command_result.returncode})
-        self.observer.publish_context_ready(task, sandbox, active_runtime)
-        return task, sandbox, None
 
     def _select_task_package(
         self,
