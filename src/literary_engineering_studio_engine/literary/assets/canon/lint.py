@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..character_identity import character_slug, formal_character_aliases
+
 
 SEVERITIES = {"blocking": 3, "warning": 2, "info": 1}
 
@@ -42,8 +44,8 @@ def build_canon_lint(project_root: Path, output: Path | None = None, json_output
     issues: list[CanonLintIssue] = []
     _check_required_files(root, issues)
     facts = _check_facts(root, issues)
-    character_ids, character_names = _check_characters(root, issues)
-    scene_records = _check_scenes(root, issues, character_ids, character_names)
+    _check_characters(root, issues)
+    scene_records = _check_scenes(root, issues, formal_character_aliases(root))
     _check_timeline(root, issues)
     _check_foreshadowing(root, issues, scene_records)
     _check_chapter_states(root, issues)
@@ -162,8 +164,7 @@ def _check_characters(root: Path, issues: list[CanonLintIssue]) -> tuple[set[str
 def _check_scenes(
     root: Path,
     issues: list[CanonLintIssue],
-    character_ids: set[str],
-    character_names: set[str],
+    character_aliases: set[str],
 ) -> dict[str, dict[str, object]]:
     scene_dir = root / "scenes"
     records: dict[str, dict[str, object]] = {}
@@ -200,9 +201,8 @@ def _check_scenes(
         if not participants:
             _add(issues, "scene-participants-empty", "warning", rel, "场景 participants 为空。", scene_id)
         for participant in participants:
-            if character_ids or character_names:
-                if participant not in character_ids and participant not in character_names:
-                    _add(issues, "scene-participant-unknown", "blocking", rel, "场景参与者未在人物档案中登记。", participant)
+            if character_aliases and participant not in character_aliases and character_slug(participant) not in character_aliases:
+                _add(issues, "scene-participant-unknown", "blocking", rel, "场景参与者未在人物档案中登记。", participant)
         if _list_after(text, "new_facts"):
             _add(issues, "scene-new-facts-candidate", "info", rel, "场景 output_state.new_facts 应进入人工确认候选。", scene_id)
     return records

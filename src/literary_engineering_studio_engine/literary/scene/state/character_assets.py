@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 
 from ....platform_agent_tasks import write_platform_asset_creation_task
-from .character_identity import (
+from ...assets.character_identity import (
     character_field_value,
     character_slug,
     formal_character_aliases,

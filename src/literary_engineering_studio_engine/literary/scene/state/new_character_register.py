@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .character_identity import is_formal_character
+from ...assets.character_identity import is_formal_character
 
 
 REGISTER_KEY = "new_character_register"

@@ -1,4 +1,4 @@
-"""Dependency-free identity lookup for formal character assets."""
+"""Shared identity lookup for formal character assets."""
 
 from __future__ import annotations
 
