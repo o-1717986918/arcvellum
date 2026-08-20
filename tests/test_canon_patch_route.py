@@ -91,6 +91,15 @@ class CanonPatchRouteTests(unittest.TestCase):
             record_workflow_approval(root, patch.stem, "approve", subject_sha256=digest)
             approved = _review_audit_state(root)
             self.assertEqual(approved["current_step"], "canon-patch-apply")
+            apply_task = build_task_payload(root, "review-and-audit", approved)
+            self.assertIn(
+                "canon/patches/scene_0001_canon_patch.agent_tasks.md",
+                apply_task["source_paths"],
+            )
+            self.assertIn(
+                "canon/patches/scene_0001_canon_patch_review.json",
+                apply_task["source_paths"],
+            )
 
             apply_canon_patch(root, patch=patch, approval_run_id=patch.stem)
             after_apply = _review_audit_state(root)

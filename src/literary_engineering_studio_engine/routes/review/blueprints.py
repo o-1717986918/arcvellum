@@ -15,6 +15,7 @@ class ReviewBlueprintContext:
     patch_report: str
     patch_task: str
     patch_completion: str
+    patch_review: str
     canon_review: str
     committee: str
     canon_repair_targets: tuple[str, ...]
@@ -57,6 +58,7 @@ def _blueprint_context(root: Path, state: dict[str, object]) -> ReviewBlueprintC
         patch_report=_related_path(patch, ".md"),
         patch_task=_related_path(patch, ".agent_tasks.md"),
         patch_completion=_related_path(patch, ".agent_completion.json"),
+        patch_review=_sibling_path(patch, "_review.json"),
         canon_review=canon_review,
         committee=committee,
         canon_repair_targets=tuple(
@@ -80,12 +82,20 @@ def _related_path(path: str, suffix: str) -> str:
     return str(Path(path).with_suffix(suffix)).replace("\\", "/") if path else ""
 
 
+def _sibling_path(path: str, suffix: str) -> str:
+    if not path:
+        return ""
+    source = Path(path)
+    return str(source.with_name(f"{source.stem}{suffix}")).replace("\\", "/")
+
+
 def _canon_patch_revision(context: ReviewBlueprintContext) -> dict[str, object]:
     sources = [
         context.patch,
         context.patch_report,
         context.patch_task,
         context.patch_completion,
+        context.patch_review,
         "workflow/approvals/index.jsonl",
         "canon",
         "scenes",
@@ -114,7 +124,18 @@ def _canon_patch_approval(context: ReviewBlueprintContext) -> dict[str, object]:
         "human-approval-boundary",
         "route.review-audit.canon-patch.approval.v1",
         f"Ask for a decision on canon patch `{context.patch_id}` and bind it to the current candidate SHA-256.",
-        [item for item in [context.patch, context.patch_report, "workflow/approvals/index.jsonl"] if item],
+        [
+            item
+            for item in [
+                context.patch,
+                context.patch_report,
+                context.patch_task,
+                context.patch_completion,
+                context.patch_review,
+                "workflow/approvals/index.jsonl",
+            ]
+            if item
+        ],
         ["workflow/approvals/index.jsonl"],
         [
             "The writing Worker must not self-approve its own canon patch.",
@@ -131,7 +152,18 @@ def _canon_patch_deferred(context: ReviewBlueprintContext) -> dict[str, object]:
         "human-approval-boundary",
         "route.review-audit.canon-patch.approval.v1",
         f"Canon patch `{context.patch_id}` is deferred. Resume it from the decision panel when ready.",
-        [item for item in [context.patch, context.patch_report, "workflow/approvals/index.jsonl"] if item],
+        [
+            item
+            for item in [
+                context.patch,
+                context.patch_report,
+                context.patch_task,
+                context.patch_completion,
+                context.patch_review,
+                "workflow/approvals/index.jsonl",
+            ]
+            if item
+        ],
         ["workflow/approvals/index.jsonl"],
         ["Do not silently apply or discard a deferred canon patch."],
         ["user or delegated steward explicitly resumes the deferred patch"],
@@ -148,7 +180,18 @@ def _canon_patch_apply(context: ReviewBlueprintContext) -> dict[str, object]:
         "deterministic-cli",
         "route.review-audit.canon-patch.apply.v1",
         command,
-        [item for item in [context.patch, context.patch_report, context.patch_completion, "workflow/approvals/index.jsonl"] if item],
+        [
+            item
+            for item in [
+                context.patch,
+                context.patch_report,
+                context.patch_task,
+                context.patch_completion,
+                context.patch_review,
+                "workflow/approvals/index.jsonl",
+            ]
+            if item
+        ],
         [
             context.patch,
             f"canon/applied/{context.patch_id}_apply.json",
