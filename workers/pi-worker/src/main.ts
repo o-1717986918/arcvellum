@@ -105,6 +105,14 @@ function parseOptions(args: string[]): WorkerOptions {
 		maxRepairs: positiveInteger(single(values, "--max-repairs"), 1),
 		allowedStates,
 		reasoningBudget,
+		providerReliability: {
+			firstEventTimeoutMs: positiveInteger(single(values, "--first-event-timeout-ms"), 180_000),
+			interEventTimeoutMs: positiveInteger(single(values, "--inter-event-timeout-ms"), 300_000),
+			totalTimeoutMs: positiveInteger(single(values, "--provider-total-timeout-ms"), 900_000),
+			maxRetries: nonNegativeInteger(single(values, "--provider-max-retries"), 1),
+			circuitFailureThreshold: positiveInteger(single(values, "--provider-circuit-threshold"), 2),
+			circuitCooldownMs: positiveInteger(single(values, "--provider-circuit-cooldown-ms"), 30_000),
+		},
 		mode,
 		repairTargets,
 	};

@@ -15,6 +15,13 @@ import { loadTaskContext } from "./task-context.ts";
 import { createWorkerTools, progressDigest, validateSubmittedOutputs } from "./tools.ts";
 import { workerProfile } from "./worker-profile.ts";
 import { readAuthorizedFile } from "./path-policy.ts";
+import {
+	ProviderReliabilitySession,
+	classifyProviderFailure,
+	providerStreamControls,
+	type ProviderFailureKind,
+	type ProviderReliabilityReceipt,
+} from "./provider-reliability.ts";
 
 const TOOL_NAMES = new Set([
 	"read_task_context",
@@ -29,8 +36,9 @@ const TOOL_NAMES = new Set([
 export interface WorkerResult {
 	status: "completed" | "blocked" | "incomplete";
 	message: string;
-	failureKind?: "provider_empty_response" | "provider_error";
+	failureKind?: "provider_empty_response" | ProviderFailureKind;
 	providerError?: string;
+	providerFailureRetryable?: boolean;
 	taskId: string;
 	provider: string;
 	model: string;
@@ -42,6 +50,7 @@ export interface WorkerResult {
 	writtenOutputs: string[];
 	validationPassed: boolean;
 	reasoning_budget: ReturnType<typeof reasoningBudgetReceipt>;
+	provider_reliability: ProviderReliabilityReceipt;
 }
 
 export async function runWorker(options: WorkerOptions, prompt: string, emit: RuntimeEventSink): Promise<WorkerResult> {
@@ -98,23 +107,37 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 	const eventAdapter = new WorkerEventAdapter(sessionId, state, emit);
 	const tools = createWorkerTools(context, options, state, emit);
 	let requiredToolLease = "";
-	const agent = new Agent({
+	let agent!: Agent;
+	const reliability = new ProviderReliabilitySession(options.providerReliability, () => agent.abort());
+	const streamControls = providerStreamControls(options.providerReliability);
+	agent = new Agent({
 		initialState: {
 			systemPrompt: profile.systemPrompt,
 			model,
 			thinkingLevel: effectiveThinking,
 			tools,
 		},
-		streamFn: models.streamSimple.bind(models),
+		streamFn: (streamModel, streamContext, streamOptions = {}) => models.streamSimple(
+			streamModel,
+			streamContext,
+			{ ...streamOptions, ...streamControls },
+		),
 		sessionId,
 		toolExecution: "sequential",
 		thinkingBudgets: reasoningThinkingBudgets(options.reasoningBudget)
 			?? { minimal: 128, low: 512, medium: 1024, high: 2048 },
 		onPayload: (payload) => {
+			reliability.beforeRequest(
+				state.providerRequests,
+				options.reasoningBudget.enabled
+					? options.reasoningBudget.maxProviderRequests
+					: Number.MAX_SAFE_INTEGER,
+			);
 			eventAdapter.providerRequest(provider, modelId);
 			requiredToolLease = desiredWorkerTool(options, context, repairSources, state);
 			return requiredToolLease ? bindRequiredTool(payload, model.api, requiredToolLease) : payload;
 		},
+		onResponse: (response) => reliability.observeResponse(response.status),
 		beforeToolCall: async ({ toolCall }) => {
 			if (!TOOL_NAMES.has(toolCall.name)) return { block: true, reason: "tool is outside the ArcVellum whitelist", terminate: true };
 			if (state.completed || state.blocked) return { block: true, reason: "worker is already terminal", terminate: true };
@@ -180,18 +203,28 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			return false;
 		},
 	});
-	agent.subscribe((event) => eventAdapter.handle(event));
-	await agent.prompt(prompt);
+	agent.subscribe((event) => {
+		reliability.observeAgentEvent(event);
+		eventAdapter.handle(event);
+	});
+	let promptFailure = "";
+	try {
+		await agent.prompt(prompt);
+	} catch (error) {
+		promptFailure = sanitizeProviderError(error instanceof Error ? error.message : error);
+	}
 
-	const providerError = sanitizeProviderError(agent.state.errorMessage);
-	if (providerError) {
+	const providerError = sanitizeProviderError(promptFailure || agent.state.errorMessage);
+	const providerFailure = reliability.complete(providerError);
+	if (providerFailure) {
 		emit("runner.warning", {
-			kind: "provider_error",
-			detail: providerError,
+			kind: providerFailure.kind,
+			detail: sanitizeProviderError(providerFailure.message),
+			retryable: providerFailure.retryable,
 		});
 		return buildResult(
 			"blocked",
-			"provider request failed",
+			providerFailure.message,
 			context.taskId,
 			provider,
 			modelId,
@@ -199,8 +232,10 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			options,
 			budgetSupport,
 			effectiveThinking,
-			"provider_error",
-			providerError,
+			providerFailure.kind,
+			sanitizeProviderError(providerFailure.message),
+			providerFailure.retryable,
+			reliability.receipt(),
 		);
 	}
 	if (isProviderEmptyResponse(state)) {
@@ -215,15 +250,18 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			budgetSupport,
 			effectiveThinking,
 			"provider_empty_response",
+			undefined,
+			true,
+			reliability.receipt(),
 		);
 	}
 	if (state.completed) {
-		return buildResult("completed", "outputs submitted for Studio preflight", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
+		return buildResult("completed", "outputs submitted for Studio preflight", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt());
 	}
 	if (state.blocked) {
-		return buildResult("blocked", state.blockerReason || "worker reported a blocker", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
+		return buildResult("blocked", state.blockerReason || "worker reported a blocker", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt());
 	}
-	return buildResult("incomplete", "model stopped without calling complete_task", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking);
+	return buildResult("incomplete", "model stopped without calling complete_task", context.taskId, provider, modelId, state, options, budgetSupport, effectiveThinking, undefined, undefined, undefined, reliability.receipt());
 }
 
 export function toolMatchesLease(requiredToolLease: string, toolName: string): boolean {
@@ -453,12 +491,22 @@ function buildResult(
 	effectiveThinking: WorkerOptions["thinking"],
 	failureKind?: WorkerResult["failureKind"],
 	providerError?: string,
+	providerFailureRetryable?: boolean,
+	providerReliability?: ProviderReliabilityReceipt,
 ): WorkerResult {
+	const reliability = providerReliability ?? {
+		policy: { ...options.providerReliability },
+		request_count: state.providerRequests,
+		response_count: 0,
+		circuit_state: "closed" as const,
+		failure: providerError ? classifyProviderFailure(providerError) : null,
+	};
 	return {
 		status,
 		message,
 		...(failureKind ? { failureKind } : {}),
 		...(providerError ? { providerError } : {}),
+		...(providerFailureRetryable !== undefined ? { providerFailureRetryable } : {}),
 		taskId,
 		provider,
 		model,
@@ -470,6 +518,7 @@ function buildResult(
 		writtenOutputs: [...state.writtenPaths].sort(),
 		validationPassed: state.lastValidation.passed,
 		reasoning_budget: reasoningBudgetReceipt(options.reasoningBudget, state, budgetSupport, effectiveThinking),
+		provider_reliability: reliability,
 	};
 }
 

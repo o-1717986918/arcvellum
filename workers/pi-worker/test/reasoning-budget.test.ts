@@ -23,7 +23,7 @@ const budget: ReasoningBudget = {
 describe("reasoning budget", () => {
 	it("validates the level range and projects per-request budgets", () => {
 		expect(() => validateReasoningBudget(budget)).not.toThrow();
-		expect(reasoningThinkingBudgets(budget)).toEqual({ minimal: 512, low: 512, medium: 512, high: 512 });
+		expect(reasoningThinkingBudgets(budget)).toEqual({ minimal: 128, low: 256, medium: 512, high: 1024 });
 		expect(() => validateReasoningBudget({ ...budget, initialLevel: "high" })).toThrow(/exceeds/);
 	});
 

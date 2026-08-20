@@ -116,6 +116,13 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(command[command.index("--max-turns") + 1], "4")
         self.assertEqual(command[command.index("--max-tools") + 1], "7")
         self.assertEqual(command[command.index("--allow-state") + 1], "candidate-review")
+        self.assertEqual(
+            command[command.index("--first-event-timeout-ms") + 1], "180000"
+        )
+        self.assertEqual(
+            command[command.index("--inter-event-timeout-ms") + 1], "300000"
+        )
+        self.assertEqual(command[command.index("--provider-max-retries") + 1], "1")
 
     def test_execution_profile_overrides_reach_worker_process(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -156,6 +163,8 @@ class PiWorkerRuntimeTests(unittest.TestCase):
                 max_turns=2,
                 max_tool_calls=3,
                 max_repairs=1,
+                first_event_timeout=45,
+                inter_event_timeout=90,
                 allowed_states=("story-architecture-agent-task",),
             )
             invocation = json.loads((workspace / "worker_args.json").read_text(encoding="utf-8"))
@@ -173,6 +182,14 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(result.metadata["reasoning_budget_receipt"]["effective_level"], "off")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-turns") + 1], "2")
         self.assertEqual(invocation["args"][invocation["args"].index("--max-tools") + 1], "3")
+        self.assertEqual(
+            invocation["args"][invocation["args"].index("--first-event-timeout-ms") + 1],
+            "45000",
+        )
+        self.assertEqual(
+            invocation["args"][invocation["args"].index("--inter-event-timeout-ms") + 1],
+            "90000",
+        )
         self.assertEqual(
             invocation["args"][invocation["args"].index("--allow-state") + 1],
             "story-architecture-agent-task",
@@ -302,6 +319,32 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertTrue(result.metadata["retryable"])
         self.assertIn("自动重试", result.message)
 
+    def test_worker_timeout_kind_is_preserved_without_text_reclassification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "runtime.output.log"
+            output.write_text(
+                json.dumps(
+                    {
+                        "event": "runner.worker.result",
+                        "data": {
+                            "status": "blocked",
+                            "message": "provider stream stopped",
+                            "failureKind": "idle_timeout",
+                            "providerError": "provider stream stopped producing model events",
+                            "providerFailureRetryable": True,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = PiWorkerRuntime({})._with_worker_result(
+                RuntimeResult("pi-worker", "failed", 2, (), output, "failed")
+            )
+
+        self.assertEqual(result.metadata["failure_kind"], "idle_timeout")
+        self.assertEqual(result.metadata["provider_failure_kind"], "idle_timeout")
+        self.assertTrue(result.metadata["retryable"])
+
     def test_studio_preflight_can_request_one_bounded_fresh_process_repair(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -421,6 +464,8 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertIn("tool-limit-control", capabilities.capability_ids)
         self.assertIn("reasoning-budget-control", capabilities.capability_ids)
         self.assertIn("provider-request-limit-control", capabilities.capability_ids)
+        self.assertIn("silence-timeout-control", capabilities.capability_ids)
+        self.assertIn("provider-error-classification", capabilities.capability_ids)
 
 
 if __name__ == "__main__":

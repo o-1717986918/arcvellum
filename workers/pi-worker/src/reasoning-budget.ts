@@ -22,11 +22,15 @@ export function validateReasoningBudget(budget: ReasoningBudget): void {
 
 export function reasoningThinkingBudgets(budget: ReasoningBudget): Record<"minimal" | "low" | "medium" | "high", number> | undefined {
 	if (!budget.enabled) return undefined;
+	const medium = Math.min(budget.totalTokens, Math.max(64, budget.perRequestTokens));
+	const low = Math.max(32, Math.floor(medium / 2));
+	const minimal = Math.max(16, Math.floor(low / 2));
+	const high = Math.min(budget.totalTokens, Math.max(medium + 1, medium * 2));
 	return {
-		minimal: budget.perRequestTokens,
-		low: budget.perRequestTokens,
-		medium: budget.perRequestTokens,
-		high: budget.perRequestTokens,
+		minimal,
+		low,
+		medium,
+		high,
 	};
 }
 

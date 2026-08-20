@@ -39,8 +39,18 @@ export interface WorkerOptions {
 	maxRepairs: number;
 	allowedStates: string[];
 	reasoningBudget: ReasoningBudget;
+	providerReliability: ProviderReliabilityPolicy;
 	mode: "task" | "repair";
 	repairTargets: string[];
+}
+
+export interface ProviderReliabilityPolicy {
+	firstEventTimeoutMs: number;
+	interEventTimeoutMs: number;
+	totalTimeoutMs: number;
+	maxRetries: number;
+	circuitFailureThreshold: number;
+	circuitCooldownMs: number;
 }
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";

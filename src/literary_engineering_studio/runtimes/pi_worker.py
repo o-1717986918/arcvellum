@@ -15,11 +15,10 @@ from .base import (
     AgentRunnerCapabilities,
     AgentRuntime,
     RuntimeAvailability,
-    RuntimeFailureKind,
     RuntimeResult,
     executable_prefix,
 )
-from .opencode_failures import classify_model_error
+from .pi_worker_failures import worker_failure_result
 from .pi_worker_repair import run_pi_worker_repairs
 
 
@@ -105,6 +104,22 @@ class PiWorkerRuntime(AgentRuntime):
         command.extend(["--max-turns", str(self._positive_setting("max_turns", 6))])
         command.extend(["--max-tools", str(self._positive_setting("max_tool_calls", 12))])
         command.extend(["--max-repairs", str(self._positive_setting("max_repair_attempts", 1))])
+        command.extend(
+            [
+                "--first-event-timeout-ms",
+                str(self._positive_setting("first_event_timeout", 180) * 1000),
+                "--inter-event-timeout-ms",
+                str(self._positive_setting("inter_event_timeout", 300) * 1000),
+                "--provider-total-timeout-ms",
+                str(self._positive_setting("provider_total_timeout", 900) * 1000),
+                "--provider-max-retries",
+                str(self._non_negative_setting("provider_max_retries", 1)),
+                "--provider-circuit-threshold",
+                str(self._positive_setting("provider_circuit_threshold", 2)),
+                "--provider-circuit-cooldown-ms",
+                str(self._positive_setting("provider_circuit_cooldown_ms", 30_000)),
+            ]
+        )
         command.extend(self._reasoning_budget_args())
         for state in self._allowed_states():
             command.extend(["--allow-state", state])
@@ -161,6 +176,10 @@ class PiWorkerRuntime(AgentRuntime):
             "reasoning-policy-control",
             "reasoning-budget-control",
             "provider-request-limit-control",
+            "provider-circuit-breaker",
+            "provider-error-classification",
+            "provider-retry-control",
+            "silence-timeout-control",
             "tool-limit-control",
             "total-timeout-control",
             "turn-limit-control",
@@ -193,6 +212,8 @@ class PiWorkerRuntime(AgentRuntime):
         max_turns: int | None = None,
         max_tool_calls: int | None = None,
         reasoning_budget: Mapping[str, object] | None = None,
+        first_event_timeout: int | None = None,
+        inter_event_timeout: int | None = None,
         output_validator=None,
         repair_prompt_builder=None,
         repair_turn_finalizer=None,
@@ -205,6 +226,9 @@ class PiWorkerRuntime(AgentRuntime):
             "max_turns": max_turns,
             "max_tool_calls": max_tool_calls,
             "reasoning_budget": dict(reasoning_budget) if reasoning_budget is not None else None,
+            "first_event_timeout": first_event_timeout,
+            "inter_event_timeout": inter_event_timeout,
+            "provider_total_timeout": max(30, min(int(timeout), 900)),
             "allowed_states": tuple(allowed_states) if allowed_states is not None else None,
         }
         self._execution_overrides = {key: value for key, value in overrides.items() if value is not None}
@@ -281,7 +305,7 @@ class PiWorkerRuntime(AgentRuntime):
             "reasoning_budget_receipt": self._reasoning_budget_receipt(worker_result),
         }
         if status != "completed":
-            message, failure = _worker_failure_result(worker_result, status, message)
+            message, failure = worker_failure_result(worker_result, status, message)
             metadata.update(failure)
         return replace(result, message=message, metadata=metadata)
 
@@ -344,6 +368,14 @@ class PiWorkerRuntime(AgentRuntime):
             return fallback
         return max(1, normalized)
 
+    def _non_negative_setting(self, name: str, fallback: int) -> int:
+        value = self._execution_overrides.get(name, self.settings.get(name))
+        try:
+            normalized = int(value) if value not in {None, ""} else fallback
+        except (TypeError, ValueError):
+            return fallback
+        return max(0, normalized)
+
     def _allowed_states(self) -> tuple[str, ...]:
         raw = self._execution_overrides.get("allowed_states", self.settings.get("allowed_states"))
         if not isinstance(raw, (list, tuple)):
@@ -356,43 +388,6 @@ class PiWorkerRuntime(AgentRuntime):
         if not isinstance(raw, (list, tuple)):
             return ()
         return tuple(str(item).strip() for item in raw if str(item).strip())
-
-
-def _worker_failure_result(
-    worker_result: Mapping[str, Any], status: str, message: str
-) -> tuple[str, dict[str, Any]]:
-    detail = message.lower()
-    no_progress = status == "blocked" and any(
-        token in detail
-        for token in ("no-progress", "budget exhausted", "budget_exhausted")
-    )
-    provider_error = str(worker_result.get("providerError") or "").strip()
-    provider_empty = _provider_empty_response(worker_result)
-    if provider_error:
-        failure_kind, retryable, message = classify_model_error(provider_error)
-        kind = failure_kind.value
-    else:
-        retryable = not no_progress
-        kind = (
-            RuntimeFailureKind.TRANSIENT_NETWORK.value
-            if provider_empty
-            else RuntimeFailureKind.NO_PROGRESS.value
-            if no_progress
-            else RuntimeFailureKind.VALIDATION_FAILURE.value
-        )
-    if provider_empty and not provider_error:
-        message = (
-            "模型供应商返回了空响应，未产生文本、推理或工具调用；"
-            "ArcVellum 将保留当前任务并按连接故障策略重试。"
-        )
-    provider_kind = "provider_error" if provider_error else (
-        "provider_empty_response" if provider_empty else ""
-    )
-    return message, {
-        "failure_kind": kind,
-        "retryable": retryable,
-        "provider_failure_kind": provider_kind,
-    }
 
 
 def _public_event_data(value: dict[str, Any]) -> dict[str, Any]:
@@ -431,30 +426,6 @@ def _last_worker_result(output_path: Path | None) -> dict[str, Any]:
         if isinstance(data, dict):
             result = _public_event_data(data)
     return result
-
-
-def _provider_empty_response(worker_result: Mapping[str, Any]) -> bool:
-    if str(worker_result.get("failureKind") or "") == "provider_empty_response":
-        return True
-    receipt = worker_result.get("reasoning_budget")
-    provider_requests = worker_result.get("providerRequests")
-    if provider_requests is None and isinstance(receipt, Mapping):
-        provider_requests = receipt.get("provider_requests")
-    try:
-        request_count = int(provider_requests or 0)
-        tool_calls = int(worker_result.get("toolCalls") or 0)
-        reasoning_characters = int(worker_result.get("reasoningCharacters") or 0)
-        text_characters = int(worker_result.get("textCharacters") or 0)
-    except (TypeError, ValueError):
-        return False
-    written = worker_result.get("writtenOutputs")
-    return (
-        request_count > 0
-        and tool_calls == 0
-        and reasoning_characters == 0
-        and text_characters == 0
-        and (not isinstance(written, list) or not written)
-    )
 
 
 def _positive_budget_value(budget: Mapping[str, object], name: str) -> int:
