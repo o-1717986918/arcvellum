@@ -39,6 +39,7 @@ describe("loadTaskContext", () => {
 		const context = await loadTaskContext(root, ["candidate-review"]);
 		expect(context.exactOnDemand).toEqual(["review.agent_tasks.md"]);
 		expect(context.promptAccess.formal_version).toBe("v3");
+		expect(context.evidenceIndex).toEqual({ D001: "review.agent_tasks.md" });
 	});
 
 	it("rejects compiled prompt access outside the capability manifest", async () => {
@@ -96,6 +97,10 @@ async function workspace(options: { readablePaths?: string[]; promptAccessPaths?
 				program_digest: "program-digest",
 				inline: [],
 				exact_on_demand: options.promptAccessPaths,
+				evidence_index: Object.fromEntries(options.promptAccessPaths.map((path, index) => [
+					`D${String(index + 1).padStart(3, "0")}`,
+					{ source_ref: path, source_sha256: "a".repeat(64), role: "review", tier: "exact_on_demand" },
+				])),
 				digest: "access-digest",
 			},
 		} : {}),

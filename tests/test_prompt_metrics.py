@@ -8,7 +8,7 @@ from literary_engineering_studio.observability.prompt_audit import (
     build_prompt_audit_report,
     render_prompt_audit_markdown,
 )
-from literary_engineering_studio.runtime.prompt_metrics import measure_prompt
+from literary_engineering_studio.runtime.prompt_metrics import lint_prompt, measure_prompt
 
 
 class PromptMetricsTests(unittest.TestCase):
@@ -63,6 +63,43 @@ class PromptMetricsTests(unittest.TestCase):
 """
 
         self.assertEqual(measure_prompt(prompt).exact_on_demand_count, 2)
+
+    def test_machine_source_identities_preserve_metrics_when_paths_are_hidden(self):
+        metrics = measure_prompt(
+            "### E001: role=canon\n\n----- BEGIN EVIDENCE E001 -----\n事实\n----- END EVIDENCE E001 -----",
+            source_identities=(("canon/world_rules.yaml", "a" * 64),),
+        )
+
+        self.assertEqual(metrics.unique_source_count, 1)
+        self.assertEqual(metrics.duplicate_path_count, 0)
+
+    def test_lint_rejects_direct_conflicts_and_tool_host_instructions(self):
+        metrics = measure_prompt(
+            "## Constraints\n\n- `C001` 必须修改 Canon。\n- `C002` 不得修改 Canon。\n"
+            "- 先运行 task-submit 再继续。\n"
+        )
+        report = lint_prompt(
+            metrics,
+            hard_character_limit=10_000,
+            output_count=1,
+            reject_host_instructions=True,
+        )
+
+        self.assertEqual(report.status, "error")
+        self.assertEqual(
+            {item.code for item in report.issues},
+            {"conflicting_constraints", "ineffective_host_instruction"},
+        )
+
+    def test_lint_rejects_incomplete_output_contract(self):
+        report = lint_prompt(
+            measure_prompt("完成任务。"),
+            hard_character_limit=100,
+            output_count=1,
+            output_contract_complete=False,
+        )
+
+        self.assertEqual(report.issues[0].code, "incomplete_output_contract")
 
 
 if __name__ == "__main__":

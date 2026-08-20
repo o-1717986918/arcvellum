@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 import hashlib
 import math
 import re
+from typing import Iterable
 
 
 _AUTHORIZED_FILE = re.compile(
@@ -57,6 +58,8 @@ class PromptMetrics:
     constraint_count: int
     repeated_constraint_count: int
     constraint_repetition_ratio: float
+    conflicting_constraint_count: int
+    ineffective_host_instruction_count: int
     exact_on_demand_count: int
     prompt_sha256: str
 
@@ -85,7 +88,9 @@ class PromptLintReport:
         }
 
 
-def measure_prompt(text: str) -> PromptMetrics:
+def measure_prompt(
+    text: str, *, source_identities: Iterable[tuple[str, str]] = ()
+) -> PromptMetrics:
     """Measure a rendered prompt without retaining any prompt content."""
 
     normalized = text.replace("\r\n", "\n")
@@ -98,15 +103,17 @@ def measure_prompt(text: str) -> PromptMetrics:
         *_AUTHORIZED_BLOCK.finditer(normalized),
         *_V3_EVIDENCE_BLOCK.finditer(normalized),
     ]
-    source_paths = [item.group("path") for item in sources]
-    source_digests = [item.group("digest") for item in sources]
+    supplied = list(source_identities)
+    source_paths = [item.group("path") for item in sources] + [item[0] for item in supplied]
+    source_digests = [item.group("digest") for item in sources] + [item[1] for item in supplied]
     evidence_characters = sum(len(item.group(0)) for item in source_blocks)
     duplicate_paragraph_characters = _duplicate_paragraph_characters(normalized)
     nested_duplicate_characters = _nested_duplicate_characters(source_blocks)
     duplicate_characters = min(
         len(normalized), duplicate_paragraph_characters + nested_duplicate_characters
     )
-    constraint_lines = _constraint_lines(normalized)
+    instructions = _instruction_text(normalized)
+    constraint_lines = _constraint_lines(instructions)
     repeated_constraints = sum(
         count - 1 for count in Counter(constraint_lines).values() if count > 1
     )
@@ -127,6 +134,8 @@ def measure_prompt(text: str) -> PromptMetrics:
         constraint_count=len(constraint_lines),
         repeated_constraint_count=repeated_constraints,
         constraint_repetition_ratio=_ratio(repeated_constraints, len(constraint_lines)),
+        conflicting_constraint_count=_conflicting_constraint_count(constraint_lines),
+        ineffective_host_instruction_count=_host_instruction_count(instructions),
         exact_on_demand_count=_exact_on_demand_count(normalized),
         prompt_sha256=hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
     )
@@ -139,6 +148,8 @@ def lint_prompt(
     output_count: int,
     duplicate_warning_ratio: float = 0.15,
     duplicate_error_ratio: float = 0.25,
+    reject_host_instructions: bool = False,
+    output_contract_complete: bool = True,
 ) -> PromptLintReport:
     issues: list[PromptLintIssue] = []
     if metrics.total_characters > hard_character_limit:
@@ -175,6 +186,18 @@ def lint_prompt(
     if output_count <= 0:
         issues.append(
             PromptLintIssue("missing_agent_output", "error", "Prompt Program declares no Agent-owned output")
+        )
+    elif not output_contract_complete:
+        issues.append(
+            PromptLintIssue("incomplete_output_contract", "error", "an Agent-owned output lacks path, kind, or format")
+        )
+    if metrics.conflicting_constraint_count:
+        issues.append(
+            PromptLintIssue("conflicting_constraints", "error", "Prompt Program contains directly conflicting rules")
+        )
+    if reject_host_instructions and metrics.ineffective_host_instruction_count:
+        issues.append(
+            PromptLintIssue("ineffective_host_instruction", "error", "tool-worker prompt contains host workflow instructions")
         )
     status = "error" if any(item.severity == "error" for item in issues) else "warning" if issues else "pass"
     return PromptLintReport("arcvellum/prompt-lint/v1", status, tuple(issues))
@@ -236,6 +259,50 @@ def _constraint_lines(text: str) -> list[str]:
         if any(word in normalized for word in _CONSTRAINT_WORDS):
             rows.append(normalized)
     return rows
+
+
+def _instruction_text(text: str) -> str:
+    return _V3_EVIDENCE_BLOCK.sub("", _AUTHORIZED_BLOCK.sub("", text))
+
+
+def _conflicting_constraint_count(lines: list[str]) -> int:
+    positive: Counter[str] = Counter()
+    negative: Counter[str] = Counter()
+    for line in lines:
+        polarity, subject = _constraint_signature(line)
+        if polarity == "positive" and subject:
+            positive[subject] += 1
+        elif polarity == "negative" and subject:
+            negative[subject] += 1
+    return sum(min(positive[key], negative[key]) for key in positive.keys() & negative.keys())
+
+
+def _constraint_signature(line: str) -> tuple[str, str]:
+    value = re.sub(r"^[-*]\s*`?c\d+`?\s*", "", line.casefold()).strip(" `。.!；;")
+    negative_markers = ("不得", "禁止", "不允许", "不要", "must not", "do not", "never")
+    positive_markers = ("必须", "应当", "需要", "must", "require")
+    for marker in negative_markers:
+        if marker in value:
+            return "negative", _constraint_subject(value.replace(marker, "", 1))
+    for marker in positive_markers:
+        if marker in value:
+            return "positive", _constraint_subject(value.replace(marker, "", 1))
+    return "", ""
+
+
+def _constraint_subject(value: str) -> str:
+    return re.sub(r"[\s`'\"，。,:：；;.!]", "", value)
+
+
+def _host_instruction_count(text: str) -> int:
+    lowered = text.casefold()
+    return sum(
+        lowered.count(fragment)
+        for fragment in (
+            "task-submit", "task-complete", "route-audit", "skill.md", "agents.md",
+            "cli task package", "platform agent", "sidecar completed",
+        )
+    )
 
 
 def _exact_on_demand_count(text: str) -> int:

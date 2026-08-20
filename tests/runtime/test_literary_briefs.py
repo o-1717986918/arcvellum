@@ -119,6 +119,9 @@ class LiteraryBriefTests(unittest.TestCase):
             self.assertEqual(program.literary_brief["objective"], "完成选择")
             self.assertEqual(program.safe_projection()["literary_brief"]["kind"], "scene-writing")
             self.assertEqual(len(program.digest), 64)
+            cache = program.compile_metrics["cache_contract"]
+            self.assertEqual(cache["dynamic_suffix_digest"], program.digest)
+            self.assertEqual(len(cache["stable_prefix_digest"]), 64)
 
 
 def _task(root: Path, *, route: str, state: str, asset_type: str = "") -> TaskPackage:

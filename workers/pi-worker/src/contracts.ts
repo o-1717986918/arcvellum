@@ -26,6 +26,7 @@ export interface TaskContext {
 	semanticPassCondition: Record<string, unknown>;
 	promptAsset: Record<string, unknown>;
 	promptAccess: Record<string, unknown>;
+	evidenceIndex: Record<string, string>;
 	maxResultChars: number;
 	raw: Record<string, unknown>;
 }

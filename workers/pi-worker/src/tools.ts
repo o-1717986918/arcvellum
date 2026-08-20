@@ -31,16 +31,17 @@ export function createWorkerTools(
 		{
 			name: "read_authorized_source",
 			label: "Read Exact Context Or Output",
-			description: "Read one exact-on-demand source or the current content of an Agent-owned expected output. Must-inline sources that are not outputs are already in the task prompt and cannot be reread.",
+			description: "Read one exact-on-demand source by evidence_id, or reread an Agent-owned expected output by path. Must-inline sources cannot be reread.",
 			parameters: Type.Object({
-				path: Type.String(),
+				evidence_id: Type.Optional(Type.String()),
+				path: Type.Optional(Type.String()),
 				offset: Type.Optional(Type.Integer({ minimum: 0 })),
 				limit: Type.Optional(Type.Integer({ minimum: 1, maximum: context.maxResultChars })),
 			}),
 			executionMode: "sequential",
 			execute: async (_id, params) => {
-				const input = params as { path: string; offset?: number; limit?: number };
-				const path = normalizeRelativePath(input.path);
+				const input = params as { evidence_id?: string; path?: string; offset?: number; limit?: number };
+				const path = readTarget(input, context.evidenceIndex);
 				if (!readablePaths.has(path)) throw new Error("path is neither exact-on-demand nor an Agent-owned expected output");
 				const content = await readAuthorizedFile(options.workspace, path);
 				const offset = input.offset ?? 0;
@@ -186,6 +187,21 @@ export function createWorkerTools(
 			},
 		},
 	];
+}
+
+function readTarget(
+	input: { evidence_id?: string; path?: string },
+	evidenceIndex: Record<string, string>,
+): string {
+	const hasId = typeof input.evidence_id === "string" && input.evidence_id.length > 0;
+	const hasPath = typeof input.path === "string" && input.path.length > 0;
+	if (hasId === hasPath) throw new Error("provide exactly one of evidence_id or path");
+	if (hasId) {
+		const path = evidenceIndex[input.evidence_id ?? ""];
+		if (!path) throw new Error("evidence_id is not an exact-on-demand source");
+		return path;
+	}
+	return normalizeRelativePath(input.path ?? "");
 }
 
 export async function validateOutputs(context: TaskContext, workspace: string, onlyPath?: string): Promise<ValidationResult> {

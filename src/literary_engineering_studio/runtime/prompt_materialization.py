@@ -30,6 +30,23 @@ class PromptMaterialization:
         if self.formal.version == "v3" and program is not None:
             inline = [item.source_ref for item in program.evidence]
             exact_on_demand = [item.source_ref for item in program.exact_on_demand]
+            evidence_index = {
+                item.evidence_id: {
+                    "source_ref": item.source_ref,
+                    "source_sha256": item.source_sha256,
+                    "role": item.role,
+                    "tier": item.tier,
+                }
+                for item in program.evidence
+            } | {
+                item.evidence_id: {
+                    "source_ref": item.source_ref,
+                    "source_sha256": item.source_sha256,
+                    "role": item.role,
+                    "tier": "exact_on_demand",
+                }
+                for item in program.exact_on_demand
+            }
             program_digest = program.digest
         else:
             inline = [
@@ -37,6 +54,7 @@ class PromptMaterialization:
                 *execution_context.summary_reference_paths,
             ]
             exact_on_demand = list(execution_context.exact_on_demand)
+            evidence_index = {}
             program_digest = ""
         payload: dict[str, object] = {
             "schema": "arcvellum/prompt-access/v1",
@@ -45,6 +63,7 @@ class PromptMaterialization:
             "program_digest": program_digest,
             "inline": list(dict.fromkeys(inline)),
             "exact_on_demand": list(dict.fromkeys(exact_on_demand)),
+            "evidence_index": evidence_index,
         }
         payload["digest"] = _contract_digest(payload)
         return payload

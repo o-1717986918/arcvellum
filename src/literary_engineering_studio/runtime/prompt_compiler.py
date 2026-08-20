@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -15,6 +17,14 @@ from .prompt_program import (
     prompt_program_digest,
 )
 from .prompt_recipes import PromptRecipe, prompt_recipe
+
+
+_STOP_CONTRACT = (
+    "写完所有 Agent-owned outputs 并逐项检查格式与内容。",
+    "不要创建或修改 Studio 管理的 completion evidence。",
+    "不要用聊天文本、分析或计划替代正式产物。",
+    "没有可验证进展或证据冲突无法解决时停止并报告阻断。",
+)
 
 
 def compile_prompt_program(
@@ -51,12 +61,6 @@ def compile_prompt_program(
     literary_brief = _literary_brief(
         task, task_context, execution_context, evidence.inline, output_contract
     )
-    stop_contract = (
-        "写完所有 Agent-owned outputs 并逐项检查格式与内容。",
-        "不要创建或修改 Studio 管理的 completion evidence。",
-        "不要用聊天文本、分析或计划替代正式产物。",
-        "没有可验证进展或证据冲突无法解决时停止并报告阻断。",
-    )
     identity = {
         "task_id": task.task_id,
         "route": task.route,
@@ -74,7 +78,7 @@ def compile_prompt_program(
         output_contract=output_contract,
         evidence=evidence.inline,
         exact_on_demand=evidence.exact_on_demand,
-        stop_contract=stop_contract,
+        stop_contract=_STOP_CONTRACT,
         literary_brief=literary_brief,
     )
     return PromptProgram(
@@ -87,12 +91,13 @@ def compile_prompt_program(
         output_contract=output_contract,
         evidence=evidence.inline,
         exact_on_demand=evidence.exact_on_demand,
-        stop_contract=stop_contract,
+        stop_contract=_STOP_CONTRACT,
         compile_metrics={
             **evidence.safe_metrics(),
             "soft_character_limit": recipe.soft_character_limit,
             "hard_character_limit": recipe.hard_character_limit,
             "max_on_demand_reads": recipe.max_on_demand_reads,
+            "cache_contract": _cache_contract(task_context, recipe, digest),
         },
         digest=digest,
         literary_brief=literary_brief,
@@ -110,6 +115,26 @@ def _literary_brief(
         task, context, execution_context, evidence, output_contract
     )
     return brief.as_dict() if brief is not None else {}
+
+
+def _cache_contract(
+    context: Mapping[str, Any], recipe: PromptRecipe, dynamic_digest: str
+) -> Mapping[str, object]:
+    profile = _mapping(context.get("execution_profile"))
+    asset = _mapping(context.get("prompt_asset"))
+    stable = {
+        "recipe_id": recipe.recipe_id,
+        "profile_digest": str(profile.get("digest") or ""),
+        "prompt_asset_id": str(asset.get("resolved_id") or ""),
+        "prompt_asset_version": str(asset.get("version") or ""),
+    }
+    serialized = json.dumps(stable, sort_keys=True, separators=(",", ":"))
+    return {
+        "schema": "arcvellum/prompt-cache-partition/v1",
+        "stable_prefix_digest": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
+        "dynamic_suffix_digest": dynamic_digest,
+        "stable_identity": stable,
+    }
 
 
 def _objective(

@@ -160,12 +160,17 @@ def _evidence(values: tuple[PromptEvidence, ...], *, compact: bool) -> str:
     blocks: list[str] = []
     for item in values:
         metadata = (
-            f"- role=`{item.role}`; fidelity=`{item.fidelity}`; sha256=`{item.source_sha256}`"
+            f"- role=`{item.role}`; fidelity=`{item.fidelity}`"
             if compact
             else f"- role: `{item.role}`\n- fidelity: `{item.fidelity}`\n- source_sha256: `{item.source_sha256}`"
         )
+        heading = (
+            f"### {item.evidence_id}: role={item.role}"
+            if compact
+            else f"### {item.evidence_id}: `{item.source_ref}`"
+        )
         blocks.append(
-            f"### {item.evidence_id}: `{item.source_ref}`\n\n"
+            f"{heading}\n\n"
             f"{metadata}\n\n"
             f"----- BEGIN EVIDENCE {item.evidence_id} -----\n"
             f"{item.body.rstrip()}\n"
@@ -178,13 +183,17 @@ def _on_demand(program: PromptProgram, *, tool_worker: bool) -> str:
     if not program.exact_on_demand:
         return "- 无。"
     access = (
-        "- `Dxxx` 仅为标签；按需读取时将反引号内路径原样传给 "
-        "`read_authorized_source.path`。"
+        "- 按需读取时将 `Dxxx` 原样传给 `read_authorized_source.evidence_id`；"
+        "来源路径与摘要由机器合同校验。"
         if tool_worker
         else ""
     )
     rows = [
-        f"- `{item.evidence_id}` `{item.source_ref}` ({item.role}): {item.reason}"
+        (
+            f"- `{item.evidence_id}` ({item.role}): {item.reason}"
+            if tool_worker
+            else f"- `{item.evidence_id}` `{item.source_ref}` ({item.role}): {item.reason}"
+        )
         for item in program.exact_on_demand
     ]
     return "\n".join(([access] if access else []) + rows)

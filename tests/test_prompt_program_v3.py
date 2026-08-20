@@ -498,7 +498,7 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertEqual(contract["outputs"][0]["format"], "markdown")
         self.assertEqual(contract["outputs"][1]["format"], "json")
 
-    def test_tool_renderer_requires_exact_paths_instead_of_evidence_ids(self):
+    def test_tool_renderer_uses_evidence_ids_without_exposing_exact_paths(self):
         program = PromptProgram(
             schema="arcvellum/prompt-program/v3",
             recipe_id="prompt-v3/structured/v1",
@@ -518,9 +518,10 @@ class PromptProgramV3Tests(unittest.TestCase):
 
         rendered = render_tool_worker_program(program)
 
-        self.assertIn("`Dxxx` 仅为标签", rendered)
-        self.assertIn("`read_authorized_source.path`", rendered)
-        self.assertIn("`D001` `exact.md`", rendered)
+        self.assertIn("`Dxxx` 原样传给", rendered)
+        self.assertIn("`read_authorized_source.evidence_id`", rendered)
+        self.assertIn("`D001` (recovery)", rendered)
+        self.assertNotIn("exact.md", rendered)
 
     def test_tool_renderer_omits_studio_owned_sidecar_work(self):
         program = PromptProgram(
@@ -870,17 +871,30 @@ class PromptProgramV3Tests(unittest.TestCase):
                 (sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8")
             )
             access = context["prompt_access"]
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
 
             self.assertEqual(access["formal_version"], "v3")
             self.assertEqual(access["renderer"], "tool-worker")
             self.assertIn("source.md", access["inline"])
             self.assertIn("creation.agent_tasks.md", access["exact_on_demand"])
             self.assertNotIn("creation.agent_tasks.md", access["inline"])
+            indexed = [
+                item for item in access["evidence_index"].values()
+                if item["source_ref"] == "creation.agent_tasks.md"
+            ]
+            self.assertEqual(len(indexed), 1)
+            self.assertEqual(indexed[0]["tier"], "exact_on_demand")
+            self.assertEqual(len(indexed[0]["source_sha256"]), 64)
             self.assertIn(
                 "creation.agent_tasks.md",
                 context["controlled_capabilities"]["readable_paths"],
             )
             self.assertEqual(len(access["digest"]), 64)
+            self.assertIn("### E001: role=", prompt)
+            self.assertIn("`D001`", prompt)
+            self.assertNotIn("source.md", prompt)
+            self.assertNotIn("creation.agent_tasks.md", prompt)
+            self.assertNotIn("sha256=", prompt)
 
     def test_pi_asset_review_keeps_candidate_and_demotes_planning_ledgers(self):
         with tempfile.TemporaryDirectory() as temporary:

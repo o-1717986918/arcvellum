@@ -40,6 +40,7 @@ export async function loadTaskContext(
 
 	const executionContext = recordValue(raw.execution_context);
 	const promptAccess = promptAccessContract(raw);
+	const evidenceIndex = evidencePathIndex(promptAccess?.evidence_index);
 	const exactOnDemand = promptAccess
 		? pathList(promptAccess.exact_on_demand)
 		: pathList(executionContext.exact_on_demand);
@@ -84,6 +85,7 @@ export async function loadTaskContext(
 		semanticPassCondition: recordValue(completion.semantic_pass_condition),
 		promptAsset: recordValue(raw.prompt_asset),
 		promptAccess: promptAccess ?? {},
+		evidenceIndex,
 		maxResultChars: positiveInteger(controlled.max_result_chars, 24_000),
 		raw,
 	};
@@ -129,6 +131,17 @@ function promptAccessContract(raw: Record<string, unknown>): Record<string, unkn
 	requiredString(raw.prompt_access, "formal_version");
 	requiredString(raw.prompt_access, "digest");
 	return raw.prompt_access;
+}
+
+function evidencePathIndex(value: unknown): Record<string, string> {
+	if (!isRecord(value)) return {};
+	const result: Record<string, string> = {};
+	for (const [evidenceId, metadata] of Object.entries(value)) {
+		if (!/^D\d{3,}$/.test(evidenceId) || !isRecord(metadata)) continue;
+		const source = stringValue(metadata.source_ref);
+		if (source) result[evidenceId] = normalizeRelativePath(source);
+	}
+	return result;
 }
 
 async function readJson(path: string): Promise<Record<string, unknown>> {

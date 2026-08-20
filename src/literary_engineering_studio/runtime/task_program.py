@@ -236,7 +236,12 @@ def compile_worker_program(
             text = render_file_agent_program(program)
         else:
             raise ValueError(f"unsupported Prompt v3 renderer: {renderer}")
-        metrics = measure_prompt(text)
+        metrics = measure_prompt(
+            text,
+            source_identities=tuple(
+                (item.source_ref, item.source_sha256) for item in program.evidence
+            ) if renderer == "tool-worker" else (),
+        )
         recipe = prompt_recipe(execution_context.task_kind)
         outputs = program.output_contract.get("outputs")
         output_count = len(outputs) if isinstance(outputs, list) else 0
@@ -250,6 +255,8 @@ def compile_worker_program(
             duplicate_error_ratio=_float_setting(
                 prompt_lint_config, "duplicate_error_ratio", 0.25
             ),
+            reject_host_instructions=renderer == "tool-worker",
+            output_contract_complete=_complete_output_contract(outputs),
         )
         return CompiledWorkerProgram(text, "v3", renderer, metrics, lint, program)
     if prompt_version != "v2":
@@ -430,3 +437,11 @@ def _float_setting(
         return float((config or {}).get(key, default))
     except (TypeError, ValueError):
         return default
+
+
+def _complete_output_contract(value: object) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(item, Mapping)
+        and all(str(item.get(key) or "").strip() for key in ("path", "kind", "format"))
+        for item in value
+    )

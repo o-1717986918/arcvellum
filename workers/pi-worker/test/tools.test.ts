@@ -149,6 +149,28 @@ describe("local output validation", () => {
 		expect(workerState.readPaths.has("out/review.json")).toBe(true);
 	});
 
+	it("reads exact context by machine evidence id without exposing its path in the prompt", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-evidence-id-"));
+		roots.push(root);
+		await writeFile(join(root, "exact.md"), "authorized evidence", "utf8");
+		const taskContext = {
+			...context(),
+			exactOnDemand: ["exact.md"],
+			readablePaths: ["exact.md"],
+			evidenceIndex: { D001: "exact.md" },
+		};
+		const workerState = state();
+		const read = createWorkerTools(taskContext, options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "read_authorized_source");
+
+		const response = await read?.execute("call", { evidence_id: "D001" });
+
+		expect(response?.content[0]?.text).toContain("authorized evidence");
+		expect(workerState.readPaths.has("exact.md")).toBe(true);
+		await expect(read?.execute("call", { evidence_id: "D999" }))
+			.rejects.toThrow("not an exact-on-demand source");
+	});
+
 	it("still rejects a path outside exact context and Agent-owned outputs", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-tools-"));
 		roots.push(root);
@@ -275,6 +297,7 @@ function context(): TaskContext {
 		semanticPassCondition: {},
 		promptAsset: {},
 		promptAccess: {},
+		evidenceIndex: {},
 		maxResultChars: 4000,
 		raw: {},
 	};
