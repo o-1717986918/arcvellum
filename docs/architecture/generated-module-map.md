@@ -9,7 +9,7 @@
 | `src/literary_engineering_studio_engine/tasking` | 19 | Formal task contracts | `tasking/__init__.py` | Engine foundation | Agent execution |
 | `src/literary_engineering_studio_engine/routes` | 46 | Formal route catalog | `routes/catalog.py` | tasking and literary services | Studio lifecycle |
 | `src/literary_engineering_studio_engine/workflow` | 34 | Workflow projections | `workflow_state facade` | tasking and routes | Runtime adapters |
-| `src/literary_engineering_studio_engine/literary` | 143 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
+| `src/literary_engineering_studio_engine/literary` | 147 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
 | `src/literary_engineering_studio_engine/prompting` | 11 | Prompt programs | `prompt registry/compiler` | literary contracts | Provider transport |
 | `src/literary_engineering_studio_engine/orchestration` | 6 | Read-only orchestration catalog | `orchestration/__init__.py` | task and Gate catalogs | Planner execution |
 | `src/literary_engineering_studio_engine/projections` | 17 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |

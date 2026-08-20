@@ -1,29 +1,25 @@
-"""LLM/Agent-backed scene review artifacts."""
+"""Provider-backed scene review orchestration and formal artifacts."""
 
 from __future__ import annotations
 
-import json
-import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+import json
 from pathlib import Path
 
-from ...anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE, lint_ai_style, render_ai_style_lint_block
 from ...agent_provider import run_agent_task
 from ...agent_schema import validate_agent_run
-from ...context_broker import default_context_trace_path
-from ...creative_quality import (
-    creative_quality_profile_exists,
-    creative_quality_profile_path,
-    load_creative_quality_profile,
-    render_creative_quality_prompt,
-)
-from ...draft_text import final_body_from_workbench_text
-from ...narrative_rhythm import render_narrative_rhythm_contract
-from ...new_character_register import empty_new_character_register, render_new_character_register_contract
-from ...reader_experience import reader_experience_adherence_for_body, scene_chapter_obligation_id
-from ...word_budget import word_budget_adherence_for_body
-from .style_context import render_review_style_snapshot, scene_review_style_context
+from ...creative_quality import creative_quality_profile_exists
+from .scene_agent_context import SceneAgentReviewContext, prepare_scene_agent_review_context
+from .scene_agent_context import read_text as _read
+from .scene_agent_context import relative_path as _rel_str
+from .scene_agent_context import resolve_draft as _resolve_draft
+from .scene_agent_context import resolve_output as _resolve_output
+from .scene_agent_context import resolve_scene as _resolve_scene
+from .scene_agent_dry import dry_scene_review as _dry_scene_review
+from .scene_agent_dry import style_source_label as _style_source_label
+from .scene_agent_prompt import scene_review_system_prompt as _system_prompt
+from .scene_agent_prompt import scene_review_user_prompt as _user_prompt
+from .scene_agent_report import render_scene_review_report as _render_report
 
 
 @dataclass(frozen=True)
@@ -46,98 +42,87 @@ def review_scene_with_agent(
     output: Path | None = None,
     json_output: Path | None = None,
 ) -> AgentSceneReviewResult:
-    root = project_root.resolve()
-    if not root.is_dir():
-        raise FileNotFoundError(f"project root not found: {root}")
-    scene_path = _resolve_scene(root, scene)
-    scene_id = scene_path.stem
-    draft_path = _resolve_draft(root, scene_id, draft)
-    context_path = root / "memory" / "context_packets" / f"{scene_id}.md"
-    context_trace_path = default_context_trace_path(context_path)
-    style_context = scene_review_style_context(root)
-    style_prompt_path, style_mount_snapshot = style_context.prompt_path, style_context.snapshot
-    quality_profile = load_creative_quality_profile(root)
-    quality_path = creative_quality_profile_path(root)
-    source_paths = [_rel_str(scene_path, root)]
-    if draft_path.exists():
-        source_paths.append(_rel_str(draft_path, root))
-    if context_path.exists():
-        source_paths.append(_rel_str(context_path, root))
-    if context_trace_path.exists():
-        source_paths.append(_rel_str(context_trace_path, root))
-    source_paths.extend(_rel_str(path, root) for path in style_context.evidence_paths)
-    source_paths = list(dict.fromkeys(source_paths))
-    if creative_quality_profile_exists(root):
-        source_paths.append(_rel_str(quality_path, root))
-    composition_json = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
-    if composition_json.exists():
-        source_paths.append(_rel_str(composition_json, root))
-    obligation_path = root / "plot" / "chapter_obligations" / f"{scene_chapter_obligation_id(root, scene_path)}.json"
-    if obligation_path.exists():
-        source_paths.append(_rel_str(obligation_path, root))
-
-    scene_text = _read(scene_path)
-    draft_text = _read(draft_path) if draft_path.exists() else ""
-    candidate_sha256 = hashlib.sha256(draft_path.read_bytes()).hexdigest()
-    draft_body = final_body_from_workbench_text(draft_text) or draft_text
-    context_text = _read(context_path) if context_path.exists() else ""
-    context_trace_text = _read(context_trace_path) if context_trace_path.exists() else ""
-    style_text = render_review_style_snapshot(style_mount_snapshot) + "\n\n" + (_read(style_prompt_path) if style_prompt_path else "")
-    word_budget_adherence = word_budget_adherence_for_body(root, scene_path, draft_body)
-    reader_adherence = reader_experience_adherence_for_body(root, scene_path, draft_body)
-    rhythm_contract_text = render_narrative_rhythm_contract(root, scene_path, composition_json if composition_json.exists() else None)
+    context = prepare_scene_agent_review_context(project_root, scene, draft)
     dry_payload = _dry_scene_review(
-        scene_id,
-        draft_text,
-        source_paths,
-        word_budget_adherence,
-        reader_adherence,
-        quality_profile,
-        candidate_sha256,
+        context.scene_id,
+        context.draft_text,
+        context.source_paths,
+        context.word_budget_adherence,
+        context.reader_adherence,
+        context.quality_profile,
+        context.candidate_sha256,
     )
-    dry_payload["style_mount_snapshot"] = style_mount_snapshot
+    dry_payload["style_mount_snapshot"] = context.style_mount_snapshot
     run_result = run_agent_task(
-        root,
+        context.root,
         agent_id="scene-reviewer",
-        task=f"review-scene:{scene_id}",
+        task=f"review-scene:{context.scene_id}",
         system_prompt=_system_prompt(),
-        user_prompt=_user_prompt(
-            scene_text,
-            draft_text,
-            context_text,
-            context_trace_text,
-            style_text,
-            source_paths,
-            word_budget_adherence,
-            reader_adherence,
-            rhythm_contract_text,
-            quality_profile,
-            scene_id,
-            candidate_sha256,
-        ),
+        user_prompt=_prompt_from_context(context),
         provider=provider,
-        metadata={"schema_name": "scene_review.v1", "scene_id": scene_id, "source_paths": source_paths},
+        metadata={
+            "schema_name": "scene_review.v1",
+            "scene_id": context.scene_id,
+            "source_paths": context.source_paths,
+        },
         dry_run_output=dry_payload,
     )
-    validation = validate_agent_run(root, run_dir=run_result.run_dir, schema_name="scene_review.v1")
+    validation = validate_agent_run(context.root, run_dir=run_result.run_dir, schema_name="scene_review.v1")
     parsed = json.loads(run_result.parsed_output_path.read_text(encoding="utf-8"))
-    _bind_review_metadata(parsed, root, run_result.run_dir, validation.validation_path, candidate_sha256, quality_path, quality_profile, style_mount_snapshot)
-
-    report_path = _resolve_output(root, output, "reviews", "agent", f"{scene_id}_scene_review.md")
-    json_path = _resolve_output(root, json_output, "reviews", "agent", f"{scene_id}_scene_review.json")
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(parsed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    report_path.write_text(_render_report(parsed, validation.status), encoding="utf-8")
+    _bind_review_metadata(
+        parsed,
+        context.root,
+        run_result.run_dir,
+        validation.validation_path,
+        context.candidate_sha256,
+        context.quality_path,
+        context.quality_profile,
+        context.style_mount_snapshot,
+    )
+    report_path, json_path = _write_review_artifacts(context.root, context.scene_id, parsed, validation.status, output, json_output)
     return AgentSceneReviewResult(
-        project_root=root,
-        scene_id=scene_id,
+        project_root=context.root,
+        scene_id=context.scene_id,
         run_dir=run_result.run_dir,
         report_path=report_path,
         json_path=json_path,
         validation_path=validation.validation_path,
         conclusion=str(parsed.get("conclusion", "")),
     )
+
+
+def _prompt_from_context(context: SceneAgentReviewContext) -> str:
+    return _user_prompt(
+        context.scene_text,
+        context.draft_text,
+        context.context_text,
+        context.context_trace_text,
+        context.style_text,
+        context.source_paths,
+        context.word_budget_adherence,
+        context.reader_adherence,
+        context.rhythm_contract_text,
+        context.quality_profile,
+        context.scene_id,
+        context.candidate_sha256,
+    )
+
+
+def _write_review_artifacts(
+    root: Path,
+    scene_id: str,
+    payload: dict[str, object],
+    validation_status: str,
+    output: Path | None,
+    json_output: Path | None,
+) -> tuple[Path, Path]:
+    report_path = _resolve_output(root, output, "reviews", "agent", f"{scene_id}_scene_review.md")
+    json_path = _resolve_output(root, json_output, "reviews", "agent", f"{scene_id}_scene_review.json")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    report_path.write_text(_render_report(payload, validation_status), encoding="utf-8")
+    return report_path, json_path
 
 
 def _bind_review_metadata(
@@ -166,287 +151,4 @@ def _bind_review_metadata(
     )
 
 
-def _system_prompt() -> str:
-    return """You are a literary engineering scene review agent.
-
-Review the scene as a workbench artifact, not as final praise. Judge character logic, canon safety, plot movement, reader-experience payoff, narrative rhythm and scene bridge, mounted style adherence, punctuation rhythm, deterministic Style Lint evidence, anti-evasion revision integrity, cleaned-body word-budget adherence, new character registration, canon writeback declaration, and revision actions. Output JSON only using schema scene_review.v1, including structured style_adherence, word_budget_adherence, reader_experience_adherence, narrative_rhythm_adherence, canon_writeback, new_character_register, and revision_integrity objects."""
-
-
-def _user_prompt(
-    scene_text: str,
-    draft_text: str,
-    context_text: str,
-    context_trace_text: str,
-    style_text: str,
-    source_paths: list[str],
-    word_budget_adherence: dict[str, object],
-    reader_adherence: dict[str, object],
-    rhythm_contract_text: str,
-    quality_profile: dict[str, object],
-    scene_id: str,
-    candidate_sha256: str,
-) -> str:
-    draft_body = final_body_from_workbench_text(draft_text) or draft_text
-    return f"""Source paths: {source_paths}
-Exact candidate SHA-256: {candidate_sha256}
-The JSON field `candidate_sha256` must equal this value exactly.
-
-{render_ai_style_lint_block(draft_body, profile=quality_profile, scope=scene_id)}
-
-{render_creative_quality_prompt(quality_profile, scope=scene_id)}
-
-{ANTI_EVASION_REVISION_PROTOCOL}
-
-审查时必须执行：{ANTI_EVASION_SHORT_RULE}
-
-## Word Budget Gate
-
-以下是用清洗后的可交付正文统计出的确定性字数门禁。正式门禁按中文内容字符判断，计入汉字和中文标点；机器非空白字符只作为诊断映射。不得统计状态变化候选、canon 说明、workflow 痕迹、scene 编号或文件路径：
-
-```json
-{json.dumps(word_budget_adherence, ensure_ascii=False, indent=2)}
-```
-
-若 status 不是 pass 或 not_required，`conclusion` 不得为 pass。若 status 已通过，也必须判断 narrative_load_satisfied；不能靠重复心理解释、空泛描写或流程文本填字数。
-
-## Reader Experience Gate
-
-以下是章节义务与读者体验契约的确定性结构门禁。语义判断由平台 Agent 完成，但若 status 不是 pass 或 not_required，`conclusion` 不得为 pass。即使结构通过，也必须判断正文是否推进了读者问题、承诺回报、暂扣信息、兑现/延迟、情绪曲线、张力来源、新鲜度、反摘要要求和读后余味；不能只复述事件梗概：
-
-```json
-{json.dumps(reader_adherence, ensure_ascii=False, indent=2)}
-```
-
-## Narrative Rhythm / Scene Bridge Gate
-
-{rhythm_contract_text}
-
-若正文没有接住入场压力、没有完成本场 scene_turn、没有按 tension_curve 的 entry / peak / exit 形成可辨识的升降、没有详略节奏差异，或结尾没有给下一场留下可接续钩子，`conclusion` 不得为 pass。不得只因元数据填写完整就判断通过；必须结合正文中的动作、信息、选择与代价验证曲线，并在 JSON 中填写 `narrative_rhythm_adherence`。
-
-同时检查 Scene Function Gate、Reader Question / Promise-Payoff、Narrative Distance 和 Texture Variety：本场不能只是补设定或聊天；必须有推进主线、改变关系、制造误判、兑现/设置问题、改变人物选择、扩大代价或转移读者认知之一。若读者问题没有管理、承诺没有兑现/延迟说明、叙述距离持续贴脸解释心理，或章节内连续场景材料过于单一，不能 clean pass。
-
-## Scene YAML
-
-```yaml
-{scene_text[:6000]}
-```
-
-## Draft
-
-```markdown
-{draft_text[:9000] or "Draft missing."}
-```
-
-## Context Packet
-
-```markdown
-{context_text[:6000] or "Context packet missing."}
-```
-
-## Context Trace
-
-```json
-{context_trace_text[:6000] or "Context trace missing. Clean pass is forbidden for formal review until `context` is rerun and the trace is inspected."}
-```
-
-## Style Prompt / Profile
-
-```markdown
-{style_text[:5000] or "Style prompt/profile missing."}
-```
-
-## New Character Register Contract
-
-{render_new_character_register_contract()}
-"""
-
-
-def _dry_scene_review(
-    scene_id: str,
-    draft_text: str,
-    source_paths: list[str],
-    word_budget_adherence: dict[str, object],
-    reader_adherence: dict[str, object],
-    quality_profile: dict[str, object],
-    candidate_sha256: str,
-) -> dict[str, object]:
-    draft_body = final_body_from_workbench_text(draft_text) or draft_text
-    has_body = bool(draft_body.strip()) and "<!-- 在这里写入场景正文。 -->" not in draft_body
-    lint_issues = lint_ai_style(draft_body, profile=quality_profile, scope=scene_id) if has_body else []
-    blocking_lint = [issue for issue in lint_issues if issue.severity not in {"low"}]
-    budget_status = str(word_budget_adherence.get("status") or "").strip().lower()
-    budget_blocked = budget_status not in {"pass", "not_required"}
-    reader_status = str(reader_adherence.get("status") or "").strip().lower()
-    reader_blocked = reader_status not in {"pass", "not_required"}
-    conclusion = "revise_required" if not has_body or blocking_lint or budget_blocked or reader_blocked else "pass_with_notes"
-    warnings = [] if has_body else ["场景草稿缺少可审查正文，需先补正文或提升生成候选。"]
-    warnings.extend(f"Style lint: {issue.rule} - {issue.message}" for issue in blocking_lint)
-    if budget_blocked:
-        warnings.append(f"Word budget gate: {word_budget_adherence.get('message')}")
-    if reader_blocked:
-        warnings.append(f"Reader experience gate: {reader_adherence.get('message')}")
-    style_source = _style_source_label(source_paths)
-    style_status = "pass_with_notes" if style_source and has_body else ("revise_required" if style_source else "not_applicable")
-    style_revision_actions = (
-        ["真实平台审查需确认挂载文风已经影响叙述距离、句法节奏、意象系统、对白语气和标点停顿。"] if style_source else []
-    )
-    lint_revision_actions = [
-        f"按确定性 Style Lint 逐句复核 `{issue.sample}`，修订 {issue.rule}，不得用脚本直接删改造成语义反转。"
-        for issue in blocking_lint
-        if issue.sample
-    ]
-    return {
-        "schema": "literary-engineering-workbench/scene-review-agent/v1",
-        "scene_id": scene_id,
-        "candidate_sha256": candidate_sha256,
-        "conclusion": conclusion,
-        "summary": "dry-run scene reviewer preserved the review contract and source trace.",
-        "blocking_issues": [],
-        "warnings": warnings,
-        "revision_actions": ["保留人工确认点；不要把候选事实直接写入 canon。"] + lint_revision_actions,
-        "character_logic": [
-            {
-                "character": "all",
-                "assessment": "检查人物 BDI、背景故事隐性动因和当前状态是否共同支持行动。",
-            }
-        ],
-        "canon_risks": [],
-        "style_notes": [
-            "后续真实模型审查应核对 style_prompt.md 是否影响句法、叙述距离和意象调度。",
-            *[f"确定性 Style Lint 检出 {issue.rule}: {issue.sample}" for issue in lint_issues],
-        ],
-        "style_adherence": {
-            "status": style_status,
-            "style_profile": style_source or "n/a",
-            "evidence": ["dry-run 仅保持审查契约；真实平台 agent 需要引用正文证据。"] if style_source else [],
-            "deviations": [],
-            "revision_actions": style_revision_actions,
-        },
-        "word_budget_adherence": {
-            **word_budget_adherence,
-            "narrative_load_satisfied": budget_status in {"pass", "not_required"},
-        },
-        "reader_experience_adherence": {
-            **reader_adherence,
-            "reader_promise_satisfied": reader_status in {"pass", "not_required"},
-            "semantic_review_required": reader_adherence.get("requires_platform_agent_semantic_review", True),
-        },
-        "narrative_rhythm_adherence": {
-            "status": "pass_with_notes" if has_body else "revise_required",
-            "rhythm_executed": has_body,
-            "bridge_executed": has_body,
-            "flatness_risks": ["dry-run cannot semantically judge rhythm; platform agent must verify scene turn and bridge."],
-            "revision_actions": [],
-        },
-        "canon_writeback": {
-            "status": "unknown",
-            "canon_change": "unknown",
-            "no_canon_change_reason": "",
-            "candidate_patch": "",
-        },
-        "new_character_register": empty_new_character_register(),
-        "revision_integrity": {
-            "status": "pass" if not blocking_lint else "revise_required",
-            "anti_evasion_checked": True,
-            "evasion_risks": [f"{issue.rule}: {issue.sample}" for issue in blocking_lint if issue.rule in {"mechanical-contrast-frame", "contrast-evasion-frame"}],
-            "evasion_risks_unresolved": [f"{issue.rule}: {issue.sample}" for issue in blocking_lint if issue.rule in {"mechanical-contrast-frame", "contrast-evasion-frame"}],
-            "retained_transitions": [],
-            "burden_of_proof": [],
-            "message": "dry-run deterministic review; platform agent must perform semantic revision-integrity review.",
-        },
-        "source_paths": source_paths,
-        "agent_confidence": "dry-run",
-        "next_gate": "schema_validation_then_human_review",
-    }
-
-
-def _render_report(payload: dict[str, object], validation_status: str) -> str:
-    lines = [
-        f"# Agent 场景审查：{payload.get('scene_id', '')}",
-        "",
-        f"- 结论：`{payload.get('conclusion', '')}`",
-        f"- Schema：`{validation_status}`",
-        f"- Agent Run：`{payload.get('agent_run_dir', '')}`",
-        "",
-        "## 字数预算门禁",
-        "",
-        f"- 状态：`{(payload.get('word_budget_adherence') if isinstance(payload.get('word_budget_adherence'), dict) else {}).get('status', '')}`",
-        f"- 清洗后正文中文内容字符：`{(payload.get('word_budget_adherence') if isinstance(payload.get('word_budget_adherence'), dict) else {}).get('clean_body_chinese_chars', '')}`",
-        f"- 机器非空白字符诊断：`{(payload.get('word_budget_adherence') if isinstance(payload.get('word_budget_adherence'), dict) else {}).get('clean_body_machine_chars', '')}`",
-        "",
-        "## 读者体验门禁",
-        "",
-        f"- 状态：`{(payload.get('reader_experience_adherence') if isinstance(payload.get('reader_experience_adherence'), dict) else {}).get('status', '')}`",
-        f"- 信息：{(payload.get('reader_experience_adherence') if isinstance(payload.get('reader_experience_adherence'), dict) else {}).get('message', '')}",
-        f"- 语义复核：`{(payload.get('reader_experience_adherence') if isinstance(payload.get('reader_experience_adherence'), dict) else {}).get('semantic_review_required', '')}`",
-        "",
-        "## 叙事节奏与场景桥接门禁",
-        "",
-        f"- 状态：`{(payload.get('narrative_rhythm_adherence') if isinstance(payload.get('narrative_rhythm_adherence'), dict) else {}).get('status', '')}`",
-        f"- 节奏执行：`{(payload.get('narrative_rhythm_adherence') if isinstance(payload.get('narrative_rhythm_adherence'), dict) else {}).get('rhythm_executed', '')}`",
-        f"- 桥接执行：`{(payload.get('narrative_rhythm_adherence') if isinstance(payload.get('narrative_rhythm_adherence'), dict) else {}).get('bridge_executed', '')}`",
-        "",
-        "## Canon 写回判断",
-        "",
-        f"- 状态：`{(payload.get('canon_writeback') if isinstance(payload.get('canon_writeback'), dict) else {}).get('status', '')}`",
-        f"- Canon 变化：`{(payload.get('canon_writeback') if isinstance(payload.get('canon_writeback'), dict) else {}).get('canon_change', '')}`",
-        f"- 无变化理由：{(payload.get('canon_writeback') if isinstance(payload.get('canon_writeback'), dict) else {}).get('no_canon_change_reason', '')}",
-        "",
-        "## 摘要",
-        "",
-        str(payload.get("summary", "")),
-        "",
-        "## 修订动作",
-        "",
-    ]
-    for item in payload.get("revision_actions", []) or []:
-        lines.append(f"- {item}")
-    lines.extend(["", "## 风险", ""])
-    for item in payload.get("blocking_issues", []) or []:
-        lines.append(f"- BLOCKING: {item}")
-    for item in payload.get("warnings", []) or []:
-        lines.append(f"- WARNING: {item}")
-    return "\n".join(lines) + "\n"
-
-
-def _resolve_scene(root: Path, scene: Path | None) -> Path:
-    path = root / "scenes" / "scene_0001.yaml" if scene is None else (scene if scene.is_absolute() else root / scene)
-    if not path.exists():
-        raise FileNotFoundError(f"scene file not found: {path}")
-    return path.resolve()
-
-
-def _resolve_draft(root: Path, scene_id: str, draft: Path | None) -> Path:
-    if draft is None:
-        return root / "drafts" / "scenes" / f"{scene_id}.md"
-    return draft if draft.is_absolute() else root / draft
-
-
-def _resolve_output(root: Path, value: Path | None, *default_parts: str) -> Path:
-    if value is None:
-        return root.joinpath(*default_parts)
-    return value if value.is_absolute() else root / value
-
-
-def _style_source_label(source_paths: list[str]) -> str:
-    for value in source_paths:
-        normalized = value.replace("\\", "/")
-        if normalized.startswith("style/") and (
-            "active_style_skill.json" in normalized
-            or "style_prompt.md" in normalized
-            or "prompt.md" in normalized
-            or "style-profile.md" in normalized
-        ):
-            return normalized
-    return ""
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8") if path.exists() else ""
-
-
-def _rel_str(path: Path, root: Path) -> str:
-    try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
-        return str(path)
+__all__ = ["AgentSceneReviewResult", "review_scene_with_agent"]

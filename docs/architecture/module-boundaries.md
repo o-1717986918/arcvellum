@@ -533,6 +533,16 @@ Export Route 的职责边界为：
 真正的 DOCX/Markdown 生成、发布复制和 fingerprint 计算仍由既有 literary export/release 服务拥有；Route 不得复制 writer，也不得
 自行产生 approve 事实。
 
+Scene AgentReview 的兼容 provider 路径必须维持四段边界：
+
+- `literary/review/scene_agent_context.py` 只装配候选绑定的只读审查材料与确定性 adherence；
+- `literary/review/scene_agent_prompt.py` 只渲染正式审查提示，不执行 lint 之外的文学判断；
+- `literary/review/scene_agent_dry.py` 是保守的离线诊断，不得产生正式 clean pass；
+- `literary/review/scene_agent_report.py` 只渲染已校验 payload；
+- `literary/review/scene_agent.py` 才能调用 Agent provider、schema validator 和写正式 review artifact。
+
+确定性 Style Lint 是审查证据而不是编辑器；不得自动删改正文，也不得替代独立 Agent 对语义、人物、节奏和 Canon 的判断。
+
 - `persistence.primitives`：schema 常量、ID 校验、序列化和脱敏；
 - `persistence.autopilot_runs`：run、lease、policy snapshot、delegated decision 与 autopilot event；
 - `persistence.sessions`：顾问对话、Agent session、通知收件箱、delegation policy 和阅读位置/书签；
