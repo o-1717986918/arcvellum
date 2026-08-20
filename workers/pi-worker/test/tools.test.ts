@@ -72,6 +72,24 @@ describe("local output validation", () => {
 		expect(workerState.lastValidation.passed).toBe(true);
 	});
 
+	it("serializes structured JSON without requiring escaped content", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-json-"));
+		roots.push(root);
+		const workerState = state();
+		const write = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call", {
+			outputs: [
+				{ path: "out/review.json", json: { verdict: "pass", findings: ["证据成立"] } },
+				{ path: "out/review.md", content: "# Review\n" },
+			],
+		});
+
+		expect((await validateOutputs(context(), root)).passed).toBe(true);
+		expect(workerState.lastValidation.passed).toBe(true);
+	});
+
 	it("returns aggregate validation immediately after a partial or malformed write", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-write-feedback-"));
 		roots.push(root);

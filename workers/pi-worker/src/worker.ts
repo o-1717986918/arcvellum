@@ -249,12 +249,15 @@ async function existingRepairSources(
 export function desiredRepairTool(
 	options: Pick<WorkerOptions, "mode">,
 	repairSources: readonly string[],
-	state: Pick<WorkerState, "readPaths" | "writtenPaths">,
+	state: Pick<WorkerState, "readPaths" | "writtenPaths" | "lastValidation">,
 	requiredOutputs: readonly string[] = repairSources,
 ): string {
 	if (options.mode !== "repair") return "";
 	if (repairSources.some((path) => !state.readPaths.has(path))) return "read_authorized_source";
 	if (requiredOutputs.some((path) => !state.writtenPaths.has(path))) return "write_expected_output";
+	if (state.lastValidation.issues.some((issue) => requiredOutputs.includes(issue.path))) {
+		return "write_expected_output";
+	}
 	return "complete_task";
 }
 

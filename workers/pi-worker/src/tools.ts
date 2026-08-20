@@ -53,12 +53,17 @@ export function createWorkerTools(
 		{
 			name: "write_expected_output",
 			label: "Write Expected Output",
-			description: "Atomically write one or several Agent-owned expected outputs. Batch only compact artifacts whose combined content is safely below 12000 characters; otherwise write one complete artifact per call. The result includes aggregate local validation. Completion receipts are never writable by the Agent.",
+			description: "Atomically write one or several Agent-owned expected outputs. For JSON artifacts, pass a structured json object instead of an escaped content string; Studio serializes it and later restores protected machine fields. Batch only compact artifacts whose combined content is safely below 12000 characters; otherwise write one complete artifact per call. The result includes aggregate local validation. Completion receipts are never writable by the Agent.",
 			parameters: Type.Object({
 				path: Type.Optional(Type.String()),
 				content: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000_000 })),
+				json: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 				outputs: Type.Optional(Type.Array(
-					Type.Object({ path: Type.String(), content: Type.String({ minLength: 1, maxLength: 2_000_000 }) }),
+					Type.Object({
+						path: Type.String(),
+						content: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000_000 })),
+						json: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+					}),
 					{ minItems: 1, maxItems: 64 },
 				)),
 			}),
@@ -67,7 +72,12 @@ export function createWorkerTools(
 				const input = params as {
 					path?: string;
 					content?: string;
-					outputs?: Array<{ path: string; content: string }>;
+					json?: Record<string, unknown>;
+					outputs?: Array<{
+						path: string;
+						content?: string;
+						json?: Record<string, unknown>;
+					}>;
 				};
 				const values = outputWrites(input);
 				const normalized = values.map((item) => ({
@@ -273,14 +283,36 @@ function normalizeText(value: string): string {
 function outputWrites(input: {
 	path?: string;
 	content?: string;
-	outputs?: Array<{ path: string; content: string }>;
+	json?: Record<string, unknown>;
+	outputs?: Array<{
+		path: string;
+		content?: string;
+		json?: Record<string, unknown>;
+	}>;
 }): Array<{ path: string; content: string }> {
-	const hasSingle = typeof input.path === "string" || typeof input.content === "string";
+	const hasSingle = typeof input.path === "string"
+		|| typeof input.content === "string"
+		|| input.json !== undefined;
 	const hasBatch = Array.isArray(input.outputs);
-	if (hasSingle === hasBatch) throw new Error("provide either path/content or outputs");
-	if (hasBatch) return input.outputs ?? [];
-	if (!input.path || !input.content) throw new Error("single output requires both path and content");
-	return [{ path: input.path, content: input.content }];
+	if (hasSingle === hasBatch) throw new Error("provide either one path payload or outputs");
+	if (hasBatch) {
+		return (input.outputs ?? []).map((item) => ({
+			path: item.path,
+			content: serializedOutput(item.content, item.json),
+		}));
+	}
+	if (!input.path) throw new Error("single output requires path");
+	return [{ path: input.path, content: serializedOutput(input.content, input.json) }];
+}
+
+function serializedOutput(
+	content: string | undefined,
+	json: Record<string, unknown> | undefined,
+): string {
+	if ((typeof content === "string") === (json !== undefined)) {
+		throw new Error("each output requires exactly one of content or json");
+	}
+	return json === undefined ? content ?? "" : `${JSON.stringify(json, null, 2)}\n`;
 }
 
 function publicError(error: unknown): string {

@@ -216,6 +216,26 @@ describe("bounded worker lifecycle", () => {
 			.toBe("complete_task");
 	});
 
+	it("reopens an invalid repair target after completion validation fails", () => {
+		const workerState = state();
+		const targets = ["out/review.json", "out/review.md"];
+		for (const path of targets) {
+			workerState.readPaths.add(path);
+			workerState.writtenPaths.add(path);
+		}
+		workerState.lastValidation = {
+			passed: false,
+			issues: [{
+				path: "out/review.json",
+				code: "invalid_json",
+				message: "unexpected end of input",
+			}],
+		};
+
+		expect(desiredRepairTool({ mode: "repair" }, targets, workerState, targets))
+			.toBe("write_expected_output");
+	});
+
 	it("fails closed at the turn boundary when an output is missing", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-turn-"));
 		roots.push(root);
