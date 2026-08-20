@@ -553,6 +553,10 @@ Creative Director 的有限循环由以下边界组成：
 新增 Director 工具必须先进入 `DIRECTOR_ALLOWED_TOOLS` 与 dispatcher 显式注册，并声明正式 service；禁止通用 Shell、任意文件编辑、
 直接 Canon/正文写入、自我批准和绕过 task/gate 的工具。
 
+`literary/planning/rhythm_plan.py` 是用户可管理的节奏意图与只读审计模块。它可以规范化 scene entry、计算 chapter/volume/book 曲线、
+保存带 digest/revision 的计划，但不能直接重写场景正文或以宏观曲线覆盖 scene-level rhythm/bridge contract。`spatial_time_gap_before`
+只影响投影呼吸，不修改作品时间线事实。
+
 - `persistence.primitives`：schema 常量、ID 校验、序列化和脱敏；
 - `persistence.autopilot_runs`：run、lease、policy snapshot、delegated decision 与 autopilot event；
 - `persistence.sessions`：顾问对话、Agent session、通知收件箱、delegation policy 和阅读位置/书签；

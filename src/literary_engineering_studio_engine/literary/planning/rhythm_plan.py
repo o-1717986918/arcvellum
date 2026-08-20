@@ -60,52 +60,11 @@ def rhythm_plan_path(root: Path) -> Path:
 def load_rhythm_plan(root: Path) -> dict[str, Any]:
     root = root.resolve()
     stored = _read_json(rhythm_plan_path(root))
-    stored_scenes = stored.get("scenes") if isinstance(stored.get("scenes"), dict) else {}
     book_profile = normalize_book_profile(stored.get("book_profile"))
-    scene_paths = _rhythm_scene_paths(root)
-    entries: list[dict[str, Any]] = []
-    for path in scene_paths:
-        scene_text = path.read_text(encoding="utf-8", errors="ignore")
-        scene_id = _scalar(scene_text, "scene_id") or path.stem
-        chapter_id = _scalar(scene_text, "chapter_id") or "unassigned"
-        volume_id = _scalar(scene_text, "volume_id") or _scalar(scene_text, "volume") or "unassigned"
-        contract = narrative_rhythm_contract(root, path, plan_payload=stored, scene_text=scene_text)
-        rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
-        curve = normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
-        stored_entry = stored_scenes.get(scene_id) if isinstance(stored_scenes.get(scene_id), dict) else {}
-        stored_gap = stored_entry.get("spatial_time_gap_before") if stored_entry else None
-        scene_gap = _scalar(scene_text, "spatial_time_gap_before")
-        entries.append({
-            "scene_id": scene_id,
-            "volume_id": volume_id,
-            "chapter_id": chapter_id,
-            "title": _scalar(scene_text, "title") or scene_id,
-            "pace": str(rhythm.get("pace") or "balanced"),
-            "rhythm_role": str(rhythm.get("rhythm_role") or "mixed"),
-            "scene_function": _strings(rhythm.get("scene_function")),
-            "tension_curve": curve,
-            "detail_level": str(rhythm.get("detail_level") or "standard"),
-            "word_count_target": _integer(_scalar(scene_text, "word_count_target")),
-            "timeline_order": _integer(_scalar(scene_text, "timeline_order")),
-            "story_time": _scalar(scene_text, "story_time"),
-            "spatial_time_gap_before": _positive_number(stored_gap if stored_gap not in (None, "") else scene_gap),
-            "source": "rhythm-plan" if scene_id in stored_scenes else str(contract.get("source") or "default"),
-        })
-    chapters: dict[str, dict[str, Any]] = {}
-    for chapter_id in sorted({str(entry["chapter_id"]) for entry in entries}):
-        chapter_entries = [entry for entry in entries if entry["chapter_id"] == chapter_id]
-        chapters[chapter_id] = analyze_narrative_rhythm_sequence(chapter_entries)
-    volumes: dict[str, dict[str, Any]] = {}
-    for volume_id in sorted({str(entry["volume_id"]) for entry in entries}):
-        volume_entries = [entry for entry in entries if entry["volume_id"] == volume_id]
-        volumes[volume_id] = analyze_narrative_rhythm_sequence(volume_entries)
-    book_audit = analyze_narrative_rhythm_sequence(entries)
-    macro = _book_macro(entries, book_profile)
-    book_audit["macro"] = macro
-    book_audit["issues"] = [*book_audit.get("issues", []), *macro["issues"]]
-    if book_audit.get("status") == "pass" and macro["issues"]:
-        book_audit["status"] = "needs_attention"
-        book_audit["warning_count"] = int(book_audit.get("warning_count") or 0) + len(macro["issues"])
+    entries = _load_scene_entries(root, stored)
+    chapters = _group_audits(entries, "chapter_id")
+    volumes = _group_audits(entries, "volume_id")
+    book_audit = _book_audit(entries, book_profile)
     return {
         "schema": RHYTHM_PLAN_SCHEMA,
         "revision": int(stored.get("revision") or 0),
@@ -120,6 +79,68 @@ def load_rhythm_plan(root: Path) -> dict[str, Any]:
     }
 
 
+def _load_scene_entries(root: Path, stored: dict[str, Any]) -> list[dict[str, Any]]:
+    stored_scenes = stored.get("scenes") if isinstance(stored.get("scenes"), dict) else {}
+    entries: list[dict[str, Any]] = []
+    for path in _rhythm_scene_paths(root):
+        scene_text = path.read_text(encoding="utf-8", errors="ignore")
+        scene_id = _scalar(scene_text, "scene_id") or path.stem
+        contract = narrative_rhythm_contract(root, path, plan_payload=stored, scene_text=scene_text)
+        rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
+        curve = normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
+        stored_entry = stored_scenes.get(scene_id) if isinstance(stored_scenes.get(scene_id), dict) else {}
+        stored_gap = stored_entry.get("spatial_time_gap_before") if stored_entry else None
+        scene_gap = _scalar(scene_text, "spatial_time_gap_before")
+        entries.append(_scene_entry(scene_text, scene_id, rhythm, curve, stored_gap, scene_gap, stored_scenes, contract))
+    return entries
+
+
+def _scene_entry(
+    scene_text: str,
+    scene_id: str,
+    rhythm: dict[str, Any],
+    curve: dict[str, int],
+    stored_gap: object,
+    scene_gap: str,
+    stored_scenes: dict[str, Any],
+    contract: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "scene_id": scene_id,
+        "volume_id": _scalar(scene_text, "volume_id") or _scalar(scene_text, "volume") or "unassigned",
+        "chapter_id": _scalar(scene_text, "chapter_id") or "unassigned",
+        "title": _scalar(scene_text, "title") or scene_id,
+        "pace": str(rhythm.get("pace") or "balanced"),
+        "rhythm_role": str(rhythm.get("rhythm_role") or "mixed"),
+        "scene_function": _strings(rhythm.get("scene_function")),
+        "tension_curve": curve,
+        "detail_level": str(rhythm.get("detail_level") or "standard"),
+        "word_count_target": _integer(_scalar(scene_text, "word_count_target")),
+        "timeline_order": _integer(_scalar(scene_text, "timeline_order")),
+        "story_time": _scalar(scene_text, "story_time"),
+        "spatial_time_gap_before": _positive_number(stored_gap if stored_gap not in (None, "") else scene_gap),
+        "source": "rhythm-plan" if scene_id in stored_scenes else str(contract.get("source") or "default"),
+    }
+
+
+def _group_audits(entries: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
+    return {
+        group_id: analyze_narrative_rhythm_sequence([entry for entry in entries if entry[key] == group_id])
+        for group_id in sorted({str(entry[key]) for entry in entries})
+    }
+
+
+def _book_audit(entries: list[dict[str, Any]], profile: dict[str, Any]) -> dict[str, Any]:
+    book_audit = analyze_narrative_rhythm_sequence(entries)
+    macro = _book_macro(entries, profile)
+    book_audit["macro"] = macro
+    book_audit["issues"] = [*book_audit.get("issues", []), *macro["issues"]]
+    if book_audit.get("status") == "pass" and macro["issues"]:
+        book_audit["status"] = "needs_attention"
+        book_audit["warning_count"] = int(book_audit.get("warning_count") or 0) + len(macro["issues"])
+    return book_audit
+
+
 def _rhythm_scene_paths(root: Path) -> list[Path]:
     folder = root / "scenes"
     return [path for path in sorted(folder.glob("*.yaml")) if not path.name.startswith("_")] if folder.is_dir() else []
@@ -132,52 +153,83 @@ def save_rhythm_plan(
     book_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
-    known = {_scalar(path.read_text(encoding="utf-8", errors="ignore"), "scene_id") or path.stem for path in (root / "scenes").glob("*.yaml")}
+    known = _known_scene_ids(root)
+    normalized = _normalize_saved_entries(entries, known)
+    previous = _read_json(rhythm_plan_path(root))
+    profile = normalize_book_profile(book_profile if book_profile is not None else previous.get("book_profile"))
+    payload = _saved_plan_payload(normalized, profile, previous, updated_by)
+    _write_json_atomic(rhythm_plan_path(root), payload)
+    return load_rhythm_plan(root)
+
+
+def _known_scene_ids(root: Path) -> set[str]:
+    return {
+        _scalar(path.read_text(encoding="utf-8", errors="ignore"), "scene_id") or path.stem
+        for path in (root / "scenes").glob("*.yaml")
+    }
+
+
+def _normalize_saved_entries(
+    entries: list[dict[str, Any]],
+    known: set[str],
+) -> dict[str, dict[str, Any]]:
     normalized: dict[str, dict[str, Any]] = {}
     for entry in entries:
         scene_id = str(entry.get("scene_id") or "").strip()
         if not scene_id or scene_id not in known:
             raise ValueError(f"unknown rhythm-plan scene: {scene_id or 'missing'}")
-        pace = str(entry.get("pace") or "balanced").strip().lower()
-        role = str(entry.get("rhythm_role") or "mixed").strip().lower()
-        curve = normalize_tension_curve(entry.get("tension_curve"))
-        if pace not in PACE_VALUES:
-            raise ValueError(f"unsupported scene pace: {pace}")
-        if role not in ROLE_VALUES:
-            raise ValueError(f"unsupported rhythm role: {role}")
-        detail_level = str(entry.get("detail_level") or "standard").strip().lower()
-        if detail_level not in DETAIL_LEVEL_VALUES:
-            raise ValueError(f"unsupported scene detail level: {detail_level}")
-        if curve is None:
-            raise ValueError(f"scene {scene_id} requires entry/peak/exit tension values from 1 to 5")
-        time_gap = _positive_number(entry.get("spatial_time_gap_before"))
-        normalized[scene_id] = {
-            "pace": pace,
-            "rhythm_role": role,
-            "scene_function": _strings(entry.get("scene_function")),
-            "tension_curve": curve,
-            "detail_level": detail_level,
-            # This is a projection-only editorial adjustment. It controls the
-            # visual breathing room before the scene without rewriting the
-            # project's authored story time or its reading order.
-            "spatial_time_gap_before": time_gap,
-        }
-    previous = _read_json(rhythm_plan_path(root))
-    normalized_profile = normalize_book_profile(book_profile if book_profile is not None else previous.get("book_profile"))
-    digest = hashlib.sha256(json.dumps({"scenes": normalized, "book_profile": normalized_profile}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        normalized[scene_id] = _normalize_saved_entry(scene_id, entry)
+    return normalized
+
+
+def _normalize_saved_entry(scene_id: str, entry: dict[str, Any]) -> dict[str, Any]:
+    pace = str(entry.get("pace") or "balanced").strip().lower()
+    role = str(entry.get("rhythm_role") or "mixed").strip().lower()
+    detail_level = str(entry.get("detail_level") or "standard").strip().lower()
+    curve = normalize_tension_curve(entry.get("tension_curve"))
+    if pace not in PACE_VALUES:
+        raise ValueError(f"unsupported scene pace: {pace}")
+    if role not in ROLE_VALUES:
+        raise ValueError(f"unsupported rhythm role: {role}")
+    if detail_level not in DETAIL_LEVEL_VALUES:
+        raise ValueError(f"unsupported scene detail level: {detail_level}")
+    if curve is None:
+        raise ValueError(f"scene {scene_id} requires entry/peak/exit tension values from 1 to 5")
+    return {
+        "pace": pace,
+        "rhythm_role": role,
+        "scene_function": _strings(entry.get("scene_function")),
+        "tension_curve": curve,
+        "detail_level": detail_level,
+        "spatial_time_gap_before": _positive_number(entry.get("spatial_time_gap_before")),
+    }
+
+
+def _saved_plan_payload(
+    normalized: dict[str, dict[str, Any]],
+    profile: dict[str, Any],
+    previous: dict[str, Any],
+    updated_by: str,
+) -> dict[str, Any]:
+    digest = hashlib.sha256(
+        json.dumps(
+            {"scenes": normalized, "book_profile": profile},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
     previous_digest = str(previous.get("digest") or "")
     revision = int(previous.get("revision") or 0) + (1 if digest != previous_digest else 0)
-    payload = {
+    return {
         "schema": RHYTHM_PLAN_SCHEMA,
         "revision": revision,
         "digest": digest,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "updated_by": updated_by,
-        "book_profile": normalized_profile,
+        "book_profile": profile,
         "scenes": normalized,
     }
-    _write_json_atomic(rhythm_plan_path(root), payload)
-    return load_rhythm_plan(root)
 
 
 def normalize_book_profile(value: object) -> dict[str, Any]:
@@ -216,19 +268,8 @@ def normalize_book_profile(value: object) -> dict[str, Any]:
 def _book_macro(entries: list[dict[str, Any]], profile: dict[str, Any]) -> dict[str, Any]:
     chapter_ids = _ordered_unique(entry.get("chapter_id") for entry in entries)
     expected = _interpolate_arc(profile["arc"], len(chapter_ids))
-    actual: list[int] = []
-    issues: list[dict[str, Any]] = []
-    for chapter_id in chapter_ids:
-        chapter_entries = [entry for entry in entries if entry.get("chapter_id") == chapter_id]
-        peaks = [int((entry.get("tension_curve") or {}).get("peak") or 3) for entry in chapter_entries]
-        actual.append(max(peaks, default=3))
-    if len(actual) >= 4:
-        mismatch = [chapter_ids[index] for index, value in enumerate(actual) if abs(value - expected[index]) >= 2]
-        if len(mismatch) >= max(2, len(actual) // 3):
-            issues.append(_macro_issue("macro_curve_drift", mismatch, "实际章节峰值长期偏离全书意图曲线；请确认是有意反转，还是需要调整重点场和张力分布。"))
-        run = max(_high_pressure_run(actual), default=0)
-        if run >= profile["breathing_interval"] + 2:
-            issues.append(_macro_issue("macro_breathing_gap", chapter_ids, "高压章节连续过长，未按设定保留叙事呼吸与后果落点。"))
+    actual = _chapter_peak_curve(entries, chapter_ids)
+    issues = _macro_curve_issues(actual, expected, chapter_ids, profile)
     scene_count = len(entries)
     set_pieces = sum(1 for entry in entries if entry.get("detail_level") == "set_piece")
     actual_ratio = round((set_pieces / scene_count) * 100) if scene_count else 0
@@ -243,6 +284,49 @@ def _book_macro(entries: list[dict[str, Any]], profile: dict[str, Any]) -> dict[
         "set_piece_ratio": actual_ratio,
         "issues": issues,
     }
+
+
+def _chapter_peak_curve(entries: list[dict[str, Any]], chapter_ids: list[str]) -> list[int]:
+    return [
+        max(
+            (
+                int((entry.get("tension_curve") or {}).get("peak") or 3)
+                for entry in entries
+                if entry.get("chapter_id") == chapter_id
+            ),
+            default=3,
+        )
+        for chapter_id in chapter_ids
+    ]
+
+
+def _macro_curve_issues(
+    actual: list[int],
+    expected: list[int],
+    chapter_ids: list[str],
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if len(actual) < 4:
+        return []
+    issues: list[dict[str, Any]] = []
+    mismatch = [chapter_ids[index] for index, value in enumerate(actual) if abs(value - expected[index]) >= 2]
+    if len(mismatch) >= max(2, len(actual) // 3):
+        issues.append(
+            _macro_issue(
+                "macro_curve_drift",
+                mismatch,
+                "实际章节峰值长期偏离全书意图曲线；请确认是有意反转，还是需要调整重点场和张力分布。",
+            )
+        )
+    if max(_high_pressure_run(actual), default=0) >= profile["breathing_interval"] + 2:
+        issues.append(
+            _macro_issue(
+                "macro_breathing_gap",
+                chapter_ids,
+                "高压章节连续过长，未按设定保留叙事呼吸与后果落点。",
+            )
+        )
+    return issues
 
 
 def _interpolate_arc(arc: dict[str, Any], count: int) -> list[int]:
