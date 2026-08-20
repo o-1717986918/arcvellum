@@ -543,6 +543,16 @@ Scene AgentReview 的兼容 provider 路径必须维持四段边界：
 
 确定性 Style Lint 是审查证据而不是编辑器；不得自动删改正文，也不得替代独立 Agent 对语义、人物、节奏和 Canon 的判断。
 
+Creative Director 的有限循环由以下边界组成：
+
+- `director/tool_calls.py` 只处理工具 identity、去重、停止/status、观察与摘要；
+- `director/tool_execution.py` 是唯一白名单 dispatcher，只能调用显式注册的 workflow/asset/status/direction 工具；
+- `director/tool_observation.py` 负责 observation 后的 Agent decision 与确定性 fallback；
+- `director/loop.py` 只推进最多 `DIRECTOR_MAX_TOOL_STEPS` 次的有限状态循环并写 loop ledger。
+
+新增 Director 工具必须先进入 `DIRECTOR_ALLOWED_TOOLS` 与 dispatcher 显式注册，并声明正式 service；禁止通用 Shell、任意文件编辑、
+直接 Canon/正文写入、自我批准和绕过 task/gate 的工具。
+
 - `persistence.primitives`：schema 常量、ID 校验、序列化和脱敏；
 - `persistence.autopilot_runs`：run、lease、policy snapshot、delegated decision 与 autopilot event；
 - `persistence.sessions`：顾问对话、Agent session、通知收件箱、delegation policy 和阅读位置/书签；
