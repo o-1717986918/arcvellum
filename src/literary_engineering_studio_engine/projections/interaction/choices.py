@@ -15,8 +15,9 @@ from ...project_interaction_common import (
     _safe_target_id, _safe_token, _stable_choice_id, _write_json_atomic,
 )
 from ...release_fingerprint import release_candidate_fingerprint
-from ...workflow_dashboard import build_workflow_dashboard
-from ...workflow_state import build_workflow_state, next_scene_workflow_state
+from ...workflow.dashboard_projection import project_workflow_dashboard
+from ...workflow.state import project_workflow_state
+from ...workflow_state import next_scene_workflow_state
 from .style_choices import build_style_mount_choice as _style_mount_choice
 
 def build_current_human_choices(
@@ -32,10 +33,9 @@ def build_current_human_choices(
         actions = dashboard_payload.get("next_actions") if isinstance(dashboard_payload.get("next_actions"), list) else []
         dashboard_path = "workflow/dashboard/workflow_dashboard.json"
     else:
-        result = build_workflow_dashboard(root)
-        dashboard = read_json_file(result.json_path)
+        dashboard = project_workflow_dashboard(root)
         actions = dashboard.get("next_actions") if isinstance(dashboard.get("next_actions"), list) else []
-        dashboard_path = _rel(result.json_path, root)
+        dashboard_path = "workflow/dashboard/workflow_dashboard.json"
     choices: list[dict[str, object]] = []
     seen = set()
     resolved = _resolved_choice_ids(root)
@@ -117,14 +117,7 @@ def _route_choice_actions(root: Path, route: str) -> tuple[list[dict[str, object
             }
         ], ""
 
-    state_dir = root / "workflow" / "runtime_choices"
-    result = build_workflow_state(
-        root,
-        route=route,
-        output=state_dir / f"{route}.md",
-        json_output=state_dir / f"{route}.json",
-    )
-    payload = read_json_file(result.json_path)
+    payload = project_workflow_state(root, route=route)
     keys = {
         "longform-planning": ("longform",),
         "source-ingest": ("source_ingests",),
@@ -151,7 +144,7 @@ def _route_choice_actions(root: Path, route: str) -> tuple[list[dict[str, object
                     "next_action": item.get("next_action", ""),
                 }
             )
-    return items, _rel(result.json_path, root)
+    return items, f"workflow/runtime_choices/{route}.json"
 
 def record_human_choice(project_root: Path, payload: dict[str, object]) -> dict[str, object]:
     root = project_root.resolve()

@@ -10,6 +10,8 @@ import threading
 import time
 from typing import Any, Callable
 
+from literary_engineering_studio_engine.public.workflow import project_workflow_dashboard
+
 from ..application.choice_effects import apply_choice_effect
 
 
@@ -27,9 +29,10 @@ def install_core_import_path(config: dict[str, Any]) -> Path:
 
 
 def build_dashboard(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    del config
     with ENGINE_ACCESS_LOCK:
-        result = _function(config, "workflow_dashboard", "build_workflow_dashboard")(project_root)
-        payload = _read_json_with_retry(result.json_path)
+        payload = project_workflow_dashboard(project_root)
+    frontend = payload.get("frontend") if isinstance(payload.get("frontend"), dict) else {}
     return {
         "ok": True,
         "project_root": str(project_root),
@@ -39,9 +42,9 @@ def build_dashboard(config: dict[str, Any], project_root: Path) -> dict[str, Any
         "next_actions": payload.get("next_actions", []),
         "recent_events": payload.get("recent_events", []),
         "paths": {
-            "markdown": _relative(result.markdown_path, project_root),
-            "json": _relative(result.json_path, project_root),
-            "html": _relative(result.html_path, project_root),
+            "markdown": "workflow/dashboard/workflow_dashboard.md",
+            "json": str(frontend.get("json") or "workflow/dashboard/workflow_dashboard.json"),
+            "html": str(frontend.get("html") or "workflow/dashboard/workflow_dashboard.html"),
         },
         "rules": payload.get("rules", []),
     }

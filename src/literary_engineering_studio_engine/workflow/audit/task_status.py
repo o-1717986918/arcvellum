@@ -45,22 +45,13 @@ def build_agent_task_status(
     output: Path | None = None,
     json_output: Path | None = None,
 ) -> AgentTaskStatusResult:
+    payload = project_agent_task_status(project_root)
     root = project_root.resolve()
-    if not root.exists():
-        raise FileNotFoundError(f"project root not found: {root}")
-    records = scan_agent_tasks(root)
-    summary = _summary(records)
+    summary = payload["summary"]
     markdown_path = _resolve_output(root, output, "workflow", "agent_task_status.md")
     json_path = _resolve_output(root, json_output, "workflow", "agent_task_status.json")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema": "literary-engineering-workbench/agent-task-status/v0.1",
-        "generated_at": _now(),
-        "project_root": str(root),
-        "summary": summary,
-        "tasks": [asdict(record) for record in records],
-    }
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     markdown_path.write_text(_render_status_markdown(payload), encoding="utf-8")
     return AgentTaskStatusResult(
@@ -71,6 +62,22 @@ def build_agent_task_status(
     )
 
 
+def project_agent_task_status(project_root: Path) -> dict[str, object]:
+    """Project sidecar status without materializing status files."""
+
+    root = project_root.resolve()
+    if not root.exists():
+        raise FileNotFoundError(f"project root not found: {root}")
+    records = scan_agent_tasks(root)
+    return {
+        "schema": "literary-engineering-workbench/agent-task-status/v0.1",
+        "generated_at": _now(),
+        "project_root": str(root),
+        "summary": _summary(records),
+        "tasks": [asdict(record) for record in records],
+    }
+
+
 def build_route_audit(
     project_root: Path,
     *,
@@ -78,37 +85,13 @@ def build_route_audit(
     output: Path | None = None,
     json_output: Path | None = None,
 ) -> RouteAuditResult:
+    payload = project_route_audit(project_root, route=route)
     root = project_root.resolve()
-    if not root.exists():
-        raise FileNotFoundError(f"project root not found: {root}")
-    records = scan_agent_tasks(root)
-    normalized_route = _normalize_route(route)
-    gates = _route_gates(root, normalized_route, records)
-    scene_scope = _scene_audit_scope(root) if normalized_route == "scene-development" else {}
-    summary = {
-        "route": normalized_route or "overall",
-        "gate_count": len(gates),
-        "blocking_count": sum(1 for gate in gates if gate["severity"] == "blocking"),
-        "warning_count": sum(1 for gate in gates if gate["severity"] == "warning"),
-        "waiting_count": sum(1 for gate in gates if gate["status"] == "waiting"),
-        "pass_count": sum(1 for gate in gates if gate["status"] == "pass"),
-        "pending_task_count": sum(1 for record in records if record.status in {"pending", "partial", "unknown"}),
-        "missing_expected_count": sum(len(record.missing_expected_paths) for record in records),
-    }
-    if scene_scope:
-        summary["scene_scope"] = scene_scope
+    summary = payload["summary"]
     markdown_path = _resolve_output(root, output, "workflow", "route_audit.md")
     json_path = _resolve_output(root, json_output, "workflow", "route_audit.json")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema": "literary-engineering-workbench/route-audit/v0.1",
-        "generated_at": _now(),
-        "project_root": str(root),
-        "summary": summary,
-        "gates": gates,
-        "tasks": [asdict(record) for record in records],
-    }
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     markdown_path.write_text(_render_route_audit_markdown(payload), encoding="utf-8")
     return RouteAuditResult(
@@ -116,3 +99,50 @@ def build_route_audit(
         gate_count=summary["gate_count"], blocking_count=summary["blocking_count"],
         warning_count=summary["warning_count"], pending_task_count=summary["pending_task_count"],
     )
+
+
+def project_route_audit(project_root: Path, *, route: str = "") -> dict[str, object]:
+    """Project route gates without materializing audit files."""
+
+    root = project_root.resolve()
+    if not root.exists():
+        raise FileNotFoundError(f"project root not found: {root}")
+    records = scan_agent_tasks(root)
+    normalized_route = _normalize_route(route)
+    gates = _route_gates(root, normalized_route, records)
+    scene_scope = _scene_audit_scope(root) if normalized_route == "scene-development" else {}
+    summary = _route_summary(normalized_route, records, gates)
+    if scene_scope:
+        summary["scene_scope"] = scene_scope
+    return {
+        "schema": "literary-engineering-workbench/route-audit/v0.1",
+        "generated_at": _now(),
+        "project_root": str(root),
+        "summary": summary,
+        "gates": gates,
+        "tasks": [asdict(record) for record in records],
+    }
+
+
+def _route_summary(
+    normalized_route: str,
+    records: list[AgentTaskRecord],
+    gates: list[dict[str, str]],
+) -> dict[str, object]:
+    return {
+        "route": normalized_route or "overall",
+        "gate_count": len(gates),
+        "blocking_count": _gate_count(gates, "severity", "blocking"),
+        "warning_count": _gate_count(gates, "severity", "warning"),
+        "waiting_count": _gate_count(gates, "status", "waiting"),
+        "pass_count": _gate_count(gates, "status", "pass"),
+        "pending_task_count": sum(
+            1 for record in records
+            if record.status in {"pending", "partial", "unknown"}
+        ),
+        "missing_expected_count": sum(len(record.missing_expected_paths) for record in records),
+    }
+
+
+def _gate_count(gates: list[dict[str, str]], field: str, value: str) -> int:
+    return sum(1 for gate in gates if gate[field] == value)

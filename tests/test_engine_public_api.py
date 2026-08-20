@@ -41,7 +41,12 @@ EXPECTED_SYMBOLS = {
         "validated_branch_proposal_ids",
         "write_agent_completion_marker",
     ),
-    "workflow": ("asset_candidate_states", "build_workflow_state"),
+    "workflow": (
+        "asset_candidate_states",
+        "build_workflow_state",
+        "project_workflow_dashboard",
+        "project_workflow_state",
+    ),
     "prompting": (
         "list_prompt_assets",
         "load_schema_spec",
@@ -94,6 +99,7 @@ class EnginePublicApiTests(unittest.TestCase):
         self.assertIs(projects.atomic_write_text, atomic_io.atomic_write_text)
         self.assertIs(tasking.issue_next_task, internal_tasking.issue_next_task)
         self.assertIs(workflow.build_workflow_state, internal_workflow.build_workflow_state)
+        self.assertIs(workflow.project_workflow_state, internal_workflow.project_workflow_state)
         self.assertIs(prompting.validate_payload, internal_schema.validate_payload)
         self.assertIs(projections.display_counts, display_cleaner.display_counts)
         self.assertIs(orchestration.PlanNodeKind, internal_orchestration.PlanNodeKind)

@@ -10,7 +10,7 @@ from ...approval import record_workflow_approval
 from ...canon_evolver import apply_canon_patch, build_canon_patch_backlog
 from ...project_interaction import build_current_human_choices, record_human_choice
 from ...workflow_activity import build_task_package_summary, build_workflow_activity
-from ...workflow_dashboard import build_workflow_dashboard
+from ...workflow.dashboard_projection import project_workflow_dashboard
 from ...workflow_runner import run_workflow
 from ..common import rel_str, reject_bypass, require_api_token, run_state_path, safe_project_root, safe_relative_path
 from ..models import ApprovalRequest, CanonApplyRequest, HumanChoiceRequest, RunWorkflowRequest
@@ -48,13 +48,12 @@ def build_workflow_router(*, api_token: str, allowed_roots: list[Path]):
         require_api_token(http_request, api_token)
         root = safe_project_root(project_root, allowed_roots)
         try:
-            result = build_workflow_dashboard(root)
-            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+            payload = project_workflow_dashboard(root)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return dashboard_response(result, payload, root)
+        return dashboard_response(payload, root)
 
     @router.get("/workflow/dashboard/stream")
     def workflow_dashboard_stream(project_root: str, http_request: Request, interval_seconds: float = 8.0, max_events: int = 0):
@@ -66,10 +65,9 @@ def build_workflow_router(*, api_token: str, allowed_roots: list[Path]):
         def stream():
             sent = 0
             while True:
-                result = build_workflow_dashboard(root)
-                payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+                payload = project_workflow_dashboard(root)
                 yield "event: dashboard\n"
-                yield "data: " + json.dumps(dashboard_response(result, payload, root), ensure_ascii=False) + "\n\n"
+                yield "data: " + json.dumps(dashboard_response(payload, root), ensure_ascii=False) + "\n\n"
                 sent += 1
                 if limit and sent >= limit:
                     break
@@ -199,5 +197,6 @@ def run_response(result, root: Path) -> dict[str, object]:
     return {"run_id": result.run_id, "status": result.status, "state_path": rel_str(result.state_path, root), "log_path": rel_str(result.log_path, root), "nodes": result.node_count, "blocked": result.blocked}
 
 
-def dashboard_response(result, payload: dict[str, object], root: Path) -> dict[str, object]:
-    return {"ok": True, "project_root": str(root), "dashboard": payload, "summary": payload.get("summary", {}), "route_audits": payload.get("route_audits", []), "next_actions": payload.get("next_actions", []), "recent_events": payload.get("recent_events", []), "paths": {"markdown": rel_str(result.markdown_path, root), "json": rel_str(result.json_path, root), "html": rel_str(result.html_path, root)}, "rules": payload.get("rules", [])}
+def dashboard_response(payload: dict[str, object], root: Path) -> dict[str, object]:
+    frontend = payload.get("frontend") if isinstance(payload.get("frontend"), dict) else {}
+    return {"ok": True, "project_root": str(root), "dashboard": payload, "summary": payload.get("summary", {}), "route_audits": payload.get("route_audits", []), "next_actions": payload.get("next_actions", []), "recent_events": payload.get("recent_events", []), "paths": {"markdown": "workflow/dashboard/workflow_dashboard.md", "json": str(frontend.get("json") or "workflow/dashboard/workflow_dashboard.json"), "html": str(frontend.get("html") or "workflow/dashboard/workflow_dashboard.html")}, "rules": payload.get("rules", [])}

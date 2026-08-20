@@ -67,14 +67,14 @@ def build_workflow_state(
 ) -> WorkflowStateResult:
     """Write the current formal-route ledger without advancing any Gate."""
 
+    payload = project_workflow_state(
+        project_root,
+        route=route,
+        scene=scene,
+        scene_scope=scene_scope,
+    )
     root = project_root.resolve()
-    if not root.exists():
-        raise FileNotFoundError(f"project root not found: {root}")
-    normalized_route = _normalize_route(route) or "scene-development"
-    scenes, scene_scope_summary = _project_scenes(root, normalized_route, scene, scene_scope)
-    route_state = _project_route_state(root, normalized_route)
-    summary = _build_summary(normalized_route, scenes, scene_scope_summary, scene_scope, route_state)
-    payload = _build_payload(root, normalized_route, scenes, route_state, summary)
+    summary = payload["summary"]
     markdown_path = _resolve_output(root, output, "workflow", "route_state.md")
     json_path = _resolve_output(root, json_output, "workflow", "route_state.json")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,12 +85,31 @@ def build_workflow_state(
         project_root=root,
         markdown_path=markdown_path,
         json_path=json_path,
-        route=normalized_route,
+        route=str(payload["route"]),
         scene_count=int(summary["scene_count"]),
         blocked_count=summary["blocked_count"],
         ready_count=summary["ready_count"],
         next_action_count=summary["next_action_count"],
     )
+
+
+def project_workflow_state(
+    project_root: Path,
+    *,
+    route: str = "scene-development",
+    scene: Path | str | None = None,
+    scene_scope: str = "full",
+) -> dict[str, object]:
+    """Project formal-route state without writing derived artifacts."""
+
+    root = project_root.resolve()
+    if not root.exists():
+        raise FileNotFoundError(f"project root not found: {root}")
+    normalized_route = _normalize_route(route) or "scene-development"
+    scenes, scene_scope_summary = _project_scenes(root, normalized_route, scene, scene_scope)
+    route_state = _project_route_state(root, normalized_route)
+    summary = _build_summary(normalized_route, scenes, scene_scope_summary, scene_scope, route_state)
+    return _build_payload(root, normalized_route, scenes, route_state, summary)
 
 
 def _project_scenes(

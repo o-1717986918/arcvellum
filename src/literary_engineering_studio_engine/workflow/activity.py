@@ -9,7 +9,7 @@ import re
 
 from ..project_interaction import build_current_human_choices
 from ..task_registry import SUPPORTED_ROUTES
-from .dashboard import build_workflow_dashboard
+from .dashboard_projection import project_workflow_dashboard
 
 
 WORKFLOW_ACTIVITY_SCHEMA = "literary-engineering-workbench/workflow-activity/v0.1"
@@ -63,8 +63,7 @@ def build_workflow_activity(project_root: Path, *, limit: int = 30) -> dict[str,
     root = project_root.resolve()
     if not root.exists():
         raise FileNotFoundError(f"project root not found: {root}")
-    dashboard_result = build_workflow_dashboard(root)
-    dashboard = _read_json(dashboard_result.json_path)
+    dashboard = project_workflow_dashboard(root)
     events = _read_events(root / "workflow" / "events" / "task_events.jsonl")
     tasks = _load_tasks(root)
     choices_payload = _safe_current_choices(root)
@@ -88,7 +87,7 @@ def build_workflow_activity(project_root: Path, *, limit: int = 30) -> dict[str,
         "route_lanes": route_lanes,
         "timeline": timeline,
         "waiting_choices": choices[:20],
-        "dashboard": _rel(dashboard_result.json_path, root),
+        "dashboard": "workflow/dashboard/workflow_dashboard.json",
         "rules": [
             "This activity cockpit is read-only and must not be used as task completion proof.",
             "Only task-complete or route-audit pass can prove formal completion.",

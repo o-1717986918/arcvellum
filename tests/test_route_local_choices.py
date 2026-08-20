@@ -3,7 +3,6 @@ import json
 import tempfile
 import unittest
 from unittest.mock import patch
-from types import SimpleNamespace
 
 from literary_engineering_studio import core_read_models
 from literary_engineering_studio_engine import project_interaction
@@ -26,7 +25,7 @@ class RouteLocalChoiceTests(unittest.TestCase):
 
             with patch.object(
                 project_interaction_choices,
-                "build_workflow_dashboard",
+                "project_workflow_dashboard",
                 side_effect=AssertionError("whole-project dashboard scan used"),
             ):
                 payload = project_interaction.build_current_human_choices(
@@ -77,8 +76,8 @@ class RouteLocalChoiceTests(unittest.TestCase):
 
             with patch.object(
                 project_interaction_choices,
-                "build_workflow_state",
-                return_value=SimpleNamespace(json_path=state_path),
+                "project_workflow_state",
+                return_value=json.loads(state_path.read_text(encoding="utf-8")),
             ):
                 payload = project_interaction.build_current_human_choices(
                     root,
@@ -114,8 +113,8 @@ class RouteLocalChoiceTests(unittest.TestCase):
             )
             with patch.object(
                 project_interaction_choices,
-                "build_workflow_state",
-                return_value=SimpleNamespace(json_path=state_path),
+                "project_workflow_state",
+                return_value=json.loads(state_path.read_text(encoding="utf-8")),
             ):
                 after = project_interaction.build_current_human_choices(
                     root,
