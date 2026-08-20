@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,19 +13,9 @@ from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
 from ....flow_gates import ensure_composition_ready_for_generation
 from ....roleplay_lab import CharacterCard, _list_after, _load_characters, _nested_list, _nested_scalar, _read, _scalar
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
+from .contracts import CharacterStatePatchResult, StatePatchSources
+from .rendering import render_state_patch
 from .writeback_source import merge_writeback_candidates, structured_scene_writeback
-
-
-@dataclass(frozen=True)
-class CharacterStatePatchResult:
-    project_root: Path
-    output_path: Path
-    json_path: Path
-    agent_tasks_path: Path | None
-    scene_id: str
-    source_path: Path
-    character_count: int
-    unresolved_count: int
 
 
 def build_character_state_patch(
@@ -39,49 +28,124 @@ def build_character_state_patch(
 ) -> CharacterStatePatchResult:
     """Build a reviewable character-state patch from one scene artifact."""
 
+    sources = _load_state_patch_sources(project_root, scene=scene, source=source)
+    payload = _build_candidate_payload(sources)
+    default_dir = sources.root / "characters" / "state_patches"
+    output_path = _resolve(
+        sources.root,
+        output,
+        default_dir / f"{sources.scene_id}_state_patch.md",
+    )
+    json_path = _resolve(
+        sources.root,
+        json_output,
+        default_dir / f"{sources.scene_id}_state_patch.json",
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    payload, patch_changed = _persist_candidate(payload, output_path, json_path)
+    agent_tasks_path = None
+    if agent_tasks:
+        write_semantic_artifact_template(
+            sources.root,
+            "state-agent-task",
+            sources.scene_id,
+            source=json_path.relative_to(sources.root).as_posix(),
+            # Reissuing a materially different patch must invalidate the old
+            # digest-bound review. Equivalent retries preserve the conclusion.
+            overwrite=patch_changed,
+        )
+        agent_tasks_path = _write_state_patch_agent_tasks(
+            sources.root,
+            sources.scene_path,
+            sources.source_path,
+            output_path,
+            json_path,
+            payload,
+        )
+    return CharacterStatePatchResult(
+        project_root=sources.root,
+        output_path=output_path,
+        json_path=json_path,
+        agent_tasks_path=agent_tasks_path,
+        scene_id=sources.scene_id,
+        source_path=sources.source_path,
+        character_count=len(payload["characters"]),
+        unresolved_count=len(payload["unresolved_changes"]),
+    )
+
+
+def _load_state_patch_sources(
+    project_root: Path,
+    *,
+    scene: Path | None,
+    source: Path | None,
+) -> StatePatchSources:
     root = project_root.resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"project root not found: {root}")
-
-    scene_path = root / "scenes" / "scene_0001.yaml" if scene is None else _resolve(root, scene)
+    scene_path = (
+        root / "scenes" / "scene_0001.yaml"
+        if scene is None
+        else _resolve(root, scene)
+    )
     if not scene_path.exists():
         raise FileNotFoundError(f"scene file not found: {scene_path}")
     scene_text = _read(scene_path)
     scene_id = _scalar(scene_text, "scene_id") or scene_path.stem or "scene"
-    participants = _list_value(scene_text, "participants")
     source_path = _resolve_source(root, scene_id, source)
     if _is_composition_source(source_path):
         ensure_composition_ready_for_generation(root, source_path)
     source_text = _read(source_path)
     if not source_text:
-        raise FileNotFoundError(f"source artifact not found or empty: {source_path}")
+        raise FileNotFoundError(
+            f"source artifact not found or empty: {source_path}"
+        )
+    return StatePatchSources(
+        root=root,
+        scene_path=scene_path,
+        scene_id=scene_id,
+        participants=tuple(_list_value(scene_text, "participants")),
+        source_path=source_path,
+        source_text=source_text,
+    )
 
-    cards = _load_characters(root)
-    active_cards = _active_cards(cards, participants)
-    artifact_changes = _source_changes(source_path, source_text)
-    structured_changes, structured_source = structured_scene_writeback(root, scene_id)
-    source_changes = merge_writeback_candidates(structured_changes, artifact_changes)
-    patches, unresolved = _build_patches(root, active_cards or cards, active_cards, source_changes)
-    default_dir = root / "characters" / "state_patches"
-    output_path = _resolve(root, output, default_dir / f"{scene_id}_state_patch.md")
-    json_path = _resolve(root, json_output, default_dir / f"{scene_id}_state_patch.json")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.parent.mkdir(parents=True, exist_ok=True)
 
-    payload = {
+def _build_candidate_payload(sources: StatePatchSources) -> dict[str, Any]:
+    cards = _load_characters(sources.root)
+    active_cards = _active_cards(cards, list(sources.participants))
+    artifact_changes = _source_changes(sources.source_path, sources.source_text)
+    structured_changes, structured_source = structured_scene_writeback(
+        sources.root,
+        sources.scene_id,
+    )
+    source_changes = merge_writeback_candidates(
+        structured_changes,
+        artifact_changes,
+    )
+    patches, unresolved = _build_patches(
+        sources.root,
+        active_cards or cards,
+        active_cards,
+        source_changes,
+    )
+    return {
         "schema": "literary-engineering-workbench/character-state-patch/v0.1",
         "generated_at": _now(),
-        "project_root": str(root),
-        "scene_id": scene_id,
-        "scene": _rel(scene_path, root),
-        "source_artifact": _rel(source_path, root),
+        "project_root": str(sources.root),
+        "scene_id": sources.scene_id,
+        "scene": _rel(sources.scene_path, sources.root),
+        "source_artifact": _rel(sources.source_path, sources.root),
         "status": "pending_human_approval",
         "characters": patches,
         "unresolved_changes": unresolved,
         "source_changes": source_changes,
         "source_change_sources": [
             value
-            for value in [_rel(source_path, root), structured_source]
+            for value in [
+                _rel(sources.source_path, sources.root),
+                structured_source,
+            ]
             if value
         ],
         "new_character_policy": {
@@ -100,39 +164,25 @@ def build_character_state_patch(
             "正文中新出现的持久角色不得写入既有人物状态；必须进入 characters/candidates/ 并走资产审查、用户批准和晋升。",
         ],
     }
-    previous_payload = _read_json_object(json_path)
-    patch_changed = not _same_patch_contract(previous_payload, payload)
-    if not patch_changed:
-        # Keep the exact candidate digest stable across deterministic retries.
-        # Reviews and approvals are bound to the full JSON bytes.
-        payload = previous_payload
-    else:
-        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    rendered = _render_markdown(payload)
+
+
+def _persist_candidate(
+    payload: dict[str, Any],
+    output_path: Path,
+    json_path: Path,
+) -> tuple[dict[str, Any], bool]:
+    previous = _read_json_object(json_path)
+    changed = not _same_patch_contract(previous, payload)
+    persisted = payload if changed else previous
+    if changed:
+        json_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    rendered = render_state_patch(persisted)
     if not output_path.exists() or output_path.read_text(encoding="utf-8") != rendered:
         output_path.write_text(rendered, encoding="utf-8")
-    agent_tasks_path = None
-    if agent_tasks:
-        write_semantic_artifact_template(
-            root,
-            "state-agent-task",
-            scene_id,
-            source=json_path.relative_to(root).as_posix(),
-            # Reissuing a materially different patch must invalidate the old
-            # digest-bound review. Equivalent retries preserve the conclusion.
-            overwrite=patch_changed,
-        )
-        agent_tasks_path = _write_state_patch_agent_tasks(root, scene_path, source_path, output_path, json_path, payload)
-    return CharacterStatePatchResult(
-        project_root=root,
-        output_path=output_path,
-        json_path=json_path,
-        agent_tasks_path=agent_tasks_path,
-        scene_id=scene_id,
-        source_path=source_path,
-        character_count=len(patches),
-        unresolved_count=len(unresolved),
-    )
+    return persisted, changed
 
 
 def _write_state_patch_agent_tasks(
@@ -408,80 +458,6 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]
-
-
-def _render_markdown(payload: dict[str, Any]) -> str:
-    lines = [
-        f"# 人物状态演化候选 Patch：{payload['scene_id']}",
-        "",
-        f"- 生成时间：{payload['generated_at']}",
-        f"- 场景：`{payload['scene']}`",
-        f"- 来源产物：`{payload['source_artifact']}`",
-        f"- 状态：`{payload['status']}`",
-        "",
-        "## 使用边界",
-        "",
-        _md_list(payload["guardrails"]),
-        "",
-        "## 候选写回",
-        "",
-    ]
-    if not payload["characters"]:
-        lines.extend(["- 未生成可匹配人物的状态 patch。", ""])
-    for patch in payload["characters"]:
-        updates = patch["proposed_updates"]
-        state = updates["state"]
-        lines.extend(
-            [
-                f"### {patch['name']} `{patch['character_id']}`",
-                "",
-                f"- 人物文件：`{patch['file']}`",
-                f"- 置信等级：`{patch['confidence']}`",
-                "",
-                "状态候选：",
-                "",
-                _md_list(
-                    state["known_facts_add"]
-                    + state["resources_add"]
-                    + [item for item in [state["location_note"], state["health_note"]] if item]
-                ),
-                "",
-                "弧光候选：",
-                "",
-                _md_list(updates["arc"]["candidate_changes"]),
-                "",
-                "关系候选：",
-                "",
-                _md_list(updates["relationships"]["candidate_changes"]),
-                "",
-            ]
-        )
-    lines.extend(["## 未匹配变化", ""])
-    if payload["unresolved_changes"]:
-        for item in payload["unresolved_changes"]:
-            lines.append(f"- `{item['kind']}`：{item['text']}")
-    else:
-        lines.append("- 无。")
-    lines.extend(
-        [
-            "",
-            "## 人工确认清单",
-            "",
-            _md_list(payload["approval_required"]),
-            "",
-            "## 后续",
-            "",
-            "- 审查通过后，下一阶段才允许实现受控写回命令。",
-            "- 写回前应保留本 patch 作为审批证据。",
-        ]
-    )
-    return "\n".join(lines) + "\n"
-
-
-def _md_list(items: list[str]) -> str:
-    if not items:
-        return "- 无。"
-    return "\n".join(f"- {item}" for item in items)
 
 
 def _resolve(root: Path, value: Path | None, default: Path | None = None) -> Path:
