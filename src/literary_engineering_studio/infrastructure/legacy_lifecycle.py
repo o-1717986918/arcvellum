@@ -8,7 +8,7 @@ from typing import Any
 from ..application.lifecycle import ManagedProcessState
 from ..application.lifecycle import ApplicationLifecycleManager as _ApplicationLifecycleManager
 from ..application.ports import ApplicationPorts
-from ..runtimes import RUNTIME_TYPES, agent_runner_status
+from ..runtimes import DEFAULT_RUNTIME_REGISTRY, RUNTIME_TYPES, agent_runner_status
 from .defaults import build_default_application_ports
 
 
@@ -24,7 +24,7 @@ class ApplicationLifecycleManager(_ApplicationLifecycleManager):
         if ports is None:
             selected = replace(
                 selected,
-                runtime_ids=tuple(RUNTIME_TYPES),
+                runtime_ids=DEFAULT_RUNTIME_REGISTRY.ids(),
                 runner_status_loader=agent_runner_status,
             )
         super().__init__(config, selected)

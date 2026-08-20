@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import threading
 import time
-from typing import Any
+from typing import Any, Protocol
 from collections.abc import Callable
 from typing import Sequence
 
@@ -103,7 +103,35 @@ class AgentRunnerCapabilities:
         return payload
 
 
+class AgentRuntimePort(Protocol):
+    """Stable Studio-owned contract implemented by every Agent runtime."""
+
+    runtime_id: str
+
+    def availability(self) -> RuntimeAvailability: ...
+
+    def capabilities(
+        self, availability: RuntimeAvailability | None = None
+    ) -> AgentRunnerCapabilities: ...
+
+    def execution_control_capabilities(self) -> tuple[str, ...]: ...
+
+    def execute(
+        self,
+        workspace: Path,
+        prompt_path: Path,
+        run_root: Path,
+        *,
+        timeout: int,
+        event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+        cancel_event: threading.Event | None = None,
+        **options: object,
+    ) -> RuntimeResult: ...
+
+
 class AgentRuntime:
+    """Reusable line-oriented subprocess adapter for CLI Agent runtimes."""
+
     runtime_id = "base"
 
     def __init__(self, settings: dict[str, object]):
@@ -312,3 +340,8 @@ def _terminate_process(process: subprocess.Popen[str]) -> None:
             process.kill()
         except OSError:
             pass
+
+
+# Explicit SPI-era name; the established class identity remains stable until
+# its long execute loop is split under the M7 behavior-locking batch.
+SubprocessRuntimeBase = AgentRuntime

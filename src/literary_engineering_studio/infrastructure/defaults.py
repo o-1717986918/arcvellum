@@ -15,7 +15,7 @@ from ..runtime.execution_coordinator import ProjectExecutionCoordinator
 from ..runtime.prepared_context_cache import PreparedContextCache
 from ..runtime.process_manager import ProcessManager
 from ..runtime.supervisor import WorkerSupervisor
-from ..runtimes import RUNTIME_TYPES, agent_runner_status
+from ..runtimes import DEFAULT_RUNTIME_REGISTRY, agent_runner_status
 
 
 def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
@@ -49,7 +49,7 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
             lease_seconds=int(application.get("lease_seconds") or 90),
             execution_coordinator=execution_coordinator,
         ),
-        runtime_ids=tuple(RUNTIME_TYPES),
+        runtime_ids=DEFAULT_RUNTIME_REGISTRY.ids(),
         runner_status_loader=agent_runner_status,
         model_connection_status_loader=model_connection_status,
     )
