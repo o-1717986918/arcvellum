@@ -15,6 +15,43 @@ from literary_engineering_studio_engine.workflow.state_scene import _state_patch
 
 
 class StateWritebackContractTests(unittest.TestCase):
+    def test_symbolic_protagonist_does_not_match_secondary_protagonist(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir(parents=True)
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                'scene_id: scene_0001\nparticipants: ["主角", "林曦"]\n',
+                encoding="utf-8",
+            )
+            (root / "characters").mkdir(parents=True)
+            (root / "characters" / "lin-huan.yaml").write_text(
+                'character_id: lin-huan\nname: 林桓\nrole: 主角——轨道维修员\n',
+                encoding="utf-8",
+            )
+            (root / "characters" / "lin-xi.yaml").write_text(
+                'character_id: lin-xi\nname: 林曦\nrole: 次要主角——往访工程师\n',
+                encoding="utf-8",
+            )
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("## 正文草稿\n\n林桓决定烧掉返航冗余。\n", encoding="utf-8")
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            composition.write_text(
+                json.dumps(
+                    {"writeback_candidates": {"character_changes": ["主角把自身存活押进燃料表。"]}},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_character_state_patch(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+            by_id = {item["character_id"]: item for item in payload["characters"]}
+
+            self.assertIn("lin-huan", by_id)
+            self.assertNotIn("lin-xi", by_id)
+
     def test_symbolic_protagonist_alias_routes_named_change_to_protagonist(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

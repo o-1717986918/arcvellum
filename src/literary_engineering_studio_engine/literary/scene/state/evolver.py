@@ -423,10 +423,29 @@ def _card_aliases(card: CharacterCard) -> set[str]:
 
     text = _read(card.file)
     aliases = {card.character_id, card.name, card.file.stem, *_list_value(text, "aliases")}
-    role = card.role.casefold()
-    if "主角" in role or "protagonist" in role or "protagonist" in card.character_id.casefold():
+    if _is_primary_protagonist(card):
         aliases.update({"主角", "protagonist"})
     return {str(value).strip() for value in aliases if str(value).strip()}
+
+
+def _is_primary_protagonist(card: CharacterCard) -> bool:
+    role = card.role.casefold().strip()
+    character_id = card.character_id.casefold().strip()
+    secondary_markers = (
+        "次要主角",
+        "副主角",
+        "secondary protagonist",
+        "supporting protagonist",
+        "deuteragonist",
+    )
+    if any(marker in role for marker in secondary_markers):
+        return False
+    id_declares_primary = (
+        character_id == "protagonist"
+        or character_id.startswith("protagonist-")
+        or character_id.endswith("-protagonist")
+    )
+    return "主角" in role or "protagonist" in role or id_declares_primary
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:

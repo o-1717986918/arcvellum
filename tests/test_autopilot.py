@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import json
 import tempfile
 import threading
@@ -37,6 +38,69 @@ class _Audit:
 
 
 class AutopilotTests(unittest.TestCase):
+    def test_full_auto_steward_escalation_uses_safe_revision_when_available(self):
+        class EscalatingSteward:
+            def decide(self, project, choice, *, project_direction="", timeout=180, cancel_event=None):
+                return {
+                    "selected_option": "approve",
+                    "rationale": "原始判断不应落地。",
+                    "evidence": [],
+                    "alternatives": [],
+                    "confidence": 0.42,
+                    "requires_human": True,
+                    "human_reason": "次要角色错误继承了主角弧光。",
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            patch_path = project / "characters" / "state_patches" / "scene_0001_state_patch.json"
+            patch_path.parent.mkdir(parents=True)
+            (project / "project.yaml").write_text("title: Tide\n", encoding="utf-8")
+            patch_path.write_text('{"scene_id":"scene_0001"}\n', encoding="utf-8")
+            digest = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+            store = JobStore(root / "studio.sqlite3")
+            policy_payload = default_policy("full_auto")
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+            run = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="full_auto",
+                runtime="pi-worker",
+                policy=policy_payload,
+            )
+            choice = {
+                "choice_id": "choice.state.safe-revision",
+                "route": "scene-development",
+                "task_id": "scene-development-scene-0001-state-patch-approval",
+                "decision_type": "state_patch_confirmation",
+                "target": {
+                    "scene_id": "scene_0001",
+                    "patch": "characters/state_patches/scene_0001_state_patch.json",
+                    "approval_run_id": "scene_0001_state_patch",
+                    "candidate_sha256": digest,
+                },
+                "options": [{"id": "approve"}, {"id": "revise"}, {"id": "reject"}],
+            }
+
+            handled = service._delegate_choice(
+                run["run_id"],
+                project,
+                "scene-development",
+                DelegationPolicy(policy_payload),
+                EscalatingSteward(),
+                choice,
+            )
+
+            self.assertTrue(handled)
+            decision = store.delegated_decisions(run["run_id"])[0]
+            self.assertEqual(decision["selected_option"], "revise")
+            self.assertEqual(decision["escalation_resolution"], "delegated-safe-revision")
+            approval = json.loads(
+                (project / "workflow" / "approvals" / "scene_0001_state_patch.jsonl").read_text(encoding="utf-8").splitlines()[-1]
+            )
+            self.assertEqual(approval["decision"], "revise")
+            self.assertEqual(store.read_autopilot_run(run["run_id"])["status"], "running")
+
     def test_transport_retries_do_not_consume_literary_task_failure_budget(self):
         host = MagicMock()
         host.store = MagicMock()

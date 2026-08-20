@@ -29,6 +29,11 @@ MATERIALIZED_DECISIONS = {
     "revision_direction",
 }
 DIRECTION_DECISIONS = {"word_budget_direction"}
+SAFE_REVISION_DECISIONS = {
+    "asset_approval",
+    "canon_patch_approval",
+    "state_patch_confirmation",
+}
 
 
 class DecisionDelegator:
@@ -69,8 +74,22 @@ class DecisionDelegator:
         if decision is None:
             return False
         if decision["requires_human"]:
-            self.pause_for(run_id, "steward-escalation", decision["human_reason"] or "创作代理认为需要你来决定。")
-            return True
+            fallback = _safe_revision_fallback(policy, choice, decision, decision_type)
+            if fallback is None:
+                self.pause_for(run_id, "steward-escalation", decision["human_reason"] or "创作代理认为需要你来决定。")
+                return True
+            decision = fallback
+            self.runs.append_autopilot_event(
+                run_id,
+                "decision.escalation_routed_to_revision",
+                {
+                    "route": route,
+                    "task_id": task_id or str(choice.get("task_id") or ""),
+                    "decision_type": decision_type,
+                    "choice_id": str(choice.get("choice_id") or ""),
+                    "reason": decision["human_reason"],
+                },
+            )
         evidence = self._materialize(project, choice, decision, decision_type, task_id)
         self.runs.record_delegated_decision(
             run_id,
@@ -153,6 +172,36 @@ class DecisionDelegator:
 
 def _stopped(stop: threading.Event | None) -> bool:
     return stop is not None and stop.is_set()
+
+
+def _safe_revision_fallback(
+    policy: DelegationPolicy,
+    choice: dict[str, Any],
+    decision: dict[str, Any],
+    decision_type: str,
+) -> dict[str, Any] | None:
+    """Route an authorized full-auto conflict to revision, never approval."""
+
+    option_ids = {
+        str(option.get("id") or "").strip()
+        for option in choice.get("options") or []
+        if isinstance(option, dict)
+    }
+    if (
+        policy.mode != "full_auto"
+        or decision_type not in SAFE_REVISION_DECISIONS
+        or "revise" not in option_ids
+    ):
+        return None
+    reason = str(decision.get("human_reason") or "").strip() or "Steward 发现候选证据冲突。"
+    return {
+        **decision,
+        "selected_option": "revise",
+        "rationale": f"全自动模式采用安全修订回退，不批准存在冲突的候选：{reason}",
+        "requires_human": False,
+        "human_reason": reason,
+        "escalation_resolution": "delegated-safe-revision",
+    }
 
 
 def _choice_evidence(recorded: dict[str, Any]) -> list[str]:
