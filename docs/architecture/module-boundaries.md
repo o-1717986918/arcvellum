@@ -557,6 +557,18 @@ Creative Director 的有限循环由以下边界组成：
 保存带 digest/revision 的计划，但不能直接重写场景正文或以宏观曲线覆盖 scene-level rhythm/bridge contract。`spatial_time_gap_before`
 只影响投影呼吸，不修改作品时间线事实。
 
+Studio Advisor 分为：
+
+- `advisor/contracts.py`：answer schema、传输 marker 与动作白名单；
+- `advisor/answer_parser.py`：纯答案兼容解析和白名单投影；
+- `advisor/streaming.py`：只输出用户正文、隐藏 metadata；
+- `advisor/prompt.py`：只读宪法、人格、历史和动作协议；
+- `advisor/runtime.py`：OpenCode 远程会话、事件、超时与资源生命周期；
+- `advisor/service.py`：snapshot/hash、persona、memory 与 repository 用例。
+
+顾问 runtime 只能使用 read-only advisor profile；动作卡只是结构化建议，真正改变项目必须经过 Studio API、用户/Steward 授权与正式
+状态机。不得在 Advisor service 或 runtime 增加文件编辑、Shell、网络研究或直接工作流写入能力。
+
 - `persistence.primitives`：schema 常量、ID 校验、序列化和脱敏；
 - `persistence.autopilot_runs`：run、lease、policy snapshot、delegated decision 与 autopilot event；
 - `persistence.sessions`：顾问对话、Agent session、通知收件箱、delegation policy 和阅读位置/书签；

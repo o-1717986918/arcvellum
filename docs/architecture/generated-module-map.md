@@ -25,7 +25,7 @@
 | `src/literary_engineering_studio/observability` | 24 | Events and telemetry | `observability projections` | event contracts | task mutation |
 | `src/literary_engineering_studio/integrations` | 17 | External integrations | `integration-specific facades` | external SDKs and ports | literary policy |
 | `src/literary_engineering_studio/api` | 24 | HTTP/SSE adapters | `router factories` | application use cases | direct project mutation |
-| `src/literary_engineering_studio/advisor` | 6 | Read-only advisor | `advisor service` | read models and Runtime port | formal project writeback |
+| `src/literary_engineering_studio/advisor` | 11 | Read-only advisor | `advisor service` | read models and Runtime port | formal project writeback |
 | `workers/pi-worker/src` | 14 | Bounded Pi Worker | `main.ts / worker.ts` | Pi SDK and task contract | formal project access |
 | `desktop/src-tauri/src` | 1 | Desktop host | `main.rs` | Tauri commands and sidecar protocol | literary logic |
 
