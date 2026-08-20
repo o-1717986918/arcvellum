@@ -3,12 +3,44 @@ from __future__ import annotations
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock
 
-from literary_engineering_studio.agent_session_tracking import track_agent_session_event
+from literary_engineering_studio.agent_session_tracking import (
+    AgentSessionEventProjector,
+    track_agent_session_event,
+)
 from literary_engineering_studio.jobs import JobStore
 
 
 class AgentSessionTrackingTests(unittest.TestCase):
+    def test_named_projector_routes_mutation_without_a_compatibility_facade(self):
+        sessions = Mock()
+        context_ledgers = Mock()
+        mutation_receipts = Mock()
+        mutation_receipts.record_mutation_receipt.return_value = {"receipt_id": "receipt-one"}
+        observed = []
+        projector = AgentSessionEventProjector(
+            sessions,
+            context_ledgers,
+            mutation_receipts,
+            mutation_listener=lambda project, receipt: observed.append((project, receipt)),
+        )
+
+        result = projector(
+            project_root="C:/work",
+            role="worker",
+            runtime="pi-worker",
+            controller_id="run-one",
+            event="mutation.receipt",
+            data={"receipt": {"receipt_id": "receipt-one"}},
+        )
+
+        self.assertIsNone(result)
+        mutation_receipts.record_mutation_receipt.assert_called_once()
+        context_ledgers.record_context_ledger.assert_not_called()
+        sessions.upsert_agent_session.assert_not_called()
+        self.assertEqual(observed, [("C:/work", {"receipt_id": "receipt-one"})])
+
     def test_tracks_real_lifecycle_and_ignores_stream_deltas(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")

@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from ..streaming import numeric_resume_cursor, sse_headers, stream_terminal
 
+from ...observability.event_policy import EventDurability, classify_runtime_event
 from ...observability.context_ledger_tracking import persist_prepared_context
 from ...observability.mutation_receipt_tracking import (
     persist_mutation_receipt_event,
@@ -28,7 +29,9 @@ class WorkerRouterDependencies:
     worker_factory: Callable[..., Any]
     project_lock_key: Callable[[str, str], str]
     track_agent_session_event: Callable[..., None]
-    ephemeral_worker_events: set[str] | frozenset[str]
+    context_ledgers: Any
+    mutation_receipts: Any
+    invalidate_project: Callable[[Path, str], Any]
     coalesce_live_events: Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
 
 
@@ -54,7 +57,6 @@ def launch_worker(deps: WorkerRouterDependencies, payload: WorkerRequest, *, res
     def execute(cancel_event) -> dict[str, Any]:
         def emit(event: str, data: dict[str, Any]) -> None:
             deps.track_agent_session_event(
-                deps.jobs,
                 project_root=str(resolve_project_root(payload.project_root)),
                 role="worker",
                 runtime=payload.runtime,
@@ -65,7 +67,7 @@ def launch_worker(deps: WorkerRouterDependencies, payload: WorkerRequest, *, res
                 data=data,
             )
             channel = f"worker:{job['job_id']}"
-            if event in deps.ephemeral_worker_events:
+            if classify_runtime_event(event) is EventDurability.EPHEMERAL:
                 deps.lifecycle.live_events.publish(channel, event, data)
             else:
                 deps.jobs.append_event(str(job["job_id"]), event, data)
@@ -176,13 +178,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
                 raise RuntimeError("another active task owns this project route")
             try:
                 def emit(event: str, data: dict[str, Any]) -> None:
-                    persist_mutation_receipt_event(
-                        deps.jobs,
-                        project_root=str(resolve_project_root(project_root)),
-                        event=event,
-                        data=data,
-                    )
-                    deps.jobs.append_event(job_id, event, data)
+                    _persist_writeback_event(deps, project_root, job_id, event, data)
 
                 worker = deps.worker_factory(deps.config, event_sink=emit, runtime_pool=deps.lifecycle.opencode_pool)
                 decision = payload.decision.strip().lower()
@@ -301,7 +297,7 @@ def _worker_stream_response(
 def _prepared_worker_response(deps, payload, task, sandbox) -> dict[str, Any]:
     if task is None or sandbox is None:
         raise RuntimeError("worker preparation returned no task sandbox")
-    persist_prepared_context(deps.jobs, task, sandbox)
+    persist_prepared_context(deps.context_ledgers, task, sandbox)
     return {
         "ok": True,
         "status": "prepared",
@@ -313,3 +309,22 @@ def _prepared_worker_response(deps, payload, task, sandbox) -> dict[str, Any]:
         "workspace": str(sandbox.workspace),
         "prompt": str(sandbox.prompt_path),
     }
+
+
+def _persist_writeback_event(
+    deps: WorkerRouterDependencies,
+    project_root: str,
+    job_id: str,
+    event: str,
+    data: dict[str, Any],
+) -> None:
+    root = resolve_project_root(project_root)
+    receipt = persist_mutation_receipt_event(
+        deps.mutation_receipts,
+        project_root=str(root),
+        event=event,
+        data=data,
+    )
+    if receipt is not None:
+        deps.invalidate_project(root, "worker-writeback")
+    deps.jobs.append_event(job_id, event, data)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable
 
 from ..application.archaeology import ArchaeologyApplicationService
@@ -31,6 +32,7 @@ def style_lab_dependencies(
     *,
     mounts: StyleMountApplicationService,
     launch_style_worker: Callable[[dict[str, str]], dict[str, object]],
+    invalidate_project: Callable[[Path, str], Any] | None = None,
 ) -> StyleLabRouterDependencies:
     application = StyleApplicationService()
     return StyleLabRouterDependencies(
@@ -53,4 +55,5 @@ def style_lab_dependencies(
         authoring=StyleAuthoringService(),
         tasks=StyleTaskService(launch_style_worker),
         mounts=mounts,
+        invalidate_project=invalidate_project or (lambda _root, _reason: None),
     )

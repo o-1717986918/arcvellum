@@ -19,6 +19,57 @@ _TERMINAL_STATUS = {
 }
 
 
+class AgentSessionEventProjector:
+    """Project runtime facts through three explicit persistence capabilities."""
+
+    def __init__(self, sessions, context_ledgers, mutation_receipts, *, mutation_listener=None):
+        self.sessions = sessions
+        self.context_ledgers = context_ledgers
+        self.mutation_receipts = mutation_receipts
+        self.mutation_listener = mutation_listener
+
+    def __call__(self, **fields: Any) -> dict[str, Any] | None:
+        return self.project(**fields)
+
+    def project(
+        self,
+        *,
+        project_root: str,
+        role: str,
+        runtime: str,
+        controller_id: str,
+        task_id: str = "",
+        route: str = "",
+        event: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        persist_context_ledger_event(
+            self.context_ledgers,
+            project_root=project_root,
+            event=event,
+            data=data,
+        )
+        receipt = persist_mutation_receipt_event(
+            self.mutation_receipts,
+            project_root=project_root,
+            event=event,
+            data=data,
+        )
+        if receipt is not None and self.mutation_listener is not None:
+            self.mutation_listener(project_root, receipt)
+        return _project_session_event(
+            self.sessions,
+            project_root=project_root,
+            role=role,
+            runtime=runtime,
+            controller_id=controller_id,
+            task_id=task_id,
+            route=route,
+            event=event,
+            data=data,
+        )
+
+
 def track_agent_session_event(
     store,
     *,
@@ -31,32 +82,44 @@ def track_agent_session_event(
     event: str,
     data: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Project one runtime event into the durable, user-safe session ledger."""
+    """Compatibility entry point for callers that still provide one facade."""
 
-    persist_context_ledger_event(
-        store,
+    return AgentSessionEventProjector(store, store, store).project(
         project_root=project_root,
+        role=role,
+        runtime=runtime,
+        controller_id=controller_id,
+        task_id=task_id,
+        route=route,
         event=event,
         data=data,
     )
-    persist_mutation_receipt_event(
-        store,
-        project_root=project_root,
-        event=event,
-        data=data,
-    )
+
+
+def _project_session_event(
+    sessions,
+    *,
+    project_root: str,
+    role: str,
+    runtime: str,
+    controller_id: str,
+    task_id: str,
+    route: str,
+    event: str,
+    data: dict[str, Any],
+) -> dict[str, Any] | None:
     session_id = str(data.get("session_id") or "").strip()
     if not session_id:
         return None
     if event in {"agent.message.delta", "runner.session.status", "usage.updated"}:
         return None
-    current = _read_existing(store, session_id)
+    current = _read_existing(sessions, session_id)
     raw_status = str(data.get("status") or "").strip().lower()
     status = _status_for(event, raw_status, current)
     retry_count = int(current.get("retry_count") or 0) if current else 0
     if event == "repair.started":
         retry_count = max(retry_count + 1, int(data.get("attempt") or 0))
-    return store.upsert_agent_session(
+    return sessions.upsert_agent_session(
         session_id,
         project_root=project_root,
         role=role,
@@ -157,3 +220,6 @@ def _public_message(event: str, data: dict[str, Any]) -> str:
         "steward.session.finished": "受托决策会话已经结束。",
     }
     return messages.get(event, "Agent 会话状态已更新。")
+
+
+__all__ = ["AgentSessionEventProjector", "track_agent_session_event"]

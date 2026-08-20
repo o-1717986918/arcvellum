@@ -160,6 +160,34 @@ class SessionRepositoryPort(Protocol):
 
 
 @runtime_checkable
+class ContextLedgerRepositoryPort(Protocol):
+    def record_context_ledger(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def read_context_ledger(self, ledger_id: str) -> dict[str, Any]: ...
+
+    def list_context_ledgers(self, project_root: str, *, limit: int = 100) -> list[dict[str, Any]]: ...
+
+
+@runtime_checkable
+class MutationReceiptRepositoryPort(Protocol):
+    def record_mutation_receipt(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def read_mutation_receipt(self, receipt_id: str) -> dict[str, Any]: ...
+
+    def list_mutation_receipts(
+        self,
+        project_root: str,
+        *,
+        task_id: str = "",
+        run_id: str = "",
+        session_id: str = "",
+        plan_id: str = "",
+        change_group_id: str = "",
+        limit: int = 500,
+    ) -> list[dict[str, Any]]: ...
+
+
+@runtime_checkable
 class LeaseRepositoryPort(Protocol):
     def acquire_resource_lease(
         self,
@@ -289,6 +317,8 @@ class PersistencePorts:
     jobs: JobRepositoryPort
     autopilot: AutopilotRepositoryPort
     sessions: SessionRepositoryPort
+    context_ledgers: ContextLedgerRepositoryPort
+    mutation_receipts: MutationReceiptRepositoryPort
     leases: LeaseRepositoryPort
     plans: PlanRepositoryPort
     asset_revisions: AssetRevisionIndexPort
@@ -307,10 +337,12 @@ __all__ = [
     "AssetRevisionIndexPort",
     "AutopilotRepositoryPort",
     "Clock",
+    "ContextLedgerRepositoryPort",
     "DurableEventStorePort",
     "IdGenerator",
     "JobRepositoryPort",
     "LeaseRepositoryPort",
+    "MutationReceiptRepositoryPort",
     "PersistencePorts",
     "PlanRepositoryPort",
     "SessionRepositoryPort",

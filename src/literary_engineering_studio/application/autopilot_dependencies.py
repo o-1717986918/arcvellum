@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, Callable
 
-from ..observability.agent_session_tracking import track_agent_session_event
+from ..observability.agent_session_tracking import AgentSessionEventProjector
 from .persistence_ports import AutopilotRepositoryPort, PlanRepositoryPort, SessionRepositoryPort
 
 
@@ -34,7 +33,7 @@ def resolve_autopilot_persistence(
     if session_event_tracker is None:
         if legacy_store is None:
             raise TypeError("named Autopilot ports require a session event tracker")
-        session_event_tracker = partial(track_agent_session_event, legacy_store)
+        session_event_tracker = AgentSessionEventProjector(legacy_store, legacy_store, legacy_store)
     return AutopilotPersistenceDependencies(
         runs=selected_runs,
         sessions=selected_sessions,

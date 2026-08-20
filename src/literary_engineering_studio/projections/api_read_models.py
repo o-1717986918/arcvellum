@@ -37,6 +37,9 @@ class ProjectReadModels:
     def cached(self, key: str, root: Path, builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
         return self._lifecycle.read_models.get(key, root, builder)
 
+    def invalidate(self, root: Path, reason: str) -> int:
+        return self._lifecycle.read_models.invalidate(root, reason=reason)
+
     def dashboard(self, root: Path) -> dict[str, Any]:
         return self.cached(f"dashboard:{root}", root, lambda: self._dashboard_builder(root))
 

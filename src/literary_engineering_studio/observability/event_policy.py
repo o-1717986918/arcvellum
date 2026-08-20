@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from enum import Enum
+
+
+class EventDurability(str, Enum):
+    DURABLE = "durable"
+    EPHEMERAL = "ephemeral"
+
 
 EPHEMERAL_RUNTIME_EVENTS = frozenset(
     {
@@ -20,16 +27,27 @@ def canonical_runtime_event(event: str) -> str:
 
 
 def is_ephemeral_runtime_event(event: str) -> bool:
-    return canonical_runtime_event(event) in EPHEMERAL_RUNTIME_EVENTS
+    return classify_runtime_event(event) is EventDurability.EPHEMERAL
+
+
+def classify_runtime_event(event: str) -> EventDurability:
+    canonical = canonical_runtime_event(event)
+    return (
+        EventDurability.EPHEMERAL
+        if canonical in EPHEMERAL_RUNTIME_EVENTS
+        else EventDurability.DURABLE
+    )
 
 
 def should_persist_runtime_event(event: str) -> bool:
-    return not is_ephemeral_runtime_event(event)
+    return classify_runtime_event(event) is EventDurability.DURABLE
 
 
 __all__ = [
     "EPHEMERAL_RUNTIME_EVENTS",
+    "EventDurability",
     "canonical_runtime_event",
+    "classify_runtime_event",
     "is_ephemeral_runtime_event",
     "should_persist_runtime_event",
 ]

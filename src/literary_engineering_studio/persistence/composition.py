@@ -13,6 +13,8 @@ def sqlite_persistence_ports(store: JobStore) -> PersistencePorts:
         jobs=store,
         autopilot=store.autopilot_runs,
         sessions=store.sessions,
+        context_ledgers=store.context_ledgers,
+        mutation_receipts=store.mutation_receipts,
         leases=store.resource_leases,
         plans=store.creative_plans,
         asset_revisions=store.asset_history,

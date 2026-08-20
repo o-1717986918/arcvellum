@@ -22,6 +22,7 @@ class WorkflowRouterDependencies:
     build_task_summary: Callable[[dict[str, Any], Path, str], dict[str, Any]]
     current_choices: Callable[..., dict[str, Any]]
     record_choice: Callable[[dict[str, Any], Path, dict[str, Any]], dict[str, Any]]
+    invalidate_project: Callable[[Path, str], Any]
     stream_read_model: Callable[[str, Callable[[], dict[str, Any]], float, int], Any]
 
 
@@ -79,6 +80,7 @@ def build_workflow_router(deps: WorkflowRouterDependencies) -> APIRouter:
     def workflow_human_choice(payload: dict[str, Any]):
         root = resolve_project_root(str(payload.get("project_root") or ""))
         result = call_handler(lambda: deps.record_choice(deps.config, root, payload))
+        deps.invalidate_project(root, "human-choice")
         choice = result.get("choice") if isinstance(result.get("choice"), dict) else {}
         resumed_run: dict[str, Any] | None = None
         if result.get("consumed") is True:

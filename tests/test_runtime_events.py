@@ -1,7 +1,11 @@
 import unittest
 
 from literary_engineering_studio.live_events import EPHEMERAL_WORKER_EVENTS, coalesce_live_events
-from literary_engineering_studio.observability.event_policy import should_persist_runtime_event
+from literary_engineering_studio.observability.event_policy import (
+    EventDurability,
+    classify_runtime_event,
+    should_persist_runtime_event,
+)
 from literary_engineering_studio.runtime_events import normalize_opencode_event
 
 
@@ -20,6 +24,11 @@ def _tool_event(status: str):
 
 
 class RuntimeEventTests(unittest.TestCase):
+    def test_event_durability_classifies_worker_aliases_explicitly(self):
+        self.assertIs(classify_runtime_event("agent.message.delta"), EventDurability.EPHEMERAL)
+        self.assertIs(classify_runtime_event("worker.agent.message.delta"), EventDurability.EPHEMERAL)
+        self.assertIs(classify_runtime_event("mutation.receipt"), EventDurability.DURABLE)
+
     def test_tool_transitions_are_deduplicated_by_call_id(self):
         states = {}
         self.assertEqual(normalize_opencode_event(_tool_event("pending"), tool_states=states)[0][0], "tool.started")

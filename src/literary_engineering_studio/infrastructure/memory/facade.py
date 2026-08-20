@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from typing import Any
-
 from ...persistence.facade import RepositoryMethod
-from .primitives import iso_now
 
 
 class MemoryCompatibilityFacade:
@@ -55,6 +51,14 @@ class MemoryCompatibilityFacade:
     read_agent_session = RepositoryMethod("sessions")
     list_agent_sessions = RepositoryMethod("sessions")
 
+    record_context_ledger = RepositoryMethod("context_ledgers")
+    read_context_ledger = RepositoryMethod("context_ledgers")
+    list_context_ledgers = RepositoryMethod("context_ledgers")
+
+    record_mutation_receipt = RepositoryMethod("mutation_receipts")
+    read_mutation_receipt = RepositoryMethod("mutation_receipts")
+    list_mutation_receipts = RepositoryMethod("mutation_receipts")
+
     reserve_creative_plan_revision = RepositoryMethod("creative_plans")
     finalize_creative_plan_revision = RepositoryMethod("creative_plans")
     read_creative_plan = RepositoryMethod("creative_plans")
@@ -68,7 +72,19 @@ class MemoryCompatibilityFacade:
     read_asset_revision = RepositoryMethod("asset_history")
     list_asset_revisions = RepositoryMethod("asset_history")
 
-    def __init__(self, state, clock, *, jobs, autopilot, sessions, plans, assets):
+    def __init__(
+        self,
+        state,
+        clock,
+        *,
+        jobs,
+        autopilot,
+        sessions,
+        plans,
+        assets,
+        context_ledgers,
+        mutation_receipts,
+    ):
         self._state = state
         self._clock = clock
         self.jobs = jobs
@@ -76,27 +92,9 @@ class MemoryCompatibilityFacade:
         self.sessions = sessions
         self.creative_plans = plans
         self.asset_history = assets
+        self.context_ledgers = context_ledgers
+        self.mutation_receipts = mutation_receipts
         self.path = jobs.path
-
-    def record_context_ledger(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]:
-        with self._state.lock:
-            record = {
-                **deepcopy(payload),
-                "project_root": project_root,
-                "recorded_at": iso_now(self._clock),
-            }
-            self._state.context_ledgers.setdefault(project_root, []).append(record)
-            return deepcopy(record)
-
-    def record_mutation_receipt(self, project_root: str, payload: dict[str, Any]) -> dict[str, Any]:
-        with self._state.lock:
-            record = {
-                **deepcopy(payload),
-                "project_root": project_root,
-                "recorded_at": iso_now(self._clock),
-            }
-            self._state.mutation_receipts.setdefault(project_root, []).append(record)
-            return deepcopy(record)
 
 
 __all__ = ["MemoryCompatibilityFacade"]

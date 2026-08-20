@@ -29,6 +29,8 @@ def _ports() -> ApplicationPorts:
             jobs=store,
             autopilot=store,
             sessions=store,
+            context_ledgers=store,
+            mutation_receipts=store,
             leases=store,
             plans=store,
             asset_revisions=store,

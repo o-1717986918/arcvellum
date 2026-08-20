@@ -20,6 +20,7 @@ class ProjectDetailRouterDependencies:
     load_creative_quality_profile: Callable[[Path], dict[str, Any]]
     save_display_field: Callable[[dict[str, Any], Path, dict[str, Any]], dict[str, Any]]
     record_ui_note: Callable[[dict[str, Any], Path, dict[str, Any]], dict[str, Any]]
+    invalidate_project: Callable[[Path, str], Any]
 
 
 def build_project_detail_router(deps: ProjectDetailRouterDependencies) -> APIRouter:
@@ -44,10 +45,16 @@ def build_project_detail_router(deps: ProjectDetailRouterDependencies) -> APIRou
 
     @router.patch("/project/display-field")
     def project_display_field(payload: dict[str, Any]):
-        return call_handler(lambda: deps.save_display_field(deps.config, resolve_project_root(str(payload.get("project_root") or "")), payload))
+        root = resolve_project_root(str(payload.get("project_root") or ""))
+        result = call_handler(lambda: deps.save_display_field(deps.config, root, payload))
+        deps.invalidate_project(root, "display-field")
+        return result
 
     @router.post("/project/ui-note")
     def project_ui_note(payload: dict[str, Any]):
-        return call_handler(lambda: deps.record_ui_note(deps.config, resolve_project_root(str(payload.get("project_root") or "")), payload))
+        root = resolve_project_root(str(payload.get("project_root") or ""))
+        result = call_handler(lambda: deps.record_ui_note(deps.config, root, payload))
+        deps.invalidate_project(root, "ui-note")
+        return result
 
     return router

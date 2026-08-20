@@ -72,7 +72,6 @@ from .api.routers.project_details import ProjectDetailRouterDependencies, build_
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
 from .agent_observability import build_agent_observability
 from .api_read_models import ProjectReadModels
-from .agent_session_tracking import track_agent_session_event
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
 from .advisor_personas import persona_catalog, save_custom_persona, select_persona
 from .config import default_projects_root, load_config, save_config
@@ -81,7 +80,7 @@ from .core_read_models import build_activity, build_dashboard, build_library, bu
 from .core_read_models import record_choice, record_ui_note, save_display_field
 from .delivery import build_delivery, delivery_content_type, resolve_delivery_file
 from .infrastructure.composition import resolve_application_container
-from .live_events import EPHEMERAL_WORKER_EVENTS, coalesce_live_events
+from .live_events import coalesce_live_events
 from .model_connections import model_connection_status
 from .narrative_projection import build_narrative_projection, projection_delta, projection_motion_events
 from .narrative_projection_v3 import (
@@ -181,7 +180,7 @@ def _narrative_dependencies(
     )
 
 
-def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any) -> WorkerRouterDependencies:
+def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any, session_events: Any) -> WorkerRouterDependencies:
     def worker_factory(*args, **kwargs):
         kwargs.setdefault("plan_store", jobs)
         kwargs.setdefault("prepared_context_cache", lifecycle.prepared_context_cache)
@@ -193,9 +192,20 @@ def _worker_dependencies(config: dict[str, Any], jobs: Any, lifecycle: Any) -> W
         lifecycle=lifecycle,
         worker_factory=worker_factory,
         project_lock_key=lambda project_root, route: project_lock_key(project_root, route),
-        track_agent_session_event=lambda *args, **kwargs: track_agent_session_event(*args, **kwargs),
-        ephemeral_worker_events=EPHEMERAL_WORKER_EVENTS,
+        track_agent_session_event=session_events,
+        context_ledgers=lifecycle.persistence.context_ledgers,
+        mutation_receipts=lifecycle.persistence.mutation_receipts,
+        invalidate_project=lifecycle.read_models.invalidate,
         coalesce_live_events=lambda events: coalesce_live_events(events),
+    )
+
+
+def _project_read_models(config: dict[str, Any], lifecycle: Any, autopilot: Any) -> ProjectReadModels:
+    return ProjectReadModels(
+        config,
+        lifecycle,
+        autopilot,
+        dashboard_builder=lambda root: build_dashboard(config, root),
     )
 
 
@@ -244,14 +254,7 @@ def create_app(
     app.state.bootstrap = bootstrap
     app.state.autopilot = autopilot
     app.state.container = container
-    read_models = ProjectReadModels(
-        config,
-        lifecycle,
-        autopilot,
-        # Leave this late-bound in the API module so existing instrumentation
-        # and contract tests can observe the public dashboard dependency.
-        dashboard_builder=lambda root: build_dashboard(config, root),
-    )
+    read_models = _project_read_models(config, lifecycle, autopilot)
     cached_read_model = read_models.cached
     dashboard_snapshot = read_models.dashboard
     library_snapshot = read_models.library
@@ -336,6 +339,7 @@ def create_app(
                 lint_punctuation=lambda *args, **kwargs: lint_punctuation(*args, **kwargs),
                 load_rhythm_plan=lambda root: load_rhythm_plan(root),
                 save_rhythm_plan=lambda *args, **kwargs: save_rhythm_plan(*args, **kwargs),
+                invalidate_project=read_models.invalidate,
             )
         )
     )
@@ -391,12 +395,13 @@ def create_app(
                     payload,
                     style_mount_service=style_mounts,
                 ),
+                invalidate_project=read_models.invalidate,
                 stream_read_model=_stream_read_model,
             )
         )
     )
 
-    worker_dependencies = _worker_dependencies(config, jobs, lifecycle)
+    worker_dependencies = _worker_dependencies(config, jobs, lifecycle, services.session_events)
     app.include_router(
         build_archive_router(
             default_archive_dependencies(
@@ -464,6 +469,7 @@ def create_app(
                     worker_dependencies,
                     WorkerRequest(**request),
                 ),
+                invalidate_project=read_models.invalidate,
             )
         )
     )
@@ -478,6 +484,7 @@ def create_app(
                 load_creative_quality_profile=lambda root: load_creative_quality_profile(root),
                 save_display_field=lambda *args, **kwargs: save_display_field(*args, **kwargs),
                 record_ui_note=lambda *args, **kwargs: record_ui_note(*args, **kwargs),
+                invalidate_project=read_models.invalidate,
             )
         )
     )

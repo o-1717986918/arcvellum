@@ -5,9 +5,11 @@ from __future__ import annotations
 from ...application.persistence_ports import PersistencePorts
 from .assets import InMemoryAssetRevisionIndex
 from .autopilot import InMemoryAutopilotRepository
+from .context_ledgers import InMemoryContextLedgerRepository
 from .facade import MemoryCompatibilityFacade
 from .events import InMemoryDurableEventStore
 from .jobs import InMemoryWorkerPersistence
+from .mutation_receipts import InMemoryMutationReceiptRepository
 from .plans import InMemoryPlanRepository
 from .primitives import SystemClock, UuidIdGenerator
 from .sessions import InMemorySessionRepository
@@ -24,6 +26,8 @@ def build_memory_persistence_ports(*, clock=None, ids=None) -> PersistencePorts:
     sessions = InMemorySessionRepository(state, selected_clock, selected_ids)
     plans = InMemoryPlanRepository(state, selected_clock)
     assets = InMemoryAssetRevisionIndex(state)
+    context_ledgers = InMemoryContextLedgerRepository(state, selected_clock)
+    mutation_receipts = InMemoryMutationReceiptRepository(state)
     events = InMemoryDurableEventStore(jobs, autopilot)
     facade = MemoryCompatibilityFacade(
         state,
@@ -33,11 +37,15 @@ def build_memory_persistence_ports(*, clock=None, ids=None) -> PersistencePorts:
         sessions=sessions,
         plans=plans,
         assets=assets,
+        context_ledgers=context_ledgers,
+        mutation_receipts=mutation_receipts,
     )
     return PersistencePorts(
         jobs=jobs,
         autopilot=autopilot,
         sessions=sessions,
+        context_ledgers=context_ledgers,
+        mutation_receipts=mutation_receipts,
         leases=jobs,
         plans=plans,
         asset_revisions=assets,

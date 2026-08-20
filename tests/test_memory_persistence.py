@@ -13,9 +13,11 @@ from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.application.persistence_ports import (
     AssetRevisionIndexPort,
     AutopilotRepositoryPort,
+    ContextLedgerRepositoryPort,
     DurableEventStorePort,
     JobRepositoryPort,
     LeaseRepositoryPort,
+    MutationReceiptRepositoryPort,
     PlanRepositoryPort,
     SessionRepositoryPort,
     UnitOfWorkPort,
@@ -44,6 +46,8 @@ class MemoryPersistenceContractTests(unittest.TestCase):
         self.assertIsInstance(self.ports.worker, WorkerPersistencePort)
         self.assertIsInstance(self.ports.autopilot, AutopilotRepositoryPort)
         self.assertIsInstance(self.ports.sessions, SessionRepositoryPort)
+        self.assertIsInstance(self.ports.context_ledgers, ContextLedgerRepositoryPort)
+        self.assertIsInstance(self.ports.mutation_receipts, MutationReceiptRepositoryPort)
         self.assertIsInstance(self.ports.leases, LeaseRepositoryPort)
         self.assertIsInstance(self.ports.plans, PlanRepositoryPort)
         self.assertIsInstance(self.ports.asset_revisions, AssetRevisionIndexPort)

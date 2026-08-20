@@ -20,6 +20,7 @@ class QualityRouterDependencies:
     lint_punctuation: Callable[..., list[Any]]
     load_rhythm_plan: Callable[[Path], dict[str, Any]]
     save_rhythm_plan: Callable[..., dict[str, Any]]
+    invalidate_project: Callable[[Path, str], Any]
 
 
 def build_quality_router(deps: QualityRouterDependencies) -> APIRouter:
@@ -35,7 +36,7 @@ def build_quality_router(deps: QualityRouterDependencies) -> APIRouter:
     @router.put("/project/creative-quality")
     def project_creative_quality_update(payload: CreativeQualityRequest):
         root = resolve_project_root(payload.project_root)
-        return call_handler(
+        result = call_handler(
             lambda: {
                 "ok": True,
                 "profile": deps.save_creative_quality_profile(root, payload.profile, updated_by="studio-user"),
@@ -43,6 +44,8 @@ def build_quality_router(deps: QualityRouterDependencies) -> APIRouter:
                 "review_required_for_existing_candidates": True,
             }
         )
+        deps.invalidate_project(root, "creative-quality")
+        return result
 
     @router.post("/project/creative-quality/preview")
     def project_creative_quality_preview(payload: CreativeQualityPreviewRequest):
@@ -72,7 +75,7 @@ def build_quality_router(deps: QualityRouterDependencies) -> APIRouter:
     @router.put("/project/rhythm-plan")
     def project_rhythm_plan_update(payload: RhythmPlanRequest):
         root = resolve_project_root(payload.project_root)
-        return call_handler(
+        result = call_handler(
             lambda: {
                 "ok": True,
                 "plan": deps.save_rhythm_plan(
@@ -85,5 +88,7 @@ def build_quality_router(deps: QualityRouterDependencies) -> APIRouter:
                 "review_required_for_existing_candidates": True,
             }
         )
+        deps.invalidate_project(root, "rhythm-plan")
+        return result
 
     return router

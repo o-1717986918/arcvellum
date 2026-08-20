@@ -54,6 +54,7 @@ class StyleLabRouterDependencies:
     authoring: StyleAuthoringService
     tasks: StyleTaskService
     mounts: StyleMountApplicationService
+    invalidate_project: Callable[[Path, str], Any]
 
 
 def build_style_lab_router(deps: StyleLabRouterDependencies) -> APIRouter:
@@ -217,9 +218,10 @@ def _register_mount_routes(
 
     @router.post("/style-lab/mount")
     def style_lab_mount(payload: StyleMountRequest):
-        return _mount_call(
+        root = resolve_project_root(payload.project_root)
+        result = _mount_call(
             lambda: deps.mounts.mount_confirmed(
-                resolve_project_root(payload.project_root),
+                root,
                 style_id=payload.style_id,
                 version_id=payload.version_id,
                 content_hash=payload.content_hash,
@@ -228,6 +230,8 @@ def _register_mount_routes(
                 priority=payload.priority,
             )
         )
+        deps.invalidate_project(root, "style-mount")
+        return result
 
 
 def _mount_error(

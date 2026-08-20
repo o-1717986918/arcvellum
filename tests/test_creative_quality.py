@@ -171,12 +171,14 @@ class CreativeQualityApiTests(unittest.TestCase):
             self.assertEqual(current.status_code, 200)
             profile = current.json()["profile"]
             profile["name"] = "我的写作规则"
+            revision_before = client.app.state.lifecycle.read_models.revision(root)
             saved = client.put(
                 "/project/creative-quality",
                 json={"project_root": str(root), "profile": profile},
             )
             self.assertEqual(saved.status_code, 200)
             self.assertEqual(saved.json()["profile"]["name"], "我的写作规则")
+            self.assertEqual(client.app.state.lifecycle.read_models.revision(root), revision_before + 1)
             preview = client.post(
                 "/project/creative-quality/preview",
                 json={"project_root": str(root), "text": "这不是误会，而是决定。"},
