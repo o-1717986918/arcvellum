@@ -42,7 +42,7 @@
 | `library` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `observatory` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `onboarding` | 0 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `orrery` | 51 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `orrery` | 58 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `projects` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `quality` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `reader` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
