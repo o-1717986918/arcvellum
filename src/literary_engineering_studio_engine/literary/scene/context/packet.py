@@ -3,18 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-import hashlib
-import json
 import re
 
 from ....context_broker import default_context_trace_path, write_context_trace
-from ....memory_index import build_memory_index, search_memory, trust_tier_for_relative_path
+from ....memory_index import SearchHit, build_memory_index, search_memory
 from ....scene_handoff import scene_handoff_status
 from ....word_budget import render_scene_word_budget_contract
-from ...style.snapshot import (
-    active_style_evidence_paths,
-    active_style_mount_snapshot_payload,
+from .rendering import (
+    ContextPacketSections,
+    render_context_packet,
+    render_handoff,
 )
+from .trace import build_context_trace_payload, relative_path
 
 
 @dataclass(frozen=True)
@@ -289,98 +289,26 @@ def build_context_packet(
     output_path = output or root / "memory" / "context_packets" / f"{scene_id}.md"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    content = f"""# 场景上下文包：{scene_id}
-
-生成时间：{datetime.now(timezone.utc).isoformat()}
-
-## 使用规则
-
-- 本文件是写作前工作记忆，不是正稿。
-- Canon、人物档案和时间线是硬约束。
-- “软记忆检索”只提供参考，不得覆盖硬事实。
-- `background_story` 是人物的隐性行为因果，只能影响选择、回避、误判和语气，不应在正文中直白说明。
-- 写作完成后必须输出写回计划。
-
-## 项目配置
-
-```yaml
-{_read(root / "project.yaml")}
-```
-
-## 当前场景
-
-来源：`{scene_path.relative_to(root).as_posix()}`
-
-```yaml
-{scene_text}
-```
-
-## 场景字数预算
-
-{word_budget_contract}
-
-## 硬约束：Canon 与时间线
-
-{_first_existing(root, [
-    "canon/world_rules.yaml",
-    "canon/timeline.yaml",
-    "canon/facts.json",
-    "canon/forbidden_changes.yaml",
-])}
-
-## 人物状态
-
-{character_text}
-
-## 剧情状态
-
-{_plot_context(root, scene_text)}
-
-## 上一场正式交接
-
-{_render_handoff(root, scene_id, handoff_ok, handoff_message, handoff_payload)}
-
-## 风格约束
-
-{_first_existing(root, [
-    "style/style-profile.md",
-])}
-
-## 软记忆检索
-
-查询依据：当前场景字段 + 用户补充 query。
-
-{_retrieval_section(hits)}
-
-## 写作任务
-
-请基于以上上下文生成或推演当前场景。生成时必须：
-
-1. 不违背硬 canon。
-2. 人物行动符合 BDI 和当前信息差。
-3. 人物背景故事只能作为隐性动因，不得变成解释性设定段落。
-4. 场景输出必须包含状态变化。
-5. 正文清洗后的可交付部分必须遵守“场景字数预算”的目标、上下限和叙事负载；不得用流程痕迹、状态候选、canon 说明或空泛重复填字数。
-6. 风格遵守 profile，而不是只模仿表面词汇。
-7. 若需要新增事实，写入候选，不直接确认为 canon。
-
-## 写回清单
-
-生成完成后输出：
-
-- 新增事实候选。
-- 人物状态变化。
-- 关系变化。
-- 伏笔变化。
-- 需要进入软记忆索引的正文片段。
-- 需要人工确认的重大变更。
-"""
+    content = render_context_packet(
+        _packet_sections(
+            root=root,
+            scene_path=scene_path,
+            scene_id=scene_id,
+            scene_text=scene_text,
+            word_budget=word_budget_contract,
+            character_text=character_text,
+            hits=hits,
+            handoff_ok=handoff_ok,
+            handoff_message=handoff_message,
+            handoff_payload=handoff_payload,
+        )
+    )
 
     output_path.write_text(content, encoding="utf-8")
     trace_path = trace_output or default_context_trace_path(output_path)
     write_context_trace(
         trace_path,
-        _context_trace_payload(
+        build_context_trace_payload(
             root=root,
             scene_path=scene_path,
             scene_id=scene_id,
@@ -390,6 +318,7 @@ def build_context_packet(
             content=content,
             hits=hits,
             loaded_character_ids=loaded_character_ids,
+            character_context_required=bool(_scene_character_refs(scene_text)),
             handoff_ok=handoff_ok,
             handoff_message=handoff_message,
             handoff_payload=handoff_payload,
@@ -398,249 +327,42 @@ def build_context_packet(
     return ContextPacketResult(project_root=root, output_path=output_path, retrieval_count=len(hits), trace_path=trace_path)
 
 
-def _context_trace_payload(
+def _packet_sections(
     *,
     root: Path,
     scene_path: Path,
     scene_id: str,
-    context_path: Path,
-    top_k: int,
-    query: str,
-    content: str,
-    hits,
-    loaded_character_ids: set[str],
+    scene_text: str,
+    word_budget: str,
+    character_text: str,
+    hits: list[SearchHit],
     handoff_ok: bool,
     handoff_message: str,
     handoff_payload: dict[str, object],
-) -> dict[str, object]:
-    project_files = _existing_rel_paths(root, ["project.yaml"])
-    canon_files = _existing_rel_paths(
-        root,
-        [
-            "canon/world_rules.yaml",
-            "canon/timeline.yaml",
-            "canon/facts.json",
-            "canon/forbidden_changes.yaml",
-        ],
+) -> ContextPacketSections:
+    return ContextPacketSections(
+        scene_id=scene_id,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        project_config=_read(root / "project.yaml"),
+        scene_relative=relative_path(scene_path, root),
+        scene_text=scene_text,
+        word_budget=word_budget,
+        canon=_first_existing(
+            root,
+            [
+                "canon/world_rules.yaml",
+                "canon/timeline.yaml",
+                "canon/facts.json",
+                "canon/forbidden_changes.yaml",
+            ],
+        ),
+        characters=character_text,
+        plot=_plot_context(root, scene_text),
+        handoff=render_handoff(
+            passed=handoff_ok,
+            message=handoff_message,
+            payload=handoff_payload,
+        ),
+        style=_first_existing(root, ["style/style-profile.md"]),
+        retrieval=_retrieval_section(hits),
     )
-    plot_files = _existing_rel_paths(
-        root,
-        [
-            "plot/outline.md",
-            "plot/foreshadowing.csv",
-            "plot/conflict_matrix.md",
-            "plot/reader_questions/ledger.json",
-            "plot/promises/ledger.json",
-        ],
-    )
-    style_files, style_snapshot = _context_style_evidence(root)
-    word_budget_files = _existing_rel_paths(root, ["plot/word_budget/word_budget.json", "plot/word_budget/word_budget.md"])
-    character_files = _loaded_character_paths(root, loaded_character_ids)
-    excluded_character_files = _excluded_character_paths(root, loaded_character_ids)
-    scene_rel = _rel(scene_path, root)
-    summarized_files = sorted({str(getattr(hit, "source", "")) for hit in hits if str(getattr(hit, "source", "")).strip()})
-    loaded_files = sorted(
-        {
-            *project_files,
-            scene_rel,
-            *canon_files,
-            *plot_files,
-            *style_files,
-            *word_budget_files,
-            *character_files,
-            *summarized_files,
-        }
-    )
-    previous_handoff_path = str(handoff_payload.get("_path") or "") if isinstance(handoff_payload, dict) else ""
-    if not previous_handoff_path and handoff_payload:
-        previous_id = str(handoff_payload.get("scene_id") or "")
-        if previous_id:
-            previous_handoff_path = f"workflow/handoffs/{previous_id}.json"
-    if previous_handoff_path and (root / previous_handoff_path).is_file():
-        loaded_files = sorted({*loaded_files, previous_handoff_path})
-    groups = [
-        _context_group("project", True, project_files, "project.yaml anchors title, genre, target length, and provider-neutral project rules."),
-        _context_group("scene", True, [scene_rel] if scene_path.exists() else [], "Current scene YAML is the formal scene contract."),
-        _context_group("canon", bool(canon_files), canon_files, "Canon files are hard constraints when present."),
-        _context_group("characters", bool(_scene_character_refs(_read(scene_path))), character_files, "Major characters plus scene-referenced secondary/cameo files."),
-        _context_group("plot", False, plot_files, "Approved or working outline, foreshadowing, and conflict scaffolds."),
-        _context_group("style", bool(style_files), style_files, "Mounted Style Skill or project style profile."),
-        _context_group("word_budget", bool(word_budget_files), word_budget_files, "Longform target-length and scene-budget evidence."),
-        _context_group("previous_handoff", not handoff_ok, [previous_handoff_path] if previous_handoff_path else [], handoff_message),
-        _context_group("retrieval", False, summarized_files, "Soft memory retrieval; never overrides hard canon."),
-    ]
-    missing_required = [str(group["name"]) for group in groups if group["required"] and not group["loaded"]]
-    if not handoff_ok:
-        missing_required.append("previous_handoff")
-    source_roles = _source_roles(groups)
-    source_records = _source_records(root, loaded_files, source_roles, groups)
-    retrieval_rows = [
-        {
-            "path": str(getattr(hit, "source", "")),
-            "tier": str(getattr(hit, "trust_tier", "candidate")),
-            "score": float(getattr(hit, "score", 0.0)),
-            "adopted_reason": "lexical retrieval matches the active scene query; direct formal sources retain priority.",
-        }
-        for hit in hits
-    ]
-    return {
-        "route": "scene-development",
-        "scene_id": scene_id,
-        "context_packet": _rel(context_path, root),
-        "scene_file": scene_rel,
-        "required_context_groups": groups,
-        "loaded_files": loaded_files,
-        "loaded_sources": source_records,
-        "summarized_files": summarized_files,
-        "excluded_files": excluded_character_files,
-        "style_mounts": style_files,
-        "style_mount_snapshot": style_snapshot,
-        "word_budget_source": word_budget_files[0] if word_budget_files else "",
-        "character_files": character_files,
-        "canon_files": canon_files,
-        "previous_scene_tail": handoff_message,
-        "previous_promoted_scene_sha": str(handoff_payload.get("promoted_draft_sha256") or "") if isinstance(handoff_payload, dict) else "",
-        "state_revision": _manifest_digest(root / "characters" / "state_patches"),
-        "canon_revision": _manifest_digest(root / "canon" / "patches"),
-        "style_mount_revision": _digest_paths(root, style_files),
-        "word_budget_revision": _digest_paths(root, word_budget_files),
-        "rhythm_plan_revision": _manifest_digest(root / "plot" / "rhythm_plan.json"),
-        "retrieval_digest": _digest_value(retrieval_rows),
-        "project_revision": _digest_value(source_records),
-        "retrieval_evidence": retrieval_rows,
-        "token_or_length_budget": {
-            "top_k": top_k,
-            "query": query,
-            "retrieval_count": len(hits),
-            "context_chars": len(content),
-        },
-        "missing_required_context": missing_required,
-}
-
-
-def _render_handoff(root: Path, scene_id: str, passed: bool, message: str, payload: dict[str, object]) -> str:
-    if not payload:
-        return f"- 状态：`{'pass' if passed else 'blocked'}`\n- {message}"
-    previous = str(payload.get("scene_id") or "")
-    return "\n".join([
-        f"- 状态：`{'pass' if passed else 'blocked'}`",
-        f"- {message}",
-        f"- 前场：`{previous}`",
-        f"- 前场正文摘要：`{str(payload.get('promoted_draft_sha256') or '')[:12]}`",
-        f"- 时间落点：{payload.get('time_after') or '未声明'}",
-        f"- 地点落点：{payload.get('location_after') or '未声明'}",
-        f"- 未完成行动：{', '.join(str(item) for item in payload.get('unresolved_actions', []) if str(item).strip()) or '未登记'}",
-        f"- 出场钩子：{', '.join(str(item) for item in payload.get('outgoing_hooks', []) if str(item).strip()) or '未登记'}",
-    ])
-
-
-def _source_roles(groups: list[dict[str, object]]) -> dict[str, tuple[str, bool]]:
-    result: dict[str, tuple[str, bool]] = {}
-    for group in groups:
-        role = str(group.get("name") or "context")
-        required = bool(group.get("required"))
-        for item in group.get("files") if isinstance(group.get("files"), list) else []:
-            result[str(item)] = (role, required)
-    return result
-
-
-def _source_records(root: Path, paths: list[str], roles: dict[str, tuple[str, bool]], groups: list[dict[str, object]]) -> list[dict[str, object]]:
-    required_by_role = {str(group.get("name") or ""): bool(group.get("required")) for group in groups}
-    rows: list[dict[str, object]] = []
-    for relative in sorted(dict.fromkeys(paths)):
-        path = root / relative
-        if not path.is_file():
-            continue
-        role, required = roles.get(relative, ("retrieval", required_by_role.get("retrieval", False)))
-        rows.append({
-            "relative_path": relative,
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            "role": role,
-            "trust_tier": trust_tier_for_relative_path(relative),
-            "required": required,
-            "loaded_at": datetime.now(timezone.utc).isoformat(),
-        })
-    return rows
-
-
-def _digest_paths(root: Path, relatives: list[str]) -> str:
-    return _digest_value([
-        {"path": relative, "sha256": hashlib.sha256((root / relative).read_bytes()).hexdigest()}
-        for relative in sorted(dict.fromkeys(relatives))
-        if (root / relative).is_file()
-    ])
-
-
-def _manifest_digest(path: Path) -> str:
-    if path.is_file():
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    if path.is_dir():
-        return _digest_value([
-            {"path": item.name, "sha256": hashlib.sha256(item.read_bytes()).hexdigest()}
-            for item in sorted(path.glob("*.json"))
-            if item.is_file()
-        ])
-    return ""
-
-
-def _digest_value(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-
-
-def _context_group(name: str, required: bool, files: list[str], notes: str) -> dict[str, object]:
-    return {
-        "name": name,
-        "required": required,
-        "loaded": bool(files),
-        "files": sorted(dict.fromkeys(files)),
-        "notes": notes,
-    }
-
-
-def _existing_rel_paths(root: Path, rels: list[str]) -> list[str]:
-    existing: list[str] = []
-    for rel in rels:
-        path = root / rel
-        if path.exists() and (path.is_dir() or _read(path)):
-            existing.append(rel)
-    return existing
-
-
-def _context_style_evidence(root: Path) -> tuple[list[str], dict[str, str]]:
-    mounted = [_rel(path, root) for path in active_style_evidence_paths(root)]
-    files = mounted or _existing_rel_paths(
-        root,
-        ["style/style-profile.md", "style/style_prompt.md"],
-    )
-    return files, active_style_mount_snapshot_payload(root)
-
-
-def _loaded_character_paths(root: Path, loaded_character_ids: set[str]) -> list[str]:
-    paths: list[str] = []
-    for character_id in sorted(loaded_character_ids):
-        for suffix in (".yaml", ".yml"):
-            path = root / "characters" / f"{character_id}{suffix}"
-            if path.exists():
-                paths.append(_rel(path, root))
-                break
-    return paths
-
-
-def _excluded_character_paths(root: Path, loaded_character_ids: set[str]) -> list[str]:
-    chars_dir = root / "characters"
-    if not chars_dir.exists():
-        return []
-    excluded: list[str] = []
-    for path in sorted(chars_dir.glob("*.y*ml")):
-        if path.name.startswith("_"):
-            continue
-        if path.stem not in loaded_character_ids:
-            excluded.append(_rel(path, root))
-    return excluded
-
-
-def _rel(path: Path, root: Path) -> str:
-    try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
-        return str(path).replace("\\", "/")
