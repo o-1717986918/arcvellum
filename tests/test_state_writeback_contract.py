@@ -226,10 +226,12 @@ class StateWritebackContractTests(unittest.TestCase):
 
     def test_workflow_exposes_concrete_state_approval_apply_or_review_steps(self):
         cases = {
+            "needs_revision": "state-patch-json",
             "needs_approval": "state-patch-approval",
             "pending_apply": "state-apply",
             "missing": "state-agent-task",
             "pass": "state-writeback",
+            "rejected": "state-writeback",
         }
         for status, expected_key in cases.items():
             with self.subTest(status=status), patch(
@@ -288,6 +290,12 @@ class StateWritebackContractTests(unittest.TestCase):
             self.assertEqual(state_patch_writeback_status(root, "scene_0001")["status"], "needs_approval")
             with self.assertRaises(RuntimeError):
                 apply_character_state_patch(root, patch=patch)
+
+            record_workflow_approval(root, patch.stem, "revise", subject_sha256=digest)
+            self.assertEqual(state_patch_writeback_status(root, "scene_0001")["status"], "needs_revision")
+            self.assertEqual(_state_patch_writeback_step(root, "scene_0001")["key"], "state-patch-json")
+            with self.assertRaises(RuntimeError):
+                apply_character_state_patch(root, patch=patch, approval_run_id=patch.stem)
 
             record_workflow_approval(root, patch.stem, "approve", subject_sha256=digest)
             self.assertEqual(state_patch_writeback_status(root, "scene_0001")["status"], "pending_apply")

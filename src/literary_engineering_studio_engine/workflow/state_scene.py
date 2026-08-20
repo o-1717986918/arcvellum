@@ -230,19 +230,15 @@ def _dependency_file_step(key: str, path: Path, dependencies: list[Path], next_a
 
 
 def _state_patch_writeback_step(root: Path, scene_id: str) -> dict[str, object]:
-    """Expose the concrete state-machine handoff, never a prose repair step.
-
-    ``state-writeback`` used to be a dashboard-only aggregate label.  When it
-    became the first unfinished step, task-next treated that label as a formal
-    state and fell through to a manual task whose natural-language command
-    cannot run inside the Worker command bridge.  Map the aggregate status
-    back to the executable approval, apply, or review state instead.
-    """
+    """Map aggregate state-writeback status to its executable formal step."""
 
     status = state_patch_writeback_status(root, scene_id)
     value = str(status.get("status") or "missing")
-    passed = value in {"pass", "not_required"}
-    if value == "needs_approval":
+    passed = value in {"pass", "not_required", "rejected"}
+    if value == "needs_revision":
+        key = "state-patch-json"
+        next_action = "rebuild the state patch from the current structured writeback contract after the revise decision"
+    elif value == "needs_approval":
         key = "state-patch-approval"
         next_action = "record a digest-bound state_patch_confirmation for the current state patch"
     elif value == "pending_apply":

@@ -298,8 +298,6 @@ def _find_approval(root: Path, approval_run_id: str = "") -> dict[str, object] |
         if not line.strip():
             continue
         record = json.loads(line)
-        if record.get("decision") != "approve":
-            continue
         if approval_run_id and record.get("run_id") != approval_run_id:
             continue
         records.append(record)
@@ -309,9 +307,16 @@ def _find_approval(root: Path, approval_run_id: str = "") -> dict[str, object] |
 
 
 def _approval_matches_patch(approval: dict[str, object] | None, patch_sha256: str) -> bool:
+    return bool(
+        _approval_targets_patch(approval, patch_sha256)
+        and str((approval or {}).get("decision") or "") == "approve"
+    )
+
+
+def _approval_targets_patch(approval: dict[str, object] | None, patch_sha256: str) -> bool:
     if not approval or not patch_sha256:
         return False
-    return str(approval.get("decision") or "") == "approve" and str(approval.get("subject_sha256") or "").strip().lower() == patch_sha256.lower()
+    return str(approval.get("subject_sha256") or "").strip().lower() == patch_sha256.lower()
 
 
 def state_patch_writeback_status(root: Path, scene_id: str) -> dict[str, object]:
@@ -362,9 +367,22 @@ def state_patch_writeback_status(root: Path, scene_id: str) -> dict[str, object]
             details.append(f"state sidecar incomplete: {completion.get('message')}")
         result.update({"status": "semantic_incomplete", "message": "; ".join(details)})
         return result
+    return _state_patch_approval_status(root, patch, apply_manifest, result)
+
+
+def _state_patch_approval_status(
+    root: Path,
+    patch: Path,
+    apply_manifest: Path,
+    result: dict[str, object],
+) -> dict[str, object]:
     patch_sha256 = hashlib.sha256(patch.read_bytes()).hexdigest()
     approval_id = patch.stem
     approval = _find_approval(root, approval_id)
+    decision_result = _state_patch_decision_result(approval, patch_sha256, approval_id)
+    if decision_result:
+        result.update(decision_result)
+        return result
     if not _approval_matches_patch(approval, patch_sha256):
         result.update({
             "status": "needs_approval",
@@ -383,6 +401,29 @@ def state_patch_writeback_status(root: Path, scene_id: str) -> dict[str, object]
             return result
     result.update({"status": "pending_apply", "message": "approved state patch is ready for state-apply", "approval_run_id": approval_id, "candidate_sha256": patch_sha256})
     return result
+
+
+def _state_patch_decision_result(
+    approval: dict[str, object] | None,
+    patch_sha256: str,
+    approval_id: str,
+) -> dict[str, object]:
+    if not _approval_targets_patch(approval, patch_sha256):
+        return {}
+    decision = str((approval or {}).get("decision") or "").strip().lower()
+    status_message = {
+        "revise": ("needs_revision", "state patch has a digest-bound revise decision and must be rebuilt"),
+        "reject": ("rejected", "state patch was explicitly rejected and will not be applied"),
+    }.get(decision)
+    if status_message is None:
+        return {}
+    status, message = status_message
+    return {
+        "status": status,
+        "message": message,
+        "approval_run_id": approval_id,
+        "candidate_sha256": patch_sha256,
+    }
 
 
 def _resolve_patch(root: Path, patch: Path | None) -> Path:
