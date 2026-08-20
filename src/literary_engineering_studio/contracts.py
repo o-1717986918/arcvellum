@@ -336,6 +336,13 @@ def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:
     if present and present != EXPLICIT_EXECUTION_FIELDS:
         missing = ", ".join(sorted(EXPLICIT_EXECUTION_FIELDS - present))
         raise ValueError(f"partial explicit execution contract; missing: {missing}")
+    _validate_execution_policy_fields(payload)
+    _validate_execution_output_fields(payload)
+    _validate_semantic_artifact(payload)
+    _validate_prompt_asset(payload)
+
+
+def _validate_execution_policy_fields(payload: dict[str, Any]) -> None:
     if "execution_policy" in payload and payload["execution_policy"] not in {
         "deterministic",
         "agent-required",
@@ -350,33 +357,44 @@ def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:
             raise ValueError("task package human_gate must contain a boolean required field")
         if not isinstance(gate.get("reasons", []), list):
             raise ValueError("task package human_gate.reasons must be a list")
+
+
+def _validate_execution_output_fields(payload: dict[str, Any]) -> None:
     for field in ("runtime_capabilities_required", "output_contracts"):
         if field in payload and not isinstance(payload[field], list):
             raise ValueError(f"task package field must be a list: {field}")
     if "output_contracts" in payload:
         _parse_output_contracts(payload["output_contracts"])
-    if "semantic_artifact" in payload:
-        semantic = payload["semantic_artifact"]
-        if not isinstance(semantic, dict):
-            raise ValueError("task package semantic_artifact must be an object")
-        path = str(semantic.get("path") or "").strip()
-        if not path or path not in {str(item) for item in payload.get("expected_outputs") or []}:
-            raise ValueError("task package semantic_artifact path must be an expected output")
-        for field in ("kind", "schema_name", "consumed_by"):
-            if not str(semantic.get(field) or "").strip():
-                raise ValueError(f"task package semantic_artifact.{field} must not be empty")
-        if str(semantic.get("writeback_policy") or "") not in {"automatic", "preview-required", "approval-required", "none"}:
-            raise ValueError("task package semantic_artifact.writeback_policy is invalid")
+
+
+def _validate_semantic_artifact(payload: dict[str, Any]) -> None:
+    if "semantic_artifact" not in payload:
+        return
+    semantic = payload["semantic_artifact"]
+    if not isinstance(semantic, dict):
+        raise ValueError("task package semantic_artifact must be an object")
+    path = str(semantic.get("path") or "").strip()
+    if not path or path not in {str(item) for item in payload.get("expected_outputs") or []}:
+        raise ValueError("task package semantic_artifact path must be an expected output")
+    for field in ("kind", "schema_name", "consumed_by"):
+        if not str(semantic.get(field) or "").strip():
+            raise ValueError(f"task package semantic_artifact.{field} must not be empty")
+    if str(semantic.get("writeback_policy") or "") not in {"automatic", "preview-required", "approval-required", "none"}:
+        raise ValueError("task package semantic_artifact.writeback_policy is invalid")
+
+
+def _validate_prompt_asset(payload: dict[str, Any]) -> None:
     prompt_asset = payload.get("prompt_asset")
-    if prompt_asset is not None:
-        if not isinstance(prompt_asset, dict):
-            raise ValueError("task package prompt_asset must be an object")
-        for field in ("requested_id", "resolved_id", "version", "body"):
-            if not str(prompt_asset.get(field) or "").strip():
-                raise ValueError(f"task package prompt_asset.{field} must not be empty")
-        for field in PROMPT_ASSET_LIST_FIELDS:
-            if not isinstance(prompt_asset.get(field), list):
-                raise ValueError(f"task package prompt_asset.{field} must be a list")
+    if prompt_asset is None:
+        return
+    if not isinstance(prompt_asset, dict):
+        raise ValueError("task package prompt_asset must be an object")
+    for field in ("requested_id", "resolved_id", "version", "body"):
+        if not str(prompt_asset.get(field) or "").strip():
+            raise ValueError(f"task package prompt_asset.{field} must not be empty")
+    for field in PROMPT_ASSET_LIST_FIELDS:
+        if not isinstance(prompt_asset.get(field), list):
+            raise ValueError(f"task package prompt_asset.{field} must be a list")
 
 
 def _derive_execution_policy(payload: dict[str, Any], human_gate: HumanGate) -> str:

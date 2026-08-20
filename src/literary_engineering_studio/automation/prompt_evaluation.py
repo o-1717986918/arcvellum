@@ -382,17 +382,29 @@ def _live_payload_errors(payload: dict[str, Any], genre: str) -> list[str]:
     draft = str(payload.get("draft") or "").strip()
     revision = str(payload.get("revision") or "").strip()
     for label, value in (("draft", draft), ("revision", revision)):
-        count = _content_chars(value)
-        if count < 180 or count > 420:
-            errors.append(f"{label} Chinese content chars outside 180-420: {count}")
-        if re.search(r"AGENT_TASK|workflow|canon patch|scene[_-]?\d|```|#{1,6}\s", value, re.IGNORECASE):
-            errors.append(f"{label} leaks workflow traces")
-        contrast_count = len(re.findall(r"不是[^。！？\n]{0,24}(?:而是|——\s*是)", value))
-        if contrast_count:
-            errors.append(f"{label} contains prohibited mechanical contrast frame")
-        dash_ratio = value.count("——") / max(1, count)
-        if dash_ratio > 0.02:
-            errors.append(f"{label} dash ratio exceeds 2%")
+        errors.extend(_live_prose_errors(label, value))
+    errors.extend(_live_review_receipt_errors(payload))
+    if draft == revision:
+        errors.append("revision is identical to draft")
+    return errors
+
+
+def _live_prose_errors(label: str, value: str) -> list[str]:
+    errors: list[str] = []
+    count = _content_chars(value)
+    if count < 180 or count > 420:
+        errors.append(f"{label} Chinese content chars outside 180-420: {count}")
+    if re.search(r"AGENT_TASK|workflow|canon patch|scene[_-]?\d|```|#{1,6}\s", value, re.IGNORECASE):
+        errors.append(f"{label} leaks workflow traces")
+    if re.findall(r"不是[^。！？\n]{0,24}(?:而是|——\s*是)", value):
+        errors.append(f"{label} contains prohibited mechanical contrast frame")
+    if value.count("——") / max(1, count) > 0.02:
+        errors.append(f"{label} dash ratio exceeds 2%")
+    return errors
+
+
+def _live_review_receipt_errors(payload: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
     review = payload.get("review")
     if not isinstance(review, list) or len(review) < 2:
         errors.append("review contains fewer than two findings")
@@ -400,8 +412,6 @@ def _live_payload_errors(payload: dict[str, Any], genre: str) -> list[str]:
     for required in ("word budget", "style", "reader effect", "bridge", "canon"):
         if required not in receipt:
             errors.append(f"constraint receipt missing: {required}")
-    if draft == revision:
-        errors.append("revision is identical to draft")
     return errors
 
 

@@ -109,24 +109,33 @@ def normalize_custom_provider(value: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("custom provider requires at least one model")
     if len(raw_models) > 30:
         raise ValueError("custom provider supports at most 30 models")
+    models = _normalize_custom_models(raw_models)
+    return {"id": provider_id, "name": name, "base_url": base_url, "models": models}
+
+
+def _normalize_custom_models(raw_models: list[object]) -> list[dict[str, Any]]:
     models: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw in raw_models:
-        if not isinstance(raw, dict):
-            raise ValueError("custom provider models must be objects")
-        model_id = str(raw.get("id") or "").strip()
-        if not model_id or len(model_id) > 180 or any(char.isspace() for char in model_id):
-            raise ValueError("custom model id must be a non-empty, whitespace-free value")
-        if model_id in seen:
-            raise ValueError("custom model ids must be unique")
-        seen.add(model_id)
-        model_name = str(raw.get("name") or model_id).strip()
-        if not model_name or len(model_name) > 120:
-            raise ValueError("custom model display name must contain between 1 and 120 characters")
-        context = _positive_int(raw.get("context"), "custom model context", maximum=10_000_000)
-        output = _positive_int(raw.get("output"), "custom model output", maximum=2_000_000)
-        models.append({"id": model_id, "name": model_name, "context": context, "output": output})
-    return {"id": provider_id, "name": name, "base_url": base_url, "models": models}
+        models.append(_normalize_custom_model(raw, seen))
+    return models
+
+
+def _normalize_custom_model(raw: object, seen: set[str]) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError("custom provider models must be objects")
+    model_id = str(raw.get("id") or "").strip()
+    if not model_id or len(model_id) > 180 or any(char.isspace() for char in model_id):
+        raise ValueError("custom model id must be a non-empty, whitespace-free value")
+    if model_id in seen:
+        raise ValueError("custom model ids must be unique")
+    seen.add(model_id)
+    model_name = str(raw.get("name") or model_id).strip()
+    if not model_name or len(model_name) > 120:
+        raise ValueError("custom model display name must contain between 1 and 120 characters")
+    context = _positive_int(raw.get("context"), "custom model context", maximum=10_000_000)
+    output = _positive_int(raw.get("output"), "custom model output", maximum=2_000_000)
+    return {"id": model_id, "name": model_name, "context": context, "output": output}
 
 
 def _opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
