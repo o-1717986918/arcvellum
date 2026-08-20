@@ -31,7 +31,21 @@ def refresh_advisor_inbox(
     mode = str(settings.get("mode") or "standard")
     if mode == "off":
         return inbox_snapshot(store, root, settings=settings)
+    _refresh_choice_notices(config, store, root, dashboard_payload)
+    dashboard = _inbox_dashboard(config, root, dashboard_payload)
+    _refresh_route_notices(store, root, dashboard, mode)
+    _refresh_autopilot_notice(store, root)
+    if mode in {"standard", "active"}:
+        _refresh_reader_notice(store, root)
+    return inbox_snapshot(store, root, settings=settings)
 
+
+def _refresh_choice_notices(
+    config: dict[str, Any],
+    store: JobStore,
+    root: Path,
+    dashboard_payload: dict[str, Any] | None,
+) -> None:
     try:
         choices = current_choices(config, root, dashboard=dashboard_payload)
     except Exception:
@@ -51,10 +65,24 @@ def refresh_advisor_inbox(
             action={"type": "open_view", "target": "overview", "label": "查看选择"},
         )
 
+
+def _inbox_dashboard(
+    config: dict[str, Any],
+    root: Path,
+    dashboard_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
     try:
-        dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else build_dashboard(config, root)
+        return dashboard_payload if isinstance(dashboard_payload, dict) else build_dashboard(config, root)
     except Exception:
-        dashboard = {"route_audits": []}
+        return {"route_audits": []}
+
+
+def _refresh_route_notices(
+    store: JobStore,
+    root: Path,
+    dashboard: dict[str, Any],
+    mode: str,
+) -> None:
     audits = dashboard.get("route_audits") if isinstance(dashboard.get("route_audits"), list) else []
     blocked = [item for item in audits if isinstance(item, dict) and int(item.get("blocking_count") or 0) > 0]
     for audit in blocked[:2]:
@@ -77,29 +105,31 @@ def refresh_advisor_inbox(
                 action={"type": "open_view", "target": "overview", "label": "查看下一步"},
             )
 
+
+def _refresh_autopilot_notice(store: JobStore, root: Path) -> None:
     run = store.latest_autopilot_run(str(root))
     if run and str(run.get("status") or "") in {"paused", "blocked", "failed"}:
         _upsert_autopilot_notice(store, root, run)
 
-    if mode in {"standard", "active"}:
-        try:
-            manifest = build_reader_manifest(root)
-        except Exception:
-            manifest = {"units": []}
-        units = manifest.get("units") if isinstance(manifest.get("units"), list) else []
-        if units:
-            newest = units[-1]
-            store.upsert_advisor_inbox(
-                str(root),
-                dedupe_key=f"reader:{newest.get('unit_id')}:{newest.get('content_hash')}",
-                kind="prose_promoted",
-                severity="success",
-                title="新正文已经进入阅读长卷",
-                message=f"《{newest.get('title') or '最新一节'}》已经通过正式门禁，可以边读边继续创作。",
-                action={"type": "open_view", "target": "reader", "label": "开始阅读"},
-            )
 
-    return inbox_snapshot(store, root, settings=settings)
+def _refresh_reader_notice(store: JobStore, root: Path) -> None:
+    try:
+        manifest = build_reader_manifest(root)
+    except Exception:
+        manifest = {"units": []}
+    units = manifest.get("units") if isinstance(manifest.get("units"), list) else []
+    if not units:
+        return
+    newest = units[-1]
+    store.upsert_advisor_inbox(
+        str(root),
+        dedupe_key=f"reader:{newest.get('unit_id')}:{newest.get('content_hash')}",
+        kind="prose_promoted",
+        severity="success",
+        title="新正文已经进入阅读长卷",
+        message=f"《{newest.get('title') or '最新一节'}》已经通过正式门禁，可以边读边继续创作。",
+        action={"type": "open_view", "target": "reader", "label": "开始阅读"},
+    )
 
 
 def inbox_snapshot(

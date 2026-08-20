@@ -566,6 +566,10 @@ Studio Advisor 分为：
 - `advisor/runtime.py`：OpenCode 远程会话、事件、超时与资源生命周期；
 - `advisor/service.py`：snapshot/hash、persona、memory 与 repository 用例。
 
+`advisor/advisor_inbox.py` 只把 human choice、route blocker、autopilot stop 和 promoted prose 投影为去重通知，不执行选择或推进；
+`advisor/creative_steward.py` 只在声明的 evidence packet 与 option ids 上作一次 bounded decision，最多修复一次结构化输出。Steward 的
+Runtime 获取、session 事件和资源释放可以分段，但不得获得项目浏览、文件编辑、Shell 或绕过授权策略的能力。
+
 顾问 runtime 只能使用 read-only advisor profile；动作卡只是结构化建议，真正改变项目必须经过 Studio API、用户/Steward 授权与正式
 状态机。不得在 Advisor service 或 runtime 增加文件编辑、Shell、网络研究或直接工作流写入能力。
 

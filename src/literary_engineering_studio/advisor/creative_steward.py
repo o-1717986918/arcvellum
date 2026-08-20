@@ -78,83 +78,32 @@ class CreativeSteward:
         timeout: int,
         cancel_event: threading.Event | None,
     ) -> dict[str, Any]:
-        settings = self.config.get("agent_runners", {}).get("opencode", {})
-        executable = locate_opencode(settings if isinstance(settings, dict) else {})
-        if executable is None:
-            raise RuntimeError("bundled OpenCode Runner is not installed")
-        models = (settings or {}).get("models") if isinstance((settings or {}).get("models"), dict) else {}
-        model = str(models.get("steward") or (settings or {}).get("steward_model") or (settings or {}).get("model") or "").strip()
-        if "/" not in model:
-            raise RuntimeError("select an OpenCode provider/model before using Creative Steward")
-        data_root = Path(str(self.config.get("application", {}).get("data_root") or ".")).expanduser().resolve()
+        executable, model, data_root = _steward_runtime_settings(self.config)
         run_root = data_root / "steward" / "runs" / f"run-{int(time.time() * 1000)}"
         run_root.mkdir(parents=True, exist_ok=False)
         manager = ProcessManager(run_root / "logs") if self.runtime_pool is None else None
         server = OpenCodeServer(manager, executable=executable, shared_data_root=data_root) if manager is not None else None
         handle = None
         lease = None
-        client = None
-        session_id = ""
-        session_finished = False
         try:
-            if self.runtime_pool is not None:
-                lease = self.runtime_pool.acquire("steward", workspace, model=model)
-                client = lease.client
-            else:
-                assert server is not None
-                handle = server.start(
-                    component_id=f"steward-{run_root.name}",
-                    workspace=workspace,
-                    run_root=run_root,
-                    role="steward",
-                    model=model,
-                )
-                client = handle.client
-            session = client.create_session("ArcVellum Creative Steward")
-            session_id = str(session.get("id") or "")
-            if not session_id:
-                raise RuntimeError("OpenCode did not create a Creative Steward session")
-            self._emit("steward.session.created", {"session_id": session_id, "model": model})
-            self._emit("steward.session.started", {"session_id": session_id, "model": model})
-            client.prompt_async(
-                session_id,
-                text=_decision_prompt(choice, project_direction, evidence_packet),
-                model=model,
-                agent="creative-steward",
+            client, handle, lease = _acquire_steward_client(
+                self.runtime_pool,
+                manager,
+                server,
+                workspace,
+                run_root,
+                model,
             )
-            _wait_for_decision_idle(client, session_id, model, timeout, cancel_event, self._emit)
-            try:
-                result = _parse_decision(_last_assistant_text(client.messages(session_id)))
-                if not _has_declared_selection(result, choice):
-                    raise RuntimeError("Creative Steward selected an option outside the proposal")
-            except (RuntimeError, json.JSONDecodeError):
-                # A decision is structured control-plane data. Retry once when
-                # the model returns prose, malformed JSON, or a semantic label
-                # such as "approve" instead of the task's exact option id.
-                client.prompt_async(
-                    session_id,
-                    text=_decision_repair_prompt(choice),
-                    model=model,
-                    agent="creative-steward",
-                )
-                self._emit("steward.decision.repair_started", {"session_id": session_id, "model": model})
-                _wait_for_decision_idle(client, session_id, model, timeout, cancel_event, self._emit)
-                try:
-                    result = _parse_decision(_last_assistant_text(client.messages(session_id)))
-                except (RuntimeError, json.JSONDecodeError) as exc:
-                    raise RuntimeError("Creative Steward returned no valid decision JSON after one repair attempt") from exc
-                if not _has_declared_selection(result, choice):
-                    raise RuntimeError("Creative Steward selected an option outside the proposal after one repair attempt")
-            self._emit("steward.session.finished", {"session_id": session_id, "model": model, "status": "complete"})
-            session_finished = True
-            return result
-        except Exception:
-            if session_id and not session_finished:
-                self._emit(
-                    "steward.session.finished",
-                    {"session_id": session_id, "model": model, "status": "failed", "reason": "decision_error"},
-                )
-            raise
+            return _run_steward_session(
+                client,
+                choice,
+                evidence_packet,
+                project_direction,
+                model,
+                timeout,
+                cancel_event,
+                self._emit,
+            )
         finally:
             if lease is not None:
                 self.runtime_pool.release(lease)
@@ -166,6 +115,84 @@ class CreativeSteward:
     def _emit(self, event: str, data: dict[str, Any]) -> None:
         if self.event_sink is not None:
             self.event_sink(event, data)
+
+
+def _steward_runtime_settings(config: dict[str, Any]) -> tuple[Path, str, Path]:
+    settings = config.get("agent_runners", {}).get("opencode", {})
+    settings = settings if isinstance(settings, dict) else {}
+    executable = locate_opencode(settings)
+    if executable is None:
+        raise RuntimeError("bundled OpenCode Runner is not installed")
+    models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
+    model = str(models.get("steward") or settings.get("steward_model") or settings.get("model") or "").strip()
+    if "/" not in model:
+        raise RuntimeError("select an OpenCode provider/model before using Creative Steward")
+    data_root = Path(str(config.get("application", {}).get("data_root") or ".")).expanduser().resolve()
+    return executable, model, data_root
+
+
+def _acquire_steward_client(runtime_pool, manager, server, workspace: Path, run_root: Path, model: str):
+    if runtime_pool is not None:
+        lease = runtime_pool.acquire("steward", workspace, model=model)
+        return lease.client, None, lease
+    assert manager is not None and server is not None
+    handle = server.start(
+        component_id=f"steward-{run_root.name}",
+        workspace=workspace,
+        run_root=run_root,
+        role="steward",
+        model=model,
+    )
+    return handle.client, handle, None
+
+
+def _run_steward_session(
+    client,
+    choice: dict[str, Any],
+    evidence_packet: str,
+    project_direction: str,
+    model: str,
+    timeout: int,
+    cancel_event: threading.Event | None,
+    emit,
+) -> dict[str, Any]:
+    session_id = ""
+    finished = False
+    try:
+        session_id = str(client.create_session("ArcVellum Creative Steward").get("id") or "")
+        if not session_id:
+            raise RuntimeError("OpenCode did not create a Creative Steward session")
+        emit("steward.session.created", {"session_id": session_id, "model": model})
+        emit("steward.session.started", {"session_id": session_id, "model": model})
+        client.prompt_async(session_id, text=_decision_prompt(choice, project_direction, evidence_packet), model=model, agent="creative-steward")
+        _wait_for_decision_idle(client, session_id, model, timeout, cancel_event, emit)
+        result = _parse_or_repair_decision(client, session_id, choice, model, timeout, cancel_event, emit)
+        emit("steward.session.finished", {"session_id": session_id, "model": model, "status": "complete"})
+        finished = True
+        return result
+    except Exception:
+        if session_id and not finished:
+            emit("steward.session.finished", {"session_id": session_id, "model": model, "status": "failed", "reason": "decision_error"})
+        raise
+
+
+def _parse_or_repair_decision(client, session_id: str, choice: dict[str, Any], model: str, timeout: int, cancel_event, emit) -> dict[str, Any]:
+    try:
+        result = _parse_decision(_last_assistant_text(client.messages(session_id)))
+        if not _has_declared_selection(result, choice):
+            raise RuntimeError("Creative Steward selected an option outside the proposal")
+        return result
+    except (RuntimeError, json.JSONDecodeError):
+        client.prompt_async(session_id, text=_decision_repair_prompt(choice), model=model, agent="creative-steward")
+        emit("steward.decision.repair_started", {"session_id": session_id, "model": model})
+        _wait_for_decision_idle(client, session_id, model, timeout, cancel_event, emit)
+        try:
+            result = _parse_decision(_last_assistant_text(client.messages(session_id)))
+        except (RuntimeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Creative Steward returned no valid decision JSON after one repair attempt") from exc
+        if not _has_declared_selection(result, choice):
+            raise RuntimeError("Creative Steward selected an option outside the proposal after one repair attempt")
+        return result
 
 
 def _decision_prompt(choice: dict[str, Any], project_direction: str, evidence_packet: str = "") -> str:
