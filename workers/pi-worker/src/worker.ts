@@ -27,6 +27,7 @@ import {
 const TOOL_NAMES = new Set([
 	"read_task_context",
 	"read_authorized_source",
+	"read_repair_target",
 	"write_expected_output",
 	"validate_output",
 	"complete_task",
@@ -309,7 +310,7 @@ export function desiredRepairTool(
 	requiredOutputs: readonly string[] = repairSources,
 ): string {
 	if (options.mode !== "repair") return "";
-	if (repairSources.some((path) => !state.readPaths.has(path))) return "read_authorized_source";
+	if (repairSources.some((path) => !state.readPaths.has(path))) return "read_repair_target";
 	if (requiredOutputs.some((path) => !state.writtenPaths.has(path))) return "write_expected_output";
 	if (state.lastValidation.issues.some((issue) => requiredOutputs.includes(issue.path))) {
 		return "write_expected_output";

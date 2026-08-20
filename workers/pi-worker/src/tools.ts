@@ -16,7 +16,7 @@ export function createWorkerTools(
 ): AgentTool[] {
 	const ownedPaths = new Set(context.agentOwnedOutputs.map((item) => item.path));
 	const readablePaths = new Set([...context.exactOnDemand, ...ownedPaths]);
-	return [
+	const tools: AgentTool[] = [
 		{
 			name: "read_task_context",
 			label: "Read Task Contract",
@@ -191,6 +191,35 @@ export function createWorkerTools(
 			},
 		},
 	];
+	if (options.mode === "repair") {
+		tools.splice(2, 0, {
+			name: "read_repair_target",
+			label: "Read Next Repair Target",
+			description: "Read the next existing Studio-authorized repair target. Call with an empty object; the Worker chooses the exact path deterministically.",
+			parameters: EMPTY_PARAMETERS,
+			executionMode: "sequential",
+			execute: async () => {
+				for (const path of ownedPaths) {
+					if (state.readPaths.has(path)) continue;
+					try {
+						const content = await readAuthorizedFile(options.workspace, path);
+						state.readPaths.add(path);
+						return result(content, {
+							path,
+							returned: content.length,
+							total: content.length,
+							truncated: false,
+						});
+					} catch (error) {
+						if (!isMissingFileError(error)) throw error;
+						// Missing repair targets are created directly in the write phase.
+					}
+				}
+				throw new Error("no unread existing repair target remains");
+			},
+		});
+	}
+	return tools;
 }
 
 function readTarget(
@@ -347,4 +376,11 @@ function serializedOutput(
 
 function publicError(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+function isMissingFileError(error: unknown): boolean {
+	return typeof error === "object"
+		&& error !== null
+		&& "code" in error
+		&& (error as { code?: unknown }).code === "ENOENT";
 }

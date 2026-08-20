@@ -43,7 +43,7 @@ describe("bounded worker lifecycle", () => {
 
 	it("forces repair turns through read, write, then completion tools", () => {
 		const workerState = state();
-		expect(desiredRepairTool({ mode: "repair" }, ["out/review.md"], workerState)).toBe("read_authorized_source");
+		expect(desiredRepairTool({ mode: "repair" }, ["out/review.md"], workerState)).toBe("read_repair_target");
 		workerState.readPaths.add("out/review.md");
 		expect(desiredRepairTool({ mode: "repair" }, ["out/review.md"], workerState)).toBe("write_expected_output");
 		workerState.writtenPaths.add("out/review.md");

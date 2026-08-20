@@ -149,6 +149,39 @@ describe("local output validation", () => {
 		expect(workerState.readPaths.has("out/review.json")).toBe(true);
 	});
 
+	it("selects repair targets deterministically without model-supplied paths", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-repair-target-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), '{"status":"needs_revision"}\n', "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Needs revision\n", "utf8");
+		const workerState = state();
+		const repairOptions = { ...options(root), mode: "repair" as const };
+		const read = createWorkerTools(context(), repairOptions, workerState, () => undefined)
+			.find((tool) => tool.name === "read_repair_target");
+
+		const first = await read?.execute("call", {});
+		const second = await read?.execute("call", {
+			path: "outside.md",
+			evidence_id: "D999",
+		});
+
+		expect(first?.content[0]?.text).toContain("needs_revision");
+		expect(second?.content[0]?.text).toContain("Needs revision");
+		expect([...workerState.readPaths]).toEqual(["out/review.json", "out/review.md"]);
+		await expect(read?.execute("call", {})).rejects.toThrow("no unread existing repair target remains");
+	});
+
+	it("does not expose the deterministic repair reader during normal tasks", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-normal-tools-"));
+		roots.push(root);
+
+		const names = createWorkerTools(context(), options(root), state(), () => undefined)
+			.map((tool) => tool.name);
+
+		expect(names).not.toContain("read_repair_target");
+	});
+
 	it("reads exact context by machine evidence id without exposing its path in the prompt", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-evidence-id-"));
 		roots.push(root);
