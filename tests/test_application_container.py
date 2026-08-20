@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.application.container import build_application_container
 from literary_engineering_studio.application.ports import ApplicationPorts
+from literary_engineering_studio.application.persistence_ports import PersistencePorts
 
 
 def _ports() -> ApplicationPorts:
@@ -24,7 +25,17 @@ def _ports() -> ApplicationPorts:
     supervisor = Mock()
     supervisor.health.return_value = {"ready": True}
     return ApplicationPorts(
-        store=store,
+        persistence=PersistencePorts(
+            jobs=store,
+            autopilot=store,
+            sessions=store,
+            leases=store,
+            plans=store,
+            asset_revisions=store,
+            events=store,
+            unit_of_work=store,
+            facade=store,
+        ),
         live_events=live_events,
         read_models=read_models,
         prepared_context_cache=prepared_context_cache,

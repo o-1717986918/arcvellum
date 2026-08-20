@@ -30,6 +30,7 @@ class ApplicationLifecycleManager:
     def __init__(self, config: dict[str, Any], ports: ApplicationPorts):
         self.config = config
         self.ports = ports
+        self.persistence = ports.persistence
         self.store = ports.store
         self.live_events = ports.live_events
         self.read_models = ports.read_models

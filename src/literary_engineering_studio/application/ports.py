@@ -5,16 +5,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
-
-class JobStorePort(Protocol):
-    def health(self) -> dict[str, Any]: ...
+from .persistence_ports import PersistencePorts
 
 
 class LiveEventPublisherPort(Protocol):
+    def publish(self, channel: str, event: str, data: dict[str, Any]) -> Any: ...
+
+    def wait_since(
+        self,
+        channel: str,
+        after: int,
+        *,
+        timeout: float = 0.5,
+    ) -> list[dict[str, Any]]: ...
+
     def close(self) -> None: ...
 
 
 class ReadModelCachePort(Protocol):
+    def get(self, key: str, project_root: Any, builder: Callable[[], Any]) -> Any: ...
+
     def clear(self) -> None: ...
 
 
@@ -62,7 +72,7 @@ ModelConnectionStatusLoader = Callable[[dict[str, Any]], dict[str, Any]]
 class ApplicationPorts:
     """One application's replaceable infrastructure and process boundaries."""
 
-    store: JobStorePort
+    persistence: PersistencePorts
     live_events: LiveEventPublisherPort
     read_models: ReadModelCachePort
     prepared_context_cache: PreparedContextCachePort
@@ -74,11 +84,16 @@ class ApplicationPorts:
     runner_status_loader: RunnerStatusLoader
     model_connection_status_loader: ModelConnectionStatusLoader
 
+    @property
+    def store(self) -> Any:
+        """Compatibility seam while use cases migrate to named repositories."""
+
+        return self.persistence.facade
+
 
 __all__ = [
     "ApplicationPorts",
     "ExecutionCoordinatorPort",
-    "JobStorePort",
     "LiveEventPublisherPort",
     "ModelConnectionStatusLoader",
     "PreparedContextCachePort",

@@ -10,6 +10,7 @@ from ..integrations.model_connections import model_connection_status
 from ..integrations.opencode.opencode_runtime_pool import OpenCodeRuntimePool
 from ..observability.live_events import LiveEventBus
 from ..persistence.job_store import JobStore
+from ..persistence.composition import sqlite_persistence_ports
 from ..projections.read_model_cache import ReadModelCache
 from ..runtime.execution_coordinator import ProjectExecutionCoordinator
 from ..runtime.prepared_context_cache import PreparedContextCache
@@ -31,7 +32,7 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
     process_manager = ProcessManager(data_root / "logs" / "sidecars")
     execution_coordinator = ProjectExecutionCoordinator()
     return ApplicationPorts(
-        store=store,
+        persistence=sqlite_persistence_ports(store),
         live_events=LiveEventBus(),
         read_models=ReadModelCache(),
         prepared_context_cache=PreparedContextCache(

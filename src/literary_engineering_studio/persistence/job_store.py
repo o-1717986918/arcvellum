@@ -44,16 +44,16 @@ class JobStore:
         resolved = location.expanduser().resolve()
         self.path = resolved if resolved.suffix in {".db", ".sqlite", ".sqlite3"} else resolved / "studio.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._uow = SqliteUnitOfWork(self.path)
-        self._write_lock = self._uow.write_lock
-        self.autopilot_runs = AutopilotRepository(self._uow)
-        self.sessions = SessionRepository(self._uow)
-        self.context_ledgers = ContextLedgerRepository(self._uow)
-        self.mutation_receipts = MutationReceiptRepository(self._uow)
-        self.creative_plans = CreativePlanRepository(self._uow)
-        self.recycle_bin = RecycleBinRepository(self._uow)
-        self.resource_leases = ResourceLeaseRepository(self._uow)
-        self.asset_history = AssetHistoryRepository(self._uow)
+        self.unit_of_work = SqliteUnitOfWork(self.path)
+        self._write_lock = self.unit_of_work.write_lock
+        self.autopilot_runs = AutopilotRepository(self.unit_of_work)
+        self.sessions = SessionRepository(self.unit_of_work)
+        self.context_ledgers = ContextLedgerRepository(self.unit_of_work)
+        self.mutation_receipts = MutationReceiptRepository(self.unit_of_work)
+        self.creative_plans = CreativePlanRepository(self.unit_of_work)
+        self.recycle_bin = RecycleBinRepository(self.unit_of_work)
+        self.resource_leases = ResourceLeaseRepository(self.unit_of_work)
+        self.asset_history = AssetHistoryRepository(self.unit_of_work)
         self.migration_backup = self._backup_before_migration()
         self._initialize()
 
@@ -435,11 +435,11 @@ class JobStore:
             initialize_schema(connection)
 
     def _connect(self) -> sqlite3.Connection:
-        return self._uow.connect()
+        return self.unit_of_work.connect()
 
     @contextmanager
     def _connection(self):
-        with self._uow.connection() as connection:
+        with self.unit_of_work.connection() as connection:
             yield connection
 
     def _append_event_tx(
