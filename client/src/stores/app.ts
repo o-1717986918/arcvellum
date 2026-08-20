@@ -1,6 +1,9 @@
 import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
-import { api, bootstrapDesktopSession, connectEventStream, query, type EventStreamConnection } from "@/services/api";
+import { deliveryClient } from "@/features/delivery/services/deliveryClient";
+import { projectsClient } from "@/features/projects/services/projectsClient";
+import { settingsClient } from "@/features/settings/services/settingsClient";
+import { workflowClient, type WorkspaceSnapshot } from "@/features/workflow/services/workflowClient";
 import type {
   BootstrapSnapshot,
   DashboardResponse,
@@ -17,18 +20,7 @@ import type {
   ProjectProgress,
 } from "@/types/api";
 
-interface ProjectWorkspaceSnapshot {
-  project_root?: string;
-  revision?: string;
-  source_revisions?: Record<string, string>;
-  dashboard: DashboardResponse;
-  library: LibraryResponse;
-  delivery: DeliveryResponse;
-  reader_manifest: ReaderManifest;
-  project_progress: ProjectProgress;
-  autopilot_status: AutopilotStatus;
-  agent_observability: AgentObservability;
-}
+interface StreamConnection { close(): void }
 
 export const useAppStore = defineStore("app", () => {
   const initialized = ref(false);
@@ -48,10 +40,10 @@ export const useAppStore = defineStore("app", () => {
   const autopilotStatus = shallowRef<AutopilotStatus | null>(null);
   const projectProgress = shallowRef<ProjectProgress | null>(null);
   const agentObservability = shallowRef<AgentObservability | null>(null);
-  let bootstrapStream: EventStreamConnection | null = null;
-  let workspaceStream: EventStreamConnection | null = null;
-  let autopilotStream: EventStreamConnection | null = null;
-  let agentObservabilityStream: EventStreamConnection | null = null;
+  let bootstrapStream: StreamConnection | null = null;
+  let workspaceStream: StreamConnection | null = null;
+  let autopilotStream: StreamConnection | null = null;
+  let agentObservabilityStream: StreamConnection | null = null;
   let workspaceRevisions: Record<string, string> = {};
   let workspaceRefresh: Promise<void> | null = null;
   let workspaceRefreshRoot = "";
@@ -67,8 +59,8 @@ export const useAppStore = defineStore("app", () => {
     loading.value = true;
     error.value = "";
     try {
-      await bootstrapDesktopSession();
-      bootstrap.value = await api<BootstrapSnapshot>("/application/bootstrap");
+      await settingsClient.bootstrapDesktopSession();
+      bootstrap.value = await settingsClient.bootstrap();
       if (bootstrap.value.model_catalog && !modelCatalogAuthoritative) {
         modelCatalog.value = bootstrap.value.model_catalog;
       }
@@ -83,7 +75,7 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function loadProjects(): Promise<void> {
-    const response = await api<ProjectsResponse>("/projects");
+    const response = await projectsClient.list();
     projects.value = response.projects || [];
     const remembered = projects.value.some((item) => item.path === currentProjectPath.value);
     const preferred = remembered ? currentProjectPath.value : response.current_project || response.projects[0]?.path || "";
@@ -107,10 +99,7 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function createProject(payload: Record<string, unknown>): Promise<ProjectSummary> {
-    const response = await api<{ ok: boolean; project: ProjectSummary }>("/projects/create", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    const response = await projectsClient.create(payload);
     await loadProjects();
     setCurrentProject(response.project.path);
     notice.value = `《${response.project.title}》已经建立。`;
@@ -118,10 +107,7 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function openProject(projectRoot: string): Promise<ProjectSummary> {
-    const response = await api<{ ok: boolean; project: ProjectSummary }>("/projects/open", {
-      method: "POST",
-      body: JSON.stringify({ project_root: projectRoot }),
-    });
+    const response = await projectsClient.open(projectRoot);
     await loadProjects();
     setCurrentProject(response.project.path);
     notice.value = `已打开《${response.project.title}》。`;
@@ -150,9 +136,7 @@ export const useAppStore = defineStore("app", () => {
 
   async function loadWorkspaceSnapshot(requestedRoot: string): Promise<void> {
     error.value = "";
-    const snapshot = await api<ProjectWorkspaceSnapshot>(
-      `/project/workspace?${query({ project_root: requestedRoot })}`,
-    );
+    const snapshot = await workflowClient.workspace(requestedRoot);
     // Requests from a project that was just closed or switched must never
     // repaint the current workbench after their response finally arrives.
     if (requestedRoot !== currentProjectPath.value) return;
@@ -160,7 +144,7 @@ export const useAppStore = defineStore("app", () => {
     startProjectStreams();
   }
 
-  function applyWorkspaceSnapshot(snapshot: ProjectWorkspaceSnapshot, expectedRoot = currentProjectPath.value): void {
+  function applyWorkspaceSnapshot(snapshot: WorkspaceSnapshot, expectedRoot = currentProjectPath.value): void {
     if (expectedRoot !== currentProjectPath.value) return;
     if (snapshot.project_root && snapshot.project_root !== currentProjectPath.value) return;
     const manifest = snapshot.reader_manifest;
@@ -186,9 +170,7 @@ export const useAppStore = defineStore("app", () => {
 
   async function loadAutopilotStatus(): Promise<void> {
     if (!currentProjectPath.value) return;
-    autopilotStatus.value = await api<AutopilotStatus>(
-      `/autopilot/status?${query({ project_root: currentProjectPath.value })}`,
-    );
+    autopilotStatus.value = await workflowClient.autopilotStatus(currentProjectPath.value);
   }
 
   function setAutopilotStatus(value: AutopilotStatus | null): void {
@@ -202,40 +184,32 @@ export const useAppStore = defineStore("app", () => {
 
   async function loadDashboard(): Promise<void> {
     if (!currentProjectPath.value) return;
-    dashboard.value = await api<DashboardResponse>(
-      `/workflow/dashboard?${query({ project_root: currentProjectPath.value })}`,
-    );
+    dashboard.value = await workflowClient.dashboard(currentProjectPath.value);
   }
 
   async function loadLibrary(): Promise<void> {
     if (!currentProjectPath.value) return;
-    library.value = await api<LibraryResponse>(`/project/library?${query({ project_root: currentProjectPath.value })}`);
+    library.value = await deliveryClient.library(currentProjectPath.value);
   }
 
   async function loadDelivery(): Promise<void> {
     if (!currentProjectPath.value) return;
-    delivery.value = await api<DeliveryResponse>(`/project/delivery?${query({ project_root: currentProjectPath.value })}`);
+    delivery.value = await deliveryClient.delivery(currentProjectPath.value);
   }
 
   async function loadReaderManifest(): Promise<void> {
     if (!currentProjectPath.value) return;
-    readerManifest.value = await api<ReaderManifest>(
-      `/reader/manifest?${query({ project_root: currentProjectPath.value })}`,
-    );
+    readerManifest.value = await deliveryClient.readerManifest(currentProjectPath.value);
   }
 
   async function loadProjectProgress(): Promise<void> {
     if (!currentProjectPath.value) return;
-    projectProgress.value = await api<ProjectProgress>(
-      `/project/progress?${query({ project_root: currentProjectPath.value })}`,
-    );
+    projectProgress.value = await deliveryClient.progress(currentProjectPath.value);
   }
 
   async function loadAgentObservability(): Promise<void> {
     if (!currentProjectPath.value) return;
-    applyAgentObservability(await api<AgentObservability>(
-      `/agent-observability?${query({ project_root: currentProjectPath.value })}`,
-    ));
+    applyAgentObservability(await workflowClient.observability(currentProjectPath.value));
   }
 
   function applyAgentObservability(snapshot: AgentObservability | null): void {
@@ -249,9 +223,7 @@ export const useAppStore = defineStore("app", () => {
     const summary = readerManifest.value?.units.find((item) => item.unit_id === unitId);
     const cached = readerBodies.value[unitId];
     if (cached && summary && cached.hash === summary.content_hash) return cached.body;
-    const response = await api<ReaderUnitResponse>(
-      `/reader/units/${encodeURIComponent(unitId)}?${query({ project_root: currentProjectPath.value })}`,
-    );
+    const response = await deliveryClient.readerUnit(currentProjectPath.value, unitId);
     readerBodies.value = {
       ...readerBodies.value,
       [unitId]: { hash: response.unit.content_hash, body: response.body },
@@ -261,7 +233,7 @@ export const useAppStore = defineStore("app", () => {
 
   async function loadModelCatalog(force = false): Promise<void> {
     void force;
-    const catalog = await api<ModelCatalog & { ok: boolean }>("/model-connections/opencode/catalog");
+    const catalog = await settingsClient.modelCatalog();
     applyModelCatalog(catalog);
   }
 
@@ -279,9 +251,7 @@ export const useAppStore = defineStore("app", () => {
 
   function startBootstrapStream(): void {
     if (bootstrapStream) return;
-    bootstrapStream = connectEventStream("/application/bootstrap/stream?interval_seconds=1", (event, data) => {
-      if (event !== "application.bootstrap") return;
-      const payload = data as unknown as BootstrapSnapshot;
+    bootstrapStream = settingsClient.observeBootstrap((payload) => {
       const nextPayload = modelCatalogAuthoritative && modelCatalog.value
         ? { ...payload, model_catalog: modelCatalog.value }
         : payload;
@@ -300,34 +270,19 @@ export const useAppStore = defineStore("app", () => {
     stopProjectStreams();
     const root = currentProjectPath.value;
     if (!root) return;
-    workspaceStream = connectEventStream(
-      `/project/workspace/stream?${query({ project_root: root, interval_seconds: 2 })}`,
-      (event, data) => {
-        if (event !== "workspace.snapshot") return;
-        applyWorkspaceSnapshot(data as unknown as ProjectWorkspaceSnapshot, root);
-      },
-    );
-    agentObservabilityStream = connectEventStream(
-      `/agent-observability/stream?${query({ project_root: root, interval_seconds: 1 })}`,
-      (event, data) => {
-        if (event !== "agent.observability") return;
-        applyAgentObservability(data as unknown as AgentObservability);
-      },
-    );
+    workspaceStream = workflowClient.observeWorkspace(root, (snapshot) => applyWorkspaceSnapshot(snapshot, root));
+    agentObservabilityStream = workflowClient.observeAgents(root, applyAgentObservability);
     const activeRun = autopilotStatus.value?.run;
     if (activeRun?.status === "running") {
-      autopilotStream = connectEventStream(
-        `/autopilot/runs/${encodeURIComponent(activeRun.run_id)}/stream`,
-        (event, data) => {
+      autopilotStream = workflowClient.observeAutopilot(activeRun.run_id, (event, data) => {
           if (event !== "autopilot.status") return;
-          const payload = data as unknown as { run: AutopilotRun };
-          setAutopilotRun(payload.run);
-          if (["complete", "paused", "blocked", "cancelled", "failed"].includes(payload.run.status)) {
+          const run = (data as unknown as { run: AutopilotRun }).run;
+          setAutopilotRun(run);
+          if (["complete", "paused", "blocked", "cancelled", "failed"].includes(run.status)) {
             autopilotStream?.close();
             autopilotStream = null;
           }
-        },
-      );
+        });
     }
   }
 

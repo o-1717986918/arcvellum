@@ -107,6 +107,22 @@ export interface EventStreamConnection {
   close(): void;
 }
 
+export interface ApiTransport {
+  request<T>(path: string, init?: RequestInit): Promise<T>;
+  authorizedFetch(path: string, init?: RequestInit): Promise<Response>;
+  stream(
+    path: string,
+    init: RequestInit,
+    onEvent: (event: string, data: Record<string, unknown>) => void,
+  ): Promise<void>;
+  connect(
+    path: string,
+    onEvent: (event: string, data: Record<string, unknown>) => void,
+    onError?: (cause: unknown) => void,
+  ): EventStreamConnection;
+  query(values: Record<string, string | number | undefined>): string;
+}
+
 export function connectEventStream(
   path: string,
   onEvent: (event: string, data: Record<string, unknown>) => void,

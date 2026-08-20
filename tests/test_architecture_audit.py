@@ -171,6 +171,16 @@ class ArchitectureAuditTests(unittest.TestCase):
             ],
         )
 
+    def test_generated_client_contract_is_not_manual_file_debt(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated = root / "client/src/types/generated/api-schema.d.ts"
+            _write(generated, "\n".join(["export type Generated = unknown;"] * 700) + "\n")
+
+            report = audit_repository(root)
+
+        self.assertNotIn("client/src/types/generated/api-schema.d.ts", report["oversized_files"])
+
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

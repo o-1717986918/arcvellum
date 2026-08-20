@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { BookMarked, ExternalLink, FileText, Fingerprint, Github, HardDrive, Scale, ShieldCheck } from "lucide-vue-next";
-import { api } from "@/services/api";
+import { qualityClient } from "@/features/quality/services/qualityClient";
+import { settingsClient } from "@/features/settings/services/settingsClient";
 import { asList, asRecord, formatCount } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 
@@ -15,8 +16,8 @@ const summary = computed(() => asRecord(store.dashboard?.summary));
 const routes = computed(() => asList<Record<string, unknown>>(store.dashboard?.route_audits));
 
 onMounted(async () => {
-  app.value = await api<Record<string, any>>("/application/info");
-  if (store.currentProjectPath) quality.value = (await api<Record<string, any>>(`/project/creative-quality?project_root=${encodeURIComponent(store.currentProjectPath)}`)).profile as Record<string, any>;
+  app.value = await settingsClient.applicationInfo();
+  if (store.currentProjectPath) quality.value = (await qualityClient.profile(store.currentProjectPath)).profile as Record<string, any>;
 });
 </script>
 

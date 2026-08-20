@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
-import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
+import { orreryClient } from "@/features/orrery/services/orreryClient";
 import type { NarrativeFocusLevel } from "@/features/orrery/model/focusScope";
 import type { SpatialGrammar, SpatialNarrativeProjection, SpatialNarrativeProjectionPatch } from "@/types/spatial";
 import { defaultObservation } from "@/features/orrery/layout/observationWindow";
@@ -23,7 +23,7 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
   const timeWindow = ref(3);
   const cameraPreset = ref<"recommended" | "front" | "current-chapter" | "custom">("recommended");
   let observationProject = "";
-  let stream: EventStreamConnection | null = null;
+  let stream: { close(): void } | null = null;
   let requestSequence = 0;
 
   async function open(root: string, next: Partial<{ level: NarrativeFocusLevel; focus: string; grammar: SpatialGrammar }> = {}): Promise<void> {
@@ -42,7 +42,7 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     loading.value = true;
     error.value = "";
     try {
-      const payload = await api<SpatialNarrativeProjection>(`/narrative/projection/v3?${params()}`);
+      const payload = await orreryClient.spatialProjection(viewQuery());
       if (sequence === requestSequence) {
         applyProjection(payload);
       }
@@ -81,18 +81,15 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     stream?.close();
     if (!projectRoot.value) return;
     const expectedRoot = projectRoot.value;
-    const expectedKey = params();
-    stream = connectEventStream(`/narrative/stream/v3?${expectedKey}&interval_seconds=2`, (event, data) => {
-      if (projectRoot.value !== expectedRoot || params() !== expectedKey) return;
-      if (event === "narrative.v3.patch") {
-        applyPatch(data as unknown as SpatialNarrativeProjectionPatch);
-        return;
-      }
-      if (event !== "narrative.v3.projection") return;
-      const payload = data as unknown as SpatialNarrativeProjection;
+    const expectedKey = viewKey();
+    stream = orreryClient.observeSpatialProjection(viewQuery(), (payload) => {
+      if (projectRoot.value !== expectedRoot || viewKey() !== expectedKey) return;
       const current = projection.value;
       if (current && payload.sequence < current.sequence) return;
       applyProjection(payload);
+    }, (patch) => {
+      if (projectRoot.value !== expectedRoot || viewKey() !== expectedKey) return;
+      applyPatch(patch);
     }, (cause) => {
       if (projectRoot.value === expectedRoot) error.value = cause instanceof Error ? cause.message : "叙事场域连接暂时中断。";
     });
@@ -107,8 +104,12 @@ export const useSpatialProjectionStore = defineStore("spatialProjection", () => 
     focusHistory.value = [];
   }
 
-  function params(): string {
-    return query({ project_root: projectRoot.value, level: level.value, focus: focus.value, grammar: grammar.value });
+  function viewQuery() {
+    return { projectRoot: projectRoot.value, level: level.value, focus: focus.value, grammar: grammar.value };
+  }
+
+  function viewKey(): string {
+    return JSON.stringify(viewQuery());
   }
 
   function initializeObservation(payload: SpatialNarrativeProjection): void {

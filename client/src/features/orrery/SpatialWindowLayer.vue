@@ -6,12 +6,13 @@ import RulesInstrument from "@/features/quality/RulesInstrument.vue";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
+import { deliveryClient } from "@/features/delivery/services/deliveryClient";
+import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
 import { useAppStore } from "@/stores/app";
 import type { SpatialNarrativeProjection } from "@/types/spatial";
 import type { ProjectProgress } from "@/types/api";
 import { asList, asRecord, describeGate, labelFor } from "@/services/presentation";
-import { api, authorizedFetch, query } from "@/services/api";
 import { readCreativeRuntime } from "@/services/runtimePreference";
 
 const props = defineProps<{ projection: SpatialNarrativeProjection | null; dashboard: Record<string, unknown> | null; choices: Record<string, unknown>[]; delivery: Record<string, unknown> | null; progress: ProjectProgress | null; prose: Record<string, unknown>[] }>();
@@ -109,10 +110,7 @@ async function prepareDelivery(): Promise<void> {
   deliveryPreparing.value = true;
   deliveryMessage.value = "";
   try {
-    const result = await api<Record<string, unknown>>("/worker/run", {
-      method: "POST",
-      body: JSON.stringify({ project_root: app.currentProjectPath, route: "export-and-release", runtime: readCreativeRuntime() }),
-    });
+    const result = await workflowClient.runWorker(app.currentProjectPath, "export-and-release", readCreativeRuntime());
     deliveryMessage.value = String(result.message || "交付任务已开始；完成后文件会出现在这里。");
     await Promise.allSettled([app.loadDelivery(), app.loadDashboard(), app.loadAgentObservability(), app.loadAutopilotStatus()]);
   } catch (cause) {
@@ -127,7 +125,7 @@ async function downloadDelivery(file: Record<string, unknown>): Promise<void> {
   if (!path || !app.currentProjectPath) return;
   deliveryMessage.value = "";
   try {
-    const response = await authorizedFetch(`/project/delivery/download?${query({ project_root: app.currentProjectPath, path })}`);
+    const response = await deliveryClient.download(app.currentProjectPath, path);
     if (!response.ok) throw new Error(`下载失败（${response.status}）`);
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement("a");

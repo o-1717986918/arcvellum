@@ -16,7 +16,7 @@ import {
   Sun,
   X,
 } from "lucide-vue-next";
-import { api, query } from "@/services/api";
+import { deliveryClient } from "@/features/delivery/services/deliveryClient";
 import { displayValue } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import { useReaderNavigationStore } from "@/stores/readerNavigation";
@@ -110,9 +110,7 @@ onMounted(async () => {
   let remembered = localStorage.getItem(`arcvellum.reader.unit.${store.currentProjectPath}`) || "";
   if (store.currentProjectPath) {
     try {
-      const state = await api<{ position: { unit_id: string; scroll_ratio: number }; bookmarks: Array<{ unit_id: string }> }>(
-        `/reader/state?${query({ project_root: store.currentProjectPath })}`,
-      );
+      const state = await deliveryClient.readerState(store.currentProjectPath);
       savedPosition.value = state.position || savedPosition.value;
       remembered = state.position?.unit_id || remembered;
       bookmarks.value = (state.bookmarks || []).map((item) => item.unit_id);
@@ -181,10 +179,7 @@ function rememberScroll(): void {
   if (positionTimer !== null) window.clearTimeout(positionTimer);
   positionTimer = window.setTimeout(() => {
     if (!store.currentProjectPath) return;
-    void api("/reader/position", {
-      method: "PUT",
-      body: JSON.stringify({ project_root: store.currentProjectPath, unit_id: currentId.value, scroll_ratio: ratio }),
-    });
+    void deliveryClient.saveReaderPosition(store.currentProjectPath, currentId.value, ratio);
   }, 350);
 }
 
@@ -194,10 +189,7 @@ async function toggleBookmark(): Promise<void> {
   bookmarks.value = isBookmarked.value ? bookmarks.value.filter((item) => item !== id) : [...bookmarks.value, id];
   localStorage.setItem("arcvellum.reader.bookmarks", JSON.stringify(bookmarks.value));
   if (store.currentProjectPath) {
-    await api("/reader/bookmark", {
-      method: "PUT",
-      body: JSON.stringify({ project_root: store.currentProjectPath, unit_id: id, enabled: bookmarks.value.includes(id) }),
-    });
+    await deliveryClient.setBookmark(store.currentProjectPath, id, bookmarks.value.includes(id));
   }
 }
 
@@ -224,9 +216,7 @@ async function searchProse(): Promise<void> {
   if (!searchText.value.trim() || !store.currentProjectPath) return;
   searching.value = true;
   try {
-    const result = await api<{ items: Record<string, unknown>[] }>(
-      `/reader/search?${query({ project_root: store.currentProjectPath, q: searchText.value.trim() })}`,
-    );
+    const result = await deliveryClient.search(store.currentProjectPath, searchText.value.trim());
     searchResults.value = result.items || [];
   } finally {
     searching.value = false;

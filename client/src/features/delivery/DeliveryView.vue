@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { CheckCircle2, Download, FileText, PackageOpen, RefreshCw, ShieldCheck } from "lucide-vue-next";
-import { api, query } from "@/services/api";
+import { deliveryClient } from "@/features/delivery/services/deliveryClient";
+import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { asList, displayValue } from "@/services/presentation";
 import { readCreativeRuntime } from "@/services/runtimePreference";
 import { useAppStore } from "@/stores/app";
@@ -15,7 +16,7 @@ const blockers = computed(() => asList<Record<string, unknown>>(store.delivery?.
 onMounted(() => store.loadDelivery());
 
 function downloadUrl(path: string): string {
-  return `/project/delivery/download?${query({ project_root: store.currentProjectPath, path })}`;
+  return deliveryClient.downloadUrl(store.currentProjectPath, path);
 }
 
 function fileSize(size?: number): string {
@@ -29,10 +30,7 @@ async function prepareDelivery(): Promise<void> {
   preparing.value = true;
   message.value = "";
   try {
-    const result = await api<Record<string, unknown>>("/worker/run", {
-      method: "POST",
-      body: JSON.stringify({ project_root: store.currentProjectPath, route: "export-and-release", runtime: readCreativeRuntime() }),
-    });
+    const result = await workflowClient.runWorker(store.currentProjectPath, "export-and-release", readCreativeRuntime());
     message.value = String(result.message || "交付任务已经启动；完成后正式文件会出现在下方。");
     await Promise.allSettled([store.loadDelivery(), store.loadDashboard(), store.loadAgentObservability(), store.loadAutopilotStatus()]);
   } catch (cause) {

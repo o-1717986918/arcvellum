@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { FileText, LockKeyhole, Scale } from "lucide-vue-next";
-import { api } from "@/services/api";
+import { settingsClient } from "@/features/settings/services/settingsClient";
 
 interface LegalSection { title: string; body: string }
 interface LegalDocument { id: string; title: string; summary: string; sections: LegalSection[] }
@@ -9,7 +9,7 @@ const documents = ref<LegalDocument[]>([]);
 const active = ref("terms");
 
 onMounted(async () => {
-  const payload = await api<{ documents: LegalDocument[] }>("/application/legal");
+  const payload = await settingsClient.legalDocuments<{ documents: LegalDocument[] }>();
   documents.value = payload.documents || [];
 });
 </script>

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { BookOpenText, ChevronRight, Focus, Layers3, List, Minus, Network, Plus, ScanSearch, X } from "lucide-vue-next";
-import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
+import { orreryClient } from "@/features/orrery/services/orreryClient";
 import { asList } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import type { NarrativeEdge, NarrativeNode, NarrativeProjection } from "@/types/api";
@@ -19,7 +19,7 @@ const listMode = ref(false);
 const loading = ref(false);
 const zoom = ref(1);
 const recentMotion = ref(new Set<string>());
-let stream: EventStreamConnection | null = null;
+let stream: { close(): void } | null = null;
 let motionTimer = 0;
 
 const sceneOptions = computed(() =>
@@ -61,16 +61,13 @@ async function connectProjection(): Promise<void> {
   selected.value = null;
   if (!store.currentProjectPath) return;
   loading.value = true;
-  const path = query({ project_root: store.currentProjectPath, level: level.value, focus: focus.value });
   try {
-    projection.value = await api<NarrativeProjection>(`/narrative/projection?${path}`);
+    projection.value = await orreryClient.projection(store.currentProjectPath, level.value, focus.value);
     if (!focus.value && projection.value.focus && level.value !== "book") focus.value = projection.value.focus;
   } finally {
     loading.value = false;
   }
-  stream = connectEventStream(`/narrative/stream?${path}&interval_seconds=2`, (event, data) => {
-    if (event !== "narrative.projection") return;
-    const next = data as unknown as NarrativeProjection;
+  stream = orreryClient.observeProjection(store.currentProjectPath, level.value, focus.value, (next) => {
     projection.value = next;
     recentMotion.value = new Set(next.motion_events.map((item) => item.node_id));
     window.clearTimeout(motionTimer);

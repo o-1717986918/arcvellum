@@ -6,7 +6,7 @@ import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ImmersiveConsole from "@/components/ImmersiveConsole.vue";
 import StoryTrace from "@/components/StoryTrace.vue";
-import { api } from "@/services/api";
+import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { readCreativeRuntime } from "@/services/runtimePreference";
 import { asList, asRecord, describeGate, describeWorkflowAction, formatCount, labelFor, manuscriptItems, targetLabel, workflowStepLabel } from "@/services/presentation";
 import { applyOrreryExperience, backgroundForTheme, normalizeInstrumentVisibility, normalizeOrreryBackground, normalizeOrreryMode, normalizeOrreryTheme, type OrreryBackground, type OrreryMode, type OrreryTheme } from "@/services/orreryPreferences";
@@ -143,10 +143,7 @@ async function prepareNextTask(): Promise<void> {
   working.value = true;
   actionMessage.value = "";
   try {
-    const result = await api<Record<string, unknown>>("/worker/run", {
-      method: "POST",
-      body: JSON.stringify({ project_root: store.currentProjectPath, route: String(firstAction.value?.route || "auto"), runtime: readCreativeRuntime() }),
-    });
+    const result = await workflowClient.runWorker(store.currentProjectPath, String(firstAction.value?.route || "auto"), readCreativeRuntime());
     actionMessage.value = result.job_id
       ? "下一项创作任务已经启动，进度会持续显示在活动记录中。"
       : String(result.message || result.status || "下一项创作任务已经启动。");
@@ -180,7 +177,7 @@ async function handleActiveRun(): Promise<void> {
   }
   working.value = true;
   try {
-    const result = await api<{ run: NonNullable<typeof run> }>(`/autopilot/runs/${run.run_id}/resume`, { method: "POST" });
+    const result = await workflowClient.resumeAutopilot(run.run_id);
     store.setAutopilotRun(result.run);
     actionMessage.value = "已经从原处继续，实时进度会显示在推进仪表中。";
     if (immersive.value && !immersivePanels.value.includes("progress")) immersivePanels.value = ["progress", ...immersivePanels.value];

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, LoaderCircle, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
-import { api, authorizedFetch } from "@/services/api";
+import { projectsClient } from "@/features/projects/services/projectsClient";
+import { settingsClient } from "@/features/settings/services/settingsClient";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
@@ -68,7 +69,7 @@ onMounted(async () => {
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "模型目录暂时不可用。";
   }
-  appInfo.value = await api<Record<string, any>>("/application/info").catch(() => null);
+  appInfo.value = await settingsClient.applicationInfo().catch(() => null);
   projectsRoot.value = String(appInfo.value?.paths?.projects_root || "");
 });
 
@@ -95,20 +96,14 @@ async function connectProvider(): Promise<void> {
   feedback.value = "";
   try {
     const result = isCustomProvider.value
-      ? await api<any>("/model-connections/opencode/custom", {
-          method: "PUT",
-          body: JSON.stringify({
+      ? await settingsClient.saveCustomProvider({
             provider_id: customProvider.provider_id,
             display_name: customProvider.display_name,
             base_url: customProvider.base_url,
             models: parseCustomModels(),
             credential: credential.credential,
-          }),
-        })
-      : await api<any>("/model-connections/opencode/credential", {
-          method: "PUT",
-          body: JSON.stringify(credential),
-        });
+          })
+      : await settingsClient.saveProviderCredential(credential);
     credential.credential = "";
     store.applyModelCatalog(result);
     await store.loadModelCatalog();
@@ -128,10 +123,7 @@ async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> 
   roleSaved[role] = false;
   feedback.value = "";
   try {
-    const result = await api<any>("/model-connections/opencode/model", {
-      method: "PUT",
-      body: JSON.stringify({ model: expectedModel, role }),
-    });
+    const result = await settingsClient.selectModel(expectedModel, role);
     const catalog = result.catalog || result;
     const confirmedModel = catalog.selected_models?.[role] || catalog.selected_model || "";
     if (confirmedModel !== expectedModel) {
@@ -176,7 +168,7 @@ function syncSelectedModels(): void {
 async function disconnect(providerId: string): Promise<void> {
   busy.value = true;
   try {
-    await api(`/model-connections/opencode/credential/${encodeURIComponent(providerId)}`, { method: "DELETE" });
+    await settingsClient.disconnectProvider(providerId);
     await store.loadModelCatalog();
   } finally {
     busy.value = false;
@@ -215,7 +207,7 @@ async function applyUpdate(): Promise<void> {
 async function exportDiagnostics(): Promise<void> {
   busy.value = true;
   try {
-    const response = await authorizedFetch("/application/diagnostics/export", { method: "POST" });
+    const response = await settingsClient.exportDiagnostics();
     if (!response.ok) throw new Error("诊断报告没有生成。 ");
     const blob = await response.blob();
     const disposition = response.headers.get("content-disposition") || "";
@@ -243,13 +235,10 @@ async function saveProjectsRoot(): Promise<void> {
   if (!projectsRoot.value.trim()) return;
   busy.value = true;
   try {
-    const result = await api<{ projects_root: string }>("/projects/default-location", {
-      method: "PUT",
-      body: JSON.stringify({ projects_root: projectsRoot.value }),
-    });
+    const result = await projectsClient.setDefaultLocation(projectsRoot.value);
     projectsRoot.value = result.projects_root;
     feedback.value = "默认作品库已更新，只影响以后新建的作品。";
-    appInfo.value = await api<Record<string, any>>("/application/info");
+    appInfo.value = await settingsClient.applicationInfo();
   } finally {
     busy.value = false;
   }

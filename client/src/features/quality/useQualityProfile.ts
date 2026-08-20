@@ -1,21 +1,9 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { api } from "@/services/api";
+import { qualityClient } from "@/features/quality/services/qualityClient";
+import type { QualityProfile } from "@/features/quality/types";
 import { useAppStore } from "@/stores/app";
 
-export type QualityMode = "off" | "note" | "blocking";
-export interface QualityException { rule: string; scope: string; reason: string; mode: QualityMode; expires_at: string }
-export interface QualityProfile {
-  name: string;
-  preset: string;
-  revision: number;
-  digest: string;
-  thresholds: Record<string, number>;
-  rule_modes: Record<string, QualityMode>;
-  custom_banned_phrases: string[];
-  preferred_habits: string[];
-  exceptions: QualityException[];
-  [key: string]: unknown;
-}
+export type { QualityException, QualityMode, QualityProfile } from "@/features/quality/types";
 
 export const QUALITY_RULES = [
   ["mechanical-contrast-frame", "生硬对照", "拦住“不是……而是……”及其标点变体。"],
@@ -57,7 +45,7 @@ export function useQualityProfile() {
     loading.value = true;
     error.value = "";
     try {
-      const result = await api<{ profile: QualityProfile }>(`/project/creative-quality?project_root=${encodeURIComponent(projectPath)}`);
+      const result = await qualityClient.profile(projectPath);
       if (store.currentProjectPath !== projectPath) return;
       profile.value = result.profile;
       loadedProject = projectPath;
@@ -74,15 +62,7 @@ export function useQualityProfile() {
     if (!profile.value || !store.currentProjectPath) return;
     const revision = ++previewRevision;
     try {
-      const result = await api<Record<string, unknown>>("/project/creative-quality/preview", {
-        method: "POST",
-        body: JSON.stringify({
-          project_root: store.currentProjectPath,
-          text: previewText.value,
-          profile: profile.value,
-          scope: previewScope.value,
-        }),
-      });
+      const result = await qualityClient.preview(store.currentProjectPath, previewText.value, profile.value, previewScope.value);
       if (revision === previewRevision) preview.value = result;
     } catch (cause) {
       if (revision === previewRevision) {
@@ -104,10 +84,7 @@ export function useQualityProfile() {
     message.value = "";
     error.value = "";
     try {
-      const result = await api<{ profile: QualityProfile }>("/project/creative-quality", {
-        method: "PUT",
-        body: JSON.stringify({ project_root: store.currentProjectPath, profile: profile.value }),
-      });
+      const result = await qualityClient.saveProfile(store.currentProjectPath, profile.value);
       profile.value = result.profile;
       dirty.value = false;
       message.value = "规则已保存。它会从下一份候选正文开始生效，旧稿需要重新审查。";

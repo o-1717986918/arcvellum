@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.98.0",
   "scripts": {
+    "api:openapi": "python scripts/export_studio_openapi.py --output contracts/openapi/arcvellum-studio-v1.json",
+    "api:types": "openapi-typescript contracts/openapi/arcvellum-studio-v1.json -o client/src/types/generated/api-schema.d.ts",
+    "api:contracts": "npm run api:openapi && npm run api:types",
+    "api:contracts:check": "python scripts/export_studio_openapi.py --output contracts/openapi/arcvellum-studio-v1.json --check && npm run api:types && git diff --exit-code -- contracts/openapi/arcvellum-studio-v1.json client/src/types/generated/api-schema.d.ts",
     "client:dev": "vite --config client/vite.config.ts",
     "client:build": "vue-tsc -p client/tsconfig.json --noEmit && vite build --configLoader runner --config client/vite.config.ts && node scripts/sync-desktop-frontend.mjs && node scripts/verify-v09-build.mjs",
     "client:verify-build": "node scripts/verify-v09-build.mjs",
@@ -31,6 +35,7 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/test-utils": "2.4",
     "jsdom": "^26.1.0",
+    "openapi-typescript": "7.10.1",
     "pngjs": "^7.0.0",
     "typescript": "^5.8.3",
     "vite": "^7.3.6",

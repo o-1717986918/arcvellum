@@ -1,25 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { Bot, Check, KeyRound, Unplug } from "lucide-vue-next";
-import { api } from "@/services/api";
+import { settingsClient, type PiCatalog } from "@/features/settings/services/settingsClient";
 import { saveCreativeRuntime } from "@/services/runtimePreference";
-
-interface PiModel {
-  qualified_id: string;
-  name: string;
-}
-
-interface PiProvider {
-  id: string;
-  name: string;
-  connected: boolean;
-  models?: PiModel[];
-}
-
-interface PiCatalog {
-  providers: PiProvider[];
-  selected_model: string;
-}
 
 const catalog = ref<PiCatalog | null>(null);
 const credential = reactive({ provider_id: "deepseek", credential: "" });
@@ -35,7 +18,7 @@ onMounted(loadCatalog);
 async function loadCatalog(): Promise<void> {
   feedback.value = "";
   try {
-    catalog.value = await api<PiCatalog>("/model-connections/pi-worker/catalog");
+    catalog.value = await settingsClient.piCatalog();
     selectedModel.value = catalog.value.selected_model || "";
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "内置 Pi 主创暂时不可用。";
@@ -47,10 +30,7 @@ async function connectProvider(): Promise<void> {
   busy.value = true;
   feedback.value = "";
   try {
-    catalog.value = await api<PiCatalog>("/model-connections/pi-worker/credential", {
-      method: "PUT",
-      body: JSON.stringify(credential),
-    });
+    catalog.value = await settingsClient.savePiCredential(credential);
     credential.credential = "";
     selectedModel.value = catalog.value.selected_model || "";
     feedback.value = "Pi 主创已连接模型服务；请选择它执行正式创作时使用的模型。";
@@ -66,10 +46,7 @@ async function saveModel(): Promise<void> {
   busy.value = true;
   feedback.value = "";
   try {
-    catalog.value = await api<PiCatalog>("/model-connections/pi-worker/model", {
-      method: "PUT",
-      body: JSON.stringify({ model: selectedModel.value, role: "worker" }),
-    });
+    catalog.value = await settingsClient.selectPiModel({ model: selectedModel.value, role: "worker" });
     selectedModel.value = catalog.value.selected_model || "";
     saveCreativeRuntime("pi-worker");
     feedback.value = "内置 Pi 主创已经设为正式创作执行器，重启后仍会保持。";
@@ -84,7 +61,7 @@ async function disconnectProvider(providerId: string): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   try {
-    catalog.value = await api<PiCatalog>(`/model-connections/pi-worker/credential/${encodeURIComponent(providerId)}`, { method: "DELETE" });
+    catalog.value = await settingsClient.disconnectPiProvider(providerId);
     selectedModel.value = catalog.value.selected_model || "";
     feedback.value = "Pi 主创与该模型服务的连接已移除。";
   } catch (cause) {

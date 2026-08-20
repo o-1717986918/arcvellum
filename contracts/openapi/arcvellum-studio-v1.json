@@ -1,0 +1,6873 @@
+{
+  "components": {
+    "schemas": {
+      "AdvisorCustomPersonaRequest": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "persona_id": {
+            "default": "",
+            "title": "Persona Id",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "tagline": {
+            "default": "",
+            "title": "Tagline",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "prompt"
+        ],
+        "title": "AdvisorCustomPersonaRequest",
+        "type": "object"
+      },
+      "AdvisorInboxReadRequest": {
+        "properties": {
+          "read": {
+            "default": true,
+            "title": "Read",
+            "type": "boolean"
+          }
+        },
+        "title": "AdvisorInboxReadRequest",
+        "type": "object"
+      },
+      "AdvisorInboxSettingsRequest": {
+        "properties": {
+          "mode": {
+            "default": "standard",
+            "title": "Mode",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "quiet_end": {
+            "default": "08:00",
+            "title": "Quiet End",
+            "type": "string"
+          },
+          "quiet_start": {
+            "default": "22:30",
+            "title": "Quiet Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "AdvisorInboxSettingsRequest",
+        "type": "object"
+      },
+      "AdvisorPersonaSelectionRequest": {
+        "properties": {
+          "persona_id": {
+            "title": "Persona Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "persona_id"
+        ],
+        "title": "AdvisorPersonaSelectionRequest",
+        "type": "object"
+      },
+      "AdvisorQuestionRequest": {
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "timeout": {
+            "default": 180,
+            "title": "Timeout",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AdvisorQuestionRequest",
+        "type": "object"
+      },
+      "AdvisorSessionRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "title": {
+            "default": "项目问答",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "AdvisorSessionRequest",
+        "type": "object"
+      },
+      "ArchaeologyImportRequest": {
+        "properties": {
+          "chunk_size": {
+            "default": 6000,
+            "title": "Chunk Size",
+            "type": "integer"
+          },
+          "content_base64": {
+            "default": "",
+            "title": "Content Base64",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "mode": {
+            "default": "continuation",
+            "title": "Mode",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "rights_declaration": {
+            "title": "Rights Declaration",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "work_id": {
+            "default": "",
+            "title": "Work Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "filename",
+          "rights_declaration"
+        ],
+        "title": "ArchaeologyImportRequest",
+        "type": "object"
+      },
+      "ArchiveAssetArchiveRequest": {
+        "properties": {
+          "base_revision": {
+            "title": "Base Revision",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "base_revision",
+          "reason"
+        ],
+        "title": "ArchiveAssetArchiveRequest",
+        "type": "object"
+      },
+      "ArchiveAssetCommitRequest": {
+        "properties": {
+          "base_revision": {
+            "title": "Base Revision",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "expected_impacts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Impacts",
+            "type": "array"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "semantic_review": {
+            "default": "required",
+            "title": "Semantic Review",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "base_revision",
+          "content",
+          "reason"
+        ],
+        "title": "ArchiveAssetCommitRequest",
+        "type": "object"
+      },
+      "ArchiveAssetContentRequest": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "content"
+        ],
+        "title": "ArchiveAssetContentRequest",
+        "type": "object"
+      },
+      "ArchiveAssetCreateCommitRequest": {
+        "properties": {
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "expected_impacts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Impacts",
+            "type": "array"
+          },
+          "local_id": {
+            "default": "",
+            "title": "Local Id",
+            "type": "string"
+          },
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "semantic_review": {
+            "default": "required",
+            "title": "Semantic Review",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "asset_type",
+          "content",
+          "reason",
+          "preview_digest"
+        ],
+        "title": "ArchiveAssetCreateCommitRequest",
+        "type": "object"
+      },
+      "ArchiveAssetCreatePreviewRequest": {
+        "properties": {
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "expected_impacts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Impacts",
+            "type": "array"
+          },
+          "local_id": {
+            "default": "",
+            "title": "Local Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "semantic_review": {
+            "default": "required",
+            "title": "Semantic Review",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "asset_type",
+          "content",
+          "reason"
+        ],
+        "title": "ArchiveAssetCreatePreviewRequest",
+        "type": "object"
+      },
+      "ArchiveAssetRestoreRequest": {
+        "properties": {
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "entry_id",
+          "reason"
+        ],
+        "title": "ArchiveAssetRestoreRequest",
+        "type": "object"
+      },
+      "ArchiveCandidatePromotionRequest": {
+        "properties": {
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "preview_digest"
+        ],
+        "title": "ArchiveCandidatePromotionRequest",
+        "type": "object"
+      },
+      "ArchiveRestorePreviewRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "revision",
+          "reason"
+        ],
+        "title": "ArchiveRestorePreviewRequest",
+        "type": "object"
+      },
+      "ArchiveStructuredContentRequest": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "content"
+        ],
+        "title": "ArchiveStructuredContentRequest",
+        "type": "object"
+      },
+      "ArchiveStructuredRenderRequest": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "source_revision": {
+            "title": "Source Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "content",
+          "source_revision",
+          "fields"
+        ],
+        "title": "ArchiveStructuredRenderRequest",
+        "type": "object"
+      },
+      "AutopilotControlRequest": {
+        "properties": {
+          "authorized": {
+            "default": false,
+            "title": "Authorized",
+            "type": "boolean"
+          },
+          "reason": {
+            "default": "user-request",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "AutopilotControlRequest",
+        "type": "object"
+      },
+      "AutopilotPolicyRequest": {
+        "properties": {
+          "policy": {
+            "additionalProperties": true,
+            "title": "Policy",
+            "type": "object"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "policy"
+        ],
+        "title": "AutopilotPolicyRequest",
+        "type": "object"
+      },
+      "AutopilotStartRequest": {
+        "properties": {
+          "authorized": {
+            "default": false,
+            "title": "Authorized",
+            "type": "boolean"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "runtime": {
+            "default": "opencode",
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "AutopilotStartRequest",
+        "type": "object"
+      },
+      "CreativeQualityPreviewRequest": {
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "scope": {
+            "default": "",
+            "title": "Scope",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "text"
+        ],
+        "title": "CreativeQualityPreviewRequest",
+        "type": "object"
+      },
+      "CreativeQualityRequest": {
+        "properties": {
+          "profile": {
+            "additionalProperties": true,
+            "title": "Profile",
+            "type": "object"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "profile"
+        ],
+        "title": "CreativeQualityRequest",
+        "type": "object"
+      },
+      "CustomProviderConnectionRequest": {
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "credential": {
+            "title": "Credential",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/CustomProviderModelRequest"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "display_name",
+          "base_url",
+          "models",
+          "credential"
+        ],
+        "title": "CustomProviderConnectionRequest",
+        "type": "object"
+      },
+      "CustomProviderModelRequest": {
+        "properties": {
+          "context": {
+            "default": 0,
+            "title": "Context",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "output": {
+            "default": 0,
+            "title": "Output",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CustomProviderModelRequest",
+        "type": "object"
+      },
+      "DirectionRequest": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "message"
+        ],
+        "title": "DirectionRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ModelSelectionRequest": {
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "role": {
+            "default": "all",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "ModelSelectionRequest",
+        "type": "object"
+      },
+      "OpenCodeCredentialRequest": {
+        "properties": {
+          "credential": {
+            "title": "Credential",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "credential"
+        ],
+        "title": "OpenCodeCredentialRequest",
+        "type": "object"
+      },
+      "PiWorkerCredentialRequest": {
+        "properties": {
+          "credential": {
+            "title": "Credential",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "credential"
+        ],
+        "title": "PiWorkerCredentialRequest",
+        "type": "object"
+      },
+      "ProjectCreateRequest": {
+        "properties": {
+          "folder_name": {
+            "default": "",
+            "title": "Folder Name",
+            "type": "string"
+          },
+          "genre": {
+            "default": "",
+            "title": "Genre",
+            "type": "string"
+          },
+          "parent_directory": {
+            "default": "",
+            "title": "Parent Directory",
+            "type": "string"
+          },
+          "premise": {
+            "default": "",
+            "title": "Premise",
+            "type": "string"
+          },
+          "target_chapters": {
+            "default": 0,
+            "title": "Target Chapters",
+            "type": "integer"
+          },
+          "target_length": {
+            "default": 30000,
+            "title": "Target Length",
+            "type": "integer"
+          },
+          "target_scenes": {
+            "default": 0,
+            "title": "Target Scenes",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "work_type": {
+            "default": "novel",
+            "title": "Work Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ProjectCreateRequest",
+        "type": "object"
+      },
+      "ProjectLocationRequest": {
+        "properties": {
+          "folder_name": {
+            "default": "",
+            "title": "Folder Name",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "parent_directory": {
+            "default": "",
+            "title": "Parent Directory",
+            "type": "string"
+          },
+          "project_root": {
+            "default": "",
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "ProjectLocationRequest",
+        "type": "object"
+      },
+      "ProjectOpenRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "ProjectOpenRequest",
+        "type": "object"
+      },
+      "ProjectsRootRequest": {
+        "properties": {
+          "projects_root": {
+            "title": "Projects Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projects_root"
+        ],
+        "title": "ProjectsRootRequest",
+        "type": "object"
+      },
+      "ReaderBookmarkRequest": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "unit_id": {
+            "title": "Unit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "unit_id"
+        ],
+        "title": "ReaderBookmarkRequest",
+        "type": "object"
+      },
+      "ReaderPositionRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "scroll_ratio": {
+            "default": 0.0,
+            "title": "Scroll Ratio",
+            "type": "number"
+          },
+          "unit_id": {
+            "title": "Unit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "unit_id"
+        ],
+        "title": "ReaderPositionRequest",
+        "type": "object"
+      },
+      "RhythmPlanRequest": {
+        "properties": {
+          "book_profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Profile"
+          },
+          "entries": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "entries"
+        ],
+        "title": "RhythmPlanRequest",
+        "type": "object"
+      },
+      "RunnerProbeRequest": {
+        "properties": {
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "role": {
+            "default": "worker",
+            "title": "Role",
+            "type": "string"
+          },
+          "timeout": {
+            "default": 120,
+            "title": "Timeout",
+            "type": "integer"
+          }
+        },
+        "title": "RunnerProbeRequest",
+        "type": "object"
+      },
+      "StyleAdvanceRequest": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "runtime": {
+            "default": "opencode",
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "author_id",
+          "profile_id"
+        ],
+        "title": "StyleAdvanceRequest",
+        "type": "object"
+      },
+      "StyleAuthorCreateRequest": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rights_declaration": {
+            "title": "Rights Declaration",
+            "type": "string"
+          },
+          "rights_mode": {
+            "title": "Rights Mode",
+            "type": "string"
+          },
+          "style_library_root": {
+            "default": "",
+            "title": "Style Library Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "author_id",
+          "name",
+          "rights_mode",
+          "rights_declaration"
+        ],
+        "title": "StyleAuthorCreateRequest",
+        "type": "object"
+      },
+      "StyleBuildRequest": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "runtime": {
+            "default": "opencode",
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "author_id",
+          "profile_id"
+        ],
+        "title": "StyleBuildRequest",
+        "type": "object"
+      },
+      "StyleCompileRequest": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "holdout_sources": {
+            "items": {
+              "$ref": "#/components/schemas/StyleSourceSelectionRequest"
+            },
+            "title": "Holdout Sources",
+            "type": "array"
+          },
+          "profile_id": {
+            "default": "default",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "runtime": {
+            "default": "opencode",
+            "title": "Runtime",
+            "type": "string"
+          },
+          "style_library_root": {
+            "default": "",
+            "title": "Style Library Root",
+            "type": "string"
+          },
+          "training_sources": {
+            "items": {
+              "$ref": "#/components/schemas/StyleSourceSelectionRequest"
+            },
+            "title": "Training Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_root",
+          "author_id",
+          "training_sources",
+          "holdout_sources"
+        ],
+        "title": "StyleCompileRequest",
+        "type": "object"
+      },
+      "StyleMountRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "preview_revision": {
+            "default": "",
+            "title": "Preview Revision",
+            "type": "string"
+          },
+          "priority": {
+            "default": "highest",
+            "title": "Priority",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "scope": {
+            "default": "project",
+            "title": "Scope",
+            "type": "string"
+          },
+          "style_id": {
+            "title": "Style Id",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "style_id",
+          "version_id",
+          "content_hash"
+        ],
+        "title": "StyleMountRequest",
+        "type": "object"
+      },
+      "StyleSourceCreateRequest": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "media_type": {
+            "default": "text/plain",
+            "title": "Media Type",
+            "type": "string"
+          },
+          "rights_declaration": {
+            "title": "Rights Declaration",
+            "type": "string"
+          },
+          "rights_mode": {
+            "title": "Rights Mode",
+            "type": "string"
+          },
+          "style_library_root": {
+            "default": "",
+            "title": "Style Library Root",
+            "type": "string"
+          },
+          "work_id": {
+            "title": "Work Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "author_id",
+          "work_id",
+          "filename",
+          "content",
+          "rights_mode",
+          "rights_declaration"
+        ],
+        "title": "StyleSourceCreateRequest",
+        "type": "object"
+      },
+      "StyleSourceSelectionRequest": {
+        "properties": {
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "work_id": {
+            "title": "Work Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "work_id",
+          "source_id"
+        ],
+        "title": "StyleSourceSelectionRequest",
+        "type": "object"
+      },
+      "StyleWorkCreateRequest": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "style_library_root": {
+            "default": "",
+            "title": "Style Library Root",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "work_id": {
+            "title": "Work Id",
+            "type": "string"
+          },
+          "year": {
+            "default": "",
+            "title": "Year",
+            "type": "string"
+          }
+        },
+        "required": [
+          "author_id",
+          "work_id",
+          "title"
+        ],
+        "title": "StyleWorkCreateRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkerRequest": {
+        "properties": {
+          "idempotency_key": {
+            "default": "",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "route": {
+            "default": "scene-development",
+            "title": "Route",
+            "type": "string"
+          },
+          "runtime": {
+            "default": "opencode",
+            "title": "Runtime",
+            "type": "string"
+          },
+          "scene": {
+            "default": "",
+            "title": "Scene",
+            "type": "string"
+          },
+          "task_id": {
+            "default": "",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "WorkerRequest",
+        "type": "object"
+      },
+      "WorkerRetryRequest": {
+        "properties": {
+          "resume": {
+            "default": true,
+            "title": "Resume",
+            "type": "boolean"
+          },
+          "runtime": {
+            "default": "",
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "title": "WorkerRetryRequest",
+        "type": "object"
+      },
+      "WritebackDecisionRequest": {
+        "properties": {
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "WritebackDecisionRequest",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "ArcVellum",
+    "version": "0.98.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "ui_root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ui Root"
+      }
+    },
+    "/advisor/inbox": {
+      "get": {
+        "operationId": "advisor_inbox_advisor_inbox_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Inbox"
+      }
+    },
+    "/advisor/inbox/settings": {
+      "put": {
+        "operationId": "advisor_inbox_settings_advisor_inbox_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorInboxSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Inbox Settings"
+      }
+    },
+    "/advisor/inbox/stream": {
+      "get": {
+        "operationId": "advisor_inbox_stream_advisor_inbox_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 8.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Inbox Stream"
+      }
+    },
+    "/advisor/inbox/{item_id}": {
+      "patch": {
+        "operationId": "advisor_inbox_read_advisor_inbox__item_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorInboxReadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Inbox Read"
+      }
+    },
+    "/advisor/personas": {
+      "get": {
+        "operationId": "advisor_personas_advisor_personas_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Personas"
+      }
+    },
+    "/advisor/personas/custom": {
+      "put": {
+        "operationId": "advisor_persona_custom_advisor_personas_custom_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorCustomPersonaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Persona Custom"
+      }
+    },
+    "/advisor/personas/selection": {
+      "put": {
+        "operationId": "advisor_persona_selection_advisor_personas_selection_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorPersonaSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Persona Selection"
+      }
+    },
+    "/advisor/sessions": {
+      "get": {
+        "operationId": "advisor_sessions_advisor_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Sessions"
+      },
+      "post": {
+        "operationId": "advisor_session_create_advisor_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Session Create"
+      }
+    },
+    "/advisor/sessions/{session_id}": {
+      "get": {
+        "operationId": "advisor_session_read_advisor_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Session Read"
+      }
+    },
+    "/advisor/sessions/{session_id}/ask": {
+      "post": {
+        "operationId": "advisor_session_ask_advisor_sessions__session_id__ask_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorQuestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Session Ask"
+      }
+    },
+    "/advisor/sessions/{session_id}/ask/stream": {
+      "post": {
+        "operationId": "advisor_session_ask_stream_advisor_sessions__session_id__ask_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorQuestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advisor Session Ask Stream"
+      }
+    },
+    "/agent-observability": {
+      "get": {
+        "operationId": "agent_observability_agent_observability_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Observability"
+      }
+    },
+    "/agent-observability/stream": {
+      "get": {
+        "operationId": "agent_observability_stream_agent_observability_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Observability Stream"
+      }
+    },
+    "/agent-runners": {
+      "get": {
+        "operationId": "agent_runners_agent_runners_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Agent Runners"
+      }
+    },
+    "/agent-runners/opencode/bundle": {
+      "get": {
+        "operationId": "opencode_bundle_status_agent_runners_opencode_bundle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Bundle Status"
+      }
+    },
+    "/agent-runners/opencode/install": {
+      "post": {
+        "operationId": "opencode_bundle_install_agent_runners_opencode_install_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Bundle Install"
+      }
+    },
+    "/agent-runners/{runner_id}/probe": {
+      "post": {
+        "operationId": "agent_runner_probe_agent_runners__runner_id__probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Runner Probe"
+      }
+    },
+    "/application/bootstrap": {
+      "get": {
+        "operationId": "application_bootstrap_application_bootstrap_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Bootstrap"
+      }
+    },
+    "/application/bootstrap/stream": {
+      "get": {
+        "operationId": "application_bootstrap_stream_application_bootstrap_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Application Bootstrap Stream"
+      }
+    },
+    "/application/details": {
+      "get": {
+        "operationId": "application_details_application_details_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Details"
+      }
+    },
+    "/application/diagnostics": {
+      "get": {
+        "operationId": "application_diagnostics_application_diagnostics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Diagnostics"
+      }
+    },
+    "/application/diagnostics/export": {
+      "post": {
+        "operationId": "application_diagnostics_export_application_diagnostics_export_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Diagnostics Export"
+      }
+    },
+    "/application/health": {
+      "get": {
+        "operationId": "application_health_application_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Health"
+      }
+    },
+    "/application/info": {
+      "get": {
+        "operationId": "application_info_application_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Info"
+      }
+    },
+    "/application/legal": {
+      "get": {
+        "operationId": "application_legal_application_legal_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Legal"
+      }
+    },
+    "/application/warmup": {
+      "post": {
+        "operationId": "application_warmup_application_warmup_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Application Warmup"
+      }
+    },
+    "/archaeology/imports": {
+      "get": {
+        "operationId": "archaeology_imports_archaeology_imports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archaeology Imports"
+      },
+      "post": {
+        "operationId": "archaeology_import_archaeology_imports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchaeologyImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archaeology Import"
+      }
+    },
+    "/archaeology/options": {
+      "get": {
+        "operationId": "archaeology_options_archaeology_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Archaeology Options"
+      }
+    },
+    "/archaeology/workbench/{work_id}": {
+      "get": {
+        "operationId": "archaeology_workbench_archaeology_workbench__work_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work_id",
+            "required": true,
+            "schema": {
+              "title": "Work Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archaeology Workbench"
+      }
+    },
+    "/archive/assets/{asset_id}": {
+      "get": {
+        "operationId": "archive_asset_archive_assets__asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Asset"
+      }
+    },
+    "/archive/assets/{asset_id}/archive": {
+      "post": {
+        "operationId": "archive_asset_to_recycle_bin_archive_assets__asset_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssetArchiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Asset To Recycle Bin"
+      }
+    },
+    "/archive/assets/{asset_id}/commit": {
+      "post": {
+        "operationId": "archive_commit_archive_assets__asset_id__commit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssetCommitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Commit"
+      }
+    },
+    "/archive/assets/{asset_id}/history": {
+      "get": {
+        "operationId": "archive_history_archive_assets__asset_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive History"
+      }
+    },
+    "/archive/assets/{asset_id}/impact": {
+      "post": {
+        "operationId": "archive_impact_archive_assets__asset_id__impact_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssetContentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Impact"
+      }
+    },
+    "/archive/assets/{asset_id}/render-structured": {
+      "post": {
+        "operationId": "archive_render_structured_archive_assets__asset_id__render_structured_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveStructuredRenderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Render Structured"
+      }
+    },
+    "/archive/assets/{asset_id}/restore": {
+      "post": {
+        "operationId": "restore_asset_from_recycle_bin_archive_assets__asset_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssetRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Asset From Recycle Bin"
+      }
+    },
+    "/archive/assets/{asset_id}/restore/preview": {
+      "post": {
+        "operationId": "archive_restore_preview_archive_assets__asset_id__restore_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveRestorePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Restore Preview"
+      }
+    },
+    "/archive/assets/{asset_id}/structure": {
+      "post": {
+        "operationId": "archive_structure_archive_assets__asset_id__structure_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveStructuredContentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Structure"
+      }
+    },
+    "/archive/assets/{asset_id}/validate": {
+      "post": {
+        "operationId": "archive_validate_archive_assets__asset_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssetContentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Validate"
+      }
+    },
+    "/archive/candidates": {
+      "get": {
+        "operationId": "archive_candidates_archive_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Candidates"
+      }
+    },
+    "/archive/candidates/{candidate_id}": {
+      "get": {
+        "operationId": "archive_candidate_archive_candidates__candidate_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Candidate"
+      }
+    },
+    "/archive/candidates/{candidate_id}/promote": {
+      "post": {
+        "operationId": "promote_archive_candidate_archive_candidates__candidate_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveCandidatePromotionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Archive Candidate"
+      }
+    },
+    "/archive/creation/commit": {
+      "post": {
+        "operationId": "archive_creation_commit_archive_creation_commit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssetCreateCommitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Creation Commit"
+      }
+    },
+    "/archive/creation/options": {
+      "get": {
+        "operationId": "archive_creation_options_archive_creation_options_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Creation Options"
+      }
+    },
+    "/archive/creation/preview": {
+      "post": {
+        "operationId": "archive_creation_preview_archive_creation_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssetCreatePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Creation Preview"
+      }
+    },
+    "/archive/recycle-bin": {
+      "get": {
+        "operationId": "archive_recycle_bin_archive_recycle_bin_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Recycle Bin"
+      }
+    },
+    "/archive/tree": {
+      "get": {
+        "operationId": "archive_tree_archive_tree_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Tree"
+      }
+    },
+    "/autopilot/policy": {
+      "put": {
+        "operationId": "autopilot_policy_save_autopilot_policy_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutopilotPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Policy Save"
+      }
+    },
+    "/autopilot/runs/{run_id}/events": {
+      "get": {
+        "operationId": "autopilot_events_autopilot_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 300,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Events"
+      }
+    },
+    "/autopilot/runs/{run_id}/pause": {
+      "post": {
+        "operationId": "autopilot_pause_autopilot_runs__run_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutopilotControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Pause"
+      }
+    },
+    "/autopilot/runs/{run_id}/resume": {
+      "post": {
+        "operationId": "autopilot_resume_autopilot_runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AutopilotControlRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Resume"
+      }
+    },
+    "/autopilot/runs/{run_id}/stream": {
+      "get": {
+        "operationId": "autopilot_stream_autopilot_runs__run_id__stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Stream"
+      }
+    },
+    "/autopilot/start": {
+      "post": {
+        "operationId": "autopilot_start_autopilot_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutopilotStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Start"
+      }
+    },
+    "/autopilot/status": {
+      "get": {
+        "operationId": "autopilot_status_autopilot_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Status"
+      }
+    },
+    "/desktop/session": {
+      "post": {
+        "operationId": "desktop_session_desktop_session_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Desktop Session"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/help": {
+      "get": {
+        "operationId": "help_center_help_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Help Center"
+      }
+    },
+    "/model-connections": {
+      "get": {
+        "operationId": "model_connections_model_connections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Connections"
+      }
+    },
+    "/model-connections/opencode/catalog": {
+      "get": {
+        "operationId": "opencode_model_catalog_model_connections_opencode_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Model Catalog"
+      }
+    },
+    "/model-connections/opencode/credential": {
+      "put": {
+        "operationId": "opencode_model_credential_model_connections_opencode_credential_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenCodeCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Opencode Model Credential"
+      }
+    },
+    "/model-connections/opencode/credential/{provider_id}": {
+      "delete": {
+        "operationId": "opencode_model_disconnect_model_connections_opencode_credential__provider_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Opencode Model Disconnect"
+      }
+    },
+    "/model-connections/opencode/custom": {
+      "put": {
+        "operationId": "opencode_custom_provider_model_connections_opencode_custom_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomProviderConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Opencode Custom Provider"
+      }
+    },
+    "/model-connections/opencode/model": {
+      "put": {
+        "operationId": "opencode_model_select_model_connections_opencode_model_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Opencode Model Select"
+      }
+    },
+    "/model-connections/pi-worker/catalog": {
+      "get": {
+        "operationId": "catalog_model_connections_pi_worker_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Catalog"
+      }
+    },
+    "/model-connections/pi-worker/credential": {
+      "put": {
+        "operationId": "credential_model_connections_pi_worker_credential_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PiWorkerCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Credential"
+      }
+    },
+    "/model-connections/pi-worker/credential/{provider_id}": {
+      "delete": {
+        "operationId": "disconnect_model_connections_pi_worker_credential__provider_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect"
+      }
+    },
+    "/model-connections/pi-worker/model": {
+      "put": {
+        "operationId": "select_model_connections_pi_worker_model_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select"
+      }
+    },
+    "/narrative/projection": {
+      "get": {
+        "operationId": "narrative_projection_narrative_projection_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Projection"
+      }
+    },
+    "/narrative/projection/v3": {
+      "get": {
+        "operationId": "narrative_projection_v3_narrative_projection_v3_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "grammar",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "title": "Grammar",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Projection V3"
+      }
+    },
+    "/narrative/projection/v3/nodes/{node_id}": {
+      "get": {
+        "operationId": "narrative_projection_v3_node_narrative_projection_v3_nodes__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "grammar",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "title": "Grammar",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Projection V3 Node"
+      }
+    },
+    "/narrative/stream": {
+      "get": {
+        "operationId": "narrative_stream_narrative_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 6.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Stream"
+      }
+    },
+    "/narrative/stream/v3": {
+      "get": {
+        "operationId": "narrative_stream_v3_narrative_stream_v3_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "grammar",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "title": "Grammar",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 6.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Stream V3"
+      }
+    },
+    "/project/creative-quality": {
+      "get": {
+        "operationId": "project_creative_quality_project_creative_quality_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Creative Quality"
+      },
+      "put": {
+        "operationId": "project_creative_quality_update_project_creative_quality_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeQualityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Creative Quality Update"
+      }
+    },
+    "/project/creative-quality/preview": {
+      "post": {
+        "operationId": "project_creative_quality_preview_project_creative_quality_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeQualityPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Creative Quality Preview"
+      }
+    },
+    "/project/delivery": {
+      "get": {
+        "operationId": "project_delivery_project_delivery_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Delivery"
+      }
+    },
+    "/project/delivery/download": {
+      "get": {
+        "operationId": "project_delivery_download_project_delivery_download_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Delivery Download"
+      }
+    },
+    "/project/delivery/stream": {
+      "get": {
+        "operationId": "project_delivery_stream_project_delivery_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 5.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Delivery Stream"
+      }
+    },
+    "/project/details": {
+      "get": {
+        "operationId": "project_details_project_details_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Details"
+      }
+    },
+    "/project/display-field": {
+      "patch": {
+        "operationId": "project_display_field_project_display_field_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Display Field"
+      }
+    },
+    "/project/library": {
+      "get": {
+        "operationId": "project_library_project_library_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Library"
+      }
+    },
+    "/project/library/stream": {
+      "get": {
+        "operationId": "project_library_stream_project_library_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 6.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Library Stream"
+      }
+    },
+    "/project/progress": {
+      "get": {
+        "operationId": "project_progress_project_progress_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Progress"
+      }
+    },
+    "/project/progress/stream": {
+      "get": {
+        "operationId": "project_progress_stream_project_progress_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 5.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Progress Stream"
+      }
+    },
+    "/project/rhythm-plan": {
+      "get": {
+        "operationId": "project_rhythm_plan_project_rhythm_plan_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Rhythm Plan"
+      },
+      "put": {
+        "operationId": "project_rhythm_plan_update_project_rhythm_plan_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RhythmPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Rhythm Plan Update"
+      }
+    },
+    "/project/strategy": {
+      "get": {
+        "operationId": "project_strategy_project_strategy_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Strategy"
+      }
+    },
+    "/project/strategy/events": {
+      "get": {
+        "operationId": "project_strategy_events_project_strategy_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_event_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "After Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "follow",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Follow",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "maximum": 30.0,
+              "minimum": 0.1,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000,
+              "minimum": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Strategy Events"
+      }
+    },
+    "/project/ui-note": {
+      "post": {
+        "operationId": "project_ui_note_project_ui_note_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Ui Note"
+      }
+    },
+    "/project/workspace": {
+      "get": {
+        "operationId": "project_workspace_project_workspace_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Workspace"
+      }
+    },
+    "/project/workspace/stream": {
+      "get": {
+        "operationId": "project_workspace_stream_project_workspace_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 2.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Workspace Stream"
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "projects_index_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Projects Index"
+      }
+    },
+    "/projects/create": {
+      "post": {
+        "operationId": "projects_create_projects_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Create"
+      }
+    },
+    "/projects/current": {
+      "get": {
+        "operationId": "projects_current_projects_current_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Projects Current"
+      }
+    },
+    "/projects/default-location": {
+      "get": {
+        "operationId": "projects_default_location_projects_default_location_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Projects Default Location"
+      },
+      "put": {
+        "operationId": "projects_default_location_update_projects_default_location_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectsRootRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Default Location Update"
+      }
+    },
+    "/projects/directions": {
+      "get": {
+        "operationId": "projects_directions_projects_directions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Directions"
+      },
+      "post": {
+        "operationId": "projects_record_direction_projects_directions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Record Direction"
+      }
+    },
+    "/projects/open": {
+      "post": {
+        "operationId": "projects_open_projects_open_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectOpenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Open"
+      }
+    },
+    "/projects/validate-location": {
+      "post": {
+        "operationId": "projects_validate_location_projects_validate_location_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectLocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Validate Location"
+      }
+    },
+    "/reader/bookmark": {
+      "put": {
+        "operationId": "reader_bookmark_reader_bookmark_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReaderBookmarkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reader Bookmark"
+      }
+    },
+    "/reader/manifest": {
+      "get": {
+        "operationId": "reader_manifest_reader_manifest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reader Manifest"
+      }
+    },
+    "/reader/position": {
+      "put": {
+        "operationId": "reader_position_reader_position_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReaderPositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reader Position"
+      }
+    },
+    "/reader/search": {
+      "get": {
+        "operationId": "reader_search_reader_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 40,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reader Search"
+      }
+    },
+    "/reader/state": {
+      "get": {
+        "operationId": "reader_state_reader_state_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reader State"
+      }
+    },
+    "/reader/stream": {
+      "get": {
+        "operationId": "reader_stream_reader_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 4.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reader Stream"
+      }
+    },
+    "/reader/units/{unit_id}": {
+      "get": {
+        "operationId": "reader_unit_reader_units__unit_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "unit_id",
+            "required": true,
+            "schema": {
+              "title": "Unit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reader Unit"
+      }
+    },
+    "/runtime/adapters": {
+      "get": {
+        "operationId": "runtime_adapters_runtime_adapters_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Runtime Adapters"
+      }
+    },
+    "/style-lab/advance": {
+      "post": {
+        "operationId": "style_lab_advance_style_lab_advance_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleAdvanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Advance"
+      }
+    },
+    "/style-lab/authors": {
+      "get": {
+        "operationId": "style_lab_authors_style_lab_authors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "style_library_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Style Library Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Authors"
+      },
+      "post": {
+        "operationId": "style_lab_create_author_style_lab_authors_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleAuthorCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Create Author"
+      }
+    },
+    "/style-lab/build": {
+      "post": {
+        "operationId": "style_lab_build_style_lab_build_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleBuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Build"
+      }
+    },
+    "/style-lab/compile": {
+      "post": {
+        "operationId": "style_lab_compile_style_lab_compile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Compile"
+      }
+    },
+    "/style-lab/library": {
+      "get": {
+        "operationId": "style_lab_library_style_lab_library_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "style_library_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Style Library Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Library"
+      }
+    },
+    "/style-lab/mount": {
+      "post": {
+        "operationId": "style_lab_mount_style_lab_mount_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleMountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Mount"
+      }
+    },
+    "/style-lab/mount-preview": {
+      "post": {
+        "operationId": "style_lab_mount_preview_style_lab_mount_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleMountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Mount Preview"
+      }
+    },
+    "/style-lab/mounts": {
+      "get": {
+        "operationId": "style_lab_mounts_style_lab_mounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Mounts"
+      }
+    },
+    "/style-lab/sources": {
+      "post": {
+        "operationId": "style_lab_import_source_style_lab_sources_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleSourceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Import Source"
+      }
+    },
+    "/style-lab/versions": {
+      "get": {
+        "operationId": "style_lab_versions_style_lab_versions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "style_library_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Style Library Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Versions"
+      }
+    },
+    "/style-lab/versions/{style_id}/{version_id}": {
+      "get": {
+        "operationId": "style_lab_version_detail_style_lab_versions__style_id___version_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "style_id",
+            "required": true,
+            "schema": {
+              "title": "Style Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Version Detail"
+      }
+    },
+    "/style-lab/workbench": {
+      "get": {
+        "operationId": "style_lab_workbench_style_lab_workbench_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "style_library_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Style Library Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Workbench"
+      }
+    },
+    "/style-lab/works": {
+      "post": {
+        "operationId": "style_lab_create_work_style_lab_works_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StyleWorkCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Style Lab Create Work"
+      }
+    },
+    "/ui/{path}": {
+      "get": {
+        "operationId": "ui_asset_ui__path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ui Asset"
+      }
+    },
+    "/worker/jobs/{job_id}": {
+      "get": {
+        "operationId": "worker_job_worker_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Job"
+      }
+    },
+    "/worker/jobs/{job_id}/events": {
+      "get": {
+        "operationId": "worker_job_events_worker_jobs__job_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Job Events"
+      }
+    },
+    "/worker/jobs/{job_id}/retry": {
+      "post": {
+        "operationId": "worker_job_retry_worker_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerRetryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Job Retry"
+      }
+    },
+    "/worker/jobs/{job_id}/stop": {
+      "post": {
+        "operationId": "worker_job_stop_worker_jobs__job_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Job Stop"
+      }
+    },
+    "/worker/jobs/{job_id}/stream": {
+      "get": {
+        "operationId": "worker_job_stream_worker_jobs__job_id__stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Job Stream"
+      }
+    },
+    "/worker/jobs/{job_id}/writeback": {
+      "post": {
+        "operationId": "worker_job_writeback_worker_jobs__job_id__writeback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WritebackDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Job Writeback"
+      }
+    },
+    "/worker/prepare": {
+      "post": {
+        "operationId": "worker_prepare_worker_prepare_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Prepare"
+      }
+    },
+    "/worker/run": {
+      "post": {
+        "operationId": "worker_run_worker_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Run"
+      }
+    },
+    "/workflow/activity": {
+      "get": {
+        "operationId": "workflow_activity_workflow_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Activity"
+      }
+    },
+    "/workflow/activity/stream": {
+      "get": {
+        "operationId": "workflow_activity_stream_workflow_activity_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 4.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Activity Stream"
+      }
+    },
+    "/workflow/current-choice": {
+      "get": {
+        "operationId": "workflow_current_choice_workflow_current_choice_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Current Choice"
+      }
+    },
+    "/workflow/dashboard": {
+      "get": {
+        "operationId": "workflow_dashboard_workflow_dashboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Dashboard"
+      }
+    },
+    "/workflow/dashboard/stream": {
+      "get": {
+        "operationId": "workflow_dashboard_stream_workflow_dashboard_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 8.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Dashboard Stream"
+      }
+    },
+    "/workflow/human-choice": {
+      "post": {
+        "operationId": "workflow_human_choice_workflow_human_choice_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Human Choice"
+      }
+    },
+    "/workflow/task-package": {
+      "get": {
+        "operationId": "workflow_task_package_workflow_task_package_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Task Package"
+      }
+    }
+  }
+}

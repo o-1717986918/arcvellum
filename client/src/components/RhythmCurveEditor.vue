@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { Activity, CircleAlert, RefreshCw, Save, Waves } from "lucide-vue-next";
-import { api, query } from "@/services/api";
+import { qualityClient } from "@/features/quality/services/qualityClient";
 import { useAppStore } from "@/stores/app";
 
 const props = defineProps<{ compact?: boolean }>();
@@ -132,7 +132,7 @@ onMounted(() => void load());
 
 async function load(): Promise<void> {
   if (!store.currentProjectPath) return;
-  const result = await api<{ plan: RhythmPlan }>(`/project/rhythm-plan?${query({ project_root: store.currentProjectPath })}`);
+  const result = await qualityClient.rhythmPlan<RhythmPlan>(store.currentProjectPath);
   plan.value = result.plan;
   plan.value.book_profile = normalizeProfile(plan.value.book_profile);
   chapter.value = chapters.value.includes(chapter.value) ? chapter.value : chapters.value[0] || "";
@@ -144,10 +144,7 @@ async function save(): Promise<void> {
   saving.value = true;
   message.value = "";
   try {
-    const result = await api<{ plan: RhythmPlan }>("/project/rhythm-plan", {
-      method: "PUT",
-      body: JSON.stringify({ project_root: store.currentProjectPath, entries: plan.value.entries, book_profile: plan.value.book_profile }),
-    });
+    const result = await qualityClient.saveRhythmPlan<RhythmPlan>(store.currentProjectPath, plan.value.entries, plan.value.book_profile);
     plan.value = result.plan;
     plan.value.book_profile = normalizeProfile(plan.value.book_profile);
     message.value = "全书曲线与场景节奏已进入正式创作链路；现有候选需要按新曲线重新审查。";

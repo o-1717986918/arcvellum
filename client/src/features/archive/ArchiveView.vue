@@ -35,6 +35,7 @@ import {
 import type { GuidedTourStep } from "@/features/onboarding/types";
 import type { RecycleEntry } from "./types";
 import type { ArchiveCreationPayload } from "./types";
+import { fetchArchiveWorkerJob } from "./services/archiveClient";
 import "./archive.css";
 
 const app = useAppStore();
@@ -270,7 +271,7 @@ async function monitorPromotion(jobId: string): Promise<void> {
   try {
     for (let attempt = 0; attempt < 80; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 500));
-      const result = await import("@/services/api").then(({ api }) => api<Record<string, unknown>>(`/worker/jobs/${jobId}`));
+      const result = await fetchArchiveWorkerJob(jobId);
       archive.promotionJob = result;
       if (!["queued", "running", "stopping"].includes(String(result.status || ""))) {
         await archive.refreshCandidate();

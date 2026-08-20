@@ -19,7 +19,7 @@ import { applyRelationLens } from "@/features/orrery/model/relationLens";
 import { viewBookmarkLabel, type OrreryHeatLens } from "@/features/orrery/model/exploration";
 import { nodeForReaderUnit, readerUnitForNode } from "@/features/orrery/model/readerLink";
 import type { RelationFamily } from "@/features/orrery/model/relations";
-import { api, query } from "@/services/api";
+import { orreryClient } from "@/features/orrery/services/orreryClient";
 import { manuscriptItems } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
@@ -170,12 +170,12 @@ async function selectNode(node: SpatialNarrativeNode): Promise<void> {
   if (!app.currentProjectPath || !projection.value) return;
   let detail: SpatialNodeDetail | null = null;
   try {
-    detail = await api<SpatialNodeDetail>(`${node.detail_endpoint}?${query({
-      project_root: app.currentProjectPath,
+    detail = await orreryClient.nodeDetail(node.detail_endpoint, {
+      projectRoot: app.currentProjectPath,
       level: projection.value.level,
       focus: projection.value.focus,
       grammar: projection.value.spatial_grammar,
-    })}`);
+    });
   } catch { /* Details are an enhancement, not a reason to block node inspection. */ }
   windows.openNode(node, detail, anchors.value[node.node_id]);
 }
@@ -363,12 +363,12 @@ async function loadChoices(): Promise<void> {
 
 async function loadChapterRail(root: string): Promise<void> {
   const sequence = ++chapterRailRequest;
-  const payload = await api<SpatialNarrativeProjection>(`/narrative/projection/v3?${query({
-    project_root: root,
+  const payload = await orreryClient.spatialProjection({
+    projectRoot: root,
     level: "book",
     focus: "",
     grammar: spatial.grammar,
-  })}`).catch(() => null);
+  }).catch(() => null);
   if (sequence !== chapterRailRequest || root !== app.currentProjectPath || !payload) return;
   bookChapterNodes.value = payload.nodes.filter((node) => node.type === "chapter");
 }

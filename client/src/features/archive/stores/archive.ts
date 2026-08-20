@@ -1,6 +1,5 @@
 import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
-import { api } from "@/services/api";
 import { useAppStore } from "@/stores/app";
 import type {
   ArchiveAssetDetail,
@@ -13,15 +12,18 @@ import type {
   RecycleEntry,
 } from "../types";
 import {
+  archiveFormalAsset,
   commitArchiveCreation,
   commitArchiveEdit,
   fetchArchiveAsset,
   fetchArchiveCandidate,
   fetchArchiveWorkspace,
   fetchStructuredDocument,
+  promoteArchiveCandidate,
   previewArchiveCreation,
   previewArchiveEdit,
   refreshArchiveMutation,
+  restoreArchiveAsset,
   renderStructuredDocument,
 } from "../services/archiveClient";
 import {
@@ -315,14 +317,7 @@ export const useArchiveStore = defineStore("archive", () => {
     const asset = requireAsset();
     busy.value = true;
     try {
-      await api(`/archive/assets/${encodeURIComponent(asset.asset_id)}/archive`, {
-        method: "POST",
-        body: JSON.stringify({
-          project_root: projectRoot.value,
-          base_revision: asset.revision,
-          reason,
-        }),
-      });
+      await archiveFormalAsset(projectRoot.value, asset.asset_id, asset.revision, reason);
       await closeTab(asset.asset_id, "asset", true);
       notice.value = "资料已移入项目回收站。";
       await loadWorkspace();
@@ -334,14 +329,7 @@ export const useArchiveStore = defineStore("archive", () => {
   async function restoreEntry(entry: RecycleEntry, reason: string): Promise<void> {
     busy.value = true;
     try {
-      await api(`/archive/assets/${encodeURIComponent(entry.asset_id)}/restore`, {
-        method: "POST",
-        body: JSON.stringify({
-          project_root: projectRoot.value,
-          entry_id: entry.entry_id,
-          reason,
-        }),
-      });
+      await restoreArchiveAsset(projectRoot.value, entry.asset_id, entry.entry_id, reason);
       notice.value = "资料已恢复到正式档案。";
       await loadWorkspace();
     } finally {
@@ -355,16 +343,7 @@ export const useArchiveStore = defineStore("archive", () => {
     if (!candidate.can_promote) throw new Error("候选仍有未完成的审查或批准步骤。");
     busy.value = true;
     try {
-      const job = await api<Record<string, unknown>>(
-        `/archive/candidates/${encodeURIComponent(candidate.candidate_id)}/promote`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            project_root: projectRoot.value,
-            preview_digest: candidate.preview_digest,
-          }),
-        },
-      );
+      const job = await promoteArchiveCandidate(projectRoot.value, candidate.candidate_id, candidate.preview_digest);
       promotionJob.value = job;
       notice.value = "候选已进入正式晋升任务，结果会继续接受 Engine 门禁。";
       return job;

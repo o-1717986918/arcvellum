@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { BookOpenText, Bot, CircleHelp, Compass, FileDown, Gauge, RotateCw, ShieldCheck, Sparkles } from "lucide-vue-next";
+import { settingsClient } from "@/features/settings/services/settingsClient";
 import { useAppStore } from "@/stores/app";
-import { api } from "@/services/api";
 
 const store = useAppStore();
 const phase = computed(() => store.bootstrap?.phase === "blocked" ? "有一项启动条件需要处理" : store.bootstrap?.phase === "degraded" ? "工作台可用，部分创作连接尚未就绪" : "工作台运行正常");
 
 async function exportDiagnostics(): Promise<void> {
-  await api("/application/diagnostics/export", { method: "POST" });
+  await settingsClient.exportDiagnostics();
   store.notice = "诊断报告已生成。";
 }
 

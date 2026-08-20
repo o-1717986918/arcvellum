@@ -19,6 +19,31 @@ export interface ArchiveWorkspacePayload {
   creationOptions: ArchiveCreationOption[];
 }
 
+export function fetchArchiveWorkerJob(jobId: string): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>(`/worker/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function archiveFormalAsset(projectRoot: string, assetId: string, baseRevision: string, reason: string): Promise<unknown> {
+  return api(`/archive/assets/${encodeURIComponent(assetId)}/archive`, {
+    method: "POST",
+    body: JSON.stringify({ project_root: projectRoot, base_revision: baseRevision, reason }),
+  });
+}
+
+export function restoreArchiveAsset(projectRoot: string, assetId: string, entryId: string, reason: string): Promise<unknown> {
+  return api(`/archive/assets/${encodeURIComponent(assetId)}/restore`, {
+    method: "POST",
+    body: JSON.stringify({ project_root: projectRoot, entry_id: entryId, reason }),
+  });
+}
+
+export function promoteArchiveCandidate(projectRoot: string, candidateId: string, previewDigest: string): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>(`/archive/candidates/${encodeURIComponent(candidateId)}/promote`, {
+    method: "POST",
+    body: JSON.stringify({ project_root: projectRoot, preview_digest: previewDigest }),
+  });
+}
+
 export async function fetchArchiveWorkspace(
   projectRoot: string,
 ): Promise<ArchiveWorkspacePayload> {

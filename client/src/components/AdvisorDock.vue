@@ -18,7 +18,9 @@ import {
   UserRoundPen,
   X,
 } from "lucide-vue-next";
-import { api, connectEventStream, query, streamApi, type EventStreamConnection } from "@/services/api";
+import { advisorClient } from "@/features/advisor/services/advisorClient";
+import { projectsClient } from "@/features/projects/services/projectsClient";
+import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { renderSafeMarkdown } from "@/services/markdown";
 import { readCreativeRuntime } from "@/services/runtimePreference";
 import { friendlyError, useAppStore } from "@/stores/app";
@@ -57,7 +59,7 @@ const dockStyle = computed(() => {
   };
 });
 let requestController: AbortController | null = null;
-let inboxStream: EventStreamConnection | null = null;
+let inboxStream: { close(): void } | null = null;
 let deltaBuffer = "";
 let deltaTimer = 0;
 let dragKind: "orb" | "dock" | null = null;
@@ -242,48 +244,33 @@ function currentDockSize(): { width: number; height: number } {
 
 async function loadAdvisorSurface(): Promise<void> {
   if (!store.currentProjectPath) return;
-  const [catalog, notices] = await Promise.all([
-    api<{ selected_persona: string; items: Record<string, unknown>[] }>(
-      `/advisor/personas?${query({ project_root: store.currentProjectPath })}`,
-    ),
-    api<{ items: Record<string, unknown>[]; unread_count: number; notification_count?: number; settings?: { mode: string; quiet_start: string; quiet_end: string } }>(
-      `/advisor/inbox?${query({ project_root: store.currentProjectPath })}`,
-    ),
-  ]).catch(() => [
-    { selected_persona: "chief-editor", items: [] as Record<string, unknown>[] },
-    { items: [] as Record<string, unknown>[], unread_count: 0, notification_count: 0, settings: undefined },
-  ]);
+  const surface = await advisorClient.surface(store.currentProjectPath).catch(() => ({
+    personas: { selected_persona: "chief-editor", items: [] as Record<string, unknown>[] },
+    inbox: { items: [] as Record<string, unknown>[], unread_count: 0, notification_count: 0, settings: undefined },
+  }));
+  const catalog = surface.personas;
+  const notices = surface.inbox;
   personas.value = [...(catalog.items || [])];
   selectedPersona.value = catalog.selected_persona || "chief-editor";
   inbox.value = [...(notices.items || [])];
   unreadCount.value = notices.notification_count ?? notices.unread_count ?? 0;
   if (notices.settings) inboxSettings.value = notices.settings;
   inboxStream?.close();
-  inboxStream = connectEventStream(
-    `/advisor/inbox/stream?${query({ project_root: store.currentProjectPath, interval_seconds: 8 })}`,
-    (event, data) => {
-      if (event !== "advisor.inbox") return;
-      inbox.value = (data.items || []) as Record<string, unknown>[];
-      unreadCount.value = Number(data.notification_count ?? data.unread_count ?? 0);
-    },
-  );
+  inboxStream = advisorClient.observeInbox(store.currentProjectPath, (data) => {
+    inbox.value = data.items || [];
+    unreadCount.value = Number(data.notification_count ?? data.unread_count ?? 0);
+  });
 }
 
 async function choosePersona(): Promise<void> {
   if (!store.currentProjectPath) return;
-  const result = await api<{ selected_persona: string; items: Record<string, unknown>[] }>("/advisor/personas/selection", {
-    method: "PUT",
-    body: JSON.stringify({ project_root: store.currentProjectPath, persona_id: selectedPersona.value }),
-  });
+  const result = await advisorClient.selectPersona(store.currentProjectPath, selectedPersona.value);
   personas.value = result.items || personas.value;
   store.notice = `顾问已切换为${String(personas.value.find((item) => item.persona_id === selectedPersona.value)?.name || "新人格")}。`;
 }
 
 async function saveCustomPersona(): Promise<void> {
-  const result = await api<{ persona: Record<string, unknown> }>("/advisor/personas/custom", {
-    method: "PUT",
-    body: JSON.stringify(customPersona.value),
-  });
+  const result = await advisorClient.saveCustomPersona(customPersona.value);
   await loadAdvisorSurface();
   selectedPersona.value = String(result.persona.persona_id || "chief-editor");
   await choosePersona();
@@ -292,20 +279,14 @@ async function saveCustomPersona(): Promise<void> {
 
 async function saveInboxSettings(): Promise<void> {
   if (!store.currentProjectPath) return;
-  const result = await api<{ settings: { mode: string; quiet_start: string; quiet_end: string } }>("/advisor/inbox/settings", {
-    method: "PUT",
-    body: JSON.stringify({ project_root: store.currentProjectPath, ...inboxSettings.value }),
-  });
+  const result = await advisorClient.saveInboxSettings(store.currentProjectPath, inboxSettings.value);
   inboxSettings.value = result.settings;
   store.notice = "顾问主动提醒偏好已保存。";
 }
 
 async function markNotice(item: Record<string, unknown>, run = false): Promise<void> {
   if (item.unread) {
-    await api(`/advisor/inbox/${encodeURIComponent(String(item.item_id))}`, {
-      method: "PATCH",
-      body: JSON.stringify({ read: true }),
-    });
+    await advisorClient.markNotice(String(item.item_id));
     item.unread = false;
     unreadCount.value = Math.max(0, unreadCount.value - 1);
   }
@@ -316,16 +297,11 @@ async function ensureSession(): Promise<void> {
   if (session.value || loadingSession.value || !store.currentProjectPath) return;
   loadingSession.value = true;
   try {
-    const list = await api<{ items: Array<Pick<AdvisorSession, "session_id">> }>(
-      `/advisor/sessions?${query({ project_root: store.currentProjectPath })}`,
-    );
+    const list = await advisorClient.sessions(store.currentProjectPath);
     if (list.items?.[0]?.session_id) {
-      session.value = await api<AdvisorSession>(`/advisor/sessions/${encodeURIComponent(list.items[0].session_id)}`);
+      session.value = await advisorClient.session(list.items[0].session_id);
     } else {
-      session.value = await api<AdvisorSession>("/advisor/sessions", {
-        method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, title: `${projectTitle.value}创作对话` }),
-      });
+      session.value = await advisorClient.createSession(store.currentProjectPath, `${projectTitle.value}创作对话`);
     }
     await scrollToEnd();
   } catch (cause) {
@@ -354,17 +330,11 @@ async function ask(): Promise<void> {
   await scrollToEnd();
   try {
     requestController = new AbortController();
-    await streamApi(
-      `/advisor/sessions/${encodeURIComponent(session.value.session_id)}/ask/stream`,
-      {
-        method: "POST",
-        signal: requestController.signal,
-        body: JSON.stringify({
-          question: value,
-          timeout: 240,
-          context: { view: String(route.name || "overview"), user_intent: "free_conversation" },
-        }),
-      },
+    await advisorClient.ask(
+      session.value.session_id,
+      value,
+      { view: String(route.name || "overview"), user_intent: "free_conversation" },
+      requestController.signal,
       (event, data) => {
         const current = transientMessages.value.at(-1);
         if (!current || current.role !== "advisor") return;
@@ -381,7 +351,7 @@ async function ask(): Promise<void> {
         void scrollToEnd();
       },
     );
-    session.value = await api<AdvisorSession>(`/advisor/sessions/${encodeURIComponent(session.value.session_id)}`);
+    session.value = await advisorClient.session(session.value.session_id);
     transientMessages.value = [];
   } catch (cause) {
     const current = transientMessages.value.at(-1);
@@ -420,52 +390,33 @@ async function runAction(action: AdvisorAction): Promise<void> {
       await router.push(`/${action.target || "overview"}`);
       open.value = false;
     } else if (action.type === "record_direction") {
-      await api("/projects/directions", {
-        method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, message: action.message || action.label }),
-      });
+      await projectsClient.addDirection(store.currentProjectPath, action.message || action.label);
       store.notice = "这条想法已经交给创作流程。";
     } else if (action.type === "run_next_task" || action.type === "prepare_next_task") {
       const allowedRoutes = new Set(["auto", "scene-development", "longform-planning", "style-engineering", "character-and-world-assets", "review-and-audit", "export-and-release"]);
-      await api("/worker/run", {
-        method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, route: allowedRoutes.has(action.route || "") ? action.route : "auto", runtime: readCreativeRuntime() }),
-      });
+      await workflowClient.runWorker(store.currentProjectPath, allowedRoutes.has(action.route || "") ? String(action.route) : "auto", readCreativeRuntime());
       store.notice = "下一项创作任务已经启动。";
       await store.loadDashboard();
     } else if (action.type === "start_autopilot") {
-      await api("/autopilot/start", {
-        method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, runtime: readCreativeRuntime() }),
-      });
+      await workflowClient.startAutopilot({ project_root: store.currentProjectPath, runtime: readCreativeRuntime() });
       store.notice = "连续创作已经开始。";
       await store.loadDashboard();
     } else if (action.type === "pause_autopilot") {
-      const state = await api<{ run?: { run_id: string; status: string } }>(
-        `/autopilot/status?${query({ project_root: store.currentProjectPath })}`,
-      );
+      const state = await workflowClient.autopilotStatus(store.currentProjectPath);
       if (state.run?.run_id && state.run.status === "running") {
-        await api(`/autopilot/runs/${state.run.run_id}/pause`, {
-          method: "POST",
-          body: JSON.stringify({ reason: "advisor-user-request" }),
-        });
+        await workflowClient.pauseAutopilot(state.run.run_id, "advisor-user-request");
         store.notice = "连续创作已经暂停。";
       }
     } else if (action.type === "resume_autopilot") {
-      const state = await api<{ run?: { run_id: string; status: string } }>(
-        `/autopilot/status?${query({ project_root: store.currentProjectPath })}`,
-      );
+      const state = await workflowClient.autopilotStatus(store.currentProjectPath);
       if (state.run?.run_id && ["paused", "blocked", "failed"].includes(state.run.status)) {
-        await api(`/autopilot/runs/${state.run.run_id}/resume`, { method: "POST" });
+        await workflowClient.resumeAutopilot(state.run.run_id);
         store.notice = "连续创作已经继续。";
       } else {
         store.notice = "当前没有可以恢复的连续创作任务。";
       }
     } else if (action.type === "request_revision") {
-      await api("/projects/directions", {
-        method: "POST",
-        body: JSON.stringify({ project_root: store.currentProjectPath, message: `修订方向：${action.message || action.label}` }),
-      });
+      await projectsClient.addDirection(store.currentProjectPath, `修订方向：${action.message || action.label}`);
       store.notice = "修订要求已经加入创作方向。";
     }
   } catch (cause) {

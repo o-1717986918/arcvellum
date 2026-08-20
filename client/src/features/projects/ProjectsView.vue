@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ArrowRight, BookPlus, Check, FolderOpen, LocateFixed, Sparkles } from "lucide-vue-next";
-import { api } from "@/services/api";
+import { projectsClient } from "@/features/projects/services/projectsClient";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { friendlyError, useAppStore } from "@/stores/app";
 
@@ -29,7 +29,7 @@ const openPath = ref(localStorage.getItem("arcvellum.openDirectory") || "");
 onMounted(async () => {
   if (createForm.parent_directory) return;
   try {
-    const location = await api<{ projects_root: string }>("/projects/default-location");
+    const location = await projectsClient.defaultLocation();
     createForm.parent_directory = location.projects_root || "";
   } catch {
     advancedPaths.value = true;
@@ -77,13 +77,10 @@ async function createProject(): Promise<void> {
   feedback.value = "";
   busy.value = true;
   try {
-    const check = await api<{ valid: boolean; conflicts: string[]; warnings: string[] }>("/projects/validate-location", {
-      method: "POST",
-      body: JSON.stringify({
-        mode: "create",
-        parent_directory: createForm.parent_directory,
-        folder_name: createForm.folder_name || createForm.title,
-      }),
+    const check = await projectsClient.validateLocation({
+      mode: "create",
+      parent_directory: createForm.parent_directory,
+      folder_name: createForm.folder_name || createForm.title,
     });
     if (!check.valid) throw new Error(check.conflicts.join(" "));
     await store.createProject({ ...createForm });
@@ -100,10 +97,7 @@ async function openProject(): Promise<void> {
   feedback.value = "";
   busy.value = true;
   try {
-    const check = await api<{ valid: boolean; conflicts: string[] }>("/projects/validate-location", {
-      method: "POST",
-      body: JSON.stringify({ mode: "open", project_root: openPath.value }),
-    });
+    const check = await projectsClient.validateLocation({ mode: "open", project_root: openPath.value });
     if (!check.valid) throw new Error(check.conflicts.join(" "));
     await store.openProject(openPath.value);
     localStorage.setItem("arcvellum.openDirectory", openPath.value);

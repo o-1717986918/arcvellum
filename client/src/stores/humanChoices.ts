@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { defineStore } from "pinia";
-import { api, query } from "@/services/api";
+import { workflowClient } from "@/features/workflow/services/workflowClient";
 import type { HumanChoiceReceipt } from "@/types/api";
 
 type Choice = Record<string, unknown>;
@@ -23,9 +23,7 @@ export const useHumanChoicesStore = defineStore("human-choices", () => {
       reset();
       return;
     }
-    const result = await api<{ items?: Choice[]; choices?: Choice[] }>(
-      `/workflow/current-choice?${query({ project_root: root })}`,
-    );
+    const result = await workflowClient.choices(root);
     if (sequence !== requestSequence) return;
     loadedProject.value = root;
     choices.value = result.items || result.choices || [];
@@ -62,9 +60,7 @@ export const useHumanChoicesStore = defineStore("human-choices", () => {
     busy.value = true;
     error.value = "";
     try {
-      const receipt = await api<HumanChoiceReceipt>("/workflow/human-choice", {
-        method: "POST",
-        body: JSON.stringify({
+      const receipt = await workflowClient.submitChoice({
           project_root: projectRoot,
           choice_id: choice.choice_id,
           route: choice.route,
@@ -75,7 +71,6 @@ export const useHumanChoicesStore = defineStore("human-choices", () => {
           selected,
           rationale: rationale.value || `用户在 ArcVellum 中确认“${String(option.label || option.id)}”。`,
           actor: "arcvellum-user",
-        }),
       });
       const effect = (
         receipt.effect && typeof receipt.effect === "object"

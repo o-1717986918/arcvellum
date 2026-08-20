@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Bot, CircleCheck, CirclePause, Gauge, Pause, Play, RefreshCw, ShieldAlert, Sparkles, Timer, Wrench } from "lucide-vue-next";
-import { api, connectEventStream, query, type EventStreamConnection } from "@/services/api";
+import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { readCreativeRuntime, saveCreativeRuntime, type CreativeRuntime } from "@/services/runtimePreference";
 import { friendlyError, useAppStore } from "@/stores/app";
 import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy, FailureRecoveryAction } from "@/types/api";
@@ -22,7 +22,7 @@ const repairCount = ref(0);
 const tick = ref(Date.now());
 const streamStartedAt = ref(0);
 const renewalLimits = ref({ max_tasks: 500, max_runtime_hours: 24, max_consecutive_revisions: 3, max_failures_per_task: 2, max_cost: 100 });
-let events: EventStreamConnection | null = null;
+let events: { close(): void } | null = null;
 let clock = 0;
 
 const run = computed(() => snapshot.value?.run || null);
@@ -92,7 +92,7 @@ async function load(): Promise<void> {
   snapshot.value = null;
   if (!store.currentProjectPath) return;
   try {
-    snapshot.value = await api<AutopilotStatus>(`/autopilot/status?${query({ project_root: store.currentProjectPath })}`);
+    snapshot.value = await workflowClient.autopilotStatus(store.currentProjectPath);
     selectedMode.value = snapshot.value.policy.mode || "collaborative";
     if (snapshot.value.run?.runtime === "pi-worker" || snapshot.value.run?.runtime === "opencode") {
       selectedRuntime.value = snapshot.value.run.runtime;
@@ -142,10 +142,7 @@ async function selectMode(next: AutopilotMode): Promise<void> {
       ],
       release_policy: next === "full_auto" ? "delegated" : "require_user",
     };
-    const saved = await api<{ policy: DelegationPolicy; run?: AutopilotRun }>("/autopilot/policy", {
-      method: "PUT",
-      body: JSON.stringify({ project_root: store.currentProjectPath, policy }),
-    });
+    const saved = await workflowClient.saveAutopilotPolicy(store.currentProjectPath, policy);
     if (snapshot.value) {
       snapshot.value.policy = saved.policy;
       if (saved.run) snapshot.value.run = saved.run;
@@ -166,10 +163,7 @@ async function start(): Promise<void> {
   if (!store.currentProjectPath || busy.value || (needsFullAutoAuthorization.value && !authorized.value)) return;
   busy.value = true;
   try {
-    const result = await api<{ run: AutopilotRun }>("/autopilot/start", {
-      method: "POST",
-      body: JSON.stringify({ project_root: store.currentProjectPath, runtime: selectedRuntime.value, authorized: mode.value !== "full_auto" || authorized.value }),
-    });
+    const result = await workflowClient.startAutopilot({ project_root: store.currentProjectPath, runtime: selectedRuntime.value, authorized: mode.value !== "full_auto" || authorized.value });
     if (snapshot.value) snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
     authorizationConfirmationRequired.value = false;
@@ -191,10 +185,7 @@ async function pause(): Promise<void> {
   if (!run.value || busy.value) return;
   busy.value = true;
   try {
-    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/pause`, {
-      method: "POST",
-      body: JSON.stringify({ reason: "user-request" }),
-    });
+    const result = await workflowClient.pauseAutopilot(run.value.run_id, "user-request");
     if (snapshot.value) snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
     stopStream();
@@ -207,10 +198,7 @@ async function resume(): Promise<void> {
   if (!run.value || busy.value || (needsFullAutoAuthorization.value && !authorized.value)) return;
   busy.value = true;
   try {
-    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, {
-      method: "POST",
-      body: JSON.stringify({ authorized: mode.value !== "full_auto" || authorized.value || !needsFullAutoAuthorization.value }),
-    });
+    const result = await workflowClient.resumeAutopilot(run.value.run_id, { authorized: mode.value !== "full_auto" || authorized.value || !needsFullAutoAuthorization.value });
     if (snapshot.value) snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
     authorizationConfirmationRequired.value = false;
@@ -237,15 +225,9 @@ async function renewAuthorization(): Promise<void> {
         max_cost: Math.max(0, Number(renewalLimits.value.max_cost || 0)),
       },
     };
-    const saved = await api<{ policy: DelegationPolicy; run?: AutopilotRun }>("/autopilot/policy", {
-      method: "PUT",
-      body: JSON.stringify({ project_root: store.currentProjectPath, policy }),
-    });
+    const saved = await workflowClient.saveAutopilotPolicy(store.currentProjectPath, policy);
     snapshot.value.policy = saved.policy;
-    const result = await api<{ run: AutopilotRun }>(`/autopilot/runs/${run.value.run_id}/resume`, {
-      method: "POST",
-      body: JSON.stringify({ authorized: mode.value !== "full_auto" || authorized.value || !needsFullAutoAuthorization.value }),
-    });
+    const result = await workflowClient.resumeAutopilot(run.value.run_id, { authorized: mode.value !== "full_auto" || authorized.value || !needsFullAutoAuthorization.value });
     snapshot.value.run = result.run;
     store.setAutopilotRun(result.run);
     authorizationConfirmationRequired.value = false;
@@ -264,7 +246,7 @@ function startStream(runId: string): void {
   stopStream();
   streamStartedAt.value = Date.now();
   lastActivityAt.value = "";
-  events = connectEventStream(`/autopilot/runs/${encodeURIComponent(runId)}/stream`, (event, data) => {
+  events = workflowClient.observeAutopilot(runId, (event, data) => {
     if (event === "autopilot.status") {
       const payload = data as unknown as { run: AutopilotRun };
       if (snapshot.value) snapshot.value.run = payload.run;

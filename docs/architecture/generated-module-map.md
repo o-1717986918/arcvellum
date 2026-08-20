@@ -33,22 +33,23 @@
 
 | Feature | 文件数 | 规则 |
 |---|---:|---|
+| `advisor` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `archaeology` | 14 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `archive` | 24 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `delivery` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `delivery` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `details` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `help` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `library` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `observatory` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `onboarding` | 3 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `orrery` | 50 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `projects` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `quality` | 3 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `orrery` | 51 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `projects` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `quality` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `reader` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `settings` | 3 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `settings` | 4 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `strategy` | 8 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `style-atelier` | 19 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `workflow` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `workflow` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 
 ## 机器检查
 

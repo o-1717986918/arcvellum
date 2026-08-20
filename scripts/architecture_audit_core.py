@@ -287,6 +287,8 @@ def _oversized_files(root: Path) -> dict[str, int]:
         candidates.extend(client_root.rglob("*.ts"))
         candidates.extend(client_root.rglob("*.vue"))
     for path in sorted(set(candidates)):
+        if path.is_relative_to(client_root / "types" / "generated"):
+            continue
         try:
             lines = len(path.read_text(encoding="utf-8").splitlines())
         except (OSError, UnicodeError):
