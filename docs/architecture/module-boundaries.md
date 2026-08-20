@@ -512,6 +512,16 @@ compatibility facade 作为内部依赖。
 
 compatibility facade 不得成为新代码的依赖入口。新代码应直接 import 所属目录中的实现；只有 CLI、旧 API、外部脚本或测试 patch seam 可以通过 facade 访问旧路径。
 
+Workflow Dashboard 必须保持显式 command/query 分离：
+
+- `workflow/dashboard_model.py` 只根据已取得的 state、task、audit 与 event payload 计算摘要和下一步动作；
+- `workflow/dashboard_rendering.py` 只把 dashboard payload 渲染为 Markdown/HTML，不读取或修改作品；
+- `workflow/dashboard.py` 是正式物化命令，可以生成 dashboard、route state、task status 与 route audit 文件；
+- `workflow/dashboard_projection.py` 是 UI/SSE 的纯查询入口，只调用无写入 projection，不得借用正式 builder 写项目。
+
+不得为了复用而让 projection 调用 materialized command，也不得让 renderer 自行推断 Gate。`route-audit` 始终是正式通过/阻塞事实，
+`workflow-state` 和 Dashboard 只负责导航与展示。
+
 - `persistence.primitives`：schema 常量、ID 校验、序列化和脱敏；
 - `persistence.autopilot_runs`：run、lease、policy snapshot、delegated decision 与 autopilot event；
 - `persistence.sessions`：顾问对话、Agent session、通知收件箱、delegation policy 和阅读位置/书签；
