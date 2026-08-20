@@ -292,8 +292,12 @@ export function bindRequiredTool(payload: unknown, api: string, tool: string): u
 	if (!isRecord(payload)) return payload;
 	if (api === "pi-messages") {
 		const options = isRecord(payload.options) ? { ...payload.options } : {};
+		const context = isRecord(payload.context)
+			? restrictContextTools(payload.context, tool)
+			: payload.context;
 		return {
 			...payload,
+			context,
 			options: {
 				...options,
 				toolChoice: { type: "function", function: { name: tool } },
@@ -301,21 +305,78 @@ export function bindRequiredTool(payload: unknown, api: string, tool: string): u
 		};
 	}
 	if (api === "anthropic-messages") {
-		return { ...payload, tool_choice: { type: "tool", name: tool } };
+		return { ...payload, tools: restrictToolDefinitions(payload.tools, tool), tool_choice: { type: "tool", name: tool } };
 	}
 	if (api === "openai-responses" || api === "azure-openai-responses") {
-		return { ...payload, tool_choice: { type: "function", name: tool } };
+		return { ...payload, tools: restrictToolDefinitions(payload.tools, tool), tool_choice: { type: "function", name: tool } };
 	}
 	if (api === "openai-codex-responses") {
-		return { ...payload, tool_choice: "required" };
+		return { ...payload, tools: restrictToolDefinitions(payload.tools, tool), tool_choice: "required" };
 	}
 	if (api === "openai-completions" || api === "mistral-conversations") {
-		return { ...payload, tool_choice: { type: "function", function: { name: tool } } };
+		return {
+			...payload,
+			tools: restrictToolDefinitions(payload.tools, tool),
+			tool_choice: { type: "function", function: { name: tool } },
+		};
 	}
 	if (api === "google-generative-ai" || api === "google-vertex" || api === "bedrock-converse-stream") {
-		return { ...payload, tool_choice: "any" };
+		return restrictProviderToolConfig(payload, api, tool);
 	}
 	return payload;
+}
+
+/**
+ * Treat the required tool as a capability lease, not only a sampling hint.
+ * Some compatible gateways accept an exact tool choice while still exposing
+ * stale tools to the underlying model. Removing those tools makes each Worker
+ * protocol phase deterministic; beforeToolCall remains a fail-closed guard.
+ */
+export function restrictToolDefinitions(value: unknown, requiredTool: string): unknown {
+	if (!Array.isArray(value)) return value;
+	return value.filter((item) => toolDefinitionNames(item).includes(requiredTool));
+}
+
+function restrictContextTools(value: Record<string, unknown>, requiredTool: string): Record<string, unknown> {
+	return { ...value, tools: restrictToolDefinitions(value.tools, requiredTool) };
+}
+
+function restrictProviderToolConfig(
+	payload: Record<string, unknown>,
+	api: string,
+	requiredTool: string,
+): Record<string, unknown> {
+	if (api === "bedrock-converse-stream" && isRecord(payload.toolConfig)) {
+		return {
+			...payload,
+			toolConfig: {
+				...payload.toolConfig,
+				tools: restrictToolDefinitions(payload.toolConfig.tools, requiredTool),
+				toolChoice: { tool: { name: requiredTool } },
+			},
+		};
+	}
+	const tools = Array.isArray(payload.tools)
+		? payload.tools.map((item) => {
+			if (!isRecord(item) || !Array.isArray(item.functionDeclarations)) return item;
+			return {
+				...item,
+				functionDeclarations: restrictToolDefinitions(item.functionDeclarations, requiredTool),
+			};
+		}).filter((item) => {
+			if (!isRecord(item) || !Array.isArray(item.functionDeclarations)) return true;
+			return item.functionDeclarations.length > 0;
+		})
+		: payload.tools;
+	return { ...payload, tools, tool_choice: "any" };
+}
+
+function toolDefinitionNames(value: unknown): string[] {
+	if (!isRecord(value)) return [];
+	const names = [value.name];
+	if (isRecord(value.function)) names.push(value.function.name);
+	if (isRecord(value.toolSpec)) names.push(value.toolSpec.name);
+	return names.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

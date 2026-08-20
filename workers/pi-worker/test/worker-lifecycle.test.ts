@@ -6,6 +6,7 @@ import type { TaskContext, WorkerState } from "../src/contracts.ts";
 import {
 	isProviderEmptyResponse,
 	noProgressTurnLimit,
+	restrictToolDefinitions,
 	sanitizeProviderError,
 	bindRequiredTool,
 	desiredRepairTool,
@@ -77,13 +78,36 @@ describe("bounded worker lifecycle", () => {
 		expect(desiredWorkerTool({ mode: "task" }, creative, [], workerState)).toBe("");
 	});
 
-	it("projects required tool choice using provider-native payload shapes", () => {
-		expect(bindRequiredTool({}, "openai-completions", "write_expected_output")).toEqual({
+	it("projects required tool choice and capability lease using provider-native payload shapes", () => {
+		expect(bindRequiredTool({
+			tools: [
+				{ type: "function", function: { name: "read_authorized_source" } },
+				{ type: "function", function: { name: "write_expected_output" } },
+			],
+		}, "openai-completions", "write_expected_output")).toEqual({
+			tools: [{ type: "function", function: { name: "write_expected_output" } }],
 			tool_choice: { type: "function", function: { name: "write_expected_output" } },
 		});
-		expect(bindRequiredTool({ options: { reasoning: "low" } }, "pi-messages", "complete_task")).toEqual({
+		expect(bindRequiredTool({
+			context: {
+				messages: [],
+				tools: [{ name: "read_authorized_source" }, { name: "complete_task" }],
+			},
+			options: { reasoning: "low" },
+		}, "pi-messages", "complete_task")).toEqual({
+			context: { messages: [], tools: [{ name: "complete_task" }] },
 			options: { reasoning: "low", toolChoice: { type: "function", function: { name: "complete_task" } } },
 		});
+	});
+
+	it("removes every stale capability from a required-tool request", () => {
+		expect(restrictToolDefinitions([
+			{ name: "read_authorized_source" },
+			{ type: "function", function: { name: "write_expected_output" } },
+			{ toolSpec: { name: "complete_task" } },
+		], "write_expected_output")).toEqual([
+			{ type: "function", function: { name: "write_expected_output" } },
+		]);
 	});
 
 	it("holds one required-tool lease for every sibling call in a provider response", () => {
