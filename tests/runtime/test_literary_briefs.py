@@ -89,11 +89,40 @@ class LiteraryBriefTests(unittest.TestCase):
 
             self.assertEqual(review["kind"], "review")
             self.assertEqual(review["candidate_evidence_ids"], ("E001",))
+            self.assertEqual(review["review_requirements"], ("检查人物因果",))
+            self.assertNotIn("语义审查", review["review_requirements"])
             self.assertEqual(state["kind"], "state-evolution")
             self.assertEqual(state["character_evidence_ids"], ("E003",))
             self.assertEqual(asset["kind"], "asset")
             self.assertEqual(asset["asset_type"], "world")
             self.assertEqual(asset_review["kind"], "review")
+
+    def test_review_brief_excludes_studio_lifecycle_language_from_legacy_assets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            context = _context()
+            context["validation_gates"] = [
+                "canon review sidecar completed",
+                "canon_review.v1 validates",
+            ]
+            context["prompt_asset"]["review_requirements"] = [
+                "Pass requires no unresolved Canon contradiction.",
+                "review conclusion is recorded",
+                "task-complete must succeed",
+            ]
+
+            brief = compile_literary_brief(
+                _task(root, route="review-and-audit", state="canon-review-agent-task"),
+                context,
+                _envelope("review", "canon-review-agent-task"),
+                (),
+                {"outputs": [{"path": "canon_review.json"}]},
+            ).as_dict()
+
+            self.assertEqual(
+                brief["review_requirements"],
+                ("Pass requires no unresolved Canon contradiction.",),
+            )
 
     def test_prompt_compiler_uses_evidence_port_and_hashes_brief(self):
         with tempfile.TemporaryDirectory() as temporary:

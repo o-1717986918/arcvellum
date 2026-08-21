@@ -153,8 +153,11 @@ def _review_brief(
             evidence, "scene", "composition_contract", "character_state", "canon",
             "mounted_style", "creative_quality_profile", "scene_context",
         ),
+        # The brief owns literary judgment. Task-level validation gates own
+        # Studio transport, schema and lifecycle checks and must not be
+        # repeated as instructions to a tool-driven Worker.
         review_requirements=_review_requirements(
-            (*_strings(asset.get("review_requirements")), *_strings(context.get("validation_gates")))
+            _strings(asset.get("review_requirements"))
         ),
         output_contract=output,
         provenance=_provenance(evidence),
@@ -260,8 +263,18 @@ def _review_requirements(values: tuple[str, ...]) -> tuple[str, ...]:
     """Keep literary review semantics, not duplicate transport receipts."""
 
     duplicate_fragments = (
+        "task-submit",
+        "task-complete",
+        "route-audit",
+        "sidecar completed",
+        "sidecar is complete",
+        "completion receipt",
+        "completion evidence",
         "cite the exact candidate path",
         "candidate_sha256 must equal",
+        "json exists",
+        "schema validates",
+        "conclusion is recorded",
         "scene_review.v1 json exists",
         "review cites exact candidate",
         "review conclusion is recorded",
