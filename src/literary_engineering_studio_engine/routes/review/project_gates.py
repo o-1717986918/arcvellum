@@ -7,6 +7,7 @@ from pathlib import Path
 from ...agent_schema import validate_payload
 from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
 from ...literary.review.longform_contract import longform_audit_gate_errors
+from ...literary.review.project_targets import project_review_repair_target_issues
 from ...task_paths import relative_path as _rel
 from ...task_paths import resolve_project_path as _resolve_project_path
 from .canon_gates import canon_lint_gate_errors
@@ -135,6 +136,14 @@ def _committee_decision_errors(
 ) -> list[str]:
     recommendation = str(payload.get("final_recommendation") or "").strip().lower()
     errors = longform_audit_file_gate_errors(root, require_clean=True) if recommendation == "approve" else []
+    errors.extend(
+        f"committee review {issue.selector}: {issue.message}"
+        for issue in project_review_repair_target_issues(
+            root,
+            payload,
+            ("action_items", "disagreements"),
+        )
+    )
     if not require_approve:
         return errors
     action_items = payload.get("action_items") if isinstance(payload.get("action_items"), list) else []

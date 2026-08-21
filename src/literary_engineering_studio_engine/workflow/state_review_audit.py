@@ -7,6 +7,7 @@ from ..agent_tasks import agent_task_completion_status
 from ..canon_evolver import canon_patch_backlog_items
 from ..literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from ..literary.review.longform_contract import longform_audit_gate_errors
+from ..literary.review.project_targets import project_review_repair_target_issues
 from .state_common import _file_step, _read_json, _rel
 def _review_audit_state(root: Path) -> dict[str, object]:
     canon_lint_json = root / "reviews" / "canon_lint.json"
@@ -284,6 +285,18 @@ def _is_recheck_required(path: Path) -> bool:
 
 def _canon_review_pass_step(root: Path, json_path: Path) -> dict[str, object]:
     payload = _read_json(json_path)
+    target_issues = project_review_repair_target_issues(
+        root,
+        payload,
+        ("recommendations",),
+    )
+    if target_issues:
+        return _invalid_review_targets_step(
+            root,
+            json_path,
+            "canon-review-agent-task",
+            target_issues,
+        )
     conclusion = str(payload.get("conclusion") or "").strip().lower()
     blocking = payload.get("blocking_issues") if isinstance(payload.get("blocking_issues"), list) else []
     warnings = payload.get("warnings") if isinstance(payload.get("warnings"), list) else []
@@ -306,6 +319,18 @@ def _canon_review_pass_step(root: Path, json_path: Path) -> dict[str, object]:
 
 def _committee_pass_step(root: Path, json_path: Path) -> dict[str, object]:
     payload = _read_json(json_path)
+    target_issues = project_review_repair_target_issues(
+        root,
+        payload,
+        ("action_items", "disagreements"),
+    )
+    if target_issues:
+        return _invalid_review_targets_step(
+            root,
+            json_path,
+            "committee-agent-task",
+            target_issues,
+        )
     recommendation = str(payload.get("final_recommendation") or "").strip().lower()
     action_items = payload.get("action_items") if isinstance(payload.get("action_items"), list) else []
     disagreements = payload.get("disagreements") if isinstance(payload.get("disagreements"), list) else []
@@ -319,5 +344,24 @@ def _committee_pass_step(root: Path, json_path: Path) -> dict[str, object]:
             ""
             if passed
             else "repair declared project targets, refresh deterministic audits, reset canon/committee evidence, and rerun both independent reviews"
+        ),
+    }
+
+
+def _invalid_review_targets_step(
+    root: Path,
+    json_path: Path,
+    step_key: str,
+    issues: list[object],
+) -> dict[str, object]:
+    messages = [str(getattr(issue, "message", issue)) for issue in issues]
+    return {
+        "key": step_key,
+        "status": "invalid",
+        "path": _rel(json_path, root),
+        "message": "; ".join(messages),
+        "next_action": (
+            "rerun the independent project review and cite only exact repair targets "
+            "that already exist in the work project"
         ),
     }

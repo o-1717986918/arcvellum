@@ -13,6 +13,15 @@ from literary_engineering_studio_engine.platform_agent_tasks import (
     write_platform_canon_review_task,
     write_platform_committee_task,
 )
+from literary_engineering_studio_engine.public.literary import (
+    project_review_repair_target_issues,
+)
+from literary_engineering_studio_engine.routes.review.project_gates import (
+    _committee_decision_errors,
+)
+from literary_engineering_studio_engine.workflow.state_review_audit import (
+    _committee_pass_step,
+)
 
 
 class ProjectReviewPromptContractTests(unittest.TestCase):
@@ -75,6 +84,97 @@ class ProjectReviewPromptContractTests(unittest.TestCase):
             validate_project_review_contract(task, sandbox, issues)
 
             self.assertTrue(any(item.path.endswith("#action_items") for item in issues))
+
+    def test_committee_rejects_invented_repair_targets_before_import(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task, sandbox, review = self._fixture(Path(temporary), committee=True)
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/committee-review-agent/v1",
+                        "final_recommendation": "approve_with_notes",
+                        "reviewers": [],
+                        "disagreements": [],
+                        "action_items": [
+                            {
+                                "target_path": "drafts/candidates/chapter10_ending.md",
+                                "action": "补足不存在的第十章。",
+                                "verification": "达到精确目标字数。",
+                            },
+                            {
+                                "target_path": "scenes/s06_consequence.md",
+                                "action": "改变六场节奏。",
+                                "verification": "节奏更丰富。",
+                            },
+                        ],
+                        "source_paths": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            issues: list[PreflightIssue] = []
+
+            validate_project_review_contract(task, sandbox, issues)
+
+            selectors = {item.path.split("#", 1)[-1] for item in issues}
+            self.assertIn("action_items[0].target_path", selectors)
+            self.assertIn("action_items[1].target_path", selectors)
+            self.assertTrue(all("does not exist" in item.message for item in issues))
+
+    def test_project_review_target_contract_accepts_existing_exact_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "plot" / "rhythm_plan.json"
+            target.parent.mkdir(parents=True)
+            target.write_text("{}\n", encoding="utf-8")
+            payload = {
+                "action_items": [
+                    {
+                        "target_path": "plot/rhythm_plan.json",
+                        "action": "调整节奏。",
+                        "verification": "节奏审计通过。",
+                    }
+                ],
+                "disagreements": [{"topic": "已解决分歧", "blocking": False}],
+            }
+
+            issues = project_review_repair_target_issues(
+                root,
+                payload,
+                ("action_items", "disagreements"),
+            )
+
+            self.assertEqual(issues, [])
+
+    def test_invalid_imported_committee_review_returns_to_agent_task(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            review = root / "reviews" / "agent" / "committee_project-final-audit.json"
+            review.parent.mkdir(parents=True)
+            payload = {
+                "final_recommendation": "revise",
+                "action_items": [
+                    {
+                        "target_path": "scenes/invented_scene.yaml",
+                        "action": "改写场景。",
+                        "verification": "缺陷消失。",
+                    }
+                ],
+                "disagreements": [],
+            }
+            review.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            step = _committee_pass_step(root, review)
+            gate_errors = _committee_decision_errors(
+                root,
+                payload,
+                require_approve=False,
+            )
+
+            self.assertEqual(step["key"], "committee-agent-task")
+            self.assertEqual(step["status"], "invalid")
+            self.assertTrue(any("does not exist" in error for error in gate_errors))
 
     def test_repair_declaring_disagreement_has_its_own_exact_error_path(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -274,6 +374,13 @@ class ProjectReviewPromptContractTests(unittest.TestCase):
             baseline_path=root / "baseline.json",
             expected_outputs=task.expected_outputs,
         )
+        for target, content in (
+            ("plot/rhythm_plan.json", "{}\n"),
+            ("canon/timeline.yaml", "events: []\n"),
+        ):
+            path = root / target
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
         return task, sandbox, review
 
 

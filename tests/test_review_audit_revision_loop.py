@@ -59,6 +59,9 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             project = root / "project"
+            target = project / "canon" / "world_rules.yaml"
+            target.parent.mkdir(parents=True)
+            target.write_text("rules: []\n", encoding="utf-8")
             task_json = self._write_task(
                 project,
                 {

@@ -11,6 +11,7 @@ import re
 from ...task_paths import read_json as _read_json
 from ...task_paths import relative_path as _rel
 from ...task_paths import resolve_project_path as _resolve_project_path
+from ...literary.review.project_targets import valid_project_review_repair_targets
 
 
 def project_review_repair_targets(
@@ -21,32 +22,7 @@ def project_review_repair_targets(
     if not review_path.is_file():
         return []
     payload = _read_json(review_path)
-    allowed_prefixes = ("canon/", "characters/", "plot/", "scenes/", "drafts/candidates/")
-    targets: list[str] = []
-    for field in fields:
-        items = payload.get(field) if isinstance(payload.get(field), list) else []
-        targets.extend(_safe_repair_targets(items, allowed_prefixes))
-    return unique(targets)
-
-
-def _safe_repair_targets(items: list[object], allowed_prefixes: tuple[str, ...]) -> list[str]:
-    targets: list[str] = []
-    allowed_suffixes = {".md", ".json", ".yaml", ".yml", ".csv"}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        target = str(item.get("target_path") or item.get("target") or "").replace("\\", "/").strip()
-        target = target.split("#", 1)[0]
-        path = Path(target)
-        if (
-            target
-            and not path.is_absolute()
-            and ".." not in path.parts
-            and target.startswith(allowed_prefixes)
-            and path.suffix.lower() in allowed_suffixes
-        ):
-            targets.append(target)
-    return targets
+    return valid_project_review_repair_targets(root, payload, fields)
 
 
 def declared_repair_targets_changed(root: Path, task: dict[str, object], label: str) -> list[str]:

@@ -43,6 +43,10 @@ from ..literary.review.reader_experience import (
     chapter_obligation_contract_issues,
     reader_experience_adherence_for_body,
 )
+from ..literary.review.project_targets import (
+    ProjectReviewTargetIssue,
+    project_review_repair_target_issues,
+)
 from ..literary.review.resolution import (
     review_new_character_issues,
     review_semantic_consistency_issues,
@@ -107,6 +111,7 @@ __all__ = [
     "CanonPatchCandidateIssue",
     "DOMAIN_REVIEW_SCHEMA",
     "IDENTITY_RESOLUTION_SCHEMA",
+    "ProjectReviewTargetIssue",
     "RECONSTRUCTION_CANDIDATE_SCHEMA",
     "REQUIRED_FIELDS",
     "SCENE_LIFECYCLE_VALUES",
@@ -152,6 +157,7 @@ __all__ = [
     "mount_style_profile_version",
     "plan_style_profile_version",
     "prepare_style_engineering_session",
+    "project_review_repair_target_issues",
     "promotion_eligibility_errors",
     "promotion_output_paths",
     "read_artifact_style_mount_snapshot",

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
+from ...literary.review.project_targets import project_review_repair_target_issues
 
 from ...agent_schema import validate_payload
 from ...agent_tasks import agent_task_completion_status
@@ -204,6 +205,14 @@ def canon_review_gate_errors(root: Path, *, require_pass: bool) -> list[str]:
         return errors
     schema_errors, _warnings = validate_payload(payload, "canon_review.v1")
     errors.extend(f"canon_review.v1 schema error at {item.get('path')}: {item.get('message')}" for item in schema_errors)
+    errors.extend(
+        f"canon review {issue.selector}: {issue.message}"
+        for issue in project_review_repair_target_issues(
+            root,
+            payload,
+            ("recommendations",),
+        )
+    )
     if require_pass:
         errors.extend(_canon_review_cleanliness_errors(payload))
     return errors

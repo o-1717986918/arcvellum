@@ -7,6 +7,10 @@ import hashlib
 import json
 from pathlib import Path
 
+from literary_engineering_studio_engine.public.literary import (
+    project_review_repair_target_issues,
+)
+
 from ..contracts import TaskPackage
 from ..sandbox import SandboxManifest
 from .common import PreflightIssue
@@ -36,7 +40,7 @@ def validate_project_review_contract(
     if state in {"canon-review-pass", "committee-pass"}:
         _validate_revision(task, sandbox, payload, relative, committee, issues)
         return
-    _validate_initial(payload, relative, committee, issues)
+    _validate_initial(task, payload, relative, committee, issues)
 
 
 def _read_review(sandbox: SandboxManifest, relative: str) -> dict[str, object] | None:
@@ -104,6 +108,7 @@ def _validate_revision_targets(
 
 
 def _validate_initial(
+    task: TaskPackage,
     payload: dict[str, object],
     relative: str,
     committee: bool,
@@ -115,22 +120,44 @@ def _validate_initial(
     if verdict not in allowed:
         _add_issue(issues, relative, verdict_field, f"审查结论必须是 {sorted(allowed)} 之一。", "如实记录结论；非通过结论本身可以完成本轮审查。")
     _validate_required_fields(payload, relative, committee, issues)
-    clean_pass = (committee and verdict == "approve") or (not committee and verdict == "pass")
-    if clean_pass:
-        return
     action_field = "action_items" if committee else "recommendations"
     actionable = _indexed_action_items(payload, action_field)
+    clean_pass = (committee and verdict == "approve") or (not committee and verdict == "pass")
+    if clean_pass and not actionable:
+        return
+    if clean_pass:
+        _add_issue(
+            issues,
+            relative,
+            action_field,
+            "通过结论不能同时保留必修动作。",
+            "如动作确为必修则使用非通过结论；如仅为可选建议则移入非阻断说明并清空动作数组。",
+        )
     if not actionable:
         _add_issue(issues, relative, action_field, "非通过结论必须提供至少一个结构化修复动作。", "为修复动作写出 target_path、action 和 verification。")
         return
-    _validate_action_targets(actionable, action_field, relative, issues)
+    _validate_action_fields(actionable, action_field, relative, issues)
+    target_fields = [action_field]
     if committee:
         disagreements = _indexed_action_items(
             payload,
             "disagreements",
             predicate=_disagreement_declares_repair,
         )
-        _validate_action_targets(disagreements, "disagreements", relative, issues)
+        _validate_action_fields(disagreements, "disagreements", relative, issues)
+        target_fields.append("disagreements")
+    for target_issue in project_review_repair_target_issues(
+        task.project_root,
+        payload,
+        tuple(target_fields),
+    ):
+        _add_issue(
+            issues,
+            relative,
+            target_issue.selector,
+            target_issue.message,
+            "从当前任务证据中选择项目里已存在的精确文件；不要编造章节、场景或候选文件名。",
+        )
 
 
 def _validate_required_fields(
@@ -185,30 +212,13 @@ def _disagreement_declares_repair(item: dict[str, object]) -> bool:
     )
 
 
-def _validate_action_targets(
+def _validate_action_fields(
     actionable: list[tuple[int, dict[str, object]]],
     collection_field: str,
     relative: str,
     issues: list[PreflightIssue],
 ) -> None:
-    allowed_prefixes = ("canon/", "characters/", "plot/", "scenes/", "drafts/candidates/")
     for index, item in actionable:
-        target = str(item.get("target_path") or item.get("target") or "").replace("\\", "/").strip()
-        target_file = target.split("#", 1)[0]
-        valid = (
-            target_file.startswith(allowed_prefixes)
-            and not Path(target_file).is_absolute()
-            and ".." not in Path(target_file).parts
-            and Path(target_file).suffix.lower() in {".md", ".json", ".yaml", ".yml", ".csv"}
-        )
-        if not valid:
-            _add_issue(
-                issues,
-                relative,
-                f"{collection_field}[{index}].target_path",
-                f"修复目标 `{target or 'missing'}` 不是允许的精确项目文件。",
-                "使用 canon/、characters/、plot/、scenes/ 或 drafts/candidates/ 下的单个文本文件路径；不能写目录或 review/workflow 路径。",
-            )
         for action_field in ("action", "verification"):
             if not str(item.get(action_field) or "").strip():
                 _add_issue(
