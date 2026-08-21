@@ -7,6 +7,7 @@ from pathlib import Path
 from ...foundation.display_cleaner import scalar_from_yaml_text
 from ...release_fingerprint import release_candidate_fingerprint
 from ...task_paths import relative_path
+from .approval_evidence import release_approval_is_current
 
 
 DELIVERY_KEYS = ("novel", "screenplay", "video_prompt_pack")
@@ -61,6 +62,7 @@ def published_release_is_current(
         approval.get("decision") == "approve",
         content_bound,
         str(approval.get("subject_sha256") or "").strip().lower() == approved,
+        release_approval_is_current(root, chapter_id, approval),
         latest.get("manifest") == relative_path(manifest, root),
     ))
     return passed, content_bound

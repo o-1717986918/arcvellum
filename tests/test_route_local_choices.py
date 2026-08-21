@@ -5,13 +5,19 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.advisor.advisor_snapshot import create_advisor_snapshot
-from literary_engineering_studio.advisor.creative_steward import _decision_evidence_packet
+from literary_engineering_studio.advisor.creative_steward import (
+    _decision_evidence_packet,
+    _decision_prompt,
+)
 from literary_engineering_studio import core_read_models
 from literary_engineering_studio_engine import project_interaction
 from literary_engineering_studio_engine import project_interaction_choices
 from literary_engineering_studio_engine import workflow_state
 from literary_engineering_studio_engine.routes.export.blueprints import (
     export_release_blueprint_for_state,
+)
+from literary_engineering_studio_engine.projections.interaction.choice_builders import (
+    approval_choice,
 )
 
 
@@ -101,6 +107,44 @@ class RouteLocalChoiceTests(unittest.TestCase):
             self.assertIn(f'<source path="exports/{chapter_id}/export_manifest.json">', packet)
             self.assertIn(f'<source path="exports/{chapter_id}/{chapter_id}_novel.md">', packet)
             self.assertIn('<source path="reviews/longform/longform_audit.json">', packet)
+
+    def test_non_final_release_choice_excludes_whole_work_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scenes = root / "scenes"
+            scenes.mkdir()
+            (scenes / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+                encoding="utf-8",
+            )
+            (scenes / "scene_0002.yaml").write_text(
+                "scene_id: scene_0002\nchapter_id: chapter_0002\n",
+                encoding="utf-8",
+            )
+
+            choice = approval_choice(
+                root,
+                "export-and-release",
+                "chapter_0001",
+                "release_approval",
+                "发布前需要你确认是否放行。",
+            )
+            self.assertEqual(choice["target"]["release_scope"], "chapter-only")
+            self.assertEqual(choice["target"]["is_final_chapter"], "false")
+            self.assertNotIn("reviews/longform/longform_audit.json", choice["source_paths"])
+            self.assertNotIn(
+                "reviews/agent/committee_project-final-audit.json",
+                choice["source_paths"],
+            )
+            prompt = _decision_prompt(choice, "完成两章作品")
+            self.assertIn("do not apply whole-work target length", prompt)
+            blueprint = export_release_blueprint_for_state(
+                root,
+                "chapter_0001",
+                "release-approval",
+                "approve current release",
+            )
+            self.assertEqual(blueprint["source_paths"], choice["source_paths"])
 
     def test_scene_choice_projection_does_not_build_the_whole_dashboard(self):
         with tempfile.TemporaryDirectory() as temporary:

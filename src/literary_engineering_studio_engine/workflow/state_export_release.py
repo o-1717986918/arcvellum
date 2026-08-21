@@ -11,7 +11,7 @@ from ..literary.export.freshness import (
     missing_export_outputs,
     published_release_is_current,
 )
-from ..release_fingerprint import release_candidate_fingerprint
+from ..literary.export.approval_evidence import release_approval_is_current
 from .state_common import _approval_record, _file_step, _read_json, _rel
 def _export_release_states(root: Path) -> list[dict[str, object]]:
     chapter_ids = list(formal_chapter_ids(root))
@@ -157,7 +157,7 @@ def _export_package_step(root: Path, chapter_id: str, manifest_path: Path) -> di
 def _release_approval_step(root: Path, run_id: str, manifest_path: Path) -> dict[str, object]:
     approval = _approval_record(root, run_id)
     decision = str(approval.get("decision") or "").strip().lower()
-    current = _approval_matches_digest(approval, release_candidate_fingerprint(root, manifest_path.parent.name))
+    current = release_approval_is_current(root, manifest_path.parent.name, approval)
     passed = decision == "approve" and current
     revision_requested = decision in {"revise", "reject"} and current
     return {
@@ -175,12 +175,6 @@ def _release_approval_step(root: Path, run_id: str, manifest_path: Path) -> dict
             else f"ask user to approve the current release candidate and record approval run_id `{run_id}`"
         ),
     }
-
-
-def _approval_matches_digest(approval: dict[str, object], digest: str) -> bool:
-    return bool(digest) and str(approval.get("subject_sha256") or "").strip().lower() == digest.lower()
-
-
 def _publish_release_step(root: Path, latest_path: Path, release_dir: Path) -> dict[str, object]:
     latest = _read_json(latest_path)
     manifest = release_dir / "publish_manifest.json"

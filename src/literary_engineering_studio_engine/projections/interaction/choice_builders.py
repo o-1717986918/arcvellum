@@ -8,7 +8,11 @@ from pathlib import Path
 
 from ...character_state_apply import state_patch_writeback_status
 from ...display_cleaner import read_json_file, truncate_text
-from ...literary.export.approval_evidence import release_approval_evidence_paths
+from ...literary.export.approval_evidence import (
+    release_approval_context_sha256,
+    release_approval_evidence_paths,
+    release_approval_scope,
+)
 from ...project_interaction_common import _make_id, _rel, _safe_approval_target, _safe_target_id
 from ...release_fingerprint import release_candidate_fingerprint
 
@@ -49,12 +53,18 @@ def approval_choice(
     if decision_type == "asset_approval":
         source_paths = asset_approval_source_paths(root, approval_target)
     elif decision_type == "release_approval":
-        source_paths = list(release_approval_evidence_paths(approval_target))
+        source_paths = list(release_approval_evidence_paths(root, approval_target))
     else:
         source_paths = ["workflow/approvals/index.jsonl"]
     target_payload = {"target_id": approval_target}
     if subject_sha256:
         target_payload["candidate_sha256"] = subject_sha256
+    if decision_type == "release_approval":
+        target_payload.update(release_approval_scope(root, approval_target))
+        target_payload["decision_context_sha256"] = release_approval_context_sha256(
+            root,
+            approval_target,
+        )
     return {
         "choice_id": _make_id("choice", decision_type, choice_target), "route": route,
         "decision_type": decision_type, "title": f"{approval_target} 等待用户审批", "summary": summary,

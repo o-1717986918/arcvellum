@@ -16,6 +16,7 @@ from ...canon_lint import build_canon_lint
 from ...chapter_pipeline import ChapterWorkspaceResult, build_chapter_workspace
 from ...export_package import build_export_package, load_export_package
 from ...release_fingerprint import release_candidate_fingerprint
+from .approval_evidence import release_approval_is_current
 
 
 @dataclass(frozen=True)
@@ -80,10 +81,12 @@ def publish_chapter(
     approval = _find_approval(root, approval_run_id)
     if (
         approval is None
-        or not approved_fingerprint
-        or str(approval.get("subject_sha256") or "").strip().lower() != approved_fingerprint
+        or str(approval.get("decision") or "").strip().lower() != "approve"
+        or not release_approval_is_current(root, chapter_id, approval)
     ) and not allow_unapproved:
-        raise RuntimeError("publish requires a current-content approve record for the exported release candidate")
+        raise RuntimeError(
+            "publish requires a current content-and-context approve record for the exported release candidate"
+        )
 
     export = (
         build_export_package(

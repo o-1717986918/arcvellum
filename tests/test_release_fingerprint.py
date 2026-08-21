@@ -4,6 +4,9 @@ import tempfile
 import unittest
 
 from literary_engineering_studio_engine.approval import record_workflow_approval
+from literary_engineering_studio_engine.literary.export.approval_evidence import (
+    release_approval_context_sha256,
+)
 from literary_engineering_studio_engine.release_fingerprint import release_candidate_fingerprint
 import literary_engineering_studio_engine.export_release_route as export_release_route
 from literary_engineering_studio_engine.workflow_state import _export_package_step, _release_approval_step
@@ -71,6 +74,47 @@ class ReleaseFingerprintTests(unittest.TestCase):
             payload["generated_at"] = "another volatile timestamp"
             manifest.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             self.assertEqual(release_candidate_fingerprint(root, "chapter_0001"), before)
+
+    def test_delegated_release_approval_requires_current_evidence_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = _write_export(root)
+            chapter = root / "plot/chapters/chapter_0001.json"
+            chapter.parent.mkdir(parents=True)
+            chapter.write_text('{"chapter_id":"chapter_0001","summary":{"ready_count":1}}\n', encoding="utf-8")
+            fingerprint = release_candidate_fingerprint(root, "chapter_0001")
+
+            record_workflow_approval(
+                root,
+                "release-chapter_0001",
+                "revise",
+                actor="delegated-agent:creative-steward",
+                subject_sha256=fingerprint,
+            )
+            self.assertEqual(
+                _release_approval_step(root, "release-chapter_0001", manifest)["status"],
+                "missing",
+            )
+
+            context = release_approval_context_sha256(root, "chapter_0001")
+            record_workflow_approval(
+                root,
+                "release-chapter_0001",
+                "approve",
+                actor="delegated-agent:creative-steward",
+                subject_sha256=fingerprint,
+                decision_context_sha256=context,
+            )
+            self.assertEqual(
+                _release_approval_step(root, "release-chapter_0001", manifest)["status"],
+                "pass",
+            )
+
+            chapter.write_text('{"chapter_id":"chapter_0001","summary":{"ready_count":2}}\n', encoding="utf-8")
+            self.assertEqual(
+                _release_approval_step(root, "release-chapter_0001", manifest)["status"],
+                "missing",
+            )
 
 
 if __name__ == "__main__":

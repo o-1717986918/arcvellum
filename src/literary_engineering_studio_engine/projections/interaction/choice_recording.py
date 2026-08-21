@@ -93,7 +93,9 @@ def materialize_approval(root: Path, record: dict[str, object]) -> str:
         raise ValueError(f"{decision_type} choice does not identify its approval target")
     result = record_workflow_approval(
         root, run_id, selected, actor=str(record.get("actor") or "user-ui"),
-        notes=str(record.get("rationale") or ""), subject_sha256=str(target.get("candidate_sha256") or ""),
+        notes=str(record.get("rationale") or ""),
+        subject_sha256=str(target.get("candidate_sha256") or ""),
+        decision_context_sha256=str(target.get("decision_context_sha256") or ""),
     )
     return _rel(result.approval_path, root)
 

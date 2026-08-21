@@ -9,7 +9,7 @@ from ...literary.export.readiness import (
     export_scene_readiness_errors,
     final_delivery_length_errors,
 )
-from ...release_fingerprint import release_candidate_fingerprint
+from ...literary.export.approval_evidence import release_approval_is_current
 from ...task_paths import relative_path as _rel
 from .evidence import approval_record_for_run, delivery_trace_hits, read_optional_json, to_int
 
@@ -132,11 +132,9 @@ def release_approval_gate_errors(root: Path, chapter_id: str) -> list[str]:
         return length_errors
     run_id = f"release-{chapter_id}"
     approval = approval_record_for_run(root, run_id)
-    fingerprint = release_candidate_fingerprint(root, chapter_id)
     if (
         str(approval.get("decision") or "") == "approve"
-        and fingerprint
-        and str(approval.get("subject_sha256") or "").lower() == fingerprint
+        and release_approval_is_current(root, chapter_id, approval)
     ):
         return []
     return [f"release approval missing, stale, or not approve for current export manifest and run_id {run_id}"]

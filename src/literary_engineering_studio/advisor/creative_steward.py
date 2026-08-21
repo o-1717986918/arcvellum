@@ -208,6 +208,8 @@ The creator has delegated this decision under a recorded policy. You are not the
 
 Creator direction: {project_direction or "No additional direction was recorded."}
 
+Decision scope: {_decision_scope_instruction(choice)}
+
 Proposal:
 {json.dumps(compact, ensure_ascii=False, indent=2)}
 
@@ -227,6 +229,22 @@ Return JSON only:
 
 Set requires_human=true when evidence conflicts, canon safety is uncertain, or options are materially underspecified. A release decision appearing in this proposal has already passed DelegationPolicy authorization; evaluate its evidence critically instead of escalating merely because it is a release. Do not manufacture confidence.
 """
+
+
+def _decision_scope_instruction(choice: dict[str, Any]) -> str:
+    target = choice.get("target") if isinstance(choice.get("target"), dict) else {}
+    scope = str(target.get("release_scope") or "").strip()
+    if scope == "chapter-only":
+        return (
+            "This approval covers only the declared non-final chapter. Judge its current delivery package; "
+            "do not apply whole-work target length or final-project completion requirements here."
+        )
+    if scope == "whole-work-final":
+        return (
+            "This is the final chapter boundary. Whole-work evidence is in scope, but deterministic gates "
+            "remain authoritative prerequisites; cite a concrete current failure before requesting revision."
+        )
+    return "Use only the declared proposal and bounded evidence; do not invent a broader project gate."
 
 
 def _decision_evidence_packet(workspace: Path, choice: dict[str, Any]) -> str:

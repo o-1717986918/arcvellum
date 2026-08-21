@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...literary.export.approval_evidence import release_approval_evidence_paths
+from ...literary.export.approval_evidence import (
+    release_approval_evidence_paths,
+    release_approval_scope,
+)
 from ...literary.export.contracts import (
     chapter_workspace_source_paths,
     export_package_source_paths,
@@ -27,7 +30,12 @@ def export_release_blueprint_for_state(
         "publish-release": _publish_release,
     }
     builder = builders.get(current_state)
-    if builder in {_chapter_workspace, _export_package, _publish_release}:
+    if builder in {
+        _chapter_workspace,
+        _export_package,
+        _release_approval,
+        _publish_release,
+    }:
         return builder(root, chapter_id)
     return builder(chapter_id) if builder else _repair(chapter_id, next_action)
 
@@ -124,17 +132,25 @@ def _export_package(root: Path, chapter_id: str) -> dict[str, object]:
     }
 
 
-def _release_approval(chapter_id: str) -> dict[str, object]:
+def _release_approval(root: Path, chapter_id: str) -> dict[str, object]:
     run_id = f"release-{chapter_id}"
+    scope = release_approval_scope(root, chapter_id)
+    scope_constraint = (
+        "This is the final formal chapter: evaluate whole-work evidence only after the deterministic whole-work target gate has passed."
+        if scope["is_final_chapter"] == "true"
+        else "This is a non-final chapter approval: do not use whole-work target length or final-project audit as a reason to revise this chapter."
+    )
     return {
         "task_type": "human-approval-boundary",
         "prompt_asset_id": "route.export-release.approval.v1",
         "command": f"Ask the user whether to approve chapter `{chapter_id}` for release; record approve decision with run_id `{run_id}`.",
-        "source_paths": list(release_approval_evidence_paths(chapter_id)),
+        "source_paths": list(release_approval_evidence_paths(root, chapter_id)),
         "expected_outputs": ["workflow/approvals/index.jsonl"],
         "hard_constraints": [
             "The executing Worker must not self-approve release publication. Approval may come from the user or a separately identified Creative Steward when the active DelegationPolicy explicitly delegates release.",
             "If the user requests revision or rejection, record that decision and return to the relevant review/export task.",
+            scope_constraint,
+            "A delegated decision must bind to the current scoped evidence context as well as the exported delivery fingerprint.",
             f"Approval run_id must be `{run_id}` so publish-chapter can verify it.",
         ],
         "style_constraints": [],

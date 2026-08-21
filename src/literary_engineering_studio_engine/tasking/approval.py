@@ -33,6 +33,7 @@ def record_workflow_approval(
     actor: str = "human",
     notes: str = "",
     subject_sha256: str = "",
+    decision_context_sha256: str = "",
 ) -> ApprovalResult:
     root = project_root.resolve()
     safe_run_id = _validate_run_id(run_id)
@@ -55,6 +56,7 @@ def record_workflow_approval(
         "recorded_at": recorded_at,
         "task_path": _rel_str(task_path, root) if task_path else "",
         "subject_sha256": subject_sha256.strip().lower(),
+        "decision_context_sha256": decision_context_sha256.strip().lower(),
     }
     line = json.dumps(record, ensure_ascii=False) + "\n"
     with approval_path.open("a", encoding="utf-8") as handle:
