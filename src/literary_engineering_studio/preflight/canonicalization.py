@@ -28,6 +28,7 @@ from .style_metadata import canonicalize_style_machine_metadata
 from ..sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.literary import REQUIRED_FIELDS
 from .completion_receipts import canonicalize_agent_completion_markers
+from .project_review_repair_scope import canonicalize_project_review_repair_scope
 from .semantic_metadata import canonicalize_semantic_artifact_metadata
 
 
@@ -42,6 +43,7 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(_canonicalize_story_architecture_metadata(task, sandbox))
     changes.extend(_canonicalize_continuity_ledger_metadata(task, sandbox))
     changes.extend(canonicalize_style_machine_metadata(task, sandbox))
+    changes.extend(canonicalize_project_review_repair_scope(task, sandbox))
     changes.extend(_canonicalize_project_review_metadata(task, sandbox))
     changes.extend(_canonicalize_agent_completion_markers(task, sandbox))
     changes.extend(

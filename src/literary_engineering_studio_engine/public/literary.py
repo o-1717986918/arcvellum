@@ -4,7 +4,9 @@ from ..foundation.draft_text import final_body_from_draft_path
 from ..literary.assets.continuity.architecture import REQUIRED_FIELDS
 from ..literary.assets.continuity.ledger import continuity_ledger_status
 from ..literary.assets.canon.contracts import (
+    SCENE_LIFECYCLE_VALUES,
     CanonPatchCandidateIssue,
+    SceneLifecycleStatus,
     canon_patch_candidate_issues,
 )
 from ..literary.assets.promotion import (
@@ -107,6 +109,8 @@ __all__ = [
     "IDENTITY_RESOLUTION_SCHEMA",
     "RECONSTRUCTION_CANDIDATE_SCHEMA",
     "REQUIRED_FIELDS",
+    "SCENE_LIFECYCLE_VALUES",
+    "SceneLifecycleStatus",
     "StyleMountPriority",
     "StyleMountScope",
     "StyleSessionConflictError",
