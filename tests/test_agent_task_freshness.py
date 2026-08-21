@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio_engine.agent_tasks import (
+    agent_task_digest,
     agent_task_completion_status,
     write_agent_completion_marker,
     write_agent_tasks,
@@ -70,6 +71,25 @@ class AgentTaskFreshnessTests(unittest.TestCase):
 
             self.assertTrue(status["complete"])
             self.assertEqual(completion_time, completion.stat().st_mtime_ns)
+
+    def test_explicit_reissue_refreshes_identity_preserving_task(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = root / "reviews" / "agent" / "canon_review.agent_tasks.md"
+            arguments = {
+                "title": "canon review",
+                "root": root,
+                "source_paths": [],
+                "tasks": [("review", "inspect current evidence")],
+            }
+            write_agent_tasks(task, **arguments)
+            original_digest = agent_task_digest(task)
+            os.utime(task, ns=(1_000_000_000, 1_000_000_000))
+
+            write_agent_tasks(task, **arguments, reissue=True)
+
+            self.assertEqual(agent_task_digest(task), original_digest)
+            self.assertGreater(task.stat().st_mtime_ns, 1_000_000_000)
 
     def test_digest_receipt_rejects_changed_task_content(self):
         with tempfile.TemporaryDirectory() as temporary:

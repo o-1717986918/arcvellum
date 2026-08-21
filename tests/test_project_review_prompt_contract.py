@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import tempfile
 import unittest
 
@@ -43,6 +44,24 @@ class ProjectReviewPromptContractTests(unittest.TestCase):
                 "minority_opinions",
             ):
                 self.assertIn(field, committee_text)
+
+    def test_project_review_sidecars_are_explicitly_reissued(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            canon = write_platform_canon_review_task(root)
+            committee = write_platform_committee_task(
+                root,
+                subject="project-final-audit",
+            )
+            old = 1_000_000_000
+            os.utime(canon.task_path, ns=(old, old))
+            os.utime(committee.task_path, ns=(old, old))
+
+            write_platform_canon_review_task(root)
+            write_platform_committee_task(root, subject="project-final-audit")
+
+            self.assertGreater(canon.task_path.stat().st_mtime_ns, old)
+            self.assertGreater(committee.task_path.stat().st_mtime_ns, old)
 
     def test_explicit_verdict_and_actionable_findings_are_normalized(self):
         with tempfile.TemporaryDirectory() as temporary:

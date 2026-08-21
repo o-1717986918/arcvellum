@@ -11,7 +11,9 @@ from literary_engineering_studio.sandbox import stage_task
 from literary_engineering_studio.preflight.service import canonicalize_task_outputs
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, validate_task_outputs
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
+from literary_engineering_studio_engine.platform_agent_tasks import write_platform_canon_review_task
 from literary_engineering_studio_engine.review_audit_route import _review_audit_blueprint_for_state
+from literary_engineering_studio_engine.routes.review.gates import review_audit_state_gate_validation
 from literary_engineering_studio_engine.routes.review.task_payload import build_review_audit_task_payload
 from literary_engineering_studio_engine.tasking.package_contract import enrich_task_payload
 from literary_engineering_studio_engine.workflow.state_review_audit import _review_audit_state
@@ -374,6 +376,22 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
 
             self.assertEqual(state["current_step"], "canon-review-task-file")
             self.assertEqual(state["steps"][2]["status"], "stale")
+
+            stale_errors, _ = review_audit_state_gate_validation(
+                root,
+                {"current_state": "canon-review-task-file"},
+            )
+            self.assertTrue(any("predates current lint" in item for item in stale_errors))
+
+            write_platform_canon_review_task(root)
+            refreshed = _review_audit_state(root)
+            fresh_errors, _ = review_audit_state_gate_validation(
+                root,
+                {"current_state": "canon-review-task-file"},
+            )
+
+            self.assertEqual(refreshed["current_step"], "canon-review-agent-task")
+            self.assertEqual(fresh_errors, [])
 
 
 if __name__ == "__main__":

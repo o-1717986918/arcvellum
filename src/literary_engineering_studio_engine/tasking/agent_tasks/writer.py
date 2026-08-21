@@ -158,6 +158,7 @@ def write_agent_tasks(
     tasks: list[tuple[str, str]],
     notes: list[str] | None = None,
     identity_path: Path | None = None,
+    reissue: bool = False,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     expanded_sources = list(source_paths)
@@ -175,6 +176,8 @@ def write_agent_tasks(
     digest = hashlib.sha256(document.replace("\r\n", "\n").encode("utf-8")).hexdigest()
     document = f"{TASK_DIGEST_PREFIX}{digest} -->\n{document}"
     if output_path.exists() and output_path.read_text(encoding="utf-8") == document:
+        if reissue:
+            output_path.touch()
         return output_path
     output_path.write_text(document, encoding="utf-8")
     return output_path

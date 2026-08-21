@@ -75,6 +75,16 @@ def _canon_review_prepare(root: Path, _task: dict[str, object]) -> list[str]:
     task_path = root / "reviews" / "agent" / "canon_review.agent_tasks.md"
     if not task_path.exists():
         errors.append(f"canon review sidecar missing: {_rel(task_path, root)}")
+    else:
+        stale_source = _newer_source(
+            task_path,
+            [root / "reviews" / "canon_lint.json", root / "reviews" / "canon_lint.md"],
+        )
+        if stale_source is not None:
+            errors.append(
+                "canon review sidecar predates current lint evidence: "
+                f"{_rel(stale_source, root)}"
+            )
     return errors
 
 
@@ -100,7 +110,34 @@ def _committee_prepare(root: Path, _task: dict[str, object]) -> list[str]:
     task_path = root / "reviews" / "agent" / "committee_project-final-audit.agent_tasks.md"
     if not task_path.exists():
         errors.append(f"committee sidecar missing: {_rel(task_path, root)}")
+    else:
+        stale_source = _newer_source(
+            task_path,
+            [
+                root / "reviews" / "agent" / "canon_review.agent_completion.json",
+                root / "reviews" / "longform" / "longform_audit.json",
+            ],
+        )
+        if stale_source is not None:
+            errors.append(
+                "committee sidecar predates current review evidence: "
+                f"{_rel(stale_source, root)}"
+            )
     return errors
+
+
+def _newer_source(target: Path, sources: list[Path]) -> Path | None:
+    if not target.is_file():
+        return None
+    target_time = target.stat().st_mtime_ns
+    return next(
+        (
+            source
+            for source in sources
+            if source.is_file() and source.stat().st_mtime_ns > target_time
+        ),
+        None,
+    )
 
 
 def _committee_execute(root: Path, _task: dict[str, object]) -> list[str]:

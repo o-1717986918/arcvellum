@@ -528,7 +528,7 @@ def write_platform_canon_review_task(root: Path) -> PlatformAgentTaskResult:
         task_path,
         title="formal canon and continuity review",
         root=root,
-        source_paths=sources,
+        source_paths=sources, reissue=True,
         notes=[
             "由平台 agent 审查 canon、角色、场景、章节和伏笔连续性。",
             "本任务不调用本地 dry-run、http-chat 或外部 agent。",
@@ -565,7 +565,7 @@ def write_platform_committee_task(
         task_path,
         title=f"formal review committee {subject}",
         root=root,
-        source_paths=source_paths,
+        source_paths=source_paths, reissue=True,
         notes=[
             "由平台 agent 扮演多个审稿视角完成综合判断。",
             "不要调用本地 dry-run、http-chat 或外部 agent。",
