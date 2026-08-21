@@ -16,6 +16,7 @@ from ...docx_export import export_markdown_to_docx
 from ...draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
 from ...flow_gates import FlowGateError
 from ...punctuation_standard import normalize_punctuation_for_delivery
+from .readiness import export_scene_readiness_errors
 
 
 EXPORT_FORMATS = {"md", "docx"}
@@ -63,7 +64,7 @@ def build_export_package(
     exportable = []
     skipped = []
     for scene in scenes:
-        if _is_export_ready(scene) or include_blocked:
+        if not export_scene_readiness_errors(root, scene) or include_blocked:
             exportable.append(scene)
         else:
             skipped.append(scene)
@@ -385,19 +386,6 @@ def _public_chapter_title(chapter_id: str) -> str:
 
 def _public_scene_label(index: int) -> str:
     return f"第{index}场"
-
-
-def _is_export_ready(scene: dict) -> bool:
-    return (
-        scene.get("status") == "ready"
-        and scene.get("review_conclusion") == "pass"
-        and scene.get("agent_review_conclusion") == "pass"
-        and scene.get("agent_review_schema_status") == "pass"
-        and scene.get("agent_review_source_match") is True
-        and not scene.get("agent_review_unresolved_notes")
-        and not scene.get("flow_gate_issues")
-        and not scene.get("readiness_issues")
-    )
 
 
 def _screenplay_body(body: str) -> str:

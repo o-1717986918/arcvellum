@@ -83,7 +83,11 @@ def _export_package(chapter_id: str) -> dict[str, object]:
             f"plot/chapters/{chapter_id}.json",
             f"drafts/chapters/{chapter_id}.md",
             "drafts/scenes",
-            "reviews/agent",
+            "drafts/candidates",
+            "drafts/revisions",
+            "drafts/promotions",
+            "reviews",
+            "style",
         ],
         "expected_outputs": expected_outputs,
         "hard_constraints": [

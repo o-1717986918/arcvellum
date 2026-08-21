@@ -8,6 +8,7 @@ import unittest
 
 from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
 from literary_engineering_studio_engine.literary.planning.chapter_pipeline import build_chapter_workspace
+from literary_engineering_studio_engine.literary.export.package import build_export_package
 from literary_engineering_studio_engine.literary.scene.promotion.historical import seal_historical_promotion
 from literary_engineering_studio_engine.literary.review.longform_contract import (
     LONGFORM_AUDIT_SCHEMA,
@@ -30,6 +31,51 @@ from literary_engineering_studio_engine.literary.assets.canon.contracts import C
 
 
 class LongformQualityContractTests(unittest.TestCase):
+    def test_export_package_blueprint_stages_sealed_readiness_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            self._write_representative_longform_inputs(project)
+            task_markdown = project / "workflow" / "tasks" / "package.agent_tasks.md"
+            task_markdown.parent.mkdir(parents=True)
+            task_markdown.write_text("# deterministic export package\n", encoding="utf-8")
+            blueprint = export_release_blueprint_for_state(
+                project,
+                "chapter_0001",
+                "export-package",
+                "build export package",
+            )
+            task = TaskPackage(
+                project_root=project,
+                task_json_path=project / "workflow" / "tasks" / "package.task.json",
+                task_markdown_path=task_markdown,
+                payload={
+                    "task_id": "export-and-release-chapter-0001-export-package",
+                    "route": "export-and-release",
+                    "current_state": "export-package",
+                    "chapter_id": "chapter_0001",
+                    **blueprint,
+                },
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="deterministic-engine",
+                materialize_agent_view=False,
+            )
+
+            staged = sandbox.control_workspace
+            for relative in (
+                "drafts/candidates/scene_0001-platform-agent.md",
+                "drafts/revisions/scene_0001_revision.md",
+                "drafts/promotions/scene_0001_promotion.json",
+                "reviews/scene_0001-review.md",
+                "reviews/agent/scene_0001_scene_review.json",
+                "style/creative_quality_profile.json",
+            ):
+                self.assertTrue((staged / relative).is_file(), relative)
+
     def test_chapter_workspace_blueprint_stages_its_full_read_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -176,6 +222,15 @@ class LongformQualityContractTests(unittest.TestCase):
             self.assertEqual(chapter.ready_count, 1)
             self.assertEqual(chapter.blocked_count, 0)
             self.assertEqual(chapter_workspace_gate_errors(root, "chapter_0001"), [])
+
+            package = build_export_package(
+                root,
+                chapter_id="chapter_0001",
+                formats="md",
+            )
+
+            self.assertEqual(package.exported_scene_count, 1)
+            self.assertEqual(package.skipped_scene_count, 0)
 
     def test_character_role_label_resolves_formal_scene_alias(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
