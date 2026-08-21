@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...agent_task_inventory import AgentTaskRecord
+from ...literary.planning.chapter_inventory import formal_chapter_files
 from ...route_audit_assets import _add_asset_route_gates
 from ...route_audit_common import _add_gate, _debug_waiver_hits
 from ...route_audit_export import (
@@ -54,7 +55,7 @@ def build_route_gates(root: Path, route: str, records: list[AgentTaskRecord]) ->
         _add_gate(gates, "scene-review-notes-resolved", unresolved_reviews == 0, "blocking", "scene review notes resolved", f"仍有 {unresolved_reviews} 个场景 review notes 未进入 revise-scene 修订闭环或缺修订报告。")
     if route == "export-and-release":
         _add_review_audit_route_gates(gates, root)
-        chapter_jsons = list((root / "plot" / "chapters").glob("*.json")) if (root / "plot" / "chapters").exists() else []
+        chapter_jsons = list(formal_chapter_files(root))
         _add_gate(gates, "chapter-workspace-json", bool(chapter_jsons), "blocking", "chapter workspace JSON exists", "先运行 chapter-workspace。")
         non_ready = _non_ready_scene_count(chapter_jsons)
         _add_gate(gates, "chapter-scenes-ready", non_ready == 0 and bool(chapter_jsons), "blocking", "chapter scenes ready", f"章节中仍有 {non_ready} 个非 ready 场景。")

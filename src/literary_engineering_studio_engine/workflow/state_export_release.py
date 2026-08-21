@@ -3,30 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..literary.planning.chapter_inventory import formal_chapter_ids
 from ..release_fingerprint import release_candidate_fingerprint
-from .state_common import _approval_record, _file_step, _read, _read_json, _rel, _scene_chapter_id
+from .state_common import _approval_record, _file_step, _read_json, _rel
 def _export_release_states(root: Path) -> list[dict[str, object]]:
-    chapter_ids = _chapter_ids(root)
+    chapter_ids = list(formal_chapter_ids(root))
     return [_export_release_state(root, chapter_id) for chapter_id in chapter_ids]
-
-
-def _chapter_ids(root: Path) -> list[str]:
-    ids: set[str] = set()
-    chapters = root / "plot" / "chapters"
-    if chapters.exists():
-        ids.update(path.stem for path in chapters.glob("*.json"))
-    scenes = root / "scenes"
-    if scenes.exists():
-        for path in scenes.glob("*.yaml"):
-            if path.name.startswith("_"):
-                continue
-            chapter_id = _scene_chapter_id(_read(path))
-            if chapter_id:
-                ids.add(chapter_id)
-    releases = root / "releases"
-    if releases.exists():
-        ids.update(path.name for path in releases.iterdir() if path.is_dir())
-    return sorted(ids) or ["chapter_0001"]
 
 
 def _export_release_state(root: Path, chapter_id: str) -> dict[str, object]:

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ...word_budget import load_word_budget_summary
+from ..planning.chapter_inventory import formal_chapter_files
 from .longform_analysis import collect_expanded_evidence, extended_summary
 from .longform_contract import LONGFORM_AUDIT_SCHEMA, longform_input_snapshot
 from .longform_graph import build_graph
@@ -136,8 +137,7 @@ def _write_outputs(
 
 
 def _chapter_files(root: Path) -> list[Path]:
-    chapter_dir = root / "plot" / "chapters"
-    return sorted(chapter_dir.glob("*.json")) if chapter_dir.exists() else []
+    return list(formal_chapter_files(root))
 
 
 def _output_paths(

@@ -175,6 +175,8 @@ def _scene_catalog(root: Path) -> list[dict[str, Any]]:
 
 def _chapter_ids(root: Path, scenes: list[dict[str, Any]]) -> list[str]:
     ids = {str(item["chapter_id"]) for item in scenes}
+    if ids:
+        return sorted(ids, key=lambda value: (_numeric_order(value, 10**9), value))
     for folder in (root / "exports", root / "releases", root / "drafts" / "chapters"):
         if not folder.exists():
             continue
