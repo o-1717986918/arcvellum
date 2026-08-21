@@ -158,6 +158,9 @@ def _derived_review_fields(
     payload: dict[str, object], workspace: Path
 ) -> dict[str, object]:
     fields: dict[str, object] = {}
+    style_notes = _unwrapped_non_blocking_style_notes(payload.get("style_notes"))
+    if style_notes is not None:
+        fields["style_notes"] = style_notes
     canon = payload.get("canon_writeback")
     status = _canon_writeback_status(canon)
     if status and isinstance(canon, dict):
@@ -170,6 +173,39 @@ def _derived_review_fields(
     if register:
         fields["new_character_register"] = register
     return fields
+
+
+def _unwrapped_non_blocking_style_notes(value: object) -> list[object] | None:
+    """Collapse one unambiguous model-authored wrapper without changing notes.
+
+    Scene Review owns ``style_notes`` as a list.  Some models wrap that list in
+    a small status object despite receiving the exact schema.  Only the shape
+    that explicitly says "non-blocking, no revision" is mechanically safe to
+    unwrap; every ambiguous or actionable shape remains for schema preflight.
+    """
+
+    if not isinstance(value, dict):
+        return None
+    allowed = {"schema", "schema_id", "status", "counts", "notes", "action"}
+    if set(value) - allowed:
+        return None
+    notes = value.get("notes")
+    if not isinstance(notes, list):
+        return None
+    status = str(value.get("status") or "").strip().lower()
+    action = str(value.get("action") or "").strip().lower()
+    if status not in {"pass", "notes", "non_blocking"}:
+        return None
+    if action not in {"", "none", "observe", "no_revision_required"}:
+        return None
+    counts = value.get("counts")
+    if counts is not None and not isinstance(counts, dict):
+        return None
+    if isinstance(counts, dict):
+        total = counts.get("total")
+        if isinstance(total, int) and not isinstance(total, bool) and total != len(notes):
+            return None
+    return list(notes)
 
 
 def _normalize_character_register(value: object, workspace: Path) -> dict[str, object]:

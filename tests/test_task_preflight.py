@@ -25,6 +25,9 @@ from literary_engineering_studio.preflight.scene import (
     _validate_candidate_language_gates,
     _word_budget_repair_instruction,
 )
+from literary_engineering_studio.preflight.scene_review_contract import (
+    validate_scene_review_contract,
+)
 from literary_engineering_studio_engine.projects.source_ingest import (
     ingest_existing_work,
 )
@@ -1059,6 +1062,134 @@ class TaskPreflightTests(unittest.TestCase):
             program = (sandbox.workspace / "AGENT_TASK.md").read_text(encoding="utf-8")
             self.assertIn("## Prepared Context Snapshot", program)
             self.assertIn("drafts/candidates/scene_0001-platform-agent.md", program)
+
+    def test_scene_review_unwraps_only_non_blocking_style_notes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            candidate_rel = "drafts/revisions/scene_0003_revision_03.md"
+            candidate = workspace / candidate_rel
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("她核对完余量，决定继续靠近失联飞船。\n", encoding="utf-8")
+            review_rel = "reviews/agent/scene_0003_scene_review.json"
+            review = workspace / review_rel
+            review.parent.mkdir(parents=True)
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0003-candidate-review",
+                    "route": "scene-development",
+                    "scene_id": "scene_0003",
+                    "current_state": "candidate-review",
+                    "task_type": "platform-agent-review",
+                    "candidate": candidate_rel,
+                    "source_paths": [candidate_rel],
+                    "expected_outputs": [review_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            def payload(style_notes):
+                return {
+                    "schema": "literary-engineering-workbench/scene-review-agent/v1",
+                    "scene_id": "scene_0003",
+                    "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                    "conclusion": "pass",
+                    "summary": "候选通过独立审查。",
+                    "blocking_issues": [],
+                    "warnings": [],
+                    "revision_actions": [],
+                    "character_logic": [],
+                    "canon_risks": [],
+                    "style_notes": style_notes,
+                    "style_adherence": {"status": "pass", "deviations": [], "revision_actions": []},
+                    "word_budget_adherence": {"status": "not_required", "detail": "fixture"},
+                    "reader_experience_adherence": {"status": "not_required", "detail": "fixture"},
+                    "narrative_rhythm_adherence": {"status": "not_applicable", "detail": "fixture"},
+                    "canon_writeback": {
+                        "status": "not_required",
+                        "canon_change": False,
+                        "candidate_patch": "",
+                        "no_canon_change_reason": "没有新增持续世界事实。",
+                    },
+                    "new_character_register": {
+                        "schema": "literary-engineering-workbench/new-character-register/v0.1",
+                        "status": "existing_only",
+                        "introduced": [],
+                        "ephemeral_waivers": [],
+                        "blocking_issues": [],
+                    },
+                    "revision_integrity": {
+                        "status": "not_applicable",
+                        "anti_evasion_checked": True,
+                        "evasion_risks_unresolved": [],
+                        "source_path": "",
+                        "source_sha256_match": False,
+                        "notes": "无需修订完整性比较。",
+                    },
+                    "source_paths": [candidate_rel],
+                }
+
+            notes = ["一处低密度比喻承担物证功能，不要求修订。", "对白节奏与人物职业一致。"]
+            review.write_text(
+                json.dumps(
+                    payload(
+                        {
+                            "schema_id": "style_notes.v1",
+                            "status": "pass",
+                            "counts": {"total": 2, "low": 2},
+                            "notes": notes,
+                            "action": "no_revision_required",
+                        }
+                    ),
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            normalized = json.loads(review.read_text(encoding="utf-8"))
+            self.assertEqual(normalized["style_notes"], notes)
+            self.assertTrue(any(item.get("field") == "style_notes" for item in changes))
+            schema_issues: list[PreflightIssue] = []
+            validate_scene_review_contract(task, sandbox, schema_issues)
+            self.assertFalse(any(item.code == "scene-review-schema-invalid" for item in schema_issues))
+
+            unsafe_wrappers = (
+                {"status": "revise_required", "notes": notes, "action": "no_revision_required"},
+                {"status": "pass", "notes": notes, "action": "revision_required"},
+                {"status": "pass", "notes": notes, "action": "no_revision_required", "decision": "revise"},
+                {"status": "pass", "notes": "not-a-list", "action": "no_revision_required"},
+            )
+            for wrapper in unsafe_wrappers:
+                with self.subTest(wrapper=wrapper):
+                    review.write_text(
+                        json.dumps(payload(wrapper), ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                    canonicalize_task_outputs(task, sandbox)
+                    unresolved = json.loads(review.read_text(encoding="utf-8"))
+                    self.assertIsInstance(unresolved["style_notes"], dict)
+                    schema_issues = []
+                    validate_scene_review_contract(task, sandbox, schema_issues)
+                    issue = next(
+                        item
+                        for item in schema_issues
+                        if item.code == "scene-review-schema-invalid"
+                        and item.path.endswith("#style_notes")
+                    )
+                    self.assertIn("JSON array", issue.repair)
+                    self.assertIn("不得概括、删除或改写", issue.repair)
 
     def test_scene_review_canon_status_is_derived_from_agent_judgment(self):
         cases = (

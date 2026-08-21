@@ -12,6 +12,17 @@ from ..sandbox import SandboxManifest
 from .common import PreflightIssue
 
 
+_TOP_LEVEL_LIST_FIELDS = {
+    "blocking_issues",
+    "warnings",
+    "revision_actions",
+    "character_logic",
+    "canon_risks",
+    "style_notes",
+    "source_paths",
+}
+
+
 def validate_scene_review_contract(
     task: TaskPackage,
     sandbox: SandboxManifest,
@@ -73,13 +84,14 @@ def _append_schema_and_semantic_issues(
 
     schema_errors, _warnings = validate_payload(payload, "scene_review.v1")
     for error in schema_errors:
+        error_path = str(error.get("path") or "schema")
+        message = str(error.get("message") or "scene review schema validation failed")
         issues.append(
             PreflightIssue(
                 "scene-review-schema-invalid",
-                f"{review_rel}#{error.get('path') or 'schema'}",
-                str(error.get("message") or "scene review schema validation failed"),
-                "读取 CLI Protected Outputs 中的 scene review sidecar 和 scene_review.v1 schema；"
-                "保留真实审查结论，仅补齐缺失字段、正确类型与固定 schema 值。",
+                f"{review_rel}#{error_path}",
+                message,
+                _schema_repair_instruction(error_path, message),
             )
         )
     for message in review_semantic_consistency_issues(payload):
@@ -102,6 +114,19 @@ def _append_schema_and_semantic_issues(
                 "既有人物不得重复登记，一次性人物必须写 waiver_reason，持续人物必须走候选资产流程。",
             )
         )
+
+
+def _schema_repair_instruction(path: str, message: str) -> str:
+    field = path.split(".", 1)[0].split("[", 1)[0]
+    if field in _TOP_LEVEL_LIST_FIELDS and "expected type list" in message.lower():
+        return (
+            f"`{field}` 必须直接是 JSON array（`[]`），不能是带 schema/status/notes 的包装对象。"
+            "若现有对象中已有同一语义的数组，只把该数组原样提升为此字段；不得概括、删除或改写其中的审查意见。"
+        )
+    return (
+        "读取 CLI Protected Outputs 中的 scene review sidecar 和 scene_review.v1 schema；"
+        "保留真实审查结论，仅补齐缺失字段、正确类型与固定 schema 值。"
+    )
 
 
 def _candidate_source(task: TaskPackage) -> str:
