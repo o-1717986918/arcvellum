@@ -9,13 +9,13 @@ from ...literary.review.context_evidence import (
     scene_review_context_declaration,
 )
 from ...tasking.context_contract import CONTEXT_CONTRACT_SCHEMA
+from ...tasking.state_contracts import SCENE_REVISION_STATES
 
 CONTEXT_CONTRACT_REVISION = "scene-v2"
 CONTEXT_CONTRACT_STATES = {
     "candidate-generation-provenance",
     "candidate-review",
-    "candidate-revision",
-    "static-revision",
+    *SCENE_REVISION_STATES,
 }
 PUNCTUATION_STANDARD = "references/punctuation-standard.md"
 
@@ -233,7 +233,7 @@ def _validate_primary_evidence(
         )
     if state == "candidate-review":
         _validate_candidate_review_evidence(task, mandatory)
-    if state in {"candidate-revision", "static-revision"}:
+    if state in SCENE_REVISION_STATES:
         revision_source = str(task.get("revision_source") or "").replace("\\", "/")
         if not revision_source or revision_source not in mandatory:
             raise ValueError(

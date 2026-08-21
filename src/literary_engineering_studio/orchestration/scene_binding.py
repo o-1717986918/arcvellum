@@ -8,6 +8,7 @@ from literary_engineering_studio_engine.public.orchestration import (
     PlanNodeKind,
     scene_plan_node_kind,
 )
+from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
 
 from ..contracts import TaskPackage
 from .chapter_binding import (
@@ -343,11 +344,7 @@ def _policy_constraints(
             *common,
             f"Use narrative distance policy: {policy.narrative_distance}.",
         )
-    if current_state in {
-        "candidate-revision",
-        "candidate-human-decision",
-        "static-revision",
-    }:
+    if current_state in {*SCENE_REVISION_STATES, "candidate-human-decision"}:
         return (
             *common,
             f"Revision policy is {policy.revision_policy}; fallback level is {policy.fallback_level}.",

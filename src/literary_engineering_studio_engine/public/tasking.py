@@ -13,6 +13,7 @@ from ..tasking.semantic_contracts import (
     semantic_artifact_template,
     validated_branch_proposal_ids,
 )
+from ..tasking.state_contracts import SCENE_CANDIDATE_STATES, SCENE_REVISION_STATES
 
 __all__ = [
     "agent_task_completion_status",
@@ -22,6 +23,8 @@ __all__ = [
     "semantic_artifact_errors",
     "semantic_artifact_relative_path",
     "semantic_artifact_template",
+    "SCENE_CANDIDATE_STATES",
+    "SCENE_REVISION_STATES",
     "validated_branch_proposal_ids",
     "write_agent_completion_marker",
 ]

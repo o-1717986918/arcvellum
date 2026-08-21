@@ -18,6 +18,7 @@ from ...scene_handoff import build_scene_handoff
 from ...story_architecture import prepare_story_architecture, prepare_story_architecture_review, story_architecture_status
 from ...workflow_runner import run_workflow
 from ...word_budget import build_word_budget
+from .length_repair import handle as handle_length_repair
 def handle(args, parser) -> int | None:
     if args.command == "orchestration-plan":
         platforms = [item.strip() for item in args.platforms.split(",")] if args.platforms else None
@@ -175,25 +176,8 @@ def handle(args, parser) -> int | None:
         print(f"promises: {promises}")
         return 0
 
-    if args.command == "longform-audit":
-        out = Path(args.out) if args.out else None
-        json_out = Path(args.json_out) if args.json_out else None
-        graph_out = Path(args.graph_out) if args.graph_out else None
-        result = build_longform_audit(
-            Path(args.project),
-            target_length=args.target_length,
-            output=out,
-            json_output=json_out,
-            graph_output=graph_out,
-        )
-        print(f"audit: {result.markdown_path}")
-        print(f"json: {result.json_path}")
-        print(f"graph: {result.graph_path}")
-        print(f"chapters: {result.chapter_count}")
-        print(f"scenes: {result.scene_count}")
-        print(f"draft_chars: {result.draft_chars}")
-        print(f"issues: {result.issue_count}")
-        return 0
+    if args.command in {"longform-audit", "plan-length-repair"}:
+        return _handle_audit_or_length_repair(args, parser)
 
     if args.command == "export-package":
         out_dir = Path(args.out_dir) if args.out_dir else None
@@ -311,3 +295,24 @@ def handle(args, parser) -> int | None:
         return 0
 
     return None
+
+
+def _handle_audit_or_length_repair(args, parser) -> int:
+    if args.command == "plan-length-repair":
+        result = handle_length_repair(args, parser)
+        return 0 if result is None else result
+    audit = build_longform_audit(
+        Path(args.project),
+        target_length=args.target_length,
+        output=Path(args.out) if args.out else None,
+        json_output=Path(args.json_out) if args.json_out else None,
+        graph_output=Path(args.graph_out) if args.graph_out else None,
+    )
+    print(f"audit: {audit.markdown_path}")
+    print(f"json: {audit.json_path}")
+    print(f"graph: {audit.graph_path}")
+    print(f"chapters: {audit.chapter_count}")
+    print(f"scenes: {audit.scene_count}")
+    print(f"draft_chars: {audit.draft_chars}")
+    print(f"issues: {audit.issue_count}")
+    return 0

@@ -5,9 +5,7 @@ from __future__ import annotations
 from ..contracts import TaskPackage
 from ..preflight.common import PreflightIssue
 from ..protocols.scene_artifacts import is_scene_revision_transaction_path
-
-
-_SCENE_REVISION_STATES = frozenset({"candidate-revision", "static-revision"})
+from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
 
 
 def agent_writable_outputs(task: TaskPackage) -> tuple[str, ...]:
@@ -67,7 +65,7 @@ def _coupled_targets(
 ) -> tuple[str, ...]:
     """Expand semantic revisions to the candidate/manifest transaction pair."""
 
-    if task.current_state not in _SCENE_REVISION_STATES:
+    if task.current_state not in SCENE_REVISION_STATES:
         return ()
     issue_paths = tuple(issue.path.partition("#")[0] for issue in issues)
     if not (

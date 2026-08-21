@@ -22,6 +22,10 @@ def build_summary(
     scene_counts = _scene_counts(scenes)
     totals = word_budget.get("totals", {}) if word_budget else {}
     totals = totals if isinstance(totals, dict) else {}
+    binding = word_budget.get("scene_inventory_binding", {}) if word_budget else {}
+    binding = binding if isinstance(binding, dict) else {}
+    actual = scene_counts["draft_chars"]
+    shortfall = max(target_length - actual, 0)
     return {
         "chapter_count": max(scene_counts["chapter_count"], len(chapter_files)),
         "scene_count": len(scenes),
@@ -32,6 +36,14 @@ def build_summary(
         "draft_chinese_chars": scene_counts["draft_chars"],
         "draft_machine_chars": scene_counts["draft_machine_chars"],
         "target_length": target_length,
+        "target_length_status": "pass" if target_length <= 0 or shortfall == 0 else "shortfall",
+        "target_length_shortfall": shortfall,
+        "target_length_completion_ratio": round(actual / target_length, 6) if target_length else 1.0,
+        "target_length_inventory_complete": bool(
+            to_int(totals.get("scene_count")) > 0
+            and to_int(binding.get("actual_scene_count")) >= to_int(totals.get("scene_count"))
+            and to_int(binding.get("missing_scene_count")) == 0
+        ),
         "ready_scene_count": scene_counts["ready_scene_count"],
         "blocked_scene_count": scene_counts["blocked_scene_count"],
         "rhythm_pass_count": scene_counts["rhythm_pass_count"],
@@ -91,6 +103,7 @@ def _overview_lines(summary: dict[str, object]) -> list[str]:
         f"- 人物档案数：{summary['character_count']}",
         f"- 地点数：{summary['location_count']}",
         f"- 正文中文内容字符：{summary['draft_chars']} / 目标 {summary['target_length']}",
+        f"- 全书目标状态：{summary.get('target_length_status', 'unknown')} / 缺口 {summary.get('target_length_shortfall', 0)}",
         f"- 机器非空白字符诊断：{summary.get('draft_machine_chars', 0)}",
         f"- 字数预算状态：{summary.get('word_budget_status', 'missing')} / 预算场景 {summary.get('word_budget_scene_count', 0)}",
         f"- 可装配场景：{summary['ready_scene_count']}",

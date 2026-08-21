@@ -38,6 +38,8 @@ EXPECTED_SYMBOLS = {
         "semantic_artifact_errors",
         "semantic_artifact_relative_path",
         "semantic_artifact_template",
+        "SCENE_CANDIDATE_STATES",
+        "SCENE_REVISION_STATES",
         "validated_branch_proposal_ids",
         "write_agent_completion_marker",
     ),

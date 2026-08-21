@@ -22,6 +22,8 @@ class RouteCycle:
     route: str
     dependency_route: bool
     owner: str
+    dependency_kind: str = ""
+    resume_route_index: int | None = None
 
 
 class RunLoopHost(Protocol):

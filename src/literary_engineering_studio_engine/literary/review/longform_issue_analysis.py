@@ -196,7 +196,47 @@ def _word_budget_issues(
             f"预算需要约 {planned_scenes} 个场景，目前仅登记 {len(scenes)} 个场景，剧情库存明显不足。",
             "先扩充分卷、分章和场景列表，再进入批量正文生成。",
         ))
+    binding = word_budget.get("scene_inventory_binding")
+    binding = binding if isinstance(binding, dict) else {}
+    actual_chars = to_int(
+        binding.get("actual_draft_chinese_chars")
+        or binding.get("actual_draft_chars")
+    )
+    missing_scenes = to_int(binding.get("missing_scene_count"))
+    actual_scenes = to_int(binding.get("actual_scene_count"))
+    target_issue = _target_length_issue(
+        target_length=target_length,
+        planned_scenes=planned_scenes,
+        actual_scenes=actual_scenes,
+        missing_scenes=missing_scenes,
+        actual_chars=actual_chars,
+    )
+    if target_issue is not None:
+        issues.append(target_issue)
     return issues
+
+
+def _target_length_issue(
+    *,
+    target_length: int,
+    planned_scenes: int,
+    actual_scenes: int,
+    missing_scenes: int,
+    actual_chars: int,
+) -> LongformIssue | None:
+    inventory_complete = (
+        target_length > 0
+        and planned_scenes > 0
+        and actual_scenes >= planned_scenes
+        and missing_scenes == 0
+    )
+    if not inventory_complete or actual_chars >= target_length:
+        return None
+    return LongformIssue(
+        "high", "target_length_shortfall", "drafts/scenes",
+        f"全书正文为 {actual_chars} 个中文内容字符，低于明确目标 {target_length}，缺口 {target_length - actual_chars}。",
+        "生成正式目标长度修订计划，把缺口分配到有叙事容量的场景；逐场走主 Agent 修订、独立复审、晋升和连续性闭环，禁止注水或用单场容差替代全书目标。",
+    )
 
 
 def _scale_progress_issues(scenes: list[LongformSceneRecord], target_length: int) -> list[LongformIssue]:

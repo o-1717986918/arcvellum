@@ -13,6 +13,7 @@ from typing import Any
 from ..creative_steward import CreativeSteward
 from ..project_manager import read_directions
 from literary_engineering_studio_engine.public.workflow import build_workflow_state
+from literary_engineering_studio_engine.public.literary import target_length_repair_pending
 
 
 PROGRESS_ROOTS = (
@@ -54,6 +55,15 @@ def _pending_asset_dependency(project: Path) -> bool:
         and str(item.get("status") or "") != "ready"
         for item in assets
     )
+
+
+def _pending_target_length_dependency(project: Path) -> bool:
+    """Return whether final delivery must revisit formal scene development."""
+
+    try:
+        return target_length_repair_pending(project)
+    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError):
+        return False
 
 
 def _validate_autopilot_project(project: Path, runtime: str) -> None:

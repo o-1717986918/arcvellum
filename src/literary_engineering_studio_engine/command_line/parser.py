@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-
 from ..agent_provider import AGENT_PROVIDERS
 from ..asset_workshop import ASSET_TYPES
 from .policy import FORMAL_HELP_COMMANDS, FORMAL_HELP_METAVAR
@@ -11,6 +10,7 @@ from ..docx_export import DOCX_KINDS
 from ..knowledge_store import KNOWLEDGE_BACKENDS
 from ..source_ingest import INGEST_MODES
 from ..workflow_runner import WORKFLOW_MODES
+from .length_repair_parser import add_length_repair_parser
 from .parser_style import register_style_commands
 def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -568,7 +568,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     longform.add_argument("--out", default="", help="Output audit markdown path.")
     longform.add_argument("--json-out", default="", help="Output audit JSON path.")
     longform.add_argument("--graph-out", default="", help="Output lightweight graph JSON path.")
-
+    add_length_repair_parser(sub)
     export = sub.add_parser("export-package", help="Export a chapter as Markdown and optional DOCX artifacts.")
     export.add_argument("project", help="Work project directory.")
     export.add_argument("--chapter-id", default="chapter_0001")

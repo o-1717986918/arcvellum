@@ -15,6 +15,19 @@ from ...task_paths import relative_path as _rel
 from ...scene_route_support import _read_optional_json
 
 
+def branch_proposal_count(root: Path, scene_id: str) -> int:
+    """Return the exact count already issued by the branch manifest."""
+
+    payload, _error = _read_optional_json(
+        root / "branches" / scene_id / "branch_manifest.json"
+    )
+    try:
+        count = int(payload.get("branch_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return count if 2 <= count <= 5 else 0
+
+
 def branch_manifest_gate_errors(root: Path, scene_id: str, *, require_agent_proposals: bool = False) -> list[str]:
     path = root / "branches" / scene_id / "branch_manifest.json"
     payload, error = _read_optional_json(path)

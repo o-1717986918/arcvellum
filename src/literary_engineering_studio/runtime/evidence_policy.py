@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ..contracts import TaskPackage
+from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
 
 
 class EvidenceDisposition(str, Enum):
@@ -106,7 +107,7 @@ def _prose_evidence_policy(
     task: TaskPackage,
     path: str,
 ) -> EvidencePolicyDecision:
-    if task.current_state.casefold() in {"candidate-revision", "static-revision"}:
+    if task.current_state.casefold() in SCENE_REVISION_STATES:
         return _revision_evidence_policy(task, path)
     scene_id = _scene_id(task)
     on_demand = {

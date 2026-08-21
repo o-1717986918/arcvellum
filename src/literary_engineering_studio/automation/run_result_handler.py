@@ -12,6 +12,7 @@ from ..orchestration import RecoveryDecision, RecoveryStep, recovery_step
 from ..runtime.worker import WorkerRunResult
 from .campaign_runtime import CampaignRuntimeCoordinator, FormalProgressEvidence
 from .policy import DelegationPolicy, next_revision_count
+from .route_dependencies import dependency_label, dependency_pending
 from .run_result_contracts import RouteCycle, RunLoopHost
 from .support import _now, _operational_decision, _project_progress_fingerprint
 
@@ -34,6 +35,7 @@ class ClaimedRunResultHandler:
         steward: CreativeSteward,
         stop: threading.Event,
         dependency_probe: Callable[[Path], bool],
+        repair_probe: Callable[[Path], bool] | None = None,
         campaign: CampaignRuntimeCoordinator | None,
     ) -> None:
         self.host = host
@@ -43,6 +45,7 @@ class ClaimedRunResultHandler:
         self.steward = steward
         self.stop = stop
         self.dependency_probe = dependency_probe
+        self.repair_probe = repair_probe or (lambda _project: False)
         self.campaign = campaign
         self.failure_by_task: dict[str, int] = {}
         self.transport_failure_by_task: dict[str, int] = {}
@@ -150,19 +153,32 @@ class ClaimedRunResultHandler:
 
     def _handle_route_ready(self, cycle: RouteCycle, result: WorkerRunResult) -> bool:
         if cycle.dependency_route:
-            if self.dependency_probe(self.project):
+            if dependency_pending(
+                self.project,
+                cycle,
+                asset_probe=self.dependency_probe,
+                length_repair_probe=self.repair_probe,
+            ):
                 return self.host._register_no_progress(
                     self.run_id,
                     result.task_id or f"{cycle.route}:dependency",
                     cycle.route,
-                    "依赖路线报告完成，但候选资产门禁仍未解除。",
+                    f"依赖路线报告完成，但{dependency_label(cycle)}仍未解除。",
                 )
             self.host.runs.append_autopilot_event(
                 self.run_id,
                 "route.dependency_ready",
-                {"route": cycle.route, "resume_route": cycle.planned_route},
+                {
+                    "route": cycle.route,
+                    "resume_route": cycle.planned_route,
+                    "dependency_kind": cycle.dependency_kind,
+                },
             )
-            self._reset_route_progress(cycle.route_index)
+            self._reset_route_progress(
+                cycle.resume_route_index
+                if cycle.resume_route_index is not None
+                else cycle.route_index
+            )
             return False
         self.host.runs.append_autopilot_event(
             self.run_id, "route.ready", {"route": cycle.route}

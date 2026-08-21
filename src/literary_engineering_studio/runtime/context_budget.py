@@ -9,6 +9,7 @@ import json
 from typing import Any, Mapping
 
 from ..contracts import TaskPackage
+from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
 from .context_rollout import (
     ContextRolloutRejected,
     resolve_context_rollout,
@@ -237,7 +238,7 @@ def classify_context_task(task: TaskPackage) -> ContextTaskKind:
     if (
         "prose" in task_type
         or "generation-agent-task" in state
-        or state in {"candidate-revision", "static-revision"}
+        or state in SCENE_REVISION_STATES
     ):
         return ContextTaskKind.PROSE
     route_kind = _route_task_kind(route, haystack)

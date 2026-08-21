@@ -26,6 +26,7 @@ _STATE_NODE_KINDS = {
     "candidate-revision": PlanNodeKind.REVISION,
     "candidate-human-decision": PlanNodeKind.REVISION,
     "static-revision": PlanNodeKind.REVISION,
+    "target-length-revision": PlanNodeKind.REVISION,
     "state-patch-json": PlanNodeKind.STATE_EVOLUTION,
     "state-agent-task": PlanNodeKind.STATE_EVOLUTION,
     "state-patch-approval": PlanNodeKind.STATE_EVOLUTION,

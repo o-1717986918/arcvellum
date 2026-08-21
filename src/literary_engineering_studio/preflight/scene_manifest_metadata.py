@@ -10,6 +10,7 @@ from typing import Any, Callable
 from ..contracts import TaskPackage
 from ..protocols.scene_artifacts import is_scene_revision_candidate_path
 from ..sandbox import SandboxManifest
+from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
 from .style_snapshot import prompt_style_snapshot
 
 
@@ -48,7 +49,7 @@ def canonicalize_scene_revision_manifest(
     read_object: ReadObject,
     session_identity: SessionIdentity,
 ) -> list[dict[str, str]]:
-    if task.current_state not in {"candidate-revision", "static-revision"}:
+    if task.current_state not in SCENE_REVISION_STATES:
         return []
     candidate_rel, manifest_rel, prompt_rel, report_rel = scene_revision_paths(task)
     if not candidate_rel or not manifest_rel:

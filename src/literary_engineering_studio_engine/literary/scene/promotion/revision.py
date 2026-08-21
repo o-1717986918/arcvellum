@@ -32,6 +32,7 @@ from ...style.snapshot import (
     active_style_prompt_path,
 )
 from .revision_contract import revision_source_requires_anti_evasion_rows
+from .length_repair import target_length_instruction, target_length_repair_input
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,7 @@ def _prompt_manifest(
     draft_text = draft_path.read_text(encoding="utf-8", errors="ignore")
     body = final_body_from_draft_text(draft_text)
     review_payload = _read_json(review_path) if review_path and review_path.suffix.lower() == ".json" else {}
+    target_length_repair = target_length_repair_input(review_payload, scene_id)
     style_adherence = review_payload.get("style_adherence") if isinstance(review_payload.get("style_adherence"), dict) else {}
     quality_profile = load_creative_quality_profile(root)
     anti_evasion_rows_required = revision_source_requires_anti_evasion_rows(
@@ -170,6 +172,7 @@ def _prompt_manifest(
             "style_notes": _json_list(review_payload.get("style_notes")),
             "style_adherence": style_adherence,
             "blocking_issues": _json_list(review_payload.get("blocking_issues")),
+            "target_length_repair": target_length_repair,
         },
         "generation_standards": {
             "style_mount_snapshot": style_mount_snapshot,
@@ -185,6 +188,7 @@ def _prompt_manifest(
             "anti_evasion_rows_required": anti_evasion_rows_required,
             "output_boundary": "修订候选不得写入 AGENT_TASK、prompt manifest、canon 解释、审查过程或内部 scene 编号。",
             "notes_resolution": "逐条处理 revision_actions / warnings / style_notes / style_adherence；无法处理时写入 waiver reason。",
+            "target_length_repair": target_length_repair,
         },
         "sources": [{"path": _rel(path, root), "chars": len(_read(path))} for path in sources],
     }
@@ -206,6 +210,12 @@ def _write_revision_task(
     anti_evasion_rows_required = bool(
         prompt_payload["generation_standards"]["anti_evasion_rows_required"]
     )
+    target_length_repair = prompt_payload["generation_standards"].get(
+        "target_length_repair"
+    )
+    if not isinstance(target_length_repair, dict):
+        target_length_repair = {}
+    length_instruction = target_length_instruction(target_length_repair)
     source_paths = list(sources)
     source_paths.append(prompt_manifest)
     write_agent_tasks(
@@ -237,7 +247,7 @@ def _write_revision_task(
             ),
             (
                 "生成修订候选",
-                f"""创建或覆盖 `{_rel(candidate, root)}`。必须包含 `## 修订正文候选`、`## 状态变化候选`、`## 新角色候选登记`、`## 需要人工确认`。正文必须执行 mounted style / style prompt、长篇字数预算、标准中文标点、降低 AI 腔约束、反规避协议、新角色登记契约和 review notes。不得输出工作流、自检表、prompt manifest、AGENT_TASK、canon 解释或 scene 编号。""",
+                f"""创建或覆盖 `{_rel(candidate, root)}`。必须包含 `## 修订正文候选`、`## 状态变化候选`、`## 新角色候选登记`、`## 需要人工确认`。正文必须执行 mounted style / style prompt、长篇字数预算、标准中文标点、降低 AI 腔约束、反规避协议、新角色登记契约和 review notes。{length_instruction}不得输出工作流、自检表、prompt manifest、AGENT_TASK、canon 解释或 scene 编号。""",
             ),
             (
                 "写入修订报告",

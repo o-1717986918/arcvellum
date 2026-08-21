@@ -15,24 +15,8 @@ from ...scene_route_support import (
     _read_text, _unique,
 )
 from .writeback_blueprints import SceneWritebackContext, writeback_blueprint_for_state
-
-
-def _branch_proposal_count(root: Path, scene_id: str) -> int:
-    """Return the exact count already issued by the branch manifest.
-
-    The Creative Policy Graph may choose any supported count.  Downstream
-    task prose must repeat that decision instead of publishing a conflicting
-    range that invites the Worker to guess.
-    """
-
-    payload, _error = _read_optional_json(
-        root / "branches" / scene_id / "branch_manifest.json"
-    )
-    try:
-        count = int(payload.get("branch_count") or 0)
-    except (TypeError, ValueError):
-        return 0
-    return count if 2 <= count <= 5 else 0
+from .branch_contract import branch_proposal_count as issued_branch_proposal_count
+from .length_repair import target_length_revision_entry
 
 
 def _state_patch_character_files(root: Path, state_patch: str) -> list[str]:
@@ -132,7 +116,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     context = f"memory/context_packets/{scene_id}.md"
     context_trace = f"memory/context_packets/{scene_id}.trace.json"
     branch_dir = f"branches/{scene_id}"
-    branch_proposal_count = _branch_proposal_count(root, scene_id)
+    branch_proposal_count = issued_branch_proposal_count(root, scene_id)
     branch_count_rule = (
         f"Write exactly {branch_proposal_count} scene-specific proposals, matching branch_manifest.json branch_count."
         if branch_proposal_count
@@ -157,7 +141,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     ).replace("\\", "/")
     if Path(revision_source).is_absolute():
         revision_source = _rel(Path(revision_source), root)
-    if current_state == "static-revision":
+    if current_state in {"static-revision", "target-length-revision"}:
         revision_source = f"drafts/scenes/{scene_id}.md"
     revision = _next_revision_base(root, scene_id, revision_source)
     state_patch = f"characters/state_patches/{scene_id}_state_patch"
@@ -177,9 +161,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         if (root / relative).is_file()
     ]
     direction_sources = _matching_revision_choice_sources(
-        root,
-        scene_id,
-        revision_source,
+        root, scene_id, revision_source,
     )
     common_sources = [scene_rel]
     context_sources = _context_source_paths(root, scene_rel)
@@ -786,6 +768,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "next_allowed_states": ["candidate-review"],
         },
     }
+    table.update(target_length_revision_entry(root, scene_id, scene_rel, revision_source, revision, scene_runtime_sources, table["static-revision"]))
     default = {
         "task_type": "manual-route-repair",
         "prompt_asset_id": "route.scene-development.repair.v1",

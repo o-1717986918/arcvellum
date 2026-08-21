@@ -20,6 +20,7 @@ from literary_engineering_studio.automation.run_result_handler import (
     ClaimedRunResultHandler,
     RouteCycle,
 )
+from literary_engineering_studio.automation.run_loop import ClaimedRunLoop
 from literary_engineering_studio.creative_steward import (
     _decision_evidence_packet,
     _decision_prompt,
@@ -1297,6 +1298,58 @@ class AutopilotTests(unittest.TestCase):
             events = store.autopilot_events_since(run["run_id"])
             self.assertTrue(any(event["event"] == "route.dependency_entered" for event in events))
             self.assertTrue(any(event["event"] == "route.dependency_ready" for event in events))
+
+    def test_export_length_repair_rewinds_through_scene_and_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            host = MagicMock()
+            host.runs.read_autopilot_run.return_value = {}
+            loop = ClaimedRunLoop(
+                host,
+                run_id="autopilot-length-repair",
+                project=project,
+                policy=DelegationPolicy(default_policy("full_auto")),
+                steward=MagicMock(),
+                stop=threading.Event(),
+                route_order=(
+                    "scene-development",
+                    "review-and-audit",
+                    "export-and-release",
+                ),
+                dependency_probe=lambda _project: False,
+                repair_probe=lambda _project: True,
+            )
+
+            cycle = loop._enter_route(
+                {"current_route": "export-and-release", "current_task_id": "old"},
+                2,
+            )
+
+            self.assertEqual(cycle.route, "scene-development")
+            self.assertEqual(cycle.planned_route, "export-and-release")
+            self.assertEqual(cycle.dependency_kind, "target-length-repair")
+            self.assertEqual(cycle.resume_route_index, 1)
+
+            loop.results.repair_probe = lambda _project: False
+            result = WorkerRunResult(
+                "route_ready",
+                project,
+                cycle.route,
+                "",
+                "pi-worker",
+                None,
+                None,
+                "ready",
+            )
+            self.assertFalse(loop.results._handle_route_ready(cycle, result))
+            self.assertEqual(
+                host.runs.update_autopilot_run.call_args.kwargs["route_index"],
+                1,
+            )
+            event = host.runs.append_autopilot_event.call_args.args
+            self.assertEqual(event[1], "route.dependency_ready")
+            self.assertEqual(event[2]["dependency_kind"], "target-length-repair")
 
 
 if __name__ == "__main__":

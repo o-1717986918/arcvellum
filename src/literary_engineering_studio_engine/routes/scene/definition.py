@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 
 from .context_contract import scene_context_contract
+from ...tasking.state_contracts import SCENE_REVISION_STATES
 from ...literary.review.chapter_obligation_machine import chapter_obligation_machine_contract
 from ...scene_route_blueprints import _blueprint_for_state
 from ...scene_route_gates import (
@@ -98,7 +99,7 @@ def _apply_blueprint_contracts(
     semantic = semantic_artifact_contract(current_state, scene_id)
     if semantic is not None:
         payload["semantic_artifact"] = semantic
-    if current_state in {"candidate-revision", "static-revision"} and blueprint.get("revision_source"):
+    if current_state in SCENE_REVISION_STATES and blueprint.get("revision_source"):
         source = _resolve_project_path(root, str(blueprint["revision_source"]))
         if source.is_file():
             payload["candidate_sha256_before_revision"] = _file_sha256(source)
@@ -143,9 +144,8 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         "generation-agent-task",
         "candidate-review",
         "agent-review-task",
-        "candidate-revision",
+        *SCENE_REVISION_STATES,
         "static-review",
-        "static-revision",
     }
     if current_state == "reader-experience-contract":
         return _reader_experience_reading_paths(root, scene_id)
@@ -169,7 +169,7 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
     if current_state == "candidate-review":
         return _candidate_review_reading_paths(root, source_paths, scene_id)
 
-    if current_state in {"candidate-revision", "static-revision"}:
+    if current_state in SCENE_REVISION_STATES:
         # revise-scene receives these paths as explicit command arguments before
         # the main Agent starts.  Keep them in the same curated set the sandbox
         # stages, otherwise the CLI can generate an Agent task package that its

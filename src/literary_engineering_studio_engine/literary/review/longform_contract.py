@@ -48,6 +48,7 @@ STRUCTURAL_BLOCKING_CATEGORIES = frozenset(
         "narrative_rhythm_curve",
         "scene_inventory",
         "scene_schema",
+        "target_length_shortfall",
         "viewpoint_continuity",
         "word_budget",
     }

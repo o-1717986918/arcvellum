@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ...creative_quality import load_creative_quality_profile
+from .readiness import require_final_delivery_length
 
 from ...canon_lint import build_canon_lint
 from ...chapter_pipeline import ChapterWorkspaceResult, build_chapter_workspace
@@ -53,9 +54,7 @@ def publish_chapter(
     if release_dir.exists() and any(release_dir.iterdir()) and not overwrite:
         raise FileExistsError(f"release directory already exists: {release_dir}")
 
-    canon = build_canon_lint(root)
-    if canon.blocking_count:
-        raise RuntimeError(f"canon-lint has blocking issues: {canon.blocking_count}")
+    canon = _validated_publish_readiness(root, chapter_id)
 
     chapter_json = root / "plot" / "chapters" / f"{chapter_id}.json"
     chapter_markdown = root / "drafts" / "chapters" / f"{chapter_id}.md"
@@ -77,7 +76,6 @@ def publish_chapter(
         raise RuntimeError(f"chapter has no scenes: {chapter_id}")
     if chapter.blocked_count:
         raise RuntimeError(f"chapter has non-ready scenes: {chapter.blocked_count}")
-
     approved_fingerprint = release_candidate_fingerprint(root, chapter_id)
     approval = _find_approval(root, approval_run_id)
     if (
@@ -197,6 +195,14 @@ def publish_chapter(
         approval_run_id=str((approval or {}).get("run_id", "")),
         status=str(manifest["status"]),
     )
+
+
+def _validated_publish_readiness(root: Path, chapter_id: str):
+    canon = build_canon_lint(root)
+    if canon.blocking_count:
+        raise RuntimeError(f"canon-lint has blocking issues: {canon.blocking_count}")
+    require_final_delivery_length(root, chapter_id)
+    return canon
 
 
 def _copy_exports(root: Path, release_dir: Path, export) -> dict[str, str]:

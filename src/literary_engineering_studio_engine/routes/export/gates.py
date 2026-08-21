@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from ...literary.export.readiness import export_scene_readiness_errors
+from ...literary.export.readiness import (
+    export_scene_readiness_errors,
+    final_delivery_length_errors,
+)
 from ...release_fingerprint import release_candidate_fingerprint
 from ...task_paths import relative_path as _rel
 from .evidence import approval_record_for_run, delivery_trace_hits, read_optional_json, to_int
@@ -124,6 +127,9 @@ def _docx_output_errors(root: Path, outputs: dict[str, object]) -> list[str]:
 
 
 def release_approval_gate_errors(root: Path, chapter_id: str) -> list[str]:
+    length_errors = final_delivery_length_errors(root, chapter_id)
+    if length_errors:
+        return length_errors
     run_id = f"release-{chapter_id}"
     approval = approval_record_for_run(root, run_id)
     fingerprint = release_candidate_fingerprint(root, chapter_id)
@@ -143,7 +149,8 @@ def publish_release_gate_errors(root: Path, chapter_id: str) -> list[str]:
     payload, error = read_optional_json(manifest)
     if error:
         return [error]
-    errors = _publish_manifest_errors(payload)
+    errors = final_delivery_length_errors(root, chapter_id)
+    errors.extend(_publish_manifest_errors(payload))
     errors.extend(_published_output_errors(root, payload))
     latest_payload, latest_error = read_optional_json(latest)
     if latest_error:

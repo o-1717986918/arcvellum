@@ -18,12 +18,38 @@ def export_release_blueprint_for_state(
     builders = {
         "chapter-workspace": _chapter_workspace,
         "export-package": _export_package,
+        "target-length-repair-plan": _target_length_repair_plan,
         "release-approval": _release_approval,
         "release-revision-required": _release_revision,
         "publish-release": _publish_release,
     }
     builder = builders.get(current_state)
     return builder(chapter_id) if builder else _repair(chapter_id, next_action)
+
+
+def _target_length_repair_plan(_chapter_id: str) -> dict[str, object]:
+    return {
+        "task_type": "deterministic-cli",
+        "prompt_asset_id": "route.export-release.length-repair.v1",
+        "command": "python -m literary_engineering_studio_engine plan-length-repair <project>",
+        "source_paths": ["project.yaml", "plot/word_budget", "scenes", "drafts/scenes"],
+        "expected_outputs": [
+            "reviews/longform/target_length_repair.json",
+            "reviews/longform/target_length_repair.md",
+        ],
+        "hard_constraints": [
+            "Allocate only the exact whole-work Chinese-content shortfall.",
+            "Prefer scenes below their own target and never exceed scene max_chinese_chars.",
+            "This deterministic task plans repair; it does not write or approve prose.",
+        ],
+        "style_constraints": [],
+        "validation_gates": [
+            "repair plan binds to current word budget",
+            "allocated growth equals shortfall",
+            "every allocation stays within scene capacity",
+        ],
+        "next_allowed_states": ["target-length-repair-scenes"],
+    }
 
 
 def _chapter_workspace(chapter_id: str) -> dict[str, object]:

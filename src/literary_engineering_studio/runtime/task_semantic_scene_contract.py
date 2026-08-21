@@ -6,6 +6,7 @@ from typing import Any
 
 from ..contracts import TaskPackage
 from ..protocols.scene_artifacts import is_scene_revision_manifest_path
+from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
 
 
 def scene_revision_contract(
@@ -13,7 +14,7 @@ def scene_revision_contract(
     current_state: str,
     scene_id: str,
 ) -> dict[str, Any]:
-    if current_state not in {"candidate-revision", "static-revision"}:
+    if current_state not in SCENE_REVISION_STATES:
         return {}
     path = next(
         (item for item in task.expected_outputs if is_scene_revision_manifest_path(item)),

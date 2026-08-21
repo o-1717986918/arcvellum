@@ -16,7 +16,9 @@ from ..advisor.creative_steward import CreativeSteward
 from ..runtime.worker import WorkerRunResult
 from .campaign_runtime import CampaignRuntimeCoordinator
 from .policy import DelegationPolicy
+from .route_dependencies import resolve_route_cycle
 from .run_result_handler import ClaimedRunResultHandler, RouteCycle, RunLoopHost
+from .support import _pending_target_length_dependency
 
 
 class ClaimedRunLoop:
@@ -33,6 +35,7 @@ class ClaimedRunLoop:
         stop: threading.Event,
         route_order: tuple[str, ...],
         dependency_probe: Callable[[Path], bool],
+        repair_probe: Callable[[Path], bool] | None = None,
         campaign: CampaignRuntimeCoordinator | None = None,
     ) -> None:
         self.host = host
@@ -43,6 +46,7 @@ class ClaimedRunLoop:
         self.stop = stop
         self.route_order = route_order
         self.dependency_probe = dependency_probe
+        self.repair_probe = repair_probe or _pending_target_length_dependency
         self.campaign = campaign
         self.results = ClaimedRunResultHandler(
             host,
@@ -52,6 +56,7 @@ class ClaimedRunLoop:
             steward=steward,
             stop=stop,
             dependency_probe=dependency_probe,
+            repair_probe=self.repair_probe,
             campaign=campaign,
         )
 
@@ -110,35 +115,32 @@ class ClaimedRunLoop:
         return True
 
     def _enter_route(self, run: dict[str, Any], route_index: int) -> RouteCycle:
-        planned_route = self.route_order[route_index]
-        dependency_route = (
-            planned_route == "scene-development"
-            and self.dependency_probe(self.project)
+        cycle = resolve_route_cycle(
+            self.project,
+            self.route_order,
+            route_index,
+            asset_probe=self.dependency_probe,
+            length_repair_probe=self.repair_probe,
+            owner=f"autopilot:{self.run_id}",
         )
-        route = "character-and-world-assets" if dependency_route else planned_route
-        route_changed = str(run.get("current_route") or "") != route
+        route_changed = str(run.get("current_route") or "") != cycle.route
         self.host.runs.update_autopilot_run(
             self.run_id,
-            current_route=route,
+            current_route=cycle.route,
             current_task_id="" if route_changed else str(run.get("current_task_id") or ""),
             route_index=route_index,
         )
         if route_changed:
-            data = {"route": route}
-            if dependency_route:
-                data["resume_route"] = planned_route
+            data = {"route": cycle.route}
+            if cycle.dependency_route:
+                data["resume_route"] = cycle.planned_route
+                data["dependency_kind"] = cycle.dependency_kind
             self.host.runs.append_autopilot_event(
                 self.run_id,
-                "route.dependency_entered" if dependency_route else "route.entered",
+                "route.dependency_entered" if cycle.dependency_route else "route.entered",
                 data,
             )
-        return RouteCycle(
-            route_index=route_index,
-            planned_route=planned_route,
-            route=route,
-            dependency_route=dependency_route,
-            owner=f"autopilot:{self.run_id}",
-        )
+        return cycle
 
     def _proactive_choice_stopped(self, cycle: RouteCycle) -> bool:
         handled = self.host._resolve_proactive_choice(

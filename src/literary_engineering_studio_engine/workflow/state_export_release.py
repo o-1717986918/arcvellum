@@ -3,7 +3,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..literary.planning.chapter_inventory import formal_chapter_ids
+from ..literary.planning.chapter_inventory import formal_chapter_ids, is_final_chapter
+from ..literary.planning.length_repair import target_length_repair_status
+from ..literary.export.freshness import (
+    chapter_workspace_is_fresh,
+    export_package_is_fresh,
+    missing_export_outputs,
+    published_release_is_current,
+)
 from ..release_fingerprint import release_candidate_fingerprint
 from .state_common import _approval_record, _file_step, _read_json, _rel
 def _export_release_states(root: Path) -> list[dict[str, object]]:
@@ -21,6 +28,7 @@ def _export_release_state(root: Path, chapter_id: str) -> dict[str, object]:
     steps = [
         _chapter_workspace_step(root, chapter_id, chapter_json, chapter_md),
         _export_package_step(root, chapter_id, export_manifest),
+        _target_length_step(root, chapter_id),
         _release_approval_step(root, approval_run_id, export_manifest),
         _publish_release_step(root, latest, release_dir),
     ]
@@ -35,6 +43,55 @@ def _export_release_state(root: Path, chapter_id: str) -> dict[str, object]:
         "steps": steps,
     }
 
+def _target_length_step(root: Path, chapter_id: str) -> dict[str, object]:
+    if not is_final_chapter(root, chapter_id):
+        return {
+            "key": "target-length-gate",
+            "status": "pass",
+            "path": "plot/word_budget/word_budget.json",
+            "message": "whole-work target is enforced at the final formal chapter",
+            "next_action": "",
+        }
+    repair = target_length_repair_status(root)
+    length = repair["delivery_length"]
+    if length["status"] == "pass":
+        return {
+            "key": "target-length-gate",
+            "status": "pass",
+            "path": "plot/word_budget/word_budget.json",
+            "message": f"actual={length['actual_chinese_chars']}; target={length['target_chinese_chars']}",
+            "next_action": "",
+        }
+    if repair["status"] == "insufficient_capacity":
+        return {
+            "key": "target-length-capacity-blocked",
+            "status": "blocked",
+            "path": str(repair["path"]),
+            "message": (
+                f"whole-work shortfall={length['shortfall_chinese_chars']}; "
+                "the current scene inventory has insufficient safe expansion capacity"
+            ),
+            "next_action": (
+                "return to longform planning and add an earned scene, subplot beat, "
+                "or formally revise scene capacities before generating more prose"
+            ),
+        }
+    plan_ready = repair["status"] == "pending"
+    return {
+        "key": "target-length-repair-scenes" if plan_ready else "target-length-repair-plan",
+        "status": "blocked" if plan_ready else "missing",
+        "path": str(repair["path"]),
+        "message": (
+            f"whole-work shortfall={length['shortfall_chinese_chars']}; "
+            f"pending scenes={','.join(repair['pending_scene_ids']) or 'unplanned'}"
+        ),
+        "next_action": (
+            "resume scene-development for every pending target-length allocation"
+            if plan_ready
+            else "run plan-length-repair before final release approval"
+        ),
+    }
+
 
 def _chapter_workspace_step(root: Path, chapter_id: str, json_path: Path, markdown_path: Path) -> dict[str, object]:
     if not json_path.exists() or not markdown_path.exists():
@@ -45,17 +102,22 @@ def _chapter_workspace_step(root: Path, chapter_id: str, json_path: Path, markdo
             "message": "missing chapter workspace JSON or Markdown",
             "next_action": f"run chapter-workspace for {chapter_id}",
         }
+    fresh = chapter_workspace_is_fresh(root, chapter_id, [json_path, markdown_path])
     payload = _read_json(json_path)
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     blocked = int(summary.get("blocked_count", 0) or 0)
     ready = int(summary.get("ready_count", 0) or 0)
-    passed = blocked == 0 and ready > 0
+    passed = blocked == 0 and ready > 0 and fresh
     return {
         "key": "chapter-workspace",
-        "status": "pass" if passed else "blocked",
+        "status": "pass" if passed else "stale" if not fresh else "blocked",
         "path": _rel(json_path, root),
-        "message": f"ready={ready}; blocked={blocked}",
-        "next_action": "" if passed else "repair scene-development gates, rerun chapter-workspace, and ensure every scene is ready",
+        "message": f"ready={ready}; blocked={blocked}; fresh={fresh}",
+        "next_action": "" if passed else (
+            f"rerun chapter-workspace for {chapter_id} after the current formal drafts"
+            if not fresh
+            else "repair scene-development gates, rerun chapter-workspace, and ensure every scene is ready"
+        ),
     }
 
 
@@ -77,27 +139,15 @@ def _export_route_audit_step(root: Path, json_path: Path) -> dict[str, object]:
 def _export_package_step(root: Path, chapter_id: str, manifest_path: Path) -> dict[str, object]:
     payload = _read_json(manifest_path)
     skipped = payload.get("skipped_scenes") if isinstance(payload.get("skipped_scenes"), list) else []
-    outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
-    docx = outputs.get("docx") if isinstance(outputs.get("docx"), dict) else {}
-    layouts = outputs.get("docx_layout_plans") if isinstance(outputs.get("docx_layout_plans"), dict) else {}
-    inspections = outputs.get("docx_inspections") if isinstance(outputs.get("docx_inspections"), dict) else {}
-    delivery_keys = ("novel", "screenplay", "video_prompt_pack")
-    required = [
-        outputs.get("novel"),
-        outputs.get("screenplay"),
-        outputs.get("video_prompt_pack"),
-        *[docx.get(key) for key in delivery_keys],
-        *[layouts.get(key) for key in delivery_keys],
-        *[inspections.get(key) for key in delivery_keys],
-    ]
-    missing = [str(item) for item in required if not item or not (root / str(item)).exists()]
+    missing = missing_export_outputs(root, payload)
     include_blocked = bool(payload.get("include_blocked"))
     formats = {str(item).strip().lower() for item in payload.get("requested_formats", []) if str(item).strip()}
-    passed = manifest_path.exists() and {"md", "docx"}.issubset(formats) and not skipped and not include_blocked and not missing
-    message = f"skipped={len(skipped)}; include_blocked={include_blocked}; missing_outputs={len(missing)}"
+    fresh = export_package_is_fresh(root, chapter_id, manifest_path)
+    passed = manifest_path.exists() and fresh and {"md", "docx"}.issubset(formats) and not skipped and not include_blocked and not missing
+    message = f"skipped={len(skipped)}; include_blocked={include_blocked}; missing_outputs={len(missing)}; fresh={fresh}"
     return {
         "key": "export-package",
-        "status": "pass" if passed else "missing" if not manifest_path.exists() else "blocked",
+        "status": "pass" if passed else "missing" if not manifest_path.exists() else "stale" if not fresh else "blocked",
         "path": _rel(manifest_path, root),
         "message": message,
         "next_action": "" if passed else f"run export-package for {chapter_id}; do not use --include-blocked",
@@ -137,21 +187,14 @@ def _publish_release_step(root: Path, latest_path: Path, release_dir: Path) -> d
     payload = _read_json(manifest)
     status = str(payload.get("status") or "").strip().lower()
     approval = payload.get("approval") if isinstance(payload.get("approval"), dict) else {}
-    approved_fingerprint = str(payload.get("approved_export_fingerprint") or "").strip().lower()
-    passed = (
-        latest_path.exists()
-        and manifest.exists()
-        and status == "published"
-        and not payload.get("allow_unapproved")
-        and approval.get("decision") == "approve"
-        and bool(approved_fingerprint)
-        and str(approval.get("subject_sha256") or "").strip().lower() == approved_fingerprint
-        and latest.get("manifest") == _rel(manifest, root)
+    chapter_id = latest_path.parent.name
+    passed, content_bound = published_release_is_current(
+        root, chapter_id, latest_path, manifest, latest, payload,
     )
     return {
         "key": "publish-release",
         "status": "pass" if passed else "missing" if not manifest.exists() else "blocked",
         "path": _rel(manifest, root),
-        "message": f"latest={bool(latest)}; status={status or 'missing'}; approval={approval.get('decision') or 'missing'}; content_bound={bool(approved_fingerprint)}",
+        "message": f"latest={bool(latest)}; status={status or 'missing'}; approval={approval.get('decision') or 'missing'}; current_content_bound={content_bound}",
         "next_action": "" if passed else "run publish-chapter with approval run id; do not use --allow-unapproved",
     }

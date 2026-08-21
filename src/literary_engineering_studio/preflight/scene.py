@@ -12,7 +12,9 @@ from .scene_review_contract import (
     validate_scene_review_contract as _validate_scene_review_contract,
 )
 from .scene_manifest_metadata import scene_revision_paths
+from .scene_length_repair import target_length_revision_errors
 from ..sandbox import SandboxManifest
+from literary_engineering_studio_engine.public.tasking import SCENE_CANDIDATE_STATES, SCENE_REVISION_STATES
 
 
 def _validate_scene_candidate_generation_contract(
@@ -21,10 +23,9 @@ def _validate_scene_candidate_generation_contract(
     issues: list[PreflightIssue],
 ) -> None:
     """Expose candidate provenance and quality failures to the repair loop."""
-    supported_states = {"candidate-generation-provenance", "generation-agent-task", "candidate-revision", "static-revision"}
-    if task.current_state not in supported_states:
+    if task.current_state not in SCENE_CANDIDATE_STATES:
         return
-    if task.current_state in {"candidate-revision", "static-revision"} and not any(
+    if task.current_state in SCENE_REVISION_STATES and not any(
         relative.endswith(".prompt.json") for relative in task.core_managed_outputs
     ):
         return
@@ -270,7 +271,7 @@ def _validate_scene_revision_contract(
     sandbox: SandboxManifest,
     issues: list[PreflightIssue],
 ) -> None:
-    if task.current_state not in {"candidate-revision", "static-revision"}:
+    if task.current_state not in SCENE_REVISION_STATES:
         return
 
     candidate_rel, manifest_rel, _prompt_rel, _report_rel = scene_revision_paths(task)
@@ -331,6 +332,7 @@ def _revision_preflight_errors(
         (manifest_rel, message, "按 revision prompt 的 exact-source 与 anti_evasion_rows 契约修正 manifest；不得伪造摘要或换皮修订。")
         for message in contract_errors
     )
+    errors.extend(target_length_revision_errors(task, sandbox, candidate_rel, candidate))
     return errors
 
 

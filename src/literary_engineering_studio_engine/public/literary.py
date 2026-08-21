@@ -32,6 +32,7 @@ from ..literary.ingest import (
 from ..literary.ingest.evidence import canonical_digest
 from ..literary.planning.contracts import word_budget_adherence_for_body
 from ..literary.planning.materializer import scene_inventory_contract_issues
+from ..literary.planning.length_repair import target_length_repair_pending
 from ..literary.planning.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 from ..literary.review.creative_quality import (
     creative_quality_profile_exists,
@@ -177,6 +178,7 @@ __all__ = [
     "style_prompt_quality_report",
     "style_review_machine_values",
     "style_version_mount_snapshot",
+    "target_length_repair_pending",
     "validate_chunk_extraction",
     "validate_domain_review",
     "validate_historical_promotion",

@@ -19,6 +19,7 @@ from ..scene_composer import composition_input_digest
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..word_budget import scene_word_budget_contract
 from .historical_truth import preserve_current_historical_style_steps
+from .scene_length_repair import target_length_revision_step
 from .scene_scope import started_scene_ids
 from .state_common import (
     _file_step, _read, _read_json, _rel, _semantic_task_step,
@@ -141,6 +142,7 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
         _semantic_task_step("composition-agent-task", root, scene_id, root / "drafts" / "compositions" / f"{scene_id}_composition.agent_tasks.md", "complete the composition semantic review and sidecar marker"),
         _candidate_step(root, scene_id, candidate),
         _task_step("generation-agent-task", root, candidate.with_suffix(".agent_tasks.md") if candidate else root / "drafts" / "candidates" / f"{scene_id}-platform-agent.agent_tasks.md", "complete generation sidecar and marker"),
+        target_length_revision_step(root, scene_id, candidate),
         _review_step(root, scene_id, candidate),
         _task_step("agent-review-task", root, root / "reviews" / "agent" / f"{scene_id}_scene_review.agent_tasks.md", "complete AgentReview sidecar and marker"),
         _promotion_step(root, scene_id, candidate),

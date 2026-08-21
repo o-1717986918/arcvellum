@@ -20,6 +20,7 @@ from ...scene_character_assets import scene_character_asset_requirements
 from ...semantic_task_contracts import semantic_artifact_errors
 from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
 from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
+from ...tasking.state_contracts import SCENE_REVISION_STATES
 from ...word_budget import ensure_scene_word_budget_ready, word_budget_adherence_for_body
 from ...scene_route_support import (
     _file_sha256, _parse_datetime, _read_optional_json, _read_text,
@@ -27,6 +28,7 @@ from ...scene_route_support import (
 )
 from .branch_contract import branch_manifest_gate_errors as _branch_manifest_gate_errors
 from .branch_contract import branch_selection_gate as _branch_selection_gate
+from .length_repair import target_length_revision_gate_errors
 def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[str], list[str]]:
     """Run current-state-specific gates after expected outputs exist."""
 
@@ -66,7 +68,7 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
         candidate = _candidate_path_for_task(root, task)
         errors.extend(_candidate_generation_gate_errors(root, task, candidate))
         errors.extend(_candidate_body_gate_errors(root, task, candidate))
-    if current_state == "candidate-revision":
+    if current_state in SCENE_REVISION_STATES:
         candidate = _candidate_path_for_task(root, task)
         errors.extend(_candidate_generation_gate_errors(root, task, candidate))
         errors.extend(_candidate_body_gate_errors(root, task, candidate))
@@ -79,11 +81,8 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
         errors.extend(_promotion_gate_errors(root, task))
     if current_state == "static-review":
         errors.extend(_static_review_gate_errors(root, scene_id, require_pass=False))
-    if current_state == "static-revision":
-        candidate = _candidate_path_for_task(root, task)
-        errors.extend(_candidate_generation_gate_errors(root, task, candidate))
-        errors.extend(_candidate_body_gate_errors(root, task, candidate))
-        errors.extend(_scene_revision_gate_errors(root, task, candidate))
+    if current_state == "target-length-revision":
+        errors.extend(target_length_revision_gate_errors(root, scene_id, candidate))
     if current_state in {"state-patch-json", "state-agent-task"}:
         errors.extend(_state_patch_gate_errors(root, scene_id))
     if current_state == "state-agent-task":
@@ -114,6 +113,7 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
     if current_state == "continuity-ledger-apply" and not (root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json").is_file():
         errors.append("continuity ledger apply receipt is missing")
     return errors, notes
+
 
 def _context_trace_gate_errors(root: Path, scene_id: str) -> list[str]:
     if not scene_id:
