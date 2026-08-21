@@ -72,7 +72,7 @@ def _base_payload(
     source_paths: list[str],
     expected_outputs: list[str],
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "schema": TASK_SCHEMA,
         "task_id": task_id,
         "status": "issued",
@@ -102,6 +102,16 @@ def _base_payload(
         "forbidden_shortcuts": FORBIDDEN_SHORTCUTS.copy(),
         "next_allowed_states": blueprint["next_allowed_states"],
     }
+    core_managed_outputs = unique(
+        [
+            _normalize_rel(item)
+            for item in blueprint.get("core_managed_outputs", [])
+            if _normalize_rel(item) in expected_outputs
+        ]
+    )
+    if core_managed_outputs:
+        payload["core_managed_outputs"] = core_managed_outputs
+    return payload
 
 
 def _attach_repair_provenance(

@@ -87,6 +87,41 @@ def _sandbox(root: Path) -> SandboxManifest:
     )
 
 
+def _project_revision_task(root: Path, count: int = 8) -> TaskPackage:
+    targets = [f"scenes/scene_{index:04d}.yaml" for index in range(1, count + 1)]
+    payload = {
+        "task_id": "project-canon-revision",
+        "route": "review-and-audit",
+        "current_state": "canon-review-pass",
+        "task_type": "platform-agent-revision",
+        "execution_policy": "agent-required",
+        "agent_role": "main-creative-agent",
+        "runtime_capabilities_required": [
+            "read-task-sources",
+            "write-expected-outputs",
+        ],
+        "human_gate": {"required": False, "reasons": [], "source": "test"},
+        "repair_targets": targets,
+        "expected_outputs": [*targets, "reviews/agent/canon_review.json"],
+        "output_contracts": [
+            *[
+                {
+                    "path": path,
+                    "kind": "agent-authored",
+                    "writeback_policy": "preview-required",
+                }
+                for path in targets
+            ],
+            {
+                "path": "reviews/agent/canon_review.json",
+                "kind": "deterministic",
+                "writeback_policy": "automatic",
+            },
+        ],
+    }
+    return TaskPackage(root, root / "task.json", root / "task.md", payload)
+
+
 class WorkerExecutionProfileTests(unittest.TestCase):
     def test_shadow_profile_is_persisted_before_runtime_capabilities_are_known(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -211,6 +246,53 @@ class WorkerExecutionProfileTests(unittest.TestCase):
         self.assertEqual(observer.events[1][0], "runner.reasoning_budget.recommended")
         self.assertIsNotNone(
             observer.events[1][1]["reasoning_budget"]["effective"]
+        )
+
+    def test_pi_project_revision_starts_in_repair_mode_with_task_sized_budget(self):
+        settings = {
+            "timeout_seconds": 1800,
+            "max_repair_attempts": 2,
+            "execution_profile": {
+                "enforcement": {"enabled": True, "task_kinds": ["review"]}
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _project_revision_task(root)
+            sandbox = _sandbox(root)
+            for relative in task.payload["repair_targets"]:
+                path = sandbox.workspace / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("scene: complete\n", encoding="utf-8")
+            observer = _Observer()
+            profile, timeout = activate_execution_profile(
+                task,
+                sandbox,
+                worker_config=settings,
+                runtime_id="pi-worker",
+                runtime=_PiWorkerRuntime(),
+                observer=observer,
+            )
+            kwargs = build_runtime_kwargs(
+                task,
+                sandbox,
+                runtime_id="pi-worker",
+                timeout=timeout,
+                profile=profile,
+                worker_config=settings,
+                observer=observer,
+                cancel_event=threading.Event(),
+                writeback=_Writeback(),
+            )
+
+        self.assertEqual(
+            kwargs["initial_repair_targets"],
+            tuple(task.payload["repair_targets"]),
+        )
+        self.assertGreaterEqual(kwargs["max_turns"], 10)
+        self.assertGreaterEqual(kwargs["max_tool_calls"], 10)
+        self.assertGreaterEqual(
+            kwargs["reasoning_budget"]["max_provider_requests"], 10
         )
 
 

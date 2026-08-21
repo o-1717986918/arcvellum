@@ -324,7 +324,39 @@ def _canonicalize_project_review_metadata(task: TaskPackage, sandbox: SandboxMan
         expected["subject"] = str(task.payload.get("target_id") or "project-final-audit")
     if state in {"canon-review-pass", "committee-pass"}:
         expected[verdict_field] = "recheck_required"
+        expected["applied_repair_actions"] = _project_review_applied_repairs(
+            task, sandbox
+        )
     return _write_machine_fields(path, relative, payload, expected, "project-review")
+
+
+def _project_review_applied_repairs(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+) -> list[dict[str, str]]:
+    """Record only deterministic before/after evidence for changed targets."""
+
+    before = task.payload.get("repair_target_sha256_before_revision")
+    hashes = before if isinstance(before, dict) else {}
+    actions: list[dict[str, str]] = []
+    for relative in task.payload.get("repair_targets") or []:
+        normalized = str(relative).replace("\\", "/").strip()
+        path = sandbox.workspace / Path(normalized)
+        if not normalized or not path.is_file():
+            continue
+        previous = str(hashes.get(normalized) or "")
+        current = hashlib.sha256(path.read_bytes()).hexdigest()
+        if previous and previous == current:
+            continue
+        actions.append(
+            {
+                "target_path": normalized,
+                "status": "changed",
+                "before_sha256": previous,
+                "after_sha256": current,
+            }
+        )
+    return actions
 
 
 def _project_review_semantic_aliases(

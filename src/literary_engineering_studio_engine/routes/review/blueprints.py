@@ -262,20 +262,24 @@ def _canon_review_execute(context: ReviewBlueprintContext) -> dict[str, object]:
 def _canon_review_revise(context: ReviewBlueprintContext) -> dict[str, object]:
     review = context.canon_review
     targets = list(context.canon_repair_targets)
+    review_json = f"{review}.json"
+    completion = f"{review}.agent_completion.json"
     return _blueprint(
         "platform-agent-revision",
         "route.review-audit.canon-review.fix.v1",
         "",
         [f"{review}.json", f"{review}.md", "reviews/canon_lint.json", *targets],
-        [*targets, "reviews/canon_lint.md", "reviews/canon_lint.json", f"{review}.json", f"{review}.md", f"{review}.agent_completion.json"],
+        [*targets, review_json, completion],
         [
             "Resolve every finding only in its declared target_path; do not touch files outside Allowed Outputs.",
             "Do not relabel unresolved findings as warnings to pass the gate.",
-            "After repair run canon-lint in the sandbox, set canon review conclusion to recheck_required, and reset its completion marker for a fresh independent canon review.",
+            "Read every existing repair target before replacing it and preserve all unaffected structure and facts.",
+            "Do not write canon-lint or CanonReview lifecycle artifacts; Studio resets them and reruns deterministic lint plus a fresh independent review after import.",
         ],
-        ["at least one declared repair target changed", "canon-lint passes", "canon review reset to recheck_required"],
-        ["canon-review-agent-task"],
+        ["at least one declared repair target changed", "canon review reset to recheck_required"],
+        ["canon-lint-file"],
         repair_targets=targets,
+        core_managed_outputs=[review_json],
     )
 
 
@@ -336,6 +340,10 @@ def _committee_revise(context: ReviewBlueprintContext) -> dict[str, object]:
     committee = context.committee
     review = context.canon_review
     targets = list(context.committee_repair_targets)
+    canon_review_json = f"{review}.json"
+    canon_completion = f"{review}.agent_completion.json"
+    committee_json = f"{committee}.json"
+    committee_completion = f"{committee}.agent_completion.json"
     return _blueprint(
         "platform-agent-revision",
         "route.review-audit.committee.fix.v1",
@@ -343,26 +351,21 @@ def _committee_revise(context: ReviewBlueprintContext) -> dict[str, object]:
         [f"{committee}.json", f"{committee}.md", f"{review}.json", "reviews/longform/longform_audit.json", *targets],
         [
             *targets,
-            "reviews/canon_lint.md",
-            "reviews/canon_lint.json",
-            "reviews/longform/longform_audit.md",
-            "reviews/longform/longform_audit.json",
-            "plot/longform_graph.json",
-            f"{review}.json",
-            f"{review}.md",
-            f"{review}.agent_completion.json",
-            f"{committee}.json",
-            f"{committee}.md",
-            f"{committee}.agent_completion.json",
+            canon_review_json,
+            canon_completion,
+            committee_json,
+            committee_completion,
         ],
         [
             "Resolve every committee action item and disagreement only in its declared target_path.",
             "Do not move to export-and-release on approve_with_notes.",
-            "Rerun canon-lint and longform-audit after repair, then reset canon and committee completion evidence so both receive fresh independent review.",
+            "Read every existing repair target before replacing it and preserve all unaffected structure and facts.",
+            "Do not write canon-lint, longform-audit, CanonReview, or Committee lifecycle artifacts; Studio resets and reruns them after import.",
         ],
-        ["at least one declared repair target changed", "canon and committee reviews reset to recheck_required", "fresh deterministic audits exist"],
-        ["canon-review-agent-task"],
+        ["at least one declared repair target changed", "canon and committee reviews reset to recheck_required"],
+        ["canon-lint-file"],
         repair_targets=targets,
+        core_managed_outputs=[canon_review_json, committee_json],
     )
 
 
@@ -390,6 +393,7 @@ def _blueprint(
     next_allowed_states: list[str],
     *,
     repair_targets: list[str] | None = None,
+    core_managed_outputs: list[str] | None = None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "task_type": task_type,
@@ -404,4 +408,6 @@ def _blueprint(
     }
     if repair_targets is not None:
         payload["repair_targets"] = repair_targets
+    if core_managed_outputs is not None:
+        payload["core_managed_outputs"] = core_managed_outputs
     return payload

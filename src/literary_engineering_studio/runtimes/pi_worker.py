@@ -221,6 +221,7 @@ class PiWorkerRuntime(AgentRuntime):
         repair_turn_finalizer=None,
         progress_digest_builder=None,
         allowed_states: Sequence[str] | None = None,
+        initial_repair_targets: Sequence[str] | None = None,
     ) -> RuntimeResult:
         overrides = {
             "max_repair_attempts": max_repairs,
@@ -242,6 +243,7 @@ class PiWorkerRuntime(AgentRuntime):
                 timeout=timeout,
                 event_sink=event_sink,
                 cancel_event=cancel_event,
+                repair_targets=tuple(initial_repair_targets or ()),
             )
             return run_pi_worker_repairs(
                 result,

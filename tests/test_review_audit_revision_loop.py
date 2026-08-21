@@ -1,17 +1,20 @@
 from pathlib import Path
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 
 from literary_engineering_studio.contracts import TASK_SCHEMA, load_task_package
 from literary_engineering_studio.runtime.context_budget import resolve_task_context_budget
 from literary_engineering_studio.sandbox import stage_task
+from literary_engineering_studio.preflight.service import canonicalize_task_outputs
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, validate_task_outputs
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.review_audit_route import _review_audit_blueprint_for_state
 from literary_engineering_studio_engine.routes.review.task_payload import build_review_audit_task_payload
 from literary_engineering_studio_engine.tasking.package_contract import enrich_task_payload
+from literary_engineering_studio_engine.workflow.state_review_audit import _review_audit_state
 
 
 def _canon_review(conclusion: str = "revise_required") -> dict[str, object]:
@@ -122,35 +125,65 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
             )
             self.assertEqual(payload["context_contract_status"], "bounded-ready")
             before = hashlib.sha256(target.read_bytes()).hexdigest()
+            payload = enrich_task_payload(
+                build_review_audit_task_payload(
+                    project,
+                    "review-and-audit",
+                    {
+                        "current_step": "canon-review-pass",
+                        "next_action": "repair",
+                    },
+                )
+            )
+            self.assertEqual(
+                payload["expected_outputs"],
+                [
+                    "canon/world_rules.yaml",
+                    "reviews/agent/canon_review.json",
+                    "reviews/agent/canon_review.agent_completion.json",
+                ],
+            )
+            self.assertEqual(
+                payload["core_managed_outputs"],
+                ["reviews/agent/canon_review.json"],
+            )
+            self.assertNotIn("reviews/canon_lint.json", payload["expected_outputs"])
             task_json = self._write_task(
                 project,
-                {
-                    "task_id": "canon-fix",
-                    "route": "review-and-audit",
-                    "current_state": "canon-review-pass",
-                    "task_type": "platform-agent-revision",
-                    "repair_targets": ["canon/world_rules.yaml"],
-                    "repair_target_sha256_before_revision": {"canon/world_rules.yaml": before},
-                    "expected_outputs": blueprint["expected_outputs"],
-                    "validation_gates": blueprint["validation_gates"],
-                },
+                payload,
                 "canon-fix",
             )
             task = load_task_package(project, task_json)
             sandbox = stage_task(task, root / "runs", runtime="opencode")
             (sandbox.workspace / "canon" / "world_rules.yaml").write_text("rules:\n  - power_has_cost\n", encoding="utf-8")
-            reset = _canon_review("revise_required")
-            reset.update({"conclusion": "recheck_required", "applied_repair_actions": [{"target_path": "canon/world_rules.yaml", "evidence": "added cost"}]})
-            (sandbox.workspace / "reviews" / "agent" / "canon_review.json").write_text(json.dumps(reset, ensure_ascii=False), encoding="utf-8")
-            (sandbox.workspace / "reviews" / "agent" / "canon_review.md").write_text("# 已修复，等待复审\n", encoding="utf-8")
-            (sandbox.workspace / "reviews" / "agent" / "canon_review.agent_completion.json").write_text(
-                json.dumps({"schema": COMPLETION_SCHEMA, "source_task": "reviews/agent/canon_review.agent_tasks.md", "status": "recheck_required", "handled_by": "revision-agent", "completed_at": "2026-07-21T00:10:00Z", "expected_artifacts_checked": False, "notes": []}, ensure_ascii=False),
-                encoding="utf-8",
-            )
 
+            canonicalize_task_outputs(task, sandbox)
             result = validate_task_outputs(task, sandbox)
 
             self.assertTrue(result.passed, result.as_dict())
+            reset = json.loads(
+                (sandbox.workspace / "reviews" / "agent" / "canon_review.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(reset["conclusion"], "recheck_required")
+            self.assertEqual(
+                reset["applied_repair_actions"][0]["target_path"],
+                "canon/world_rules.yaml",
+            )
+            self.assertEqual(
+                reset["applied_repair_actions"][0]["before_sha256"], before
+            )
+            completion = json.loads(
+                (
+                    sandbox.workspace
+                    / "reviews"
+                    / "agent"
+                    / "canon_review.agent_completion.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(completion["status"], "recheck_required")
+            self.assertFalse(completion["expected_artifacts_checked"])
 
     def test_large_canon_revision_compiles_as_target_sliced_review_prompt(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -225,6 +258,14 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
             )
             for target in targets:
                 self.assertIn(target, context["prompt_access"]["exact_on_demand"])
+            self.assertEqual(
+                [
+                    item.path
+                    for item in task.execution_contract.outputs
+                    if item.kind == "agent-authored"
+                ],
+                targets,
+            )
 
     def test_committee_revision_uses_the_same_target_sliced_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -283,6 +324,56 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
                 "plot/outline.md",
                 payload["context_exact_on_demand_paths"],
             )
+            enriched = enrich_task_payload(payload)
+            self.assertNotIn(
+                "reviews/longform/longform_audit.json",
+                enriched["expected_outputs"],
+            )
+            self.assertEqual(
+                enriched["core_managed_outputs"],
+                [
+                    "reviews/agent/canon_review.json",
+                    "reviews/agent/committee_project-final-audit.json",
+                ],
+            )
+
+    def test_recheck_marker_makes_prior_canon_lint_stale(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lint = root / "reviews" / "canon_lint.json"
+            lint.parent.mkdir(parents=True)
+            lint.write_text(json.dumps(_lint_payload()), encoding="utf-8")
+            lint.with_suffix(".md").write_text("# lint\n", encoding="utf-8")
+            marker = root / "reviews" / "agent" / "canon_review.agent_completion.json"
+            marker.parent.mkdir(parents=True)
+            marker.write_text(
+                json.dumps({"status": "recheck_required"}), encoding="utf-8"
+            )
+            os.utime(lint, ns=(1_000_000_000, 1_000_000_000))
+            os.utime(marker, ns=(2_000_000_000, 2_000_000_000))
+
+            state = _review_audit_state(root)
+
+            self.assertEqual(state["current_step"], "canon-lint-file")
+            self.assertEqual(state["steps"][1]["status"], "stale")
+
+    def test_fresh_lint_requires_a_fresh_canon_review_sidecar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = root / "reviews" / "agent" / "canon_review.agent_tasks.md"
+            task.parent.mkdir(parents=True)
+            task.write_text("# old sidecar\n", encoding="utf-8")
+            lint = root / "reviews" / "canon_lint.json"
+            lint.parent.mkdir(parents=True, exist_ok=True)
+            lint.write_text(json.dumps(_lint_payload()), encoding="utf-8")
+            lint.with_suffix(".md").write_text("# lint\n", encoding="utf-8")
+            os.utime(task, ns=(1_000_000_000, 1_000_000_000))
+            os.utime(lint, ns=(2_000_000_000, 2_000_000_000))
+
+            state = _review_audit_state(root)
+
+            self.assertEqual(state["current_step"], "canon-review-task-file")
+            self.assertEqual(state["steps"][2]["status"], "stale")
 
 
 if __name__ == "__main__":

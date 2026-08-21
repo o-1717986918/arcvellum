@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Mapping
 
 from ..contracts import TaskPackage
@@ -175,4 +176,67 @@ def build_runtime_kwargs(
     )
     if runtime_id == "pi-worker":
         kwargs["allowed_states"] = (task.current_state,)
+        _bind_initial_pi_repair(task, sandbox, kwargs)
     return kwargs
+
+
+def _bind_initial_pi_repair(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    kwargs: dict[str, Any],
+) -> None:
+    """Start formal revisions in read-before-write mode with a task-sized budget."""
+
+    if task.task_type != "platform-agent-revision":
+        return
+    targets = _agent_repair_targets(task)
+    if not targets:
+        return
+    existing = _existing_target_count(sandbox, targets)
+    # Repair mode leases one deterministic read turn per existing target and
+    # then one batched write.  Keep one extra turn for bounded parser feedback.
+    turn_floor = max(2, existing + 2)
+    tool_floor = max(2, existing + 2)
+    kwargs["initial_repair_targets"] = targets
+    kwargs["max_turns"] = max(int(kwargs.get("max_turns") or 0), turn_floor)
+    kwargs["max_tool_calls"] = max(
+        int(kwargs.get("max_tool_calls") or 0), tool_floor
+    )
+    _raise_provider_request_floor(kwargs, turn_floor)
+
+
+def _agent_repair_targets(task: TaskPackage) -> tuple[str, ...]:
+    declared = {
+        str(item).replace("\\", "/")
+        for item in task.payload.get("repair_targets") or []
+        if str(item).strip()
+    }
+    return tuple(
+        output.path
+        for output in task.execution_contract.outputs
+        if output.path in declared and output.kind == "agent-authored"
+    )
+
+
+def _existing_target_count(
+    sandbox: SandboxManifest,
+    targets: tuple[str, ...],
+) -> int:
+    return sum(
+        (sandbox.workspace / Path(relative)).is_file()
+        for relative in targets
+    )
+
+
+def _raise_provider_request_floor(
+    kwargs: dict[str, Any],
+    request_floor: int,
+) -> None:
+    budget = kwargs.get("reasoning_budget")
+    if not isinstance(budget, dict):
+        return
+    normalized = dict(budget)
+    normalized["max_provider_requests"] = max(
+        int(normalized.get("max_provider_requests") or 0), request_floor
+    )
+    kwargs["reasoning_budget"] = normalized

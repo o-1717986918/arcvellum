@@ -11,19 +11,46 @@ def _review_audit_state(root: Path) -> dict[str, object]:
     canon_review_json = root / "reviews" / "agent" / "canon_review.json"
     canon_review_md = canon_review_json.with_suffix(".md")
     canon_review_task = canon_review_json.with_suffix(".agent_tasks.md")
+    canon_review_completion = canon_review_json.with_suffix(
+        ".agent_completion.json"
+    )
     committee_json = root / "reviews" / "agent" / "committee_project-final-audit.json"
     committee_md = committee_json.with_suffix(".md")
     committee_task = committee_json.with_suffix(".agent_tasks.md")
+    committee_completion = committee_json.with_suffix(".agent_completion.json")
     longform_json = root / "reviews" / "longform" / "longform_audit.json"
     canon_backlog = _canon_backlog_step(root)
+    review_resets = [
+        marker
+        for marker in (canon_review_completion, committee_completion)
+        if _is_recheck_required(marker)
+    ]
     steps = [
         canon_backlog,
-        _canon_lint_step(root, canon_lint_json),
-        _file_step("canon-review-task-file", canon_review_task, "run agent-canon-review to create the platform-agent canon review sidecar"),
+        _canon_lint_step(root, canon_lint_json, refresh_after=review_resets),
+        _fresh_file_step(
+            root,
+            "canon-review-task-file",
+            canon_review_task,
+            "run agent-canon-review to create the platform-agent canon review sidecar",
+            refresh_after=[canon_lint_json],
+        ),
         _review_agent_step(root, "canon-review-agent-task", canon_review_task, canon_review_json, canon_review_md, "complete canon review sidecar, JSON, Markdown, and completion marker"),
         _canon_review_pass_step(root, canon_review_json),
-        _file_step("longform-audit-file", longform_json, "run longform-audit to create structural longform audit JSON/Markdown"),
-        _file_step("committee-task-file", committee_task, "run agent-committee --subject project-final-audit --source reviews/agent/canon_review.md"),
+        _fresh_file_step(
+            root,
+            "longform-audit-file",
+            longform_json,
+            "run longform-audit to create structural longform audit JSON/Markdown",
+            refresh_after=[canon_review_completion, *review_resets],
+        ),
+        _fresh_file_step(
+            root,
+            "committee-task-file",
+            committee_task,
+            "run agent-committee --subject project-final-audit --source reviews/agent/canon_review.md",
+            refresh_after=[canon_review_completion, longform_json],
+        ),
         _review_agent_step(root, "committee-agent-task", committee_task, committee_json, committee_md, "complete committee sidecar, JSON, Markdown, and completion marker"),
         _committee_pass_step(root, committee_json),
     ]
@@ -98,7 +125,12 @@ def _canon_backlog_step(root: Path) -> dict[str, object]:
     }
 
 
-def _canon_lint_step(root: Path, json_path: Path) -> dict[str, object]:
+def _canon_lint_step(
+    root: Path,
+    json_path: Path,
+    *,
+    refresh_after: list[Path] | None = None,
+) -> dict[str, object]:
     report = json_path.with_suffix(".md")
     if not json_path.exists() or not report.exists():
         return {
@@ -107,6 +139,18 @@ def _canon_lint_step(root: Path, json_path: Path) -> dict[str, object]:
             "path": _rel(json_path, root),
             "message": "missing canon lint report or JSON",
             "next_action": "run canon-lint before platform-agent canon review",
+        }
+    stale_source = _newer_source(json_path, refresh_after or [])
+    if stale_source is not None:
+        return {
+            "key": "canon-lint-file",
+            "status": "stale",
+            "path": _rel(json_path, root),
+            "message": (
+                "canon lint predates project repair reset: "
+                f"{_rel(stale_source, root)}"
+            ),
+            "next_action": "rerun canon-lint against the repaired project targets",
         }
     payload = _read_json(json_path)
     status = str(payload.get("status") or "").strip().lower()
@@ -128,6 +172,14 @@ def _review_agent_step(root: Path, key: str, task_path: Path, json_path: Path, r
     message = str(state.get("message") or "")
     if missing:
         message = (message + "; " if message else "") + "missing " + ", ".join(missing)
+    stale = _newer_source(json_path, [task_path]) or _newer_source(
+        report_path, [task_path]
+    )
+    if stale is not None:
+        complete = False
+        message = (message + "; " if message else "") + (
+            "review artifacts predate current sidecar"
+        )
     return {
         "key": key,
         "status": "pass" if complete else str(state.get("status") or "pending"),
@@ -136,6 +188,47 @@ def _review_agent_step(root: Path, key: str, task_path: Path, json_path: Path, r
         "message": message,
         "next_action": "" if complete else next_action,
     }
+
+
+def _fresh_file_step(
+    root: Path,
+    key: str,
+    path: Path,
+    next_action: str,
+    *,
+    refresh_after: list[Path],
+) -> dict[str, object]:
+    step = _file_step(key, path, next_action)
+    if step["status"] != "pass":
+        return step
+    stale_source = _newer_source(path, refresh_after)
+    if stale_source is None:
+        return step
+    return {
+        **step,
+        "status": "stale",
+        "message": f"artifact predates {_rel(stale_source, root)}",
+        "next_action": next_action,
+    }
+
+
+def _newer_source(target: Path, sources: list[Path]) -> Path | None:
+    if not target.is_file():
+        return None
+    target_time = target.stat().st_mtime_ns
+    return next(
+        (
+            source
+            for source in sources
+            if source.is_file() and source.stat().st_mtime_ns > target_time
+        ),
+        None,
+    )
+
+
+def _is_recheck_required(path: Path) -> bool:
+    payload = _read_json(path)
+    return str(payload.get("status") or "").strip().lower() == "recheck_required"
 
 
 def _canon_review_pass_step(root: Path, json_path: Path) -> dict[str, object]:

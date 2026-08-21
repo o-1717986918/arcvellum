@@ -198,6 +198,50 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertTrue(any(event == "tool.started" for event, _ in events))
         self.assertTrue(any(event == "usage.updated" for event, _ in events))
 
+    def test_initial_project_repair_enters_repair_mode_on_the_first_process(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            entrypoint = self._fixture(root)
+            workspace = root / "workspace"
+            run_root = root / "run"
+            workspace.mkdir()
+            run_root.mkdir()
+            prompt = workspace / "AGENT_TASK.md"
+            prompt.write_text("repair exact project targets", encoding="utf-8")
+            runtime = PiWorkerRuntime(
+                {
+                    "executable": sys.executable,
+                    "entrypoint": str(entrypoint),
+                    "model": "fixture/model",
+                }
+            )
+
+            result = runtime.execute(
+                workspace,
+                prompt,
+                run_root,
+                timeout=10,
+                initial_repair_targets=(
+                    "canon/timeline.yaml",
+                    "scenes/scene_0001.yaml",
+                ),
+            )
+            invocation = json.loads(
+                (workspace / "worker_args.json").read_text(encoding="utf-8")
+            )["args"]
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(invocation[invocation.index("--mode") + 1], "repair")
+        repair_targets = [
+            invocation[index + 1]
+            for index, item in enumerate(invocation)
+            if item == "--repair-target"
+        ]
+        self.assertEqual(
+            repair_targets,
+            ["canon/timeline.yaml", "scenes/scene_0001.yaml"],
+        )
+
     def test_incomplete_worker_result_is_classified_for_studio(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
