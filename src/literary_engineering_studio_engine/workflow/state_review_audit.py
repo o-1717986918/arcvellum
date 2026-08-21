@@ -6,6 +6,7 @@ from pathlib import Path
 from ..agent_tasks import agent_task_completion_status
 from ..canon_evolver import canon_patch_backlog_items
 from ..literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
+from ..literary.review.longform_contract import longform_audit_gate_errors
 from .state_common import _file_step, _read_json, _rel
 def _review_audit_state(root: Path) -> dict[str, object]:
     canon_lint_json = root / "reviews" / "canon_lint.json"
@@ -38,11 +39,9 @@ def _review_audit_state(root: Path) -> dict[str, object]:
         ),
         _review_agent_step(root, "canon-review-agent-task", canon_review_task, canon_review_json, canon_review_md, "complete canon review sidecar, JSON, Markdown, and completion marker"),
         _canon_review_pass_step(root, canon_review_json),
-        _fresh_file_step(
+        _longform_audit_step(
             root,
-            "longform-audit-file",
             longform_json,
-            "run longform-audit to create structural longform audit JSON/Markdown",
             refresh_after=[canon_review_completion, *review_resets],
         ),
         _fresh_file_step(
@@ -229,6 +228,37 @@ def _fresh_file_step(
         **step,
         "status": "stale",
         "message": f"artifact predates {_rel(stale_source, root)}",
+        "next_action": next_action,
+    }
+
+
+def _longform_audit_step(
+    root: Path,
+    json_path: Path,
+    *,
+    refresh_after: list[Path],
+) -> dict[str, object]:
+    next_action = "run longform-audit to create current structural audit JSON, Markdown, and graph"
+    step = _fresh_file_step(
+        root,
+        "longform-audit-file",
+        json_path,
+        next_action,
+        refresh_after=refresh_after,
+    )
+    if step["status"] != "pass":
+        return step
+    required = (json_path.with_suffix(".md"), root / "plot" / "longform_graph.json")
+    missing = [_rel(path, root) for path in required if not path.is_file()]
+    errors = [f"missing {path}" for path in missing]
+    errors.extend(longform_audit_gate_errors(root, _read_json(json_path), require_clean=True))
+    if not errors:
+        return step
+    stale = any("stale" in error.lower() for error in errors)
+    return {
+        **step,
+        "status": "stale" if stale else "blocked",
+        "message": "; ".join(errors),
         "next_action": next_action,
     }
 

@@ -20,6 +20,10 @@ from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio_engine.routes.review.blueprints import review_audit_blueprint_for_state
 from literary_engineering_studio_engine.routes.review.definition import _committee_review_gate_errors
 from literary_engineering_studio_engine.workflow.audit.service import build_route_gates
+from literary_engineering_studio_engine.workflow.state_review_audit import _review_audit_state
+from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
+from literary_engineering_studio_engine.platform_agent_tasks import write_platform_canon_review_task
+from literary_engineering_studio_engine.literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 
 
 class LongformQualityContractTests(unittest.TestCase):
@@ -316,6 +320,50 @@ class LongformQualityContractTests(unittest.TestCase):
             gates = build_route_gates(root, "export-and-release", [])
             longform_gate = next(item for item in gates if item["key"] == "review:longform-audit")
             self.assertEqual(longform_gate["status"], "fail")
+
+    def test_stale_longform_precedes_an_existing_committee_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write(root / "project.yaml", "project:\n  title: State ordering\n  target_length: 0\n")
+            lint = {
+                "schema": "literary-engineering-workbench/canon-lint/v0.1",
+                "contract_revision": CANON_LINT_CONTRACT_REVISION,
+                "status": "pass",
+                "summary": {"blocking_count": 0, "warning_count": 0},
+            }
+            self._write(root / "reviews/canon_lint.json", json.dumps(lint))
+            self._write(root / "reviews/canon_lint.md", "# Canon lint\n")
+            canon_task = write_platform_canon_review_task(root).task_path
+            canon_review = {
+                "schema": "literary-engineering-workbench/canon-review-agent/v1",
+                "conclusion": "pass",
+                "summary": "通过。",
+                "blocking_issues": [],
+                "warnings": [],
+                "unresolved_facts": [],
+                "timeline_risks": [],
+                "source_paths": [],
+                "recommendations": [],
+                "next_gate": "longform-audit",
+            }
+            self._write(root / "reviews/agent/canon_review.json", json.dumps(canon_review))
+            self._write(root / "reviews/agent/canon_review.md", "# Canon review\n")
+            write_agent_completion_marker(canon_task, root=root, handled_by="independent-reviewer")
+            build_longform_audit(root, target_length=0)
+            committee = {
+                "final_recommendation": "revise",
+                "action_items": [{"target_path": "project.yaml"}],
+                "disagreements": [],
+            }
+            self._write(root / "reviews/agent/committee_project-final-audit.json", json.dumps(committee))
+
+            self._write(root / "project.yaml", "project:\n  title: State ordering changed\n  target_length: 0\n")
+            state = _review_audit_state(root)
+
+            self.assertEqual(state["current_step"], "longform-audit-file")
+            longform_step = next(item for item in state["steps"] if item["key"] == "longform-audit-file")
+            self.assertEqual(longform_step["status"], "stale")
+            self.assertIn("stale for the current project inputs", longform_step["message"])
 
     @staticmethod
     def _write_representative_longform_inputs(root: Path) -> None:
