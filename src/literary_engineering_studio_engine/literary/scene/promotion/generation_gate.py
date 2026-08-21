@@ -153,13 +153,24 @@ def _generation_context_issues(
     prompt: dict[str, object],
 ) -> list[str]:
     trace = context_trace_status(root, scene_id)
+    revision = is_revision_candidate_path(root, candidate_path)
+    prompt_snapshot = prompt.get("historical_context_snapshot")
+    candidate_snapshot = payload.get("historical_context_snapshot")
+    if revision and isinstance(prompt_snapshot, dict) and prompt_snapshot:
+        if prompt_snapshot != candidate_snapshot:
+            return ["candidate historical context snapshot does not match prompt"]
+        return historical_revision_context_errors(
+            root,
+            scene_id,
+            source_rel=payload.get("source_candidate"),
+            source_sha256=payload.get("source_candidate_sha256"),
+            snapshot=prompt_snapshot,
+        )
     if trace.passed:
         return []
     stale = f"context trace is stale: {trace.message}"
-    if not is_revision_candidate_path(root, candidate_path):
+    if not revision:
         return [stale]
-    prompt_snapshot = prompt.get("historical_context_snapshot")
-    candidate_snapshot = payload.get("historical_context_snapshot")
     if prompt_snapshot != candidate_snapshot:
         return [stale, "candidate historical context snapshot does not match prompt"]
     errors = historical_revision_context_errors(

@@ -11,7 +11,7 @@ from ...literary.review.context_evidence import (
 from ...tasking.context_contract import CONTEXT_CONTRACT_SCHEMA
 from ...tasking.state_contracts import SCENE_REVISION_STATES
 
-CONTEXT_CONTRACT_REVISION = "scene-v4"
+CONTEXT_CONTRACT_REVISION = "scene-v5"
 CONTEXT_CONTRACT_STATES = {
     "candidate-generation-provenance",
     "candidate-review",
@@ -171,8 +171,30 @@ def _mandatory_candidates(
     return (
         *_revision_source(task, sources),
         *_review_evidence_sources(sources),
-        *common,
+        f"scenes/{scene_id}.yaml",
+        *_revision_context_sources(scene_id, sources),
+        "style/creative_quality_profile.json",
+        "style/style-profile.md",
         *sidecars,
+    )
+
+
+def _revision_context_sources(
+    scene_id: str,
+    sources: tuple[str, ...],
+) -> tuple[str, ...]:
+    prefix = f"memory/context_history/{scene_id}/"
+    archived = tuple(
+        path
+        for path in sources
+        if path.startswith(prefix)
+        and path.endswith(("/context.md", "/context.trace.json"))
+    )
+    if archived:
+        return archived
+    return (
+        f"memory/context_packets/{scene_id}.md",
+        f"memory/context_packets/{scene_id}.trace.json",
     )
 
 

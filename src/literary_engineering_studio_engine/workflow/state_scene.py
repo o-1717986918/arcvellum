@@ -18,6 +18,7 @@ from ..scene_character_assets import scene_character_asset_requirements
 from ..scene_composer import composition_input_digest
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..word_budget import scene_word_budget_contract
+from .historical_truth import candidate_supersedes_promotion
 from .historical_truth import preserve_current_historical_style_steps
 from .scene_length_repair import target_length_revision_step
 from .scene_scope import started_scene_ids
@@ -158,7 +159,7 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
         _continuity_ledger_step(root, scene_id, review=True),
         _file_step("continuity-ledger-apply", root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json", "run apply-continuity-ledger after independent review passes"),
     ]
-    steps = preserve_current_historical_style_steps(root, scene_id, steps)
+    steps = preserve_current_historical_style_steps(root, scene_id, steps, candidate)
     first_open = next((step for step in steps if step["status"] != "pass"), None)
     return {
         "scene_id": scene_id,
@@ -535,8 +536,7 @@ def _promoted_draft_step(root: Path, scene_id: str, candidate: Path | None) -> d
 def _current_scene_candidate(root: Path, scene_id: str) -> Path | None:
     promoted = _promotion_candidate_path(root, scene_id)
     latest = _latest_scene_candidate(root, scene_id)
-    manifest = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
-    if latest and (not manifest.exists() or latest.stat().st_mtime_ns > manifest.stat().st_mtime_ns):
+    if candidate_supersedes_promotion(promoted, latest):
         return latest
     return promoted or latest
 

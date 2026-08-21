@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from .context_archive import archived_context_paths, context_archive_errors
 from .historical import validate_historical_promotion
 
 
@@ -31,9 +32,26 @@ def historical_revision_source_paths(
                 str(proof["promoted_candidate"]),
                 str(proof["candidate_manifest"]),
                 str(proof["source_prompt_manifest"]),
+                *archived_context_paths(proof.get("context_archive")),
+                str(
+                    (proof.get("context_archive") or {}).get("archive_manifest")
+                    if isinstance(proof.get("context_archive"), dict)
+                    else ""
+                ),
             )
         )
     )
+
+
+def historical_revision_reading_paths(
+    root: Path,
+    scene_id: str,
+    source_path: Path,
+) -> tuple[str, ...]:
+    """Return the archived packet and trace a revision Agent may read."""
+
+    proof = _historical_source_proof(root, scene_id, source_path, require_current=True)
+    return archived_context_paths(proof.get("context_archive")) if proof else ()
 
 
 def build_historical_revision_context_snapshot(
@@ -46,9 +64,10 @@ def build_historical_revision_context_snapshot(
     proof = _historical_source_proof(root, scene_id, source_path, require_current=True)
     if proof is None:
         return {}
-    prompt = _read_json(root / str(proof["source_prompt_manifest"]))
-    context_rel = _normalized_relative(prompt.get("context"))
-    trace_rel = _normalized_relative(prompt.get("context_trace"))
+    archive = proof.get("context_archive")
+    if not isinstance(archive, dict) or context_archive_errors(root, archive):
+        return {}
+    context_rel, trace_rel = archived_context_paths(archive)
     context_path = _safe_project_path(root, context_rel)
     trace_path = _safe_project_path(root, trace_rel)
     if context_path is None or trace_path is None:
@@ -118,7 +137,7 @@ def historical_revision_context_errors(
         errors.append("historical revision source promotion is not valid")
         return errors
     errors.extend(_snapshot_proof_errors(snapshot, proof))
-    errors.extend(_snapshot_file_errors(root, snapshot))
+    errors.extend(_snapshot_file_errors(root, snapshot, proof))
     errors.extend(_snapshot_prompt_errors(root, snapshot, proof))
     return errors
 
@@ -149,7 +168,7 @@ def _snapshot_identity_errors(
 
 def _snapshot_proof_errors(
     snapshot: dict[str, object],
-    proof: dict[str, str],
+    proof: dict[str, object],
 ) -> list[str]:
     errors: list[str] = []
     for key in (
@@ -165,41 +184,102 @@ def _snapshot_proof_errors(
         "source_prompt_manifest",
         "source_prompt_manifest_sha256",
     ):
-        if str(snapshot.get(key) or "").lower() != str(proof.get(key) or "").lower():
+        if _proof_value_matches(snapshot, proof, key):
+            continue
+        else:
             errors.append(f"historical revision context {key} mismatch")
     return errors
 
 
-def _snapshot_file_errors(root: Path, snapshot: dict[str, object]) -> list[str]:
+def _proof_value_matches(
+    snapshot: dict[str, object],
+    proof: dict[str, object],
+    key: str,
+) -> bool:
+    expected = str(snapshot.get(key) or "").lower()
+    if expected == str(proof.get(key) or "").lower():
+        return True
+    predecessor = proof.get("migration_predecessor")
+    if not isinstance(predecessor, dict):
+        return False
+    migration_key = {
+        "promotion_manifest_sha256": "promotion_manifest_sha256",
+        "promotion_evidence_sha256": "promotion_evidence_sha256",
+    }.get(key)
+    return bool(migration_key and expected == str(predecessor.get(migration_key) or "").lower())
+
+
+def _snapshot_file_errors(
+    root: Path,
+    snapshot: dict[str, object],
+    proof: dict[str, object],
+) -> list[str]:
     errors: list[str] = []
+    archive = proof.get("context_archive")
+    archive_errors = context_archive_errors(root, archive)
+    if archive_errors:
+        return archive_errors
     for path_key, digest_key in (
         ("context_packet", "context_packet_sha256"),
         ("context_trace", "context_trace_sha256"),
     ):
         relative = _normalized_relative(snapshot.get(path_key))
         path = _safe_project_path(root, relative)
+        expected_digest = str(snapshot.get(digest_key) or "").lower()
+        if path is not None and path.is_file() and _file_sha256(path) == expected_digest:
+            continue
+        if _archive_carries_snapshot(archive, relative, expected_digest, path_key):
+            continue
         if path is None or not path.is_file():
             errors.append(f"historical revision {path_key} is missing")
-        elif _file_sha256(path) != str(snapshot.get(digest_key) or "").lower():
+        else:
             errors.append(f"historical revision {path_key} digest mismatch")
     return errors
+
+
+def _archive_carries_snapshot(
+    archive: object,
+    snapshot_path: str,
+    snapshot_digest: str,
+    path_key: str,
+) -> bool:
+    if not isinstance(archive, dict):
+        return False
+    packet = path_key == "context_packet"
+    archived_path_key = "archived_context_packet" if packet else "archived_context_trace"
+    source_path_key = "source_context_packet" if packet else "source_context_trace"
+    digest_key = "context_packet_sha256" if packet else "context_trace_sha256"
+    valid_paths = {
+        _normalized_relative(archive.get(archived_path_key)),
+        _normalized_relative(archive.get(source_path_key)),
+    }
+    return snapshot_path in valid_paths and snapshot_digest == str(archive.get(digest_key) or "").lower()
 
 
 def _snapshot_prompt_errors(
     root: Path,
     snapshot: dict[str, object],
-    proof: dict[str, str],
+    proof: dict[str, object],
 ) -> list[str]:
     errors: list[str] = []
     prompt = _read_json(root / str(proof["source_prompt_manifest"]))
-    if _normalized_relative(prompt.get("context")) != _normalized_relative(
-        snapshot.get("context_packet")
-    ):
+    archive = proof.get("context_archive")
+    if not isinstance(archive, dict):
+        return ["historical revision context archive is missing"]
+    if _normalized_relative(prompt.get("context")) != _normalized_relative(archive.get("source_context_packet")):
         errors.append("source prompt historical context packet mismatch")
-    if _normalized_relative(prompt.get("context_trace")) != _normalized_relative(
-        snapshot.get("context_trace")
-    ):
+    if _normalized_relative(prompt.get("context_trace")) != _normalized_relative(archive.get("source_context_trace")):
         errors.append("source prompt historical context trace mismatch")
+    for snapshot_key, archived_key, source_key in (
+        ("context_packet", "archived_context_packet", "source_context_packet"),
+        ("context_trace", "archived_context_trace", "source_context_trace"),
+    ):
+        value = _normalized_relative(snapshot.get(snapshot_key))
+        if value not in {
+            _normalized_relative(archive.get(archived_key)),
+            _normalized_relative(archive.get(source_key)),
+        }:
+            errors.append(f"historical revision {snapshot_key} is not carried by archive")
     return errors
 
 
@@ -209,7 +289,7 @@ def _historical_source_proof(
     source_path: Path,
     *,
     require_current: bool,
-) -> dict[str, str] | None:
+) -> dict[str, object] | None:
     root = root.resolve()
     validation = validate_historical_promotion(root, scene_id)
     if not validation.passed or (require_current and not validation.current):
@@ -249,6 +329,8 @@ def _historical_source_proof(
         "candidate_manifest_sha256": _file_sha256(candidate_manifest_path),
         "source_prompt_manifest": prompt_path.relative_to(root).as_posix(),
         "source_prompt_manifest_sha256": _file_sha256(prompt_path),
+        "context_archive": evidence.get("context_archive"),
+        "migration_predecessor": evidence.get("migration_predecessor"),
     }
 
 
@@ -327,5 +409,6 @@ __all__ = [
     "HISTORICAL_REVISION_CONTEXT_SCHEMA",
     "build_historical_revision_context_snapshot",
     "historical_revision_context_errors",
+    "historical_revision_reading_paths",
     "historical_revision_source_paths",
 ]

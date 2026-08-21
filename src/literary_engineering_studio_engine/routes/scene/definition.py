@@ -9,6 +9,7 @@ from .context_contract import scene_context_contract
 from ...tasking.state_contracts import SCENE_REVISION_STATES
 from ...literary.review.chapter_obligation_machine import chapter_obligation_machine_contract
 from ...literary.scene.promotion.historical_context import (
+    historical_revision_reading_paths,
     historical_revision_source_paths,
 )
 from ...scene_route_blueprints import _blueprint_for_state
@@ -210,6 +211,14 @@ def _revision_reading_paths(
             root / "drafts" / "scenes" / f"{scene_id}.md",
         )
     )
+    archived_context_paths = set(
+        historical_revision_reading_paths(
+            root,
+            scene_id,
+            root / "drafts" / "scenes" / f"{scene_id}.md",
+        )
+    )
+    historical_proof_paths.difference_update(archived_context_paths)
     revision_inputs = [
         relative
         for relative in source_paths
@@ -224,8 +233,14 @@ def _revision_reading_paths(
         f"drafts/compositions/{scene_id}_composition.json",
         f"drafts/compositions/{scene_id}_composition_review.json",
         f"branches/{scene_id}/branch_selection.md",
-        f"memory/context_packets/{scene_id}.md",
-        f"memory/context_packets/{scene_id}.trace.json",
+        *(
+            sorted(archived_context_paths)
+            if archived_context_paths
+            else [
+                f"memory/context_packets/{scene_id}.md",
+                f"memory/context_packets/{scene_id}.trace.json",
+            ]
+        ),
         "plot/word_budget/word_budget.json",
         "plot/rhythm_plan.json",
         "style/creative_quality_profile.json",

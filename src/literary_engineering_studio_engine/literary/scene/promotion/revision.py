@@ -134,6 +134,11 @@ def _revision_context(
         if not rebuild_context and not trace_is_current
         else {}
     )
+    if snapshot:
+        archived_context = root / str(snapshot.get("context_packet") or "")
+        archived_trace = root / str(snapshot.get("context_trace") or "")
+        if archived_context.is_file() and archived_trace.is_file():
+            return archived_context, archived_trace, snapshot
     if rebuild_context or (not trace_is_current and not snapshot):
         packet = build_context_packet(
             root, scene=scene_path, query=query, rebuild_index=True, output=context_path

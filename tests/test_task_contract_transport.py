@@ -18,6 +18,7 @@ import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.platform_agent_tasks import write_project_seed_asset_tasks
 from literary_engineering_studio_engine.routes.scene.definition import _agent_reading_paths
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload, _render_task_markdown, complete_task, submit_task
+from tests.scene_lifecycle_support import prepare_promotable_candidate
 
 
 class TaskContractTransportTests(unittest.TestCase):
@@ -502,6 +503,28 @@ class TaskContractTransportTests(unittest.TestCase):
             self.assertIn("--candidate drafts/revisions/scene_0001_revision.md", blueprint["command"])
             self.assertIn("--overwrite", blueprint["command"])
             self.assertIn("drafts/revisions/scene_0001_revision.agent_completion.json", blueprint["source_paths"])
+
+    def test_promotion_declares_content_addressed_context_archive_outputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _candidate = prepare_promotable_candidate(Path(temporary))
+
+            blueprint = task_registry._blueprint_for_state(
+                root,
+                "scene_0001",
+                "scenes/scene_0001.yaml",
+                "promotion-manifest",
+                "",
+            )
+
+            archive_outputs = [
+                path
+                for path in blueprint["expected_outputs"]
+                if path.startswith("memory/context_history/scene_0001/")
+            ]
+            self.assertEqual(len(archive_outputs), 3)
+            self.assertTrue(any(path.endswith("/context.md") for path in archive_outputs))
+            self.assertTrue(any(path.endswith("/context.trace.json") for path in archive_outputs))
+            self.assertTrue(any(path.endswith("/archive.json") for path in archive_outputs))
 
     def test_scene_task_selection_uses_incremental_state_instead_of_full_route_scan(self):
         with tempfile.TemporaryDirectory() as temporary:

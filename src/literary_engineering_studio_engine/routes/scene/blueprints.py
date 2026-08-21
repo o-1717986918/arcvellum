@@ -10,6 +10,7 @@ from ...semantic_task_contracts import semantic_artifact_relative_path
 from ...tasking.paths import read_json as _read_json
 from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from ...workflow_state import current_scene_candidate
+from ...literary.scene.promotion.context_archive import context_archive_output_paths
 from ...scene_route_support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
     _read_text, _unique,
@@ -116,6 +117,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         else f"drafts/candidates/{scene_id}-platform-agent.md"
     )
     candidate = candidate_markdown[:-3] if candidate_markdown.endswith(".md") else candidate_markdown
+    promotion_archive_outputs = _promotion_archive_outputs(root, scene_id, current_candidate)
     review, revision_source, revision, historical_revision_sources = revision_blueprint_contract(
         root, scene_id, current_state, candidate
     )
@@ -648,7 +650,12 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 )
             ),
             "context_trace": context_trace,
-            "expected_outputs": [f"drafts/promotions/{scene_id}_promotion.json", f"drafts/promotions/{scene_id}_promotion.md", f"drafts/scenes/{scene_id}.md"],
+            "expected_outputs": [
+                f"drafts/promotions/{scene_id}_promotion.json",
+                f"drafts/promotions/{scene_id}_promotion.md",
+                f"drafts/scenes/{scene_id}.md",
+                *promotion_archive_outputs,
+            ],
             "hard_constraints": ["Do not use --allow-unreviewed or --allow-review-notes."],
             "style_constraints": [],
             "validation_gates": ["promotion manifest exists", "promoted draft exists"],
@@ -679,7 +686,10 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 )
             ),
             "context_trace": context_trace,
-            "expected_outputs": [f"drafts/scenes/{scene_id}.md"],
+            "expected_outputs": [
+                f"drafts/scenes/{scene_id}.md",
+                *promotion_archive_outputs,
+            ],
             "hard_constraints": ["Promoted draft must come from promote-candidate, not manual copy."],
             "style_constraints": [],
             "validation_gates": ["promoted draft exists"],
@@ -759,6 +769,14 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         "next_allowed_states": [],
     }
     return _select_blueprint(current_state, writeback, table, default)
+
+
+def _promotion_archive_outputs(
+    root: Path,
+    scene_id: str,
+    candidate: Path | None,
+) -> list[str]:
+    return list(context_archive_output_paths(root, scene_id, candidate)) if candidate else []
 
 
 def _select_blueprint(

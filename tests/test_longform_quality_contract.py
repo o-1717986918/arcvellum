@@ -256,9 +256,36 @@ class LongformQualityContractTests(unittest.TestCase):
             )
             candidate = root / "drafts" / "candidates" / "scene_0001-platform-agent.md"
             draft = root / "drafts" / "scenes" / "scene_0001.md"
+            context = root / "memory" / "context_packets" / "scene_0001.md"
+            context_trace = root / "memory" / "context_packets" / "scene_0001.trace.json"
+            prompt_manifest = candidate.with_suffix(".prompt.json")
             self._write(candidate, "正文。\n")
             self._write(draft, "正文。\n")
-            self._write(candidate.with_suffix(".json"), json.dumps({"style_mount_snapshot": {}}))
+            self._write(context, "# 场景时点上下文\n\n- 事实：林在舱室准备回家。\n")
+            self._write(
+                context_trace,
+                json.dumps({"scene_id": "scene_0001", "status": "pass"}, ensure_ascii=False),
+            )
+            self._write(
+                prompt_manifest,
+                json.dumps(
+                    {
+                        "context": context.relative_to(root).as_posix(),
+                        "context_trace": context_trace.relative_to(root).as_posix(),
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            self._write(
+                candidate.with_suffix(".json"),
+                json.dumps(
+                    {
+                        "style_mount_snapshot": {},
+                        "prompt_manifest": prompt_manifest.relative_to(root).as_posix(),
+                    },
+                    ensure_ascii=False,
+                ),
+            )
             manifest = {
                 "schema": "literary-engineering-workbench/candidate-promotion/v0.1",
                 "scene_id": "scene_0001",

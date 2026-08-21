@@ -8,8 +8,11 @@ import json
 from pathlib import Path
 import re
 
+from .context_archive import context_archive_errors, seal_context_archive
 
-HISTORICAL_PROMOTION_SCHEMA = "arcvellum/historical-scene-promotion/v1"
+
+HISTORICAL_PROMOTION_LEGACY_SCHEMA = "arcvellum/historical-scene-promotion/v1"
+HISTORICAL_PROMOTION_SCHEMA = "arcvellum/historical-scene-promotion/v2"
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,8 @@ def build_historical_promotion_evidence(
     generation_gate: dict[str, object],
     review_gate: dict[str, object],
     style_mount_snapshot: dict[str, object],
+    context_archive: dict[str, object] | None = None,
+    migration_predecessor: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Seal the exact prose, review, generation, and style evidence at promotion."""
 
@@ -50,6 +55,10 @@ def build_historical_promotion_evidence(
         "candidate_generation_gate_sha256": _payload_sha256(generation_gate),
         "candidate_review_gate_sha256": _payload_sha256(review_gate),
     }
+    if context_archive:
+        evidence["context_archive"] = context_archive
+    if migration_predecessor:
+        evidence["migration_predecessor"] = migration_predecessor
     evidence["evidence_sha256"] = _payload_sha256(evidence)
     return evidence
 
@@ -59,6 +68,8 @@ def seal_historical_promotion(
     manifest: dict[str, object],
     candidate_path: Path,
     draft_path: Path,
+    *,
+    context_archive: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Attach machine-owned historical evidence to a passed promotion manifest."""
 
@@ -67,6 +78,11 @@ def seal_historical_promotion(
     if not isinstance(generation_gate, dict) or not isinstance(review_gate, dict):
         raise ValueError("promotion manifest requires generation and review gates")
     snapshot = manifest.get("style_mount_snapshot")
+    archive = context_archive or seal_context_archive(
+        root,
+        str(manifest.get("scene_id") or ""),
+        candidate_path,
+    )
     manifest["historical_evidence"] = build_historical_promotion_evidence(
         root,
         scene_id=str(manifest.get("scene_id") or ""),
@@ -75,6 +91,7 @@ def seal_historical_promotion(
         generation_gate=generation_gate,
         review_gate=review_gate,
         style_mount_snapshot=snapshot if isinstance(snapshot, dict) else {},
+        context_archive=archive,
     )
     return manifest
 
@@ -102,6 +119,7 @@ def validate_historical_promotion(
     draft_path = _safe_project_path(root, evidence.get("draft"), "draft", errors)
     errors.extend(_manifest_binding_errors(payload, evidence))
     errors.extend(_gate_digest_errors(payload, evidence))
+    errors.extend(_context_archive_evidence_errors(root, evidence))
     _match_file_hash(candidate_path, evidence.get("candidate_sha256"), "candidate", errors)
     _match_file_hash(draft_path, evidence.get("draft_sha256"), "draft", errors)
     _match_candidate_style_snapshot(candidate_path, evidence.get("style_mount_snapshot"), errors)
@@ -111,7 +129,6 @@ def validate_historical_promotion(
         root,
         scene_id,
         candidate_path,
-        root / "drafts" / "promotions" / f"{scene_id}_promotion.json",
     )
     return HistoricalPromotionValidation(
         status="pass" if not errors else "invalid",
@@ -132,13 +149,25 @@ def _identity_errors(
         errors.append("promotion manifest has wrong or missing schema")
     if str(manifest.get("scene_id") or "") != scene_id:
         errors.append("promotion manifest scene_id mismatch")
-    if evidence.get("schema") != HISTORICAL_PROMOTION_SCHEMA:
+    if evidence.get("schema") not in {
+        HISTORICAL_PROMOTION_LEGACY_SCHEMA,
+        HISTORICAL_PROMOTION_SCHEMA,
+    }:
         errors.append("historical promotion evidence has wrong or missing schema")
     if str(evidence.get("scene_id") or "") != scene_id:
         errors.append("historical promotion evidence scene_id mismatch")
     if manifest.get("allow_unreviewed") is True or manifest.get("allow_review_notes") is True:
         errors.append("historical promotion evidence cannot seal a review bypass")
     return errors
+
+
+def _context_archive_evidence_errors(
+    root: Path,
+    evidence: dict[str, object],
+) -> list[str]:
+    if evidence.get("schema") == HISTORICAL_PROMOTION_LEGACY_SCHEMA:
+        return []
+    return context_archive_errors(root, evidence.get("context_archive"))
 
 
 def _manifest_binding_errors(
@@ -246,12 +275,11 @@ def _has_newer_candidate(
     root: Path,
     scene_id: str,
     promoted_candidate: Path | None,
-    promotion_manifest: Path,
 ) -> bool:
-    if promoted_candidate is None or not promotion_manifest.is_file():
+    if promoted_candidate is None or not promoted_candidate.is_file():
         return False
     promoted_resolved = promoted_candidate.resolve()
-    promoted_at = promotion_manifest.stat().st_mtime_ns
+    promoted_at = promoted_candidate.stat().st_mtime_ns
     for path in _formal_scene_candidates(root, scene_id):
         if path.resolve() != promoted_resolved and path.stat().st_mtime_ns > promoted_at:
             return True
@@ -261,7 +289,15 @@ def _has_newer_candidate(
 def _formal_scene_candidates(root: Path, scene_id: str) -> tuple[Path, ...]:
     candidates = root / "drafts" / "candidates"
     revisions = root / "drafts" / "revisions"
-    paths = list(candidates.glob(f"{scene_id}-*.md")) if candidates.is_dir() else []
+    paths = (
+        [
+            path
+            for path in candidates.glob(f"{scene_id}-*.md")
+            if not path.name.endswith((".agent_tasks.md", ".prompt.md", "_report.md"))
+        ]
+        if candidates.is_dir()
+        else []
+    )
     revision_name = re.compile(
         rf"^{re.escape(scene_id)}_revision(?:_[0-9]+)?\.md$"
     )

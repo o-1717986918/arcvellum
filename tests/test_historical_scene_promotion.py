@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import tempfile
@@ -11,6 +12,13 @@ from literary_engineering_studio_engine.literary.scene.promotion.historical impo
     HistoricalPromotionValidation,
     build_historical_promotion_evidence,
     validate_historical_promotion,
+)
+from literary_engineering_studio_engine.literary.scene.promotion.context_archive import (
+    context_archive_output_paths,
+    seal_context_archive,
+)
+from literary_engineering_studio_engine.literary.scene.promotion.context_migration import (
+    migrate_legacy_historical_context,
 )
 from literary_engineering_studio_engine.literary.scene.promotion.historical_context import (
     build_historical_revision_context_snapshot,
@@ -29,6 +37,7 @@ from literary_engineering_studio_engine.routes.scene.gates import (
 from literary_engineering_studio_engine.workflow.historical_truth import (
     preserve_historical_style_gates,
     preserve_historical_style_steps,
+    preserve_valid_revision_preparation_steps,
 )
 
 
@@ -115,6 +124,15 @@ class HistoricalScenePromotionTests(unittest.TestCase):
             )
             self.assertTrue(superseded.passed, superseded.errors)
             self.assertFalse(superseded.current)
+
+            manifest_future = newer.stat().st_mtime_ns + 10_000_000
+            os.utime(promotion_path, ns=(manifest_future, manifest_future))
+            after_metadata_update = validate_historical_promotion(
+                root,
+                "scene_0001",
+                manifest,
+            )
+            self.assertFalse(after_metadata_update.current)
 
     def test_numbered_static_revision_supersedes_historical_promotion(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -275,7 +293,7 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 [],
             )
 
-            trace = root / "memory/context_packets/scene_0001.trace.json"
+            trace = root / snapshot["context_trace"]
             trace.write_text('{"scene_id": "scene_0001", "tampered": true}\n', encoding="utf-8")
             errors = historical_revision_context_errors(
                 root,
@@ -284,7 +302,35 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 source_sha256=self._sha(draft),
                 snapshot=snapshot,
             )
-            self.assertIn("historical revision context_trace digest mismatch", errors)
+            self.assertIn("historical revision source promotion is not valid", errors)
+
+    def test_mutable_context_refresh_does_not_change_archived_revision_truth(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _manifest, _candidate, draft = self._sealed_promotion(Path(temporary))
+            snapshot = build_historical_revision_context_snapshot(
+                root,
+                "scene_0001",
+                draft,
+            )
+            (root / "memory/context_packets/scene_0001.md").write_text(
+                "# future context\n",
+                encoding="utf-8",
+            )
+            (root / "memory/context_packets/scene_0001.trace.json").write_text(
+                '{"scene_id":"scene_0001","canon_revision":"future"}\n',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                historical_revision_context_errors(
+                    root,
+                    "scene_0001",
+                    source_rel="drafts/scenes/scene_0001.md",
+                    source_sha256=self._sha(draft),
+                    snapshot=snapshot,
+                ),
+                [],
+            )
 
     def test_historical_revision_keeps_scene_time_context_instead_of_rebuilding(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -312,6 +358,106 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 prompt["historical_context_snapshot"]["source_draft_sha256"],
                 self._sha(draft),
             )
+
+    def test_valid_revision_seals_only_pre_generation_creative_work(self):
+        steps = [
+            {"key": "context-trace", "status": "stale", "next_action": "refresh"},
+            {"key": "roleplay-simulation", "status": "stale", "next_action": "rerun"},
+            {"key": "branch-manifest", "status": "stale", "next_action": "rerun"},
+            {"key": "composition-json", "status": "stale", "next_action": "rerun"},
+            {"key": "candidate-review", "status": "missing", "next_action": "review"},
+            {"key": "promotion-manifest", "status": "missing", "next_action": "promote"},
+        ]
+        candidate = Path("C:/project/drafts/revisions/scene_0001_revision_02.md")
+        with patch(
+            "literary_engineering_studio_engine.workflow.historical_truth."
+            "candidate_generation_gate",
+            return_value={"status": "pass"},
+        ):
+            result = preserve_valid_revision_preparation_steps(
+                Path("C:/project"),
+                "scene_0001",
+                candidate,
+                steps,
+            )
+
+        by_key = {str(item["key"]): item for item in result}
+        self.assertEqual(by_key["context-trace"]["status"], "stale")
+        self.assertEqual(by_key["roleplay-simulation"]["status"], "pass")
+        self.assertEqual(by_key["branch-manifest"]["status"], "pass")
+        self.assertEqual(by_key["composition-json"]["status"], "pass")
+        self.assertEqual(by_key["candidate-review"]["status"], "missing")
+        self.assertEqual(by_key["promotion-manifest"]["status"], "missing")
+
+    def test_legacy_snapshot_migration_preserves_exact_old_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, manifest, candidate, draft = self._sealed_promotion(Path(temporary))
+            archive = manifest["historical_evidence"]["context_archive"]
+            recovery_packet = root / archive["archived_context_packet"]
+            recovery_trace = root / archive["archived_context_trace"]
+            evidence = dict(manifest["historical_evidence"])
+            evidence["schema"] = "arcvellum/historical-scene-promotion/v1"
+            evidence.pop("context_archive", None)
+            evidence.pop("migration_predecessor", None)
+            evidence.pop("evidence_sha256", None)
+            evidence["evidence_sha256"] = self._payload_sha(evidence)
+            legacy = dict(manifest)
+            legacy["historical_evidence"] = evidence
+            promotion_path = root / "drafts/promotions/scene_0001_promotion.json"
+            promotion_path.write_text(
+                json.dumps(legacy, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            snapshot = {
+                "schema": "arcvellum/historical-revision-context/v1",
+                "scene_id": "scene_0001",
+                "source_draft": "drafts/scenes/scene_0001.md",
+                "source_draft_sha256": self._sha(draft),
+                "promotion_manifest": "drafts/promotions/scene_0001_promotion.json",
+                "promotion_manifest_sha256": self._sha(promotion_path),
+                "promotion_evidence_sha256": evidence["evidence_sha256"],
+                "promoted_candidate": candidate.relative_to(root).as_posix(),
+                "promoted_candidate_sha256": self._sha(candidate),
+                "candidate_manifest": candidate.with_suffix(".json").relative_to(root).as_posix(),
+                "candidate_manifest_sha256": self._sha(candidate.with_suffix(".json")),
+                "source_prompt_manifest": candidate.with_suffix(".prompt.json").relative_to(root).as_posix(),
+                "source_prompt_manifest_sha256": self._sha(candidate.with_suffix(".prompt.json")),
+                "context_packet": "memory/context_packets/scene_0001.md",
+                "context_packet_sha256": self._sha(recovery_packet),
+                "context_trace": "memory/context_packets/scene_0001.trace.json",
+                "context_trace_sha256": self._sha(recovery_trace),
+            }
+            snapshot["snapshot_sha256"] = self._payload_sha(snapshot)
+            revision_prompt = root / "drafts/revisions/scene_0001_revision_02.prompt.json"
+            revision_prompt.parent.mkdir(parents=True, exist_ok=True)
+            revision_prompt.write_text(
+                json.dumps({"historical_context_snapshot": snapshot}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            (root / "memory/context_packets/scene_0001.md").write_text("future\n", encoding="utf-8")
+            (root / "memory/context_packets/scene_0001.trace.json").write_text("{}\n", encoding="utf-8")
+
+            result = migrate_legacy_historical_context(
+                root,
+                "scene_0001",
+                snapshot_prompt=revision_prompt.relative_to(root),
+                packet_source=recovery_packet,
+                trace_source=recovery_trace,
+            )
+
+            self.assertTrue(result.receipt.is_file())
+            self.assertTrue(validate_historical_promotion(root, "scene_0001").passed)
+            self.assertEqual(
+                historical_revision_context_errors(
+                    root,
+                    "scene_0001",
+                    source_rel="drafts/scenes/scene_0001.md",
+                    source_sha256=self._sha(draft),
+                    snapshot=snapshot,
+                ),
+                [],
+            )
+            self.assertEqual(len(context_archive_output_paths(root, "scene_0001", candidate)), 3)
 
     def _sealed_promotion(
         self,
@@ -404,6 +550,7 @@ class HistoricalScenePromotionTests(unittest.TestCase):
         )
         generation_gate = {"status": "pass", "candidate": "scene_0001"}
         review_gate = {"status": "pass", "candidate": "scene_0001"}
+        context_archive = seal_context_archive(root, "scene_0001", candidate)
         manifest = {
             "schema": "literary-engineering-workbench/candidate-promotion/v0.1",
             "scene_id": "scene_0001",
@@ -426,6 +573,7 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 generation_gate=generation_gate,
                 review_gate=review_gate,
                 style_mount_snapshot=style_snapshot,
+                context_archive=context_archive,
             )
         )
         promotion_path.write_text(
@@ -452,15 +600,24 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 generation_gate=refreshed["candidate_generation"],
                 review_gate=refreshed["candidate_review"],
                 style_mount_snapshot=refreshed["style_mount_snapshot"],
+                context_archive=refreshed["historical_evidence"]["context_archive"],
             )
         )
         return refreshed
 
     @staticmethod
     def _sha(path: Path) -> str:
-        import hashlib
-
         return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def _payload_sha(payload: object) -> str:
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
 
 if __name__ == "__main__":

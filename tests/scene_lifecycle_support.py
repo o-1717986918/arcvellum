@@ -24,6 +24,7 @@ def prepare_promotable_candidate(root: Path) -> tuple[Path, Path]:
     build_demo_project(root, title="晋升端到端回归", run_agent_workflow=False)
     scene = root / "scenes" / "scene_0001.yaml"
     context = root / "memory" / "context_packets" / "scene_0001.md"
+    context_trace = root / "memory" / "context_packets" / "scene_0001.trace.json"
     candidate = root / "drafts" / "candidates" / "scene_0001-platform-agent.md"
     candidate.parent.mkdir(parents=True, exist_ok=True)
     candidate.write_text(
@@ -38,6 +39,8 @@ def prepare_promotable_candidate(root: Path) -> tuple[Path, Path]:
     prompt_manifest.write_text(
         json.dumps(
             {
+                "context": context.relative_to(root).as_posix(),
+                "context_trace": context_trace.relative_to(root).as_posix(),
                 "generation_standards": {
                     "creative_quality_profile_digest": profile["digest"],
                     "narrative_rhythm_contract": {

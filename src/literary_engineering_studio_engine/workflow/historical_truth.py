@@ -6,13 +6,72 @@ from pathlib import Path
 
 from ..literary.scene.promotion.historical import HistoricalPromotionValidation
 from ..literary.scene.promotion.historical import validate_historical_promotion
+from ..literary.scene.promotion.gate_support import is_revision_candidate_path
+from ..literary.scene.promotion.generation_gate import candidate_generation_gate
+
+
+def candidate_supersedes_promotion(
+    promoted: Path | None,
+    latest: Path | None,
+) -> bool:
+    if latest is None or promoted is None:
+        return latest is not None
+    return (
+        latest.resolve() != promoted.resolve()
+        and latest.stat().st_mtime_ns > promoted.stat().st_mtime_ns
+    )
+
+
+def preserve_valid_revision_preparation_steps(
+    root: Path,
+    scene_id: str,
+    candidate: Path | None,
+    steps: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Do not rerun creative preparation for an exact valid revision candidate."""
+
+    if candidate is None or not is_revision_candidate_path(root, candidate):
+        return steps
+    gate = candidate_generation_gate(root, scene_id, candidate)
+    if gate.get("status") != "pass":
+        return steps
+    sealed_keys = {
+        "roleplay-simulation",
+        "roleplay-agent-task",
+        "branch-manifest",
+        "branch-agent-task",
+        "branch-selection",
+        "composition-json",
+        "composition-agent-task",
+    }
+    result: list[dict[str, object]] = []
+    for step in steps:
+        if step.get("key") not in sealed_keys or step.get("status") == "pass":
+            result.append(step)
+            continue
+        sealed = dict(step)
+        sealed.update(
+            {
+                "status": "pass",
+                "message": (
+                    "sealed by exact historical revision provenance; current-context "
+                    "AgentReview, promotion, and writeback remain mandatory"
+                ),
+                "next_action": "",
+                "historical_revision_preparation": True,
+            }
+        )
+        result.append(sealed)
+    return result
 
 
 def preserve_current_historical_style_steps(
     root: Path,
     scene_id: str,
     steps: list[dict[str, object]],
+    candidate: Path | None = None,
 ) -> list[dict[str, object]]:
+    steps = preserve_valid_revision_preparation_steps(root, scene_id, candidate, steps)
     historical = validate_historical_promotion(root, scene_id)
     if not historical.passed or not historical.current:
         return steps
