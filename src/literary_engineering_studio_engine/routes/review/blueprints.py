@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...literary.assets.canon.contracts import CANON_LINT_SOURCE_PATHS
 from ...literary.review.longform_contract import LONGFORM_AUDIT_SOURCE_PATHS
 from .evidence import project_review_repair_targets
 
@@ -214,7 +215,7 @@ def _canon_lint(_context: ReviewBlueprintContext) -> dict[str, object]:
         "deterministic-cli",
         "route.review-audit.canon-lint.v1",
         "python -m literary_engineering_studio_engine canon-lint <project>",
-        ["project.yaml", "canon", "characters", "plot", "scenes", "drafts/scenes"],
+        list(CANON_LINT_SOURCE_PATHS),
         ["reviews/canon_lint.md", "reviews/canon_lint.json"],
         [
             "Run canon-lint before any platform-agent project-level semantic review.",

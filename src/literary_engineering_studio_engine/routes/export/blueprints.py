@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...literary.export.approval_evidence import release_approval_evidence_paths
+from ...literary.export.contracts import publish_chapter_source_paths
 
 
 def export_release_blueprint_for_state(
@@ -159,12 +160,7 @@ def _publish_release(chapter_id: str) -> dict[str, object]:
         "task_type": "deterministic-cli",
         "prompt_asset_id": "route.export-release.publish.v1",
         "command": f"python -m literary_engineering_studio_engine publish-chapter <project> --chapter-id {chapter_id} --release-id formal-release --approval-run-id {run_id} --export-formats md,docx",
-        "source_paths": [
-            f"exports/{chapter_id}/export_manifest.json",
-            "workflow/approvals/index.jsonl",
-            "reviews/canon_lint.json",
-            f"plot/chapters/{chapter_id}.json",
-        ],
+        "source_paths": list(publish_chapter_source_paths(chapter_id)),
         "expected_outputs": [
             f"{release_dir}/publish_manifest.json",
             f"{release_dir}/release_notes.md",

@@ -166,6 +166,13 @@ class TaskContractTransportTests(unittest.TestCase):
         self.assertIn("releases/chapter_0001/formal-release/chapter_0001_novel.md", publish["expected_outputs"])
         self.assertIn("releases/chapter_0001/formal-release/chapter_0001_novel.docx", publish["expected_outputs"])
         self.assertIn("reviews/canon_lint.json", publish["expected_outputs"])
+        self.assertIn("canon", publish["source_paths"])
+        self.assertIn("characters", publish["source_paths"])
+        self.assertIn("scenes", publish["source_paths"])
+        self.assertIn("plot/chapters/chapter_0001.json", publish["source_paths"])
+        self.assertIn("drafts/chapters/chapter_0001.md", publish["source_paths"])
+        self.assertIn("exports/chapter_0001", publish["source_paths"])
+        self.assertIn("style", publish["source_paths"])
 
     def test_fresh_scene_blueprint_does_not_require_future_review_output(self):
         with tempfile.TemporaryDirectory() as temporary:

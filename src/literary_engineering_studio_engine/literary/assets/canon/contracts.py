@@ -11,6 +11,14 @@ from typing import Any
 CANON_PATCH_SCHEMA = "literary-engineering-workbench/canon-patch-candidate/v0.1"
 CANON_PATCH_RISK_LEVELS = frozenset({"low", "medium", "high"})
 CANON_LINT_CONTRACT_REVISION = "2026-08-21.1"
+CANON_LINT_SOURCE_PATHS = (
+    "project.yaml",
+    "canon",
+    "characters",
+    "plot",
+    "scenes",
+    "drafts/scenes",
+)
 
 
 class SceneLifecycleStatus(StrEnum):
@@ -154,6 +162,7 @@ __all__ = [
     "CANON_PATCH_RISK_LEVELS",
     "CANON_PATCH_SCHEMA",
     "CANON_LINT_CONTRACT_REVISION",
+    "CANON_LINT_SOURCE_PATHS",
     "CHAPTER_SCENE_REQUIRED_FIELDS",
     "SCENE_LIFECYCLE_VALUES",
     "CanonPatchCandidateIssue",

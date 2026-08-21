@@ -8,7 +8,9 @@ import unittest
 
 from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
 from literary_engineering_studio_engine.literary.planning.chapter_pipeline import build_chapter_workspace
+from literary_engineering_studio_engine.literary.assets.canon.lint import build_canon_lint
 from literary_engineering_studio_engine.literary.export.package import build_export_package
+from literary_engineering_studio_engine.literary.export.publish import publish_chapter
 from literary_engineering_studio_engine.literary.scene.promotion.historical import seal_historical_promotion
 from literary_engineering_studio_engine.literary.review.longform_contract import (
     LONGFORM_AUDIT_SCHEMA,
@@ -31,6 +33,74 @@ from literary_engineering_studio_engine.literary.assets.canon.contracts import C
 
 
 class LongformQualityContractTests(unittest.TestCase):
+    def test_publish_blueprint_stages_its_canon_and_export_read_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            self._write_representative_longform_inputs(project)
+            task_markdown = project / "workflow" / "tasks" / "publish.agent_tasks.md"
+            task_markdown.parent.mkdir(parents=True)
+            task_markdown.write_text("# deterministic publish\n", encoding="utf-8")
+            blueprint = export_release_blueprint_for_state(
+                project,
+                "chapter_0001",
+                "publish-release",
+                "publish chapter",
+            )
+            task = TaskPackage(
+                project_root=project,
+                task_json_path=project / "workflow" / "tasks" / "publish.task.json",
+                task_markdown_path=task_markdown,
+                payload={
+                    "task_id": "export-and-release-chapter-0001-publish-release",
+                    "route": "export-and-release",
+                    "current_state": "publish-release",
+                    "chapter_id": "chapter_0001",
+                    **blueprint,
+                },
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="deterministic-engine",
+                materialize_agent_view=False,
+            )
+
+            staged = sandbox.control_workspace
+            for relative in (
+                "canon/world_rules.yaml",
+                "canon/timeline.yaml",
+                "canon/facts.json",
+                "canon/locations.yaml",
+                "canon/forbidden_changes.yaml",
+                "characters/lead.yaml",
+                "scenes/scene_0001.yaml",
+                "plot/outline.md",
+                "plot/foreshadowing.csv",
+                "plot/chapters/chapter_0001.json",
+                "drafts/chapters/chapter_0001.md",
+                "exports/chapter_0001/export_manifest.json",
+                "exports/chapter_0001/chapter_0001_novel.md",
+                "workflow/approvals/index.jsonl",
+                "style/creative_quality_profile.json",
+            ):
+                self.assertTrue((staged / relative).is_file(), relative)
+            self.assertEqual(build_canon_lint(staged).blocking_count, 0)
+            chapter = json.loads(
+                (staged / "plot/chapters/chapter_0001.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(chapter["summary"]["blocked_count"], 0)
+            published = publish_chapter(
+                staged,
+                chapter_id="chapter_0001",
+                release_id="sandbox-proof",
+                allow_unapproved=True,
+                export_formats="md",
+            )
+            self.assertEqual(published.status, "published_internal")
+            self.assertEqual(published.published_scene_count, 1)
+
     def test_export_package_blueprint_stages_sealed_readiness_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -482,8 +552,12 @@ class LongformQualityContractTests(unittest.TestCase):
     def _write_representative_longform_inputs(root: Path) -> None:
         files = {
             "project.yaml": "project:\n  title: Contract\n",
-            "canon/facts.json": "{}\n",
-            "characters/lead.yaml": "character_id: lead\nname: 林\n",
+            "canon/facts.json": '{"facts":[],"conflicts":[],"candidates":[]}\n',
+            "canon/world_rules.yaml": "rules: []\n",
+            "canon/timeline.yaml": "events:\n  - id: t1\n",
+            "canon/locations.yaml": "locations: []\n",
+            "canon/forbidden_changes.yaml": "forbidden_changes: []\n",
+            "characters/lead.yaml": "character_id: lead\nname: 林\nrole: 主角\n",
             "style/creative_quality_profile.json": "{}\n",
             "scenes/scene_0001.yaml": "scene_id: scene_0001\nchapter_id: chapter_0001\n",
             "branches/scene_0001/roleplay_simulation.md": "读取回执\n",
@@ -497,13 +571,34 @@ class LongformQualityContractTests(unittest.TestCase):
             "drafts/promotions/scene_0001_promotion.json": "{}\n",
             "memory/context_packets/scene_0001.md": "# Context\n",
             "memory/context_packets/scene_0001.trace.json": "{}\n",
-            "plot/chapters/chapter_0001.json": "{}\n",
+            "plot/chapters/chapter_0001.json": json.dumps(
+                {
+                    "summary": {
+                        "scene_count": 1,
+                        "ready_count": 1,
+                        "blocked_count": 0,
+                    },
+                    "scenes": [
+                        {
+                            "scene_id": "scene_0001",
+                            "path": "scenes/scene_0001.yaml",
+                            "status": "ready",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            "drafts/chapters/chapter_0001.md": "# 第一章\n\n正文。\n",
             "plot/chapter_obligations/chapter_0001.json": "{}\n",
             "plot/chapter_obligations/chapter_0001.agent_tasks.md": "# task\n",
             "plot/chapter_obligations/chapter_0001.agent_completion.json": "{}\n",
             "plot/outline.md": "# 第一章\n",
             "plot/conflict_matrix.md": "# conflict\n",
-            "plot/foreshadowing.csv": "id,status\nF1,open\n",
+            "plot/foreshadowing.csv": (
+                "foreshadow_id,setup_scene,expected_payoff,status\n"
+                "F1,scene_0001,,active\n"
+            ),
             "plot/promises/ledger.json": "{}\n",
             "plot/reader_questions/ledger.json": "{}\n",
             "plot/rhythm_plan.json": "{}\n",
@@ -511,6 +606,29 @@ class LongformQualityContractTests(unittest.TestCase):
             "reviews/scene_0001-review.md": "- 结论： pass\n",
             "reviews/agent/scene_0001_scene_review.json": "{}\n",
             "workflow/approvals/index.jsonl": "{}\n",
+            "exports/chapter_0001/export_manifest.json": json.dumps(
+                {
+                    "schema": "literary-engineering-workbench/export-package/v0.1",
+                    "chapter_id": "chapter_0001",
+                    "include_blocked": False,
+                    "requested_formats": ["md"],
+                    "outputs": {
+                        "novel": "exports/chapter_0001/chapter_0001_novel.md",
+                        "screenplay": "exports/chapter_0001/chapter_0001_screenplay.md",
+                        "video_prompt_pack": "exports/chapter_0001/chapter_0001_video_prompt_pack.md",
+                        "docx": {},
+                        "docx_layout_plans": {},
+                        "docx_inspections": {},
+                    },
+                    "exported_scenes": [{"scene_id": "scene_0001"}],
+                    "skipped_scenes": [],
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            "exports/chapter_0001/chapter_0001_novel.md": "# 第一章\n正文。\n",
+            "exports/chapter_0001/chapter_0001_screenplay.md": "# 第一章剧本\n正文。\n",
+            "exports/chapter_0001/chapter_0001_video_prompt_pack.md": "# 第一章提示词\n正文。\n",
         }
         for relative, content in files.items():
             path = root / relative
