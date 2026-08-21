@@ -12,7 +12,10 @@ from typing import Any
 
 from ..creative_steward import CreativeSteward
 from ..project_manager import read_directions
-from literary_engineering_studio_engine.public.workflow import build_workflow_state
+from literary_engineering_studio_engine.public.workflow import (
+    build_workflow_state,
+    next_scene_workflow_state,
+)
 from literary_engineering_studio_engine.public.literary import target_length_repair_pending
 
 
@@ -62,6 +65,15 @@ def _pending_target_length_dependency(project: Path) -> bool:
 
     try:
         return target_length_repair_pending(project)
+    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError):
+        return False
+
+
+def _pending_scene_dependency(project: Path) -> bool:
+    """Return whether formal export must first close an earlier scene."""
+
+    try:
+        return next_scene_workflow_state(project) is not None
     except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError):
         return False
 

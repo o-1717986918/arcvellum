@@ -11,7 +11,11 @@ from literary_engineering_studio_engine.literary.planning.chapter_pipeline impor
 from literary_engineering_studio_engine.literary.assets.canon.lint import build_canon_lint
 from literary_engineering_studio_engine.literary.export.package import build_export_package
 from literary_engineering_studio_engine.literary.export.publish import publish_chapter
-from literary_engineering_studio_engine.literary.scene.promotion.historical import seal_historical_promotion
+from literary_engineering_studio_engine.literary.scene.promotion.historical import (
+    historical_promotion_archive_paths,
+    seal_historical_promotion,
+    validate_historical_promotion,
+)
 from literary_engineering_studio_engine.literary.review.longform_contract import (
     LONGFORM_AUDIT_SCHEMA,
     LONGFORM_AUDIT_SOURCE_PATHS,
@@ -309,6 +313,52 @@ class LongformQualityContractTests(unittest.TestCase):
                 "- 审查对象 SHA-256：`"
                 + hashlib.sha256(draft.read_bytes()).hexdigest()
                 + "`\n- 结论： pass\n",
+            )
+            self._write(
+                root / "memory/context_history/scene_9999/unused/context.md",
+                "unrelated archive\n",
+            )
+            archive_paths = historical_promotion_archive_paths(root, "scene_0001")
+            self.assertEqual(len(archive_paths), 3)
+            task_markdown = root / "workflow/tasks/chapter-history.agent_tasks.md"
+            self._write(task_markdown, "# deterministic chapter workspace\n")
+            blueprint = export_release_blueprint_for_state(
+                root,
+                "chapter_0001",
+                "chapter-workspace",
+                "build chapter workspace",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "workflow/tasks/chapter-history.task.json",
+                task_markdown_path=task_markdown,
+                payload={
+                    "task_id": "export-and-release-chapter-0001-chapter-workspace",
+                    "route": "export-and-release",
+                    "current_state": "chapter-workspace",
+                    "chapter_id": "chapter_0001",
+                    **blueprint,
+                },
+            )
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="deterministic-engine",
+                materialize_agent_view=False,
+            )
+            for relative in archive_paths:
+                self.assertTrue((sandbox.control_workspace / relative).is_file(), relative)
+            self.assertFalse(
+                (
+                    sandbox.control_workspace
+                    / "memory/context_history/scene_9999/unused/context.md"
+                ).exists()
+            )
+            self.assertTrue(
+                validate_historical_promotion(
+                    sandbox.control_workspace,
+                    "scene_0001",
+                ).passed
             )
 
             result = build_longform_audit(root)

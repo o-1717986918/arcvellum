@@ -9,6 +9,7 @@ from literary_engineering_studio.projections.reader import _chapter_ids as reade
 from literary_engineering_studio_engine.literary.planning.chapter_inventory import (
     formal_chapter_files,
     formal_chapter_ids,
+    formal_scene_ids_for_chapter,
     is_final_chapter,
 )
 from literary_engineering_studio_engine.literary.review.longform_audit import _chapter_files
@@ -33,6 +34,14 @@ class ChapterInventoryContractTests(unittest.TestCase):
                 self._write(root / relative, "{}\n")
 
             self.assertEqual(formal_chapter_ids(root), ("chapter_0001", "chapter_0002"))
+            self.assertEqual(
+                formal_scene_ids_for_chapter(root, "chapter_0001"),
+                ("scene_0001",),
+            )
+            self.assertEqual(
+                formal_scene_ids_for_chapter(root, "chapter_0002"),
+                ("scene_0002",),
+            )
             self.assertEqual(
                 tuple(path.stem for path in formal_chapter_files(root)),
                 ("chapter_0001", "chapter_0002"),

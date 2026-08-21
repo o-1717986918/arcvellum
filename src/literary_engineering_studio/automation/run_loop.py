@@ -18,7 +18,7 @@ from .campaign_runtime import CampaignRuntimeCoordinator
 from .policy import DelegationPolicy
 from .route_dependencies import resolve_route_cycle
 from .run_result_handler import ClaimedRunResultHandler, RouteCycle, RunLoopHost
-from .support import _pending_target_length_dependency
+from .support import _pending_scene_dependency, _pending_target_length_dependency
 
 
 class ClaimedRunLoop:
@@ -36,6 +36,7 @@ class ClaimedRunLoop:
         route_order: tuple[str, ...],
         dependency_probe: Callable[[Path], bool],
         repair_probe: Callable[[Path], bool] | None = None,
+        scene_probe: Callable[[Path], bool] | None = None,
         campaign: CampaignRuntimeCoordinator | None = None,
     ) -> None:
         self.host = host
@@ -47,6 +48,7 @@ class ClaimedRunLoop:
         self.route_order = route_order
         self.dependency_probe = dependency_probe
         self.repair_probe = repair_probe or _pending_target_length_dependency
+        self.scene_probe = scene_probe or _pending_scene_dependency
         self.campaign = campaign
         self.results = ClaimedRunResultHandler(
             host,
@@ -57,6 +59,7 @@ class ClaimedRunLoop:
             stop=stop,
             dependency_probe=dependency_probe,
             repair_probe=self.repair_probe,
+            scene_probe=self.scene_probe,
             campaign=campaign,
         )
 
@@ -121,6 +124,7 @@ class ClaimedRunLoop:
             route_index,
             asset_probe=self.dependency_probe,
             length_repair_probe=self.repair_probe,
+            scene_probe=self.scene_probe,
             owner=f"autopilot:{self.run_id}",
         )
         route_changed = str(run.get("current_route") or "") != cycle.route

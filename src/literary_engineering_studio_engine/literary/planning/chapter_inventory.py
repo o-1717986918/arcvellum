@@ -35,25 +35,47 @@ def formal_chapter_files(project_root: Path) -> tuple[Path, ...]:
     )
 
 
+def formal_scene_ids_for_chapter(
+    project_root: Path,
+    chapter_id: str,
+) -> tuple[str, ...]:
+    """Return formal scene identities assigned to one chapter."""
+
+    selected = {
+        scene_id
+        for scene_id, declared_chapter in _scene_records(project_root.resolve())
+        if declared_chapter == chapter_id
+    }
+    return tuple(sorted(selected, key=_natural_key))
+
+
 def is_final_chapter(project_root: Path, chapter_id: str) -> bool:
     ids = formal_chapter_ids(project_root)
     return bool(ids) and ids[-1] == chapter_id
 
 
 def _scene_chapter_ids(root: Path) -> set[str]:
+    return {
+        chapter_id
+        for _scene_id, chapter_id in _scene_records(root)
+        if chapter_id != "unassigned"
+    }
+
+
+def _scene_records(root: Path) -> tuple[tuple[str, str], ...]:
     scene_dir = root / "scenes"
     if not scene_dir.is_dir():
-        return set()
-    ids: set[str] = set()
-    for path in sorted(scene_dir.glob("*.yaml")):
+        return ()
+    records: list[tuple[str, str]] = []
+    for path in sorted(scene_dir.glob("*.yaml"), key=lambda item: _natural_key(item.stem)):
         if path.name.startswith("_"):
             continue
-        chapter_id = scalar_from_yaml_text(
-            path.read_text(encoding="utf-8"), "chapter_id"
-        ).strip()
-        if chapter_id and chapter_id != "unassigned":
-            ids.add(chapter_id)
-    return ids
+        text = path.read_text(encoding="utf-8")
+        scene_id = scalar_from_yaml_text(text, "scene_id").strip()
+        chapter_id = scalar_from_yaml_text(text, "chapter_id").strip()
+        if scene_id and chapter_id:
+            records.append((scene_id, chapter_id))
+    return tuple(records)
 
 
 def _budget_chapter_ids(root: Path) -> set[str]:
@@ -107,4 +129,9 @@ def _natural_key(value: str) -> tuple[object, ...]:
     )
 
 
-__all__ = ["formal_chapter_files", "formal_chapter_ids", "is_final_chapter"]
+__all__ = [
+    "formal_chapter_files",
+    "formal_chapter_ids",
+    "formal_scene_ids_for_chapter",
+    "is_final_chapter",
+]

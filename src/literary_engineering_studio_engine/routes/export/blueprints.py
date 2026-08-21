@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...literary.export.approval_evidence import release_approval_evidence_paths
-from ...literary.export.contracts import publish_chapter_source_paths
+from ...literary.export.contracts import (
+    chapter_workspace_source_paths,
+    publish_chapter_source_paths,
+)
 
 
 def export_release_blueprint_for_state(
@@ -14,7 +17,6 @@ def export_release_blueprint_for_state(
     current_state: str,
     next_action: str,
 ) -> dict[str, object]:
-    _ = root
     builders = {
         "chapter-workspace": _chapter_workspace,
         "export-package": _export_package,
@@ -24,6 +26,8 @@ def export_release_blueprint_for_state(
         "publish-release": _publish_release,
     }
     builder = builders.get(current_state)
+    if builder is _chapter_workspace:
+        return _chapter_workspace(root, chapter_id)
     return builder(chapter_id) if builder else _repair(chapter_id, next_action)
 
 
@@ -59,28 +63,12 @@ def _target_length_repair_plan(_chapter_id: str) -> dict[str, object]:
     }
 
 
-def _chapter_workspace(chapter_id: str) -> dict[str, object]:
+def _chapter_workspace(root: Path, chapter_id: str) -> dict[str, object]:
     return {
         "task_type": "deterministic-cli",
         "prompt_asset_id": "route.export-release.chapter-workspace.v1",
         "command": f"python -m literary_engineering_studio_engine chapter-workspace <project> --chapter-id {chapter_id}",
-        "source_paths": [
-            "project.yaml",
-            "scenes",
-            "memory/context_packets",
-            "drafts/scenes",
-            "drafts/candidates",
-            "drafts/revisions",
-            "drafts/promotions",
-            "reviews",
-            "branches",
-            "drafts/compositions",
-            "plot/word_budget",
-            "plot/chapter_obligations",
-            "plot/rhythm_plan.json",
-            "style",
-            "characters",
-        ],
+        "source_paths": list(chapter_workspace_source_paths(root, chapter_id)),
         "expected_outputs": [f"drafts/chapters/{chapter_id}.md", f"plot/chapters/{chapter_id}.json"],
         "hard_constraints": [
             "Rebuild or verify chapter workspace immediately before export.",

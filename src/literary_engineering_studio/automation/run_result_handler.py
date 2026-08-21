@@ -17,9 +17,7 @@ from .run_result_contracts import RouteCycle, RunLoopHost
 from .support import _now, _operational_decision, _project_progress_fingerprint
 
 
-_TRANSPORT_FAILURE_KINDS = frozenset(
-    {"transient_network", "first_event_timeout", "idle_timeout"}
-)
+_TRANSPORT_FAILURE_KINDS = frozenset({"transient_network", "first_event_timeout", "idle_timeout"})
 
 
 class ClaimedRunResultHandler:
@@ -36,6 +34,7 @@ class ClaimedRunResultHandler:
         stop: threading.Event,
         dependency_probe: Callable[[Path], bool],
         repair_probe: Callable[[Path], bool] | None = None,
+        scene_probe: Callable[[Path], bool] | None = None,
         campaign: CampaignRuntimeCoordinator | None,
     ) -> None:
         self.host = host
@@ -46,6 +45,7 @@ class ClaimedRunResultHandler:
         self.stop = stop
         self.dependency_probe = dependency_probe
         self.repair_probe = repair_probe or (lambda _project: False)
+        self.scene_probe = scene_probe or (lambda _project: False)
         self.campaign = campaign
         self.failure_by_task: dict[str, int] = {}
         self.transport_failure_by_task: dict[str, int] = {}
@@ -158,6 +158,7 @@ class ClaimedRunResultHandler:
                 cycle,
                 asset_probe=self.dependency_probe,
                 length_repair_probe=self.repair_probe,
+                scene_probe=self.scene_probe,
             ):
                 return self.host._register_no_progress(
                     self.run_id,

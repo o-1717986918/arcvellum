@@ -139,6 +139,37 @@ def validate_historical_promotion(
     )
 
 
+def historical_promotion_archive_paths(
+    root: Path,
+    scene_id: str,
+) -> tuple[str, ...]:
+    """Return the exact archive files of a current valid promotion."""
+
+    root = root.resolve()
+    validation = validate_historical_promotion(root, scene_id)
+    if not validation.passed or not validation.current:
+        return ()
+    payload = _read_json(
+        root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
+    )
+    evidence = payload.get("historical_evidence")
+    archive = evidence.get("context_archive") if isinstance(evidence, dict) else None
+    if context_archive_errors(root, archive):
+        return ()
+    paths: list[str] = []
+    for key in (
+        "archived_context_packet",
+        "archived_context_trace",
+        "archive_manifest",
+    ):
+        value = archive.get(key) if isinstance(archive, dict) else None
+        resolved = _safe_project_path(root, value, key, [])
+        if resolved is None or not resolved.is_file():
+            return ()
+        paths.append(_relative_path(root, resolved))
+    return tuple(paths)
+
+
 def _identity_errors(
     manifest: dict[str, object],
     evidence: dict[str, object],
@@ -334,3 +365,14 @@ def _read_json(path: Path) -> dict[str, object]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+__all__ = [
+    "HISTORICAL_PROMOTION_LEGACY_SCHEMA",
+    "HISTORICAL_PROMOTION_SCHEMA",
+    "HistoricalPromotionValidation",
+    "build_historical_promotion_evidence",
+    "historical_promotion_archive_paths",
+    "seal_historical_promotion",
+    "validate_historical_promotion",
+]

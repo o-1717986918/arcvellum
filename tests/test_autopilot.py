@@ -1351,6 +1351,59 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(event[1], "route.dependency_ready")
             self.assertEqual(event[2]["dependency_kind"], "target-length-repair")
 
+    def test_export_scene_closure_rewinds_through_scene_and_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            host = MagicMock()
+            host.runs.read_autopilot_run.return_value = {}
+            loop = ClaimedRunLoop(
+                host,
+                run_id="autopilot-scene-closure",
+                project=project,
+                policy=DelegationPolicy(default_policy("full_auto")),
+                steward=MagicMock(),
+                stop=threading.Event(),
+                route_order=(
+                    "scene-development",
+                    "review-and-audit",
+                    "export-and-release",
+                ),
+                dependency_probe=lambda _project: False,
+                repair_probe=lambda _project: False,
+                scene_probe=lambda _project: True,
+            )
+
+            cycle = loop._enter_route(
+                {"current_route": "export-and-release", "current_task_id": "old"},
+                2,
+            )
+
+            self.assertEqual(cycle.route, "scene-development")
+            self.assertEqual(cycle.planned_route, "export-and-release")
+            self.assertEqual(cycle.dependency_kind, "scene-closure")
+            self.assertEqual(cycle.resume_route_index, 1)
+
+            loop.results.scene_probe = lambda _project: False
+            result = WorkerRunResult(
+                "route_ready",
+                project,
+                cycle.route,
+                "",
+                "pi-worker",
+                None,
+                None,
+                "ready",
+            )
+            self.assertFalse(loop.results._handle_route_ready(cycle, result))
+            self.assertEqual(
+                host.runs.update_autopilot_run.call_args.kwargs["route_index"],
+                1,
+            )
+            event = host.runs.append_autopilot_event.call_args.args
+            self.assertEqual(event[1], "route.dependency_ready")
+            self.assertEqual(event[2]["dependency_kind"], "scene-closure")
+
 
 if __name__ == "__main__":
     unittest.main()
