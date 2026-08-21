@@ -63,6 +63,12 @@ class LongformQualityContractTests(unittest.TestCase):
                     **blueprint,
                 },
             )
+            old_release = project / "releases" / "chapter_0001" / "formal-release"
+            old_release.mkdir(parents=True)
+            (old_release / "publish_manifest.json").write_text(
+                '{"status":"stale-baseline"}\n',
+                encoding="utf-8",
+            )
 
             sandbox = stage_task(
                 task,
@@ -72,6 +78,15 @@ class LongformQualityContractTests(unittest.TestCase):
             )
 
             staged = sandbox.control_workspace
+            self.assertIn("--overwrite", blueprint["command"])
+            self.assertEqual(
+                json.loads(
+                    (staged / "releases/chapter_0001/formal-release/publish_manifest.json").read_text(
+                        encoding="utf-8"
+                    )
+                )["status"],
+                "stale-baseline",
+            )
             for relative in (
                 "canon/world_rules.yaml",
                 "canon/timeline.yaml",
@@ -98,12 +113,17 @@ class LongformQualityContractTests(unittest.TestCase):
             published = publish_chapter(
                 staged,
                 chapter_id="chapter_0001",
-                release_id="sandbox-proof",
+                release_id="formal-release",
                 allow_unapproved=True,
+                overwrite=True,
                 export_formats="md",
             )
             self.assertEqual(published.status, "published_internal")
             self.assertEqual(published.published_scene_count, 1)
+            self.assertEqual(
+                json.loads(published.manifest_path.read_text(encoding="utf-8"))["status"],
+                "published_internal",
+            )
 
     def test_export_package_blueprint_stages_sealed_readiness_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

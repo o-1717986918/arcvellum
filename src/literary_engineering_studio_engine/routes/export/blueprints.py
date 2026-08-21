@@ -188,7 +188,7 @@ def _publish_release(root: Path, chapter_id: str) -> dict[str, object]:
     return {
         "task_type": "deterministic-cli",
         "prompt_asset_id": "route.export-release.publish.v1",
-        "command": f"python -m literary_engineering_studio_engine publish-chapter <project> --chapter-id {chapter_id} --release-id formal-release --approval-run-id {run_id} --export-formats md,docx",
+        "command": f"python -m literary_engineering_studio_engine publish-chapter <project> --chapter-id {chapter_id} --release-id formal-release --approval-run-id {run_id} --export-formats md,docx --overwrite",
         "source_paths": list(publish_chapter_source_paths(root, chapter_id)),
         "expected_outputs": [
             f"{release_dir}/publish_manifest.json",
@@ -208,7 +208,7 @@ def _publish_release(root: Path, chapter_id: str) -> dict[str, object]:
         "hard_constraints": [
             "Do not use --allow-unapproved in formal Skill-host work.",
             "Published manifest must have status=published and copied delivery outputs.",
-            "If the release directory already exists, do not overwrite casually; inspect latest and ask the user before replacing.",
+            "Overwrite formal-release only inside the isolated task sandbox and only after the current content-and-context approval Gate has passed.",
         ],
         "style_constraints": [],
         "validation_gates": [
