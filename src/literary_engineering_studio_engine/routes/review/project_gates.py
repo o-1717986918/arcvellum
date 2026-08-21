@@ -22,7 +22,7 @@ def project_review_revision_gate_errors(
     targets = [str(item) for item in task.get("repair_targets") or [] if str(item).strip()]
     errors = _revision_target_errors(root, task, targets, review_kind)
     errors.extend(_review_reset_errors(root, "canon_review"))
-    errors.extend(canon_lint_gate_errors(root))
+    errors.extend(canon_lint_gate_errors(root, require_clean=True))
     if review_kind == "committee":
         errors.extend(_review_reset_errors(root, "committee_project-final-audit"))
         errors.extend(longform_audit_file_gate_errors(root))

@@ -18,12 +18,15 @@ hard_constraints:
   - Resolve each finding at its target_path without relabeling the old review as pass.
   - Run canon-lint after repair and keep its refreshed Markdown and JSON outputs.
   - Set canon review conclusion to recheck_required record applied_repair_actions and reset completion evidence to recheck_required with expected_artifacts_checked false.
+  - Obey every canon-lint allowed_values and repair_hint literally. Never invent lifecycle labels such as completed or canon_lint_clear.
+  - The refreshed canon lint must have blocking_count=0 and warning_count=0; replacing one warning with another is not a repair.
 style_constraints:
   - Preserve deliberate ambiguity while removing contradictions and unsupported durable facts.
 output_contract:
   - Write every declared repair target refreshed canon lint files reset review JSON/Markdown and reset completion marker.
 review_requirements:
   - A fresh independent canon-review-agent-task decides the next verdict.
+  - Lint info may remain; it is context and cannot be promoted into unresolved_facts without independent contradiction evidence.
 forbidden_shortcuts:
   - Do not self-pass or delete findings without repair evidence.
   - Do not touch a file that was not declared as an Allowed Output.

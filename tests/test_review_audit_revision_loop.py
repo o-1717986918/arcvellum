@@ -13,6 +13,7 @@ from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, valida
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
 from literary_engineering_studio_engine.platform_agent_tasks import write_platform_canon_review_task
 from literary_engineering_studio_engine.review_audit_route import _review_audit_blueprint_for_state
+from literary_engineering_studio_engine.routes.review.canon_gates import canon_lint_gate_errors
 from literary_engineering_studio_engine.routes.review.gates import review_audit_state_gate_validation
 from literary_engineering_studio_engine.routes.review.task_payload import build_review_audit_task_payload
 from literary_engineering_studio_engine.tasking.package_contract import enrich_task_payload
@@ -187,6 +188,28 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
             self.assertEqual(completion["status"], "recheck_required")
             self.assertFalse(completion["expected_artifacts_checked"])
 
+    def test_project_revision_rejects_refreshed_lint_warnings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reviews = root / "reviews"
+            reviews.mkdir(parents=True)
+            (reviews / "canon_lint.md").write_text("# Canon Lint\n", encoding="utf-8")
+            (reviews / "canon_lint.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/canon-lint/v0.1",
+                        "status": "pass_with_warnings",
+                        "summary": {"blocking_count": 0, "warning_count": 1},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(canon_lint_gate_errors(root), [])
+            errors = canon_lint_gate_errors(root, require_clean=True)
+            self.assertTrue(any("warning_count must be 0" in item for item in errors))
+            self.assertTrue(any("status must be pass" in item for item in errors))
+
     def test_large_canon_revision_compiles_as_target_sliced_review_prompt(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -224,6 +247,12 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
                     root,
                     "review-and-audit",
                     {"current_step": "canon-review-pass", "next_action": "repair"},
+                )
+            )
+            self.assertTrue(
+                any(
+                    "allowed_values" in item and "never invent lifecycle labels" in item
+                    for item in payload["hard_constraints"]
                 )
             )
             task = load_task_package(

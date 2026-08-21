@@ -9,19 +9,17 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .contracts import (
+    CHAPTER_SCENE_REQUIRED_FIELDS,
+    SCENE_LIFECYCLE_VALUES,
+    SceneLifecycleStatus,
+)
+from .lint_issues import CanonLintIssue, add_issue as _add, render_report as _render_report
+
 from ..character_identity import character_slug, formal_character_aliases
 
 
 SEVERITIES = {"blocking": 3, "warning": 2, "info": 1}
-
-
-@dataclass(frozen=True)
-class CanonLintIssue:
-    check_id: str
-    severity: str
-    location: str
-    message: str
-    evidence: str = ""
 
 
 @dataclass(frozen=True)
@@ -194,8 +192,7 @@ def _check_scenes(
             _add(issues, "scene-id-missing", "warning", rel, "场景缺少 scene_id，当前将使用文件名推断。")
         if not chapter_id:
             _add(issues, "scene-chapter-missing", "warning", rel, "场景缺少 chapter_id。", scene_id)
-        if status not in {"planned", "drafting", "review", "ready", "blocked", "published"}:
-            _add(issues, "scene-status-invalid", "warning", rel, "场景 status 未使用推荐状态。", status or "empty")
+        _check_scene_lifecycle(root, issues, rel, scene_id, status, text)
         if not location:
             _add(issues, "scene-location-missing", "warning", rel, "场景缺少 location。", scene_id)
         if not participants:
@@ -203,9 +200,33 @@ def _check_scenes(
         for participant in participants:
             if character_aliases and participant not in character_aliases and character_slug(participant) not in character_aliases:
                 _add(issues, "scene-participant-unknown", "blocking", rel, "场景参与者未在人物档案中登记。", participant)
-        if _list_after(text, "new_facts"):
-            _add(issues, "scene-new-facts-candidate", "info", rel, "场景 output_state.new_facts 应进入人工确认候选。", scene_id)
     return records
+
+
+def _check_scene_lifecycle(
+    root: Path,
+    issues: list[CanonLintIssue],
+    rel: str,
+    scene_id: str,
+    status: str,
+    text: str,
+) -> None:
+    if status not in SCENE_LIFECYCLE_VALUES:
+        _add(
+            issues, "scene-status-invalid", "warning", rel,
+            "场景 status 不在正式生命周期枚举中。", status or "empty",
+            allowed_values=SCENE_LIFECYCLE_VALUES,
+            repair_hint=(
+                "只能使用 allowed_values；若该场景已通过正文晋升、审查和写回门禁则使用 ready，"
+                "否则按真实阶段使用 planned/drafting/review/blocked，禁止创造新标签。"
+            ),
+        )
+    if _list_after(text, "new_facts") and not _canon_patch_applied(root, scene_id):
+        _add(
+            issues, "scene-new-facts-candidate", "info", rel,
+            "场景 output_state.new_facts 尚未形成已应用的 Canon patch。", scene_id,
+            repair_hint="Info 仅供审查上下文使用；不得仅凭本项升级为 warning 或 unresolved_facts。",
+        )
 
 
 def _check_timeline(root: Path, issues: list[CanonLintIssue]) -> None:
@@ -260,12 +281,55 @@ def _check_chapter_states(root: Path, issues: list[CanonLintIssue]) -> None:
             continue
         scenes = data.get("scenes", [])
         if not scenes:
-            _add(issues, "chapter-scenes-empty", "warning", rel, "章节状态没有 scenes。")
+            _add(
+                issues,
+                "chapter-scenes-empty",
+                "warning",
+                rel,
+                "章节状态没有 scenes。",
+                allowed_values=CHAPTER_SCENE_REQUIRED_FIELDS,
+                repair_hint=(
+                    "scenes 必须是对象数组；每项保留 scene_id、path、status，且只收录 chapter_id 与本章一致的场景。"
+                ),
+            )
         for scene in scenes:
+            if not isinstance(scene, dict):
+                _add(
+                    issues,
+                    "chapter-scene-shape-invalid",
+                    "warning",
+                    rel,
+                    "章节 scenes 项必须是对象。",
+                    repr(scene)[:120],
+                    allowed_values=CHAPTER_SCENE_REQUIRED_FIELDS,
+                    repair_hint="将该项改为包含 scene_id、path、status 的对象。",
+                )
+                continue
             status = str(scene.get("status", ""))
             scene_id = str(scene.get("scene_id", ""))
-            if status != "ready":
-                _add(issues, "chapter-scene-not-ready", "warning", rel, "章节内存在未 ready 场景。", f"{scene_id}:{status}")
+            missing = [field for field in CHAPTER_SCENE_REQUIRED_FIELDS if not str(scene.get(field, "")).strip()]
+            if missing:
+                _add(
+                    issues,
+                    "chapter-scene-fields-missing",
+                    "warning",
+                    rel,
+                    "章节场景条目缺少必需字段。",
+                    f"{scene_id or 'unknown'}:{','.join(missing)}",
+                    allowed_values=CHAPTER_SCENE_REQUIRED_FIELDS,
+                    repair_hint="补齐 scene_id、path、status；不要只写 scene_ids 摘要数组。",
+                )
+            if status != SceneLifecycleStatus.READY:
+                _add(
+                    issues,
+                    "chapter-scene-not-ready",
+                    "warning",
+                    rel,
+                    "章节内存在未 ready 场景。",
+                    f"{scene_id}:{status}",
+                    allowed_values=(SceneLifecycleStatus.READY.value,),
+                    repair_hint="只有场景正式 readiness 已通过时才写 status=ready；否则先修复场景正式门禁。",
+                )
 
 
 def _check_unconfirmed_candidates(root: Path, issues: list[CanonLintIssue], facts: dict[str, object]) -> None:
@@ -308,53 +372,15 @@ def _is_no_change_candidate(value: str) -> bool:
     return normalized in {"无", "none", "no change", "n/a", "not applicable"}
 
 
-def _render_report(root: Path, payload: dict[str, object]) -> str:
-    summary = payload["summary"]
-    lines = [
-        "# Canon Lint Report",
-        "",
-        f"- 项目：`{root}`",
-        f"- 生成时间：{payload['generated_at']}",
-        f"- 状态：`{payload['status']}`",
-        f"- 问题总数：{summary['issue_count']}",
-        f"- Blocking：{summary['blocking_count']}",
-        f"- Warning：{summary['warning_count']}",
-        f"- Info：{summary['info_count']}",
-        "",
-        "## Issues",
-        "",
-    ]
-    issues = payload["issues"]
-    if not issues:
-        lines.append("- 未发现问题。")
-        return "\n".join(lines) + "\n"
-    lines.extend(["| Severity | Check | Location | Message | Evidence |", "| --- | --- | --- | --- | --- |"])
-    for issue in issues:
-        lines.append(
-            "| {severity} | `{check}` | `{location}` | {message} | {evidence} |".format(
-                severity=issue["severity"],
-                check=issue["check_id"],
-                location=issue["location"],
-                message=issue["message"],
-                evidence=str(issue.get("evidence", "")).replace("|", "\\|"),
-            )
-        )
-    lines.extend(
-        [
-            "",
-            "## 使用边界",
-            "",
-            "- 本报告只检查项目状态，不自动修改 canon。",
-            "- Blocking 应在正式导出或发布前解决。",
-            "- Warning 可进入人工审查队列，但不能被忽略。",
-            "- Info 用于提醒仍需维护的工程事实。",
-        ]
-    )
-    return "\n".join(lines) + "\n"
-
-
-def _add(issues: list[CanonLintIssue], check_id: str, severity: str, location: str, message: str, evidence: str = "") -> None:
-    issues.append(CanonLintIssue(check_id=check_id, severity=severity, location=location, message=message, evidence=evidence))
+def _canon_patch_applied(root: Path, scene_id: str) -> bool:
+    manifest = root / "canon" / "applied" / f"{scene_id}_canon_patch_apply.json"
+    if not manifest.is_file():
+        return False
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return payload.get("status") == "applied" and payload.get("scene_id") == scene_id
 
 
 def _resolve_output(root: Path, output: Path | None, *default_parts: str) -> Path:

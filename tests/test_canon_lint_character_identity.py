@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
@@ -47,6 +48,42 @@ class CanonLintCharacterIdentityTests(unittest.TestCase):
 
             self.assertEqual(self._issues(result.json_path, "draft-unconfirmed-candidate"), [])
 
+    def test_invalid_scene_status_exposes_closed_repair_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_minimum_project(root, role="主角——轨道维修员")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.write_text(scene.read_text(encoding="utf-8").replace("status: ready", "status: canon_lint_clear"), encoding="utf-8")
+
+            result = build_canon_lint(root)
+
+            issue = self._issues(result.json_path, "scene-status-invalid")[0]
+            self.assertEqual(
+                issue["allowed_values"],
+                ["planned", "drafting", "review", "ready", "blocked", "published"],
+            )
+            self.assertIn("禁止创造新标签", issue["repair_hint"])
+            self.assertIn("allowed=planned,drafting,review,ready,blocked,published", result.report_path.read_text(encoding="utf-8"))
+
+    def test_applied_canon_patch_resolves_new_fact_candidate_notice(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_minimum_project(root, role="主角——轨道维修员")
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.write_text(scene.read_text(encoding="utf-8") + "output_state:\n  new_facts:\n    - 求救信号已确认\n", encoding="utf-8")
+
+            pending = build_canon_lint(root)
+            self.assertEqual(len(self._issues(pending.json_path, "scene-new-facts-candidate")), 1)
+
+            manifest = root / "canon" / "applied" / "scene_0001_canon_patch_apply.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(
+                json.dumps({"status": "applied", "scene_id": "scene_0001"}),
+                encoding="utf-8",
+            )
+            applied = build_canon_lint(root)
+            self.assertEqual(self._issues(applied.json_path, "scene-new-facts-candidate"), [])
+
     @staticmethod
     def _write_minimum_project(root: Path, *, role: str) -> None:
         files = {
@@ -78,8 +115,6 @@ class CanonLintCharacterIdentityTests(unittest.TestCase):
 
     @staticmethod
     def _issues(path: Path, check_id: str) -> list[dict[str, object]]:
-        import json
-
         payload = json.loads(path.read_text(encoding="utf-8"))
         return [item for item in payload["issues"] if item["check_id"] == check_id]
 

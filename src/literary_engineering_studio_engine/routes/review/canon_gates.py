@@ -138,7 +138,7 @@ def _canon_apply_patch_evidence_errors(root: Path, patch: Path, apply_manifest: 
     return errors
 
 
-def canon_lint_gate_errors(root: Path) -> list[str]:
+def canon_lint_gate_errors(root: Path, *, require_clean: bool = False) -> list[str]:
     json_path = root / "reviews" / "canon_lint.json"
     report_path = root / "reviews" / "canon_lint.md"
     errors = [f"canon-lint artifact missing: {_rel(path, root)}" for path in (report_path, json_path) if not path.exists()]
@@ -150,11 +150,16 @@ def canon_lint_gate_errors(root: Path) -> list[str]:
         errors.append("canon_lint.json has wrong or missing schema")
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     blocking = to_int(summary.get("blocking_count"))
+    warnings = to_int(summary.get("warning_count"))
     status = str(payload.get("status") or "").strip().lower()
     if blocking:
         errors.append(f"canon-lint blocking_count must be 0; got {blocking}")
-    if status not in {"pass", "pass_with_warnings"}:
-        errors.append(f"canon-lint status must be pass/pass_with_warnings; got {status or 'missing'}")
+    if require_clean and warnings:
+        errors.append(f"canon-lint warning_count must be 0 after project repair; got {warnings}")
+    allowed_statuses = {"pass"} if require_clean else {"pass", "pass_with_warnings"}
+    if status not in allowed_statuses:
+        expected = "pass" if require_clean else "pass/pass_with_warnings"
+        errors.append(f"canon-lint status must be {expected}; got {status or 'missing'}")
     return errors
 
 

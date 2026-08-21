@@ -1,14 +1,28 @@
-"""Pure semantic contracts for Canon patch candidates."""
+"""Pure semantic contracts for Canon patches, lint, and lifecycle state."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 
 CANON_PATCH_SCHEMA = "literary-engineering-workbench/canon-patch-candidate/v0.1"
 CANON_PATCH_RISK_LEVELS = frozenset({"low", "medium", "high"})
+
+
+class SceneLifecycleStatus(StrEnum):
+    PLANNED = "planned"
+    DRAFTING = "drafting"
+    REVIEW = "review"
+    READY = "ready"
+    BLOCKED = "blocked"
+    PUBLISHED = "published"
+
+
+SCENE_LIFECYCLE_VALUES = tuple(status.value for status in SceneLifecycleStatus)
+CHAPTER_SCENE_REQUIRED_FIELDS = ("scene_id", "path", "status")
 
 
 @dataclass(frozen=True)
@@ -138,6 +152,9 @@ def _is_safe_canon_target(value: str) -> bool:
 __all__ = [
     "CANON_PATCH_RISK_LEVELS",
     "CANON_PATCH_SCHEMA",
+    "CHAPTER_SCENE_REQUIRED_FIELDS",
+    "SCENE_LIFECYCLE_VALUES",
     "CanonPatchCandidateIssue",
+    "SceneLifecycleStatus",
     "canon_patch_candidate_issues",
 ]

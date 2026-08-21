@@ -20,6 +20,9 @@ hard_constraints:
   - Do not edit project sources during this review task.
   - Every non-pass repair recommendation must be an object with exact target_path action and verification.
   - target_path must be one text file under canon characters plot scenes or drafts/candidates; never name a directory review file or workflow file.
+  - Treat canon-lint severity=info as context only. Do not copy info into warnings unresolved_facts or recommendations unless independent project evidence proves a contradiction or unhandled durable fact.
+  - An applied canon patch resolves its scene-new-facts candidate notice. Do not create a second approval or repair debt for the same applied patch.
+  - When canon-lint provides allowed_values or repair_hint, copy those exact constraints into the recommendation. Never invent lifecycle labels.
 style_constraints:
   - Prefer exact contradictions and downstream consequences over generic advice.
 output_contract:
@@ -29,6 +32,7 @@ output_contract:
 review_requirements:
   - Pass requires no blocking issues warnings unresolved facts or timeline risks.
   - Non-pass findings must remain visible until a separate repair task changes their declared targets.
+  - Info-only lint findings do not prevent pass and must not be laundered into an actionable field.
 forbidden_shortcuts:
   - Do not invent a pass merely because the route is waiting.
   - Do not hide a repair requirement in prose without a machine-readable target_path.

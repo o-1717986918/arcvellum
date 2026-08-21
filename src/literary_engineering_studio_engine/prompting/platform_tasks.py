@@ -532,7 +532,7 @@ def write_platform_canon_review_task(root: Path) -> PlatformAgentTaskResult:
         notes=[
             "由平台 agent 审查 canon、角色、场景、章节和伏笔连续性。",
             "本任务不调用本地 dry-run、http-chat 或外部 agent。",
-            "非通过结论可以正式提交；每条需要修复的 recommendation 必须包含精确 target_path、action 和 verification，供隔离修复任务限定写入范围。",
+            "非通过结论可以正式提交；每条需要修复的 recommendation 必须包含精确 target_path、action 和 verification，供隔离修复任务限定写入范围；canon-lint 的 info 不得无证据升级，枚举和固定结构必须逐字遵守 allowed_values 与 repair_hint。",
             f"完成后写入 JSON：{_rel(json_output, root)}",
             f"完成后写入 Markdown 报告：{_rel(report, root)}",
         ],
