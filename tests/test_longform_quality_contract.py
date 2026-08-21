@@ -304,7 +304,12 @@ class LongformQualityContractTests(unittest.TestCase):
                 root / "drafts" / "promotions" / "scene_0001_promotion.json",
                 json.dumps(manifest, ensure_ascii=False),
             )
-            self._write(root / "reviews" / "scene_0001-review.md", "- 结论： pass\n")
+            self._write(
+                root / "reviews" / "scene_0001-review.md",
+                "- 审查对象 SHA-256：`"
+                + hashlib.sha256(draft.read_bytes()).hexdigest()
+                + "`\n- 结论： pass\n",
+            )
 
             result = build_longform_audit(root)
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))

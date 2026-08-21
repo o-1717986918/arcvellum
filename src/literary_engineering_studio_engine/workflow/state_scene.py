@@ -16,6 +16,7 @@ from ..narrative_rhythm import narrative_rhythm_contract
 from ..reader_experience import reader_experience_contract
 from ..scene_character_assets import scene_character_asset_requirements
 from ..scene_composer import composition_input_digest
+from ..literary.scene.promotion.historical_readiness import static_review_evidence
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..word_budget import scene_word_budget_contract
 from .historical_truth import candidate_supersedes_promotion
@@ -24,7 +25,7 @@ from .scene_length_repair import target_length_revision_step
 from .scene_scope import started_scene_ids
 from .state_common import (
     _file_step, _read, _read_json, _rel, _semantic_task_step,
-    _static_review_conclusion, _task_step,
+    _task_step,
 )
 def _scene_states(root: Path) -> list[dict[str, object]]:
     scenes = root / "scenes"
@@ -484,9 +485,8 @@ def _candidate_revision_direction(root: Path, scene_id: str, gate: dict[str, obj
 
 def _static_review_step(root: Path, scene_id: str) -> dict[str, object]:
     path = root / "reviews" / f"{scene_id}-review.md"
-    conclusion = _static_review_conclusion(path)
     draft = root / "drafts" / "scenes" / f"{scene_id}.md"
-    fresh = _static_review_matches_draft(path, draft)
+    conclusion, fresh = static_review_evidence(path, draft)
     key = "static-review" if not conclusion or not fresh else "static-revision"
     if conclusion == "pass" and fresh:
         key = "static-review"
@@ -588,13 +588,6 @@ def _latest_scene_candidate(root: Path, scene_id: str) -> Path | None:
     if not candidates:
         return None
     return sorted(candidates, key=lambda path: path.stat().st_mtime, reverse=True)[0]
-
-
-def _static_review_matches_draft(review: Path, draft: Path) -> bool:
-    if not review.is_file() or not draft.is_file():
-        return False
-    match = re.search(r"(?m)^-\s*审查对象 SHA-256：`([0-9a-fA-F]{64})`\s*$", _read(review))
-    return bool(match and match.group(1).lower() == hashlib.sha256(draft.read_bytes()).hexdigest())
 
 
 def _scene_id(path: Path) -> str:

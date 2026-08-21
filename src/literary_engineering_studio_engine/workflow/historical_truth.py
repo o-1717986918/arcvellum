@@ -75,7 +75,45 @@ def preserve_current_historical_style_steps(
     historical = validate_historical_promotion(root, scene_id)
     if not historical.passed or not historical.current:
         return steps
+    steps = preserve_promoted_preparation_steps(steps, historical)
     return preserve_historical_style_steps(root, steps, historical)
+
+
+def preserve_promoted_preparation_steps(
+    steps: list[dict[str, object]],
+    historical: HistoricalPromotionValidation,
+) -> list[dict[str, object]]:
+    """Seal pre-promotion preparation after the promotion itself is current."""
+
+    sealed_keys = {
+        "roleplay-simulation",
+        "roleplay-agent-task",
+        "branch-manifest",
+        "branch-agent-task",
+        "branch-selection",
+        "composition-json",
+        "composition-agent-task",
+    }
+    result: list[dict[str, object]] = []
+    for step in steps:
+        if step.get("key") not in sealed_keys or step.get("status") == "pass":
+            result.append(step)
+            continue
+        sealed = dict(step)
+        sealed.update(
+            {
+                "status": "pass",
+                "message": (
+                    "sealed by the current tamper-evident promotion; "
+                    "post-promotion review and writeback remain mandatory"
+                ),
+                "next_action": "",
+                "historical_promotion_preparation": True,
+                "historical_candidate": str(historical.candidate_path or ""),
+            }
+        )
+        result.append(sealed)
+    return result
 
 
 def preserve_current_historical_style_gates(

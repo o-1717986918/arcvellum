@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -27,10 +28,10 @@ def historical_scene_readiness(
     )
     if not body.strip():
         return "needs_draft", ("historically promoted draft body is empty",)
-    conclusion = _static_review_conclusion(review)
-    if not conclusion:
+    conclusion, exact_draft = static_review_evidence(review, draft)
+    if not conclusion or not exact_draft:
         return "needs_review", (
-            "historically promoted draft lacks its post-promotion static review",
+            "historically promoted draft lacks an exact post-promotion static review",
         )
     if conclusion == "pass":
         return "ready", ()
@@ -39,16 +40,27 @@ def historical_scene_readiness(
     return "blocked", (f"post-promotion static review conclusion is {conclusion}",)
 
 
-def _static_review_conclusion(path: Path) -> str:
-    if not path.is_file():
-        return ""
-    text = path.read_text(encoding="utf-8", errors="ignore")
+def static_review_evidence(review: Path, draft: Path) -> tuple[str, bool]:
+    """Return the review conclusion and exact promoted-draft binding."""
+
+    if not review.is_file() or not draft.is_file():
+        return "", False
+    text = review.read_text(encoding="utf-8", errors="ignore")
     match = re.search(
         r"(?m)^-\s*(?:审查)?结论：\s*(?:\*\*)?`?([a-z_]+)`?(?:\*\*)?\s*$",
         text,
         re.IGNORECASE,
     )
-    return match.group(1).strip().lower() if match else ""
+    digest = re.search(
+        r"(?m)^-\s*审查对象 SHA-256：`([0-9a-fA-F]{64})`\s*$",
+        text,
+    )
+    conclusion = match.group(1).strip().lower() if match else ""
+    exact = bool(
+        digest
+        and digest.group(1).lower() == hashlib.sha256(draft.read_bytes()).hexdigest()
+    )
+    return conclusion, exact
 
 
-__all__ = ["historical_scene_readiness"]
+__all__ = ["historical_scene_readiness", "static_review_evidence"]

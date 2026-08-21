@@ -30,6 +30,9 @@ from literary_engineering_studio_engine.literary.scene.promotion.historical_cont
 from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
     _generation_context_issues,
 )
+from literary_engineering_studio_engine.literary.scene.promotion.historical_readiness import (
+    historical_scene_readiness,
+)
 from literary_engineering_studio_engine.literary.scene.promotion.revision import (
     build_scene_revision_task,
 )
@@ -37,6 +40,7 @@ from literary_engineering_studio_engine.routes.scene.gates import (
     _promotion_gate_errors,
 )
 from literary_engineering_studio_engine.workflow.historical_truth import (
+    preserve_current_historical_style_steps,
     preserve_historical_style_gates,
     preserve_historical_style_steps,
     preserve_valid_revision_preparation_steps,
@@ -45,6 +49,48 @@ import literary_engineering_studio_engine.task_registry as task_registry
 
 
 class HistoricalScenePromotionTests(unittest.TestCase):
+    def test_current_promotion_seals_preparation_but_requires_exact_static_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _manifest, _candidate, draft = self._sealed_promotion(
+                Path(temporary)
+            )
+            review = root / "reviews/scene_0001-review.md"
+            review.parent.mkdir(parents=True, exist_ok=True)
+            review.write_text(
+                "# review\n\n- 审查对象 SHA-256：`" + "0" * 64 + "`\n- 结论：pass\n",
+                encoding="utf-8",
+            )
+
+            status, issues = historical_scene_readiness(root, "scene_0001") or ("", ())
+            self.assertEqual(status, "needs_review")
+            self.assertIn("exact post-promotion static review", issues[0])
+
+            steps = [
+                {"key": "branch-selection", "status": "stale", "next_action": "rerun"},
+                {"key": "static-review", "status": "stale", "next_action": "review"},
+                {"key": "state-agent-task", "status": "stale", "next_action": "state"},
+            ]
+            projected = preserve_current_historical_style_steps(
+                root,
+                "scene_0001",
+                steps,
+            )
+            by_key = {str(item["key"]): item for item in projected}
+            self.assertEqual(by_key["branch-selection"]["status"], "pass")
+            self.assertEqual(by_key["static-review"]["status"], "stale")
+            self.assertEqual(by_key["state-agent-task"]["status"], "stale")
+
+            review.write_text(
+                "# review\n\n- 审查对象 SHA-256：`"
+                + self._sha(draft)
+                + "`\n- 结论：pass\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                historical_scene_readiness(root, "scene_0001"),
+                ("ready", ()),
+            )
+
     def test_sealed_promotion_survives_future_style_checks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, manifest, candidate, _draft = self._sealed_promotion(
