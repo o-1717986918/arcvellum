@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
+
 from ...agent_schema import validate_payload
 from ...agent_tasks import agent_task_completion_status
 from ...task_paths import relative_path as _rel
@@ -138,7 +140,12 @@ def _canon_apply_patch_evidence_errors(root: Path, patch: Path, apply_manifest: 
     return errors
 
 
-def canon_lint_gate_errors(root: Path, *, require_clean: bool = False) -> list[str]:
+def canon_lint_gate_errors(
+    root: Path,
+    *,
+    require_clean: bool = False,
+    require_current_contract: bool = False,
+) -> list[str]:
     json_path = root / "reviews" / "canon_lint.json"
     report_path = root / "reviews" / "canon_lint.md"
     errors = [f"canon-lint artifact missing: {_rel(path, root)}" for path in (report_path, json_path) if not path.exists()]
@@ -148,10 +155,29 @@ def canon_lint_gate_errors(root: Path, *, require_clean: bool = False) -> list[s
         return errors
     if payload.get("schema") != "literary-engineering-workbench/canon-lint/v0.1":
         errors.append("canon_lint.json has wrong or missing schema")
+    contract_error = _canon_lint_contract_error(payload, require_current_contract)
+    if contract_error:
+        errors.append(contract_error)
+    errors.extend(_canon_lint_result_errors(payload, require_clean))
+    return errors
+
+
+def _canon_lint_contract_error(payload: dict[str, object], required: bool) -> str:
+    revision = str(payload.get("contract_revision") or "")
+    if not required or revision == CANON_LINT_CONTRACT_REVISION:
+        return ""
+    return (
+        "canon_lint.json contract_revision must be "
+        f"{CANON_LINT_CONTRACT_REVISION}; got {revision or 'missing'}"
+    )
+
+
+def _canon_lint_result_errors(payload: dict[str, object], require_clean: bool) -> list[str]:
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     blocking = to_int(summary.get("blocking_count"))
     warnings = to_int(summary.get("warning_count"))
     status = str(payload.get("status") or "").strip().lower()
+    errors: list[str] = []
     if blocking:
         errors.append(f"canon-lint blocking_count must be 0; got {blocking}")
     if require_clean and warnings:

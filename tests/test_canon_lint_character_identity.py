@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio_engine.canon_lint import build_canon_lint
+from literary_engineering_studio_engine.literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 
 
 class CanonLintCharacterIdentityTests(unittest.TestCase):
@@ -58,6 +59,8 @@ class CanonLintCharacterIdentityTests(unittest.TestCase):
             result = build_canon_lint(root)
 
             issue = self._issues(result.json_path, "scene-status-invalid")[0]
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["contract_revision"], CANON_LINT_CONTRACT_REVISION)
             self.assertEqual(
                 issue["allowed_values"],
                 ["planned", "drafting", "review", "ready", "blocked", "published"],

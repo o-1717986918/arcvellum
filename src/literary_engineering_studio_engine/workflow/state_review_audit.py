@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..agent_tasks import agent_task_completion_status
 from ..canon_evolver import canon_patch_backlog_items
+from ..literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from .state_common import _file_step, _read_json, _rel
 def _review_audit_state(root: Path) -> dict[str, object]:
     canon_lint_json = root / "reviews" / "canon_lint.json"
@@ -153,6 +154,9 @@ def _canon_lint_step(
             "next_action": "rerun canon-lint against the repaired project targets",
         }
     payload = _read_json(json_path)
+    contract_step = _outdated_canon_lint_contract_step(root, json_path, payload)
+    if contract_step:
+        return contract_step
     status = str(payload.get("status") or "").strip().lower()
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     blocking = int(summary.get("blocking_count", 0) or 0)
@@ -162,6 +166,23 @@ def _canon_lint_step(
         "path": _rel(json_path, root),
         "message": f"status={status or 'missing'}; blocking={blocking}; warning={summary.get('warning_count', 0)}",
         "next_action": "" if status in {"pass", "pass_with_warnings"} and blocking == 0 else "fix canon-lint blocking issues before Agent canon review",
+    }
+
+
+def _outdated_canon_lint_contract_step(
+    root: Path,
+    json_path: Path,
+    payload: dict[str, object],
+) -> dict[str, object] | None:
+    revision = str(payload.get("contract_revision") or "")
+    if revision == CANON_LINT_CONTRACT_REVISION:
+        return None
+    return {
+        "key": "canon-lint-file",
+        "status": "stale",
+        "path": _rel(json_path, root),
+        "message": f"canon lint contract revision is {revision or 'missing'}; expected {CANON_LINT_CONTRACT_REVISION}",
+        "next_action": "rerun canon-lint with the current deterministic contract",
     }
 
 

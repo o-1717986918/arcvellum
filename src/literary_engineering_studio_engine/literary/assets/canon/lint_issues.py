@@ -45,6 +45,7 @@ def render_report(root: Path, payload: dict[str, object]) -> str:
     summary = payload["summary"]
     lines = [
         "# Canon Lint Report", "", f"- 项目：`{root}`", f"- 生成时间：{payload['generated_at']}",
+        f"- 合同版本：`{payload.get('contract_revision', 'missing')}`",
         f"- 状态：`{payload['status']}`", f"- 问题总数：{summary['issue_count']}",
         f"- Blocking：{summary['blocking_count']}", f"- Warning：{summary['warning_count']}",
         f"- Info：{summary['info_count']}", "", "## Issues", "",

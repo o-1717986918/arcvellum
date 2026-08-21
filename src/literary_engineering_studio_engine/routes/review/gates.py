@@ -67,11 +67,11 @@ def _canon_patch_apply(root: Path, task: dict[str, object]) -> list[str]:
 
 
 def _canon_lint(root: Path, _task: dict[str, object]) -> list[str]:
-    return canon_lint_gate_errors(root)
+    return canon_lint_gate_errors(root, require_current_contract=True)
 
 
 def _canon_review_prepare(root: Path, _task: dict[str, object]) -> list[str]:
-    errors = canon_lint_gate_errors(root)
+    errors = canon_lint_gate_errors(root, require_current_contract=True)
     task_path = root / "reviews" / "agent" / "canon_review.agent_tasks.md"
     if not task_path.exists():
         errors.append(f"canon review sidecar missing: {_rel(task_path, root)}")
@@ -89,7 +89,7 @@ def _canon_review_prepare(root: Path, _task: dict[str, object]) -> list[str]:
 
 
 def _canon_review_execute(root: Path, _task: dict[str, object]) -> list[str]:
-    errors = canon_lint_gate_errors(root)
+    errors = canon_lint_gate_errors(root, require_current_contract=True)
     errors.extend(canon_review_gate_errors(root, require_pass=False))
     return errors
 

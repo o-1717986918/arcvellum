@@ -10,6 +10,7 @@ from typing import Any
 
 CANON_PATCH_SCHEMA = "literary-engineering-workbench/canon-patch-candidate/v0.1"
 CANON_PATCH_RISK_LEVELS = frozenset({"low", "medium", "high"})
+CANON_LINT_CONTRACT_REVISION = "2026-08-21.1"
 
 
 class SceneLifecycleStatus(StrEnum):
@@ -152,6 +153,7 @@ def _is_safe_canon_target(value: str) -> bool:
 __all__ = [
     "CANON_PATCH_RISK_LEVELS",
     "CANON_PATCH_SCHEMA",
+    "CANON_LINT_CONTRACT_REVISION",
     "CHAPTER_SCENE_REQUIRED_FIELDS",
     "SCENE_LIFECYCLE_VALUES",
     "CanonPatchCandidateIssue",

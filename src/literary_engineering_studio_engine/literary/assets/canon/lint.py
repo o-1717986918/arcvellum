@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .contracts import (
+    CANON_LINT_CONTRACT_REVISION,
     CHAPTER_SCENE_REQUIRED_FIELDS,
     SCENE_LIFECYCLE_VALUES,
     SceneLifecycleStatus,
@@ -61,6 +62,7 @@ def build_canon_lint(project_root: Path, output: Path | None = None, json_output
     json_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema": "literary-engineering-workbench/canon-lint/v0.1",
+        "contract_revision": CANON_LINT_CONTRACT_REVISION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "project_root": str(root),
         "status": status,

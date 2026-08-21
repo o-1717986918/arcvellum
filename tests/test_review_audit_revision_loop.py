@@ -11,6 +11,7 @@ from literary_engineering_studio.sandbox import stage_task
 from literary_engineering_studio.preflight.service import canonicalize_task_outputs
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, validate_task_outputs
 from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
+from literary_engineering_studio_engine.literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from literary_engineering_studio_engine.platform_agent_tasks import write_platform_canon_review_task
 from literary_engineering_studio_engine.review_audit_route import _review_audit_blueprint_for_state
 from literary_engineering_studio_engine.routes.review.canon_gates import canon_lint_gate_errors
@@ -38,6 +39,7 @@ def _canon_review(conclusion: str = "revise_required") -> dict[str, object]:
 def _lint_payload() -> dict[str, object]:
     return {
         "schema": "literary-engineering-workbench/canon-lint/v0.1",
+        "contract_revision": CANON_LINT_CONTRACT_REVISION,
         "status": "pass",
         "summary": {"blocking_count": 0, "warning_count": 0},
     }
@@ -198,6 +200,7 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
                 json.dumps(
                     {
                         "schema": "literary-engineering-workbench/canon-lint/v0.1",
+                        "contract_revision": CANON_LINT_CONTRACT_REVISION,
                         "status": "pass_with_warnings",
                         "summary": {"blocking_count": 0, "warning_count": 1},
                     }
@@ -209,6 +212,30 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
             errors = canon_lint_gate_errors(root, require_clean=True)
             self.assertTrue(any("warning_count must be 0" in item for item in errors))
             self.assertTrue(any("status must be pass" in item for item in errors))
+
+    def test_review_state_refreshes_an_outdated_lint_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lint = root / "reviews" / "canon_lint.json"
+            lint.parent.mkdir(parents=True)
+            lint.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/canon-lint/v0.1",
+                        "status": "pass",
+                        "summary": {"blocking_count": 0, "warning_count": 0},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            lint.with_suffix(".md").write_text("# old lint\n", encoding="utf-8")
+
+            state = _review_audit_state(root)
+            errors = canon_lint_gate_errors(root, require_current_contract=True)
+
+            self.assertEqual(state["current_step"], "canon-lint-file")
+            self.assertEqual(state["steps"][1]["status"], "stale")
+            self.assertTrue(any("contract_revision" in item for item in errors))
 
     def test_large_canon_revision_compiles_as_target_sliced_review_prompt(self):
         with tempfile.TemporaryDirectory() as temporary:
