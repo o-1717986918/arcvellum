@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...release_fingerprint import release_candidate_fingerprint
+from ...literary.scene.promotion.historical_readiness import historical_scene_readiness
 from ...task_paths import relative_path as _rel
 from .evidence import approval_record_for_run, delivery_trace_hits, read_optional_json, to_int
 
@@ -50,7 +51,7 @@ def chapter_workspace_gate_errors(root: Path, chapter_id: str) -> list[str]:
     _validate_workspace_summary(payload, errors)
     for scene in payload.get("scenes", []) if isinstance(payload.get("scenes"), list) else []:
         if isinstance(scene, dict):
-            errors.extend(_workspace_scene_errors(scene))
+            errors.extend(_workspace_scene_errors(root, scene))
     return errors
 
 
@@ -64,9 +65,22 @@ def _validate_workspace_summary(payload: dict[str, object], errors: list[str]) -
         errors.append(f"chapter workspace blocked_count must be 0; got {summary.get('blocked_count')}")
 
 
-def _workspace_scene_errors(scene: dict[str, object]) -> list[str]:
+def _workspace_scene_errors(root: Path, scene: dict[str, object]) -> list[str]:
     scene_id = str(scene.get("scene_id") or "") or "unknown"
     errors: list[str] = []
+    historical = historical_scene_readiness(root, scene_id)
+    if historical is not None:
+        historical_status, historical_issues = historical
+        if historical_status != "ready":
+            errors.append(
+                f"historically promoted chapter scene is not ready: {scene_id}: "
+                + "; ".join(historical_issues)
+            )
+        if scene.get("status") != historical_status:
+            errors.append(
+                f"chapter workspace status does not match sealed promotion: {scene_id}"
+            )
+        return errors
     if scene.get("status") != "ready":
         errors.append(f"chapter scene must be ready: {scene_id}")
     if scene.get("agent_review_conclusion") != "pass" or scene.get("agent_review_schema_status") != "pass":

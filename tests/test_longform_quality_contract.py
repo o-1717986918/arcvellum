@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
+from literary_engineering_studio_engine.literary.planning.chapter_pipeline import build_chapter_workspace
 from literary_engineering_studio_engine.literary.scene.promotion.historical import seal_historical_promotion
 from literary_engineering_studio_engine.literary.review.longform_contract import (
     LONGFORM_AUDIT_SCHEMA,
@@ -18,6 +19,8 @@ from literary_engineering_studio_engine.literary.review.longform_contract import
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio_engine.routes.review.blueprints import review_audit_blueprint_for_state
+from literary_engineering_studio_engine.routes.export.blueprints import export_release_blueprint_for_state
+from literary_engineering_studio_engine.routes.export.gates import chapter_workspace_gate_errors
 from literary_engineering_studio_engine.routes.review.definition import _committee_review_gate_errors
 from literary_engineering_studio_engine.workflow.audit.service import build_route_gates
 from literary_engineering_studio_engine.workflow.state_review_audit import _review_audit_state
@@ -27,6 +30,55 @@ from literary_engineering_studio_engine.literary.assets.canon.contracts import C
 
 
 class LongformQualityContractTests(unittest.TestCase):
+    def test_chapter_workspace_blueprint_stages_its_full_read_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            self._write_representative_longform_inputs(project)
+            task_markdown = project / "workflow" / "tasks" / "chapter.agent_tasks.md"
+            task_markdown.parent.mkdir(parents=True)
+            task_markdown.write_text("# deterministic chapter workspace\n", encoding="utf-8")
+            blueprint = export_release_blueprint_for_state(
+                project,
+                "chapter_0001",
+                "chapter-workspace",
+                "build chapter workspace",
+            )
+            task = TaskPackage(
+                project_root=project,
+                task_json_path=project / "workflow" / "tasks" / "chapter.task.json",
+                task_markdown_path=task_markdown,
+                payload={
+                    "task_id": "export-and-release-chapter-0001-chapter-workspace",
+                    "route": "export-and-release",
+                    "current_state": "chapter-workspace",
+                    "chapter_id": "chapter_0001",
+                    **blueprint,
+                },
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="deterministic-engine",
+                materialize_agent_view=False,
+            )
+
+            staged = sandbox.control_workspace
+            for relative in (
+                "project.yaml",
+                "memory/context_packets/scene_0001.md",
+                "drafts/candidates/scene_0001-platform-agent.md",
+                "drafts/revisions/scene_0001_revision.md",
+                "drafts/promotions/scene_0001_promotion.json",
+                "plot/word_budget/word_budget.json",
+                "plot/chapter_obligations/chapter_0001.json",
+                "plot/rhythm_plan.json",
+                "style/creative_quality_profile.json",
+                "characters/lead.yaml",
+            ):
+                self.assertTrue((staged / relative).is_file(), relative)
+
     def test_longform_blueprint_stages_every_freshness_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -118,6 +170,12 @@ class LongformQualityContractTests(unittest.TestCase):
             self.assertNotIn("flow_readiness", categories)
             self.assertNotIn("memory_context", categories)
             self.assertEqual(payload["scenes"][0]["status"], "ready")
+
+            chapter = build_chapter_workspace(root, chapter_id="chapter_0001")
+
+            self.assertEqual(chapter.ready_count, 1)
+            self.assertEqual(chapter.blocked_count, 0)
+            self.assertEqual(chapter_workspace_gate_errors(root, "chapter_0001"), [])
 
     def test_character_role_label_resolves_formal_scene_alias(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -379,6 +437,7 @@ class LongformQualityContractTests(unittest.TestCase):
             "drafts/candidates/scene_0001-platform-agent.md": "正文。\n",
             "drafts/candidates/scene_0001-platform-agent.json": "{}\n",
             "drafts/scenes/scene_0001.md": "正文。\n",
+            "drafts/revisions/scene_0001_revision.md": "修订正文。\n",
             "drafts/compositions/scene_0001_composition.json": "{}\n",
             "drafts/promotions/scene_0001_promotion.json": "{}\n",
             "memory/context_packets/scene_0001.md": "# Context\n",

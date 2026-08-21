@@ -9,7 +9,7 @@ from pathlib import Path
 from ...draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
 from ...narrative_rhythm import narrative_rhythm_contract
 from ...scene_readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
-from ..scene.promotion.historical import validate_historical_promotion
+from ..scene.promotion.historical_readiness import historical_scene_readiness
 from .longform_analysis import scene_identity
 from .longform_models import LongformSceneRecord
 
@@ -67,11 +67,11 @@ def _scan_scene(root: Path, scene_path: Path) -> LongformSceneRecord:
     draft_text = read_text(paths["draft"])
     body = final_body_from_draft_text(draft_text) if draft_text else ""
     conclusion = review_conclusion(read_text(paths["review"]))
-    historical = validate_historical_promotion(root, identity[0])
-    flow_issues = () if historical.passed and historical.current else scene_flow_gate_issues(root, identity[0])
+    historical = historical_scene_readiness(root, identity[0])
+    flow_issues = () if historical is not None else scene_flow_gate_issues(root, identity[0])
     agent_state = agent_review_gate_state(root, paths["agent_json"], paths["draft"])
-    if historical.passed and historical.current:
-        status, readiness_issues = _historical_readiness(paths, body, conclusion)
+    if historical is not None:
+        status, readiness_issues = historical
     else:
         status, readiness_issues = scene_readiness_status(
             root,
@@ -88,24 +88,6 @@ def _scan_scene(root: Path, scene_path: Path) -> LongformSceneRecord:
         root, scene_path, text, identity, paths, body, conclusion,
         flow_issues, agent_state, status, readiness_issues, rhythm,
     )
-
-
-def _historical_readiness(
-    paths: dict[str, Path],
-    body: str,
-    conclusion: str,
-) -> tuple[str, tuple[str, ...]]:
-    """Keep a tamper-evident promotion ready without rechecking future policy."""
-
-    if not paths["draft"].is_file() or not body:
-        return "needs_draft", ("historically promoted draft is missing or empty",)
-    if not paths["review"].is_file() or not conclusion:
-        return "needs_review", ("historically promoted draft lacks its post-promotion static review",)
-    if conclusion == "pass":
-        return "ready", ()
-    if conclusion in {"pass_with_notes", "revise_required", "reject"}:
-        return "needs_revision", (f"post-promotion static review is {conclusion}",)
-    return "blocked", (f"post-promotion static review conclusion is {conclusion}",)
 
 
 def _scene_record(

@@ -15,7 +15,7 @@ from ...platform_agent_tasks import write_platform_scene_review_task
 from ...review_ci import review_scene_draft
 from ...narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract
 from ...scene_draft import build_scene_draft
-from ...scene_readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
+from .chapter_readiness import chapter_scene_readiness
 
 
 @dataclass(frozen=True)
@@ -192,17 +192,14 @@ def _build_scene_record(
     review_text = _read(review_path)
     body = final_body_from_draft_text(draft_text) if draft_text else ""
     conclusion = _review_conclusion(review_text)
-    flow_issues = scene_flow_gate_issues(root, scene_id)
-    agent_state = agent_review_gate_state(root, agent_review_json_path, draft_path)
-    status, readiness_issues = scene_readiness_status(
+    flow_issues, agent_state, status, readiness_issues = chapter_scene_readiness(
         root,
+        scene_id,
         draft_path=draft_path,
         review_path=review_path,
         agent_review_json_path=agent_review_json_path,
         body=body,
         static_review_conclusion=conclusion,
-        flow_gate_issues=flow_issues,
-        agent_review_state=agent_state,
     )
     rhythm_contract = narrative_rhythm_contract(root, scene_path, composition_json_path)
     rhythm_payload = rhythm_contract.get("narrative_rhythm") if isinstance(rhythm_contract.get("narrative_rhythm"), dict) else {}
