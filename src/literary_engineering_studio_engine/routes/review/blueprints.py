@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...literary.review.longform_contract import LONGFORM_AUDIT_SOURCE_PATHS
 from .evidence import project_review_repair_targets
 
 
@@ -290,7 +291,7 @@ def _longform_audit(_context: ReviewBlueprintContext) -> dict[str, object]:
         "deterministic-cli",
         "route.review-audit.longform-audit.v1",
         "python -m literary_engineering_studio_engine longform-audit <project>",
-        ["project.yaml", "plot/chapters", "scenes", "drafts/scenes", "reviews/agent", "plot/word_budget"],
+        list(LONGFORM_AUDIT_SOURCE_PATHS),
         ["reviews/longform/longform_audit.md", "reviews/longform/longform_audit.json", "plot/longform_graph.json"],
         [
             "Run longform-audit after canon review so the committee sees structural risks, word-budget gaps, and chapter readiness.",

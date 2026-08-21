@@ -8,15 +8,57 @@ import unittest
 from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
 from literary_engineering_studio_engine.literary.review.longform_contract import (
     LONGFORM_AUDIT_SCHEMA,
+    LONGFORM_AUDIT_SOURCE_PATHS,
     audit_continuity_ledgers,
     longform_audit_gate_errors,
     longform_input_snapshot,
 )
+from literary_engineering_studio.contracts import TaskPackage
+from literary_engineering_studio.runtime.sandbox import stage_task
+from literary_engineering_studio_engine.routes.review.blueprints import review_audit_blueprint_for_state
 from literary_engineering_studio_engine.routes.review.definition import _committee_review_gate_errors
 from literary_engineering_studio_engine.workflow.audit.service import build_route_gates
 
 
 class LongformQualityContractTests(unittest.TestCase):
+    def test_longform_blueprint_stages_every_freshness_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            self._write_representative_longform_inputs(project)
+            task_markdown = project / "workflow" / "tasks" / "longform.agent_tasks.md"
+            task_markdown.parent.mkdir(parents=True)
+            task_markdown.write_text("# deterministic longform audit\n", encoding="utf-8")
+            blueprint = review_audit_blueprint_for_state(
+                project,
+                "longform-audit-file",
+                "run longform audit",
+            )
+            self.assertEqual(tuple(blueprint["source_paths"]), LONGFORM_AUDIT_SOURCE_PATHS)
+            task = TaskPackage(
+                project_root=project,
+                task_json_path=project / "workflow" / "tasks" / "longform.task.json",
+                task_markdown_path=task_markdown,
+                payload={
+                    "task_id": "review-and-audit-project-review-longform-audit-file",
+                    "route": "review-and-audit",
+                    "current_state": "longform-audit-file",
+                    **blueprint,
+                },
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="deterministic-engine",
+                materialize_agent_view=False,
+            )
+            result = build_longform_audit(sandbox.control_workspace, target_length=0)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["input_snapshot"], longform_input_snapshot(project))
+            self.assertEqual(payload["input_snapshot"]["file_count"], 15)
+
     def test_quality_gate_recomputes_blockers_and_input_freshness(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -164,6 +206,30 @@ class LongformQualityContractTests(unittest.TestCase):
             gates = build_route_gates(root, "export-and-release", [])
             longform_gate = next(item for item in gates if item["key"] == "review:longform-audit")
             self.assertEqual(longform_gate["status"], "fail")
+
+    @staticmethod
+    def _write_representative_longform_inputs(root: Path) -> None:
+        files = {
+            "project.yaml": "project:\n  title: Contract\n",
+            "scenes/scene_0001.yaml": "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+            "drafts/scenes/scene_0001.md": "正文。\n",
+            "drafts/compositions/scene_0001_composition.json": "{}\n",
+            "drafts/promotions/scene_0001_promotion.json": "{}\n",
+            "memory/context_packets/scene_0001.md": "# Context\n",
+            "memory/context_packets/scene_0001.trace.json": "{}\n",
+            "plot/chapters/chapter_0001.json": "{}\n",
+            "plot/foreshadowing.csv": "id,status\nF1,open\n",
+            "plot/promises/ledger.json": "{}\n",
+            "plot/reader_questions/ledger.json": "{}\n",
+            "plot/rhythm_plan.json": "{}\n",
+            "plot/word_budget/word_budget.json": "{}\n",
+            "reviews/scene_0001-review.md": "- 结论： pass\n",
+            "reviews/agent/scene_0001_scene_review.json": "{}\n",
+        }
+        for relative, content in files.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
 
 
 if __name__ == "__main__":

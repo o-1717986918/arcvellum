@@ -10,6 +10,21 @@ from typing import Any, Iterable
 
 
 LONGFORM_AUDIT_SCHEMA = "literary-engineering-workbench/longform-audit/v0.1"
+LONGFORM_AUDIT_SOURCE_PATHS = (
+    "project.yaml",
+    "scenes",
+    "drafts/scenes",
+    "drafts/compositions",
+    "drafts/promotions",
+    "memory/context_packets",
+    "plot/chapters",
+    "plot/foreshadowing.csv",
+    "plot/promises",
+    "plot/reader_questions",
+    "plot/rhythm_plan.json",
+    "plot/word_budget",
+    "reviews",
+)
 STRUCTURAL_BLOCKING_CATEGORIES = frozenset(
     {
         "chapter_structure",
@@ -240,6 +255,7 @@ def _rel(path: Path, root: Path) -> str:
 
 __all__ = [
     "LONGFORM_AUDIT_SCHEMA",
+    "LONGFORM_AUDIT_SOURCE_PATHS",
     "audit_continuity_ledgers",
     "longform_audit_gate_errors",
     "longform_input_snapshot",
