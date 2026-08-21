@@ -41,6 +41,28 @@ from literary_engineering_studio_engine.workflow.scene_length_repair import (
 
 
 class TargetLengthRepairTests(unittest.TestCase):
+    def test_repair_plan_freshness_covers_every_capacity_input(self) -> None:
+        for relative in (
+            "plot/outline.md",
+            "workflow/longform_materialization.json",
+            "scenes/scene_0001.yaml",
+            "drafts/scenes/scene_0001.md",
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self._project(root)
+                build_target_length_repair_plan(root)
+                self.assertTrue(target_length_repair_status(root)["plan_current"])
+
+                path = root / relative
+                path.write_text(
+                    path.read_text(encoding="utf-8") + "\n# freshness change\n",
+                    encoding="utf-8",
+                )
+                status = target_length_repair_status(root)
+                self.assertFalse(status["plan_current"])
+                self.assertEqual(status["status"], "missing_or_stale")
+
     def test_deterministic_plan_blueprint_stages_the_complete_budget_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)

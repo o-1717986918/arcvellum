@@ -95,9 +95,7 @@ def target_length_repair_status(project_root: Path) -> dict[str, Any]:
     allocations = payload.get("allocations")
     allocations = allocations if isinstance(allocations, list) else []
     source = payload.get("source_snapshot") if isinstance(payload.get("source_snapshot"), dict) else {}
-    plan_current = bool(payload) and str(source.get("budget_sha256") or "") == _file_sha(
-        root / "plot" / "word_budget" / "word_budget.json"
-    )
+    plan_current = bool(payload) and source == _source_snapshot(root)
     pending = _pending_allocations(root, allocations)
     recorded_status = str(payload.get("status") or "")
     status = _current_repair_status(
@@ -275,6 +273,15 @@ def _formal_scene_chars(root: Path, scene_id: str) -> int:
 def _source_snapshot(root: Path) -> dict[str, Any]:
     return {
         "budget_sha256": _file_sha(root / "plot" / "word_budget" / "word_budget.json"),
+        "outline_sha256": _file_sha(root / "plot" / "outline.md"),
+        "materialization_sha256": _file_sha(
+            root / "workflow" / "longform_materialization.json"
+        ),
+        "scene_contracts": {
+            path.stem: _file_sha(path)
+            for path in sorted((root / "scenes").glob("*.yaml"))
+            if not path.name.startswith("_")
+        },
         "scene_drafts": {
             path.stem: _file_sha(path)
             for path in sorted((root / "drafts" / "scenes").glob("*.md"))
