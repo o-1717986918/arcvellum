@@ -27,6 +27,9 @@ from literary_engineering_studio_engine.literary.review.longform_audit import (
 from literary_engineering_studio_engine.routes.scene.blueprints import (
     _blueprint_for_state,
 )
+from literary_engineering_studio_engine.routes.scene.definition import (
+    _build_task_payload,
+)
 from literary_engineering_studio_engine.routes.export.blueprints import (
     export_release_blueprint_for_state,
 )
@@ -185,6 +188,41 @@ class TargetLengthRepairTests(unittest.TestCase):
             task_text = revision.task_path.read_text(encoding="utf-8")
             self.assertIn("至少达到 500 个中文内容字符", task_text)
             self.assertIn("禁止重复心理", task_text)
+
+    def test_length_revision_task_inlines_exact_repair_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._project(root)
+            build_target_length_repair_plan(root)
+
+            payload = _build_task_payload(
+                root,
+                "scene-development",
+                {
+                    "scene_id": "scene_0001",
+                    "scene": "scenes/scene_0001.yaml",
+                    "current_step": "target-length-revision",
+                },
+            )
+
+            source = "drafts/scenes/scene_0001.md"
+            evidence = "reviews/longform/target_length_repair.json"
+            report = "reviews/longform/target_length_repair.md"
+            self.assertEqual(payload["revision_source"], source)
+            self.assertIn(evidence, payload["source_paths"])
+            self.assertIn(report, payload["source_paths"])
+            self.assertIn(source, payload["agent_source_paths"])
+            self.assertIn(evidence, payload["agent_source_paths"])
+            self.assertNotIn(report, payload["agent_source_paths"])
+            self.assertIn(source, payload["context_must_inline_paths"])
+            self.assertIn(evidence, payload["context_must_inline_paths"])
+            self.assertNotIn(report, payload["context_must_inline_paths"])
+            self.assertTrue(
+                any(
+                    path.endswith(".agent_tasks.md")
+                    for path in payload["context_must_inline_paths"]
+                )
+            )
 
     def test_final_chapter_blocks_until_formal_drafts_meet_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

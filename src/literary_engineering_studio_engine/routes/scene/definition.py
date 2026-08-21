@@ -177,7 +177,7 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         revision_inputs = [
             relative
             for relative in source_paths
-            if _is_revision_input(relative, scene_id)
+            if _is_revision_input(relative, scene_id, current_state)
             and relative.endswith((".md", ".json"))
         ]
         revision_minimum = [
@@ -269,15 +269,24 @@ def _yaml_scalar(path: Path, key: str) -> str:
     return match.group(1).strip().strip("\"'") if match else ""
 
 
-def _is_revision_input(relative: str, scene_id: str) -> bool:
-    return relative.startswith(
+def _is_revision_input(
+    relative: str,
+    scene_id: str,
+    current_state: str,
+) -> bool:
+    if relative.startswith(
         (
             "drafts/candidates/",
             "drafts/revisions/",
             "drafts/scenes/",
             "reviews/agent/",
         )
-    ) or relative == f"reviews/{scene_id}-review.md"
+    ) or relative == f"reviews/{scene_id}-review.md":
+        return True
+    return (
+        current_state == "target-length-revision"
+        and relative == "reviews/longform/target_length_repair.json"
+    )
 
 
 build_task_payload = _build_task_payload
