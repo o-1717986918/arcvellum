@@ -15,6 +15,7 @@ from literary_engineering_studio_engine.continuity_ledger import (
     prepare_continuity_ledger,
     prepare_continuity_ledger_review,
     promise_ledger_path,
+    normalize_ledger_rows,
     reader_ledger_path,
     review_path,
     review_task_path,
@@ -69,12 +70,35 @@ class ContinuityLedgerTests(unittest.TestCase):
             self.assertTrue(questions.is_file())
             self.assertTrue(promises.is_file())
             self.assertEqual(json.loads(reader_ledger_path(root).read_text(encoding="utf-8"))["reader_questions"][0]["id"], "q-bell")
+            self.assertEqual(json.loads(reader_ledger_path(root).read_text(encoding="utf-8"))["reader_questions"][0]["status"], "open")
             self.assertEqual(json.loads(promise_ledger_path(root).read_text(encoding="utf-8"))["promises"][0]["id"], "p-bell")
 
             payload["reader_question_changes"][0]["visible_question"] = "changed"
             delta_path(root, "scene_0001").write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "stale"):
                 apply_continuity_ledger(root, "scene_0001")
+
+    def test_event_aliases_fold_back_into_the_original_ledger_identity(self):
+        rows = normalize_ledger_rows(
+            "reader_questions",
+            [
+                {"id": "q1", "change": "setup", "question": "谁敲钟？", "evidence": "钟响了", "responsibility": "后续回答"},
+                {
+                    "id": "scene_0003-reader_questions-1",
+                    "question_id": "q1",
+                    "change": "closure",
+                    "question": "谁敲钟？",
+                    "evidence": "守钟人承认了",
+                    "resolution_summary": "身份揭晓",
+                    "last_advanced_at": "scene_0003",
+                },
+            ],
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], "q1")
+        self.assertEqual(rows[0]["status"], "resolved")
+        self.assertEqual(rows[0]["actual_payoff_scene"], "scene_0003")
 
 
 if __name__ == "__main__":

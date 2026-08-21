@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...context_broker import context_trace_status
+from ..scene.promotion.historical import validate_historical_promotion
 from .longform_models import LongformIssue, LongformSceneRecord
 
 
@@ -69,10 +70,21 @@ def _inventory_issues(scenes: list[LongformSceneRecord]) -> list[LongformIssue]:
 def _scene_issues(
     root: Path,
     scenes: list[LongformSceneRecord],
-    characters: list[dict[str, str]],
+    characters: list[dict[str, object]],
 ) -> list[LongformIssue]:
     known = {item["character_id"] for item in characters}
     known |= {item["name"] for item in characters if item["name"]}
+    known |= {
+        str(alias)
+        for item in characters
+        for alias in (item.get("aliases") if isinstance(item.get("aliases"), list) else [])
+        if str(alias).strip()
+    }
+    known |= {
+        str(item.get("role_label") or "").strip()
+        for item in characters
+        if str(item.get("role_label") or "").strip()
+    }
     issues: list[LongformIssue] = []
     for scene in scenes:
         issues.extend(_scene_contract_issues(scene, known))
@@ -126,6 +138,9 @@ def _readiness_issue(scene: LongformSceneRecord) -> LongformIssue | None:
 
 
 def _context_issues(root: Path, scene: LongformSceneRecord) -> list[LongformIssue]:
+    historical = validate_historical_promotion(root, scene.scene_id)
+    if historical.passed and historical.current:
+        return []
     context_path = root / "memory" / "context_packets" / f"{scene.scene_id}.md"
     issues: list[LongformIssue] = []
     if not context_path.exists():

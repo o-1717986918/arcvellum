@@ -564,7 +564,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
 
     longform = sub.add_parser("longform-audit", help="Audit long-form continuity, readiness, and graph structure.")
     longform.add_argument("project", help="Work project directory.")
-    longform.add_argument("--target-length", type=int, default=100000)
+    longform.add_argument("--target-length", type=int, default=0, help="Override target Chinese-content characters; defaults to the project word budget or project.yaml.")
     longform.add_argument("--out", default="", help="Output audit markdown path.")
     longform.add_argument("--json-out", default="", help="Output audit JSON path.")
     longform.add_argument("--graph-out", default="", help="Output lightweight graph JSON path.")

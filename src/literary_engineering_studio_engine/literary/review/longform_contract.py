@@ -8,22 +8,34 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from ..assets.continuity.ledger import normalize_ledger_rows
+
 
 LONGFORM_AUDIT_SCHEMA = "literary-engineering-workbench/longform-audit/v0.1"
 LONGFORM_AUDIT_SOURCE_PATHS = (
     "project.yaml",
+    "canon",
+    "characters",
+    "style",
     "scenes",
+    "branches",
+    "drafts/candidates",
+    "drafts/revisions",
     "drafts/scenes",
     "drafts/compositions",
     "drafts/promotions",
     "memory/context_packets",
     "plot/chapters",
+    "plot/chapter_obligations",
+    "plot/outline.md",
+    "plot/conflict_matrix.md",
     "plot/foreshadowing.csv",
     "plot/promises",
     "plot/reader_questions",
     "plot/rhythm_plan.json",
     "plot/word_budget",
     "reviews",
+    "workflow/approvals/index.jsonl",
 )
 STRUCTURAL_BLOCKING_CATEGORIES = frozenset(
     {
@@ -42,20 +54,46 @@ STRUCTURAL_BLOCKING_CATEGORIES = frozenset(
 )
 _INPUT_GLOBS = (
     "project.yaml",
+    "canon/*.json",
+    "canon/*.yaml",
+    "canon/*.yml",
+    "characters/*.yaml",
+    "characters/*.yml",
+    "style/*.json",
+    "style/*.md",
+    "style/*.yaml",
+    "style/*.yml",
+    "style/mounted/**/*",
     "scenes/*.yaml",
+    "branches/*/roleplay_simulation.md",
+    "branches/*/branch_manifest.json",
+    "branches/*/branch_selection.md",
+    "drafts/candidates/*.md",
+    "drafts/candidates/*.json",
+    "drafts/revisions/*.md",
+    "drafts/revisions/*.json",
     "drafts/scenes/*.md",
     "drafts/compositions/*.json",
     "drafts/promotions/*.json",
     "memory/context_packets/*.md",
     "memory/context_packets/*.trace.json",
     "plot/chapters/*.json",
+    "plot/chapter_obligations/*.json",
+    "plot/chapter_obligations/*.agent_tasks.md",
+    "plot/chapter_obligations/*.agent_completion.json",
+    "plot/outline.md",
+    "plot/conflict_matrix.md",
     "plot/foreshadowing.csv",
     "plot/promises/ledger.json",
     "plot/reader_questions/ledger.json",
     "plot/rhythm_plan.json",
     "plot/word_budget/word_budget.json",
+    "plot/word_budget/word_budget.md",
     "reviews/*-review.md",
     "reviews/agent/*_scene_review.json",
+    "reviews/schema_validation/*.json",
+    "reviews/assets/*.json",
+    "workflow/approvals/index.jsonl",
 )
 _OPEN_STATUSES = frozenset({"active", "delayed", "open", "opened", "pending", "postponed"})
 _CLOSED_STATUSES = frozenset({"closed", "complete", "completed", "paid", "resolved"})
@@ -153,7 +191,8 @@ def _audit_ledger_collection(
     latest_scene: int,
 ) -> tuple[dict[str, int | str], list[dict[str, str]]]:
     payload = _read_json(path)
-    rows = payload.get(collection) if isinstance(payload.get(collection), list) else []
+    source_rows = payload.get(collection) if isinstance(payload.get(collection), list) else []
+    rows = normalize_ledger_rows(collection, source_rows)
     issues = _ledger_schema_issues(root, collection, path, payload)
     counters = {"open_count": 0, "closed_count": 0, "overdue_count": 0}
     for index, row in enumerate(rows, start=1):
@@ -184,7 +223,7 @@ def _audit_ledger_row(
     status = str(row.get("status") or "").strip().lower()
     window = str(row.get(window_key) or row.get("target_window") or row.get("due_window") or "").strip()
     if status in _OPEN_STATUSES:
-        return _open_row_result(collection, item_id, window, window_key, latest_scene)
+        return _open_row_result(collection, item_id, window, window_key, latest_scene, row)
     if status in _CLOSED_STATUSES:
         counters["closed_count"] = 1
         issue = [] if _closure_evidence(row) else [_ledger_issue("medium", collection, item_id, "关闭条目缺少正文兑现证据。", "记录 payoff/evidence 与实际场景，或恢复为开放状态。")]
@@ -198,9 +237,18 @@ def _open_row_result(
     window: str,
     window_key: str,
     latest_scene: int,
+    row: dict[str, Any],
 ) -> tuple[list[dict[str, str]], dict[str, int]]:
     counters = {"open_count": 1, "closed_count": 0, "overdue_count": 0}
     if not window:
+        if str(row.get("responsibility") or "").strip():
+            return [_ledger_issue(
+                "low",
+                collection,
+                item_id,
+                "开放条目保留了后续责任，但尚未设置精确目标窗口。",
+                f"在下一次推进时补齐 {window_key}；责任说明不能无限替代时间窗口。",
+            )], counters
         return [_ledger_issue("medium", collection, item_id, "开放条目缺少目标窗口。", f"补齐 {window_key}，避免问题或承诺无限延期。")], counters
     if latest_scene >= 0 and _window_is_due(window, latest_scene):
         counters["overdue_count"] = 1

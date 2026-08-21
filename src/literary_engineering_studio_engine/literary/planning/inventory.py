@@ -184,13 +184,19 @@ def _budget_issues(totals: dict[str, int], inventory: dict[str, int | str], scen
 def _outline_inventory(root: Path, outline_path: Path) -> dict[str, int | str]:
     text = _read(outline_path)
     scene_files = [path for path in (root / "scenes").glob("*.yaml") if not path.name.startswith("_")] if (root / "scenes").exists() else []
+    scene_chapters = {
+        _scalar(_read(path), "chapter_id")
+        for path in scene_files
+        if _scalar(_read(path), "chapter_id")
+    }
     volume_count = len(re.findall(r"(?im)^(?:#{1,6}\s*)?(?:第[一二三四五六七八九十百\d]+卷|volume\s+\d+|卷\s*[一二三四五六七八九十百\d]+)", text))
     chapter_count = len(re.findall(r"(?im)^(?:#{1,6}\s*)?(?:第[一二三四五六七八九十百\d]+章|chapter\s+\d+|chapter_\d+)", text))
     scene_markers = len(re.findall(r"(?im)^(?:#{1,6}\s*)?(?:场景\s*[一二三四五六七八九十百\d]+|scene[_\s-]?\d+)", text))
     return {
         "outline_path": _rel(outline_path, root) if outline_path.exists() else "",
         "planned_volume_count": volume_count,
-        "planned_chapter_count": chapter_count,
+        "planned_chapter_count": max(chapter_count, len(scene_chapters)),
+        "scene_file_chapter_count": len(scene_chapters),
         "outline_scene_markers": scene_markers,
         "scene_file_count": len(scene_files),
         "planned_scene_count": max(scene_markers, len(scene_files)),

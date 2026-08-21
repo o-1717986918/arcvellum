@@ -14,9 +14,16 @@ from ...draft_text import (
 from ...longform_materializer import longform_materialization_status
 from ...text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
 from .common import _project_int, _read, _read_json, _rel, _scalar, _to_int
-from .inventory import _chapter_budget_row, _scene_ids_for_chapter, _scene_word_count_target
+from .inventory import (
+    _budget_issues,
+    _chapter_budget_row,
+    _outline_inventory,
+    _scene_ids_for_chapter,
+    _scene_inventory_binding,
+    _scene_word_count_target,
+)
 
-def load_word_budget_summary(root: Path) -> dict[str, object]:
+def load_word_budget_summary(root: Path, *, live: bool = False) -> dict[str, object]:
     path = root / "plot" / "word_budget" / "word_budget.json"
     if not path.exists():
         return {}
@@ -24,7 +31,7 @@ def load_word_budget_summary(root: Path) -> dict[str, object]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
-    return {
+    summary = {
         "path": _rel(path, root),
         "status": payload.get("status", ""),
         "target": payload.get("target", {}),
@@ -33,6 +40,28 @@ def load_word_budget_summary(root: Path) -> dict[str, object]:
         "scene_inventory_binding": payload.get("scene_inventory_binding", {}),
         "issues": payload.get("issues", []),
     }
+    if not live:
+        return summary
+    totals = summary["totals"] if isinstance(summary["totals"], dict) else {}
+    chapter_budgets = summary["chapter_budgets"] if isinstance(summary["chapter_budgets"], list) else []
+    if not totals or not chapter_budgets:
+        return summary
+    outline_payload = payload.get("outline_inventory") if isinstance(payload.get("outline_inventory"), dict) else {}
+    outline_rel = str(outline_payload.get("outline_path") or "plot/outline.md")
+    outline_path = root / outline_rel
+    inventory = _outline_inventory(root, outline_path)
+    binding = _scene_inventory_binding(root, chapter_budgets)
+    issues = _budget_issues(totals, inventory, binding)
+    summary.update(
+        {
+            "status": "pass" if not [item for item in issues if item.get("severity") in {"high", "medium"}] else "needs_expansion",
+            "outline_inventory": inventory,
+            "scene_inventory_binding": binding,
+            "issues": issues,
+            "projection": "live-project-state",
+        }
+    )
+    return summary
 
 def scene_word_budget_contract(
     root: Path,

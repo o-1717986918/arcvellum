@@ -9,6 +9,7 @@ from pathlib import Path
 from ...draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
 from ...narrative_rhythm import narrative_rhythm_contract
 from ...scene_readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
+from ..scene.promotion.historical import validate_historical_promotion
 from .longform_analysis import scene_identity
 from .longform_models import LongformSceneRecord
 
@@ -24,7 +25,7 @@ def scan_scenes(root: Path) -> list[LongformSceneRecord]:
     ]
 
 
-def scan_characters(root: Path) -> list[dict[str, str]]:
+def scan_characters(root: Path) -> list[dict[str, object]]:
     char_dir = root / "characters"
     if not char_dir.exists():
         return []
@@ -33,11 +34,14 @@ def scan_characters(root: Path) -> list[dict[str, str]]:
         if path.name.startswith("_"):
             continue
         text = read_text(path)
+        role = scalar(text, "role")
         characters.append(
             {
                 "character_id": scalar(text, "character_id") or path.stem,
                 "name": scalar(text, "name") or path.stem,
-                "role": scalar(text, "role"),
+                "role": role,
+                "role_label": re.split(r"(?:——|—|–|--|：|:)", role, maxsplit=1)[0].strip(),
+                "aliases": list_after(text, "aliases"),
                 "path": rel_str(path, root),
             }
         )
@@ -63,23 +67,45 @@ def _scan_scene(root: Path, scene_path: Path) -> LongformSceneRecord:
     draft_text = read_text(paths["draft"])
     body = final_body_from_draft_text(draft_text) if draft_text else ""
     conclusion = review_conclusion(read_text(paths["review"]))
-    flow_issues = scene_flow_gate_issues(root, identity[0])
+    historical = validate_historical_promotion(root, identity[0])
+    flow_issues = () if historical.passed and historical.current else scene_flow_gate_issues(root, identity[0])
     agent_state = agent_review_gate_state(root, paths["agent_json"], paths["draft"])
-    status, readiness_issues = scene_readiness_status(
-        root,
-        draft_path=paths["draft"],
-        review_path=paths["review"],
-        agent_review_json_path=paths["agent_json"],
-        body=body,
-        static_review_conclusion=conclusion,
-        flow_gate_issues=flow_issues,
-        agent_review_state=agent_state,
-    )
+    if historical.passed and historical.current:
+        status, readiness_issues = _historical_readiness(paths, body, conclusion)
+    else:
+        status, readiness_issues = scene_readiness_status(
+            root,
+            draft_path=paths["draft"],
+            review_path=paths["review"],
+            agent_review_json_path=paths["agent_json"],
+            body=body,
+            static_review_conclusion=conclusion,
+            flow_gate_issues=flow_issues,
+            agent_review_state=agent_state,
+        )
     rhythm = narrative_rhythm_contract(root, scene_path, paths["composition"])
     return _scene_record(
         root, scene_path, text, identity, paths, body, conclusion,
         flow_issues, agent_state, status, readiness_issues, rhythm,
     )
+
+
+def _historical_readiness(
+    paths: dict[str, Path],
+    body: str,
+    conclusion: str,
+) -> tuple[str, tuple[str, ...]]:
+    """Keep a tamper-evident promotion ready without rechecking future policy."""
+
+    if not paths["draft"].is_file() or not body:
+        return "needs_draft", ("historically promoted draft is missing or empty",)
+    if not paths["review"].is_file() or not conclusion:
+        return "needs_review", ("historically promoted draft lacks its post-promotion static review",)
+    if conclusion == "pass":
+        return "ready", ()
+    if conclusion in {"pass_with_notes", "revise_required", "reject"}:
+        return "needs_revision", (f"post-promotion static review is {conclusion}",)
+    return "blocked", (f"post-promotion static review conclusion is {conclusion}",)
 
 
 def _scene_record(

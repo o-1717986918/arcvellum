@@ -22,6 +22,24 @@ DELTA_SCHEMA = "literary-engineering-workbench/continuity-ledger-delta/v1"
 REVIEW_SCHEMA = "literary-engineering-workbench/continuity-ledger-review/v1"
 LEDGER_SCHEMA = "literary-engineering-workbench/continuity-ledger/v1"
 
+_CHANGE_STATUSES = {
+    "add": "open",
+    "advance": "open",
+    "close": "resolved",
+    "closure": "resolved",
+    "delay": "delayed",
+    "delayed": "delayed",
+    "open": "open",
+    "opened": "open",
+    "paid": "paid",
+    "payoff": "paid",
+    "postpone": "delayed",
+    "postponed": "delayed",
+    "resolve": "resolved",
+    "resolved": "resolved",
+    "setup": "open",
+}
+
 
 def delta_path(root: Path, scene_id: str) -> Path:
     return root.resolve() / "plot" / "ledger_deltas" / f"{scene_id}.json"
@@ -132,35 +150,75 @@ def continuity_ledger_status(project_root: Path, scene_id: str, *, require_revie
     if not delta.is_file():
         return False, f"missing continuity ledger delta: {_rel(delta, root)}", {}
     payload = _read_json(delta)
+    error = _continuity_delta_error(root, scene_id, payload)
+    if error:
+        return False, error, payload
+    if not require_review:
+        return True, "continuity ledger delta is complete", payload
+    error = _continuity_review_error(root, scene_id, delta, payload)
+    if error:
+        return False, error, payload
+    return True, "continuity ledger delta and independent review pass", payload
+
+
+def _continuity_delta_error(root: Path, scene_id: str, payload: dict[str, Any]) -> str:
     if payload.get("schema") != DELTA_SCHEMA:
-        return False, "continuity ledger delta schema is invalid", payload
+        return "continuity ledger delta schema is invalid"
+    if not _delta_draft_is_current(root, scene_id, payload):
+        return "continuity ledger delta is stale for the promoted draft"
+    if not _delta_writer_is_complete(payload):
+        return "continuity ledger delta is incomplete or lacks writer session"
+    return _delta_content_error(payload)
+
+
+def _delta_draft_is_current(root: Path, scene_id: str, payload: dict[str, Any]) -> bool:
     draft = root / "drafts" / "scenes" / f"{scene_id}.md"
-    if str(payload.get("source_draft") or "") != f"drafts/scenes/{scene_id}.md" or not draft.is_file() or str(payload.get("source_draft_sha256") or "") != _sha256(draft):
-        return False, "continuity ledger delta is stale for the promoted draft", payload
-    if str(payload.get("status") or "").lower() != "complete" or not str(payload.get("writer_session_id") or "").strip():
-        return False, "continuity ledger delta is incomplete or lacks writer session", payload
+    expected = f"drafts/scenes/{scene_id}.md"
+    return (
+        str(payload.get("source_draft") or "") == expected
+        and draft.is_file()
+        and str(payload.get("source_draft_sha256") or "") == _sha256(draft)
+    )
+
+
+def _delta_writer_is_complete(payload: dict[str, Any]) -> bool:
+    return (
+        str(payload.get("status") or "").lower() == "complete"
+        and bool(str(payload.get("writer_session_id") or "").strip())
+    )
+
+
+def _delta_content_error(payload: dict[str, Any]) -> str:
     questions = payload.get("reader_question_changes")
     promises = payload.get("promise_changes")
     evidence = payload.get("evidence_paths")
     if not isinstance(questions, list) or not isinstance(promises, list) or not isinstance(evidence, list):
-        return False, "continuity ledger delta fields are malformed", payload
+        return "continuity ledger delta fields are malformed"
     if not (questions or promises) and not str(payload.get("no_change_reason") or "").strip():
-        return False, "empty continuity delta requires a concrete no_change_reason", payload
+        return "empty continuity delta requires a concrete no_change_reason"
     if (questions or promises) and not [item for item in evidence if str(item).strip()]:
-        return False, "continuity ledger delta requires evidence_paths", payload
-    if not require_review:
-        return True, "continuity ledger delta is complete", payload
+        return "continuity ledger delta requires evidence_paths"
+    change_errors = [
+        *_ledger_change_errors("reader_questions", questions),
+        *_ledger_change_errors("promises", promises),
+    ]
+    if change_errors:
+        return "continuity ledger delta has invalid changes: " + "; ".join(change_errors)
+    return ""
+
+
+def _continuity_review_error(root: Path, scene_id: str, delta: Path, payload: dict[str, Any]) -> str:
     review = review_path(root, scene_id)
     if not review.is_file():
-        return False, "missing continuity ledger review", payload
+        return "missing continuity ledger review"
     reviewed = _read_json(review)
     if reviewed.get("schema") != REVIEW_SCHEMA or str(reviewed.get("delta_sha256") or "") != _sha256(delta):
-        return False, "continuity ledger review is invalid or stale", payload
+        return "continuity ledger review is invalid or stale"
     if str(reviewed.get("status") or "").lower() != "complete" or str(reviewed.get("verdict") or "").lower() != "pass":
-        return False, "continuity ledger review is not a complete pass", payload
+        return "continuity ledger review is not a complete pass"
     if str(reviewed.get("reviewer_session_id") or "") == str(payload.get("writer_session_id") or "") or not str(reviewed.get("reviewer_session_id") or ""):
-        return False, "continuity ledger reviewer must use a different session", payload
-    return True, "continuity ledger delta and independent review pass", payload
+        return "continuity ledger reviewer must use a different session"
+    return ""
 
 
 def continuity_ledger_task_status(project_root: Path, scene_id: str, *, review: bool = False) -> tuple[bool, str]:
@@ -199,26 +257,132 @@ def apply_continuity_ledger(project_root: Path, scene_id: str) -> tuple[Path, Pa
 def _merge_ledger(path: Path, collection: str, changes: list[Any], scene_id: str, delta_sha: str) -> dict[str, Any]:
     previous = _read_json(path)
     rows = previous.get(collection) if isinstance(previous.get(collection), list) else []
-    merged: dict[str, dict[str, Any]] = {str(item.get("id") or item.get("question_id") or item.get("promise_id") or ""): dict(item) for item in rows if isinstance(item, dict)}
+    prepared: list[dict[str, Any]] = []
     for index, value in enumerate(changes, start=1):
         if not isinstance(value, dict):
             continue
         item = dict(value)
-        item_id = str(item.get("id") or item.get("question_id") or item.get("promise_id") or f"{scene_id}-{collection}-{index}").strip()
-        item["id"] = item_id
+        item.setdefault("id", f"{scene_id}-{collection}-{index}")
         item["last_advanced_at"] = scene_id
         item["applied_from_delta_sha256"] = delta_sha
-        merged[item_id] = {**merged.get(item_id, {}), **item}
+        prepared.append(item)
+    merged = normalize_ledger_rows(collection, [*rows, *prepared])
     payload = {
         "schema": LEDGER_SCHEMA,
         "collection": collection,
         "revision": int(previous.get("revision") or 0) + 1,
         "updated_at": _now(),
-        collection: [merged[key] for key in sorted(merged)],
+        collection: merged,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return payload
+
+
+def normalize_ledger_rows(collection: str, rows: list[Any]) -> list[dict[str, Any]]:
+    """Fold event-like ledger rows into stable question or promise records."""
+
+    reference_key, content_keys, canonical_content, window_key = _ledger_fields(collection)
+    merged: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    semantic_ids: dict[str, str] = {}
+    for index, value in enumerate(rows, start=1):
+        if not isinstance(value, dict):
+            continue
+        item, item_id = _normalize_ledger_row(
+            value, index, reference_key, content_keys, canonical_content, window_key, semantic_ids
+        )
+        if item_id not in merged:
+            order.append(item_id)
+        merged[item_id] = {**merged.get(item_id, {}), **item, "id": item_id}
+    return [merged[item_id] for item_id in order]
+
+
+def _ledger_fields(collection: str) -> tuple[str, tuple[str, ...], str, str]:
+    if collection == "reader_questions":
+        return "question_id", ("question", "visible_question", "content"), "question", "target_window"
+    return "promise_id", ("promise", "promised_effect", "content"), "promise", "due_window"
+
+
+def _normalize_ledger_row(
+    value: dict[str, Any],
+    index: int,
+    reference_key: str,
+    content_keys: tuple[str, ...],
+    canonical_content: str,
+    window_key: str,
+    semantic_ids: dict[str, str],
+) -> tuple[dict[str, Any], str]:
+    item = dict(value)
+    content = _first_nonempty(item, *content_keys)
+    semantic = " ".join(content.split()).casefold()
+    item_id = _ledger_item_id(item, reference_key, semantic, semantic_ids, index)
+    status = _ledger_status(item)
+    if status:
+        item["status"] = status
+    if content:
+        item[canonical_content] = content
+        semantic_ids.setdefault(semantic, item_id)
+    window = _first_nonempty(item, window_key, "target_window", "due_window", "target_scene", "due_scene")
+    if window:
+        item[window_key] = window
+    _record_payoff_scene(item, status)
+    item["id"] = item_id
+    return item, item_id
+
+
+def _ledger_item_id(
+    item: dict[str, Any], reference_key: str, semantic: str, semantic_ids: dict[str, str], index: int
+) -> str:
+    referenced = str(item.get(reference_key) or "").strip()
+    direct = str(item.get("id") or "").strip()
+    return referenced or semantic_ids.get(semantic, "") or direct or f"row-{index}"
+
+
+def _ledger_status(item: dict[str, Any]) -> str:
+    status = str(item.get("status") or "").strip().lower()
+    if status:
+        return status
+    change = str(item.get("change") or item.get("type") or "").strip().lower()
+    return _CHANGE_STATUSES.get(change, "")
+
+
+def _record_payoff_scene(item: dict[str, Any], status: str) -> None:
+    if status not in {"closed", "complete", "completed", "paid", "resolved"}:
+        return
+    if _first_nonempty(item, "actual_payoff_scene", "payoff_scene", "resolution_evidence"):
+        return
+    scene = str(item.get("last_advanced_at") or "").strip()
+    if scene and _first_nonempty(item, "evidence", "resolution_summary"):
+        item["actual_payoff_scene"] = scene
+
+
+def _ledger_change_errors(collection: str, rows: list[Any]) -> list[str]:
+    errors: list[str] = []
+    normalized = normalize_ledger_rows(collection, rows)
+    content_key = "question" if collection == "reader_questions" else "promise"
+    window_key = "target_window" if collection == "reader_questions" else "due_window"
+    for index, item in enumerate(normalized, start=1):
+        label = f"{collection}[{index}]"
+        status = str(item.get("status") or "").strip().lower()
+        if not status:
+            errors.append(f"{label} needs status or a recognized change enum")
+        if not str(item.get(content_key) or item.get("question_id") or item.get("promise_id") or "").strip():
+            errors.append(f"{label} needs content or an existing ledger reference")
+        if not _first_nonempty(item, "evidence", "resolution_summary"):
+            errors.append(f"{label} needs scene evidence")
+        if status in {"active", "delayed", "open", "opened", "pending", "postponed"}:
+            if not _first_nonempty(item, window_key, "responsibility"):
+                errors.append(f"{label} needs {window_key} or an explicit responsibility")
+    return errors
+
+
+def _first_nonempty(item: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = str(item.get(key) or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _read_json(path: Path) -> dict[str, Any]:

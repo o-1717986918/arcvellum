@@ -37,7 +37,7 @@ from .longform_rendering import build_summary, render_markdown
 
 def build_longform_audit(
     project_root: Path,
-    target_length: int = 100000,
+    target_length: int = 0,
     output: Path | None = None,
     json_output: Path | None = None,
     graph_output: Path | None = None,
@@ -49,13 +49,14 @@ def build_longform_audit(
     characters = scan_characters(root)
     foreshadowing = scan_foreshadowing(root)
     chapter_files = _chapter_files(root)
-    word_budget = load_word_budget_summary(root)
+    word_budget = load_word_budget_summary(root, live=True)
+    resolved_target_length = _resolved_target_length(root, target_length, word_budget)
     rhythm_plan, rhythm_curves, continuity, expanded = collect_expanded_evidence(root, scenes)
-    issues = audit_issues(root, scenes, characters, foreshadowing, chapter_files, target_length, word_budget)
+    issues = audit_issues(root, scenes, characters, foreshadowing, chapter_files, resolved_target_length, word_budget)
     issues.extend(rhythm_curve_issues(rhythm_curves))
     issues.extend(LongformIssue(**item) for item in expanded)
     paths = _output_paths(root, output, json_output, graph_output)
-    summary = build_summary(scenes, characters, foreshadowing, chapter_files, issues, target_length, word_budget)
+    summary = build_summary(scenes, characters, foreshadowing, chapter_files, issues, resolved_target_length, word_budget)
     summary.update(extended_summary(scenes, issues, rhythm_plan, continuity))
     payload = _audit_payload(
         root, summary, scenes, characters, foreshadowing, issues,
@@ -75,11 +76,22 @@ def build_longform_audit(
     )
 
 
+def _resolved_target_length(root: Path, requested: int, word_budget: dict[str, object]) -> int:
+    if requested > 0:
+        return requested
+    target = word_budget.get("target") if isinstance(word_budget.get("target"), dict) else {}
+    totals = word_budget.get("totals") if isinstance(word_budget.get("totals"), dict) else {}
+    budget_target = to_int(target.get("target_chinese_chars") or target.get("target_words"))
+    if budget_target:
+        return budget_target
+    return to_int(scalar(read_text(root / "project.yaml"), "target_length"))
+
+
 def _audit_payload(
     root: Path,
     summary: dict[str, object],
     scenes: list[LongformSceneRecord],
-    characters: list[dict[str, str]],
+    characters: list[dict[str, object]],
     foreshadowing: list[dict[str, str]],
     issues: list[LongformIssue],
     word_budget: dict[str, object],

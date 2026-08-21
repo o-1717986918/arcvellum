@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
 
 from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
+from literary_engineering_studio_engine.literary.scene.promotion.historical import seal_historical_promotion
 from literary_engineering_studio_engine.literary.review.longform_contract import (
     LONGFORM_AUDIT_SCHEMA,
     LONGFORM_AUDIT_SOURCE_PATHS,
@@ -57,7 +59,115 @@ class LongformQualityContractTests(unittest.TestCase):
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
 
             self.assertEqual(payload["input_snapshot"], longform_input_snapshot(project))
-            self.assertEqual(payload["input_snapshot"]["file_count"], 15)
+            staged = sandbox.control_workspace
+            for relative in (
+                "canon/facts.json",
+                "characters/lead.yaml",
+                "style/creative_quality_profile.json",
+                "branches/scene_0001/branch_manifest.json",
+                "drafts/candidates/scene_0001-platform-agent.md",
+                "plot/chapter_obligations/chapter_0001.json",
+                "workflow/approvals/index.jsonl",
+            ):
+                self.assertTrue((staged / relative).is_file(), relative)
+            snapshot_paths = {item["path"] for item in payload["input_snapshot"]["files"]}
+            self.assertIn("canon/facts.json", snapshot_paths)
+            self.assertIn("branches/scene_0001/branch_manifest.json", snapshot_paths)
+
+    def test_historical_promotion_prevents_future_canon_from_invalidating_scene_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write(root / "project.yaml", "project:\n  target_length: 0\n")
+            self._write(
+                root / "scenes" / "scene_0001.yaml",
+                "scene_id: scene_0001\nchapter_id: chapter_0001\nlocation: 舱室\nparticipants: [林]\nscene_goal: 回家\n",
+            )
+            candidate = root / "drafts" / "candidates" / "scene_0001-platform-agent.md"
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            self._write(candidate, "正文。\n")
+            self._write(draft, "正文。\n")
+            self._write(candidate.with_suffix(".json"), json.dumps({"style_mount_snapshot": {}}))
+            manifest = {
+                "schema": "literary-engineering-workbench/candidate-promotion/v0.1",
+                "scene_id": "scene_0001",
+                "candidate": "drafts/candidates/scene_0001-platform-agent.md",
+                "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                "draft": "drafts/scenes/scene_0001.md",
+                "draft_sha256": hashlib.sha256(draft.read_bytes()).hexdigest(),
+                "style_mount_snapshot": {},
+                "candidate_generation": {"status": "pass"},
+                "candidate_review": {"status": "pass"},
+                "allow_unreviewed": False,
+                "allow_review_notes": False,
+            }
+            seal_historical_promotion(root, manifest, candidate, draft)
+            self._write(
+                root / "drafts" / "promotions" / "scene_0001_promotion.json",
+                json.dumps(manifest, ensure_ascii=False),
+            )
+            self._write(root / "reviews" / "scene_0001-review.md", "- 结论： pass\n")
+
+            result = build_longform_audit(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+            categories = {item["category"] for item in payload["issues"]}
+
+            self.assertNotIn("flow_readiness", categories)
+            self.assertNotIn("memory_context", categories)
+            self.assertEqual(payload["scenes"][0]["status"], "ready")
+
+    def test_character_role_label_resolves_formal_scene_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write(root / "project.yaml", "project:\n  target_length: 0\n")
+            self._write(root / "characters" / "lead.yaml", 'character_id: lead\nname: 林桓\nrole: "主角——维修员"\n')
+            self._write(
+                root / "scenes" / "scene_0001.yaml",
+                "scene_id: scene_0001\nchapter_id: chapter_0001\nlocation: 舱室\nparticipants: [主角]\nscene_goal: 回家\n",
+            )
+
+            result = build_longform_audit(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertFalse(any(item["category"] == "character_inventory" for item in payload["issues"]))
+
+    def test_longform_uses_live_scene_inventory_and_project_budget_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write(root / "project.yaml", "project:\n  target_length: 1000\n")
+            for index in (1, 2):
+                scene_id = f"scene_{index:04d}"
+                self._write(
+                    root / "scenes" / f"{scene_id}.yaml",
+                    f"scene_id: {scene_id}\nchapter_id: chapter_0001\nlocation: 舱室\nparticipants: [林]\nscene_goal: 推进\n",
+                )
+                self._write(root / "drafts" / "scenes" / f"{scene_id}.md", "字" * 500)
+            stale_budget = {
+                "target": {"target_chinese_chars": 1000},
+                "totals": {"target_words": 1000, "chapter_count": 1, "scene_count": 2},
+                "chapter_budgets": [
+                    {
+                        "chapter_id": "chapter_0001",
+                        "volume_id": "volume_01",
+                        "target_words": 1000,
+                        "scene_count": 2,
+                        "avg_scene_words": 500,
+                    }
+                ],
+                "outline_inventory": {"outline_path": "plot/outline.md"},
+                "scene_inventory_binding": {"actual_scene_count": 0, "missing_scene_count": 2},
+                "issues": [{"severity": "high", "category": "scene_inventory"}],
+                "status": "needs_expansion",
+            }
+            self._write(root / "plot" / "word_budget" / "word_budget.json", json.dumps(stale_budget))
+            self._write(root / "plot" / "outline.md", "# 第一章\n")
+
+            result = build_longform_audit(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["summary"]["target_length"], 1000)
+            self.assertEqual(payload["word_budget"]["status"], "pass")
+            self.assertEqual(payload["word_budget"]["scene_inventory_binding"]["actual_scene_count"], 2)
+            self.assertEqual(payload["word_budget"]["scene_inventory_binding"]["missing_scene_count"], 0)
 
     def test_quality_gate_recomputes_blockers_and_input_freshness(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -211,13 +321,26 @@ class LongformQualityContractTests(unittest.TestCase):
     def _write_representative_longform_inputs(root: Path) -> None:
         files = {
             "project.yaml": "project:\n  title: Contract\n",
+            "canon/facts.json": "{}\n",
+            "characters/lead.yaml": "character_id: lead\nname: 林\n",
+            "style/creative_quality_profile.json": "{}\n",
             "scenes/scene_0001.yaml": "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+            "branches/scene_0001/roleplay_simulation.md": "读取回执\n",
+            "branches/scene_0001/branch_manifest.json": '{"branches":[{"branch_id":"b1"}]}\n',
+            "branches/scene_0001/branch_selection.md": "decision: selected\nselected_branch: b1\n",
+            "drafts/candidates/scene_0001-platform-agent.md": "正文。\n",
+            "drafts/candidates/scene_0001-platform-agent.json": "{}\n",
             "drafts/scenes/scene_0001.md": "正文。\n",
             "drafts/compositions/scene_0001_composition.json": "{}\n",
             "drafts/promotions/scene_0001_promotion.json": "{}\n",
             "memory/context_packets/scene_0001.md": "# Context\n",
             "memory/context_packets/scene_0001.trace.json": "{}\n",
             "plot/chapters/chapter_0001.json": "{}\n",
+            "plot/chapter_obligations/chapter_0001.json": "{}\n",
+            "plot/chapter_obligations/chapter_0001.agent_tasks.md": "# task\n",
+            "plot/chapter_obligations/chapter_0001.agent_completion.json": "{}\n",
+            "plot/outline.md": "# 第一章\n",
+            "plot/conflict_matrix.md": "# conflict\n",
             "plot/foreshadowing.csv": "id,status\nF1,open\n",
             "plot/promises/ledger.json": "{}\n",
             "plot/reader_questions/ledger.json": "{}\n",
@@ -225,11 +348,17 @@ class LongformQualityContractTests(unittest.TestCase):
             "plot/word_budget/word_budget.json": "{}\n",
             "reviews/scene_0001-review.md": "- 结论： pass\n",
             "reviews/agent/scene_0001_scene_review.json": "{}\n",
+            "workflow/approvals/index.jsonl": "{}\n",
         }
         for relative, content in files.items():
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
+
+    @staticmethod
+    def _write(path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
 
 if __name__ == "__main__":
