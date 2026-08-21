@@ -16,6 +16,7 @@ import { workerProfile } from "./worker-profile.ts";
 import { readAuthorizedFile } from "./path-policy.ts";
 import { executionIdentities, type ExecutionIdentities } from "./execution-identity.ts";
 import { workerExecutionStrategy } from "./worker-strategy.ts";
+import { allowsRepairReadHandoff } from "./repair-phase.ts";
 import {
 	ProviderReliabilitySession,
 	classifyProviderFailure,
@@ -75,6 +76,7 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		turns: 0,
 		toolCalls: 0,
 		repairRequests: 0,
+		repairReadHandoffs: 0,
 		taskContextReads: 0,
 		reasoningCharacters: 0,
 		reasoningTokens: 0,
@@ -159,7 +161,10 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			// A model may emit several sibling tool calls in one response. Freeze the
 			// protocol requirement at provider-request time so the first sibling
 			// cannot mutate state and retroactively invalidate the remaining calls.
-			if (!toolMatchesLease(requiredToolLease, toolCall.name)) {
+			if (
+				!toolMatchesLease(requiredToolLease, toolCall.name)
+				&& !allowsRepairReadHandoff(options, requiredToolLease, toolCall.name, repairSources, state)
+			) {
 				return {
 					block: true,
 					reason: `worker protocol requires ${requiredToolLease} at this stage`,

@@ -15,6 +15,7 @@ import {
 	settleTurnBudget,
 	toolMatchesLease,
 } from "../src/worker.ts";
+import { allowsRepairReadHandoff, completeRepairReadHandoff } from "../src/repair-phase.ts";
 import { validateSubmittedOutputs } from "../src/tools.ts";
 import { workerProfile } from "../src/worker-profile.ts";
 
@@ -117,6 +118,48 @@ describe("bounded worker lifecycle", () => {
 		expect(toolMatchesLease("", "complete_task")).toBe(true);
 		expect(toolMatchesLease("write_expected_output", "write_expected_output")).toBe(true);
 		expect(toolMatchesLease("write_expected_output", "validate_output")).toBe(false);
+	});
+
+	it("recovers one stale repair read only at the read-to-write boundary", () => {
+		const workerState = state();
+		const targets = ["out/review.json", "out/review.md"];
+		for (const path of targets) workerState.readPaths.add(path);
+
+		expect(allowsRepairReadHandoff(
+			{ mode: "repair" },
+			"write_expected_output",
+			"read_repair_target",
+			targets,
+			workerState,
+		)).toBe(true);
+		expect(completeRepairReadHandoff(workerState)).toEqual({
+			status: "read_phase_complete",
+			next_tool: "write_expected_output",
+			returned: 0,
+		});
+		expect(allowsRepairReadHandoff(
+			{ mode: "repair" },
+			"write_expected_output",
+			"read_repair_target",
+			targets,
+			workerState,
+		)).toBe(false);
+		expect(() => completeRepairReadHandoff(workerState)).toThrow("call write_expected_output");
+	});
+
+	it("does not relax repair handoff for unread targets, normal tasks, or other tools", () => {
+		const workerState = state();
+		const targets = ["out/review.md"];
+		expect(allowsRepairReadHandoff(
+			{ mode: "repair" }, "write_expected_output", "read_repair_target", targets, workerState,
+		)).toBe(false);
+		workerState.readPaths.add(targets[0]);
+		expect(allowsRepairReadHandoff(
+			{ mode: "task" }, "write_expected_output", "read_repair_target", targets, workerState,
+		)).toBe(false);
+		expect(allowsRepairReadHandoff(
+			{ mode: "repair" }, "write_expected_output", "read_authorized_source", targets, workerState,
+		)).toBe(false);
 	});
 
 	it("allows one bounded landing turn only for the main prose agent", () => {
@@ -277,6 +320,7 @@ function state(): WorkerState {
 		turns: 6,
 		toolCalls: 0,
 		repairRequests: 0,
+		repairReadHandoffs: 0,
 		taskContextReads: 0,
 		reasoningCharacters: 0,
 		reasoningTokens: 0,

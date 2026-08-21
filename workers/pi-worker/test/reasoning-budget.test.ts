@@ -80,6 +80,7 @@ function state(overrides: Partial<WorkerState> = {}): WorkerState {
 		turns: 0,
 		toolCalls: 0,
 		repairRequests: 0,
+		repairReadHandoffs: 0,
 		taskContextReads: 0,
 		reasoningCharacters: 0,
 		reasoningTokens: 0,

@@ -97,6 +97,7 @@ export interface WorkerState {
 	turns: number;
 	toolCalls: number;
 	repairRequests: number;
+	repairReadHandoffs: number;
 	taskContextReads: number;
 	reasoningCharacters: number;
 	reasoningTokens: number;

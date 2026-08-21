@@ -169,7 +169,11 @@ describe("local output validation", () => {
 		expect(first?.content[0]?.text).toContain("needs_revision");
 		expect(second?.content[0]?.text).toContain("Needs revision");
 		expect([...workerState.readPaths]).toEqual(["out/review.json", "out/review.md"]);
-		await expect(read?.execute("call", {})).rejects.toThrow("no unread existing repair target remains");
+		const handoff = await read?.execute("call", {});
+		expect(handoff?.content[0]?.text).toContain('"status": "read_phase_complete"');
+		expect(handoff?.content[0]?.text).toContain('"next_tool": "write_expected_output"');
+		expect(handoff?.content[0]?.text).not.toContain("Needs revision");
+		await expect(read?.execute("call", {})).rejects.toThrow("call write_expected_output");
 	});
 
 	it("does not expose the deterministic repair reader during normal tasks", async () => {
@@ -322,6 +326,7 @@ function state(): WorkerState {
 		turns: 0,
 		toolCalls: 0,
 		repairRequests: 0,
+		repairReadHandoffs: 0,
 		taskContextReads: 0,
 		reasoningCharacters: 0,
 		textCharacters: 0,

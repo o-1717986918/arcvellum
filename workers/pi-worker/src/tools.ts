@@ -5,6 +5,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { RuntimeEventSink, TaskContext, ValidationIssue, ValidationResult, WorkerOptions, WorkerState } from "./contracts.ts";
 import { atomicWriteAuthorizedFile, normalizeRelativePath, readAuthorizedFile, readAuthorizedSource, resolveWorkspacePath } from "./path-policy.ts";
 import { publicTaskProjection } from "./task-context.ts";
+import { completeRepairReadHandoff } from "./repair-phase.ts";
 
 const EMPTY_PARAMETERS = Type.Object({});
 
@@ -215,7 +216,13 @@ export function createWorkerTools(
 						// Missing repair targets are created directly in the write phase.
 					}
 				}
-				throw new Error("no unread existing repair target remains");
+				const handoff = completeRepairReadHandoff(state);
+				emit("runner.repair.phase_handoff", {
+					from: "read_repair_target",
+					to: handoff.next_tool,
+					reason: "all-existing-repair-targets-read",
+				});
+				return result(handoff, { phaseHandoff: true, returned: 0 });
 			},
 		});
 	}
@@ -318,6 +325,7 @@ export async function progressDigest(context: TaskContext, workspace: string, st
 	hash.update([...state.readPaths].sort().join("\n"));
 	hash.update([...state.writtenPaths].sort().join("\n"));
 	hash.update(`task-context-reads:${state.taskContextReads}`);
+	hash.update(`repair-read-handoffs:${state.repairReadHandoffs}`);
 	hash.update(state.lastValidation.passed ? "validation:passed" : "validation:not-passed");
 	hash.update(state.lastValidation.issues.map((item) => `${item.path}:${item.code}`).sort().join("\n"));
 	hash.update(
