@@ -299,8 +299,15 @@ def normalize_relative_path(value: str) -> PurePosixPath:
     text = str(value or "").strip().replace("\\", "/")
     if not text:
         raise ValueError("task path must not be empty")
-    path = PurePosixPath(text)
-    if path.is_absolute() or ":" in path.parts[0] or any(part in {"", ".", ".."} for part in path.parts):
+    segments = text.split("/")
+    if len(segments) > 1 and segments[-1] == "":
+        segments.pop()
+    if any(segment in {"", ".", ".."} for segment in segments):
+        raise ValueError(
+            f"task path must be a normalized project-relative path: {value}"
+        )
+    path = PurePosixPath(*segments)
+    if not path.parts or path.is_absolute() or ":" in path.parts[0]:
         raise ValueError(f"task path must be a normalized project-relative path: {value}")
     return path
 

@@ -28,9 +28,58 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(_derive_execution_policy(payload, HumanGate(False, (), "test")), "deterministic")
 
     def test_rejects_path_traversal(self):
-        for value in ("../secret", "C:/secret", "/absolute/path"):
+        for value in (
+            "",
+            ".",
+            "./scene.md",
+            "../secret",
+            "scenes/../secret",
+            "scenes//scene.md",
+            "scenes//",
+            "C:/secret",
+            "/absolute/path",
+        ):
             with self.assertRaises(ValueError):
                 normalize_relative_path(value)
+
+    def test_accepts_normalized_unicode_project_paths(self):
+        for value in (
+            "canon",
+            "scenes/scene_0001.yaml",
+            "人物/林桓.yaml",
+        ):
+            self.assertEqual(str(normalize_relative_path(value)), value)
+        self.assertEqual(str(normalize_relative_path("scenes/")), "scenes")
+
+    def test_task_package_reports_project_root_source_as_contract_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task_dir = root / "workflow/tasks"
+            task_dir.mkdir(parents=True)
+            (task_dir / "invalid.agent_tasks.md").write_text(
+                "# task\n", encoding="utf-8"
+            )
+            payload = {
+                "schema": "literary-engineering-workbench/agent-task/v1",
+                "task_id": "invalid",
+                "route": "scene-development",
+                "current_state": "target-length-revision",
+                "task_type": "main-platform-agent-prose-revision",
+                "required_reading": [],
+                "source_paths": ["."],
+                "expected_outputs": ["drafts/revisions/scene_0001.md"],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+                "task_markdown": "workflow/tasks/invalid.agent_tasks.md",
+            }
+            task_json = task_dir / "invalid.task.json"
+            task_json.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "normalized project-relative path",
+            ):
+                load_task_package(root, task_json)
 
     def test_loads_valid_task(self):
         with tempfile.TemporaryDirectory() as temporary:
