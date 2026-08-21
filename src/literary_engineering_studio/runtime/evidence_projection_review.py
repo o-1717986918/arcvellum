@@ -50,6 +50,32 @@ def revision_review(value: object) -> object:
     }
 
 
+def committee_longform_audit(value: object) -> object:
+    """Keep literary audit evidence while collapsing Core-owned provenance."""
+
+    if not isinstance(value, dict):
+        return value
+    snapshot = value.get("input_snapshot")
+    compact_snapshot = (
+        _select(snapshot, "digest", "file_count")
+        if isinstance(snapshot, dict)
+        else {}
+    )
+    return _select(
+        value,
+        "schema",
+        "summary",
+        "word_budget",
+        "rhythm_curves",
+        "macro_rhythm",
+        "continuity_ledgers",
+        "scenes",
+        "characters",
+        "foreshadowing",
+        "issues",
+    ) | {"input_snapshot": compact_snapshot}
+
+
 def compact_review_schema(value: object) -> object:
     if not isinstance(value, dict):
         return value
@@ -83,4 +109,9 @@ def _required_type_groups(contract: dict[str, Any]) -> dict[str, list[str]]:
     return groups
 
 
-__all__ = ["compact_review_schema", "review_context", "revision_review"]
+__all__ = [
+    "committee_longform_audit",
+    "compact_review_schema",
+    "review_context",
+    "revision_review",
+]

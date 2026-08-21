@@ -28,6 +28,144 @@ from literary_engineering_studio_engine.prompting.agents.schema import compact_s
 
 
 class PromptProgramV3Tests(unittest.TestCase):
+    def test_committee_prompt_keeps_semantics_without_replaying_provenance_and_markdown(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            snapshot_files = [
+                {"path": f"drafts/scenes/scene_{index:04d}.md", "sha256": f"{index:064x}"}
+                for index in range(240)
+            ]
+            scenes = [
+                {
+                    "scene_id": f"scene_{index:04d}",
+                    "chapter_id": "chapter_0001" if index <= 3 else "chapter_0002",
+                    "scene_turn": "真相改变人物选择",
+                    "reader_effect": "读者确认代价正在扩大",
+                    "status": "ready",
+                    "draft_chars": 5000,
+                }
+                for index in range(1, 7)
+            ]
+            issues = [
+                {
+                    "severity": "high",
+                    "category": "narrative_rhythm",
+                    "subject": "chapter_0002",
+                    "message": "第二章高潮后的余波不足",
+                    "recommendation": "补足代价兑现后的关系余波",
+                }
+            ]
+            files = {
+                "reviews/agent/canon_review.json": json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/canon-review-agent/v1",
+                        "conclusion": "pass",
+                        "summary": "Canon clean.",
+                    },
+                    ensure_ascii=False,
+                ),
+                "reviews/agent/canon_review.md": "Canon narrative duplicate.\n" * 180,
+                "reviews/longform/longform_audit.json": json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/longform-audit/v0.1",
+                        "generated_at": "2026-08-21T00:00:00Z",
+                        "project_root": "C:/private/project",
+                        "summary": {"blocking_issue_count": 1, "draft_chars": 30000},
+                        "input_snapshot": {
+                            "digest": "a" * 64,
+                            "file_count": len(snapshot_files),
+                            "files": snapshot_files,
+                        },
+                        "word_budget": {"target_chinese_chars": 30000},
+                        "rhythm_curves": {"chapter_0002": [2, 5, 3]},
+                        "macro_rhythm": {"book": {"shape": "rise-fall-rise"}},
+                        "continuity_ledgers": {"open_count": 1},
+                        "scenes": scenes,
+                        "characters": [],
+                        "foreshadowing": [{"id": "F1", "status": "open"}],
+                        "issues": issues,
+                        "graph_path": "plot/longform_graph.json",
+                    },
+                    ensure_ascii=False,
+                ),
+                "reviews/longform/longform_audit.md": "Longform narrative duplicate.\n" * 350,
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            payload = {
+                "task_id": "review-and-audit-project-review-committee-agent-task",
+                "route": "review-and-audit",
+                "scene_id": "project-review",
+                "current_state": "committee-agent-task",
+                "task_type": "platform-agent-review",
+                "source_paths": list(files),
+                "required_reading": [],
+                "expected_outputs": [
+                    "reviews/agent/committee_project-final-audit.json",
+                    "reviews/agent/committee_project-final-audit.md",
+                ],
+                "hard_constraints": ["独立审查每个文学维度。"],
+                "style_constraints": [],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+                "execution_policy": "agent-required",
+                "agent_role": "main-review-agent",
+                "human_gate": {"required": False, "reasons": [], "source": "test"},
+                "runtime_capabilities_required": ["read", "write"],
+                "output_contracts": [
+                    {"path": path, "kind": "agent-authored", "writeback_policy": "automatic"}
+                    for path in (
+                        "reviews/agent/committee_project-final-audit.json",
+                        "reviews/agent/committee_project-final-audit.md",
+                    )
+                ],
+                "prompt_asset": {
+                    "exact": True,
+                    "body": "执行最终多视角委员会审查。",
+                    "hard_constraints": [],
+                    "style_constraints": [],
+                    "output_contract": ["输出委员会 JSON 与 Markdown"],
+                    "review_requirements": ["保留所有阻塞意见"],
+                    "forbidden_shortcuts": [],
+                },
+            }
+            task = TaskPackage(root, root / "task.json", root / "task.md", payload)
+            selection = select_agent_context(task)
+            budget = resolve_task_context_budget(task)
+            prepared = build_prepared_prompt_context(
+                root,
+                selection.requested_context_paths,
+                budget=budget,
+            )
+            envelope = build_execution_context_envelope(
+                task,
+                workspace=root,
+                selection=selection,
+                prepared_context=prepared,
+                budget=budget,
+            )
+
+            compiled = compile_worker_program(
+                task,
+                prompt_version="v3",
+                renderer="tool-worker",
+                workspace=root,
+                execution_context=envelope,
+            )
+
+            self.assertLess(compiled.metrics.total_characters, 36_000)
+            self.assertEqual(compiled.lint.status, "pass")
+            self.assertIn("第二章高潮后的余波不足", compiled.text)
+            self.assertIn("scene_0006", compiled.text)
+            self.assertNotIn("drafts/scenes/scene_0239.md", compiled.text)
+            self.assertNotIn("Longform narrative duplicate", compiled.text)
+            self.assertNotIn("Canon narrative duplicate", compiled.text)
+            on_demand = {item.source_ref for item in compiled.program.exact_on_demand}
+            self.assertIn("reviews/agent/canon_review.md", on_demand)
+            self.assertIn("reviews/longform/longform_audit.md", on_demand)
+
     def test_pi_canon_generation_and_review_share_compact_exact_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

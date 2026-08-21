@@ -16,7 +16,11 @@ from .evidence_projection_literary import (
     prose_scene,
     prose_word_budget,
 )
-from .evidence_projection_review import review_context, revision_review
+from .evidence_projection_review import (
+    committee_longform_audit,
+    review_context,
+    revision_review,
+)
 from .evidence_projection_writeback import (
     canon_scene_review,
     composition_review,
@@ -36,6 +40,7 @@ _JSON_PROJECTIONS = {
     "composition-review": composition_review,
     "prose-chapter-obligation": prose_chapter_obligation,
     "revision-review": revision_review,
+    "committee-longform-audit": committee_longform_audit,
     "state-patch": state_patch,
     "state-composition": state_composition,
     "canon-scene-review": canon_scene_review,

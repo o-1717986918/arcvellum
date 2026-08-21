@@ -78,10 +78,28 @@ def _task_specific_policy(
         "state-agent-task": _state_evidence_policy,
         "canon-patch-json": _canon_evidence_policy,
         "canon-agent-task": _canon_evidence_policy,
+        "committee-agent-task": _committee_evidence_policy,
     }
     if policy := policies.get(state):
         return policy(task, path)
     return _asset_review_evidence_policy(task, path)
+
+
+def _committee_evidence_policy(
+    _task: TaskPackage,
+    path: str,
+) -> EvidencePolicyDecision:
+    if path == "reviews/longform/longform_audit.json":
+        return EvidencePolicyDecision(
+            EvidenceDisposition.INLINE,
+            "committee-longform-audit",
+        )
+    if path in {
+        "reviews/agent/canon_review.md",
+        "reviews/longform/longform_audit.md",
+    }:
+        return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
+    return EvidencePolicyDecision(EvidenceDisposition.INLINE)
 
 
 def _prose_evidence_policy(
