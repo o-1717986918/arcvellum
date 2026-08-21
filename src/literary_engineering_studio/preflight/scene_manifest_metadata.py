@@ -89,7 +89,7 @@ def _canonicalize_revision_payload(
         {"field": field, "reason": "bound deterministic exact-source revision metadata"}
         for field in _apply_fields(payload, expected)
     ]
-    removed_rows = _remove_misclassified_anti_evasion_rows(payload)
+    removed_rows = _remove_misclassified_anti_evasion_rows(payload, standards)
     if removed_rows:
         changes.append(
             {
@@ -151,23 +151,30 @@ def _ensure_anti_evasion_not_applicable_reason(
     if str(payload.get("anti_evasion_not_applicable_reason") or "").strip():
         return False
     payload["anti_evasion_not_applicable_reason"] = (
-        "Protected source lint found no mechanical contrast or evasion row requirement; "
-        "no additional semantic transition risk was recorded by the revising Agent."
+        "Protected source lint required no anti-evasion evidence, and no explicitly "
+        "classified semantic transition risk remains after canonicalization."
     )
     return True
 
 
-def _remove_misclassified_anti_evasion_rows(payload: dict[str, Any]) -> list[str]:
+def _remove_misclassified_anti_evasion_rows(
+    payload: dict[str, Any],
+    standards: dict[str, Any],
+) -> list[str]:
     rows = payload.get("anti_evasion_rows")
     if not isinstance(rows, list):
         return []
+    require_explicit_classification = standards.get("anti_evasion_rows_required") is False
     kept: list[object] = []
     removed: list[str] = []
     evidence_pairs: set[tuple[str, str]] = set()
     for row in rows:
         issue = str(row.get("issue") or "").strip() if isinstance(row, dict) else ""
-        if _is_non_anti_evasion_issue(issue):
-            removed.append(issue)
+        if _is_non_anti_evasion_issue(
+            issue,
+            require_explicit_classification=require_explicit_classification,
+        ):
+            removed.append(issue or "unclassified anti-evasion row")
             continue
         pair = _evidence_pair(row)
         if pair is not None and pair in evidence_pairs:
@@ -181,10 +188,16 @@ def _remove_misclassified_anti_evasion_rows(payload: dict[str, Any]) -> list[str
     return removed
 
 
-def _is_non_anti_evasion_issue(issue: str) -> bool:
+def _is_non_anti_evasion_issue(
+    issue: str,
+    *,
+    require_explicit_classification: bool,
+) -> bool:
     normalized = issue.casefold()
     if any(marker in normalized for marker in _ANTI_EVASION_ISSUE_MARKERS):
         return False
+    if require_explicit_classification:
+        return True
     has_code = any(
         normalized == code
         or normalized.startswith(f"{code}:")

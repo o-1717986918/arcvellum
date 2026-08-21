@@ -115,6 +115,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                     {
                         "anti_evasion_rows": [
                             {
+                                "issue": "机械转折被动作链替代",
                                 "still_uses_explicit_transition": "no",
                                 "suspected_rephrase": "false",
                             }
@@ -172,6 +173,155 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             )
             normalized = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertTrue(normalized["anti_evasion_not_applicable_reason"])
+
+    def test_revision_canonicalizer_removes_generic_rows_when_protected_lint_requires_none(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            candidate_rel = "drafts/revisions/scene_0003_revision_03.md"
+            manifest_rel = "drafts/revisions/scene_0003_revision_03.json"
+            prompt_rel = "drafts/revisions/scene_0003_revision_03.prompt.json"
+            source_rel = "drafts/scenes/scene_0003.md"
+            source_body = "他核对燃料表，又检查了姿态线路。"
+            candidate_body = "他核对燃料表，又检查了姿态线路。接地读数在第三次复测后稳定下来。"
+            source = workspace / source_rel
+            candidate = workspace / candidate_rel
+            manifest = workspace / manifest_rel
+            prompt = workspace / prompt_rel
+            source.parent.mkdir(parents=True)
+            candidate.parent.mkdir(parents=True)
+            source.write_text(source_body, encoding="utf-8")
+            candidate.write_text(candidate_body, encoding="utf-8")
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "revision_actions_applied": ["补足场景的因果与设备伏笔"],
+                        "warnings_addressed": [],
+                        "style_notes_addressed": [],
+                        "style_adherence_addressed": [],
+                        "anti_evasion_rows": [
+                            {
+                                "issue": "候选以动作推进与信息差代替结论复述",
+                                "source_excerpt": source_body,
+                                "revised_excerpt": candidate_body,
+                                "still_uses_explicit_transition": False,
+                                "suspected_rephrase": False,
+                                "verdict": "resolved",
+                            },
+                            {
+                                "issue": "关键选择段展开因果代价并兑现改道承诺",
+                                "source_excerpt": source_body,
+                                "revised_excerpt": candidate_body,
+                                "still_uses_explicit_transition": False,
+                                "suspected_rephrase": False,
+                                "verdict": "resolved",
+                            },
+                            {
+                                "issue": "设备故障伏笔通过接地读数与重布线路埋设",
+                                "source_excerpt": source_body,
+                                "revised_excerpt": candidate_body,
+                                "still_uses_explicit_transition": False,
+                                "suspected_rephrase": False,
+                                "verdict": "resolved",
+                            },
+                        ],
+                        "retained_transition_proofs": [],
+                        "evasion_risks_unresolved": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            prompt.write_text(
+                json.dumps(
+                    {"generation_standards": {"anti_evasion_rows_required": False}},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+            task = TaskPackage(
+                project_root=workspace,
+                task_json_path=workspace / "task.json",
+                task_markdown_path=workspace / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0003-target-length-revision",
+                    "current_state": "target-length-revision",
+                    "scene_id": "scene_0003",
+                    "candidate": candidate_rel,
+                    "revision_source": source_rel,
+                    "candidate_sha256_before_revision": source_sha256,
+                    "expected_outputs": [candidate_rel, manifest_rel, prompt_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="run-1",
+                run_root=workspace.parent,
+                workspace=workspace,
+                prompt_path=workspace / "prompt.md",
+                manifest_path=workspace / "sandbox.json",
+                baseline_path=workspace / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            canonicalize_scene_revision_manifest(
+                task,
+                sandbox,
+                read_object=lambda path: json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None,
+                session_identity=lambda _task, role: f"studio:{role}:session",
+            )
+
+            normalized = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(normalized["anti_evasion_rows"], [])
+            self.assertTrue(normalized["anti_evasion_not_applicable_reason"])
+            self.assertEqual(
+                revision_manifest_errors(
+                    normalized,
+                    scene_id="scene_0003",
+                    source_rel=source_rel,
+                    source_sha256=source_sha256,
+                    source_body=source_body,
+                    candidate_rel=candidate_rel,
+                    candidate_sha256=hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                    candidate_body=candidate_body,
+                    anti_evasion_rows_required=False,
+                ),
+                [],
+            )
+
+            normalized["anti_evasion_rows"] = [
+                {
+                    "issue": "机械转折可能只是换皮成动作总结",
+                    "source_excerpt": source_body,
+                    "revised_excerpt": candidate_body,
+                    "still_uses_explicit_transition": False,
+                    "suspected_rephrase": False,
+                    "verdict": "resolved",
+                }
+            ]
+            normalized.pop("anti_evasion_not_applicable_reason", None)
+            manifest.write_text(json.dumps(normalized, ensure_ascii=False), encoding="utf-8")
+            canonicalize_scene_revision_manifest(
+                task,
+                sandbox,
+                read_object=lambda path: json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None,
+                session_identity=lambda _task, role: f"studio:{role}:session",
+            )
+            explicit = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(len(explicit["anti_evasion_rows"]), 1)
+            self.assertIn(
+                "anti_evasion_rows[0].critical_objection is missing",
+                revision_manifest_errors(
+                    explicit,
+                    scene_id="scene_0003",
+                    source_rel=source_rel,
+                    source_sha256=source_sha256,
+                    source_body=source_body,
+                    candidate_rel=candidate_rel,
+                    candidate_sha256=hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                    candidate_body=candidate_body,
+                    anti_evasion_rows_required=False,
+                ),
+            )
 
     def test_static_review_keeps_below_threshold_style_findings_nonblocking(self):
         with tempfile.TemporaryDirectory() as temporary:
