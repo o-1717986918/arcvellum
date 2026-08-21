@@ -311,6 +311,12 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 "drafts/promotions/scene_0001_promotion.json",
                 source_paths,
             )
+            self.assertNotIn("", source_paths)
+            self.assertNotIn(".", source_paths)
+            archive = _manifest["historical_evidence"]["context_archive"]
+            self.assertIn(archive["archived_context_packet"], source_paths)
+            self.assertIn(archive["archived_context_trace"], source_paths)
+            self.assertIn(archive["archive_manifest"], source_paths)
             self.assertEqual(
                 historical_revision_context_errors(
                     root,
@@ -352,6 +358,34 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 snapshot=snapshot,
             )
             self.assertIn("historical revision source promotion is not valid", errors)
+
+    def test_legacy_historical_revision_sources_do_not_emit_project_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, manifest, _candidate, draft = self._sealed_promotion(
+                Path(temporary)
+            )
+            evidence = dict(manifest["historical_evidence"])
+            evidence["schema"] = "arcvellum/historical-scene-promotion/v1"
+            evidence.pop("context_archive", None)
+            evidence.pop("migration_predecessor", None)
+            evidence.pop("evidence_sha256", None)
+            evidence["evidence_sha256"] = self._payload_sha(evidence)
+            manifest["historical_evidence"] = evidence
+            (root / "drafts/promotions/scene_0001_promotion.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            source_paths = historical_revision_source_paths(
+                root,
+                "scene_0001",
+                draft,
+            )
+
+            self.assertEqual(len(source_paths), 4)
+            self.assertNotIn("", source_paths)
+            self.assertNotIn(".", source_paths)
+            self.assertTrue(all((root / path).is_file() for path in source_paths))
 
     def test_revision_promotion_blueprint_stages_historical_proof_closure(self):
         with tempfile.TemporaryDirectory() as temporary:

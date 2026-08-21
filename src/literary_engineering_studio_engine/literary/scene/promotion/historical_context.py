@@ -25,21 +25,23 @@ def historical_revision_source_paths(
     proof = _historical_source_proof(root, scene_id, source_path, require_current=True)
     if proof is None:
         return ()
-    return tuple(
-        dict.fromkeys(
-            (
-                str(proof["promotion_manifest"]),
-                str(proof["promoted_candidate"]),
-                str(proof["candidate_manifest"]),
-                str(proof["source_prompt_manifest"]),
-                *archived_context_paths(proof.get("context_archive")),
-                str(
-                    (proof.get("context_archive") or {}).get("archive_manifest")
-                    if isinstance(proof.get("context_archive"), dict)
-                    else ""
-                ),
-            )
-        )
+    archive = proof.get("context_archive")
+    archive_manifest = (
+        _normalized_relative(archive.get("archive_manifest"))
+        if isinstance(archive, dict)
+        else ""
+    )
+    candidates = (
+        str(proof["promotion_manifest"]),
+        str(proof["promoted_candidate"]),
+        str(proof["candidate_manifest"]),
+        str(proof["source_prompt_manifest"]),
+        *archived_context_paths(archive),
+        archive_manifest,
+    )
+    return _existing_proof_paths(
+        root,
+        tuple(path for path in candidates if _normalized_relative(path)),
     )
 
 
