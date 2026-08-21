@@ -71,6 +71,7 @@ def canonicalize_scene_revision_manifest(
         report_rel,
         source_rows,
         standards,
+        prompt,
         session_identity,
     )
     changes = _canonicalize_revision_payload(payload, expected, standards)
@@ -239,6 +240,7 @@ def _revision_machine_fields(
     report_rel: str,
     source_rows: list[object],
     standards: dict[str, Any],
+    prompt: dict[str, Any],
     session_identity: SessionIdentity,
 ) -> dict[str, Any]:
     return {
@@ -255,6 +257,10 @@ def _revision_machine_fields(
         "creative_quality_profile_digest": str(standards.get("creative_quality_profile_digest") or "").strip(),
         "reader_experience_contract": _dict_value(standards, "reader_experience_contract"),
         "narrative_rhythm_contract": _dict_value(standards, "narrative_rhythm_contract"),
+        "historical_context_snapshot": _dict_value(
+            prompt,
+            "historical_context_snapshot",
+        ),
         "anti_evasion_protocol_applied": True,
         "ready_for_review": False,
         "generated_by": "platform-agent",

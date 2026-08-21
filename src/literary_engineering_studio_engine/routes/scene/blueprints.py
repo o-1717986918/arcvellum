@@ -14,6 +14,7 @@ from ...scene_route_support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
     _read_text, _unique,
 )
+from .revision_blueprint_contract import revision_blueprint_contract
 from .writeback_blueprints import SceneWritebackContext, writeback_blueprint_for_state
 from .branch_contract import branch_proposal_count as issued_branch_proposal_count
 from .length_repair import target_length_revision_entry
@@ -86,26 +87,11 @@ def _matching_revision_choice_sources(
     return [max(matches)[1]] if matches else []
 
 
-def _next_revision_base(root: Path, scene_id: str, revision_source: str) -> str:
-    """Allocate an immutable revision artifact set for the exact source."""
-
-    first = f"drafts/revisions/{scene_id}_revision"
-    normalized = revision_source.replace("\\", "/")
-    if not normalized.startswith("drafts/revisions/") and not (root / f"{first}.md").exists():
-        return first
-    highest = 1 if (root / f"{first}.md").exists() else 0
-    folder = root / "drafts" / "revisions"
-    pattern = re.compile(rf"^{re.escape(scene_id)}_revision_(\d+)[.]md$")
-    for path in folder.glob(f"{scene_id}_revision_*.md") if folder.is_dir() else ():
-        match = pattern.match(path.name)
-        if match:
-            highest = max(highest, int(match.group(1)))
-    return f"drafts/revisions/{scene_id}_revision_{highest + 1:02d}"
-
-
 def _reader_obligation_outputs(chapter_id: str) -> list[str]:
     base = f"plot/chapter_obligations/{chapter_id}"
     return [f"{base}.json", f"{base}.md", f"{base}.agent_tasks.md", f"{base}.agent_completion.json"]
+
+
 def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_state: str, next_action: str) -> dict[str, object]:
     scene_path = _resolve_project_path(root, scene_rel)
     scene_text = _read_text(scene_path)
@@ -130,20 +116,9 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         else f"drafts/candidates/{scene_id}-platform-agent.md"
     )
     candidate = candidate_markdown[:-3] if candidate_markdown.endswith(".md") else candidate_markdown
-    review = f"reviews/agent/{scene_id}_scene_review"
-    review_path = root / f"{review}.json"
-    review_payload = _read_json(review_path) if review_path.is_file() else {}
-    revision_source = str(
-        review_payload.get("candidate")
-        or review_payload.get("reviewed_candidate")
-        or review_payload.get("draft")
-        or f"{candidate}.md"
-    ).replace("\\", "/")
-    if Path(revision_source).is_absolute():
-        revision_source = _rel(Path(revision_source), root)
-    if current_state in {"static-revision", "target-length-revision"}:
-        revision_source = f"drafts/scenes/{scene_id}.md"
-    revision = _next_revision_base(root, scene_id, revision_source)
+    review, revision_source, revision, historical_revision_sources = revision_blueprint_contract(
+        root, scene_id, current_state, candidate
+    )
     state_patch = f"characters/state_patches/{scene_id}_state_patch"
     state_patch_character_files = _state_patch_character_files(root, state_patch)
     state_apply = f"characters/state_patches/{scene_id}_state_apply"
@@ -585,6 +560,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                         f"{review}.json",
                         f"{review}.md",
                         *direction_sources,
+                        *historical_revision_sources,
                     ]
                 )
             ),
@@ -739,6 +715,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                         *scene_runtime_sources,
                         revision_source,
                         f"reviews/{scene_id}-review.md",
+                        *historical_revision_sources,
                     ]
                 )
             ),

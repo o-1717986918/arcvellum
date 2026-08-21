@@ -9,6 +9,9 @@ from ...foundation.draft_text import (
     final_body_from_draft_path,
 )
 from ...literary.planning.length_repair import scene_length_repair_allocation
+from ...literary.scene.promotion.historical_context import (
+    historical_revision_source_paths,
+)
 
 
 def target_length_revision_blueprint(
@@ -23,6 +26,11 @@ def target_length_revision_blueprint(
     allocation = scene_length_repair_allocation(root, scene_id)
     if not allocation:
         return None
+    historical_sources = historical_revision_source_paths(
+        root,
+        scene_id,
+        root / revision_source,
+    )
     result = dict(base)
     result.update({
         "prompt_asset_id": "route.scene-development.target-length-revision.v1",
@@ -38,6 +46,7 @@ def target_length_revision_blueprint(
             revision_source,
             "reviews/longform/target_length_repair.json",
             "reviews/longform/target_length_repair.md",
+            *historical_sources,
         ])),
         "hard_constraints": _hard_constraints(allocation),
         "validation_gates": [

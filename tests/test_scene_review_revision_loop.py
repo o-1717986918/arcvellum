@@ -233,7 +233,15 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             )
             prompt.write_text(
                 json.dumps(
-                    {"generation_standards": {"anti_evasion_rows_required": False}},
+                    {
+                        "historical_context_snapshot": {
+                            "schema": "arcvellum/historical-revision-context/v1",
+                            "snapshot_sha256": "machine-owned-test-snapshot",
+                        },
+                        "generation_standards": {
+                            "anti_evasion_rows_required": False
+                        },
+                    },
                     ensure_ascii=False,
                 ),
                 encoding="utf-8",
@@ -273,6 +281,10 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
             normalized = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertEqual(normalized["anti_evasion_rows"], [])
             self.assertTrue(normalized["anti_evasion_not_applicable_reason"])
+            self.assertEqual(
+                normalized["historical_context_snapshot"]["snapshot_sha256"],
+                "machine-owned-test-snapshot",
+            )
             self.assertEqual(
                 revision_manifest_errors(
                     normalized,

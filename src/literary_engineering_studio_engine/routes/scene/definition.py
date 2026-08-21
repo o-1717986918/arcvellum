@@ -8,6 +8,9 @@ import re
 from .context_contract import scene_context_contract
 from ...tasking.state_contracts import SCENE_REVISION_STATES
 from ...literary.review.chapter_obligation_machine import chapter_obligation_machine_contract
+from ...literary.scene.promotion.historical_context import (
+    historical_revision_source_paths,
+)
 from ...scene_route_blueprints import _blueprint_for_state
 from ...scene_route_gates import (
     _candidate_review_gate_errors,
@@ -170,31 +173,7 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         return _candidate_review_reading_paths(root, source_paths, scene_id)
 
     if current_state in SCENE_REVISION_STATES:
-        # revise-scene receives these paths as explicit command arguments before
-        # the main Agent starts.  Keep them in the same curated set the sandbox
-        # stages, otherwise the CLI can generate an Agent task package that its
-        # own isolated workspace cannot execute.
-        revision_inputs = [
-            relative
-            for relative in source_paths
-            if _is_revision_input(relative, scene_id, current_state)
-            and relative.endswith((".md", ".json"))
-        ]
-        revision_minimum = [
-            *revision_inputs,
-            f"scenes/{scene_id}.yaml",
-            f"drafts/compositions/{scene_id}_composition.md",
-            f"drafts/compositions/{scene_id}_composition.json",
-            f"drafts/compositions/{scene_id}_composition_review.json",
-            f"branches/{scene_id}/branch_selection.md",
-            f"memory/context_packets/{scene_id}.md",
-            f"memory/context_packets/{scene_id}.trace.json",
-            "plot/word_budget/word_budget.json",
-            "plot/rhythm_plan.json",
-            "style/creative_quality_profile.json",
-            "style/style-profile.md",
-        ]
-        return _unique([relative for relative in revision_minimum if (root / relative).is_file()])
+        return _revision_reading_paths(root, source_paths, scene_id, current_state)
 
     if current_state in prose_states:
         scene_path = _resolve_project_path(root, f"scenes/{scene_id}.yaml")
@@ -214,6 +193,45 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
         if (root / relative).is_file():
             curated.append(relative)
     return _unique(curated)
+
+
+def _revision_reading_paths(
+    root: Path,
+    source_paths: list[str],
+    scene_id: str,
+    current_state: str,
+) -> list[str]:
+    """Expose revision inputs while keeping promotion proof machine-only."""
+
+    historical_proof_paths = set(
+        historical_revision_source_paths(
+            root,
+            scene_id,
+            root / "drafts" / "scenes" / f"{scene_id}.md",
+        )
+    )
+    revision_inputs = [
+        relative
+        for relative in source_paths
+        if _is_revision_input(relative, scene_id, current_state)
+        and relative not in historical_proof_paths
+        and relative.endswith((".md", ".json"))
+    ]
+    minimum = [
+        *revision_inputs,
+        f"scenes/{scene_id}.yaml",
+        f"drafts/compositions/{scene_id}_composition.md",
+        f"drafts/compositions/{scene_id}_composition.json",
+        f"drafts/compositions/{scene_id}_composition_review.json",
+        f"branches/{scene_id}/branch_selection.md",
+        f"memory/context_packets/{scene_id}.md",
+        f"memory/context_packets/{scene_id}.trace.json",
+        "plot/word_budget/word_budget.json",
+        "plot/rhythm_plan.json",
+        "style/creative_quality_profile.json",
+        "style/style-profile.md",
+    ]
+    return _unique([relative for relative in minimum if (root / relative).is_file()])
 
 
 def _candidate_review_reading_paths(root: Path, source_paths: list[str], scene_id: str) -> list[str]:

@@ -23,6 +23,7 @@ from .gate_support import (
     read_text,
     relative_path,
 )
+from .historical_context import historical_revision_context_errors
 from .style_gate import generation_style_snapshot_errors
 
 
@@ -83,7 +84,7 @@ def candidate_generation_gate(root: Path, scene_id: str, candidate_path: Path) -
         "revision_candidate": is_revision_candidate_path(root, candidate_path),
     }
     missing = _missing_generation_files(root, candidate_path, paths)
-    invalid = _generation_envelope_issues(root, scene_id, paths, completion)
+    invalid = _generation_envelope_issues(paths, completion)
     payload = read_json(paths["manifest"])
     if paths["manifest"].exists() and not payload:
         invalid.append("manifest is not valid JSON")
@@ -107,17 +108,12 @@ def _missing_generation_files(root: Path, candidate_path: Path, paths: dict[str,
 
 
 def _generation_envelope_issues(
-    root: Path,
-    scene_id: str,
     paths: dict[str, object],
     completion: dict[str, object],
 ) -> list[str]:
     issues: list[str] = []
     if paths["task"].exists() and completion.get("complete") is not True:
         issues.append(f"generation agent task incomplete: {completion.get('message')}")
-    trace = context_trace_status(root, scene_id)
-    if not trace.passed:
-        issues.append(f"context trace is stale: {trace.message}")
     return issues
 
 
@@ -134,10 +130,48 @@ def _generation_manifest_issues(
     issues.extend(new_character_register_issues(payload, root, mode="generation"))
     prompt = read_json(paths["prompt"])
     standards = prompt.get("generation_standards") if isinstance(prompt.get("generation_standards"), dict) else {}
+    issues.extend(
+        _generation_context_issues(
+            root,
+            scene_id,
+            candidate_path,
+            payload,
+            prompt,
+        )
+    )
     issues.extend(generation_style_snapshot_errors(root, scene_id, candidate=payload, prompt=prompt))
     issues.extend(_generation_quality_issues(root, payload, standards))
     issues.extend(_generation_rhythm_reader_issues(root, scene_id, candidate_path, payload, standards))
     return issues
+
+
+def _generation_context_issues(
+    root: Path,
+    scene_id: str,
+    candidate_path: Path,
+    payload: dict[str, object],
+    prompt: dict[str, object],
+) -> list[str]:
+    trace = context_trace_status(root, scene_id)
+    if trace.passed:
+        return []
+    stale = f"context trace is stale: {trace.message}"
+    if not is_revision_candidate_path(root, candidate_path):
+        return [stale]
+    prompt_snapshot = prompt.get("historical_context_snapshot")
+    candidate_snapshot = payload.get("historical_context_snapshot")
+    if prompt_snapshot != candidate_snapshot:
+        return [stale, "candidate historical context snapshot does not match prompt"]
+    errors = historical_revision_context_errors(
+        root,
+        scene_id,
+        source_rel=payload.get("source_candidate"),
+        source_sha256=payload.get("source_candidate_sha256"),
+        snapshot=prompt_snapshot,
+    )
+    if errors:
+        return [stale, *errors]
+    return []
 
 
 def _generation_identity_issues(payload: dict[str, object], candidate_rel: str) -> list[str]:

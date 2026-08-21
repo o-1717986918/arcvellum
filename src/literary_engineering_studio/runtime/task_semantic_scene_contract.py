@@ -62,6 +62,7 @@ def scene_revision_contract(
             "candidate_sha256", "report", "source_paths", "prompt_manifest",
             "style_mount_snapshot", "creative_quality_profile_digest",
             "reader_experience_contract", "narrative_rhythm_contract",
+            "historical_context_snapshot",
             "anti_evasion_protocol_applied", "ready_for_review", "generated_by", "provider",
             "formal_contract_revision", "writer_session_id",
         ],

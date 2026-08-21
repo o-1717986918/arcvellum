@@ -12,6 +12,17 @@ from literary_engineering_studio_engine.literary.scene.promotion.historical impo
     build_historical_promotion_evidence,
     validate_historical_promotion,
 )
+from literary_engineering_studio_engine.literary.scene.promotion.historical_context import (
+    build_historical_revision_context_snapshot,
+    historical_revision_context_errors,
+    historical_revision_source_paths,
+)
+from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
+    _generation_context_issues,
+)
+from literary_engineering_studio_engine.literary.scene.promotion.revision import (
+    build_scene_revision_task,
+)
 from literary_engineering_studio_engine.routes.scene.gates import (
     _promotion_gate_errors,
 )
@@ -211,6 +222,97 @@ class HistoricalScenePromotionTests(unittest.TestCase):
             self.assertEqual(gates[0]["status"], "pass")
             self.assertEqual(gates[1]["status"], "fail")
 
+    def test_historical_revision_context_seals_exact_scene_time_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _manifest, _candidate, draft = self._sealed_promotion(
+                Path(temporary)
+            )
+            snapshot = build_historical_revision_context_snapshot(
+                root,
+                "scene_0001",
+                draft,
+            )
+
+            self.assertTrue(snapshot)
+            self.assertEqual(snapshot["source_draft"], "drafts/scenes/scene_0001.md")
+            source_paths = historical_revision_source_paths(
+                root,
+                "scene_0001",
+                draft,
+            )
+            self.assertIn(
+                "drafts/promotions/scene_0001_promotion.json",
+                source_paths,
+            )
+            self.assertEqual(
+                historical_revision_context_errors(
+                    root,
+                    "scene_0001",
+                    source_rel="drafts/scenes/scene_0001.md",
+                    source_sha256=self._sha(draft),
+                    snapshot=snapshot,
+                ),
+                [],
+            )
+
+            revision = root / "drafts/revisions/scene_0001_revision_02.md"
+            revision.parent.mkdir(parents=True, exist_ok=True)
+            revision.write_text("## 修订正文候选\n\n旧城的门仍然关着。又过了一刻。", encoding="utf-8")
+            payload = {
+                "source_candidate": "drafts/scenes/scene_0001.md",
+                "source_candidate_sha256": self._sha(draft),
+                "historical_context_snapshot": snapshot,
+            }
+            prompt = {"historical_context_snapshot": snapshot}
+            self.assertEqual(
+                _generation_context_issues(
+                    root,
+                    "scene_0001",
+                    revision,
+                    payload,
+                    prompt,
+                ),
+                [],
+            )
+
+            trace = root / "memory/context_packets/scene_0001.trace.json"
+            trace.write_text('{"scene_id": "scene_0001", "tampered": true}\n', encoding="utf-8")
+            errors = historical_revision_context_errors(
+                root,
+                "scene_0001",
+                source_rel="drafts/scenes/scene_0001.md",
+                source_sha256=self._sha(draft),
+                snapshot=snapshot,
+            )
+            self.assertIn("historical revision context_trace digest mismatch", errors)
+
+    def test_historical_revision_keeps_scene_time_context_instead_of_rebuilding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _manifest, _candidate, draft = self._sealed_promotion(
+                Path(temporary)
+            )
+
+            with patch(
+                "literary_engineering_studio_engine.literary.scene.promotion."
+                "revision.build_context_packet",
+                side_effect=AssertionError(
+                    "historical revision must not rebuild from future Canon"
+                ),
+            ):
+                result = build_scene_revision_task(
+                    root,
+                    scene=Path("scenes/scene_0001.yaml"),
+                    draft=draft.relative_to(root),
+                )
+
+            prompt = json.loads(
+                result.prompt_manifest_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                prompt["historical_context_snapshot"]["source_draft_sha256"],
+                self._sha(draft),
+            )
+
     def _sealed_promotion(
         self,
         base: Path,
@@ -232,6 +334,15 @@ class HistoricalScenePromotionTests(unittest.TestCase):
         candidate.parent.mkdir(parents=True)
         draft.parent.mkdir(parents=True)
         promotion_path.parent.mkdir(parents=True)
+        (root / "scenes").mkdir(parents=True, exist_ok=True)
+        (root / "project.yaml").write_text(
+            "project:\n  title: historical-test\n",
+            encoding="utf-8",
+        )
+        (root / "scenes/scene_0001.yaml").write_text(
+            "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+            encoding="utf-8",
+        )
         candidate.write_text(
             "## 正文候选\n\n旧城的门仍然关着。\n",
             encoding="utf-8",
@@ -250,7 +361,41 @@ class HistoricalScenePromotionTests(unittest.TestCase):
         }
         candidate.with_suffix(".json").write_text(
             json.dumps(
-                {"style_mount_snapshot": style_snapshot},
+                {
+                    "style_mount_snapshot": style_snapshot,
+                    "prompt_manifest": "drafts/candidates/scene_0001-platform-agent.prompt.json",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        context = root / "memory/context_packets/scene_0001.md"
+        trace = root / "memory/context_packets/scene_0001.trace.json"
+        context.parent.mkdir(parents=True, exist_ok=True)
+        context.write_text("# scene-time context\n", encoding="utf-8")
+        trace.write_text(
+            json.dumps(
+                {
+                    "schema": "literary-engineering-workbench/context-trace/v2",
+                    "scene_id": "scene_0001",
+                    "project_revision": "project-v1",
+                    "state_revision": "state-v1",
+                    "canon_revision": "canon-v1",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        candidate.with_suffix(".prompt.json").write_text(
+            json.dumps(
+                {
+                    "context": "memory/context_packets/scene_0001.md",
+                    "context_trace": "memory/context_packets/scene_0001.trace.json",
+                },
                 ensure_ascii=False,
                 indent=2,
             )

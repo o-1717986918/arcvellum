@@ -11,7 +11,7 @@ from ...literary.review.context_evidence import (
 from ...tasking.context_contract import CONTEXT_CONTRACT_SCHEMA
 from ...tasking.state_contracts import SCENE_REVISION_STATES
 
-CONTEXT_CONTRACT_REVISION = "scene-v3"
+CONTEXT_CONTRACT_REVISION = "scene-v4"
 CONTEXT_CONTRACT_STATES = {
     "candidate-generation-provenance",
     "candidate-review",

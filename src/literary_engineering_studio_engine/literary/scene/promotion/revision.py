@@ -31,6 +31,7 @@ from ...style.snapshot import (
     active_style_mount_snapshot_payload,
     active_style_prompt_path,
 )
+from .historical_context import build_historical_revision_context_snapshot
 from .revision_contract import revision_source_requires_anti_evasion_rows
 from .length_repair import target_length_instruction, target_length_repair_input
 
@@ -72,17 +73,9 @@ def build_scene_revision_task(
     if not draft_path.exists():
         raise FileNotFoundError(f"draft not found: {draft_path}")
     review_path = _resolve(root, review) if review else _find_review(root, scene_id)
-    context_path = root / "memory" / "context_packets" / f"{scene_id}.md"
-    context_trace_path = default_context_trace_path(context_path)
-    if (
-        rebuild_context
-        or not context_path.exists()
-        or not context_trace_path.exists()
-        or not context_trace_status(root, scene_id, context_path).passed
-    ):
-        packet = build_context_packet(root, scene=scene_path, query=query, rebuild_index=True, output=context_path)
-        context_path = packet.output_path
-        context_trace_path = packet.trace_path or default_context_trace_path(context_path)
+    context_path, context_trace_path, historical_context_snapshot = _revision_context(
+        root, scene_id, scene_path, draft_path, rebuild_context, query
+    )
 
     out_dir = root / "drafts" / "revisions"
     candidate = _resolve(root, output) if output else out_dir / f"{scene_id}_revision.md"
@@ -105,6 +98,7 @@ def build_scene_revision_task(
         candidate,
         report,
         manifest,
+        historical_context_snapshot,
     )
     prompt_manifest.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     _write_revision_task(root, scene_id, task_path, prompt_manifest, sources, draft_path, candidate, report, manifest, prompt_payload=payload)
@@ -120,6 +114,38 @@ def build_scene_revision_task(
     )
 
 
+def _revision_context(
+    root: Path,
+    scene_id: str,
+    scene_path: Path,
+    draft_path: Path,
+    rebuild_context: bool,
+    query: str,
+) -> tuple[Path, Path, dict[str, object]]:
+    context_path = root / "memory" / "context_packets" / f"{scene_id}.md"
+    trace_path = default_context_trace_path(context_path)
+    trace_is_current = (
+        context_path.exists()
+        and trace_path.exists()
+        and context_trace_status(root, scene_id, context_path).passed
+    )
+    snapshot = (
+        build_historical_revision_context_snapshot(root, scene_id, draft_path)
+        if not rebuild_context and not trace_is_current
+        else {}
+    )
+    if rebuild_context or (not trace_is_current and not snapshot):
+        packet = build_context_packet(
+            root, scene=scene_path, query=query, rebuild_index=True, output=context_path
+        )
+        return (
+            packet.output_path,
+            packet.trace_path or default_context_trace_path(packet.output_path),
+            {},
+        )
+    return context_path, trace_path, snapshot
+
+
 def _prompt_manifest(
     root: Path,
     scene_id: str,
@@ -132,6 +158,7 @@ def _prompt_manifest(
     candidate: Path,
     report: Path,
     manifest: Path,
+    historical_context_snapshot: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     draft_text = draft_path.read_text(encoding="utf-8", errors="ignore")
     body = final_body_from_draft_text(draft_text)
@@ -157,6 +184,7 @@ def _prompt_manifest(
         "source_candidate_sha256": _sha256(draft_path),
         "context": _rel(context_path, root) if context_path.exists() else "",
         "context_trace": _rel(context_trace_path, root) if context_trace_path.exists() else "",
+        "historical_context_snapshot": dict(historical_context_snapshot or {}),
         "review": _rel(review_path, root) if review_path else "",
         "style_mount_snapshot": style_mount_snapshot,
         "draft_body_chars": count_delivery_chars(body),
