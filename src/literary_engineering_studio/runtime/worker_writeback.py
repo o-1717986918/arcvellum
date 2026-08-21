@@ -8,6 +8,7 @@ from ..contracts import TaskPackage
 from ..core_bridge import CoreBridge
 from ..preflight.common import PreflightIssue, PreflightResult
 from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
+from .deterministic_evidence import refresh_deterministic_evidence
 from .mutation_tracking import WorkerMutationTracker
 from .run_manifest import load_run
 from .sandbox import (
@@ -162,6 +163,23 @@ class WritebackCoordinator:
             {"paths": list(imported), "approved_by": approved_by},
         )
         try:
+            refreshed_evidence = refresh_deterministic_evidence(
+                self.bridge,
+                task,
+                task.project_root,
+            )
+            if refreshed_evidence:
+                self.observer.emit(
+                    "validation.evidence_refreshed",
+                    {"paths": list(refreshed_evidence)},
+                )
+                update_run_manifest(
+                    sandbox.manifest_path,
+                    deterministic_evidence={
+                        "status": "refreshed",
+                        "paths": list(refreshed_evidence),
+                    },
+                )
             self.bridge.task_submit(
                 task.project_root,
                 task.task_id,
@@ -209,6 +227,16 @@ class WritebackCoordinator:
         rollback_expected_outputs(task, sandbox, imported)
         mutations.rolled_back(preview)
         rollback_error = ""
+        evidence_restore_error = ""
+        try:
+            restored_evidence = refresh_deterministic_evidence(
+                self.bridge,
+                task,
+                task.project_root,
+            )
+        except (RuntimeError, ValueError, FileNotFoundError) as exc:
+            restored_evidence = ()
+            evidence_restore_error = str(exc)
         try:
             self.bridge.task_revert_submission(
                 task.project_root,
@@ -220,12 +248,31 @@ class WritebackCoordinator:
             )
         except (RuntimeError, ValueError, FileNotFoundError) as exc:
             rollback_error = str(exc)
+        rollback_status = "pass"
+        if rollback_error or evidence_restore_error:
+            rollback_status = "; ".join(
+                item
+                for item in (
+                    f"submission={rollback_error}" if rollback_error else "",
+                    (
+                        f"deterministic_evidence={evidence_restore_error}"
+                        if evidence_restore_error
+                        else ""
+                    ),
+                )
+                if item
+            )
         update_run_manifest(
             sandbox.manifest_path,
             status="blocked_by_core_gate",
             core_gate_error=str(error),
             imported_outputs=[],
-            core_submission_rollback="pass" if not rollback_error else rollback_error,
+            core_submission_rollback=rollback_status,
+            deterministic_evidence={
+                "status": "restored" if not evidence_restore_error else "restore_failed",
+                "paths": list(restored_evidence),
+                "error": evidence_restore_error,
+            },
         )
         return WorkerRunResult(
             "blocked_by_core_gate",
