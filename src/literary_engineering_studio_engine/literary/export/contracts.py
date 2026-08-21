@@ -38,23 +38,73 @@ def chapter_workspace_source_paths(
 ) -> tuple[str, ...]:
     """Return current chapter inputs plus exact sealed scene archives."""
 
-    paths = list(_CHAPTER_WORKSPACE_SOURCE_PATHS)
+    return _with_historical_scene_archives(
+        project_root,
+        chapter_id,
+        _CHAPTER_WORKSPACE_SOURCE_PATHS,
+    )
+
+
+def export_package_source_paths(
+    project_root: Path,
+    chapter_id: str,
+) -> tuple[str, ...]:
+    """Return package inputs plus the chapter's sealed readiness evidence."""
+
+    return _with_historical_scene_archives(
+        project_root,
+        chapter_id,
+        (
+            f"plot/chapters/{chapter_id}.json",
+            f"drafts/chapters/{chapter_id}.md",
+            "drafts/scenes",
+            "drafts/candidates",
+            "drafts/revisions",
+            "drafts/promotions",
+            "reviews",
+            "style",
+        ),
+    )
+
+
+def _with_historical_scene_archives(
+    project_root: Path,
+    chapter_id: str,
+    base_paths: tuple[str, ...],
+) -> tuple[str, ...]:
+    paths = list(base_paths)
     for scene_id in formal_scene_ids_for_chapter(project_root, chapter_id):
         paths.extend(historical_promotion_archive_paths(project_root, scene_id))
     return tuple(dict.fromkeys(paths))
 
 
-def publish_chapter_source_paths(chapter_id: str) -> tuple[str, ...]:
+def publish_chapter_source_paths(
+    project_root: Path,
+    chapter_id: str,
+) -> tuple[str, ...]:
     """Return every project input read while publishing one chapter."""
 
-    return (
-        *CANON_LINT_SOURCE_PATHS,
-        f"plot/chapters/{chapter_id}.json",
-        f"drafts/chapters/{chapter_id}.md",
-        f"exports/{chapter_id}",
-        "workflow/approvals/index.jsonl",
-        "style",
+    return _with_historical_scene_archives(
+        project_root,
+        chapter_id,
+        (
+            *CANON_LINT_SOURCE_PATHS,
+            f"plot/chapters/{chapter_id}.json",
+            f"drafts/chapters/{chapter_id}.md",
+            "drafts/scenes",
+            "drafts/candidates",
+            "drafts/revisions",
+            "drafts/promotions",
+            "reviews",
+            f"exports/{chapter_id}",
+            "workflow/approvals/index.jsonl",
+            "style",
+        ),
     )
 
 
-__all__ = ["chapter_workspace_source_paths", "publish_chapter_source_paths"]
+__all__ = [
+    "chapter_workspace_source_paths",
+    "export_package_source_paths",
+    "publish_chapter_source_paths",
+]

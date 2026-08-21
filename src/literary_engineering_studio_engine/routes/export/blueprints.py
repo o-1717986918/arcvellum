@@ -7,6 +7,7 @@ from pathlib import Path
 from ...literary.export.approval_evidence import release_approval_evidence_paths
 from ...literary.export.contracts import (
     chapter_workspace_source_paths,
+    export_package_source_paths,
     publish_chapter_source_paths,
 )
 
@@ -26,8 +27,8 @@ def export_release_blueprint_for_state(
         "publish-release": _publish_release,
     }
     builder = builders.get(current_state)
-    if builder is _chapter_workspace:
-        return _chapter_workspace(root, chapter_id)
+    if builder in {_chapter_workspace, _export_package, _publish_release}:
+        return builder(root, chapter_id)
     return builder(chapter_id) if builder else _repair(chapter_id, next_action)
 
 
@@ -82,7 +83,7 @@ def _chapter_workspace(root: Path, chapter_id: str) -> dict[str, object]:
     }
 
 
-def _export_package(chapter_id: str) -> dict[str, object]:
+def _export_package(root: Path, chapter_id: str) -> dict[str, object]:
     prefix = f"exports/{chapter_id}/{chapter_id}"
     expected_outputs = [
         f"exports/{chapter_id}/export_manifest.json",
@@ -103,16 +104,7 @@ def _export_package(chapter_id: str) -> dict[str, object]:
         "task_type": "deterministic-cli",
         "prompt_asset_id": "route.export-release.package.v1",
         "command": f"python -m literary_engineering_studio_engine export-package <project> --chapter-id {chapter_id} --formats md,docx",
-        "source_paths": [
-            f"plot/chapters/{chapter_id}.json",
-            f"drafts/chapters/{chapter_id}.md",
-            "drafts/scenes",
-            "drafts/candidates",
-            "drafts/revisions",
-            "drafts/promotions",
-            "reviews",
-            "style",
-        ],
+        "source_paths": list(export_package_source_paths(root, chapter_id)),
         "expected_outputs": expected_outputs,
         "hard_constraints": [
             "Do not use --include-blocked in formal Skill-host work.",
@@ -174,14 +166,14 @@ def _release_revision(chapter_id: str) -> dict[str, object]:
     }
 
 
-def _publish_release(chapter_id: str) -> dict[str, object]:
+def _publish_release(root: Path, chapter_id: str) -> dict[str, object]:
     run_id = f"release-{chapter_id}"
     release_dir = f"releases/{chapter_id}/formal-release"
     return {
         "task_type": "deterministic-cli",
         "prompt_asset_id": "route.export-release.publish.v1",
         "command": f"python -m literary_engineering_studio_engine publish-chapter <project> --chapter-id {chapter_id} --release-id formal-release --approval-run-id {run_id} --export-formats md,docx",
-        "source_paths": list(publish_chapter_source_paths(chapter_id)),
+        "source_paths": list(publish_chapter_source_paths(root, chapter_id)),
         "expected_outputs": [
             f"{release_dir}/publish_manifest.json",
             f"{release_dir}/release_notes.md",

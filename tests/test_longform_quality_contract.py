@@ -375,6 +375,59 @@ class LongformQualityContractTests(unittest.TestCase):
             self.assertEqual(chapter.blocked_count, 0)
             self.assertEqual(chapter_workspace_gate_errors(root, "chapter_0001"), [])
 
+            for state in ("export-package", "publish-release"):
+                delivery_markdown = root / f"workflow/tasks/{state}.agent_tasks.md"
+                self._write(delivery_markdown, f"# deterministic {state}\n")
+                delivery_blueprint = export_release_blueprint_for_state(
+                    root,
+                    "chapter_0001",
+                    state,
+                    state,
+                )
+                delivery_task = TaskPackage(
+                    project_root=root,
+                    task_json_path=root / f"workflow/tasks/{state}.task.json",
+                    task_markdown_path=delivery_markdown,
+                    payload={
+                        "task_id": f"export-and-release-chapter-0001-{state}",
+                        "route": "export-and-release",
+                        "current_state": state,
+                        "chapter_id": "chapter_0001",
+                        **delivery_blueprint,
+                    },
+                )
+                delivery_sandbox = stage_task(
+                    delivery_task,
+                    root / "runs",
+                    runtime="deterministic-engine",
+                    materialize_agent_view=False,
+                )
+                for relative in archive_paths:
+                    self.assertTrue(
+                        (delivery_sandbox.control_workspace / relative).is_file(),
+                        f"{state}: {relative}",
+                    )
+                self.assertFalse(
+                    (
+                        delivery_sandbox.control_workspace
+                        / "memory/context_history/scene_9999/unused/context.md"
+                    ).exists()
+                )
+                self.assertTrue(
+                    validate_historical_promotion(
+                        delivery_sandbox.control_workspace,
+                        "scene_0001",
+                    ).passed
+                )
+                if state == "export-package":
+                    sandbox_package = build_export_package(
+                        delivery_sandbox.control_workspace,
+                        chapter_id="chapter_0001",
+                        formats="md",
+                    )
+                    self.assertEqual(sandbox_package.exported_scene_count, 1)
+                    self.assertEqual(sandbox_package.skipped_scene_count, 0)
+
             package = build_export_package(
                 root,
                 chapter_id="chapter_0001",
