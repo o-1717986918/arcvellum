@@ -32,7 +32,14 @@ def _target_length_repair_plan(_chapter_id: str) -> dict[str, object]:
         "task_type": "deterministic-cli",
         "prompt_asset_id": "route.export-release.length-repair.v1",
         "command": "python -m literary_engineering_studio_engine plan-length-repair <project>",
-        "source_paths": ["project.yaml", "plot/word_budget", "scenes", "drafts/scenes"],
+        "source_paths": [
+            "project.yaml",
+            "plot/word_budget",
+            "plot/outline.md",
+            "scenes",
+            "drafts/scenes",
+            "workflow/longform_materialization.json",
+        ],
         "expected_outputs": [
             "reviews/longform/target_length_repair.json",
             "reviews/longform/target_length_repair.md",

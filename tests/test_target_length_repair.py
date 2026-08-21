@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
@@ -26,6 +27,9 @@ from literary_engineering_studio_engine.literary.review.longform_audit import (
 from literary_engineering_studio_engine.routes.scene.blueprints import (
     _blueprint_for_state,
 )
+from literary_engineering_studio_engine.routes.export.blueprints import (
+    export_release_blueprint_for_state,
+)
 from literary_engineering_studio_engine.workflow.state_export_release import (
     _chapter_workspace_step,
     _export_package_step,
@@ -37,6 +41,47 @@ from literary_engineering_studio_engine.workflow.scene_length_repair import (
 
 
 class TargetLengthRepairTests(unittest.TestCase):
+    def test_deterministic_plan_blueprint_stages_the_complete_budget_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            project = base / "project"
+            control = base / "control"
+            self._project(project)
+            blueprint = export_release_blueprint_for_state(
+                project,
+                "chapter_0001",
+                "target-length-repair-plan",
+                "",
+            )
+
+            self.assertIn(
+                "workflow/longform_materialization.json",
+                blueprint["source_paths"],
+            )
+            self.assertIn("plot/outline.md", blueprint["source_paths"])
+            for relative in blueprint["source_paths"]:
+                source = project / str(relative)
+                target = control / str(relative)
+                if source.is_dir():
+                    shutil.copytree(source, target)
+                elif source.is_file():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+
+            result = build_target_length_repair_plan(control)
+            self.assertEqual(result.status, "ready")
+            self.assertEqual(result.allocated_chinese_chars, 100)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["unallocated_chinese_chars"], 0)
+            self.assertTrue(payload["allocations"])
+            self.assertTrue(
+                all(
+                    int(item["minimum_scene_chars"])
+                    <= int(item["max_scene_chars"])
+                    for item in payload["allocations"]
+                )
+            )
+
     def test_plan_allocates_exact_shortfall_and_drives_scene_revision_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -193,6 +238,10 @@ class TargetLengthRepairTests(unittest.TestCase):
     def _project(self, root: Path) -> None:
         self._write(root / "project.yaml", "project:\n  target_length: 1000\n")
         self._write(root / "plot/outline.md", "# 第一章\n")
+        self._write(
+            root / "workflow/longform_materialization.json",
+            '{"status": "materialized", "scene_count": 2}\n',
+        )
         budget = {
             "schema": "literary-engineering-workbench/word-budget/v1",
             "target": {"target_chinese_chars": 1000},
