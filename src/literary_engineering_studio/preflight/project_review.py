@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import hashlib
 import json
 from pathlib import Path
@@ -117,12 +118,19 @@ def _validate_initial(
     clean_pass = (committee and verdict == "approve") or (not committee and verdict == "pass")
     if clean_pass:
         return
-    action_fields = ("action_items", "disagreements") if committee else ("recommendations",)
-    actionable = _actionable_items(payload, action_fields)
+    action_field = "action_items" if committee else "recommendations"
+    actionable = _indexed_action_items(payload, action_field)
     if not actionable:
-        _add_issue(issues, relative, action_fields[0], "非通过结论必须提供至少一个结构化修复动作。", "为修复动作写出 target_path、action 和 verification。")
+        _add_issue(issues, relative, action_field, "非通过结论必须提供至少一个结构化修复动作。", "为修复动作写出 target_path、action 和 verification。")
         return
-    _validate_action_targets(actionable, action_fields[0], relative, issues)
+    _validate_action_targets(actionable, action_field, relative, issues)
+    if committee:
+        disagreements = _indexed_action_items(
+            payload,
+            "disagreements",
+            predicate=_disagreement_declares_repair,
+        )
+        _validate_action_targets(disagreements, "disagreements", relative, issues)
 
 
 def _validate_required_fields(
@@ -156,22 +164,35 @@ def _validate_required_fields(
         _add_issue(issues, relative, "summary", "Canon 审查缺少结论摘要。", "用一段证据化摘要说明结论与主要风险。")
 
 
-def _actionable_items(payload: dict[str, object], fields: tuple[str, ...]) -> list[dict[str, object]]:
-    actionable: list[dict[str, object]] = []
-    for field in fields:
-        values = payload.get(field) if isinstance(payload.get(field), list) else []
-        actionable.extend(item for item in values if isinstance(item, dict))
-    return actionable
+def _indexed_action_items(
+    payload: dict[str, object],
+    field: str,
+    *,
+    predicate: Callable[[dict[str, object]], bool] | None = None,
+) -> list[tuple[int, dict[str, object]]]:
+    values = payload.get(field) if isinstance(payload.get(field), list) else []
+    return [
+        (index, item)
+        for index, item in enumerate(values)
+        if isinstance(item, dict) and (predicate is None or predicate(item))
+    ]
+
+
+def _disagreement_declares_repair(item: dict[str, object]) -> bool:
+    return item.get("repair_required") is True or any(
+        str(item.get(field) or "").strip()
+        for field in ("target", "target_path", "action", "verification")
+    )
 
 
 def _validate_action_targets(
-    actionable: list[dict[str, object]],
+    actionable: list[tuple[int, dict[str, object]]],
     collection_field: str,
     relative: str,
     issues: list[PreflightIssue],
 ) -> None:
     allowed_prefixes = ("canon/", "characters/", "plot/", "scenes/", "drafts/candidates/")
-    for index, item in enumerate(actionable):
+    for index, item in actionable:
         target = str(item.get("target_path") or item.get("target") or "").replace("\\", "/").strip()
         target_file = target.split("#", 1)[0]
         valid = (

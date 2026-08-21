@@ -16,6 +16,109 @@ from literary_engineering_studio_engine.platform_agent_tasks import (
 
 
 class ProjectReviewPromptContractTests(unittest.TestCase):
+    def test_committee_disagreement_is_not_misclassified_as_action_item(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task, sandbox, review = self._fixture(Path(temporary), committee=True)
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/committee-review-agent/v1",
+                        "final_recommendation": "revise",
+                        "reviewers": [],
+                        "disagreements": [
+                            {
+                                "topic": "Canon pass 是否足以发布",
+                                "position_a": "足以",
+                                "position_b": "仍需长篇门禁",
+                                "resolution": "维持 revise",
+                                "blocking": True,
+                            }
+                        ],
+                        "action_items": [
+                            {
+                                "target_path": "plot/rhythm_plan.json",
+                                "action": "补足第二章余波节奏。",
+                                "verification": "章节节奏审计不再阻塞。",
+                            }
+                        ],
+                        "source_paths": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            issues: list[PreflightIssue] = []
+
+            validate_project_review_contract(task, sandbox, issues)
+
+            self.assertEqual(issues, [])
+
+    def test_committee_non_approve_still_requires_an_action_item(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task, sandbox, review = self._fixture(Path(temporary), committee=True)
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/committee-review-agent/v1",
+                        "final_recommendation": "revise",
+                        "reviewers": [],
+                        "disagreements": [{"topic": "未解决争议", "blocking": True}],
+                        "action_items": [],
+                        "source_paths": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            issues: list[PreflightIssue] = []
+
+            validate_project_review_contract(task, sandbox, issues)
+
+            self.assertTrue(any(item.path.endswith("#action_items") for item in issues))
+
+    def test_repair_declaring_disagreement_has_its_own_exact_error_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task, sandbox, review = self._fixture(Path(temporary), committee=True)
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/committee-review-agent/v1",
+                        "final_recommendation": "revise",
+                        "reviewers": [],
+                        "disagreements": [
+                            {
+                                "topic": "节奏修复位置",
+                                "repair_required": True,
+                                "target_path": "plot/rhythm_plan.json",
+                            }
+                        ],
+                        "action_items": [
+                            {
+                                "target_path": "plot/rhythm_plan.json",
+                                "action": "调整宏观节奏。",
+                                "verification": "节奏审计通过。",
+                            }
+                        ],
+                        "source_paths": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            issues: list[PreflightIssue] = []
+
+            validate_project_review_contract(task, sandbox, issues)
+
+            paths = {item.path for item in issues}
+            self.assertIn(
+                "reviews/agent/committee_project-final-audit.json#disagreements[0].action",
+                paths,
+            )
+            self.assertIn(
+                "reviews/agent/committee_project-final-audit.json#disagreements[0].verification",
+                paths,
+            )
+
     def test_task_sidecars_expose_exact_top_level_contracts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -127,23 +230,38 @@ class ProjectReviewPromptContractTests(unittest.TestCase):
             self.assertIn("recommendations", selectors)
 
     @staticmethod
-    def _fixture(root: Path) -> tuple[TaskPackage, SandboxManifest, Path]:
+    def _fixture(
+        root: Path,
+        *,
+        committee: bool = False,
+    ) -> tuple[TaskPackage, SandboxManifest, Path]:
         workspace = root / "workspace"
-        review = workspace / "reviews" / "agent" / "canon_review.json"
+        relative = (
+            "reviews/agent/committee_project-final-audit.json"
+            if committee
+            else "reviews/agent/canon_review.json"
+        )
+        review = workspace / relative
         review.parent.mkdir(parents=True)
+        state = "committee-agent-task" if committee else "canon-review-agent-task"
+        markdown_relative = (
+            "reviews/agent/committee_project-final-audit.md"
+            if committee
+            else "reviews/agent/canon_review.md"
+        )
         task = TaskPackage(
             project_root=root,
             task_json_path=root / "task.json",
             task_markdown_path=root / "task.md",
             payload={
-                "task_id": "review-and-audit-project-review-canon-review-agent-task",
+                "task_id": f"review-and-audit-project-review-{state}",
                 "route": "review-and-audit",
-                "current_state": "canon-review-agent-task",
+                "current_state": state,
                 "target_id": "project-review",
                 "source_paths": ["reviews/canon_lint.json", "canon"],
                 "expected_outputs": [
-                    "reviews/agent/canon_review.json",
-                    "reviews/agent/canon_review.md",
+                    relative,
+                    markdown_relative,
                 ],
             },
         )
