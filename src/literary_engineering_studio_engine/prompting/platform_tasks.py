@@ -569,7 +569,7 @@ def write_platform_committee_task(
         notes=[
             "由平台 agent 扮演多个审稿视角完成综合判断。",
             "不要调用本地 dry-run、http-chat 或外部 agent。",
-            "非通过建议可以正式提交；每个 action_item 或需要修复的 disagreement 必须携带精确 target_path、action 和 verification。",
+            "非通过建议可以正式提交；每个必修 action_item 或 disagreement 必须携带精确 target_path、action 和 verification；Longform attention 不自动成为 action_item，可选打磨写入 reviewer/minority notes；已解决分歧不得留在 disagreements；若没有必须修改项目的缺陷，应 approve 且 action_items/disagreements 为空。",
             f"完成后写入 JSON：{_rel(json_output, root)}",
             f"完成后写入 Markdown 报告：{_rel(report, root)}",
         ],
@@ -580,7 +580,7 @@ def write_platform_committee_task(
             ),
             (
                 "形成综合建议",
-                """按 `committee_review.v1` 写出最终建议、分歧、行动项和少数意见。JSON 顶层必须包含：schema=`literary-engineering-workbench/committee-review-agent/v1`、subject、final_recommendation、reviewers、disagreements、action_items、source_paths、minority_opinions；所有集合字段必须始终写成数组。approve_with_notes / revise / reject 均可如实提交；需要修复的 action_items / disagreements 必须写成对象并包含单个允许项目文本文件的 target_path、非空 action、verification。不要用 verdict/findings 代替正式字段，也不要把建议直接晋升为 canon 或发布决定。""",
+                """按 `committee_review.v1` 写出最终建议、未解决分歧、必修行动项和少数意见。JSON 顶层必须包含：schema=`literary-engineering-workbench/committee-review-agent/v1`、subject、final_recommendation、reviewers、disagreements、action_items、source_paths、minority_opinions；所有集合字段必须始终写成数组。只有必须在出口前改变项目的具体缺陷才能进入 action_items；不能把 status stays pass/ok 或可选打磨伪装成修复。已解决分歧写入 reviewer 说明而非 disagreements。若只剩非阻断建议，final_recommendation=approve 且 action_items/disagreements 为空。需要修复的 action_items / disagreements 必须写成对象并包含单个允许项目文本文件的 target_path、非空 action、verification。不要用 verdict/findings 代替正式字段，也不要把建议直接晋升为 canon 或发布决定。""",
             ),
         ],
     )

@@ -51,7 +51,13 @@ HIGH_RISK_CASES: dict[str, tuple[str, ...]] = {
         "open questions",
     ),
     "route.character-world-assets.review.execute.v1": ("review", "canon", "approval"),
-    "route.review-audit.committee.execute.v1": ("committee", "blocking", "pass_with_notes"),
+    "route.review-audit.committee.execute.v1": (
+        "committee",
+        "blocking",
+        "approve_with_notes",
+        "optional polish",
+        "resolved disagreement",
+    ),
     "route.export-release.approval.v1": ("approval", "manuscript", "release"),
 }
 

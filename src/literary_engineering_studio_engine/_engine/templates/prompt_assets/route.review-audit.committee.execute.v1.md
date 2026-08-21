@@ -19,7 +19,11 @@ context_groups:
 hard_constraints:
   - Evaluate independent lenses before synthesizing a verdict.
   - Cite exact artifacts and distinguish deterministic failures from semantic judgment.
-  - pass_with_notes creates required revision work and never behaves as pass.
+  - Deterministic attention is evidence to consider, not an automatic defect or repair action.
+  - Optional polish belongs in reviewer or minority notes; action_items contain only concrete defects that must change before export.
+  - An action verification must prove a changed observable; never require that an already passing or ok status merely stays passing or ok.
+  - A disagreement that the committee resolves must be explained in reviewer findings and omitted from disagreements.
+  - If only non-blocking polish remains, use approve with empty action_items and disagreements; approve_with_notes creates required revision work and never behaves as pass.
   - A non-approve recommendation is a valid completed review; every repair action item or disagreement must include exact target_path action and verification.
 style_constraints:
   - Be adversarial toward flattering generic feedback and unsupported praise.
@@ -37,6 +41,10 @@ forbidden_shortcuts:
 # Review Committee
 
 Run each editorial lens independently, expose disagreement, then synthesize. A minority blocking finding remains visible until explicitly resolved.
+
+Classify before writing the verdict: a required repair changes a concrete project artifact and has a before/after verification. An advisory
+attention item, preference, possible future enhancement, or already-resolved disagreement is not a required repair. Keep optional polish in
+reviewer findings or minority opinions. When no required repair or unresolved disagreement remains, return `approve` with both arrays empty.
 
 Use this exact top-level JSON shape:
 

@@ -394,6 +394,26 @@ class ReviewAuditRevisionLoopTests(unittest.TestCase):
                     "reviews/agent/committee_project-final-audit.json",
                 ],
             )
+            task_json = self._write_task(root, enriched, "committee-fix")
+            task = load_task_package(root, task_json)
+            sandbox = stage_task(task, Path(temporary) / "runs", runtime="pi-worker")
+            repaired = sandbox.workspace / "plot" / "outline.md"
+            repaired.write_text("# 大纲\n\n结尾因果已经闭合。\n", encoding="utf-8")
+
+            canonicalize_task_outputs(task, sandbox)
+            result = validate_task_outputs(task, sandbox)
+
+            self.assertTrue(result.passed, result.as_dict())
+            for name, verdict_field in (
+                ("canon_review.json", "conclusion"),
+                ("committee_project-final-audit.json", "final_recommendation"),
+            ):
+                reset = json.loads(
+                    (sandbox.workspace / "reviews" / "agent" / name).read_text(encoding="utf-8")
+                )
+                self.assertEqual(reset[verdict_field], "recheck_required")
+                self.assertEqual(reset["applied_repair_actions"][0]["target_path"], "plot/outline.md")
+                self.assertEqual(reset["applied_repair_actions"][0]["status"], "changed")
 
     def test_recheck_marker_makes_prior_canon_lint_stale(self):
         with tempfile.TemporaryDirectory() as temporary:

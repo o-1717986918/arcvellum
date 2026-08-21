@@ -312,31 +312,51 @@ def _canonicalize_project_review_metadata(task: TaskPackage, sandbox: SandboxMan
 
     state = str(task.current_state or "")
     contracts = {
-        "canon-review-agent-task": ("reviews/agent/canon_review.json", "literary-engineering-workbench/canon-review-agent/v1", "conclusion"),
-        "canon-review-pass": ("reviews/agent/canon_review.json", "literary-engineering-workbench/canon-review-agent/v1", "conclusion"),
-        "committee-agent-task": ("reviews/agent/committee_project-final-audit.json", "literary-engineering-workbench/committee-review-agent/v1", "final_recommendation"),
-        "committee-pass": ("reviews/agent/committee_project-final-audit.json", "literary-engineering-workbench/committee-review-agent/v1", "final_recommendation"),
+        "canon-review-agent-task": ((_CANON_REVIEW_CONTRACT),),
+        "canon-review-pass": ((_CANON_REVIEW_CONTRACT),),
+        "committee-agent-task": ((_COMMITTEE_REVIEW_CONTRACT),),
+        "committee-pass": (_CANON_REVIEW_CONTRACT, _COMMITTEE_REVIEW_CONTRACT),
     }
-    contract = contracts.get(state)
-    if contract is None:
-        return []
-    relative, schema, verdict_field = contract
+    changes: list[dict[str, str]] = []
+    for contract in contracts.get(state, ()):
+        changes.extend(_canonicalize_project_review_artifact(task, sandbox, state, contract))
+    return changes
+
+
+_CANON_REVIEW_CONTRACT = (
+    "reviews/agent/canon_review.json",
+    "literary-engineering-workbench/canon-review-agent/v1",
+    "conclusion",
+    False,
+)
+_COMMITTEE_REVIEW_CONTRACT = (
+    "reviews/agent/committee_project-final-audit.json",
+    "literary-engineering-workbench/committee-review-agent/v1",
+    "final_recommendation",
+    True,
+)
+
+
+def _canonicalize_project_review_artifact(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    state: str,
+    contract: tuple[str, str, str, bool],
+) -> list[dict[str, str]]:
+    relative, schema, verdict_field, committee = contract
     path = sandbox.workspace / relative
     payload = _read_object(path)
     if payload is None:
         return []
-    expected: dict[str, Any] = {
-        "schema": schema,
-        "source_paths": [str(item).replace("\\", "/") for item in task.source_paths],
-    }
-    expected.update(_project_review_semantic_aliases(payload, committee=state.startswith("committee")))
-    if state.startswith("committee"):
+    expected: dict[str, Any] = {"schema": schema}
+    expected.update(_project_review_semantic_aliases(payload, committee=committee))
+    if state.endswith("agent-task"):
+        expected["source_paths"] = [str(item).replace("\\", "/") for item in task.source_paths]
+    if committee:
         expected["subject"] = str(task.payload.get("target_id") or "project-final-audit")
     if state in {"canon-review-pass", "committee-pass"}:
         expected[verdict_field] = "recheck_required"
-        expected["applied_repair_actions"] = _project_review_applied_repairs(
-            task, sandbox
-        )
+        expected["applied_repair_actions"] = _project_review_applied_repairs(task, sandbox)
     return _write_machine_fields(path, relative, payload, expected, "project-review")
 
 
