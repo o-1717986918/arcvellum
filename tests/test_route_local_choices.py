@@ -4,13 +4,104 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from literary_engineering_studio.advisor.advisor_snapshot import create_advisor_snapshot
+from literary_engineering_studio.advisor.creative_steward import _decision_evidence_packet
 from literary_engineering_studio import core_read_models
 from literary_engineering_studio_engine import project_interaction
 from literary_engineering_studio_engine import project_interaction_choices
 from literary_engineering_studio_engine import workflow_state
+from literary_engineering_studio_engine.routes.export.blueprints import (
+    export_release_blueprint_for_state,
+)
 
 
 class RouteLocalChoiceTests(unittest.TestCase):
+    def test_release_approval_choice_projects_the_complete_bounded_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "project"
+            root.mkdir()
+            (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            chapter_id = "chapter_0001"
+            export_dir = root / "exports" / chapter_id
+            export_dir.mkdir(parents=True)
+            outputs = {}
+            for kind in ("novel", "screenplay", "video_prompt_pack"):
+                relative = f"exports/{chapter_id}/{chapter_id}_{kind}.md"
+                path = root / relative
+                path.write_text(f"# {kind}\n读者可见正文。\n", encoding="utf-8")
+                outputs[kind] = relative
+                (export_dir / f"{chapter_id}_{kind}.inspection.json").write_text(
+                    '{"status":"pass","trace_hits":[]}\n',
+                    encoding="utf-8",
+                )
+            (export_dir / "export_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/export-package/v0.1",
+                        "chapter_id": chapter_id,
+                        "include_blocked": False,
+                        "outputs": outputs,
+                        "exported_scenes": [{"scene_id": "scene_0001", "status": "ready"}],
+                        "skipped_scenes": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            for relative, content in (
+                (f"plot/chapters/{chapter_id}.json", '{"summary":{"ready_count":1,"blocked_count":0}}\n'),
+                ("reviews/longform/longform_audit.json", '{"status":"pass","issues":[]}\n'),
+                ("reviews/agent/committee_project-final-audit.json", '{"final_recommendation":"approve"}\n'),
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+
+            with patch.object(
+                project_interaction_choices,
+                "_route_choice_actions",
+                return_value=([{
+                    "route": "export-and-release",
+                    "target": chapter_id,
+                    "current_step": "release-approval",
+                    "next_action": "approve current release",
+                }], ""),
+            ):
+                payload = project_interaction.build_current_human_choices(
+                    root,
+                    route="export-and-release",
+                )
+
+            choice = payload["choices"][0]
+            self.assertTrue(choice["target"]["candidate_sha256"])
+            self.assertEqual(
+                choice["source_paths"],
+                [
+                    f"exports/{chapter_id}/export_manifest.json",
+                    f"exports/{chapter_id}/{chapter_id}_novel.inspection.json",
+                    f"exports/{chapter_id}/{chapter_id}_screenplay.inspection.json",
+                    f"exports/{chapter_id}/{chapter_id}_video_prompt_pack.inspection.json",
+                    "reviews/longform/longform_audit.json",
+                    f"exports/{chapter_id}/{chapter_id}_novel.md",
+                    f"plot/chapters/{chapter_id}.json",
+                    "reviews/agent/committee_project-final-audit.json",
+                ],
+            )
+            blueprint = export_release_blueprint_for_state(
+                root,
+                chapter_id,
+                "release-approval",
+                "approve current release",
+            )
+            self.assertEqual(blueprint["source_paths"], choice["source_paths"])
+            snapshot = create_advisor_snapshot(root, base / "snapshots")
+            packet = _decision_evidence_packet(snapshot.workspace, choice)
+            self.assertNotIn('status="missing"', packet)
+            self.assertIn(f'<source path="exports/{chapter_id}/export_manifest.json">', packet)
+            self.assertIn(f'<source path="exports/{chapter_id}/{chapter_id}_novel.md">', packet)
+            self.assertIn('<source path="reviews/longform/longform_audit.json">', packet)
+
     def test_scene_choice_projection_does_not_build_the_whole_dashboard(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

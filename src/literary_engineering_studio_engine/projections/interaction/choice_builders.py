@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ...character_state_apply import state_patch_writeback_status
 from ...display_cleaner import read_json_file, truncate_text
+from ...literary.export.approval_evidence import release_approval_evidence_paths
 from ...project_interaction_common import _make_id, _rel, _safe_approval_target, _safe_target_id
 from ...release_fingerprint import release_candidate_fingerprint
 
@@ -45,7 +46,12 @@ def approval_choice(
     approval_target = _safe_approval_target(target or "target")
     choice_target = _safe_target_id(approval_target)
     subject_sha256 = _approval_subject_sha256(root, approval_target, decision_type)
-    source_paths = asset_approval_source_paths(root, approval_target) if decision_type == "asset_approval" else ["workflow/approvals/index.jsonl"]
+    if decision_type == "asset_approval":
+        source_paths = asset_approval_source_paths(root, approval_target)
+    elif decision_type == "release_approval":
+        source_paths = list(release_approval_evidence_paths(approval_target))
+    else:
+        source_paths = ["workflow/approvals/index.jsonl"]
     target_payload = {"target_id": approval_target}
     if subject_sha256:
         target_payload["candidate_sha256"] = subject_sha256

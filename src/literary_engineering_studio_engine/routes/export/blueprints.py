@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...literary.export.approval_evidence import release_approval_evidence_paths
+
 
 def export_release_blueprint_for_state(
     root: Path,
@@ -114,11 +116,7 @@ def _release_approval(chapter_id: str) -> dict[str, object]:
         "task_type": "human-approval-boundary",
         "prompt_asset_id": "route.export-release.approval.v1",
         "command": f"Ask the user whether to approve chapter `{chapter_id}` for release; record approve decision with run_id `{run_id}`.",
-        "source_paths": [
-            f"exports/{chapter_id}/export_manifest.json",
-            f"exports/{chapter_id}/{chapter_id}_novel.md",
-            "workflow/approvals/index.jsonl",
-        ],
+        "source_paths": list(release_approval_evidence_paths(chapter_id)),
         "expected_outputs": ["workflow/approvals/index.jsonl"],
         "hard_constraints": [
             "The executing Worker must not self-approve release publication. Approval may come from the user or a separately identified Creative Steward when the active DelegationPolicy explicitly delegates release.",
