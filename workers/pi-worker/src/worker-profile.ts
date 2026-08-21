@@ -3,7 +3,7 @@ import mainCreativeAgentProfile from "../profiles/main-creative-agent.md?raw";
 import incrementalRepairProfile from "../profiles/incremental-repair.md?raw";
 
 export const WORKER_PROFILE_SCHEMA = "arcvellum/pi-worker-profile/v1";
-export const WORKER_PROFILE_VERSION = "1";
+export const WORKER_PROFILE_VERSION = "2";
 
 export interface WorkerProfile {
 	schema: typeof WORKER_PROFILE_SCHEMA;

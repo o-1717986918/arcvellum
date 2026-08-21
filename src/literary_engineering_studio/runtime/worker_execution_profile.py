@@ -193,10 +193,13 @@ def _bind_initial_pi_repair(
     if not targets:
         return
     existing = _existing_target_count(sandbox, targets)
-    # Repair mode leases one deterministic read turn per existing target and
-    # then one batched write.  Keep one extra turn for bounded parser feedback.
-    turn_floor = max(2, existing + 2)
-    tool_floor = max(2, existing + 2)
+    # Repair mode leases one deterministic read turn per existing target.
+    # Compact targets may be batched, but correctness cannot depend on a model
+    # fitting every replacement into one provider response.  Reserve one
+    # write turn per Agent-owned target plus two transition/feedback turns.
+    operation_floor = existing + len(targets) + 2
+    turn_floor = max(2, operation_floor)
+    tool_floor = max(2, operation_floor)
     kwargs["initial_repair_targets"] = targets
     kwargs["max_turns"] = max(int(kwargs.get("max_turns") or 0), turn_floor)
     kwargs["max_tool_calls"] = max(

@@ -289,10 +289,10 @@ class WorkerExecutionProfileTests(unittest.TestCase):
             kwargs["initial_repair_targets"],
             tuple(task.payload["repair_targets"]),
         )
-        self.assertGreaterEqual(kwargs["max_turns"], 10)
-        self.assertGreaterEqual(kwargs["max_tool_calls"], 10)
+        self.assertGreaterEqual(kwargs["max_turns"], 18)
+        self.assertGreaterEqual(kwargs["max_tool_calls"], 18)
         self.assertGreaterEqual(
-            kwargs["reasoning_budget"]["max_provider_requests"], 10
+            kwargs["reasoning_budget"]["max_provider_requests"], 18
         )
 
 
