@@ -4,6 +4,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -22,6 +23,7 @@ from literary_engineering_studio_engine.literary.scene.promotion.context_migrati
 )
 from literary_engineering_studio_engine.literary.scene.promotion.historical_context import (
     build_historical_revision_context_snapshot,
+    historical_revision_candidate_source_paths,
     historical_revision_context_errors,
     historical_revision_source_paths,
 )
@@ -39,6 +41,7 @@ from literary_engineering_studio_engine.workflow.historical_truth import (
     preserve_historical_style_steps,
     preserve_valid_revision_preparation_steps,
 )
+import literary_engineering_studio_engine.task_registry as task_registry
 
 
 class HistoricalScenePromotionTests(unittest.TestCase):
@@ -303,6 +306,127 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 snapshot=snapshot,
             )
             self.assertIn("historical revision source promotion is not valid", errors)
+
+    def test_revision_promotion_blueprint_stages_historical_proof_closure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _manifest, old_candidate, draft = self._sealed_promotion(
+                Path(temporary)
+            )
+            snapshot = build_historical_revision_context_snapshot(
+                root,
+                "scene_0001",
+                draft,
+            )
+            revision = root / "drafts/revisions/scene_0001_revision_02.md"
+            revision.parent.mkdir(parents=True, exist_ok=True)
+            revision.write_text(
+                "## 修订正文候选\n\n旧城的门仍然关着。门后传来第二次电流声。\n",
+                encoding="utf-8",
+            )
+            prompt = revision.with_suffix(".prompt.json")
+            prompt_payload = {"historical_context_snapshot": snapshot}
+            prompt.write_text(
+                json.dumps(prompt_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            revision_payload = {
+                "source_candidate": draft.relative_to(root).as_posix(),
+                "source_candidate_sha256": self._sha(draft),
+                "historical_context_snapshot": snapshot,
+                "prompt_manifest": prompt.relative_to(root).as_posix(),
+            }
+            revision.with_suffix(".json").write_text(
+                json.dumps(revision_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            proof_paths = historical_revision_candidate_source_paths(
+                root,
+                "scene_0001",
+                revision,
+            )
+            archive = _manifest["historical_evidence"]["context_archive"]
+            expected = {
+                draft.relative_to(root).as_posix(),
+                "drafts/promotions/scene_0001_promotion.json",
+                old_candidate.relative_to(root).as_posix(),
+                old_candidate.with_suffix(".json").relative_to(root).as_posix(),
+                old_candidate.with_suffix(".prompt.json").relative_to(root).as_posix(),
+                archive["archived_context_packet"],
+                archive["archived_context_trace"],
+                archive["archive_manifest"],
+            }
+            self.assertEqual(set(proof_paths), expected)
+
+            blueprint = task_registry._blueprint_for_state(
+                root,
+                "scene_0001",
+                "scenes/scene_0001.yaml",
+                "promotion-manifest",
+                "",
+            )
+            self.assertIn(
+                "--candidate drafts/revisions/scene_0001_revision_02.md",
+                blueprint["command"],
+            )
+            self.assertTrue(expected.issubset(set(blueprint["source_paths"])))
+            immutable_identity_proof = {
+                old_candidate.relative_to(root).as_posix(),
+                old_candidate.with_suffix(".json").relative_to(root).as_posix(),
+                old_candidate.with_suffix(".prompt.json").relative_to(root).as_posix(),
+            }
+            self.assertTrue(
+                immutable_identity_proof.isdisjoint(
+                    set(blueprint["expected_outputs"])
+                )
+            )
+
+            sandbox = Path(temporary) / "sandbox"
+            staged = set(blueprint["source_paths"])
+            staged.update(
+                {
+                    revision.relative_to(root).as_posix(),
+                    revision.with_suffix(".json").relative_to(root).as_posix(),
+                    prompt.relative_to(root).as_posix(),
+                }
+            )
+            for relative in staged:
+                source = root / relative
+                if not source.is_file():
+                    continue
+                target = sandbox / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+            sandbox_payload = json.loads(
+                (sandbox / revision.with_suffix(".json").relative_to(root)).read_text(
+                    encoding="utf-8"
+                )
+            )
+            sandbox_prompt = json.loads(
+                (sandbox / prompt.relative_to(root)).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                _generation_context_issues(
+                    sandbox,
+                    "scene_0001",
+                    sandbox / revision.relative_to(root),
+                    sandbox_payload,
+                    sandbox_prompt,
+                ),
+                [],
+            )
+
+            (sandbox / old_candidate.relative_to(root)).unlink()
+            self.assertIn(
+                "historical revision source promotion is not valid",
+                _generation_context_issues(
+                    sandbox,
+                    "scene_0001",
+                    sandbox / revision.relative_to(root),
+                    sandbox_payload,
+                    sandbox_prompt,
+                ),
+            )
 
     def test_mutable_context_refresh_does_not_change_archived_revision_truth(self):
         with tempfile.TemporaryDirectory() as temporary:

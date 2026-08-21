@@ -11,6 +11,9 @@ from ...tasking.paths import read_json as _read_json
 from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from ...workflow_state import current_scene_candidate
 from ...literary.scene.promotion.context_archive import context_archive_output_paths
+from ...literary.scene.promotion.historical_context import (
+    historical_revision_candidate_source_paths,
+)
 from ...scene_route_support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
     _read_text, _unique,
@@ -111,13 +114,12 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     )
     composition = f"drafts/compositions/{scene_id}_composition"
     current_candidate = current_scene_candidate(root, scene_id)
-    candidate_markdown = (
-        _rel(current_candidate, root)
-        if current_candidate is not None
-        else f"drafts/candidates/{scene_id}-platform-agent.md"
-    )
+    candidate_markdown = _candidate_markdown(root, scene_id, current_candidate)
     candidate = candidate_markdown[:-3] if candidate_markdown.endswith(".md") else candidate_markdown
     promotion_archive_outputs = _promotion_archive_outputs(root, scene_id, current_candidate)
+    promotion_historical_sources = _promotion_historical_sources(
+        root, scene_id, current_candidate
+    )
     review, revision_source, revision, historical_revision_sources = revision_blueprint_contract(
         root, scene_id, current_state, candidate
     )
@@ -646,6 +648,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                         f"{review}.md",
                         f"{review}.agent_tasks.md",
                         f"{review}.agent_completion.json",
+                        *promotion_historical_sources,
                     ]
                 )
             ),
@@ -682,6 +685,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                         f"{review}.md",
                         f"{review}.agent_tasks.md",
                         f"{review}.agent_completion.json",
+                        *promotion_historical_sources,
                     ]
                 )
             ),
@@ -777,6 +781,22 @@ def _promotion_archive_outputs(
     candidate: Path | None,
 ) -> list[str]:
     return list(context_archive_output_paths(root, scene_id, candidate)) if candidate else []
+
+
+def _candidate_markdown(root: Path, scene_id: str, candidate: Path | None) -> str:
+    return _rel(candidate, root) if candidate else f"drafts/candidates/{scene_id}-platform-agent.md"
+
+
+def _promotion_historical_sources(
+    root: Path,
+    scene_id: str,
+    candidate: Path | None,
+) -> tuple[str, ...]:
+    return (
+        historical_revision_candidate_source_paths(root, scene_id, candidate)
+        if candidate
+        else ()
+    )
 
 
 def _select_blueprint(

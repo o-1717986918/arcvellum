@@ -54,6 +54,72 @@ def historical_revision_reading_paths(
     return archived_context_paths(proof.get("context_archive")) if proof else ()
 
 
+def historical_revision_candidate_source_paths(
+    root: Path,
+    scene_id: str,
+    candidate_path: Path,
+) -> tuple[str, ...]:
+    """Return the proof closure required to promote one revision candidate.
+
+    The revision manifest carries a machine-owned historical snapshot.  A
+    promotion sandbox must stage the files that prove that snapshot, otherwise
+    the exact candidate passes in the project root but fails after isolation.
+    Only a snapshot that already passes the full project-root validation may
+    expand the task input set.
+    """
+
+    root = root.resolve()
+    try:
+        candidate = candidate_path.resolve()
+        candidate.relative_to(root)
+    except (OSError, ValueError):
+        return ()
+    manifest_path = candidate.with_suffix(".json")
+    manifest = _read_json(manifest_path)
+    snapshot = manifest.get("historical_context_snapshot")
+    source_rel = _normalized_relative(manifest.get("source_candidate"))
+    source_sha256 = manifest.get("source_candidate_sha256")
+    if not source_rel or not isinstance(snapshot, dict):
+        return ()
+    if historical_revision_context_errors(
+        root,
+        scene_id,
+        source_rel=source_rel,
+        source_sha256=source_sha256,
+        snapshot=snapshot,
+    ):
+        return ()
+    source_path = _safe_project_path(root, source_rel)
+    if source_path is None:
+        return ()
+    proof = _historical_source_proof(
+        root,
+        scene_id,
+        source_path,
+        require_current=False,
+    )
+    if proof is None:
+        return ()
+    archive = proof.get("context_archive")
+    archive_manifest = (
+        _normalized_relative(archive.get("archive_manifest"))
+        if isinstance(archive, dict)
+        else ""
+    )
+    return _existing_proof_paths(
+        root,
+        (
+            source_rel,
+            str(proof["promotion_manifest"]),
+            str(proof["promoted_candidate"]),
+            str(proof["candidate_manifest"]),
+            str(proof["source_prompt_manifest"]),
+            *archived_context_paths(archive),
+            archive_manifest,
+        ),
+    )
+
+
 def build_historical_revision_context_snapshot(
     root: Path,
     scene_id: str,
@@ -383,6 +449,16 @@ def _safe_project_path(root: Path, relative: str) -> Path | None:
     return resolved
 
 
+def _existing_proof_paths(root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
+    verified: list[str] = []
+    for relative in dict.fromkeys(_normalized_relative(path) for path in paths):
+        path = _safe_project_path(root, relative)
+        if path is None or not path.is_file():
+            return ()
+        verified.append(relative)
+    return tuple(verified)
+
+
 def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -408,6 +484,7 @@ def _read_json(path: Path) -> dict[str, object]:
 __all__ = [
     "HISTORICAL_REVISION_CONTEXT_SCHEMA",
     "build_historical_revision_context_snapshot",
+    "historical_revision_candidate_source_paths",
     "historical_revision_context_errors",
     "historical_revision_reading_paths",
     "historical_revision_source_paths",
