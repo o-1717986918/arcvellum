@@ -31,7 +31,7 @@ class SceneLifecycleStatus(StrEnum):
 
 
 SCENE_LIFECYCLE_VALUES = tuple(status.value for status in SceneLifecycleStatus)
-CHAPTER_SCENE_REQUIRED_FIELDS = ("scene_id", "path", "status")
+CHAPTER_SCENE_REQUIRED_FIELDS = ("scene_id", "scene_path", "status")
 
 
 @dataclass(frozen=True)

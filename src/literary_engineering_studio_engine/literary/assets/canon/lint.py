@@ -291,7 +291,7 @@ def _check_chapter_states(root: Path, issues: list[CanonLintIssue]) -> None:
                 "章节状态没有 scenes。",
                 allowed_values=CHAPTER_SCENE_REQUIRED_FIELDS,
                 repair_hint=(
-                    "scenes 必须是对象数组；每项保留 scene_id、path、status，且只收录 chapter_id 与本章一致的场景。"
+                    "scenes 必须是对象数组；每项保留 scene_id、scene_path、status，且只收录 chapter_id 与本章一致的场景。"
                 ),
             )
         for scene in scenes:
@@ -304,7 +304,7 @@ def _check_chapter_states(root: Path, issues: list[CanonLintIssue]) -> None:
                     "章节 scenes 项必须是对象。",
                     repr(scene)[:120],
                     allowed_values=CHAPTER_SCENE_REQUIRED_FIELDS,
-                    repair_hint="将该项改为包含 scene_id、path、status 的对象。",
+                    repair_hint="将该项改为包含 scene_id、scene_path、status 的对象。",
                 )
                 continue
             status = str(scene.get("status", ""))
@@ -319,7 +319,7 @@ def _check_chapter_states(root: Path, issues: list[CanonLintIssue]) -> None:
                     "章节场景条目缺少必需字段。",
                     f"{scene_id or 'unknown'}:{','.join(missing)}",
                     allowed_values=CHAPTER_SCENE_REQUIRED_FIELDS,
-                    repair_hint="补齐 scene_id、path、status；不要只写 scene_ids 摘要数组。",
+                    repair_hint="补齐 scene_id、scene_path、status；不要只写 scene_ids 摘要数组。",
                 )
             if status != SceneLifecycleStatus.READY:
                 _add(

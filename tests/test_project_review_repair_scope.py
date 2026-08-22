@@ -155,7 +155,7 @@ def _write_baseline_documents(control: Path | None) -> None:
                 "scenes": [
                     {
                         "scene_id": "scene_0001",
-                        "path": "scenes/scene_0001.yaml",
+                        "scene_path": "scenes/scene_0001.yaml",
                         "title": "Signal",
                     }
                 ],

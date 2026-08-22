@@ -87,6 +87,40 @@ class CanonLintCharacterIdentityTests(unittest.TestCase):
             applied = build_canon_lint(root)
             self.assertEqual(self._issues(applied.json_path, "scene-new-facts-candidate"), [])
 
+    def test_chapter_scene_contract_uses_the_workspace_scene_path_field(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_minimum_project(root, role="主角——轨道维修员")
+            chapter = root / "plot" / "chapters" / "chapter_0001.json"
+            chapter.parent.mkdir(parents=True)
+            chapter.write_text(
+                json.dumps(
+                    {
+                        "chapter_id": "chapter_0001",
+                        "scenes": [
+                            {
+                                "scene_id": "scene_0001",
+                                "scene_path": "scenes/scene_0001.yaml",
+                                "status": "ready",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            valid = build_canon_lint(root)
+            self.assertEqual(self._issues(valid.json_path, "chapter-scene-fields-missing"), [])
+
+            payload = json.loads(chapter.read_text(encoding="utf-8"))
+            payload["scenes"][0].pop("scene_path")
+            payload["scenes"][0]["path"] = "scenes/scene_0001.yaml"
+            chapter.write_text(json.dumps(payload), encoding="utf-8")
+
+            invalid = build_canon_lint(root)
+            issue = self._issues(invalid.json_path, "chapter-scene-fields-missing")[0]
+            self.assertEqual(issue["evidence"], "scene_0001:scene_path")
+
     @staticmethod
     def _write_minimum_project(root: Path, *, role: str) -> None:
         files = {

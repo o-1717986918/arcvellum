@@ -393,6 +393,8 @@ class LongformQualityContractTests(unittest.TestCase):
 
             self.assertEqual(chapter.ready_count, 1)
             self.assertEqual(chapter.blocked_count, 0)
+            chapter_payload = json.loads(chapter.json_path.read_text(encoding="utf-8"))
+            self.assertEqual(chapter_payload["scenes"][0]["scene_path"], "scenes/scene_0001.yaml")
             self.assertEqual(chapter_workspace_gate_errors(root, "chapter_0001"), [])
 
             for state in ("export-package", "publish-release"):
