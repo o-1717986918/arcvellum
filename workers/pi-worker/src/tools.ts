@@ -6,6 +6,7 @@ import type { RuntimeEventSink, TaskContext, ValidationIssue, ValidationResult, 
 import { atomicWriteAuthorizedFile, normalizeRelativePath, readAuthorizedFile, readAuthorizedSource, resolveWorkspacePath } from "./path-policy.ts";
 import { publicTaskProjection } from "./task-context.ts";
 import { completeRepairReadHandoff } from "./repair-phase.ts";
+import { validateSemanticOutput } from "./semantic-output.ts";
 
 const EMPTY_PARAMETERS = Type.Object({});
 
@@ -274,7 +275,8 @@ export async function validateOutputs(context: TaskContext, workspace: string, o
 		}
 		if (contract.format === "json") {
 			try {
-				JSON.parse(text);
+				const parsed: unknown = JSON.parse(text);
+				issues.push(...validateSemanticOutput(context, contract.path, parsed));
 			} catch (error) {
 				issues.push({ path: contract.path, code: "invalid_json", message: publicError(error) });
 			}

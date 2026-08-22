@@ -32,6 +32,50 @@ describe("local output validation", () => {
 		expect((await validateOutputs(context(), root)).passed).toBe(true);
 	});
 
+	it("reports missing and mistyped model-owned semantic fields locally", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-semantic-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), JSON.stringify({
+			warnings: "none",
+			new_character_register: {
+				schema: "literary-engineering-workbench/new-character-register/v0.1",
+				status: "none",
+				introduced: [],
+				ephemeral_waivers: [],
+			},
+		}), "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
+		const taskContext = semanticContext();
+
+		const result = await validateOutputs(taskContext, root);
+
+		expect(result.passed).toBe(false);
+		expect(result.issues).toEqual(expect.arrayContaining([
+			expect.objectContaining({ code: "semantic_type_mismatch", message: expect.stringContaining("warnings") }),
+			expect.objectContaining({ code: "semantic_missing_field", message: expect.stringContaining("new_character_register.blocking_issues") }),
+		]));
+	});
+
+	it("accepts a complete semantic payload without requiring Studio-owned fields", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-semantic-pass-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), JSON.stringify({
+			warnings: [],
+			new_character_register: {
+				schema: "literary-engineering-workbench/new-character-register/v0.1",
+				status: "none",
+				introduced: [],
+				ephemeral_waivers: [],
+				blocking_issues: [],
+			},
+		}), "utf8");
+		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
+
+		expect((await validateOutputs(semanticContext(), root)).passed).toBe(true);
+	});
+
 	it("distinguishes an existing scaffold from a current Worker submission", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-tools-"));
 		roots.push(root);
@@ -359,11 +403,38 @@ function context(): TaskContext {
 		styleConstraints: [],
 		validationGates: [],
 		wordCount: {},
+		semanticOutputContract: {},
 		semanticPassCondition: {},
 		promptAsset: {},
 		promptAccess: {},
 		evidenceIndex: {},
 		maxResultChars: 4000,
 		raw: {},
+	};
+}
+
+function semanticContext(): TaskContext {
+	return {
+		...context(),
+		semanticOutputContract: {
+			path: "out/review.json",
+			required_fields: ["warnings", "new_character_register", "studio_digest"],
+			model_owned_fields: ["warnings", "new_character_register"],
+			studio_owned_fields: ["studio_digest"],
+			field_types: {
+				warnings: "list",
+				new_character_register: "dict",
+			},
+			object_shapes: {
+				new_character_register: {
+					schema: "literary-engineering-workbench/new-character-register/v0.1",
+					status: "none | existing_only | ephemeral_only | candidates_ready | resolved",
+					introduced: "list",
+					ephemeral_waivers: "list",
+					blocking_issues: "list; must be empty for a clean result",
+					candidate_path: "optional project-relative str",
+				},
+			},
+		},
 	};
 }

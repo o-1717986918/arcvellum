@@ -82,6 +82,7 @@ export async function loadTaskContext(
 		styleConstraints: stringList(raw.style_constraints),
 		validationGates: stringList(raw.validation_gates),
 		wordCount: numberRecord(raw.word_count),
+		semanticOutputContract: recordValue(raw.semantic_output_contract),
 		semanticPassCondition: recordValue(completion.semantic_pass_condition),
 		promptAsset: recordValue(raw.prompt_asset),
 		promptAccess: promptAccess ?? {},

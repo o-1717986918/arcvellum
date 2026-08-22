@@ -12,7 +12,7 @@ The Worker may only:
 
 - read the current task projection and explicitly authorized source files;
 - write files listed in the task's `expected_outputs` contract;
-- run local output validation;
+- run local existence, format, and model-owned semantic output validation;
 - complete the task or report a blocker;
 - emit bounded lifecycle, tool, provider, and reasoning-budget events.
 
@@ -29,3 +29,7 @@ The release build bundles the Worker and its used dependencies into one
 JavaScript artifact, then stages that artifact with a pinned Node runtime and
 third-party notices under the desktop application resources. The Pi research
 fork and a loose `node_modules` tree are not bundled.
+
+Local semantic validation consumes the task package's declared
+`semantic_output_contract`; it does not copy literary gates or synthesize
+missing judgments. Studio deterministic preflight remains authoritative.

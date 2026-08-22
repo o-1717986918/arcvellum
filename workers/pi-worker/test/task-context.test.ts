@@ -18,6 +18,22 @@ describe("loadTaskContext", () => {
 		expect(context.expectedOutputs).toContain("reviews/scene.agent_completion.json");
 	});
 
+	it("carries the model-owned semantic contract into local validation", async () => {
+		const root = await workspace();
+		const payload = JSON.parse(await readFile(join(root, "TASK_CONTEXT.json"), "utf8")) as Record<string, any>;
+		payload.semantic_output_contract = {
+			path: "reviews/scene.json",
+			required_fields: ["conclusion"],
+			model_owned_fields: ["conclusion"],
+			field_types: { conclusion: "str" },
+		};
+		await writeFile(join(root, "TASK_CONTEXT.json"), JSON.stringify(payload), "utf8");
+
+		const context = await loadTaskContext(root, ["candidate-review"]);
+
+		expect(context.semanticOutputContract).toEqual(payload.semantic_output_contract);
+	});
+
 	it("fails closed when the task state is not allowed", async () => {
 		const root = await workspace();
 		await expect(loadTaskContext(root, ["asset-creation-agent-task"])).rejects.toThrow("outside the Pi Worker prototype allowlist");

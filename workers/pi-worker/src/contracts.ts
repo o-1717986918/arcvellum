@@ -23,6 +23,7 @@ export interface TaskContext {
 	styleConstraints: string[];
 	validationGates: string[];
 	wordCount: Record<string, number>;
+	semanticOutputContract: Record<string, unknown>;
 	semanticPassCondition: Record<string, unknown>;
 	promptAsset: Record<string, unknown>;
 	promptAccess: Record<string, unknown>;

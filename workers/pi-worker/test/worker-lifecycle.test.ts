@@ -358,6 +358,7 @@ function context(): TaskContext {
 		styleConstraints: [],
 		validationGates: [],
 		wordCount: {},
+		semanticOutputContract: {},
 		semanticPassCondition: {},
 		promptAsset: {},
 		promptAccess: {},
