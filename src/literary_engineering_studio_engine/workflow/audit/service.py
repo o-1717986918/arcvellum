@@ -59,7 +59,7 @@ def build_route_gates(root: Path, route: str, records: list[AgentTaskRecord]) ->
         _add_gate(gates, "chapter-workspace-json", bool(chapter_jsons), "blocking", "chapter workspace JSON exists", "先运行 chapter-workspace。")
         non_ready = _non_ready_scene_count(chapter_jsons)
         _add_gate(gates, "chapter-scenes-ready", non_ready == 0 and bool(chapter_jsons), "blocking", "chapter scenes ready", f"章节中仍有 {non_ready} 个非 ready 场景。")
-        stale_or_weak = _stale_or_weak_chapter_gate_count(chapter_jsons)
+        stale_or_weak = _stale_or_weak_chapter_gate_count(root, chapter_jsons)
         _add_gate(gates, "chapter-clean-review-gates", stale_or_weak == 0 and bool(chapter_jsons), "blocking", "chapter scenes have clean formal review gates", f"章节工作台中仍有 {stale_or_weak} 个场景缺少新式 clean review/flow gate 字段或存在未解决 notes；重新运行 chapter-workspace 并修订。")
         _add_longform_budget_gates(gates, root, force=False)
         unapplied = _unapplied_state_patch_count(root)

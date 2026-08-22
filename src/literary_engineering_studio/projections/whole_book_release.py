@@ -39,7 +39,15 @@ class WholeBookReleaseCoordinator:
         for route in ("longform-planning", "scene-development", "review-and-audit", "export-and-release"):
             result = self.bridge.route_audit(root, route)
             audits[route] = result.fields
-            blocking = int(result.fields.get("blocking_count") or 0)
+            raw_blocking = result.fields.get("blocking")
+            if raw_blocking is None:
+                raise RuntimeError(f"{route} 正式审计未返回 blocking 字段，不能生成全书交付。")
+            try:
+                blocking = int(raw_blocking)
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    f"{route} 正式审计返回了无效 blocking 值：{raw_blocking}"
+                ) from exc
             if blocking:
                 raise RuntimeError(f"{route} 仍有 {blocking} 项正式门禁未通过，不能生成全书交付。")
 

@@ -35,7 +35,7 @@ from literary_engineering_studio_engine.project_interaction import record_human_
 
 
 class _Audit:
-    fields = {"status": "pass", "blocking_count": "0"}
+    fields = {"status": "pass", "blocking": "0"}
 
 
 class AutopilotTests(unittest.TestCase):
@@ -1195,6 +1195,29 @@ class AutopilotTests(unittest.TestCase):
             self.assertNotIn("世界状态变化", manuscript_text)
             self.assertNotIn("不应进入正文", manuscript_text)
             self.assertEqual(result["manifest"]["clean_delivery_checks"]["docx_inspection_warnings"], 0)
+
+    def test_whole_book_release_fails_closed_on_blocking_or_missing_audit_field(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            chapter = root / "exports" / "chapter_0001"
+            chapter.mkdir(parents=True)
+            (root / "project.yaml").write_text("title: 潮汐之书\n", encoding="utf-8")
+            (chapter / "chapter_0001_novel.md").write_text("# 第一章\n\n正文。\n", encoding="utf-8")
+            coordinator = WholeBookReleaseCoordinator(
+                {"engine": {"python": "python", "module": "literary_engineering_studio_engine"}}
+            )
+
+            coordinator.bridge.route_audit = lambda root, route: type(
+                "BlockedAudit", (), {"fields": {"blocking": "2"}}
+            )()
+            with self.assertRaisesRegex(RuntimeError, "仍有 2 项正式门禁"):
+                coordinator.release(root, approved_by="studio-user")
+
+            coordinator.bridge.route_audit = lambda root, route: type(
+                "MalformedAudit", (), {"fields": {"status": "pass"}}
+            )()
+            with self.assertRaisesRegex(RuntimeError, "未返回 blocking 字段"):
+                coordinator.release(root, approved_by="studio-user")
 
     def test_full_auto_three_chapter_direction_to_docx(self):
         class ThreeChapterWorker:

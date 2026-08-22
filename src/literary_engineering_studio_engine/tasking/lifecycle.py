@@ -113,6 +113,13 @@ def issue_next_task(
     state_payload = services.workflow_payload(root, normalized_route, scene)
     work_item = route_def.select_work_item(root, state_payload, scene)
     if work_item is None:
+        superseded = _supersede_active_tasks(
+            root,
+            route=normalized_route,
+            scope_id=None,
+            superseded_by="route-ready",
+            reason="formal route advanced to ready",
+        )
         return TaskRegistryResult(
             project_root=root,
             task_id="",
@@ -122,7 +129,11 @@ def issue_next_task(
             route=normalized_route,
             scene_id="",
             current_state="ready",
-            message=route_def.ready_message,
+            message=(
+                f"{route_def.ready_message}; superseded {superseded} obsolete active task(s)"
+                if superseded
+                else route_def.ready_message
+            ),
         )
 
     scene_id = str(work_item.get("scene_id") or work_item.get("target_id") or "")
@@ -146,6 +157,15 @@ def issue_next_task(
     task_markdown = task_markdown_path(root, identifier)
     task["task_json"] = relative_path(task_json, root)
     task["task_markdown"] = relative_path(task_markdown, root)
+
+    _supersede_active_tasks(
+        root,
+        route=normalized_route,
+        scope_id=scene_id,
+        superseded_by=identifier,
+        reason=f"formal workflow advanced to {current_state}",
+        exclude_task_id=identifier,
+    )
 
     if task_json.exists() and not force:
         existing = read_json(task_json)
@@ -184,6 +204,55 @@ def issue_next_task(
         message="task issued",
         expected_output_count=len(task.get("expected_outputs") or []),
     )
+
+
+def _supersede_active_tasks(
+    root: Path,
+    *,
+    route: str,
+    scope_id: str | None,
+    superseded_by: str,
+    reason: str,
+    exclude_task_id: str = "",
+) -> int:
+    """Close obsolete route tasks while preserving their files and event history."""
+
+    task_dir = root / "workflow" / "tasks"
+    if not task_dir.is_dir():
+        return 0
+    count = 0
+    for path in sorted(task_dir.glob("*.task.json")):
+        payload = read_json(path)
+        task_id_value = str(payload.get("task_id") or path.name.removesuffix(".task.json"))
+        if task_id_value == exclude_task_id:
+            continue
+        if str(payload.get("route") or "") != route:
+            continue
+        if str(payload.get("execution_policy") or "") == "human-required":
+            continue
+        if str(payload.get("status") or "") not in {"issued", "opened", "blocked"}:
+            continue
+        task_scope = str(
+            payload.get("scene_id")
+            or payload.get("target_id")
+            or payload.get("chapter_id")
+            or ""
+        )
+        if scope_id is not None and task_scope != scope_id:
+            continue
+        payload["status"] = "superseded"
+        payload["superseded_at"] = now()
+        payload["superseded_by"] = superseded_by
+        payload["supersession_reason"] = reason
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        append_event(
+            root,
+            "task_superseded",
+            task_id_value,
+            {"superseded_by": superseded_by, "reason": reason},
+        )
+        count += 1
+    return count
 
 
 def open_task(project_root: Path, task_id: str, *, services: LifecycleServices) -> TaskRegistryResult:

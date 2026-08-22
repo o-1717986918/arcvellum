@@ -264,12 +264,25 @@ class LongformQualityContractTests(unittest.TestCase):
                 "branches/scene_0001/branch_manifest.json",
                 "drafts/candidates/scene_0001-platform-agent.md",
                 "plot/chapter_obligations/chapter_0001.json",
-                "workflow/approvals/index.jsonl",
             ):
                 self.assertTrue((staged / relative).is_file(), relative)
             snapshot_paths = {item["path"] for item in payload["input_snapshot"]["files"]}
             self.assertIn("canon/facts.json", snapshot_paths)
             self.assertIn("branches/scene_0001/branch_manifest.json", snapshot_paths)
+            self.assertNotIn("workflow/approvals/index.jsonl", snapshot_paths)
+
+    def test_release_approval_events_do_not_stale_a_literary_audit_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_representative_longform_inputs(root)
+            before = longform_input_snapshot(root)
+            self._write(
+                root / "workflow/approvals/index.jsonl",
+                '{"run_id":"release-chapter_0001","decision":"approve"}\n',
+            )
+            after = longform_input_snapshot(root)
+
+            self.assertEqual(after, before)
 
     def test_historical_promotion_prevents_future_canon_from_invalidating_scene_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -181,8 +181,13 @@ def _validate_tasks(root: Path, errors: list[dict[str, str]], warnings: list[dic
         if str(payload.get("task_id") or "") != task_path.name.removesuffix(".task.json"):
             errors.append(_issue(f"{label}.task_id", "task_id must match task filename", str(payload.get("task_id") or "")))
         status = str(payload.get("status") or "")
-        if status not in {"issued", "opened", "submitted", "blocked", "complete"}:
+        if status not in {"issued", "opened", "submitted", "blocked", "complete", "superseded"}:
             errors.append(_issue(f"{label}.status", "invalid task status", status or "missing"))
+        if status == "superseded":
+            if not str(payload.get("superseded_at") or ""):
+                errors.append(_issue(f"{label}.superseded_at", "superseded task must record timestamp", "missing"))
+            if not str(payload.get("superseded_by") or ""):
+                errors.append(_issue(f"{label}.superseded_by", "superseded task must record successor", "missing"))
         if status in {"submitted", "complete"}:
             submission = str(payload.get("submission") or "")
             if submission:

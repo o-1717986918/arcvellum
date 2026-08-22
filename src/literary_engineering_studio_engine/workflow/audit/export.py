@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from ...literary.export.readiness import export_scene_readiness_errors
 from ...route_audit_common import _add_gate, _approval_record, _path_exists, _read_json, _read_text, _rel
 def _non_ready_scene_count(chapter_jsons: list[Path]) -> int:
     total = 0
@@ -15,7 +16,7 @@ def _non_ready_scene_count(chapter_jsons: list[Path]) -> int:
     return total
 
 
-def _stale_or_weak_chapter_gate_count(chapter_jsons: list[Path]) -> int:
+def _stale_or_weak_chapter_gate_count(root: Path, chapter_jsons: list[Path]) -> int:
     total = 0
     required_keys = {
         "agent_review_source_match",
@@ -35,20 +36,7 @@ def _stale_or_weak_chapter_gate_count(chapter_jsons: list[Path]) -> int:
             if not required_keys.issubset(scene):
                 total += 1
                 continue
-            reader_status = scene.get("reader_experience_adherence_status")
-            weak = (
-                scene.get("review_conclusion") != "pass"
-                or scene.get("agent_review_conclusion") != "pass"
-                or scene.get("agent_review_schema_status") != "pass"
-                or scene.get("agent_review_source_match") is not True
-                or bool(scene.get("agent_review_unresolved_notes"))
-                or scene.get("word_budget_adherence_status") not in {"pass", "not_required"}
-                or reader_status not in {"", "pass", "not_required"}
-                or (reader_status in {"pass", "not_required"} and scene.get("reader_promise_satisfied") is False)
-                or bool(scene.get("flow_gate_issues"))
-                or bool(scene.get("readiness_issues"))
-            )
-            if weak:
+            if export_scene_readiness_errors(root, scene):
                 total += 1
     return total
 
