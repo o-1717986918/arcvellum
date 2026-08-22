@@ -18,10 +18,11 @@ from .repair_rendering import (
 )
 from .repair_scope import repair_scope
 from .repair_stability import regression_guard
+from .repair_references import repair_reference_paths
 from .repair_snapshots import (
     file_sha256,
+    prepare_output_protection,
     restore_outputs,
-    snapshot_outputs,
 )
 from .sandbox import SandboxManifest
 from .task_semantic_contract import semantic_output_contract
@@ -100,12 +101,8 @@ class RepairContextCoordinator:
             self.task,
             result.issues,
         )
-        attempt_root = _repair_attempt_root(self.sandbox.run_root, attempt)
-        snapshot_root = attempt_root / "protected"
-        snapshot = snapshot_outputs(
-            self.sandbox.workspace,
-            snapshot_root,
-            protected,
+        attempt_root, snapshot_root, snapshot = prepare_output_protection(
+            self.sandbox.run_root, self.sandbox.workspace, attempt, protected,
         )
         issue_rows = _issue_rows(result.issues, targets)
         invalid_outputs, excerpt_characters = _invalid_output_rows(
@@ -121,10 +118,8 @@ class RepairContextCoordinator:
             invalid_outputs, self._previous_target_digests
         )
         reasoning_contract = _reasoning_repair_contract(self.reasoning_budget, result, attempt)
-        repair_references = _repair_reference_paths(
-            self.task,
-            result.issues,
-            self.sandbox.workspace,
+        repair_references = repair_reference_paths(
+            self.task, result.issues, self.sandbox.workspace,
         )
         semantic_payload = _semantic_payload_with_guard(
             self.task,
@@ -196,10 +191,6 @@ class RepairContextCoordinator:
         }
 
 
-def _repair_attempt_root(run_root: Path, attempt: int) -> Path:
-    return run_root / "repairs" / f"attempt-{max(1, int(attempt)):02d}"
-
-
 def _stagnation_contract(
     invalid_outputs: list[dict[str, object]],
     previous_target_digests: Mapping[str, str],
@@ -220,33 +211,6 @@ def _stagnation_contract(
             if unchanged else ""
         ),
     }, target_digests
-
-
-def _repair_reference_paths(
-    task: TaskPackage,
-    issues: tuple[PreflightIssue, ...],
-    workspace: Path,
-) -> tuple[str, ...]:
-    needs_exact_source = any(
-        "anti_evasion_rows" in f"{issue.message} {issue.repair}"
-        or "exact-source" in f"{issue.message} {issue.repair}".casefold()
-        or "exact source body" in f"{issue.message} {issue.repair}".casefold()
-        for issue in issues
-    )
-    if not needs_exact_source:
-        return ()
-    source = str(task.payload.get("revision_source") or "").strip().replace("\\", "/")
-    if not source or source.startswith("/") or ":" in source or ".." in source.split("/"):
-        return ()
-    authorized = {
-        str(item).strip().replace("\\", "/")
-        for key in ("agent_source_paths", "source_paths", "context_must_inline_paths")
-        for item in (task.payload.get(key) or [])
-        if str(item).strip()
-    }
-    if source not in authorized or not (workspace / Path(source)).is_file():
-        return ()
-    return (source,)
 
 
 def _repair_semantic_contract(

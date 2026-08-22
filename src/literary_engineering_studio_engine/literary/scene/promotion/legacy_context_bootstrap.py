@@ -230,20 +230,29 @@ def _legacy_context_source_errors(
         if isinstance(item, dict) and _normalized_relative(item.get("path"))
     }
     for relative, source in ((packet_rel, packet), (trace_rel, trace)):
-        evidence = declared.get(relative)
-        if not isinstance(evidence, dict):
-            errors.append(f"legacy prompt source declaration is missing: {relative}")
-            continue
-        try:
-            expected_chars = int(evidence.get("chars") or -1)
-        except (TypeError, ValueError):
-            expected_chars = -1
-        actual_chars = len(source.read_text(encoding="utf-8", errors="ignore"))
-        # Old manifests counted text before final-newline normalization.  This
-        # is a coarse presence check; the resulting archive uses exact hashes.
-        if expected_chars < 0 or abs(expected_chars - actual_chars) > 2:
-            errors.append(f"legacy prompt source length mismatch: {relative}")
+        if error := _legacy_source_declaration_error(relative, source, declared):
+            errors.append(error)
     return errors
+
+
+def _legacy_source_declaration_error(
+    relative: str,
+    source: Path,
+    declared: dict[str, object],
+) -> str:
+    evidence = declared.get(relative)
+    if not isinstance(evidence, dict):
+        return f"legacy prompt source declaration is missing: {relative}"
+    try:
+        expected_chars = int(evidence.get("chars") or -1)
+    except (TypeError, ValueError):
+        expected_chars = -1
+    actual_chars = len(source.read_text(encoding="utf-8", errors="ignore"))
+    # Old manifests counted text before final-newline normalization. This is a
+    # coarse presence check; the resulting archive uses exact hashes.
+    if expected_chars < 0 or abs(expected_chars - actual_chars) > 2:
+        return f"legacy prompt source length mismatch: {relative}"
+    return ""
 
 
 def _normalized_relative(value: object) -> str:

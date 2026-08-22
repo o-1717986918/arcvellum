@@ -9,6 +9,23 @@ import shutil
 from typing import Any, Mapping
 
 
+def prepare_output_protection(
+    run_root: Path,
+    workspace: Path,
+    attempt: int,
+    protected: tuple[str, ...],
+) -> tuple[Path, Path, dict[str, object]]:
+    """Create one repair-attempt directory and snapshot protected outputs."""
+
+    attempt_root = run_root / "repairs" / f"attempt-{max(1, int(attempt)):02d}"
+    snapshot_root = attempt_root / "protected"
+    return attempt_root, snapshot_root, snapshot_outputs(
+        workspace,
+        snapshot_root,
+        protected,
+    )
+
+
 def snapshot_outputs(
     workspace: Path,
     snapshot_root: Path,
@@ -97,6 +114,7 @@ def _mapping(value: object) -> Mapping[str, Any]:
 __all__ = [
     "file_sha256",
     "path_sha256",
+    "prepare_output_protection",
     "restore_outputs",
     "snapshot_outputs",
 ]

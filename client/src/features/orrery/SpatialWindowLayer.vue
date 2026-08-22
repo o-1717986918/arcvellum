@@ -179,7 +179,7 @@ function handleViewportResize(): void {
 onMounted(() => {
   window.addEventListener("keydown", handleShortcut);
   window.addEventListener("resize", handleViewportResize);
-  handleViewportResize();
+  windows.constrainToViewport();
 });
 onBeforeUnmount(() => {
   window.clearTimeout(viewportTimer);

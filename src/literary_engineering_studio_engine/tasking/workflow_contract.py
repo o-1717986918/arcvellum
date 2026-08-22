@@ -180,26 +180,55 @@ def _validate_tasks(root: Path, errors: list[dict[str, str]], warnings: list[dic
                 errors.append(_issue(f"{label}.{field}", "required field missing", "missing"))
         if str(payload.get("task_id") or "") != task_path.name.removesuffix(".task.json"):
             errors.append(_issue(f"{label}.task_id", "task_id must match task filename", str(payload.get("task_id") or "")))
-        status = str(payload.get("status") or "")
-        if status not in {"issued", "opened", "submitted", "blocked", "complete", "superseded"}:
-            errors.append(_issue(f"{label}.status", "invalid task status", status or "missing"))
-        if status == "superseded":
-            if not str(payload.get("superseded_at") or ""):
-                errors.append(_issue(f"{label}.superseded_at", "superseded task must record timestamp", "missing"))
-            if not str(payload.get("superseded_by") or ""):
-                errors.append(_issue(f"{label}.superseded_by", "superseded task must record successor", "missing"))
-        if status in {"submitted", "complete"}:
-            submission = str(payload.get("submission") or "")
-            if submission:
-                _validate_submission(root, submission, str(payload.get("task_id") or ""), errors)
-            elif status == "submitted":
-                errors.append(_issue(f"{label}.submission", "submitted task must record submission path", "missing"))
-        if status == "complete":
-            completion = str(payload.get("completion") or "")
-            if not completion:
-                errors.append(_issue(f"{label}.completion", "complete task must record completion path", "missing"))
-            else:
-                _validate_completion(root, completion, str(payload.get("task_id") or ""), errors)
+        _validate_task_lifecycle(root, payload, label, errors)
+
+
+def _validate_task_lifecycle(
+    root: Path,
+    payload: dict[str, Any],
+    label: str,
+    errors: list[dict[str, str]],
+) -> None:
+    status = str(payload.get("status") or "")
+    if status not in {"issued", "opened", "submitted", "blocked", "complete", "superseded"}:
+        errors.append(_issue(f"{label}.status", "invalid task status", status or "missing"))
+        return
+    if status == "superseded":
+        _validate_supersession(payload, label, errors)
+        return
+    task_id = str(payload.get("task_id") or "")
+    submission = str(payload.get("submission") or "")
+    if status in {"submitted", "complete"} and submission:
+        _validate_submission(root, submission, task_id, errors)
+    elif status == "submitted":
+        errors.append(_issue(f"{label}.submission", "submitted task must record submission path", "missing"))
+    if status == "complete":
+        _validate_task_completion(root, payload, label, task_id, errors)
+
+
+def _validate_supersession(
+    payload: dict[str, Any],
+    label: str,
+    errors: list[dict[str, str]],
+) -> None:
+    if not str(payload.get("superseded_at") or ""):
+        errors.append(_issue(f"{label}.superseded_at", "superseded task must record timestamp", "missing"))
+    if not str(payload.get("superseded_by") or ""):
+        errors.append(_issue(f"{label}.superseded_by", "superseded task must record successor", "missing"))
+
+
+def _validate_task_completion(
+    root: Path,
+    payload: dict[str, Any],
+    label: str,
+    task_id: str,
+    errors: list[dict[str, str]],
+) -> None:
+    completion = str(payload.get("completion") or "")
+    if not completion:
+        errors.append(_issue(f"{label}.completion", "complete task must record completion path", "missing"))
+        return
+    _validate_completion(root, completion, task_id, errors)
 
 
 def _validate_submission(root: Path, rel: str, task_id: str, errors: list[dict[str, str]]) -> None:

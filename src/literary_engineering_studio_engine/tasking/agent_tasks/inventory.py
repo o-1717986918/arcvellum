@@ -46,18 +46,37 @@ def scan_agent_tasks(root: Path) -> list[AgentTaskRecord]:
         missing_sources = tuple(item for item in sources if not _path_exists(root, item))
         completion_state = agent_task_completion_status(path, root=root)
         registered_status = str(_registered_task_payload(path).get("status") or "")
-        if registered_status == "superseded":
-            status = "superseded"
-            missing = ()
-            missing_sources = ()
-        else:
-            status = "complete" if expected and not missing and completion_state.get("complete") is True else "partial" if expected and existing else "pending" if expected else "unknown"
+        status, missing, missing_sources = _record_status(
+            registered_status,
+            expected,
+            existing,
+            missing,
+            missing_sources,
+            completion_state.get("complete") is True,
+        )
         records.append(AgentTaskRecord(
             path=_rel(path, root), route=_infer_route(path, text), status=status,
             expected_paths=tuple(expected), existing_expected_paths=existing, missing_expected_paths=missing,
             source_paths=tuple(sources), missing_source_paths=missing_sources,
         ))
     return records
+
+
+def _record_status(
+    registered_status: str,
+    expected: list[str],
+    existing: tuple[str, ...],
+    missing: tuple[str, ...],
+    missing_sources: tuple[str, ...],
+    completion_is_valid: bool,
+) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+    if registered_status == "superseded":
+        return "superseded", (), ()
+    if expected and not missing and completion_is_valid:
+        return "complete", missing, missing_sources
+    if expected and existing:
+        return "partial", missing, missing_sources
+    return ("pending" if expected else "unknown"), missing, missing_sources
 
 
 def summarize_records(records: list[AgentTaskRecord]) -> dict[str, int]:
