@@ -134,6 +134,43 @@ describe("local output validation", () => {
 		expect(workerState.lastValidation.passed).toBe(true);
 	});
 
+	it("normalizes provider null placeholders and uniquely infers omitted paths", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-args-"));
+		roots.push(root);
+		const workerState = state();
+		const write = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call", {
+			outputs: [
+				{ path: null, content: "", json: { verdict: "pass" } },
+				{ path: null, content: "# Review\n", json: null },
+			],
+		});
+
+		expect((await validateOutputs(context(), root)).passed).toBe(true);
+		expect([...workerState.writtenPaths].sort()).toEqual(["out/review.json", "out/review.md"]);
+	});
+
+	it("rejects an omitted path when the remaining output type is ambiguous", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-ambiguous-"));
+		roots.push(root);
+		const taskContext = {
+			...context(),
+			expectedOutputs: ["out/a.md", "out/b.md"],
+			agentOwnedOutputs: [
+				{ path: "out/a.md", kind: "agent-authored", format: "markdown", schemaName: "" },
+				{ path: "out/b.md", kind: "agent-authored", format: "markdown", schemaName: "" },
+			],
+			writablePaths: ["out/a.md", "out/b.md"],
+		};
+		const write = createWorkerTools(taskContext, options(root), state(), () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await expect(write?.execute("call", { content: "ambiguous" }))
+			.rejects.toThrow("cannot be inferred uniquely");
+	});
+
 	it("returns aggregate validation immediately after a partial or malformed write", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-write-feedback-"));
 		roots.push(root);

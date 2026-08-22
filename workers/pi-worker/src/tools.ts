@@ -36,7 +36,7 @@ export function createWorkerTools(
 			description: "Read one exact-on-demand source by evidence_id, or reread an Agent-owned expected output by path. Directory evidence returns an inventory; pass the same evidence_id with one listed member_path to read that file. Must-inline sources cannot be reread.",
 			parameters: Type.Object({
 				evidence_id: Type.Optional(Type.String()),
-				path: Type.Optional(Type.String()),
+				path: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 				member_path: Type.Optional(Type.String()),
 				offset: Type.Optional(Type.Integer({ minimum: 0 })),
 				limit: Type.Optional(Type.Integer({ minimum: 1, maximum: context.maxResultChars })),
@@ -63,13 +63,13 @@ export function createWorkerTools(
 			description: "Atomically write one or several Agent-owned expected outputs. For JSON artifacts, pass a structured json object instead of an escaped content string; Studio serializes it and later restores protected machine fields. Batch only compact artifacts whose combined content is safely below 12000 characters; otherwise write one complete artifact per call. The result includes aggregate local validation. Completion receipts are never writable by the Agent.",
 			parameters: Type.Object({
 				path: Type.Optional(Type.String()),
-				content: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000_000 })),
-				json: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+				content: Type.Optional(Type.Union([Type.String({ maxLength: 2_000_000 }), Type.Null()])),
+				json: Type.Optional(Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.Null()])),
 				outputs: Type.Optional(Type.Array(
 					Type.Object({
-						path: Type.String(),
-						content: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000_000 })),
-						json: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+						path: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+						content: Type.Optional(Type.Union([Type.String({ maxLength: 2_000_000 }), Type.Null()])),
+						json: Type.Optional(Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.Null()])),
 					}),
 					{ minItems: 1, maxItems: 64 },
 				)),
@@ -77,16 +77,16 @@ export function createWorkerTools(
 			executionMode: "sequential",
 			execute: async (_id, params) => {
 				const input = params as {
-					path?: string;
-					content?: string;
-					json?: Record<string, unknown>;
+					path?: string | null;
+					content?: string | null;
+					json?: Record<string, unknown> | null;
 					outputs?: Array<{
-						path: string;
-						content?: string;
-						json?: Record<string, unknown>;
+						path?: string | null;
+						content?: string | null;
+						json?: Record<string, unknown> | null;
 					}>;
 				};
-				const values = outputWrites(input);
+				const values = outputWrites(input, context.agentOwnedOutputs, state.writtenPaths);
 				const normalized = values.map((item) => ({
 					path: normalizeRelativePath(item.path),
 					content: normalizeText(item.content),
@@ -354,38 +354,60 @@ function normalizeText(value: string): string {
 }
 
 function outputWrites(input: {
-	path?: string;
-	content?: string;
-	json?: Record<string, unknown>;
+	path?: string | null;
+	content?: string | null;
+	json?: Record<string, unknown> | null;
 	outputs?: Array<{
-		path: string;
-		content?: string;
-		json?: Record<string, unknown>;
+		path?: string | null;
+		content?: string | null;
+		json?: Record<string, unknown> | null;
 	}>;
-}): Array<{ path: string; content: string }> {
-	const hasSingle = typeof input.path === "string"
-		|| typeof input.content === "string"
-		|| input.json !== undefined;
+}, contracts: readonly { path: string; format: string }[], writtenPaths: ReadonlySet<string>): Array<{ path: string; content: string }> {
 	const hasBatch = Array.isArray(input.outputs);
-	if (hasSingle === hasBatch) throw new Error("provide either one path payload or outputs");
-	if (hasBatch) {
-		return (input.outputs ?? []).map((item) => ({
-			path: item.path,
-			content: serializedOutput(item.content, item.json),
-		}));
-	}
-	if (!input.path) throw new Error("single output requires path");
-	return [{ path: input.path, content: serializedOutput(input.content, input.json) }];
+	const hasSingleFields = input.path !== undefined || input.content !== undefined || input.json !== undefined;
+	if (hasBatch && hasSingleFields) throw new Error("provide either one path payload or outputs");
+	const entries = hasBatch ? input.outputs ?? [] : [input];
+	const pending = contracts.filter((item) => !writtenPaths.has(item.path));
+	const assigned = new Set<string>();
+	return entries.map((item) => {
+		const content = serializedOutput(item.content, item.json);
+		const payloadFormat = structuredJson(item.json) ? "json" : "text";
+		const explicit = typeof item.path === "string" && item.path.trim() ? item.path : "";
+		const path = explicit || inferOutputPath(pending, assigned, payloadFormat);
+		assigned.add(path);
+		return { path, content };
+	});
 }
 
 function serializedOutput(
-	content: string | undefined,
-	json: Record<string, unknown> | undefined,
+	content: string | null | undefined,
+	json: Record<string, unknown> | null | undefined,
 ): string {
-	if ((typeof content === "string") === (json !== undefined)) {
+	const normalizedContent = typeof content === "string" && content.length > 0 ? content : undefined;
+	const normalizedJson = structuredJson(json) ? json : undefined;
+	if ((normalizedContent !== undefined) === (normalizedJson !== undefined)) {
 		throw new Error("each output requires exactly one of content or json");
 	}
-	return json === undefined ? content ?? "" : `${JSON.stringify(json, null, 2)}\n`;
+	return normalizedJson === undefined ? normalizedContent ?? "" : `${JSON.stringify(normalizedJson, null, 2)}\n`;
+}
+
+function structuredJson(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function inferOutputPath(
+	contracts: readonly { path: string; format: string }[],
+	assigned: ReadonlySet<string>,
+	payloadFormat: "json" | "text",
+): string {
+	const candidates = contracts.filter((item) =>
+		!assigned.has(item.path)
+		&& (payloadFormat === "json" ? item.format === "json" : item.format !== "json")
+	);
+	if (candidates.length !== 1) {
+		throw new Error("output path is missing and cannot be inferred uniquely from remaining contracts");
+	}
+	return candidates[0].path;
 }
 
 function publicError(error: unknown): string {
