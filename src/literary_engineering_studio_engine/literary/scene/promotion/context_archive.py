@@ -103,9 +103,27 @@ def seal_context_archive(
     )
     if not plan:
         raise ValueError("formal promotion requires candidate-bound context packet and trace")
+    manifest_path = root / str(plan["archive_manifest"])
+    if manifest_path.is_file():
+        existing = _read_json(manifest_path)
+        errors = context_archive_errors(root, existing)
+        identity_keys = (
+            "schema",
+            "scene_id",
+            "archive_id",
+            "context_packet_sha256",
+            "context_trace_sha256",
+            "archived_context_packet",
+            "archived_context_trace",
+            "archive_manifest",
+        )
+        if not errors and all(existing.get(key) == plan.get(key) for key in identity_keys):
+            return existing
+        if errors:
+            raise ValueError("invalid existing immutable context archive: " + "; ".join(errors))
+        raise ValueError(f"refusing to overwrite immutable context archive: {manifest_path}")
     packet_text = str(plan.pop("_packet_text"))
     trace_text = str(plan.pop("_trace_text"))
-    manifest_path = root / str(plan["archive_manifest"])
     entries = (
         (root / str(plan["archived_context_packet"]), packet_text),
         (root / str(plan["archived_context_trace"]), trace_text),

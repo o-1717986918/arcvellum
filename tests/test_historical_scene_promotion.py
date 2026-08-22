@@ -541,6 +541,42 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 [],
             )
 
+    def test_revision_reuses_identical_immutable_context_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, manifest, _candidate, _draft = self._sealed_promotion(Path(temporary))
+            archive = manifest["historical_evidence"]["context_archive"]
+            revision = root / "drafts/revisions/scene_0001_revision.md"
+            revision.parent.mkdir(parents=True, exist_ok=True)
+            revision.write_text("# revised candidate\n", encoding="utf-8")
+            revision.with_suffix(".json").write_text(
+                json.dumps(
+                    {"prompt_manifest": "drafts/revisions/scene_0001_revision.prompt.json"},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            revision.with_suffix(".prompt.json").write_text(
+                json.dumps(
+                    {
+                        "context": archive["archived_context_packet"],
+                        "context_trace": archive["archived_context_trace"],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            archive_path = root / archive["archive_manifest"]
+            sealed_bytes = archive_path.read_bytes()
+
+            reused = seal_context_archive(root, "scene_0001", revision)
+
+            self.assertEqual(reused, archive)
+            self.assertEqual(archive_path.read_bytes(), sealed_bytes)
+
     def test_historical_revision_keeps_scene_time_context_instead_of_rebuilding(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, _manifest, _candidate, draft = self._sealed_promotion(
