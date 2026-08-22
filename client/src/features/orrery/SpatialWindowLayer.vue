@@ -2,6 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Activity, ArrowUpRight, BookOpenText, CircleAlert, CircleCheck, Download, FileCheck2, Focus, GitBranch, PackageOpen, RefreshCw, Route, ScanSearch } from "lucide-vue-next";
 import SpatialWindowFrame from "@/features/orrery/SpatialWindowFrame.vue";
+import CreativeWorkspaceHost from "@/features/orrery/CreativeWorkspaceHost.vue";
+import { dispatchConstellationAction } from "@/features/spatial-os/model/actionDispatcher";
+import { creativeWorkspaceRegistry } from "@/features/spatial-os/model/workspaceRegistry";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
@@ -10,7 +13,8 @@ import { deliveryClient } from "@/features/delivery/services/deliveryClient";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
 import { useAppStore } from "@/stores/app";
-import type { SpatialNarrativeProjection } from "@/types/spatial";
+import type { NodeActionDescriptor, SpatialNarrativeNode, SpatialNarrativeProjection, SpatialNodeDetail } from "@/types/spatial";
+import type { SpatialWindowKind } from "@/types/spatialWindows";
 import type { ProjectProgress } from "@/types/api";
 import { asList, asRecord, describeGate, labelFor } from "@/services/presentation";
 import { readCreativeRuntime } from "@/services/runtimePreference";
@@ -141,12 +145,49 @@ async function downloadDelivery(file: Record<string, unknown>): Promise<void> {
 }
 
 function archiveFor(node: SpatialNarrativeProjection["nodes"][number]): Record<string, unknown> | null {
-  const section = ({ character: "characters", canon: "world", scene: "scenes", branch: "branches", review: "reviews" } as Record<string, string>)[node.type];
+  const section = ({
+    character: "characters", canon: "world", world: "world", location: "world", organization: "world",
+    scene: "scenes", branch: "branches", review: "reviews", style: "style", draft: "drafts",
+    "word-budget": "word_budget", "story-architecture": "story_architecture", "human-decision": "decisions",
+  } as Record<string, string>)[node.creative_kind || node.type];
   if (!section) return null;
   const entries = asList<Record<string, unknown>>(librarySections.value[section]);
   return entries.find((entry) => String(entry.id || entry.scene_id || "") === node.source_id)
     || entries.find((entry) => String(entry.title || "") === node.label)
     || null;
+}
+
+function isCreativeWorkspace(kind: SpatialWindowKind): boolean {
+  return creativeWorkspaceRegistry.has(kind);
+}
+
+function nodeActions(node: SpatialNarrativeNode, detail: SpatialNodeDetail | null | undefined): NodeActionDescriptor[] {
+  const candidate = detail?.available_actions || node.available_actions || [];
+  return candidate.filter((item): item is NodeActionDescriptor => Boolean(item && typeof item === "object" && "kind" in item));
+}
+
+function nodeLabel(nodeId: string): string {
+  return props.projection?.nodes.find((item) => item.node_id === nodeId)?.label || nodeId.replace(/^[^:]+:/, "");
+}
+
+function activityFor(node: SpatialNarrativeNode): NonNullable<SpatialNarrativeProjection["activities"]>[number] | null {
+  return props.projection?.activities?.find((item) => item.target === node.source_id || item.target === node.node_id) || null;
+}
+
+function relationLabel(type: string): string {
+  return ({
+    sequence: "接续", bridge: "承接", contains: "包含", participates: "人物进入", branch: "剧情分岔",
+    review: "审查", canon: "设定写回", raises: "提出问题", promise: "建立承诺", "formal-prose": "正文晋升",
+  } as Record<string, string>)[type] || "作品关联";
+}
+
+function runNodeAction(action: NodeActionDescriptor, node: SpatialNarrativeNode): void {
+  dispatchConstellationAction(action, node, {
+    focus: (nodeId) => emit("focusNode", nodeId),
+    openWorkspace: (kind) => windows.openInstrument(kind),
+    advance: () => emit("advance"),
+    read: (target) => emit("readNode", target),
+  });
 }
 
 function handleShortcut(event: KeyboardEvent): void {
@@ -199,20 +240,38 @@ onBeforeUnmount(() => {
       @resize="windows.updateSize(item.id, $event)"
       @toggle="windows.toggleCollapsed(item.id)"
       @reset="windows.resetPosition(item.id)"
+      @workspace-mode="windows.setWorkspaceMode(item.id, $event)"
       @close="windows.close(item.id)"
     >
       <template v-if="item.kind === 'node' && item.node">
-        <div class="spatial-node-window" :data-status="item.node.status">
+        <div class="spatial-node-window" :data-status="item.node.status" :data-lifecycle="item.node.lifecycle">
           <SafeMarkdown class="spatial-node-subtitle" :source="item.node.subtitle || '这个节点来自已经进入正式项目的作品事实。'" />
+          <section v-if="activityFor(item.node)" class="spatial-node-activity" :data-status="activityFor(item.node)?.status">
+            <header><Activity :size="13" /><strong>{{ activityFor(item.node)?.label }}</strong><span>{{ activityFor(item.node)?.status === "active" ? "正在执行" : "可领取" }}</span></header>
+            <SafeMarkdown :source="activityFor(item.node)?.summary || ''" />
+          </section>
           <dl class="spatial-node-metrics">
-            <div><dt>类型</dt><dd>{{ item.node.type }}</dd></div><div><dt>状态</dt><dd>{{ statusLabel(item.node.status) }}</dd></div>
+            <div><dt>类型</dt><dd>{{ labelFor(item.node.creative_kind || item.node.type) }}</dd></div><div><dt>阶段</dt><dd>{{ statusLabel(item.node.status) }}</dd></div>
             <div v-if="item.node.metrics.word_target"><dt>目标</dt><dd>{{ item.node.metrics.word_target.toLocaleString() }} 字</dd></div>
             <div v-if="item.node.metrics.formal_chars"><dt>正文</dt><dd>{{ item.node.metrics.formal_chars.toLocaleString() }} 字</dd></div>
           </dl>
           <section v-if="archiveFor(item.node)" class="spatial-archive-preview"><header><BookOpenText :size="14" /><strong>{{ archiveFor(item.node)?.subtitle || '作品档案摘录' }}</strong></header><SafeMarkdown :source="archiveFor(item.node)?.excerpt || archiveFor(item.node)?.body || ''" /><ul v-if="asList(archiveFor(item.node)?.key_points).length"><li v-for="point in asList(archiveFor(item.node)?.key_points).slice(0, 3)" :key="String(point)">{{ point }}</li></ul></section>
-          <section class="spatial-node-relations"><header><Route :size="14" /><strong>它正在影响什么</strong></header><p v-if="!item.detail">正在读取这段作品关系……</p><ul v-else-if="item.detail.relationships.length"><li v-for="edge in item.detail.relationships.slice(0, 5)" :key="`${edge.source}-${edge.target}-${edge.type}`"><span>{{ edge.type }}</span><p>{{ edge.source }} <ArrowUpRight :size="12" /> {{ edge.target }}</p></li></ul><p v-else>暂时还没有可见的关联记录。</p></section>
-            <div class="spatial-window-commands"><button class="primary-button wide" @click="emit('focusNode', item.node!.node_id)"><Focus :size="15" />聚焦这一段</button><button v-if="item.node.type === 'task'" class="text-button" @click="windows.openInstrument('progress')"><ScanSearch :size="15" />查看推进任务</button><button v-else-if="item.node.status === 'formal'" class="text-button" @click="emit('readNode', item.node)"><BookOpenText :size="15" />阅读正式正文</button></div>
+          <section class="spatial-node-relations"><header><Route :size="14" /><strong>它正在影响什么</strong></header><p v-if="!item.detail">正在读取这段作品关系……</p><ul v-else-if="item.detail.relationships.length"><li v-for="edge in item.detail.relationships.slice(0, 6)" :key="`${edge.source}-${edge.target}-${edge.type}`"><span>{{ relationLabel(edge.type) }}</span><p>{{ nodeLabel(edge.source) }} <ArrowUpRight :size="12" /> {{ nodeLabel(edge.target) }}</p></li></ul><p v-else>暂时还没有可见的关联记录。</p></section>
+          <div class="spatial-window-commands node-action-deck">
+            <button
+              v-for="action in nodeActions(item.node, item.detail)"
+              :key="action.action_id"
+              :class="action.mutates_project ? 'primary-button' : 'text-button'"
+              :disabled="!action.enabled"
+              :title="action.reason || action.label"
+              @click="runNodeAction(action, item.node!)"
+            ><ArrowUpRight :size="14" />{{ action.label }}</button>
+            <button v-if="!nodeActions(item.node, item.detail).length" class="primary-button wide" @click="emit('focusNode', item.node!.node_id)"><Focus :size="15" />聚焦这一段</button>
+          </div>
         </div>
+      </template>
+      <template v-else-if="isCreativeWorkspace(item.kind)">
+        <CreativeWorkspaceHost :kind="item.kind" />
       </template>
       <template v-else-if="item.kind === 'progress'">
         <div class="spatial-progress-window">

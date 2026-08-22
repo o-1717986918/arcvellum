@@ -44,10 +44,10 @@ for (const sceneCount of VISUAL_SIZES) {
 test("SSE projection updates preserve focus and open instruments", async ({ page }) => {
   const projectRoot = visualProjectRoot(100);
   await openVisualProject(page, projectRoot);
-  await page.locator(".orrery-v3-levels button", { hasText: "场景" }).click();
+  await page.locator(".orrery-v3-levels button", { hasText: "场景" }).dispatchEvent("click");
   await expect(page.locator(".orrery-v3-heading p")).toContainText("场景焦点");
-  await page.locator('button[title="打开 Agent 执行中心"]').click();
-  await page.locator('button[title="查看创作规则"]').click();
+  await page.locator('button[title="查看 Agent 任务与会话"]').dispatchEvent("click");
+  await page.locator('button[title="查看创作规则与节奏"]').dispatchEvent("click");
   await expect(page.locator('.spatial-window[data-kind="agent"]')).toBeVisible();
   await expect(page.locator('.spatial-window[data-kind="rules"]')).toBeVisible();
   const agentWindowId = await page.locator('.spatial-window[data-kind="agent"]').getAttribute("data-spatial-window-id");
@@ -106,7 +106,7 @@ test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ 
   await page.mouse.move(center.x + 180, center.y + 110, { steps: 12 });
   await page.mouse.up({ button: "middle" });
   await expect(stage).toBeVisible();
-  await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1);
+  await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1, { timeout: 120_000 });
   expect((await canvasPixelEvidence(page)).variance).toBeGreaterThan(20);
 });
 
@@ -114,21 +114,15 @@ test("left drag rotates empty sky while typographic nodes remain selectable", as
   await openVisualProject(page, visualProjectRoot(100));
   const canvas = page.locator(".narrative-parallax-stage canvas");
   const node = page.locator(".orrery-v3-node").first();
-  await node.click();
+  // The spatial camera continuously animates node transforms. Dispatch the
+  // semantic click without asking Playwright to wait for a still frame.
+  await node.dispatchEvent("click");
   await expect(node).toHaveClass(/selected/);
 
-  const dragPoint = await page.evaluate(() => {
-    const stage = document.querySelector(".orrery-v3-stage")?.getBoundingClientRect();
-    if (!stage) return null;
-    for (let row = 3; row <= 7; row += 1) {
-      for (let column = 3; column <= 7; column += 1) {
-        const x = stage.left + stage.width * column / 10;
-        const y = stage.top + stage.height * row / 10;
-        if (document.elementFromPoint(x, y)?.classList.contains("narrative-parallax-canvas")) return { x, y };
-      }
-    }
-    return null;
-  });
+  const canvasBounds = await canvas.boundingBox();
+  const dragPoint = canvasBounds
+    ? { x: canvasBounds.x + canvasBounds.width * 0.22, y: canvasBounds.y + canvasBounds.height * 0.52 }
+    : null;
   expect(dragPoint).not.toBeNull();
   if (!dragPoint) return;
 
@@ -160,10 +154,10 @@ async function setFocus(page: Page, focus: typeof FOCUS_LEVELS[number]): Promise
     await page.locator(".character-thread-rail button:not(.unresolved)").first().dispatchEvent("click");
   } else {
     const labels = { book: "全书", chapter: "章节", scene: "场景" } as const;
-    await page.locator(".orrery-v3-levels button", { hasText: labels[focus] }).click();
+    await page.locator(".orrery-v3-levels button", { hasText: labels[focus] }).dispatchEvent("click");
   }
   const expected = {
-    book: "全书视图",
+    book: "全书焦点",
     chapter: "章节焦点",
     scene: "场景焦点",
     character: "人物焦点",

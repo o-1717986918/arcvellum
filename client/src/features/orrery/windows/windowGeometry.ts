@@ -16,6 +16,12 @@ export const DEFAULT_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
   rules: { width: 456, height: 600 },
   health: { width: 258, height: 290 },
   delivery: { width: 294, height: 282 },
+  archive: { width: 720, height: 590 },
+  style: { width: 680, height: 570 },
+  quality: { width: 660, height: 560 },
+  strategy: { width: 620, height: 540 },
+  observatory: { width: 690, height: 570 },
+  archaeology: { width: 650, height: 550 },
 };
 
 const MIN_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
@@ -27,6 +33,12 @@ const MIN_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
   rules: { width: 360, height: 430 },
   health: { width: 258, height: 240 },
   delivery: { width: 260, height: 210 },
+  archive: { width: 520, height: 420 },
+  style: { width: 480, height: 400 },
+  quality: { width: 460, height: 390 },
+  strategy: { width: 440, height: 380 },
+  observatory: { width: 500, height: 410 },
+  archaeology: { width: 460, height: 390 },
 };
 
 export function clampPosition(position: SpatialWindowPosition, size: SpatialWindowSize): SpatialWindowPosition {
@@ -68,6 +80,12 @@ export function instrumentPosition(
     rules: { left: viewportWidth - size.width - 52, top: 150 },
     health: { left: 26, top: viewportHeight - size.height - 34 },
     delivery: { left: viewportWidth - size.width - 44, top: viewportHeight - size.height - 40 },
+    archive: { left: Math.round((viewportWidth - size.width) / 2), top: 96 },
+    style: { left: Math.round((viewportWidth - size.width) / 2), top: 104 },
+    quality: { left: viewportWidth - size.width - 40, top: 110 },
+    strategy: { left: 46, top: 112 },
+    observatory: { left: viewportWidth - size.width - 38, top: 98 },
+    archaeology: { left: 52, top: 104 },
   };
   return clampPosition({ left: positions[kind].left - offset * 12, top: positions[kind].top + offset * 12 }, size);
 }
@@ -151,7 +169,7 @@ export function anchoredPosition(
 }
 
 export function isWindowKind(value: unknown): value is SpatialWindowKind {
-  return ["node", "progress", "agent", "reader", "decisions", "rules", "health", "delivery"].includes(String(value));
+  return ["node", "progress", "agent", "reader", "decisions", "rules", "health", "delivery", "archive", "style", "quality", "strategy", "observatory", "archaeology"].includes(String(value));
 }
 
 export function validSize(value: SpatialWindowSize): boolean {

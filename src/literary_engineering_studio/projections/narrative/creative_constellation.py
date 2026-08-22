@@ -61,7 +61,7 @@ def augment_creative_constellation(
             subtitle="作品的创作原点与全书脉络",
             order=-1,
         ),
-        *nodes,
+        *(item for item in nodes if not _is_mechanical_node(item)),
     ]
     result_edges = list(edges)
     sections = library.get("sections") if isinstance(library.get("sections"), dict) else {}
@@ -115,11 +115,21 @@ def enrich_creative_nodes(
 
 def project_activities(dashboard: dict[str, Any]) -> list[dict[str, Any]]:
     actions = dashboard.get("next_actions") if isinstance(dashboard.get("next_actions"), list) else []
+    current = dashboard.get("current_task") if isinstance(dashboard.get("current_task"), dict) else {}
+    current_route = str(current.get("route") or "")
+    current_target = str(current.get("target") or current.get("scene_id") or "")
     return [
         {
             "activity_id": f"workflow:{index}:{item.get('route', 'auto')}:{item.get('target', '')}",
             "kind": "workflow",
-            "status": "available" if index else "active",
+            "status": (
+                "active"
+                if index == 0
+                and current_route
+                and current_route == str(item.get("route") or "")
+                and (not current_target or current_target == str(item.get("target") or ""))
+                else "available"
+            ),
             "route": str(item.get("route") or "auto"),
             "target": str(item.get("target") or ""),
             "label": "下一项创作工作" if index == 0 else "后续创作工作",
@@ -383,6 +393,23 @@ def _scene_reference(item: dict[str, Any]) -> str:
 def _is_mechanical_receipt(item: dict[str, Any]) -> bool:
     path = str(item.get("path") or "").lower()
     return any(token in path for token in ("agent_completion", ".agent_tasks", "task.json", "receipt"))
+
+
+def _is_mechanical_node(item: dict[str, Any]) -> bool:
+    """Keep workflow evidence out of the literary graph even when v3 saw it."""
+
+    identity = " ".join(
+        str(item.get(key) or "").lower()
+        for key in ("node_id", "source_id", "source_type", "label")
+    )
+    return any(token in identity for token in (
+        ".agent_tasks",
+        "_agent_tasks_",
+        "agent_completion",
+        "task.json",
+        "completion marker",
+        "平台 agent 任务说明",
+    ))
 
 
 def _rows(value: object) -> list[dict[str, Any]]:

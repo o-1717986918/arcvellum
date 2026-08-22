@@ -3,22 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
   BookOpenText,
-  Boxes,
   ChevronDown,
   CircleHelp,
   Cog,
   FolderKanban,
-  Fingerprint,
-  LibraryBig,
-  PackageCheck,
   Info,
   Orbit,
-  RadioTower,
   RefreshCw,
-  ScanSearch,
   Settings2,
-  SlidersHorizontal,
-  Waypoints,
 } from "lucide-vue-next";
 import StartupScene from "@/components/StartupScene.vue";
 import AdvisorDock from "@/features/advisor/components/AdvisorDock.vue";
@@ -42,15 +34,7 @@ applyOrreryExperience({});
 
 const nav = [
   { to: "/projects", label: "作品", icon: FolderKanban, needsProject: false },
-  { to: "/overview", label: "创作总控", icon: Boxes, needsProject: true },
-  { to: "/reader", label: "阅读", icon: BookOpenText, needsProject: true },
-  { to: "/archive", label: "档案管理", icon: LibraryBig, needsProject: true },
-  { to: "/archaeology", label: "作品考古", icon: ScanSearch, needsProject: true },
-  { to: "/style", label: "文风工坊", icon: Fingerprint, needsProject: true },
-  { to: "/quality", label: "创作规则", icon: SlidersHorizontal, needsProject: true },
-  { to: "/strategy", label: "创作策略", icon: Waypoints, needsProject: true },
-  { to: "/observatory", label: "Agent 观测", icon: RadioTower, needsProject: true },
-  { to: "/delivery", label: "交付", icon: PackageCheck, needsProject: true },
+  { to: "/overview", label: "创作星链", icon: Orbit, needsProject: true },
   { to: "/settings", label: "设置", icon: Settings2, needsProject: false },
 ];
 

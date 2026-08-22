@@ -61,6 +61,7 @@ class NarrativeProjectionV4Tests(unittest.TestCase):
                 "reviews": [
                     {"id": "scene-review", "title": "场景审查", "path": "reviews/scene_0001.json", "status": "pass"},
                     {"id": "receipt", "title": "机器回执", "path": "reviews/scene_0001.agent_completion.json", "status": "complete"},
+                    {"id": "scene-task", "title": "平台 Agent 任务说明：formal scene review scene_0001", "path": "reviews/scene_0001.agent_tasks.md", "status": "blocked"},
                 ],
                 "decisions": [
                     {"id": "choice-1", "title": "选择叙事方向", "path": "workflow/human_choices/choice-1.json", "status": "waiting_human"},
@@ -119,7 +120,10 @@ class NarrativeProjectionV4Tests(unittest.TestCase):
         self.assertIn("formal-prose:chapter_0001", node_ids)
         self.assertIn("human-decision:choice-1", node_ids)
         self.assertFalse(any(item["type"] == "task" for item in projection["nodes"]))
+        self.assertFalse(any("agent_tasks" in item["node_id"] for item in projection["nodes"]))
+        self.assertFalse(any("平台 Agent 任务说明" in item["label"] for item in projection["nodes"]))
         self.assertEqual(projection["activities"][0]["target"], "scene_0001")
+        self.assertEqual(projection["activities"][0]["status"], "available")
         for item in projection["nodes"]:
             action_kinds = {action["kind"] for action in item["available_actions"]}
             self.assertIn("inspect", action_kinds)

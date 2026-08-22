@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { ChevronDown, ChevronUp, GripHorizontal, LocateFixed, PinOff, RotateCcw, X } from "lucide-vue-next";
+import { ChevronDown, ChevronUp, GripHorizontal, LocateFixed, Maximize2, Minimize2, PinOff, RotateCcw, X } from "lucide-vue-next";
 import type { SpatialWindow, SpatialWindowPosition, SpatialWindowSize } from "@/types/spatialWindows";
 
 const props = defineProps<{ item: SpatialWindow }>();
-const emit = defineEmits<{ move: [position: SpatialWindowPosition]; resize: [size: SpatialWindowSize]; close: []; toggle: []; reset: []; activate: [] }>();
+const emit = defineEmits<{ move: [position: SpatialWindowPosition]; resize: [size: SpatialWindowSize]; close: []; toggle: []; reset: []; activate: []; workspaceMode: [mode: "float" | "fullscreen"] }>();
 
 const root = ref<HTMLElement | null>(null);
 const compactViewport = ref(false);
 const readerImmersive = computed(() => props.item.kind === "reader" && props.item.reader_mode === "immersive");
+const workspaceFullscreen = computed(() => props.item.kind !== "reader" && props.item.workspace_mode === "fullscreen");
 let dragOffset = { x: 0, y: 0 };
 let resizeOrigin = { x: 0, y: 0, width: 0, height: 0 };
 const style = computed(() => {
-  if (compactViewport.value && readerImmersive.value) {
+  if ((compactViewport.value && readerImmersive.value) || workspaceFullscreen.value) {
     return {
       left: "8px",
       right: "8px",
@@ -65,7 +66,7 @@ function stopDrag(): void {
 }
 
 function startDrag(event: PointerEvent): void {
-  if (event.button !== 0 || compactViewport.value || readerImmersive.value) return;
+  if (event.button !== 0 || compactViewport.value || readerImmersive.value || workspaceFullscreen.value) return;
   if ((event.target as HTMLElement).closest(".spatial-window-actions")) return;
   const rect = root.value?.getBoundingClientRect();
   if (!rect) return;
@@ -91,7 +92,7 @@ function stopResize(): void {
 }
 
 function startResize(event: PointerEvent): void {
-  if (event.button !== 0 || compactViewport.value || props.item.collapsed || props.item.kind === "reader") return;
+  if (event.button !== 0 || compactViewport.value || workspaceFullscreen.value || props.item.collapsed || props.item.kind === "reader") return;
   resizeOrigin = { x: event.clientX, y: event.clientY, width: props.item.size.width, height: props.item.size.height };
   emit("activate");
   document.body.classList.add("resizing-spatial-window");
@@ -111,6 +112,12 @@ function windowKicker(): string {
     rules: "WRITING CONSTITUTION",
     health: "ROUTE HEALTH",
     delivery: "RELEASE PROOF",
+    archive: "ARCHIVE IDE",
+    style: "STYLE ATELIER",
+    quality: "EDITORIAL REVIEW",
+    strategy: "CREATIVE STRATEGY",
+    observatory: "AGENT OBSERVATORY",
+    archaeology: "WORK ARCHAEOLOGY",
   };
   return labels[props.item.kind];
 }
@@ -131,7 +138,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <article ref="root" class="spatial-window" :class="{ collapsed: item.collapsed, compact: compactViewport }" :data-kind="item.kind" :data-reader-mode="item.reader_mode" :data-spatial-window-id="item.id" :style="style" tabindex="-1" @pointerdown.capture="emit('activate')">
+  <article ref="root" class="spatial-window" :class="{ collapsed: item.collapsed, compact: compactViewport, fullscreen: workspaceFullscreen }" :data-kind="item.kind" :data-reader-mode="item.reader_mode" :data-spatial-window-id="item.id" :style="style" tabindex="-1" @pointerdown.capture="emit('activate')">
     <header class="spatial-window-header">
       <button class="spatial-window-drag" title="拖动窗口；双击复位" @pointerdown="startDrag" @dblclick="emit('reset')">
         <GripHorizontal :size="15" />
@@ -140,6 +147,7 @@ onBeforeUnmount(() => {
       <div class="spatial-window-actions">
         <span v-if="item.anchor?.enabled" class="spatial-window-anchor" title="正跟随节点"><LocateFixed :size="13" /></span>
         <span v-else-if="item.anchor" class="spatial-window-anchor free" title="窗口已脱离节点"><PinOff :size="13" /></span>
+        <button v-if="item.kind !== 'node' && item.kind !== 'reader'" class="orrery-v3-icon" :title="workspaceFullscreen ? '恢复浮动窗口' : '全屏打开工作台'" @click="emit('workspaceMode', workspaceFullscreen ? 'float' : 'fullscreen')"><Minimize2 v-if="workspaceFullscreen" :size="14" /><Maximize2 v-else :size="14" /></button>
         <button v-if="!readerImmersive" class="orrery-v3-icon" :title="item.collapsed ? '展开窗口' : '折叠窗口'" @click="emit('toggle')"><ChevronDown v-if="item.collapsed" :size="15" /><ChevronUp v-else :size="15" /></button>
         <button v-if="!readerImmersive" class="orrery-v3-icon" :title="item.anchor ? '回到节点旁' : '复位窗口'" @click="emit('reset')"><RotateCcw :size="14" /></button>
         <button class="orrery-v3-icon" title="关闭窗口" @click="emit('close')"><X :size="16" /></button>

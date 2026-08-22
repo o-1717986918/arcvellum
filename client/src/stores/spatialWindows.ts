@@ -8,6 +8,7 @@ import type {
   SpatialWindowKind,
   SpatialWindowPosition,
   SpatialWindowSize,
+  WorkspaceWindowMode,
 } from "@/types/spatialWindows";
 import {
   DEFAULT_SIZES,
@@ -35,6 +36,12 @@ const INSTRUMENT_TITLES: Record<Exclude<SpatialWindowKind, "node">, string> = {
   rules: "创作规则",
   health: "作品健康",
   delivery: "交付中心",
+  archive: "作品档案 IDE",
+  style: "文风工作台",
+  quality: "审查与质量",
+  strategy: "创作策略",
+  observatory: "Agent 观测台",
+  archaeology: "作品反推",
 };
 
 interface PersistedSpatialWindow {
@@ -48,6 +55,8 @@ interface PersistedSpatialWindow {
   anchor?: SpatialWindowAnchor;
   reader_mode?: ReaderWindowMode;
   reader_return?: SpatialWindow["reader_return"];
+  workspace_mode?: WorkspaceWindowMode;
+  workspace_return?: SpatialWindow["workspace_return"];
 }
 
 const PERSISTENCE_PREFIX = "arcvellum.spatial-window-layout.v1.";
@@ -143,8 +152,27 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       layer: ++highestLayer,
       collapsed: false,
       reader_mode: readerMode,
+      workspace_mode: "float",
     });
     constrainToViewport();
+  }
+
+  function setWorkspaceMode(id: string, mode: WorkspaceWindowMode): void {
+    const target = windows.value.find((item) => item.id === id);
+    if (!target || target.kind === "reader" || target.workspace_mode === mode) return;
+    if (mode === "fullscreen") {
+      target.workspace_return = { position: { ...target.position }, size: { ...target.size } };
+      target.position = { left: 12, top: 12 };
+      target.size = fullscreenSize();
+    } else if (target.workspace_return) {
+      target.position = clampPosition(target.workspace_return.position, target.workspace_return.size);
+      target.size = clampSize(target.kind, target.workspace_return.size);
+      target.workspace_return = undefined;
+    }
+    target.workspace_mode = mode;
+    target.collapsed = false;
+    bringForward(id);
+    persist();
   }
 
   function setReaderMode(mode: ReaderWindowMode): void {
@@ -167,6 +195,12 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       target.size = restoredSize;
       target.reader_return = undefined;
     } else {
+      if (target.workspace_mode === "fullscreen") {
+        target.size = fullscreenSize();
+        target.position = { left: 12, top: 12 };
+        persist();
+        return;
+      }
       target.size = readerModeSize(mode);
       target.position = clampPosition(target.position, target.size);
     }
@@ -402,6 +436,8 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
             ? (isReaderMode(item.reader_mode) ? item.reader_mode : "peek")
             : undefined,
           reader_return: item.kind === "reader" && validReaderReturn(item.reader_return) ? item.reader_return : undefined,
+          workspace_mode: item.kind !== "reader" && item.workspace_mode === "fullscreen" ? "fullscreen" : "float",
+          workspace_return: item.kind !== "reader" && validWorkspaceReturn(item.workspace_return) ? item.workspace_return : undefined,
         });
       });
       windows.value = restored;
@@ -426,12 +462,30 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       anchor: item.anchor,
       reader_mode: item.reader_mode,
       reader_return: item.reader_return,
+      workspace_mode: item.workspace_mode,
+      workspace_return: item.workspace_return,
     }));
     localStorage.setItem(persistenceKey, JSON.stringify(payload));
   }
 
-  return { windows: sortedWindows, expandedWindows, minimizedWindows, selectedNodeId, openNode, openInstrument, setReaderMode, bringForward, updatePosition, updateSize, toggleCollapsed, restore, close, closeActive, toggleActive, resetPosition, resetActive, focusNext, syncNodeAnchors, constrainToViewport, clear, setScope };
+  return { windows: sortedWindows, expandedWindows, minimizedWindows, selectedNodeId, openNode, openInstrument, setReaderMode, setWorkspaceMode, bringForward, updatePosition, updateSize, toggleCollapsed, restore, close, closeActive, toggleActive, resetPosition, resetActive, focusNext, syncNodeAnchors, constrainToViewport, clear, setScope };
 });
+
+function fullscreenSize(): SpatialWindowSize {
+  return {
+    width: Math.max(300, window.innerWidth - 24),
+    height: Math.max(260, window.innerHeight - 24),
+  };
+}
+
+function validWorkspaceReturn(value: SpatialWindow["workspace_return"]): boolean {
+  return Boolean(
+    value
+    && validSize(value.size)
+    && Number.isFinite(value.position.left)
+    && Number.isFinite(value.position.top),
+  );
+}
 
 function persistedWindowSize(item: PersistedSpatialWindow): SpatialWindowSize {
   if (item.kind === "reader") {

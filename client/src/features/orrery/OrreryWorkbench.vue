@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Activity, ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Gauge, GitBranch, Layers3, List, Maximize2, Network, PackageCheck, PanelsTopLeft, RotateCcw, Settings2, SlidersHorizontal } from "lucide-vue-next";
+import { ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
@@ -13,6 +13,7 @@ import OrreryNavigationLayer from "@/features/orrery/OrreryNavigationLayer.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
 import RelationLensBar from "@/features/orrery/RelationLensBar.vue";
 import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
+import WorkspaceDock from "@/features/spatial-os/WorkspaceDock.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import { applyRelationLens } from "@/features/orrery/model/relationLens";
@@ -49,13 +50,11 @@ const activeCharacterId = ref("");
 const hiddenRelationFamilies = ref<RelationFamily[]>([]);
 const soloRelationFamily = ref<RelationFamily | "">("");
 const staticStage = ref(false);
-const bookChapterNodes = ref<SpatialNarrativeNode[]>([]);
 const forcedNodeIds = ref<string[]>([]);
 const showAllLabels = ref(false);
 const navigationNodeId = ref("");
 const heatLens = ref<OrreryHeatLens>("");
 const comparedNodeIds = ref<string[]>([]);
-let chapterRailRequest = 0;
 let appliedReaderUnitId = "";
 
 const projection = computed(() => spatial.projection);
@@ -70,7 +69,9 @@ const deliveryReady = computed(() => String(app.delivery?.status || "") === "rea
 const prose = computed(() => manuscriptItems((app.library || null) as Record<string, unknown> | null));
 const progress = computed(() => app.projectProgress);
 const overallProgress = computed(() => Number(progress.value?.overall_percent));
-const chapterNodes = computed(() => [...bookChapterNodes.value].sort((left, right) => left.order - right.order));
+const chapterNodes = computed(() => (projection.value?.nodes || [])
+  .filter((node) => (node.creative_kind || node.type) === "chapter")
+  .sort((left, right) => left.order - right.order));
 const activeChapterRailNodeId = computed(() => {
   if (!projection.value) return windows.selectedNodeId;
   if (projection.value.level === "chapter") {
@@ -118,16 +119,11 @@ watch(() => app.currentProjectPath, (root) => {
   if (root) {
     void spatial.open(root, { level: "book", focus: "" });
     void loadChoices();
-    void loadChapterRail(root);
   }
   else {
-    bookChapterNodes.value = [];
     spatial.close();
   }
 }, { immediate: true });
-watch(() => projection.value?.source_revisions?.narrative_v2, () => {
-  if (app.currentProjectPath) void loadChapterRail(app.currentProjectPath);
-});
 watch(
   [() => app.currentProjectPath, () => projection.value?.spatial_grammar, () => projection.value?.revision],
   ([root, grammar]) => {
@@ -361,17 +357,6 @@ async function loadChoices(): Promise<void> {
   await humanChoices.load(app.currentProjectPath).catch(() => undefined);
 }
 
-async function loadChapterRail(root: string): Promise<void> {
-  const sequence = ++chapterRailRequest;
-  const payload = await orreryClient.spatialProjection({
-    projectRoot: root,
-    level: "book",
-    focus: "",
-    grammar: spatial.grammar,
-  }).catch(() => null);
-  if (sequence !== chapterRailRequest || root !== app.currentProjectPath || !payload) return;
-  bookChapterNodes.value = payload.nodes.filter((node) => node.type === "chapter");
-}
 </script>
 
 <template>
@@ -410,6 +395,7 @@ async function loadChapterRail(root: string): Promise<void> {
         :anchors="anchors"
         :level="displayProjection.level"
         :motion-events="displayProjection.motion_events"
+        :activities="displayProjection.activities"
         :time-cursor="spatial.timeCursor"
         :time-window="spatial.timeWindow"
         :selected-node-id="windows.selectedNodeId"
@@ -471,14 +457,7 @@ async function loadChapterRail(root: string): Promise<void> {
       <div class="orrery-v3-caption"><Maximize2 :size="14" /><span>{{ displayProjection.summary.node_count }} 个真实节点</span><i></i><span>{{ displayProjection.summary.cluster_count }} 个叙事构件</span></div>
     </div>
     <div v-else class="orrery-v3-empty"><i></i><strong>等待作品长出第一段脉络</strong><p>场景、人物或正文出现后，这里会形成可以进入的叙事场域。</p></div>
-    <nav class="orrery-v3-instrument-dock" aria-label="创作控制仪表">
-      <button title="打开推进仪表" @click="windows.openInstrument('progress')"><Gauge :size="16" /><span>推进</span></button>
-      <button title="打开 Agent 执行中心" @click="windows.openInstrument('agent')"><Activity :size="16" /><span>执行</span></button>
-      <button title="查看待定决定" :data-count="choices.length || undefined" @click="windows.openInstrument('decisions')"><GitBranch :size="16" /><span>决策</span></button>
-      <button title="查看创作规则" @click="windows.openInstrument('rules')"><SlidersHorizontal :size="16" /><span>规则</span></button>
-      <button title="整理打开的窗口" @click="windows.constrainToViewport()"><PanelsTopLeft :size="16" /><span>整理</span></button>
-    </nav>
-    <button class="orrery-v3-reader-entry" title="打开正文长卷" @click="windows.openInstrument('reader')"><BookOpenText :size="16" /><span><small>MANUSCRIPT</small><strong>正文长卷</strong></span></button>
+    <WorkspaceDock :pending-choices="choices.length" @open="windows.openInstrument" @organize="windows.constrainToViewport" />
     <button class="orrery-v3-delivery-beacon" :class="{ ready: deliveryReady }" :disabled="!deliveryReady" :title="deliveryReady ? '作品已具备交付条件' : '交付条件尚未满足'" @click="windows.openInstrument('delivery')"><PackageCheck :size="17" /><span>{{ deliveryReady ? '可以交付' : '交付待命' }}</span></button>
     <ChapterRail :chapters="chapterNodes" :selected-node-id="activeChapterRailNodeId" @select="openChapterFromRail" />
     <SpatialWindowLayer :projection="projection" :dashboard="props.dashboard" :choices="choices" :delivery="app.delivery" :progress="progress" :prose="prose" @advance="emit('advance')" @inspect-task="emit('inspectTask')" @open-reader="emit('openReader')" @read-node="openReaderForNode" @choose="emit('choose', $event)" @focus-node="focusNode" />

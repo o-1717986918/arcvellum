@@ -1,0 +1,490 @@
+/* ArcVellum spatial operating system. Loaded last so the constellation, not
+   legacy page chrome, owns the visual hierarchy. */
+
+.overview-view.spatial-active,
+.overview-view.spatial-active .orrery-hero {
+  height: 100dvh;
+  min-height: 0;
+  background: var(--orrery-deep);
+}
+
+.overview-view.spatial-active .orrery-v3 {
+  --spatial-glass: color-mix(in srgb, var(--orrery-deep) 80%, #53665e);
+  --spatial-glass-deep: color-mix(in srgb, var(--orrery-deep) 91%, #263b34);
+  --spatial-hairline: color-mix(in srgb, var(--orrery-label) 15%, transparent);
+  grid-template-rows: 78px 44px minmax(0, 1fr);
+  background-image:
+    linear-gradient(117deg, transparent 0 18%, color-mix(in srgb, var(--orrery-core) 7%, transparent) 18.1% 18.25%, transparent 18.4% 63%, color-mix(in srgb, var(--orrery-canon) 5%, transparent) 63.1% 63.24%, transparent 63.4%),
+    repeating-linear-gradient(23deg, transparent 0 98px, color-mix(in srgb, var(--orrery-label) 2.5%, transparent) 99px 100px),
+    linear-gradient(154deg, color-mix(in srgb, var(--orrery-branch) 7%, transparent), transparent 38%, color-mix(in srgb, var(--orrery-core) 5%, transparent) 72%, transparent),
+    var(--orrery-background-image, none);
+}
+
+.overview-view.spatial-active .orrery-v3::before {
+  opacity: .26;
+  background:
+    repeating-linear-gradient(106deg, transparent 0 156px, color-mix(in srgb, var(--orrery-canon) 4%, transparent) 157px 158px),
+    repeating-linear-gradient(17deg, transparent 0 212px, color-mix(in srgb, var(--orrery-label) 2.5%, transparent) 213px 214px);
+  mask-image: linear-gradient(90deg, transparent, #000 9% 91%, transparent);
+}
+
+.overview-view.spatial-active .orrery-v3-heading {
+  align-items: end;
+  gap: 20px;
+  padding: 17px 28px 8px;
+}
+
+.overview-view.spatial-active .orrery-v3-heading > div {
+  max-width: min(650px, 46vw);
+}
+
+.overview-view.spatial-active .orrery-v3-heading > div > span {
+  letter-spacing: .08em;
+}
+
+.overview-view.spatial-active .orrery-v3-heading h1 {
+  margin: 3px 0 2px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.overview-view.spatial-active .orrery-v3-heading p {
+  max-width: 560px;
+  font-size: 9px;
+}
+
+.overview-view.spatial-active .orrery-v3-heading dl {
+  margin-right: 280px;
+  padding: 0;
+}
+
+.overview-view.spatial-active .orrery-v3-project-band {
+  top: 17px;
+  right: 22px;
+}
+
+.overview-view.spatial-active .orrery-view-tools {
+  top: 17px;
+  right: 306px;
+  z-index: 20;
+}
+
+.spatial-route-handoff {
+  display: grid;
+  min-height: 100dvh;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: var(--orrery-label, #e6efe9);
+  background: var(--orrery-deep, #102621);
+}
+
+.spatial-route-handoff svg { color: var(--orrery-core, #65d8bd); animation: workspace-calibration 1.7s linear infinite; }
+.spatial-route-handoff strong { font-size: 16px; font-weight: 600; }
+.spatial-route-handoff span { color: color-mix(in srgb, var(--orrery-label, #e6efe9) 58%, transparent); font-size: 12px; }
+
+.overview-view.spatial-active .project-band-current,
+.overview-view.spatial-active .orrery-v3-controls label,
+.overview-view.spatial-active .orrery-v3-levels,
+.overview-view.spatial-active .orrery-v3-icon {
+  background: color-mix(in srgb, var(--spatial-glass-deep) 82%, transparent);
+  border-color: var(--spatial-hairline);
+  box-shadow: 0 9px 28px rgba(0, 0, 0, .23), inset 0 1px 0 color-mix(in srgb, var(--orrery-label) 7%, transparent);
+  backdrop-filter: blur(18px) saturate(112%);
+}
+
+.overview-view.spatial-active .orrery-v3-controls {
+  gap: 6px;
+  padding: 2px 28px 8px;
+}
+
+.overview-view.spatial-active .orrery-v3-controls > span {
+  min-width: 150px;
+}
+
+.overview-view.spatial-active .orrery-v3-stage {
+  isolation: isolate;
+}
+
+.overview-view.spatial-active .orrery-v3-stage::after {
+  z-index: 1;
+  opacity: .2;
+  background:
+    repeating-linear-gradient(118deg, transparent 0 164px, color-mix(in srgb, var(--orrery-label) 2.5%, transparent) 165px 166px),
+    linear-gradient(180deg, color-mix(in srgb, var(--orrery-deep) 4%, transparent), color-mix(in srgb, var(--orrery-deep) 26%, transparent));
+}
+
+/* The constellation is made of typography and one celestial mark, not stacked badges. */
+.orrery-v3-node.typographic {
+  grid-template-columns: 12px minmax(0, auto);
+  gap: 6px;
+  padding: 6px 7px;
+}
+
+.orrery-v3-node.typographic .node-luminary {
+  width: 12px;
+  height: 22px;
+}
+
+.orrery-v3-node.typographic .node-luminary b {
+  display: none;
+}
+
+.orrery-v3-node.typographic .node-luminary i {
+  width: 6px;
+  height: 6px;
+  border: 0;
+  box-shadow: 0 0 3px color-mix(in srgb, var(--orrery-label) 92%, transparent), 0 0 14px var(--type-star);
+}
+
+.orrery-v3-node.typographic::after {
+  left: 18px;
+}
+
+.orrery-v3-node.typographic:is(:hover, .selected, .focused, .navigating) {
+  background: color-mix(in srgb, var(--spatial-glass-deep, var(--orrery-deep)) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--type-star) 34%, transparent);
+  box-shadow: 0 13px 34px rgba(0, 0, 0, .32), inset 0 1px 0 color-mix(in srgb, var(--orrery-label) 8%, transparent);
+}
+
+.orrery-v3-node.typographic[data-kind="project"] {
+  --type-star: color-mix(in srgb, var(--orrery-canon) 68%, var(--orrery-core));
+}
+
+.orrery-v3-node.typographic[data-kind="project"] .node-luminary i {
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 6px var(--orrery-label), 0 0 22px var(--orrery-canon), 0 0 46px color-mix(in srgb, var(--orrery-core) 48%, transparent);
+}
+
+.orrery-v3-node.typographic[data-kind="project"] .node-title {
+  font-size: 18px;
+}
+
+.orrery-v3-node.typographic[data-kind="project"] .node-title,
+.orrery-v3-node.typographic[data-kind="project"] .node-copy { display: block; }
+
+.orrery-v3-node.typographic[data-kind="style"] { --type-star: color-mix(in srgb, var(--orrery-branch) 70%, var(--orrery-canon)); }
+.orrery-v3-node.typographic:is([data-kind="world"], [data-kind="location"], [data-kind="organization"]) { --type-star: color-mix(in srgb, var(--orrery-core) 65%, var(--orrery-canon)); }
+.orrery-v3-node.typographic[data-kind="formal-prose"] { --type-star: var(--orrery-canon); }
+.orrery-v3-node.typographic:is([data-lifecycle="locked"], [data-lifecycle="latent"]) { opacity: .68; filter: saturate(.72); }
+.orrery-v3-node.typographic[data-lifecycle="available"] .node-luminary i { animation: constellation-available 2.8s ease-in-out infinite; }
+.orrery-v3-node.typographic:is([data-lifecycle="active"], [data-lifecycle="reviewing"]) .node-luminary i { animation: constellation-active 1.45s ease-in-out infinite; }
+.orrery-v3-node.activity-running .node-luminary i { animation: constellation-active .95s ease-in-out infinite; }
+.orrery-v3-node.activity-blocked .node-luminary i { background: var(--orrery-warning); box-shadow: 0 0 7px var(--orrery-warning), 0 0 23px color-mix(in srgb, var(--orrery-warning) 68%, transparent); }
+.orrery-v3-node.typographic:is([data-lifecycle="formal"], [data-lifecycle="delivered"]) .node-luminary i { background: color-mix(in srgb, var(--orrery-canon) 78%, white); }
+.orrery-v3-node.typographic:is([data-lifecycle="blocked"], [data-lifecycle="awaiting"]) { --type-star: var(--orrery-warning); }
+
+.orrery-v3-node.symbolic .node-glyph {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: color-mix(in srgb, var(--orrery-branch) 76%, var(--orrery-label));
+  background: color-mix(in srgb, var(--orrery-deep) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--orrery-branch) 38%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--orrery-branch) 16%, transparent);
+}
+
+.orrery-v3-node.symbolic:is(:hover, .selected, .focused) .node-glyph {
+  color: var(--orrery-label);
+  border-color: color-mix(in srgb, var(--orrery-branch) 72%, transparent);
+  transform: scale(1.12);
+}
+
+/* Bottom navigation: chapter chronology is the foundation; tools sit above it. */
+.spatial-workspace-dock {
+  position: absolute;
+  z-index: 18;
+  bottom: 72px;
+  left: 50%;
+  display: flex;
+  max-width: calc(100vw - 280px);
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  overflow-x: auto;
+  color: var(--orrery-label);
+  background: color-mix(in srgb, var(--spatial-glass-deep) 79%, transparent);
+  border: 1px solid var(--spatial-hairline);
+  border-radius: 6px;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .34), inset 0 1px 0 color-mix(in srgb, var(--orrery-label) 8%, transparent);
+  backdrop-filter: blur(24px) saturate(116%);
+  transform: translateX(-50%);
+}
+
+.spatial-workspace-dock .dock-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.spatial-workspace-dock button {
+  position: relative;
+  display: inline-flex;
+  min-width: 35px;
+  height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 7px;
+  color: color-mix(in srgb, var(--orrery-label) 62%, transparent);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-family: var(--font-body);
+  font-size: 9px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.spatial-workspace-dock button:hover,
+.spatial-workspace-dock button.active {
+  color: var(--orrery-label);
+  background: color-mix(in srgb, var(--orrery-core) 13%, transparent);
+  border-color: color-mix(in srgb, var(--orrery-core) 32%, transparent);
+}
+
+.spatial-workspace-dock button.urgent {
+  color: color-mix(in srgb, var(--orrery-warning) 72%, white);
+  border-color: color-mix(in srgb, var(--orrery-warning) 38%, transparent);
+}
+
+.spatial-workspace-dock button[data-count]::after {
+  position: absolute;
+  top: -5px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  color: #fff;
+  background: var(--orrery-warning);
+  border: 1px solid color-mix(in srgb, var(--orrery-label) 66%, transparent);
+  border-radius: 50%;
+  font-size: 8px;
+  line-height: 12px;
+  content: attr(data-count);
+}
+
+.spatial-workspace-dock .dock-seam {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--spatial-hairline);
+}
+
+.chapter-rail {
+  right: 164px;
+  bottom: 10px;
+  left: 158px;
+  min-height: 52px;
+  background: color-mix(in srgb, var(--spatial-glass-deep) 74%, transparent);
+  border-color: var(--spatial-hairline);
+  backdrop-filter: blur(23px) saturate(112%);
+}
+
+.character-thread-rail {
+  bottom: 140px;
+  left: 20px;
+  width: 142px;
+  background: color-mix(in srgb, var(--spatial-glass-deep) 70%, transparent);
+  border-color: var(--spatial-hairline);
+}
+
+.orrery-v3-delivery-beacon {
+  right: 20px;
+  bottom: 17px;
+}
+
+.orrery-v3-progress-spindle {
+  right: 20px;
+  top: 70px;
+}
+
+.orrery-v3-caption {
+  bottom: 118px;
+  left: 24px;
+}
+
+/* Windows are compact observatory instruments. Page-white is never allowed to leak through. */
+.spatial-window {
+  --instrument-ink: color-mix(in srgb, var(--orrery-label) 91%, #d8e2de);
+  --instrument-muted: color-mix(in srgb, var(--orrery-label) 52%, transparent);
+  --ink-900: color-mix(in srgb, var(--orrery-label) 94%, #d9e2de);
+  --ink-800: color-mix(in srgb, var(--orrery-label) 82%, transparent);
+  --ink-700: color-mix(in srgb, var(--orrery-label) 69%, transparent);
+  --ink-600: color-mix(in srgb, var(--orrery-label) 57%, transparent);
+  --ink-500: color-mix(in srgb, var(--orrery-label) 45%, transparent);
+  --instrument-panel: color-mix(in srgb, var(--orrery-deep) 76%, #53645d);
+  --instrument-deep: color-mix(in srgb, var(--orrery-deep) 91%, #24362f);
+  --instrument-header: color-mix(in srgb, var(--orrery-deep) 80%, #53675e);
+  --instrument-line: color-mix(in srgb, var(--orrery-label) 14%, transparent);
+  color-scheme: dark;
+  color: var(--instrument-ink);
+  background: color-mix(in srgb, var(--spatial-glass) 88%, transparent);
+  border-color: color-mix(in srgb, var(--instrument-accent) 29%, var(--spatial-hairline));
+  border-radius: 6px;
+  box-shadow: 0 28px 78px rgba(0, 0, 0, .47), inset 0 1px 0 color-mix(in srgb, var(--orrery-label) 9%, transparent);
+  backdrop-filter: blur(28px) saturate(112%);
+}
+
+.spatial-window.fullscreen {
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--orrery-label) 7%, transparent), 0 36px 110px rgba(0, 0, 0, .6);
+}
+
+.spatial-window-header {
+  min-height: 38px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--instrument-accent) 11%, transparent), transparent 66%);
+  border-bottom-color: var(--instrument-line);
+}
+
+.spatial-window-drag small {
+  color: color-mix(in srgb, var(--instrument-accent) 72%, var(--instrument-muted));
+  letter-spacing: .08em;
+}
+
+.spatial-window-drag strong {
+  color: var(--instrument-ink);
+  font-size: 13px;
+}
+
+.spatial-window-scroll {
+  padding: 9px;
+}
+
+.node-action-deck {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.node-action-deck button {
+  min-width: 0;
+  justify-content: center;
+}
+
+.spatial-node-activity {
+  margin: 8px 0;
+  padding: 7px 8px;
+  color: var(--instrument-muted);
+  background: color-mix(in srgb, var(--instrument-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--instrument-accent) 24%, var(--instrument-line));
+  border-radius: 4px;
+}
+
+.spatial-node-activity header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  color: var(--instrument-ink);
+  font-size: 11px;
+}
+
+.spatial-node-activity header svg { color: var(--instrument-accent); }
+.spatial-node-activity header span { margin-left: auto; color: var(--instrument-accent); font-size: 9px; }
+.spatial-node-activity :is(p, ul) { margin: 0; font-size: 10px; line-height: 1.55; }
+
+.creative-workspace-host {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  color: var(--instrument-ink);
+  background: var(--instrument-deep);
+}
+
+.creative-workspace-host > .view,
+.creative-workspace-host > * > .view {
+  min-height: 100%;
+  padding: 12px;
+  color: var(--instrument-ink);
+  background: transparent;
+}
+
+.creative-workspace-host :is(h1, h2, h3, h4, strong, label, dt, dd) {
+  color: var(--instrument-ink);
+}
+
+.creative-workspace-host :is(p, small, .eyebrow) {
+  color: var(--instrument-muted);
+}
+
+.creative-workspace-host :is(section, article, aside, header, nav, .panel, .card) {
+  border-color: var(--instrument-line);
+}
+
+.creative-workspace-host :is(input, textarea, select) {
+  color: var(--instrument-ink);
+  background: color-mix(in srgb, var(--instrument-panel) 82%, transparent);
+  border-color: var(--instrument-line);
+}
+
+.creative-workspace-host .quality-heading,
+.creative-workspace-host .archive-heading,
+.creative-workspace-host .style-heading {
+  margin-bottom: 10px;
+}
+
+.creative-workspace-host :is(.quality-heading, .archive-heading, .style-heading) h1 {
+  font-size: 20px;
+}
+
+.creative-workspace-loading {
+  display: grid;
+  height: 100%;
+  min-height: 240px;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--instrument-muted);
+}
+
+.creative-workspace-loading i {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--instrument-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: workspace-calibration 1s linear infinite;
+}
+
+@keyframes constellation-available {
+  0%, 100% { opacity: .72; transform: scale(.88); }
+  50% { opacity: 1; transform: scale(1.22); }
+}
+
+@keyframes constellation-active {
+  0%, 100% { box-shadow: 0 0 4px var(--orrery-label), 0 0 12px var(--type-star); transform: scale(.9); }
+  50% { box-shadow: 0 0 7px var(--orrery-label), 0 0 27px var(--type-star); transform: scale(1.38); }
+}
+
+@keyframes workspace-calibration { to { transform: rotate(360deg); } }
+
+@media (max-width: 1120px) {
+  .overview-view.spatial-active .orrery-view-tools { right: 270px; }
+  .spatial-workspace-dock button span { display: none; }
+  .spatial-workspace-dock { max-width: calc(100vw - 200px); }
+  .overview-view.spatial-active .orrery-v3-heading dl { display: none; }
+}
+
+@media (max-width: 760px) {
+  .overview-view.spatial-active .orrery-view-tools { top: 66px; right: 10px; }
+  .overview-view.spatial-active .orrery-v3 { grid-template-rows: 58px 38px minmax(0, 1fr); }
+  .overview-view.spatial-active .orrery-v3-heading { padding: 11px 14px 4px; }
+  .overview-view.spatial-active .orrery-v3-heading h1 { max-width: 45vw; font-size: 18px; }
+  .overview-view.spatial-active .orrery-v3-project-band { top: 9px; right: 10px; }
+  .overview-view.spatial-active .orrery-v3-controls { padding: 0 12px 5px; }
+  .spatial-workspace-dock { right: 10px; bottom: 62px; left: 10px; max-width: none; transform: none; }
+  .spatial-workspace-dock .workspace-tools { display: none; }
+  .chapter-rail { right: 10px; bottom: 8px; left: 10px; }
+  .orrery-v3-delivery-beacon { right: 10px; bottom: 105px; }
+  .orrery-v3-caption { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orrery-v3-node.typographic .node-luminary i,
+  .creative-workspace-loading i { animation: none !important; }
+}

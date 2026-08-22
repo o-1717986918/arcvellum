@@ -3,7 +3,7 @@ import { curveProfilePoint } from "@/features/orrery/layout/curveProfiles";
 import { applyValidatedLayoutHints } from "@/features/orrery/layout/layoutHints";
 
 const PRIMARY = new Set(["chapter", "scene"]);
-const NARRATIVE_TYPES = new Set(["chapter", "scene"]);
+const NARRATIVE_TYPES = new Set(["project", "chapter", "scene"]);
 // A primary node needs enough room for both its physical glyph and a short
 // label at the opening camera scale.  This is deliberately larger than the
 // global-map cadence: the overview can zoom out, while a working segment must
@@ -61,12 +61,16 @@ export function buildSpatialLayout(
   const points = new Map<string, WorldPoint>();
   const seeded = seedFrom(layoutSeed);
 
+  nodes.filter((node) => (node.creative_kind || node.type) === "project")
+    .forEach((node) => points.set(node.node_id, { x: 0, y: 0.4, z: 0 }));
+
   // Chapter nuclei are the fixed celestial architecture. Scenes then orbit
   // their own chapter nucleus instead of being laid on one generic rail.
   context.chapters.forEach((node, index) => points.set(node.node_id, primaryPoint(grammar, node, index, context)));
   context.scenes.forEach((node, index) => points.set(node.node_id, primaryPoint(grammar, node, index, context)));
   nodes.filter((node) => !PRIMARY.has(node.type)).forEach((node) => {
-    const parent = node.parent_id ? points.get(node.parent_id) : undefined;
+    if (points.has(node.node_id)) return;
+    const parent = relatedAnchor(node, points) || (node.parent_id ? points.get(node.parent_id) : undefined);
     points.set(node.node_id, satellitePoint(grammar, parent || semanticAnchor(node, context), node, seeded));
   });
 
@@ -403,7 +407,8 @@ function satellitePoint(grammar: SpatialGrammar, anchor: WorldPoint, node: Spati
   const identity = hashNode(node.node_id, 29);
   const angle = pseudo(seed + identity) * Math.PI * 2;
   const role = satelliteProfile(node.type);
-  const magnitude = role.radius + (identity % 4) * role.spread;
+  const hierarchy = Math.max(0, Number(node.hierarchy_depth || 0));
+  const magnitude = role.radius + (identity % 4) * role.spread + Math.max(0, hierarchy - 1) * 0.34;
   const elevation = role.elevation + (identity % 3) * 0.32;
   const depth = grammar === "strata" ? Math.cos(angle) * magnitude * 0.45 : Math.sin(angle) * magnitude;
   return {
@@ -414,12 +419,30 @@ function satellitePoint(grammar: SpatialGrammar, anchor: WorldPoint, node: Spati
 }
 
 function satelliteProfile(type: string): { radius: number; spread: number; elevation: number; depthBias: number } {
+  if (type === "story-architecture") return { radius: 5.8, spread: 0.36, elevation: 2.4, depthBias: -0.8 };
+  if (type === "word-budget") return { radius: 5.2, spread: 0.34, elevation: -2.5, depthBias: -0.5 };
+  if (type === "style") return { radius: 5.6, spread: 0.44, elevation: 1.2, depthBias: 2.1 };
+  if (type === "world" || type === "location" || type === "organization") return { radius: 6.2, spread: 0.72, elevation: -1.25, depthBias: -2.5 };
   if (type === "character") return { radius: 3.8, spread: 0.72, elevation: 1.35, depthBias: 0.95 };
   if (type === "canon") return { radius: 2.8, spread: 0.56, elevation: -1.48, depthBias: -2.35 };
   if (type === "task" || type === "review") return { radius: 3.1, spread: 0.62, elevation: 3.15, depthBias: 1.38 };
   if (type === "branch") return { radius: 4.25, spread: 0.88, elevation: 1.8, depthBias: 0.82 };
   if (type === "promise" || type === "reader-question") return { radius: 3.45, spread: 0.72, elevation: 2.02, depthBias: 0.52 };
+  if (type === "draft" || type === "formal-prose") return { radius: 2.35, spread: 0.38, elevation: -1.85, depthBias: 0.2 };
+  if (type === "human-decision") return { radius: 4.4, spread: 0.5, elevation: 3.25, depthBias: 1.4 };
   return { radius: 2.2, spread: 0.5, elevation: 1.25, depthBias: 0.35 };
+}
+
+function relatedAnchor(node: SpatialNarrativeNode, points: Map<string, WorldPoint>): WorldPoint | undefined {
+  if ((node.creative_kind || node.type) !== "character") return undefined;
+  const sceneIds = Array.isArray(node.metrics.scene_ids) ? node.metrics.scene_ids.map(String) : [];
+  const related = sceneIds.map((sceneId) => points.get(`scene:${sceneId}`)).filter((point): point is WorldPoint => Boolean(point));
+  if (!related.length) return undefined;
+  return {
+    x: related.reduce((sum, point) => sum + point.x, 0) / related.length,
+    y: related.reduce((sum, point) => sum + point.y, 0) / related.length,
+    z: related.reduce((sum, point) => sum + point.z, 0) / related.length,
+  };
 }
 
 function relaxLocalCollisions(points: Map<string, WorldPoint>, nodes: SpatialNarrativeNode[], seed: number): void {
@@ -457,7 +480,7 @@ function relaxLocalCollisions(points: Map<string, WorldPoint>, nodes: SpatialNar
 }
 
 function visualWeight(node: SpatialNarrativeNode): number {
-  const type = node.type === "chapter" ? 3 : node.type === "scene" ? 2.7 : node.type === "canon" ? 2.3 : 1.2;
+  const type = node.type === "project" ? 4 : node.type === "chapter" ? 3 : node.type === "scene" ? 2.7 : node.type === "canon" ? 2.3 : 1.2;
   const status = node.status === "current" ? 0.9 : node.status === "blocked" ? 0.7 : node.status === "formal" ? 0.25 : 0;
   return type + status + node.importance;
 }

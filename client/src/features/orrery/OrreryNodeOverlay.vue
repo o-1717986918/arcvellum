@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, type Component } from "vue";
-import { BadgeCheck, BookMarked, CircleHelp, Clapperboard, GitFork, Landmark, Orbit, Sparkles, UserRound } from "lucide-vue-next";
+import { BadgeCheck, BookMarked, BookOpenText, CircleHelp, Clapperboard, FilePenLine, Fingerprint, GitFork, Landmark, MapPinned, Orbit, Scale, Sparkles, UserRound, Waypoints } from "lucide-vue-next";
 import type { SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
 import type { NarrativeFocusLevel } from "@/features/orrery/model/focusScope";
 import { observationWeight } from "@/features/orrery/layout/observationWindow";
@@ -18,6 +18,7 @@ const props = defineProps<{
   comparedNodeIds?: string[];
   level?: NarrativeFocusLevel;
   motionEvents?: SpatialNarrativeProjection["motion_events"];
+  activities?: SpatialNarrativeProjection["activities"];
   timeCursor?: number;
   timeWindow?: number;
 }>();
@@ -68,7 +69,7 @@ function isPinned(node: SpatialNarrativeNode): boolean {
 }
 
 function isTypographic(node: SpatialNarrativeNode): boolean {
-  return node.type === "chapter" || node.type === "scene" || node.type === "character";
+  return ["project", "story-architecture", "word-budget", "style", "world", "location", "organization", "chapter", "scene", "character", "formal-prose"].includes(node.creative_kind || node.type);
 }
 
 function isOverview(node: SpatialNarrativeNode): boolean {
@@ -105,8 +106,13 @@ function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
 }
 
 function labelFor(node: SpatialNarrativeNode): string {
-  const labels: Record<string, string> = { chapter: "章节", scene: "场景", character: "人物", branch: "分支", review: "审查", canon: "设定", promise: "承诺", "reader-question": "问题", task: "任务" };
-  return labels[node.type] || "资料";
+  const labels: Record<string, string> = {
+    project: "作品原点", "story-architecture": "全书架构", "word-budget": "篇幅规划", style: "文风",
+    world: "世界观", location: "地点", organization: "组织", chapter: "章节", scene: "场景", character: "人物",
+    branch: "分支", review: "审查", canon: "设定", promise: "承诺", "reader-question": "问题", draft: "候选正文",
+    "formal-prose": "正式正文", "human-decision": "创作决定", delivery: "交付",
+  };
+  return labels[node.creative_kind || node.type] || "作品资料";
 }
 
 function compactLabelFor(node: SpatialNarrativeNode): string {
@@ -132,7 +138,14 @@ function iconFor(node: SpatialNarrativeNode): Component {
     canon: Landmark,
     promise: Sparkles,
     "reader-question": CircleHelp,
-    task: Orbit,
+    project: Orbit,
+    "story-architecture": Waypoints,
+    "word-budget": Scale,
+    style: Fingerprint,
+    world: Landmark,
+    location: MapPinned,
+    draft: FilePenLine,
+    "formal-prose": BookOpenText,
   };
   return icons[node.type] || Orbit;
 }
@@ -141,6 +154,15 @@ function motionClass(node: SpatialNarrativeNode): Record<string, boolean> {
   const event = props.motionEvents?.find((item) => item.node_id === node.node_id);
   if (!event) return {};
   return { [`motion-${event.type}`]: true };
+}
+
+function activityClass(node: SpatialNarrativeNode): Record<string, boolean> {
+  const activity = props.activities?.find((item) => item.target === node.source_id || item.target === node.node_id);
+  if (!activity) return {};
+  return {
+    "activity-running": ["active", "running"].includes(activity.status),
+    "activity-blocked": ["blocked", "failed"].includes(activity.status),
+  };
 }
 
 function overviewClass(node: SpatialNarrativeNode): Record<string, boolean> {
@@ -171,10 +193,12 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       v-for="node in visible"
       :key="node.node_id"
       class="orrery-v3-node"
-      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), overviewClass(node)]"
+      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
       :data-status="node.status"
       :data-completion="node.completion_state"
       :data-type="node.type"
+      :data-kind="node.creative_kind || node.type"
+      :data-lifecycle="node.lifecycle || node.completion_state"
       :style="styleFor(node)"
       :aria-label="`${labelFor(node)}：${node.label}`"
       @click="emit('select', node)"

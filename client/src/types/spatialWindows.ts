@@ -1,7 +1,10 @@
 import type { SpatialNarrativeNode, SpatialNodeDetail } from "@/types/spatial";
 
-export type SpatialWindowKind = "node" | "progress" | "agent" | "reader" | "decisions" | "rules" | "health" | "delivery";
+export type SpatialWindowKind =
+  | "node" | "progress" | "agent" | "reader" | "decisions" | "rules" | "health" | "delivery"
+  | "archive" | "style" | "quality" | "strategy" | "observatory" | "archaeology";
 export type ReaderWindowMode = "peek" | "reading" | "immersive";
+export type WorkspaceWindowMode = "float" | "fullscreen";
 
 export interface SpatialWindowPosition {
   left: number;
@@ -32,6 +35,11 @@ export interface SpatialWindow {
   detail?: SpatialNodeDetail | null;
   anchor?: SpatialWindowAnchor;
   reader_mode?: ReaderWindowMode;
+  workspace_mode?: WorkspaceWindowMode;
+  workspace_return?: {
+    position: SpatialWindowPosition;
+    size: SpatialWindowSize;
+  };
   reader_return?: {
     position: SpatialWindowPosition;
     size: SpatialWindowSize;
