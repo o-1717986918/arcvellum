@@ -43,6 +43,7 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m pip install -e ".[api,test]"
           python -m pip install "pyinstaller==6.21.0"
           npm ci
@@ -53,6 +54,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           $version = python -c "from literary_engineering_studio import __version__; print(__version__)"
           $tag = "${{ github.ref_name }}".TrimStart("v")
           if ($version.Trim() -ne $tag) {
@@ -62,6 +64,7 @@ jobs:
       - name: Test Python and prompt contracts
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m unittest discover -s tests -v
           python -m compileall -q src
           python scripts/architecture_audit.py
@@ -76,12 +79,15 @@ jobs:
       - name: Test Vue client
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           npm run client:test
           npm run client:build
 
       - name: Test embedded Pi Worker
         shell: pwsh
-        run: npm run pi-worker:check
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run pi-worker:check
 
       # The Tauri build requires the frozen Python sidecar, which is generated
       # by build_desktop.ps1 and intentionally not tracked in Git. That script
@@ -90,6 +96,7 @@ jobs:
       - name: Build signed updater and installer
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           ./packaging/build_desktop.ps1 -SkipPythonInstall -SkipNodeInstall
 
       - name: Upload workflow artifact

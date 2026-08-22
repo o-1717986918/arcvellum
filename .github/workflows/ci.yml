@@ -26,6 +26,11 @@ jobs:
         run: |
           npm ci
           npm run client:build
+          # Python integration tests verify that a source checkout can locate
+          # the compiled bounded Worker. Build that artifact in this job rather
+          # than relying on another job's isolated workspace.
+          npm run pi-worker:install
+          npm run pi-worker:build
       - name: Install Studio test dependencies
         run: python -m pip install -e ".[api,test]"
       - name: Verify formal contracts
