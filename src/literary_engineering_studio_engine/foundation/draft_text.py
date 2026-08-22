@@ -18,6 +18,15 @@ INTERNAL_HEADING_RE = re.compile(
 # silently truncate legitimate literary subheadings such as scene or date
 # divisions inside a long chapter.
 PROSE_SECTION_RE = re.compile(r"(?ms)^##\s*(正文草稿|正文候选|修订正文候选)\s*\n(.*)\Z")
+WORKBENCH_ROOT_HEADING_RE = re.compile(
+    r"^\s{0,3}#\s*(?=.*(?:场景|scene))(?=.*(?:草稿|候选|修订|draft|candidate|revision)).+$",
+    re.IGNORECASE,
+)
+WORKBENCH_META_QUOTE_RE = re.compile(
+    r"^\s*>\s*(?:修订目标|创作目标|写作目标|场景目标|目标字数|正文目标|字数|任务|来源|版本|说明)\s*[:：]",
+    re.IGNORECASE,
+)
+MARKDOWN_RULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
 INTERNAL_SCENE_ID_RE = re.compile(r"\bscene[_-]?\d{1,6}\b", re.IGNORECASE)
 INTERNAL_SCENE_LINE_RE = re.compile(
     r"^\s{0,3}(?:#{1,6}\s*)?(?:[-*]\s*)?"
@@ -50,7 +59,28 @@ def final_body_from_workbench_text(text: str) -> str:
     match = PROSE_SECTION_RE.search(text)
     if match:
         return clean_final_body(match.group(2)).strip()
-    return clean_final_body(text).strip()
+    return clean_final_body(_without_workbench_preamble(text)).strip()
+
+
+def _without_workbench_preamble(text: str) -> str:
+    """Remove only an explicit scene workbench header, never a literary title."""
+
+    lines = text.splitlines()
+    index = next((offset for offset, line in enumerate(lines) if line.strip()), len(lines))
+    if index >= len(lines) or not WORKBENCH_ROOT_HEADING_RE.match(lines[index]):
+        return text
+    index += 1
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip() or WORKBENCH_META_QUOTE_RE.match(line) or MARKDOWN_RULE_RE.match(line):
+            index += 1
+            continue
+        break
+    if index < len(lines) and re.match(r"^\s{0,3}##\s+\S", lines[index]):
+        index += 1
+        while index < len(lines) and not lines[index].strip():
+            index += 1
+    return "\n".join(lines[index:])
 
 
 def final_body_from_draft_path(path: Path) -> str:

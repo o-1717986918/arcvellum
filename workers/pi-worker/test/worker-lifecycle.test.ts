@@ -291,6 +291,7 @@ describe("bounded worker lifecycle", () => {
 		expect(workerState.completed).toBe(false);
 		expect(workerState.blocked).toBe(true);
 		expect(workerState.blockerReason).toContain("before outputs passed");
+		expect(workerState.blockerReason).toContain("out/review.json:missing");
 	});
 
 	it("hands valid written outputs to Studio before the no-progress guard", async () => {

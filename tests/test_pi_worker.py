@@ -208,6 +208,14 @@ class PiWorkerRuntimeTests(unittest.TestCase):
             run_root.mkdir()
             prompt = workspace / "AGENT_TASK.md"
             prompt.write_text("repair exact project targets", encoding="utf-8")
+            (workspace / "canon").mkdir()
+            (workspace / "scenes").mkdir()
+            (workspace / "canon" / "timeline.yaml").write_text(
+                "events: []\n", encoding="utf-8"
+            )
+            (workspace / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\n", encoding="utf-8"
+            )
             runtime = PiWorkerRuntime(
                 {
                     "executable": sys.executable,
@@ -241,6 +249,8 @@ class PiWorkerRuntimeTests(unittest.TestCase):
             repair_targets,
             ["canon/timeline.yaml", "scenes/scene_0001.yaml"],
         )
+        self.assertEqual(invocation[invocation.index("--max-turns") + 1], "8")
+        self.assertEqual(invocation[invocation.index("--max-tools") + 1], "12")
 
     def test_incomplete_worker_result_is_classified_for_studio(self):
         with tempfile.TemporaryDirectory() as temporary:

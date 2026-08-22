@@ -478,7 +478,12 @@ export async function settleTurnBudget(
 		return;
 	}
 	state.blocked = true;
-	state.blockerReason = "turn budget exhausted before outputs passed local validation";
+	const issueSummary = state.lastValidation.issues
+		.slice(0, 4)
+		.map((issue) => `${issue.path}:${issue.code}`)
+		.join(", ");
+	state.blockerReason = "turn budget exhausted before outputs passed local validation"
+		+ (issueSummary ? `: ${issueSummary}` : "");
 }
 
 /**

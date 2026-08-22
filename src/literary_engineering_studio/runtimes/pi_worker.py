@@ -292,6 +292,12 @@ class PiWorkerRuntime(AgentRuntime):
                     "repair_references": tuple(repair_references),
                 }
             )
+            _ensure_repair_operation_budget(
+                self._execution_overrides,
+                self.settings,
+                workspace,
+                tuple(repair_targets),
+            )
         if reasoning_policy:
             self._execution_overrides["reasoning_policy"] = reasoning_policy
         try:
@@ -407,6 +413,33 @@ class PiWorkerRuntime(AgentRuntime):
         if not isinstance(raw, (list, tuple)):
             return ()
         return tuple(str(item).strip() for item in raw if str(item).strip())
+
+
+def _ensure_repair_operation_budget(
+    overrides: dict[str, object],
+    settings: Mapping[str, object],
+    workspace: Path,
+    targets: tuple[str, ...],
+) -> None:
+    """Reserve one deterministic correction pass for every repair target."""
+
+    existing = sum((workspace / Path(relative)).is_file() for relative in targets)
+    operation_floor = max(2, existing + (2 * len(targets)) + 2)
+    for key, default in (("max_turns", 6), ("max_tool_calls", 12)):
+        configured = overrides.get(key, settings.get(key))
+        try:
+            current = int(configured) if configured not in {None, ""} else default
+        except (TypeError, ValueError):
+            current = default
+        overrides[key] = max(current, operation_floor)
+    budget = overrides.get("reasoning_budget")
+    if isinstance(budget, Mapping):
+        normalized = dict(budget)
+        normalized["max_provider_requests"] = max(
+            int(normalized.get("max_provider_requests") or 0),
+            operation_floor,
+        )
+        overrides["reasoning_budget"] = normalized
 
 
 def _public_event_data(value: dict[str, Any]) -> dict[str, Any]:
