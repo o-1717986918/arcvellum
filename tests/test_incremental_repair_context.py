@@ -426,6 +426,54 @@ class IncrementalRepairContextTests(unittest.TestCase):
             self.assertIn("不得等量替换", prepared.prompt)
             self.assertNotIn("修订应优先等量替换", prepared.prompt)
 
+    def test_exact_source_revision_issue_selects_only_the_revision_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = "drafts/revisions/scene_0005_revision.md"
+            manifest = "drafts/revisions/scene_0005_revision.json"
+            task = _task(
+                root,
+                (candidate, manifest),
+                current_state="target-length-revision",
+            )
+            task.payload.update(
+                {
+                    "revision_source": "drafts/scenes/scene_0005.md",
+                    "agent_source_paths": [
+                        "drafts/scenes/scene_0005.md",
+                        "canon/timeline.yaml",
+                    ],
+                }
+            )
+            sandbox = _sandbox(root)
+            source = sandbox.workspace / "drafts/scenes/scene_0005.md"
+            source.parent.mkdir(parents=True)
+            source.write_text("精确原始正文。", encoding="utf-8")
+            for relative in (candidate, manifest):
+                output = sandbox.workspace / relative
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text("{}" if relative.endswith(".json") else "修订正文", encoding="utf-8")
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "scene-revision-invalid",
+                        f"{manifest}#anti_evasion_rows[0].source_excerpt",
+                        "anti_evasion_rows[0].source_excerpt is not present in the exact source body",
+                        "按 exact-source 契约修正 manifest。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(task, sandbox)
+
+            prepared = coordinator.prepare(result, 1, 2)
+            payload = json.loads(prepared.artifact_path.read_text(encoding="utf-8"))
+            coordinator.finalize()
+
+            self.assertEqual(prepared.repair_references, ("drafts/scenes/scene_0005.md",))
+            self.assertEqual(payload["repair_references"], ["drafts/scenes/scene_0005.md"])
+            self.assertNotIn("canon/timeline.yaml", payload["repair_references"])
+
     def test_prose_repair_keeps_style_and_budget_as_cross_turn_guards(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

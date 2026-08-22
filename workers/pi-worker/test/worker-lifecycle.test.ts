@@ -362,6 +362,7 @@ function context(): TaskContext {
 		semanticPassCondition: {},
 		promptAsset: {},
 		promptAccess: {},
+		repairReferences: [],
 		maxResultChars: 4000,
 		raw: {},
 	};

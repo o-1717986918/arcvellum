@@ -28,6 +28,7 @@ export interface TaskContext {
 	promptAsset: Record<string, unknown>;
 	promptAccess: Record<string, unknown>;
 	evidenceIndex: Record<string, string>;
+	repairReferences: string[];
 	maxResultChars: number;
 	raw: Record<string, unknown>;
 }
@@ -45,6 +46,7 @@ export interface WorkerOptions {
 	providerReliability: ProviderReliabilityPolicy;
 	mode: "task" | "repair";
 	repairTargets: string[];
+	repairReferences: string[];
 }
 
 export interface ProviderReliabilityPolicy {

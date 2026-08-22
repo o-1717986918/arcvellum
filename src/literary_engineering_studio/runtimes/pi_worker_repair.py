@@ -19,7 +19,7 @@ def run_pi_worker_repairs(
     max_repairs: int,
     repair_prompt_builder: Callable[[Any, int, int], Any] | None,
     repair_turn_finalizer: Callable[[], dict[str, object]] | None,
-    run_turn: Callable[[Path, Path, tuple[str, ...], str], RuntimeResult],
+    run_turn: Callable[[Path, Path, tuple[str, ...], tuple[str, ...], str], RuntimeResult],
     emit: Callable[[str, dict[str, Any]], None],
 ) -> RuntimeResult:
     """Run bounded issue-focused repairs in fresh processes within one workspace."""
@@ -123,7 +123,7 @@ def _execute_repair_turn(
     run_root: Path,
     repair_prompt_builder: Callable[[Any, int, int], Any],
     repair_turn_finalizer: Callable[[], dict[str, object]] | None,
-    run_turn: Callable[[Path, Path, tuple[str, ...], str], RuntimeResult],
+    run_turn: Callable[[Path, Path, tuple[str, ...], tuple[str, ...], str], RuntimeResult],
     emit: Callable[[str, dict[str, Any]], None],
 ) -> RuntimeResult:
     prepared = repair_prompt_builder(preflight, attempt, maximum)
@@ -139,8 +139,13 @@ def _execute_repair_turn(
             for item in getattr(prepared, "repair_targets", ())
             if str(item).strip()
         )
+        references = tuple(
+            str(item).strip()
+            for item in getattr(prepared, "repair_references", ())
+            if str(item).strip()
+        )
         reasoning_level = str(getattr(prepared, "reasoning_level", "") or "")
-        result = run_turn(prompt_path, attempt_root, targets, reasoning_level)
+        result = run_turn(prompt_path, attempt_root, targets, references, reasoning_level)
         metadata = dict(result.metadata or {})
         metadata["repair_reasoning_level"] = reasoning_level
         return replace(result, metadata=metadata)

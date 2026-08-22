@@ -60,7 +60,12 @@ export interface WorkerResult {
 }
 
 export async function runWorker(options: WorkerOptions, prompt: string, emit: RuntimeEventSink): Promise<WorkerResult> {
-	const context = await loadTaskContext(options.workspace, options.allowedStates, options.repairTargets);
+	const context = await loadTaskContext(
+		options.workspace,
+		options.allowedStates,
+		options.repairTargets,
+		options.repairReferences,
+	);
 	const [provider, modelId] = parseModelId(options.model);
 	const credentials = new ReadOnlyJsonCredentialStore(options.authPath);
 	const models = builtinModels({ credentials });
@@ -297,10 +302,13 @@ async function existingRepairSources(
 	workspace: string,
 ): Promise<string[]> {
 	const existing: string[] = [];
-	for (const output of context.agentOwnedOutputs) {
+	for (const path of [
+		...context.agentOwnedOutputs.map((output) => output.path),
+		...context.repairReferences,
+	]) {
 		try {
-			await readAuthorizedFile(workspace, output.path);
-			existing.push(output.path);
+			await readAuthorizedFile(workspace, path);
+			existing.push(path);
 		} catch {
 			// A missing repair target must be created directly.
 		}

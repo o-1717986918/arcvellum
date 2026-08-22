@@ -48,6 +48,7 @@ class PreparedRepairContext:
     protected_count: int
     excerpt_characters: int
     repair_targets: tuple[str, ...]
+    repair_references: tuple[str, ...]
     reasoning_level: str
 
     def event_fields(self) -> dict[str, object]:
@@ -56,6 +57,7 @@ class PreparedRepairContext:
             "repair_prompt_characters": len(self.prompt),
             "repair_excerpt_characters": self.excerpt_characters,
             "repair_target_count": self.target_count,
+            "repair_reference_count": len(self.repair_references),
             "repair_protected_count": self.protected_count,
             "repair_write_scope_mode": self.write_scope_mode,
             "repair_reasoning_level": self.reasoning_level,
@@ -118,6 +120,11 @@ class RepairContextCoordinator:
             invalid_outputs, self._previous_target_digests
         )
         reasoning_contract = _reasoning_repair_contract(self.reasoning_budget, result, attempt)
+        repair_references = _repair_reference_paths(
+            self.task,
+            result.issues,
+            self.sandbox.workspace,
+        )
         semantic_payload = _semantic_payload_with_guard(
             self.task,
             result,
@@ -133,6 +140,7 @@ class RepairContextCoordinator:
             self._seen_issue_codes,
         )
         semantic_payload["repair_session"] = "same-session" if self.same_session_required else "fresh-bounded-session"
+        semantic_payload["repair_references"] = list(repair_references)
         semantic_payload["stagnation"] = stagnation
         self._previous_target_digests = target_digests
         digest = _canonical_sha256(semantic_payload)
@@ -159,6 +167,7 @@ class RepairContextCoordinator:
             protected_count=len(protected),
             excerpt_characters=excerpt_characters,
             repair_targets=targets,
+            repair_references=repair_references,
             reasoning_level=str(reasoning_contract.get("level") or ""),
         )
 
@@ -207,6 +216,33 @@ def _stagnation_contract(
             if unchanged else ""
         ),
     }, target_digests
+
+
+def _repair_reference_paths(
+    task: TaskPackage,
+    issues: tuple[PreflightIssue, ...],
+    workspace: Path,
+) -> tuple[str, ...]:
+    needs_exact_source = any(
+        "anti_evasion_rows" in f"{issue.message} {issue.repair}"
+        or "exact-source" in f"{issue.message} {issue.repair}".casefold()
+        or "exact source body" in f"{issue.message} {issue.repair}".casefold()
+        for issue in issues
+    )
+    if not needs_exact_source:
+        return ()
+    source = str(task.payload.get("revision_source") or "").strip().replace("\\", "/")
+    if not source or source.startswith("/") or ":" in source or ".." in source.split("/"):
+        return ()
+    authorized = {
+        str(item).strip().replace("\\", "/")
+        for key in ("agent_source_paths", "source_paths", "context_must_inline_paths")
+        for item in (task.payload.get(key) or [])
+        if str(item).strip()
+    }
+    if source not in authorized or not (workspace / Path(source)).is_file():
+        return ()
+    return (source,)
 
 
 def _issue_ids(issue_rows: list[dict[str, str]]) -> tuple[str, ...]:

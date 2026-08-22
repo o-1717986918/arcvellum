@@ -130,6 +130,8 @@ class PiWorkerRuntime(AgentRuntime):
             command.extend(["--mode", mode])
         for target in self._repair_targets():
             command.extend(["--repair-target", target])
+        for reference in self._repair_references():
+            command.extend(["--repair-reference", reference])
         return tuple(command)
 
     def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
@@ -252,7 +254,7 @@ class PiWorkerRuntime(AgentRuntime):
                 max_repairs=int(max_repairs or 0),
                 repair_prompt_builder=repair_prompt_builder,
                 repair_turn_finalizer=repair_turn_finalizer,
-                run_turn=lambda repair_prompt, repair_root, repair_targets, repair_reasoning: self._execute_once(
+                run_turn=lambda repair_prompt, repair_root, repair_targets, repair_references, repair_reasoning: self._execute_once(
                     workspace,
                     repair_prompt,
                     repair_root,
@@ -260,6 +262,7 @@ class PiWorkerRuntime(AgentRuntime):
                     event_sink=event_sink,
                     cancel_event=cancel_event,
                     repair_targets=repair_targets,
+                    repair_references=repair_references,
                     reasoning_policy=repair_reasoning,
                 ),
                 emit=event_sink or (lambda _event, _data: None),
@@ -277,6 +280,7 @@ class PiWorkerRuntime(AgentRuntime):
         event_sink=None,
         cancel_event=None,
         repair_targets: Sequence[str] = (),
+        repair_references: Sequence[str] = (),
         reasoning_policy: str = "",
     ) -> RuntimeResult:
         previous = dict(self._execution_overrides)
@@ -285,6 +289,7 @@ class PiWorkerRuntime(AgentRuntime):
                 {
                     "worker_mode": "repair",
                     "repair_targets": tuple(repair_targets),
+                    "repair_references": tuple(repair_references),
                 }
             )
         if reasoning_policy:
@@ -393,6 +398,12 @@ class PiWorkerRuntime(AgentRuntime):
 
     def _repair_targets(self) -> tuple[str, ...]:
         raw = self._execution_overrides.get("repair_targets")
+        if not isinstance(raw, (list, tuple)):
+            return ()
+        return tuple(str(item).strip() for item in raw if str(item).strip())
+
+    def _repair_references(self) -> tuple[str, ...]:
+        raw = self._execution_overrides.get("repair_references")
         if not isinstance(raw, (list, tuple)):
             return ()
         return tuple(str(item).strip() for item in raw if str(item).strip())

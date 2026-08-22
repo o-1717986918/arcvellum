@@ -7,6 +7,7 @@ export async function loadTaskContext(
 	workspace: string,
 	allowedStates: readonly string[],
 	repairTargets: readonly string[] = [],
+	repairReferences: readonly string[] = [],
 ): Promise<TaskContext> {
 	const raw = await readJson(join(workspace, "TASK_CONTEXT.json"));
 	const task = await readJson(join(workspace, "_task", "task.json"));
@@ -56,8 +57,15 @@ export async function loadTaskContext(
 	}
 
 	const repairTargetSet = new Set(repairTargets.map(normalizeRelativePath));
+	const repairReferenceSet = new Set(repairReferences.map(normalizeRelativePath));
 	if ([...repairTargetSet].some((item) => !agentOwnedOutputs.some((output) => output.path === item))) {
 		throw new Error("repair target exceeds Agent-owned expected outputs");
+	}
+	if ([...repairReferenceSet].some((item) => !readablePaths.includes(item))) {
+		throw new Error("repair reference exceeds the readable capability manifest");
+	}
+	if ([...repairReferenceSet].some((item) => repairTargetSet.has(item))) {
+		throw new Error("repair reference must be read-only and distinct from repair targets");
 	}
 	const activeOutputs = repairTargetSet.size > 0
 		? agentOwnedOutputs.filter((item) => repairTargetSet.has(item.path))
@@ -74,9 +82,9 @@ export async function loadTaskContext(
 		executionPolicy,
 		expectedOutputs: repairTargetSet.size > 0 ? activePaths : expectedOutputs,
 		agentOwnedOutputs: activeOutputs,
-		exactOnDemand: repairTargetSet.size > 0 ? [] : exactOnDemand,
+		exactOnDemand: repairTargetSet.size > 0 ? [...repairReferenceSet] : exactOnDemand,
 		excluded,
-		readablePaths: repairTargetSet.size > 0 ? activePaths : readablePaths,
+		readablePaths: repairTargetSet.size > 0 ? [...activePaths, ...repairReferenceSet] : readablePaths,
 		writablePaths: repairTargetSet.size > 0 ? activePaths : writablePaths,
 		hardConstraints: stringList(raw.hard_constraints),
 		styleConstraints: stringList(raw.style_constraints),
@@ -87,6 +95,7 @@ export async function loadTaskContext(
 		promptAsset: recordValue(raw.prompt_asset),
 		promptAccess: promptAccess ?? {},
 		evidenceIndex,
+		repairReferences: [...repairReferenceSet],
 		maxResultChars: positiveInteger(controlled.max_result_chars, 24_000),
 		raw,
 	};

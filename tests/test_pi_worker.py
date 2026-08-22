@@ -433,6 +433,7 @@ class PiWorkerRuntimeTests(unittest.TestCase):
                 repair_prompt_builder=lambda _result, attempt, maximum: SimpleNamespace(
                     prompt=f"# Studio Incremental Repair {attempt}/{maximum}\nfix the fixture output",
                     repair_targets=("result.md",),
+                    repair_references=("source.md",),
                     reasoning_level="medium",
                     event_fields=lambda: {"repair_context_digest": "fixture"},
                 ),
@@ -452,6 +453,10 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(
             invocation[invocation.index("--repair-target") + 1],
             "result.md",
+        )
+        self.assertEqual(
+            invocation[invocation.index("--repair-reference") + 1],
+            "source.md",
         )
         self.assertEqual(invocation[invocation.index("--thinking") + 1], "medium")
         self.assertEqual(result.metadata["repair_reasoning_level"], "medium")

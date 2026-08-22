@@ -194,14 +194,18 @@ export function createWorkerTools(
 		},
 	];
 	if (options.mode === "repair") {
+		const repairReadPaths = [
+			...context.agentOwnedOutputs.map((item) => item.path),
+			...context.repairReferences,
+		];
 		tools.splice(2, 0, {
 			name: "read_repair_target",
 			label: "Read Next Repair Target",
-			description: "Read the next existing Studio-authorized repair target. Call with an empty object; the Worker chooses the exact path deterministically.",
+			description: "Read the next existing Studio-authorized repair target or read-only reference. Call with an empty object; the Worker chooses the exact path deterministically.",
 			parameters: EMPTY_PARAMETERS,
 			executionMode: "sequential",
 			execute: async () => {
-				for (const path of ownedPaths) {
+				for (const path of repairReadPaths) {
 					if (state.readPaths.has(path)) continue;
 					try {
 						const content = await readAuthorizedFile(options.workspace, path);

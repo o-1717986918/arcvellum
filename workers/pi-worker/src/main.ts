@@ -92,6 +92,7 @@ function parseOptions(args: string[]): WorkerOptions {
 	const mode = single(values, "--mode") || "task";
 	if (!isWorkerMode(mode)) throw new Error(`unsupported worker mode: ${mode}`);
 	const repairTargets = values.get("--repair-target") ?? [];
+	const repairReferences = values.get("--repair-reference") ?? [];
 	if (mode === "repair" && repairTargets.length === 0) {
 		throw new Error("repair mode requires at least one --repair-target");
 	}
@@ -115,6 +116,7 @@ function parseOptions(args: string[]): WorkerOptions {
 		},
 		mode,
 		repairTargets,
+		repairReferences,
 	};
 }
 

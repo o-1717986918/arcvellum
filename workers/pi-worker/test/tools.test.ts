@@ -199,9 +199,11 @@ describe("local output validation", () => {
 		await mkdir(join(root, "out"), { recursive: true });
 		await writeFile(join(root, "out", "review.json"), '{"status":"needs_revision"}\n', "utf8");
 		await writeFile(join(root, "out", "review.md"), "# Needs revision\n", "utf8");
+		await writeFile(join(root, "source.md"), "exact revision source\n", "utf8");
 		const workerState = state();
 		const repairOptions = { ...options(root), mode: "repair" as const };
-		const read = createWorkerTools(context(), repairOptions, workerState, () => undefined)
+		const repairContext = { ...context(), repairReferences: ["source.md"] };
+		const read = createWorkerTools(repairContext, repairOptions, workerState, () => undefined)
 			.find((tool) => tool.name === "read_repair_target");
 
 		const first = await read?.execute("call", {});
@@ -212,7 +214,9 @@ describe("local output validation", () => {
 
 		expect(first?.content[0]?.text).toContain("needs_revision");
 		expect(second?.content[0]?.text).toContain("Needs revision");
-		expect([...workerState.readPaths]).toEqual(["out/review.json", "out/review.md"]);
+		const reference = await read?.execute("call", {});
+		expect(reference?.content[0]?.text).toContain("exact revision source");
+		expect([...workerState.readPaths]).toEqual(["out/review.json", "out/review.md", "source.md"]);
 		const handoff = await read?.execute("call", {});
 		expect(handoff?.content[0]?.text).toContain('"status": "read_phase_complete"');
 		expect(handoff?.content[0]?.text).toContain('"next_tool": "write_expected_output"');
@@ -359,6 +363,7 @@ function options(workspace: string): WorkerOptions {
 		},
 		mode: "task",
 		repairTargets: [],
+		repairReferences: [],
 	};
 }
 
@@ -408,6 +413,7 @@ function context(): TaskContext {
 		promptAsset: {},
 		promptAccess: {},
 		evidenceIndex: {},
+		repairReferences: [],
 		maxResultChars: 4000,
 		raw: {},
 	};
