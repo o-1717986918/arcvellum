@@ -1331,6 +1331,26 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(cycle.dependency_kind, "target-length-repair")
             self.assertEqual(cycle.resume_route_index, 1)
 
+            loop.repair_probe = lambda _project: False
+            resumed = loop._enter_route(
+                {
+                    "current_route": "scene-development",
+                    "current_task_id": "scene-development-scene-0006-target-length-revision",
+                },
+                2,
+            )
+            self.assertEqual(resumed.route, "review-and-audit")
+            self.assertEqual(
+                host.runs.update_autopilot_run.call_args.kwargs["route_index"],
+                1,
+            )
+            dependency_events = [
+                call.args
+                for call in host.runs.append_autopilot_event.call_args_list
+                if call.args[1] == "route.dependency_ready"
+            ]
+            self.assertEqual(dependency_events[-1][2]["dependency_kind"], "target-length-repair")
+
             loop.results.repair_probe = lambda _project: False
             result = WorkerRunResult(
                 "route_ready",

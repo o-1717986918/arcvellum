@@ -127,6 +127,27 @@ class ClaimedRunLoop:
             scene_probe=self.scene_probe,
             owner=f"autopilot:{self.run_id}",
         )
+        dependency_kind = self._completed_export_dependency(run, cycle)
+        if dependency_kind:
+            route_index = self.route_order.index("review-and-audit")
+            cycle = resolve_route_cycle(
+                self.project,
+                self.route_order,
+                route_index,
+                asset_probe=self.dependency_probe,
+                length_repair_probe=self.repair_probe,
+                scene_probe=self.scene_probe,
+                owner=f"autopilot:{self.run_id}",
+            )
+            self.host.runs.append_autopilot_event(
+                self.run_id,
+                "route.dependency_ready",
+                {
+                    "route": "scene-development",
+                    "resume_route": "review-and-audit",
+                    "dependency_kind": dependency_kind,
+                },
+            )
         route_changed = str(run.get("current_route") or "") != cycle.route
         self.host.runs.update_autopilot_run(
             self.run_id,
@@ -145,6 +166,26 @@ class ClaimedRunLoop:
                 data,
             )
         return cycle
+
+    def _completed_export_dependency(
+        self,
+        run: dict[str, Any],
+        cycle: RouteCycle,
+    ) -> str:
+        if (
+            cycle.planned_route != "export-and-release"
+            or cycle.dependency_route
+            or str(run.get("current_route") or "") != "scene-development"
+            or not str(run.get("current_task_id") or "").startswith("scene-development-")
+            or "review-and-audit" not in self.route_order
+        ):
+            return ""
+        task_id = str(run.get("current_task_id") or "")
+        return (
+            "target-length-repair"
+            if "target-length-revision" in task_id
+            else "scene-closure"
+        )
 
     def _proactive_choice_stopped(self, cycle: RouteCycle) -> bool:
         handled = self.host._resolve_proactive_choice(
