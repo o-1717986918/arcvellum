@@ -58,12 +58,12 @@
 }
 
 .orrery-v3-node .node-luminary i {
-  width: 4px;
-  height: 4px;
-  background: var(--type-star);
-  border: 0;
+  width: 5px;
+  height: 5px;
+  background: color-mix(in srgb, var(--type-star) 76%, white);
+  border: 1px solid color-mix(in srgb, white 72%, var(--type-star));
   border-radius: 50%;
-  box-shadow: 0 0 7px var(--type-star), 0 0 18px color-mix(in srgb, var(--type-star) 46%, transparent);
+  box-shadow: 0 0 4px white, 0 0 10px var(--type-star), 0 0 25px color-mix(in srgb, var(--type-star) 68%, transparent);
 }
 
 .orrery-v3-node .node-luminary b {
@@ -123,7 +123,7 @@
 
 .orrery-v3-node.typographic[data-completion="planned"] .node-luminary,
 .orrery-v3-node.typographic[data-completion="planned"] .node-copy {
-  opacity: .76;
+  opacity: 1;
 }
 
 .orrery-v3-node.typographic[data-completion="completed"] .node-luminary i {
@@ -144,13 +144,20 @@
   display: grid;
   width: 10px;
   height: 18px;
-  transform: scale(1.42);
+  transform: scale(1.56);
 }
 
 .orrery-v3-node.typographic.overview .node-luminary i {
   width: 5px;
   height: 5px;
   box-shadow: 0 0 9px var(--type-star), 0 0 24px color-mix(in srgb, var(--type-star) 58%, transparent);
+}
+
+.orrery-v3-node.typographic.overview[data-type="scene"] .node-luminary i {
+  width: 7px;
+  height: 7px;
+  background: color-mix(in srgb, var(--orrery-core) 58%, white);
+  box-shadow: 0 0 4px white, 0 0 11px var(--orrery-core), 0 0 27px color-mix(in srgb, var(--orrery-core) 72%, transparent);
 }
 
 .orrery-v3-node.typographic.overview .node-title {
@@ -170,7 +177,7 @@
 }
 
 .orrery-v3-node.typographic.overview[data-type="chapter"] > .node-luminary {
-  opacity: 0;
+  opacity: 1;
 }
 
 .orrery-v3-stage .narrative-chapter-anchor-halo {
@@ -183,12 +190,38 @@
 }
 
 .orrery-v3-stage .narrative-chapter-anchor-label {
+  display: block;
+  fill: color-mix(in srgb, var(--orrery-canon) 78%, white);
+  font-family: var(--font-utility);
+  font-size: 9px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: color-mix(in srgb, var(--orrery-deep) 88%, transparent);
+  stroke-width: 3px;
+}
+
+.orrery-v3-node.typographic.label-suppressed .node-copy,
+.orrery-v3-node.typographic.overview.label-suppressed[data-type="scene"] .node-copy,
+.orrery-v3-node.typographic.overview.label-suppressed[data-type="character"] .node-copy {
   display: none;
 }
 
-.orrery-v3-node.typographic.overview[data-type="scene"] .node-copy,
-.orrery-v3-node.typographic.overview[data-type="character"] .node-copy {
-  display: none;
+.orrery-v3-node.typographic.label-suppressed {
+  grid-template-columns: 14px;
+  min-width: 22px;
+  padding: 4px;
+}
+
+.orrery-v3-node.typographic.label-suppressed .node-luminary {
+  transform: scale(1.48);
+}
+
+.orrery-v3-node.typographic.overview.label-suppressed[data-type="scene"] .node-luminary {
+  transform: scale(1.72);
+}
+
+.orrery-v3-node.typographic[data-completion="completed"] .node-luminary {
+  opacity: 1;
 }
 
 .orrery-v3-node.typographic:is(.selected,.focused,.navigating,.forced-label) .node-copy {

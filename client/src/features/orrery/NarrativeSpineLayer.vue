@@ -339,7 +339,7 @@ function threadColor(value: string): string {
     <g v-for="(cluster, index) in spineClusters" :key="cluster.id" class="narrative-chapter-anchor" :class="chapterState(cluster.id)" :data-completion="chapterCompletion(cluster)">
       <circle class="narrative-chapter-anchor-halo" :cx="cluster.anchor.x" :cy="cluster.anchor.y" r="12" />
       <circle class="narrative-chapter-anchor-core" :cx="cluster.anchor.x" :cy="cluster.anchor.y" r="4" />
-      <text v-if="cluster.anchor.visible && cluster.anchor.scale >= 0.56" class="narrative-chapter-anchor-label" :x="cluster.anchor.x + 10" :y="cluster.anchor.y - 10">{{ String(index + 1).padStart(2, "0") }}</text>
+      <text v-if="cluster.anchor.visible && cluster.anchor.scale >= 0.5" class="narrative-chapter-anchor-label" :x="cluster.anchor.x + 10" :y="cluster.anchor.y - 10">{{ String(index + 1).padStart(2, "0") }}</text>
     </g>
     <path
       v-for="connection in localFlowPaths"

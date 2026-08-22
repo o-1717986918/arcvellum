@@ -181,6 +181,12 @@ async function verifySemanticField(
     ? fixture.chapter_count
     : fixture.scene_count;
   expect(await visibleNodeCount(page)).toBeGreaterThanOrEqual(expectedNodeFloor);
+  if (focus === "book") {
+    // The opening shot is a true whole-work constellation, not a cropped
+    // opening segment with most chapter nuclei outside the viewport.
+    await expect.poll(() => page.locator('.orrery-v3-node[data-type="chapter"]').count())
+      .toBeGreaterThanOrEqual(Math.min(6, fixture.chapter_count));
+  }
   await expect(page.locator(".narrative-spine-foundation")).toHaveCount(1);
   expect(await page.locator(".narrative-spine-segment").count()).toBeGreaterThan(0);
   const relationCount = await page.locator(

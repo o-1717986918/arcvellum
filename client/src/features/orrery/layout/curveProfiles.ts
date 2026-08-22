@@ -92,8 +92,8 @@ export function curveProfilePoint(grammar: SpatialGrammar, input: CurveProfileIn
     // Restores the readable orbital cadence of the early v0.9 curve while
     // widening each revolution enough that long books never collapse into a
     // tight coil. The irrational micro-modulation avoids decorative circles.
-    const angle = -2.3 + visualRank * 0.43 + Math.sin(visualRank * 0.37 + 0.4) * 0.038;
-    const radius = 14.2 + visualRank * 2.42 + Math.sin(visualRank * 0.21) * 0.5 + lift * 0.34;
+    const angle = -2.3 + visualRank * 0.64 + Math.sin(visualRank * 0.37 + 0.4) * 0.052;
+    const radius = 14.8 + visualRank * 3.35 + Math.sin(visualRank * 0.21) * 0.62 + lift * 0.34;
     const offset = clusterRibbonOffset(cluster, angle + Math.PI / 2, 1.05, 0.48);
     return {
       x: Math.cos(angle) * radius + offset.x,

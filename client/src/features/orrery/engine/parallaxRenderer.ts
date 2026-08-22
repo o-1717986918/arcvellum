@@ -34,8 +34,10 @@ const ORIGIN = NARRATIVE_STAGE.origin;
 // Narrative facts and DOM labels stay on the work plane. Only atmosphere
 // receives differential motion, so a pan never separates a node from its label.
 const LAYER_DEPTH: Record<OrreryDepth, { far: number; mid: number; near: number }> = {
-  deep: { far: 0.28, mid: 1, near: 1.18 },
-  balanced: { far: 0.52, mid: 1, near: 1.1 },
+  // Keep enough parallax to read the 2.5D volume, but do not compress the
+  // celestial canopy into a small patch behind the narrative field.
+  deep: { far: 0.46, mid: 1, near: 1.16 },
+  balanced: { far: 0.64, mid: 1, near: 1.09 },
   flat: { far: 1, mid: 1, near: 1 },
 };
 
@@ -319,9 +321,22 @@ export class NarrativeParallaxRenderer {
     const primary = this.projection.nodes
       .filter((node) => node.type === "chapter" || node.type === "scene")
       .sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
+    const chapterGroups = new Map<string, typeof primary>();
+    for (const node of primary) {
+      const chapterId = narrativeClusterId(node);
+      if (!chapterId) continue;
+      const group = chapterGroups.get(chapterId) || [];
+      group.push(node);
+      chapterGroups.set(chapterId, group);
+    }
+    const groups = chapterGroups.size > 1
+      ? [...chapterGroups.values()]
+      : Array.from({ length: Math.ceil(primary.length / Math.max(1, groupSize)) }, (_value, index) => (
+        primary.slice(index * Math.max(1, groupSize), (index + 1) * Math.max(1, groupSize))
+      ));
     const result: NarrativeFrame[] = [];
-    for (let index = 0; index < primary.length; index += Math.max(1, groupSize)) {
-      const points = primary.slice(index, index + groupSize)
+    for (const group of groups) {
+      const points = group
         .map((node) => this.layout?.points.get(node.node_id))
         .filter((point): point is WorldPoint => Boolean(point))
         .map((point) => this.projectPoint(point));
@@ -437,4 +452,11 @@ export class NarrativeParallaxRenderer {
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     );
   }
+}
+
+function narrativeClusterId(node: SpatialNarrativeProjection["nodes"][number]): string {
+  const source = node.type === "chapter"
+    ? String(node.metrics.chapter_id || node.source_id || node.node_id)
+    : String(node.metrics.chapter_id || "");
+  return source.trim().replace(/^chapter:/, "");
 }

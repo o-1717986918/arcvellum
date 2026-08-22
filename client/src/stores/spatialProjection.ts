@@ -6,7 +6,9 @@ import type { SpatialGrammar, SpatialNarrativeProjection, SpatialNarrativeProjec
 import { defaultObservation } from "@/features/orrery/layout/observationWindow";
 import { applySpatialProjectionPatch } from "@/features/orrery/model/projectionPatch";
 
-const DEFAULT_GRAMMAR: SpatialGrammar = "spine";
+// Open with the full celestial shell. The chapter rail preserves exact order,
+// while the first frame gains the spatial depth expected from the observatory.
+const DEFAULT_GRAMMAR: SpatialGrammar = "constellation";
 type NarrativeViewTarget = { level: NarrativeFocusLevel; focus: string };
 
 export const useSpatialProjectionStore = defineStore("spatialProjection", () => {

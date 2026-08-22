@@ -23,7 +23,7 @@ describe("parallax camera orientation", () => {
 
   it("opens with a restrained oblique view while retaining a testable front view", () => {
     const point = { x: 2, y: 3, z: 4 };
-    expect(scenePoint(point, "deep", IDENTITY_PARALLAX_VIEW)).toEqual({ x: 96368, y: 10968 });
+    expect(scenePoint(point, "deep", IDENTITY_PARALLAX_VIEW)).toEqual({ x: 96368, y: 15968 });
     expect(scenePoint(point, "deep", DEFAULT_PARALLAX_VIEW)).not.toEqual(
       scenePoint(point, "deep", IDENTITY_PARALLAX_VIEW),
     );

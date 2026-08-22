@@ -124,8 +124,8 @@ describe("buildSpatialLayout", () => {
       const withinOne = Math.hypot(two.x - one.x, two.y - one.y, two.z - one.z);
       const between = Math.hypot(three.x - two.x, three.y - two.y, three.z - two.z);
       const withinTwo = Math.hypot(four.x - three.x, four.y - three.y, four.z - three.z);
-      expect(between).toBeGreaterThan(withinOne * 1.75);
-      expect(between).toBeGreaterThan(withinTwo * 1.75);
+      expect(between, `${grammar}: first chapter cluster`).toBeGreaterThan(withinOne * 1.75);
+      expect(between, `${grammar}: second chapter cluster`).toBeGreaterThan(withinTwo * 1.75);
     }
   });
 
@@ -145,7 +145,7 @@ describe("buildSpatialLayout", () => {
     }
   });
 
-  it("arranges a long constellation as separated stellar families", () => {
+  it("arranges a long constellation as a dispersed three-dimensional stellar shell", () => {
     const chapters = Array.from({ length: 72 }, (_value, index) => {
       const item = node(`scene:${index + 1}`, "scene", index + 1);
       item.metrics.chapter_id = `chapter_${String(index + 1).padStart(4, "0")}`;
@@ -153,29 +153,15 @@ describe("buildSpatialLayout", () => {
     });
     const result = buildSpatialLayout("constellation", "constellation-route", chapters, "project-seed");
     const points = chapters.map((item) => result.points.get(item.node_id)!);
-    const familySize = 9;
-    const centers = Array.from({ length: 8 }, (_value, family) => {
-      const group = points.slice(family * familySize, (family + 1) * familySize);
-      return {
-        x: group.reduce((sum, point) => sum + point.x, 0) / group.length,
-        z: group.reduce((sum, point) => sum + point.z, 0) / group.length,
-        span: Math.hypot(
-          Math.max(...group.map((point) => point.x)) - Math.min(...group.map((point) => point.x)),
-          Math.max(...group.map((point) => point.z)) - Math.min(...group.map((point) => point.z)),
-        ),
-      };
-    });
-    expect(centers.every((center) => center.span > 8)).toBe(true);
-    const firstFamily = points.slice(0, familySize);
-    const firstFamilySteps = firstFamily.slice(1).map((point, index) => Math.hypot(
-      point.x - firstFamily[index].x,
-      point.y - firstFamily[index].y,
-      point.z - firstFamily[index].z,
+    const adjacentDistances = points.slice(1).map((point, index) => Math.hypot(
+      point.x - points[index].x,
+      point.y - points[index].y,
+      point.z - points[index].z,
     ));
-    expect(Math.max(...firstFamilySteps)).toBeLessThan(12);
-    for (let index = 1; index < centers.length; index += 1) {
-      expect(centers[index].x - centers[index - 1].x).toBeGreaterThan(20);
-    }
+    expect(Math.min(...adjacentDistances)).toBeGreaterThan(12);
+    expect(Math.max(...points.map((point) => point.x)) - Math.min(...points.map((point) => point.x))).toBeGreaterThan(90);
+    expect(Math.max(...points.map((point) => point.y)) - Math.min(...points.map((point) => point.y))).toBeGreaterThan(55);
+    expect(Math.max(...points.map((point) => point.z)) - Math.min(...points.map((point) => point.z))).toBeGreaterThan(90);
   });
 
   it("keeps the loop grammar open between full revolutions instead of coiling chapters together", () => {

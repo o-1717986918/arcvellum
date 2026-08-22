@@ -23,33 +23,29 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ select: [node: SpatialNarrativeNode]; focus: [node: SpatialNarrativeNode] }>();
 
-const visible = computed(() => {
-  const candidates = props.nodes
-    .filter((node) => {
-      const anchor = props.anchors[node.node_id];
-      // Primary narrative beats never disappear from a full-book projection.
-      // At distant camera scales they become compact glyphs; their text returns
-      // only once the reader enters a sufficiently roomy local segment.
-      return Boolean(anchor?.visible) && (isPrimary(node) || node.detail_level !== "far" || isPinned(node) || props.showAllLabels);
-    })
-    .sort((left, right) => nodePriority(right) - nodePriority(left));
-  const accepted: SpatialNarrativeNode[] = [];
+const visible = computed(() => props.nodes
+  .filter((node) => Boolean(props.anchors[node.node_id]?.visible))
+  .sort((left, right) => nodePriority(right) - nodePriority(left)));
+
+const labeledNodeIds = computed(() => {
+  const accepted = new Set<string>();
   const occupied: Array<{ left: number; right: number; top: number; bottom: number }> = [];
 
-  for (const node of candidates) {
+  for (const node of visible.value) {
     const anchor = props.anchors[node.node_id];
     if (!anchor) continue;
     const rectangle = labelRectangle(node, anchor);
-    if (isPrimary(node) && isOverview(node)) {
-      accepted.push(node);
+    // Every visible entity keeps a crisp celestial mark. This pass only
+    // decides which marks have enough room for copy; it never removes nodes.
+    if (isPinned(node) || props.showAllLabels) {
+      accepted.add(node.node_id);
+      occupied.push(rectangle);
       continue;
     }
-    // Current work and the selected node are never suppressed. Other labels
-    // must earn a place in the viewport instead of overlapping into noise.
-    if (!props.showAllLabels && !isPinned(node) && occupied.some((item) => rectanglesOverlap(item, rectangle))) continue;
-    accepted.push(node);
+    if (occupied.some((item) => rectanglesOverlap(item, rectangle))) continue;
+    accepted.add(node.node_id);
     occupied.push(rectangle);
-    if (!props.showAllLabels && accepted.length >= 56 && !isPinned(node)) break;
+    if (accepted.size >= 72) break;
   }
   return accepted;
 });
@@ -69,10 +65,6 @@ function isPinned(node: SpatialNarrativeNode): boolean {
     || node.status === "current"
     || node.status === "blocked"
     || node.type === "chapter";
-}
-
-function isPrimary(node: SpatialNarrativeNode): boolean {
-  return node.type === "chapter" || node.type === "scene";
 }
 
 function isTypographic(node: SpatialNarrativeNode): boolean {
@@ -156,7 +148,11 @@ function overviewClass(node: SpatialNarrativeNode): Record<string, boolean> {
   // Only text below the legibility threshold is suppressed; it returns as the
   // camera enters a readable local segment.
   const forced = Boolean(props.showAllLabels || props.forcedNodeIds?.includes(node.node_id) || node.node_id === props.navigationNodeId);
-  return { overview: isOverview(node) && !forced, "forced-label": forced };
+  return {
+    overview: isOverview(node) && !forced,
+    "forced-label": forced,
+    "label-suppressed": !labeledNodeIds.value.has(node.node_id) && !forced,
+  };
 }
 
 function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {

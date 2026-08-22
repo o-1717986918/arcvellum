@@ -77,7 +77,10 @@ async function mountRenderer(): Promise<void> {
   const rect = target.getBoundingClientRect();
   renderer.resize(rect.width, rect.height);
   renderer.update(props.projection, props.layout);
-  renderer.showOpeningSegment();
+  // All semantic levels represent the whole work. Begin with the complete
+  // constellation in frame; the chapter rail and node actions then provide
+  // deliberate local focus instead of silently cropping the opening view.
+  renderer.fit();
 }
 
 onMounted(async () => {
@@ -142,7 +145,7 @@ watch(() => [props.projection.spatial_grammar, props.layout.grammar] as const, a
   // grammar switch can reframe using the previous coordinate system and leave
   // the new constellation or loop entirely outside the viewport.
   await nextTick();
-  openingSegment();
+  fit();
 }, { flush: "post" });
 
 function emitStaticAnchors(): void {
@@ -210,12 +213,22 @@ function staticWorldPoint(point: WorldPoint, origin: WorldPoint): { x: number; y
 }
 
 function initializeStaticCamera(primary: SpatialNarrativeProjection["nodes"], worlds: Map<string, { x: number; y: number }>, rect: DOMRect): void {
-  const currentIndex = primary.findIndex((node) => node.status === "current" || node.status === "blocked");
-  const centerIndex = Math.min(primary.length - 1, Math.max(0, currentIndex >= 0 ? currentIndex + 3 : 5));
-  const point = worlds.get(primary[centerIndex]?.node_id || "") || { x: 0, y: 0 };
-  staticCamera.x = point.x;
-  staticCamera.y = point.y;
-  staticCamera.scale = Math.min(0.92, Math.max(0.62, (rect.width - 260) / Math.max(760, Math.min(1320, primary.length * 118))));
+  const points = primary.map((node) => worlds.get(node.node_id)).filter((point): point is { x: number; y: number } => Boolean(point));
+  if (!points.length) {
+    staticCamera.x = 0;
+    staticCamera.y = 0;
+    staticCamera.scale = 0.78;
+    staticCameraReady = true;
+    return;
+  }
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  staticCamera.x = (minX + maxX) / 2;
+  staticCamera.y = (minY + maxY) / 2;
+  staticCamera.scale = Math.max(0.08, Math.min(0.9,
+    Math.min((rect.width - 260) / Math.max(420, maxX - minX + 240), (rect.height - 260) / Math.max(360, maxY - minY + 200))));
   staticCameraReady = true;
 }
 

@@ -3,8 +3,8 @@ import type { OrreryDepth } from "@/services/orreryPreferences";
 
 export const NARRATIVE_STAGE = {
   width: 520000,
-  height: 22000,
-  origin: { x: 96000, y: 11000 },
+  height: 32000,
+  origin: { x: 96000, y: 16000 },
 } as const;
 const ORIGIN = NARRATIVE_STAGE.origin;
 const YAW_PER_PIXEL = 0.0052;

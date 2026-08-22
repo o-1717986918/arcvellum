@@ -8,9 +8,9 @@ const NARRATIVE_TYPES = new Set(["chapter", "scene"]);
 // label at the opening camera scale.  This is deliberately larger than the
 // global-map cadence: the overview can zoom out, while a working segment must
 // remain inspectable without immediately reaching for the zoom wheel.
-const CHAPTER_STEP = 4.25;
-const SCENE_STEP = 1.2;
-const CHAPTER_CLUSTER_GAP = 5.45;
+const CHAPTER_STEP = 10.8;
+const SCENE_STEP = 1.55;
+const CHAPTER_CLUSTER_GAP = 10.8;
 
 interface LayoutContext {
   primary: SpatialNarrativeNode[];
@@ -20,7 +20,7 @@ interface LayoutContext {
   sceneRank: Map<string, number>;
   chapterRank: Map<string, number>;
   sceneClusters: Map<string, SceneCluster>;
-  sceneClusterAxes: Map<string, number>;
+  chapterClusterRanks: Map<string, number>;
   sceneClusterCount: number;
   rhythm: Map<string, NarrativeBeat>;
   temporalAxis: Map<string, number>;
@@ -61,7 +61,10 @@ export function buildSpatialLayout(
   const points = new Map<string, WorldPoint>();
   const seeded = seedFrom(layoutSeed);
 
-  context.primary.forEach((node, index) => points.set(node.node_id, primaryPoint(grammar, node, index, context)));
+  // Chapter nuclei are the fixed celestial architecture. Scenes then orbit
+  // their own chapter nucleus instead of being laid on one generic rail.
+  context.chapters.forEach((node, index) => points.set(node.node_id, primaryPoint(grammar, node, index, context)));
+  context.scenes.forEach((node, index) => points.set(node.node_id, primaryPoint(grammar, node, index, context)));
   nodes.filter((node) => !PRIMARY.has(node.type)).forEach((node) => {
     const parent = node.parent_id ? points.get(node.parent_id) : undefined;
     points.set(node.node_id, satellitePoint(grammar, parent || semanticAnchor(node, context), node, seeded));
@@ -88,6 +91,12 @@ function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
   const scenes = primary.filter((node) => node.type === "scene");
   const chapters = primary.filter((node) => node.type === "chapter");
   const sceneClusters = buildSceneClusters(scenes);
+  const chapterRanks = new Map(chapters.map((node, index) => [chapterIdentity(node), index]));
+  const chapterClusterRanks = new Map<string, number>();
+  for (const cluster of sceneClusters.values()) {
+    if (chapterClusterRanks.has(cluster.id)) continue;
+    chapterClusterRanks.set(cluster.id, chapterRanks.get(cluster.id) ?? cluster.rank);
+  }
   const rhythm = smoothNarrativeBeats(primary);
   const temporalAxis = buildTemporalAxis(primary, rhythm, sceneClusters);
   return {
@@ -98,8 +107,8 @@ function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
     sceneRank: new Map(scenes.map((node, index) => [node.node_id, index])),
     chapterRank: new Map(chapters.map((node, index) => [node.node_id, index])),
     sceneClusters,
-    sceneClusterAxes: buildSceneClusterAxes(sceneClusters, temporalAxis),
-    sceneClusterCount: new Set([...sceneClusters.values()].map((cluster) => cluster.id)).size,
+    chapterClusterRanks,
+    sceneClusterCount: Math.max(chapters.length, new Set([...sceneClusters.values()].map((cluster) => cluster.id)).size),
     rhythm,
     temporalAxis,
   };
@@ -109,8 +118,9 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
   const isChapter = node.type === "chapter";
   const rank = isChapter ? context.chapterRank.get(node.node_id) ?? fallbackIndex : context.sceneRank.get(node.node_id) ?? fallbackIndex;
   const cluster = isChapter ? undefined : context.sceneClusters.get(node.node_id);
-  const visualRank = cluster?.rank ?? rank;
-  const visualCount = isChapter ? context.chapters.length : cluster ? context.sceneClusterCount : context.primary.length;
+  if (cluster) return clusteredScenePoint(grammar, node, cluster, context);
+  const visualRank = rank;
+  const visualCount = isChapter ? context.chapters.length : context.primary.length;
   // Every primary projection owns a stable ordinal. The old implementation
   // multiplied chapter ordinals into a high-frequency sine/cosine wave. Long
   // books therefore curled back across themselves and then had to be squeezed
@@ -122,8 +132,8 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
   // Scenes keep their chronological footprint, but each chapter shares one
   // local nucleus. The grammar can then fan the scenes around that nucleus in
   // depth instead of rendering them as a nearly flat queue.
-  const axis = cluster
-    ? context.sceneClusterAxes.get(cluster.id) ?? context.temporalAxis.get(node.node_id) ?? narrativeAxis(timeline)
+  const axis = isChapter
+    ? chapterAxis(rank)
     : context.temporalAxis.get(node.node_id) ?? narrativeAxis(timeline);
   const beat = context.rhythm.get(node.node_id) || narrativeBeat(node, rank, context.primary.length);
   const contour = bookContour(visualRank, visualCount);
@@ -132,17 +142,94 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
   // This is a forward-moving cadence, not a repeating map ornament. It gives
   // a long scene sequence room to inhale and release without ever folding the
   // reading order back over itself.
-  const cadence = cluster
-    ? Math.sin(cluster.localRank * 1.16 + cluster.rank * 0.43) * 0.15 + Math.sin(cluster.rank * 0.57 + 0.7) * 0.2
-    : Math.sin(phase * 0.88) * 0.31 + Math.sin(phase * 0.31 + 0.7) * 0.19;
+  const cadence = Math.sin(phase * 0.88) * 0.31 + Math.sin(phase * 0.31 + 0.7) * 0.19;
   const rise = narrativeRise(timeline) + contour * 0.58 + lift + cadence;
   const arc = Math.sin(phase * 0.82);
   const swell = Math.cos(phase * 0.96);
 
+  if (isChapter && grammar === "constellation") {
+    return constellationNucleus(rank, Math.max(1, context.chapters.length), lift);
+  }
+
   return curveProfilePoint(grammar, {
     axis, phase, depth, rise, arc, swell, cadence, lift,
-    visualRank, visualCount, rank, cluster,
+    visualRank, visualCount, rank,
   });
+}
+
+function clusteredScenePoint(
+  grammar: SpatialGrammar,
+  node: SpatialNarrativeNode,
+  cluster: SceneCluster,
+  context: LayoutContext,
+): WorldPoint {
+  const nucleusRank = context.chapterClusterRanks.get(cluster.id) ?? cluster.rank;
+  const count = Math.max(1, context.sceneClusterCount);
+  const timeline = nucleusRank + 1;
+  const phase = timeline * 0.34;
+  const beat = context.rhythm.get(node.node_id) || narrativeBeat(node, nucleusRank, count);
+  const contour = bookContour(nucleusRank, count);
+  const lift = rhythmLift(beat);
+  const depth = narrativeDepth(timeline) + 0.38 + lift * 0.22;
+  const cadence = Math.sin(phase * 0.88) * 0.31 + Math.sin(phase * 0.31 + 0.7) * 0.19;
+  const rise = narrativeRise(timeline) + contour * 0.58 + lift + cadence;
+  const nucleus = grammar === "constellation"
+    ? constellationNucleus(nucleusRank, count, lift)
+    : curveProfilePoint(grammar, {
+      axis: chapterAxis(nucleusRank),
+      phase,
+      depth,
+      rise,
+      arc: Math.sin(phase * 0.82),
+      swell: Math.cos(phase * 0.96),
+      cadence,
+      lift,
+      visualRank: nucleusRank,
+      visualCount: count,
+      rank: nucleusRank,
+      });
+  const local = chapterOrbitOffset(grammar, cluster, lift);
+  return { x: nucleus.x + local.x, y: nucleus.y + local.y, z: nucleus.z + local.z };
+}
+
+function constellationNucleus(rank: number, count: number, lift: number): WorldPoint {
+  // The visual-orrery experiment proved that a few legible celestial
+  // latitudes communicate chapter families more clearly than a mathematically
+  // uniform sphere. Generalise that idea without assuming a fixed volume
+  // count: chapters advance around two or three offset latitude bands, while
+  // every band remains readable from the recommended oblique camera.
+  const bandCount = count < 6 ? 2 : 3;
+  const perBand = Math.max(1, Math.ceil(count / bandCount));
+  const band = Math.min(bandCount - 1, Math.floor(rank / perBand));
+  const within = rank % perBand;
+  const members = Math.min(perBand, count - band * perBand);
+  const normalizedY = 0.58 - band * (1.16 / (bandCount - 1));
+  const shellRadius = Math.max(38, Math.sqrt(Math.max(1, count)) * 8.8);
+  const horizontalRadius = Math.sqrt(Math.max(0.08, 1 - normalizedY * normalizedY)) * shellRadius;
+  const angle = (within / Math.max(1, members)) * Math.PI * 2 + band * 0.84 + 0.28;
+  return {
+    x: Math.cos(angle) * horizontalRadius,
+    y: normalizedY * shellRadius * 0.82 + (within - (members - 1) / 2) * 0.42 + lift * 0.5,
+    z: Math.sin(angle) * horizontalRadius,
+  };
+}
+
+function chapterOrbitOffset(grammar: SpatialGrammar, cluster: SceneCluster, lift: number): WorldPoint {
+  if (cluster.size <= 1) return { x: 0, y: lift * 0.12, z: 0 };
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const angle = cluster.localRank * goldenAngle + cluster.rank * 0.61;
+  const radius = 2.25 + Math.sqrt(cluster.localRank + 0.72) * 1.42;
+  const centered = cluster.localRank - (cluster.size - 1) / 2;
+  const depthRatio = grammar === "strata" ? 0.48 : grammar === "stage" ? 0.66 : 0.86;
+  return {
+    x: Math.cos(angle) * radius + centered * 0.22,
+    y: Math.sin(angle * 0.82) * 0.72 + lift * 0.18 + (cluster.localRank % 2 ? 0.12 : -0.12),
+    z: Math.sin(angle) * radius * depthRatio + Math.cos(centered * 0.94) * 0.34,
+  };
+}
+
+function chapterAxis(rank: number): number {
+  return rank * CHAPTER_CLUSTER_GAP - 4.8;
 }
 
 function narrativeAxis(timeline: number): number {
@@ -230,9 +317,8 @@ function buildSceneClusters(scenes: SpatialNarrativeNode[]): Map<string, SceneCl
   const groups = new Map<string, SpatialNarrativeNode[]>();
   for (const scene of scenes) {
     // Older projects without a chapter field remain one continuous route.
-    // Canonical scene contracts carry chapter_id, which creates the real
-    // book-scale visual clusters used by detailed views.
-    const chapterId = String(scene.metrics.chapter_id || "__unassigned__");
+    const chapterId = normalizeChapterId(String(scene.metrics.chapter_id || ""));
+    if (!chapterId) continue;
     const group = groups.get(chapterId) || [];
     group.push(scene);
     groups.set(chapterId, group);
@@ -246,20 +332,12 @@ function buildSceneClusters(scenes: SpatialNarrativeNode[]): Map<string, SceneCl
   return result;
 }
 
-function buildSceneClusterAxes(
-  clusters: Map<string, SceneCluster>,
-  temporalAxis: Map<string, number>,
-): Map<string, number> {
-  const totals = new Map<string, { total: number; count: number }>();
-  for (const [nodeId, cluster] of clusters) {
-    const axis = temporalAxis.get(nodeId);
-    if (axis === undefined) continue;
-    const current = totals.get(cluster.id) || { total: 0, count: 0 };
-    current.total += axis;
-    current.count += 1;
-    totals.set(cluster.id, current);
-  }
-  return new Map([...totals].map(([clusterId, value]) => [clusterId, value.total / Math.max(1, value.count)]));
+function chapterIdentity(node: SpatialNarrativeNode): string {
+  return normalizeChapterId(String(node.metrics.chapter_id || node.source_id || node.node_id));
+}
+
+function normalizeChapterId(value: string): string {
+  return value.trim().replace(/^chapter:/, "");
 }
 
 function temporalSpacing(previous?: NarrativeBeat, current?: NarrativeBeat): number {

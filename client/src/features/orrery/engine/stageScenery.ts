@@ -1,8 +1,8 @@
 import { Container, Graphics } from "pixi.js";
 import type { SpatialLayout, SpatialNarrativeProjection } from "@/types/spatial";
 import { constellationClusterSize, stageActSize } from "@/features/orrery/layout/curveProfiles";
-import { NARRATIVE_STAGE } from "./parallaxProjection";
-import { braidPath, pseudo, seedFrom, spinePath } from "./renderMath";
+import { drawCelestialCanopy } from "./celestialCanopy";
+import { braidPath, spinePath } from "./renderMath";
 import type { NarrativeFrame, ScenePalette, StageExperience } from "./renderModel";
 
 export interface StageLayers {
@@ -22,93 +22,8 @@ export interface StageSceneryOptions {
 }
 
 export function drawStageScenery(options: StageSceneryOptions): void {
-  drawAtmosphere(options);
+  drawCelestialCanopy(options);
   drawGrammarScenery(options);
-}
-
-function drawAtmosphere(options: StageSceneryOptions): void {
-  const { layers, layout, projection, palette, experience, frame } = options;
-  const atmosphere = new Graphics();
-  const seed = seedFrom(projection.layout_seed);
-  const horizon = NARRATIVE_STAGE.origin.y - 410;
-  const strength = experience.depth === "deep" ? 1 : experience.depth === "balanced" ? 0.76 : 0.38;
-  const planeCount = experience.quality === "efficient" ? 6 : 10;
-  const rayCount = experience.quality === "efficient" ? 10 : 18;
-  for (let index = 0; index < planeCount; index += 1) {
-    const depth = index / planeCount;
-    const y = horizon + depth * 1560;
-    const inset = 120 + depth * 340;
-    const skew = (pseudo(seed + index * 19) - 0.5) * 250;
-    const color = index % 3 === 0 ? palette.core : index % 3 === 1 ? palette.canon : palette.branch;
-    atmosphere.poly([
-      inset, y - 88 - skew * 0.06,
-      NARRATIVE_STAGE.width - inset, y - 168 + skew * 0.08,
-      NARRATIVE_STAGE.width - inset - 180, y + 102,
-      inset + 180, y + 176,
-    ]).fill({ color, alpha: (0.012 + depth * 0.009) * strength })
-      .stroke({ color: palette.label, width: 1, alpha: (0.02 + depth * 0.012) * strength });
-  }
-  for (let index = 0; index < rayCount; index += 1) {
-    const left = 80 + pseudo(seed + index * 37) * (NARRATIVE_STAGE.width - 720);
-    const rise = 120 + pseudo(seed + index * 53) * 620;
-    const span = 260 + pseudo(seed + index * 71) * 820;
-    const color = index % 4 === 0 ? palette.canon : palette.core;
-    atmosphere.moveTo(left, NARRATIVE_STAGE.height - 130)
-      .lineTo(left + span * 0.48, horizon + rise)
-      .lineTo(left + span, NARRATIVE_STAGE.height - 130)
-      .stroke({ color, width: 1, alpha: (0.022 + pseudo(seed + index) * 0.022) * strength });
-  }
-  const bandColor = layout.grammar === "braid" ? palette.branch : layout.grammar === "strata" ? palette.core : palette.canon;
-  const origin = NARRATIVE_STAGE.origin;
-  atmosphere.poly([
-    0, origin.y + 760,
-    NARRATIVE_STAGE.width * 0.28, origin.y + 360,
-    NARRATIVE_STAGE.width * 0.76, origin.y + 520,
-    NARRATIVE_STAGE.width, origin.y + 1020,
-    NARRATIVE_STAGE.width, NARRATIVE_STAGE.height,
-    0, NARRATIVE_STAGE.height,
-  ]).fill({ color: bandColor, alpha: 0.045 * strength });
-  layers.far.addChild(atmosphere);
-  const veil = new Graphics();
-  veil.poly([
-    origin.x - 1680, origin.y - 720,
-    origin.x + 1540, origin.y - 940,
-    origin.x + 1880, origin.y + 320,
-    origin.x - 1420, origin.y + 560,
-  ]).fill({ color: palette.deep, alpha: 0.2 * strength });
-  layers.far.addChild(veil);
-
-  // The stage is a sky in every grammar, not a decorated plane. A seeded
-  // two-depth star volume keeps the field continuous while the camera pans.
-  const farStars = new Graphics();
-  const nearStars = new Graphics();
-  const starCount = experience.quality === "efficient" ? 180 : 340;
-  const skyWidth = Math.max(3600, frame.width * 1.45);
-  const skyHeight = Math.max(2100, frame.height * 1.85);
-  let starState = (seed ^ 0x9e3779b9) >>> 0;
-  const starRandom = (): number => {
-    starState ^= starState << 13;
-    starState ^= starState >>> 17;
-    starState ^= starState << 5;
-    return (starState >>> 0) / 4294967296;
-  };
-  for (let index = 0; index < starCount; index += 1) {
-    const x = frame.centerX + (starRandom() - 0.5) * skyWidth;
-    const y = frame.centerY + (starRandom() - 0.5) * skyHeight;
-    const depth = starRandom();
-    const bright = index % 37 === 0;
-    const target = depth > 0.76 ? nearStars : farStars;
-    const radius = bright ? 2.1 : depth > 0.76 ? 1.15 : 0.72;
-    const color = index % 11 === 0 ? palette.canon : index % 7 === 0 ? palette.core : palette.label;
-    target.circle(x, y, radius).fill({ color, alpha: bright ? 0.74 : 0.22 + depth * 0.34 });
-    if (bright) {
-      target.moveTo(x - 7, y).lineTo(x + 7, y)
-        .moveTo(x, y - 5).lineTo(x, y + 5)
-        .stroke({ color, width: 0.8, alpha: 0.34 });
-    }
-  }
-  layers.far.addChild(farStars);
-  layers.near.addChild(nearStars);
 }
 
 function drawGrammarScenery(options: StageSceneryOptions): void {
@@ -159,8 +74,8 @@ function drawConstellations(
     const width = Math.max(260, family.width + 260);
     const height = Math.max(170, family.height + 190);
     shadow.ellipse(family.centerX + 24, family.centerY + 30, width * 0.64, height * 0.64)
-      .fill({ color: palette.shadow, alpha: 0.14 })
-      .stroke({ color: palette.shadow, width: 34, alpha: 0.18 });
+      .fill({ color: palette.shadow, alpha: 0.045 })
+      .stroke({ color: palette.shadow, width: 18, alpha: 0.1 });
     silhouette.ellipse(family.centerX - width * 0.04, family.centerY + height * 0.03, width * 0.58, height * 0.54)
       .fill({ color: index % 2 ? palette.branch : palette.core, alpha: 0.052 })
       .stroke({ color: index % 2 ? palette.branch : palette.core, width: 2, alpha: 0.26 });
