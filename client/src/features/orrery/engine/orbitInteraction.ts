@@ -11,7 +11,9 @@ export interface OrbitInteractionControls {
 export function attachOrbitInteraction(canvas: HTMLCanvasElement, controls: OrbitInteractionControls): () => void {
   let pointer: { pointerId: number; clientX: number; clientY: number; view: ParallaxView; pivot: WorldPoint | null } | null = null;
   const onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 1) return;
+    // Middle drag belongs to spatial translation. Holding Alt explicitly
+    // changes the same gesture into an unrestricted 2.5D orbit.
+    if (event.button !== 1 || !event.altKey) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     controls.cancelAnimation();

@@ -59,4 +59,28 @@ describe("parallax renderer modules", () => {
       "pointerdown", "pointermove", "pointerup", "pointercancel", "auxclick",
     ]);
   });
+
+  it("reserves plain middle drag for translation and uses Alt-middle for orbit", () => {
+    const canvas = document.createElement("canvas");
+    const updateView = vi.fn();
+    const pointer = (name: string, init: MouseEventInit, pointerId: number): Event => {
+      const event = new MouseEvent(name, init);
+      Object.defineProperty(event, "pointerId", { value: pointerId });
+      return event;
+    };
+    attachOrbitInteraction(canvas, {
+      currentView: () => ({ x: 0, y: 0, z: 0, w: 1 }),
+      pivot: () => null,
+      cancelAnimation: vi.fn(),
+      updateView,
+    });
+
+    canvas.dispatchEvent(pointer("pointerdown", { button: 1, clientX: 20, clientY: 20 }, 1));
+    canvas.dispatchEvent(pointer("pointermove", { button: 1, clientX: 60, clientY: 40 }, 1));
+    expect(updateView).not.toHaveBeenCalled();
+
+    canvas.dispatchEvent(pointer("pointerdown", { button: 1, altKey: true, clientX: 20, clientY: 20 }, 2));
+    canvas.dispatchEvent(pointer("pointermove", { button: 1, altKey: true, clientX: 60, clientY: 40 }, 2));
+    expect(updateView).toHaveBeenCalledTimes(1);
+  });
 });

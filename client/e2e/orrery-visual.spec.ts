@@ -102,9 +102,9 @@ test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ 
   const center = { x: box.x + box.width * 0.5, y: box.y + box.height * 0.55 };
   await page.mouse.move(center.x, center.y);
   await page.mouse.wheel(0, -480);
-  await page.mouse.down();
+  await page.mouse.down({ button: "middle" });
   await page.mouse.move(center.x + 180, center.y + 110, { steps: 12 });
-  await page.mouse.up();
+  await page.mouse.up({ button: "middle" });
   await expect(stage).toBeVisible();
   await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1);
   expect((await canvasPixelEvidence(page)).variance).toBeGreaterThan(20);

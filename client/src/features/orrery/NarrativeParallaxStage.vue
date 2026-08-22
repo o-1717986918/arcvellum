@@ -327,7 +327,7 @@ function focusStaticCluster(points: WorldPoint[]): void {
 function startStaticDrag(event: PointerEvent): void {
   if (!staticProjection.value || !host.value) return;
   cancelStaticCameraAnimation();
-  if (event.button === 1) {
+  if (event.button === 1 && event.altKey) {
     event.preventDefault();
     staticOrbit = {
       pointerId: event.pointerId,
@@ -339,7 +339,8 @@ function startStaticDrag(event: PointerEvent): void {
     host.value.setPointerCapture(event.pointerId);
     return;
   }
-  if (event.button !== 0) return;
+  if (event.button !== 1) return;
+  event.preventDefault();
   host.value.setPointerCapture(event.pointerId);
   staticDrag = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: staticCamera.x, y: staticCamera.y };
 }
@@ -467,5 +468,5 @@ defineExpose({ fit, focus, focusCluster, openingSegment, resetView });
 </script>
 
 <template>
-  <div ref="host" class="narrative-parallax-stage" aria-hidden="true" title="左键拖动浏览，滚轮缩放，中键拖动调整视角" @pointerdown="startStaticDrag" @pointermove="moveStaticDrag" @pointerup="stopStaticDrag" @pointercancel="stopStaticDrag" @wheel.prevent="zoomStatic"></div>
+  <div ref="host" class="narrative-parallax-stage" aria-hidden="true" title="左键选择节点，中键拖动移动天穹，Alt + 中键调整视角，滚轮缩放" @pointerdown="startStaticDrag" @pointermove="moveStaticDrag" @pointerup="stopStaticDrag" @pointercancel="stopStaticDrag" @wheel.prevent="zoomStatic"></div>
 </template>

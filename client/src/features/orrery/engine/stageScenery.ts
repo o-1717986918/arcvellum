@@ -27,7 +27,7 @@ export function drawStageScenery(options: StageSceneryOptions): void {
 }
 
 function drawAtmosphere(options: StageSceneryOptions): void {
-  const { layers, layout, projection, palette, experience } = options;
+  const { layers, layout, projection, palette, experience, frame } = options;
   const atmosphere = new Graphics();
   const seed = seedFrom(projection.layout_seed);
   const horizon = NARRATIVE_STAGE.origin.y - 410;
@@ -77,6 +77,38 @@ function drawAtmosphere(options: StageSceneryOptions): void {
     origin.x - 1420, origin.y + 560,
   ]).fill({ color: palette.deep, alpha: 0.2 * strength });
   layers.far.addChild(veil);
+
+  // The stage is a sky in every grammar, not a decorated plane. A seeded
+  // two-depth star volume keeps the field continuous while the camera pans.
+  const farStars = new Graphics();
+  const nearStars = new Graphics();
+  const starCount = experience.quality === "efficient" ? 180 : 340;
+  const skyWidth = Math.max(3600, frame.width * 1.45);
+  const skyHeight = Math.max(2100, frame.height * 1.85);
+  let starState = (seed ^ 0x9e3779b9) >>> 0;
+  const starRandom = (): number => {
+    starState ^= starState << 13;
+    starState ^= starState >>> 17;
+    starState ^= starState << 5;
+    return (starState >>> 0) / 4294967296;
+  };
+  for (let index = 0; index < starCount; index += 1) {
+    const x = frame.centerX + (starRandom() - 0.5) * skyWidth;
+    const y = frame.centerY + (starRandom() - 0.5) * skyHeight;
+    const depth = starRandom();
+    const bright = index % 37 === 0;
+    const target = depth > 0.76 ? nearStars : farStars;
+    const radius = bright ? 2.1 : depth > 0.76 ? 1.15 : 0.72;
+    const color = index % 11 === 0 ? palette.canon : index % 7 === 0 ? palette.core : palette.label;
+    target.circle(x, y, radius).fill({ color, alpha: bright ? 0.74 : 0.22 + depth * 0.34 });
+    if (bright) {
+      target.moveTo(x - 7, y).lineTo(x + 7, y)
+        .moveTo(x, y - 5).lineTo(x, y + 5)
+        .stroke({ color, width: 0.8, alpha: 0.34 });
+    }
+  }
+  layers.far.addChild(farStars);
+  layers.near.addChild(nearStars);
 }
 
 function drawGrammarScenery(options: StageSceneryOptions): void {

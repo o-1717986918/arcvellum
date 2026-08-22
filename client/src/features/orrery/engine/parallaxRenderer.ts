@@ -120,7 +120,7 @@ export class NarrativeParallaxRenderer {
     host.append(app.canvas);
     app.stage.addChild(viewport);
     viewport.eventMode = "static";
-    viewport.drag({ pressDrag: true, wheel: false })
+    viewport.drag({ pressDrag: true, wheel: false, mouseButtons: "middle" })
       .pinch()
       .wheel({ smooth: 4, percent: 0.12 })
       .decelerate({ friction: 0.9, minSpeed: 0.01 })

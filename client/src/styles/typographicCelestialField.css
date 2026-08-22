@@ -1,0 +1,224 @@
+/* Typographic Celestial Field: literature is the primary celestial material. */
+.orrery-v3-stage {
+  --type-star: color-mix(in srgb, var(--orrery-canon) 74%, var(--orrery-label));
+}
+
+.orrery-v3-stage::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  opacity: .42;
+  background:
+    repeating-linear-gradient(118deg, transparent 0 118px, color-mix(in srgb, var(--orrery-label) 3%, transparent) 119px 120px),
+    linear-gradient(180deg, color-mix(in srgb, var(--orrery-deep) 5%, transparent), color-mix(in srgb, var(--orrery-deep) 22%, transparent));
+  content: "";
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.orrery-v3-node.typographic {
+  display: grid;
+  grid-template-columns: 14px minmax(0, auto);
+  align-items: center;
+  justify-items: start;
+  gap: 7px;
+  min-width: 0;
+  padding: 7px 8px;
+  text-align: left;
+  transform-origin: center;
+}
+
+.orrery-v3-node.typographic::after {
+  position: absolute;
+  right: 7px;
+  bottom: 4px;
+  left: 21px;
+  height: 1px;
+  opacity: 0;
+  background: linear-gradient(90deg, var(--type-star), transparent);
+  content: "";
+  transform: scaleX(.35);
+  transform-origin: left;
+  transition: opacity .22s ease, transform .34s cubic-bezier(.2,.8,.2,1);
+}
+
+.orrery-v3-node.typographic:is(:hover,.selected,.focused)::after {
+  opacity: .72;
+  transform: scaleX(1);
+}
+
+.orrery-v3-node .node-luminary {
+  position: relative;
+  display: grid;
+  width: 14px;
+  height: 24px;
+  max-width: none;
+  place-items: center;
+  overflow: visible;
+}
+
+.orrery-v3-node .node-luminary i {
+  width: 4px;
+  height: 4px;
+  background: var(--type-star);
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 7px var(--type-star), 0 0 18px color-mix(in srgb, var(--type-star) 46%, transparent);
+}
+
+.orrery-v3-node .node-luminary b {
+  position: absolute;
+  width: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--type-star) 62%, transparent), transparent);
+}
+
+.orrery-v3-node .node-copy {
+  display: grid;
+  min-width: 0;
+  max-width: 194px;
+  gap: 1px;
+  overflow: visible;
+}
+
+.orrery-v3-node .node-kicker {
+  color: color-mix(in srgb, var(--type-star) 76%, transparent);
+  font-family: var(--font-utility);
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.orrery-v3-node .node-title {
+  max-width: 194px;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--orrery-label) 94%, var(--type-star));
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 2px 10px color-mix(in srgb, var(--orrery-deep) 88%, transparent), 0 0 13px color-mix(in srgb, var(--type-star) 13%, transparent);
+}
+
+.orrery-v3-node.typographic[data-type="chapter"] {
+  --type-star: color-mix(in srgb, var(--orrery-canon) 88%, var(--orrery-label));
+}
+
+.orrery-v3-node.typographic[data-type="chapter"] .node-title {
+  font-size: 15px;
+}
+
+.orrery-v3-node.typographic[data-type="scene"] {
+  --type-star: color-mix(in srgb, var(--orrery-core) 82%, var(--orrery-label));
+}
+
+.orrery-v3-node.typographic[data-type="scene"] .node-title {
+  font-size: 11px;
+}
+
+.orrery-v3-node.typographic[data-type="character"] {
+  --type-star: color-mix(in srgb, var(--orrery-branch) 82%, var(--orrery-label));
+}
+
+.orrery-v3-node.typographic[data-completion="planned"] .node-luminary,
+.orrery-v3-node.typographic[data-completion="planned"] .node-copy {
+  opacity: .48;
+}
+
+.orrery-v3-node.typographic[data-completion="completed"] .node-luminary i {
+  box-shadow: 0 0 8px var(--type-star), 0 0 22px color-mix(in srgb, var(--type-star) 62%, transparent);
+}
+
+.orrery-v3-node.typographic[data-completion="active"] .node-luminary i {
+  animation: typographic-star-breathe 2.4s ease-in-out infinite;
+}
+
+.orrery-v3-node.typographic.overview {
+  grid-template-columns: 10px auto;
+  gap: 4px;
+  padding: 4px;
+}
+
+.orrery-v3-node.typographic.overview .node-luminary {
+  display: grid;
+  width: 10px;
+  height: 18px;
+  transform: scale(1.28);
+}
+
+.orrery-v3-node.typographic.overview .node-title {
+  display: none;
+}
+
+.orrery-v3-node.typographic.overview .node-kicker {
+  display: block;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.orrery-v3-node.typographic.overview[data-type="chapter"] > .node-copy {
+  display: grid;
+  transform: translate(5px, -15px) scale(1.48);
+  transform-origin: left center;
+}
+
+.orrery-v3-node.typographic.overview[data-type="chapter"] > .node-luminary {
+  opacity: 0;
+}
+
+.orrery-v3-stage .narrative-chapter-anchor-halo {
+  r: 7px;
+  opacity: .58;
+}
+
+.orrery-v3-stage .narrative-chapter-anchor-core {
+  r: 2.6px;
+}
+
+.orrery-v3-stage .narrative-chapter-anchor-label {
+  display: none;
+}
+
+.orrery-v3-node.typographic.overview[data-type="scene"] .node-copy,
+.orrery-v3-node.typographic.overview[data-type="character"] .node-copy {
+  display: none;
+}
+
+.orrery-v3-node.typographic:is(.selected,.focused,.navigating,.forced-label) .node-copy {
+  display: grid;
+}
+
+.orrery-v3-node.typographic:is(.selected,.focused,.navigating,.forced-label) .node-title {
+  display: block;
+}
+
+.orrery-v3-node.typographic:is(:hover,.selected,.focused) {
+  z-index: 999 !important;
+  background: color-mix(in srgb, var(--orrery-deep) 52%, transparent);
+  border-radius: 3px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--orrery-deep) 46%, transparent);
+  backdrop-filter: blur(7px);
+}
+
+.orrery-v3-node.symbolic .node-copy {
+  justify-items: center;
+}
+
+.orrery-v3-node.symbolic .node-title {
+  max-width: 150px;
+  font-size: 10px;
+}
+
+.orrery-v3-node.symbolic .node-kicker {
+  font-size: 6px;
+}
+
+@keyframes typographic-star-breathe {
+  0%, 100% { opacity: .68; transform: scale(.9); }
+  50% { opacity: 1; transform: scale(1.45); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orrery-v3-node.typographic[data-completion="active"] .node-luminary i { animation: none; }
+}

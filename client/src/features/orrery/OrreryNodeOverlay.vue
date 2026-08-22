@@ -75,14 +75,20 @@ function isPrimary(node: SpatialNarrativeNode): boolean {
   return node.type === "chapter" || node.type === "scene";
 }
 
+function isTypographic(node: SpatialNarrativeNode): boolean {
+  return node.type === "chapter" || node.type === "scene" || node.type === "character";
+}
+
 function isOverview(node: SpatialNarrativeNode): boolean {
   const anchor = props.anchors[node.node_id];
   return Boolean(anchor && anchor.scale < 0.59);
 }
 
 function labelRectangle(node: SpatialNarrativeNode, anchor: { x: number; y: number; scale: number }): { left: number; right: number; top: number; bottom: number } {
-  const width = Math.min(158, Math.max(76, node.label.length * 11.2)) * Math.max(0.74, anchor.scale);
-  const height = 42 * Math.max(0.8, anchor.scale);
+  const overview = anchor.scale < 0.59;
+  const compactWidth = node.type === "chapter" ? 68 : node.type === "scene" ? 24 : 58;
+  const width = (overview ? compactWidth : Math.min(184, Math.max(76, node.label.length * 11.2))) * Math.max(0.74, anchor.scale);
+  const height = (overview ? 25 : 46) * Math.max(0.8, anchor.scale);
   return { left: anchor.x - width / 2, right: anchor.x + width / 2, top: anchor.y - 10, bottom: anchor.y + height };
 }
 
@@ -109,6 +115,19 @@ function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
 function labelFor(node: SpatialNarrativeNode): string {
   const labels: Record<string, string> = { chapter: "章节", scene: "场景", character: "人物", branch: "分支", review: "审查", canon: "设定", promise: "承诺", "reader-question": "问题", task: "任务" };
   return labels[node.type] || "资料";
+}
+
+function compactLabelFor(node: SpatialNarrativeNode): string {
+  if (node.type === "chapter") {
+    const match = node.label.match(/第[\d一二三四五六七八九十百千万零〇两]+[章节卷部幕]/);
+    return match?.[0] || `第${Math.max(1, Math.round(node.order) + 1)}章`;
+  }
+  if (node.type === "scene") return `场景 ${String(Math.max(1, Math.round(node.order) + 1)).padStart(2, "0")}`;
+  return labelFor(node);
+}
+
+function displayLabelFor(node: SpatialNarrativeNode): string {
+  return node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label;
 }
 
 function iconFor(node: SpatialNarrativeNode): Component {
@@ -156,7 +175,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       v-for="node in visible"
       :key="node.node_id"
       class="orrery-v3-node"
-      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens) }, focusClass(node), motionClass(node), overviewClass(node)]"
+      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), overviewClass(node)]"
       :data-status="node.status"
       :data-completion="node.completion_state"
       :data-type="node.type"
@@ -165,9 +184,12 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       @click="emit('select', node)"
       @dblclick="emit('focus', node)"
     >
-      <span class="node-glyph"><component :is="iconFor(node)" :size="12" :stroke-width="1.85" /></span>
-      <span>{{ node.label.slice(0, 14) }}</span>
-      <small>{{ labelFor(node) }}</small>
+      <span v-if="isTypographic(node)" class="node-luminary" aria-hidden="true"><i></i><b></b></span>
+      <span v-else class="node-glyph"><component :is="iconFor(node)" :size="12" :stroke-width="1.85" /></span>
+      <span class="node-copy">
+        <small class="node-kicker">{{ compactLabelFor(node) }}</small>
+        <span class="node-title">{{ displayLabelFor(node) }}</span>
+      </span>
     </button>
   </div>
 </template>
