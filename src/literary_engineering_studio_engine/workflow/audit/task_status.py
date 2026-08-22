@@ -132,8 +132,10 @@ def _route_summary(
     return {
         "route": normalized_route or "overall",
         "gate_count": len(gates),
-        "blocking_count": _gate_count(gates, "severity", "blocking"),
-        "warning_count": _gate_count(gates, "severity", "warning"),
+        "blocking_count": _failed_gate_count(gates, "blocking"),
+        "warning_count": _failed_gate_count(gates, "warning"),
+        "blocking_gate_count": _gate_count(gates, "severity", "blocking"),
+        "warning_gate_count": _gate_count(gates, "severity", "warning"),
         "waiting_count": _gate_count(gates, "status", "waiting"),
         "pass_count": _gate_count(gates, "status", "pass"),
         "pending_task_count": sum(
@@ -146,3 +148,11 @@ def _route_summary(
 
 def _gate_count(gates: list[dict[str, str]], field: str, value: str) -> int:
     return sum(1 for gate in gates if gate[field] == value)
+
+
+def _failed_gate_count(gates: list[dict[str, str]], severity: str) -> int:
+    return sum(
+        1
+        for gate in gates
+        if gate.get("status") == "fail" and gate.get("severity") == severity
+    )

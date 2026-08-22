@@ -10,6 +10,7 @@ from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.runtime.task_program import build_task_context
 from literary_engineering_studio_engine.agent_task_status import build_agent_task_status, build_route_audit
 import literary_engineering_studio_engine.agent_task_status as agent_task_status
+from literary_engineering_studio_engine.workflow.audit.task_status import _route_summary
 import literary_engineering_studio_engine.agent_task_inventory as agent_task_inventory
 import literary_engineering_studio_engine.route_audit_common as route_audit_common
 import literary_engineering_studio_engine.asset_route as asset_route
@@ -22,6 +23,23 @@ from tests.scene_lifecycle_support import prepare_promotable_candidate
 
 
 class TaskContractTransportTests(unittest.TestCase):
+    def test_route_summary_counts_failed_gates_separately_from_gate_inventory(self):
+        summary = _route_summary(
+            "scene-development",
+            [],
+            [
+                {"key": "sealed", "status": "pass", "severity": "blocking", "message": "ok"},
+                {"key": "failed", "status": "fail", "severity": "blocking", "message": "bad"},
+                {"key": "warning", "status": "fail", "severity": "warning", "message": "risk"},
+                {"key": "info", "status": "pass", "severity": "info", "message": "ok"},
+            ],
+        )
+
+        self.assertEqual(summary["blocking_count"], 1)
+        self.assertEqual(summary["warning_count"], 1)
+        self.assertEqual(summary["blocking_gate_count"], 2)
+        self.assertEqual(summary["warning_gate_count"], 1)
+
     def test_agent_task_sidecars_are_always_studio_managed(self):
         sidecar = "plot/chapter_obligations/chapter_0001.agent_tasks.md"
         task = _enrich_task_payload(
