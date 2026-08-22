@@ -1,5 +1,13 @@
 # Studio Implementation Route
 
+## Planned Roadmap: Spatial Operating System and Creative Constellation
+
+ArcVellum will evolve from a page-oriented Studio with an orrery module into a spatial literary operating system. The orrery becomes the persistent project shell, while prose, characters, world assets, style, branches, reviews, revisions, Agent activity and delivery become interactive nodes in one hierarchical 2.5D creative constellation. Mechanical CLI work remains hidden inside node lifecycle and never becomes a second frontend state machine.
+
+The product architecture, projection v4 contract, semantic zoom model, workspace-window protocol, feature-preserving migration matrix, implementation phases and release gates are defined in `docs/roadmap/arcvellum-spatial-operating-system-and-creative-constellation-development-plan.md`.
+
+This roadmap extends rather than replaces the delivered spatial renderer, Narrative Projection v3, WorkspaceCommandBus, feature clients, adaptive orchestration and modular interface work. Settings, model connections, project management, application information and legal content remain independent system pages; all work-project capabilities migrate behind constellation nodes only after functional parity is proven.
+
 ## Planned Roadmap: ArcVellum v0.9
 
 ArcVellum v0.9 will replace the fixed SVG orrery with an adaptive 2.5D narrative stage while preserving the embedded literary state machine as the only workflow authority. The product and visual specification is recorded in `docs/roadmap/arcvellum-v0.9-spatial-orrery-and-creative-observability-plan.md`; the dependency-ordered engineering route, migration strategy, performance budgets, test matrix, and release gates are recorded in `docs/roadmap/arcvellum-v0.9-implementation-execution-plan.md`.
