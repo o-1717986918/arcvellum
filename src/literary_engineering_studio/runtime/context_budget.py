@@ -241,6 +241,12 @@ def classify_context_task(task: TaskPackage) -> ContextTaskKind:
         or state in SCENE_REVISION_STATES
     ):
         return ContextTaskKind.PROSE
+    # This scene-route state creates a chapter-level planning contract.  Its
+    # legacy transport name contains ``platform-review``, but it does not
+    # review an existing candidate.  Letting that transport token win gives
+    # the task the review recipe and replays unrelated review/style evidence.
+    if state == "reader-experience-contract":
+        return ContextTaskKind.PLANNING
     route_kind = _route_task_kind(route, haystack)
     if route_kind is not None:
         return route_kind

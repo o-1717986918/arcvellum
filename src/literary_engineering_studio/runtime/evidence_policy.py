@@ -74,6 +74,7 @@ def _task_specific_policy(
     if task_kind == "prose":
         return _prose_evidence_policy(task, path)
     policies = {
+        "reader-experience-contract": _reader_experience_evidence_policy,
         "composition-agent-task": _composition_evidence_policy,
         "continuity-ledger-agent-task": _continuity_evidence_policy,
         "state-agent-task": _state_evidence_policy,
@@ -84,6 +85,45 @@ def _task_specific_policy(
     if policy := policies.get(state):
         return policy(task, path)
     return _asset_review_evidence_policy(task, path)
+
+
+def _reader_experience_evidence_policy(
+    _task: TaskPackage,
+    path: str,
+) -> EvidencePolicyDecision:
+    """Keep chapter planning semantic and bounded on the first turn.
+
+    Reader-experience planning needs the chapter inventory, not prose lint,
+    lifecycle receipts, or duplicate human-readable reports.  Those sources
+    remain authorized on demand for a specific dispute.
+    """
+
+    projections = {
+        "project.yaml": "project-identity",
+        "plot/word_budget/word_budget.json": "prose-word-budget",
+    }
+    if projection := projections.get(path):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, projection)
+    if path.startswith("scenes/") and path.endswith((".yaml", ".yml")):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE, "prose-scene")
+    if path.startswith("plot/chapter_obligations/") and path.endswith(".json"):
+        return EvidencePolicyDecision(
+            EvidenceDisposition.INLINE,
+            "prose-chapter-obligation",
+        )
+    if path.startswith("characters/") and path.endswith((".yaml", ".yml")):
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+    if path in {
+        "plot/outline.md",
+        "plot/foreshadowing.csv",
+        "plot/conflict_matrix.md",
+        "canon/facts.json",
+        "canon/forbidden_changes.yaml",
+        "canon/timeline.yaml",
+        "canon/world_rules.yaml",
+    }:
+        return EvidencePolicyDecision(EvidenceDisposition.INLINE)
+    return EvidencePolicyDecision(EvidenceDisposition.ON_DEMAND)
 
 
 def _committee_evidence_policy(

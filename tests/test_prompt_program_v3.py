@@ -1474,6 +1474,121 @@ class PromptProgramV3Tests(unittest.TestCase):
                 self.assertNotIn(relative, context["prompt_access"]["inline"])
             self.assertNotIn("embedded_transport_copy", sandbox.prompt_path.read_text(encoding="utf-8"))
 
+    def test_pi_reader_experience_planning_keeps_only_semantic_chapter_evidence_inline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                "project.yaml": "project:\n  title: 测试长篇\n",
+                "plot/outline.md": "# 第一章\n\n建立问题，扩大代价，留下下一章压力。\n",
+                "plot/foreshadowing.csv": "id,setup,payoff\nF1,失真的钟声,第二章\n",
+                "plot/conflict_matrix.md": "# 冲突\n\n主角需要确认事实却害怕验证失败。\n",
+                "plot/word_budget/word_budget.json": json.dumps(
+                    {
+                        "schema": "budget/v1",
+                        "target": {"target_chinese_chars": 30000},
+                        "chapter_budgets": [
+                            {"chapter_id": "chapter_0001", "target_words": 15000}
+                        ],
+                        "scene_inventory_binding": {
+                            "chapter_rows": [
+                                {
+                                    "chapter_id": "chapter_0001",
+                                    "scene_ids": ["scene_0001", "scene_0002"],
+                                    "target_scene_count": 2,
+                                    "avg_scene_words": 7500,
+                                }
+                            ]
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                "plot/word_budget/word_budget.md": "重复预算说明" * 5000,
+                "plot/chapter_obligations/chapter_0001.json": json.dumps(
+                    {
+                        "schema": "chapter-obligation/v1",
+                        "chapter_id": "chapter_0001",
+                        "status": "pending",
+                        "target_chinese_chars": 15000,
+                    },
+                    ensure_ascii=False,
+                ),
+                "plot/chapter_obligations/chapter_0001.md": "重复章节说明" * 4000,
+                "scenes/scene_0001.yaml": "scene_id: scene_0001\nchapter_id: chapter_0001\nscene_goal: 建立问题\n",
+                "scenes/scene_0002.yaml": "scene_id: scene_0002\nchapter_id: chapter_0001\nscene_goal: 扩大代价\n",
+                "canon/world_rules.yaml": "rules:\n  - 记忆只能由声音触发。\n",
+                "characters/protagonist.yaml": "name: 主角\nbelief: 验证能带来确定\n",
+                "references/punctuation-standard.md": "无关标点规范" * 4000,
+                "style/creative_quality_profile.json": json.dumps(
+                    {"rules": ["无关正文规则" * 4000]}, ensure_ascii=False
+                ),
+                "reviews/word_budget/word_budget_review.md": "重复审查记录" * 4000,
+                "workflow/longform_materialization.json": '{"status":"complete"}',
+            }
+            for relative, body in files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            task = _task(root)
+            task.payload.update(
+                {
+                    "task_id": "reader-experience-contract",
+                    "route": "scene-development",
+                    "task_type": "deterministic-cli-plus-platform-review",
+                    "current_state": "reader-experience-contract",
+                    "scene_id": "scene_0001",
+                    "source_paths": list(files),
+                    "agent_source_paths": list(files),
+                    "context_must_inline_paths": [],
+                    "context_exact_on_demand_paths": [],
+                    "expected_outputs": [
+                        "plot/chapter_obligations/chapter_0001.json",
+                        "plot/chapter_obligations/chapter_0001.md",
+                    ],
+                    "core_managed_outputs": [],
+                }
+            )
+            selection = select_agent_context(task)
+            budget = resolve_task_context_budget(task)
+            prepared = build_prepared_prompt_context(
+                root,
+                selection.requested_context_paths,
+                budget=budget,
+            )
+            envelope = build_execution_context_envelope(
+                task,
+                workspace=root,
+                selection=selection,
+                prepared_context=prepared,
+                budget=budget,
+            )
+
+            compiled = compile_worker_program(
+                task,
+                prompt_version="v3",
+                renderer="tool-worker",
+                workspace=root,
+                execution_context=envelope,
+            )
+
+            self.assertEqual(envelope.task_kind, "planning")
+            self.assertEqual(compiled.lint.status, "pass")
+            self.assertLess(compiled.metrics.total_characters, 30_000)
+            inline = {item.source_ref for item in compiled.program.evidence}
+            on_demand = {item.source_ref for item in compiled.program.exact_on_demand}
+            self.assertIn("plot/word_budget/word_budget.json", inline)
+            self.assertIn("plot/chapter_obligations/chapter_0001.json", inline)
+            self.assertIn("scenes/scene_0001.yaml", inline)
+            self.assertIn("scenes/scene_0002.yaml", inline)
+            for relative in (
+                "plot/word_budget/word_budget.md",
+                "plot/chapter_obligations/chapter_0001.md",
+                "references/punctuation-standard.md",
+                "style/creative_quality_profile.json",
+                "reviews/word_budget/word_budget_review.md",
+            ):
+                self.assertIn(relative, on_demand)
+                self.assertNotIn(relative, inline)
+
     def test_pi_continuity_delta_uses_reader_evidence_not_nested_promotion_history(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

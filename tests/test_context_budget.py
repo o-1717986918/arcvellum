@@ -144,6 +144,16 @@ class ContextBudgetTests(unittest.TestCase):
             )
             self.assertIs(canon.task_kind, ContextTaskKind.REVIEW)
 
+            reader_contract = resolve_task_context_budget(
+                _task(
+                    root,
+                    route="scene-development",
+                    task_type="deterministic-cli-plus-platform-review",
+                    current_state="reader-experience-contract",
+                )
+            )
+            self.assertIs(reader_contract.task_kind, ContextTaskKind.PLANNING)
+
     def test_composition_agent_task_is_review_not_creative_generation(self):
         with tempfile.TemporaryDirectory() as temporary:
             budget = resolve_task_context_budget(
