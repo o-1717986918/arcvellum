@@ -1213,6 +1213,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/narrative/projection/v4": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Narrative Projection V4 */
+        get: operations["narrative_projection_v4_narrative_projection_v4_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/narrative/projection/v4/nodes/{node_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Narrative Projection V4 Node */
+        get: operations["narrative_projection_v4_node_narrative_projection_v4_nodes__node_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/narrative/stream": {
         parameters: {
             query?: never;
@@ -1239,6 +1273,23 @@ export interface paths {
         };
         /** Narrative Stream V3 */
         get: operations["narrative_stream_v3_narrative_stream_v3_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/narrative/stream/v4": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Narrative Stream V4 */
+        get: operations["narrative_stream_v4_narrative_stream_v4_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5212,6 +5263,76 @@ export interface operations {
             };
         };
     };
+    narrative_projection_v4_narrative_projection_v4_get: {
+        parameters: {
+            query: {
+                project_root: string;
+                level?: string;
+                focus?: string;
+                grammar?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    narrative_projection_v4_node_narrative_projection_v4_nodes__node_id__get: {
+        parameters: {
+            query: {
+                project_root: string;
+                level?: string;
+                focus?: string;
+                grammar?: string;
+            };
+            header?: never;
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     narrative_stream_narrative_stream_get: {
         parameters: {
             query: {
@@ -5248,6 +5369,42 @@ export interface operations {
         };
     };
     narrative_stream_v3_narrative_stream_v3_get: {
+        parameters: {
+            query: {
+                project_root: string;
+                level?: string;
+                focus?: string;
+                grammar?: string;
+                interval_seconds?: number;
+                max_events?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    narrative_stream_v4_narrative_stream_v4_get: {
         parameters: {
             query: {
                 project_root: string;

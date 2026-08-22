@@ -74,15 +74,15 @@ describe("feature clients over MockFeatureTransport", () => {
   it("filters Orrery projection and patch events without a browser connection", async () => {
     const { transport, clients } = createFeatureClientHarness();
     const view = { projectRoot: PROJECT_ROOT, level: "book", focus: "", grammar: "spine" };
-    const path = `/narrative/stream/v3?${transport.query({ project_root: PROJECT_ROOT, level: "book", focus: "", grammar: "spine" })}&interval_seconds=2`;
+    const path = `/narrative/stream/v4?${transport.query({ project_root: PROJECT_ROOT, level: "book", focus: "", grammar: "spine" })}&interval_seconds=2`;
     const projection = spatialProjectionFixture();
     const onProjection = vi.fn();
     const onPatch = vi.fn();
 
     clients.orrery.observeSpatialProjection(view, onProjection, onPatch);
     transport.emit(path, "narrative.heartbeat", {});
-    transport.emit(path, "narrative.v3.projection", projection as unknown as Record<string, unknown>);
-    transport.emit(path, "narrative.v3.patch", { target_revision: "fixture-p2" });
+    transport.emit(path, "narrative.v4.projection", projection as unknown as Record<string, unknown>);
+    transport.emit(path, "narrative.v4.patch", { target_revision: "fixture-p2" });
 
     expect(onProjection).toHaveBeenCalledWith(projection);
     expect(onPatch).toHaveBeenCalledWith({ target_revision: "fixture-p2" });

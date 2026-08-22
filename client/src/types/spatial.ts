@@ -6,6 +6,28 @@ import type { RelationFamily, RelationFocusState, RelationVisibilityProfile } fr
 export type SpatialGrammar = "spine" | "braid" | "strata" | "constellation" | "loop" | "stage";
 export type SpatialDetailLevel = "far" | "mid" | "near";
 export type SpatialCompletionState = "completed" | "active" | "planned" | "blocked";
+export type CreativeNodeKind =
+  | "project" | "story-architecture" | "word-budget" | "style" | "world" | "location" | "organization"
+  | "character" | "relationship" | "volume" | "chapter" | "scene" | "event" | "branch" | "reader-question"
+  | "promise" | "payoff" | "draft" | "formal-prose" | "review" | "revision" | "canon" | "human-decision" | "delivery";
+export type CreativeNodeLifecycle =
+  | "latent" | "locked" | "available" | "active" | "awaiting" | "reviewing" | "revision" | "formal" | "blocked" | "superseded" | "delivered";
+export type NodeActionKind =
+  | "inspect" | "focus" | "open-workspace" | "compare" | "propose-edit" | "request-agent" | "run-creative-step"
+  | "choose-branch" | "request-revision" | "promote" | "approve" | "export";
+
+export interface NodeActionDescriptor {
+  action_id: string;
+  kind: NodeActionKind;
+  label: string;
+  target: string;
+  mutates_project: boolean;
+  requires_confirmation: boolean;
+  risk_level: "read" | "draft" | "formal" | string;
+  enabled: boolean;
+  reason: string;
+  workspace: string;
+}
 
 export interface SpatialOrientation {
   x: number;
@@ -54,6 +76,17 @@ export interface SpatialNarrativeNode extends NarrativeNode {
   world_hint: SpatialWorldHint;
   rhythm?: SpatialRhythmHint;
   detail_endpoint: string;
+  creative_kind?: CreativeNodeKind;
+  lifecycle?: CreativeNodeLifecycle;
+  hierarchy_depth?: number;
+  depth_role?: "far-anchor" | "mid-structure" | "near-detail";
+  available_actions?: NodeActionDescriptor[];
+  workspace_hints?: {
+    preferred_workspace: string;
+    supports_float: boolean;
+    supports_dock: boolean;
+    supports_fullscreen: boolean;
+  };
 }
 
 export interface SpatialNarrativeEdge extends NarrativeEdge {
@@ -73,7 +106,7 @@ export interface SpatialCluster {
 
 export interface SpatialNarrativeProjection {
   ok: boolean;
-  schema: "arcvellum/narrative-projection/v3";
+  schema: "arcvellum/narrative-projection/v3" | "arcvellum/narrative-projection/v4";
   project_root: string;
   generated_at: string;
   revision: string;
@@ -107,6 +140,15 @@ export interface SpatialNarrativeProjection {
   motion_events: Array<{ type: string; node_id: string; label: string }>;
   legend: Array<{ type: string; label: string; color: string }>;
   accessibility_summary: string;
+  activities?: Array<{
+    activity_id: string;
+    kind: string;
+    status: string;
+    route: string;
+    target: string;
+    label: string;
+    summary: string;
+  }>;
 }
 
 export interface SpatialProjectionCollectionPatch<T> {
@@ -118,6 +160,7 @@ export interface SpatialProjectionCollectionPatch<T> {
 export interface SpatialNarrativeProjectionPatch {
   ok: boolean;
   schema: "arcvellum/narrative-projection-patch/v1";
+  projection_schema?: SpatialNarrativeProjection["schema"];
   base_revision: string;
   target_revision: string;
   sequence: number;
@@ -131,12 +174,13 @@ export interface SpatialNarrativeProjectionPatch {
 
 export interface SpatialNodeDetail {
   ok: boolean;
-  schema: "arcvellum/narrative-node-detail/v1";
+  schema: "arcvellum/narrative-node-detail/v1" | "arcvellum/narrative-node-detail/v2";
   project_root: string;
   projection_revision: string;
   node: SpatialNarrativeNode;
   relationships: SpatialNarrativeEdge[];
-  available_actions: Array<{ id: string; label: string }>;
+  available_actions: NodeActionDescriptor[] | Array<{ id: string; label: string }>;
+  workspace_hints?: SpatialNarrativeNode["workspace_hints"];
 }
 
 export interface WorldPoint {

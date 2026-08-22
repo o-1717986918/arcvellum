@@ -20,16 +20,20 @@ class NarrativeRouterDependencies:
     cached_read_model: Callable[..., dict[str, Any]]
     dashboard_snapshot: Callable[[Path], dict[str, Any]]
     narrative_evidence_snapshot: Callable[[Path], dict[str, Any]]
+    library_snapshot: Callable[[Path], dict[str, Any]]
     build_projection: Callable[..., dict[str, Any]]
     projection_delta: Callable[[dict[str, Any] | None, dict[str, Any]], dict[str, Any]]
     projection_motion_events: Callable[..., list[dict[str, Any]]]
     build_projection_v3: Callable[..., dict[str, Any]]
     build_node_detail_v3: Callable[..., dict[str, Any]]
+    build_projection_v4: Callable[..., dict[str, Any]]
+    build_node_detail_v4: Callable[..., dict[str, Any]]
     spatial_projection_delta: Callable[[dict[str, Any] | None, dict[str, Any]], dict[str, Any]]
     spatial_projection_motion_events: Callable[..., list[dict[str, Any]]]
     spatial_projection_patch: Callable[..., dict[str, Any]]
     v2_stream_state: dict[str, dict[str, Any]]
     v3_stream_state: dict[str, dict[str, Any]]
+    v4_stream_state: dict[str, dict[str, Any]]
     stream_lock: Lock
     sse: Callable[[str, dict[str, Any], int | str | None], str]
 
@@ -65,20 +69,56 @@ def _projection_v3(deps: NarrativeRouterDependencies, root: Path, level: str, fo
     )
 
 
+def _projection_v4(deps: NarrativeRouterDependencies, root: Path, level: str, focus: str, grammar: str) -> dict[str, Any]:
+    return deps.cached_read_model(
+        f"narrative-v4:{root}:{level}:{focus}:{grammar}",
+        root,
+        lambda: deps.build_projection_v4(
+            deps.config,
+            root,
+            level=level,
+            focus=focus,
+            grammar=grammar,
+            dashboard_payload=deps.dashboard_snapshot(root),
+            library_payload=deps.library_snapshot(root),
+        ),
+    )
+
+
 def _v3_transition(
     deps: NarrativeRouterDependencies,
     previous: dict[str, Any] | None,
     current: dict[str, Any],
     sequence: int,
 ) -> tuple[str, dict[str, Any]]:
+    return _spatial_transition(deps, previous, current, sequence, version=3)
+
+
+def _v4_transition(
+    deps: NarrativeRouterDependencies,
+    previous: dict[str, Any] | None,
+    current: dict[str, Any],
+    sequence: int,
+) -> tuple[str, dict[str, Any]]:
+    return _spatial_transition(deps, previous, current, sequence, version=4)
+
+
+def _spatial_transition(
+    deps: NarrativeRouterDependencies,
+    previous: dict[str, Any] | None,
+    current: dict[str, Any],
+    sequence: int,
+    *,
+    version: int,
+) -> tuple[str, dict[str, Any]]:
     delta = deps.spatial_projection_delta(previous, current)
     motion_events = deps.spatial_projection_motion_events(previous, current, delta)
     if previous is None:
         payload = dict(current)
         payload.update({"sequence": sequence, "delta": delta, "motion_events": motion_events})
-        return "narrative.v3.projection", payload
+        return f"narrative.v{version}.projection", payload
     return (
-        "narrative.v3.patch",
+        f"narrative.v{version}.patch",
         deps.spatial_projection_patch(
             previous,
             current,
@@ -98,22 +138,69 @@ def _v3_streaming_response(
     interval: float,
     limit: int,
 ) -> StreamingResponse:
+    return _spatial_streaming_response(
+        deps,
+        root,
+        level,
+        focus,
+        grammar,
+        interval,
+        limit,
+        version=3,
+    )
+
+
+def _v4_streaming_response(
+    deps: NarrativeRouterDependencies,
+    root: Path,
+    level: str,
+    focus: str,
+    grammar: str,
+    interval: float,
+    limit: int,
+) -> StreamingResponse:
+    return _spatial_streaming_response(
+        deps,
+        root,
+        level,
+        focus,
+        grammar,
+        interval,
+        limit,
+        version=4,
+    )
+
+
+def _spatial_streaming_response(
+    deps: NarrativeRouterDependencies,
+    root: Path,
+    level: str,
+    focus: str,
+    grammar: str,
+    interval: float,
+    limit: int,
+    *,
+    version: int,
+) -> StreamingResponse:
+    projection_builder = _projection_v4 if version == 4 else _projection_v3
+    stream_state = deps.v4_stream_state if version == 4 else deps.v3_stream_state
+
     def stream():
         sent = 0
         stream_key = f"{root}|{level}|{focus}|{grammar}"
         while True:
-            projection = _projection_v3(deps, root, level, focus, grammar)
+            projection = projection_builder(deps, root, level, focus, grammar)
             revision = str(projection.get("revision") or "")
             event_name = ""
             event_payload: dict[str, Any] | None = None
             with deps.stream_lock:
-                state = deps.v3_stream_state.get(stream_key, {})
+                state = stream_state.get(stream_key, {})
                 previous = state.get("projection") if isinstance(state.get("projection"), dict) else None
                 previous_revision = str((previous or {}).get("revision") or "")
                 if revision != previous_revision:
                     sequence = int(state.get("sequence") or 0) + 1
-                    event_name, event_payload = _v3_transition(deps, previous, projection, sequence)
-                    deps.v3_stream_state[stream_key] = {
+                    event_name, event_payload = _spatial_transition(deps, previous, projection, sequence, version=version)
+                    stream_state[stream_key] = {
                         "sequence": sequence,
                         "projection": projection,
                     }
@@ -125,7 +212,7 @@ def _v3_streaming_response(
                 if limit and sent >= limit:
                     break
             else:
-                yield ": narrative v3 heartbeat\n\n"
+                yield f": narrative v{version} heartbeat\n\n"
             time.sleep(interval)
 
     return StreamingResponse(
@@ -212,5 +299,36 @@ def build_narrative_router(deps: NarrativeRouterDependencies) -> APIRouter:
         interval = max(2.0, min(60.0, float(interval_seconds or 6.0)))
         limit = max(0, int(max_events or 0))
         return _v3_streaming_response(deps, root, level, focus, grammar, interval, limit)
+
+    @router.get("/narrative/projection/v4")
+    def narrative_projection_v4(project_root: str, level: str = "book", focus: str = "", grammar: str = "auto"):
+        root = resolve_project_root(project_root)
+        return call_handler(lambda: _projection_v4(deps, root, level, focus, grammar))
+
+    @router.get("/narrative/projection/v4/nodes/{node_id}")
+    def narrative_projection_v4_node(node_id: str, project_root: str, level: str = "book", focus: str = "", grammar: str = "auto"):
+        root = resolve_project_root(project_root)
+        try:
+            return call_handler(
+                lambda: deps.build_node_detail_v4(
+                    deps.config,
+                    root,
+                    node_id,
+                    level=level,
+                    focus=focus,
+                    grammar=grammar,
+                    dashboard_payload=deps.dashboard_snapshot(root),
+                    library_payload=deps.library_snapshot(root),
+                )
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="未找到这个创作节点。") from exc
+
+    @router.get("/narrative/stream/v4")
+    def narrative_stream_v4(project_root: str, level: str = "book", focus: str = "", grammar: str = "auto", interval_seconds: float = 6.0, max_events: int = 0):
+        root = resolve_project_root(project_root)
+        interval = max(2.0, min(60.0, float(interval_seconds or 6.0)))
+        limit = max(0, int(max_events or 0))
+        return _v4_streaming_response(deps, root, level, focus, grammar, interval, limit)
 
     return router

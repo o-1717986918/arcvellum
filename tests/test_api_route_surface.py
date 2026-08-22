@@ -88,6 +88,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             ("GET", "/project/rhythm-plan"),
             ("PUT", "/project/rhythm-plan"),
             ("GET", "/narrative/projection/v3"),
+            ("GET", "/narrative/projection/v4"),
             ("GET", "/narrative/stream/v3"),
             ("GET", "/project/delivery"),
         }

@@ -76,6 +76,57 @@ def scene_graph(
     return nodes, edges
 
 
+def constellation_graph(
+    inventory: ProjectionInventory,
+    reader: dict[str, Any],
+    dashboard: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build the complete literary graph without projecting mechanical task files."""
+
+    grouped = _group_scenes(inventory.scenes)
+    ordered_chapters = sorted(grouped, key=order)
+    ordered_scenes = sorted(inventory.scenes, key=lambda item: order(str(item.get("id") or "")))
+    coverage = formal_coverage(reader)
+    formal_chars = formal_chars_by_chapter(reader)
+    active_targets = _active_targets(dashboard)
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    for index, chapter_id in enumerate(ordered_chapters):
+        _append_chapter(
+            nodes,
+            edges,
+            chapter_id,
+            grouped[chapter_id],
+            ordered_chapters,
+            index,
+            coverage,
+            formal_chars,
+            active_targets,
+        )
+    _append_scene_chain(
+        nodes,
+        edges,
+        ordered_scenes,
+        coverage,
+        active_targets,
+        single_current=False,
+    )
+    for scene in ordered_scenes:
+        scene_id = str(scene.get("id") or "")
+        chapter_id = scene_chapter(scene)
+        if scene_id and chapter_id:
+            edges.append(edge(f"chapter:{chapter_id}", f"scene:{scene_id}", "contains", "章节包含场景"))
+    for scene in ordered_scenes:
+        append_scene_evidence(
+            nodes,
+            edges,
+            scene,
+            inventory,
+            include_pending=str(scene.get("id") or "") in active_targets,
+        )
+    return nodes, edges
+
+
 def _append_chapter(
     nodes: list[dict[str, Any]],
     edges: list[dict[str, Any]],
@@ -207,9 +258,11 @@ def _append_evidence(
     edges: list[dict[str, Any]],
     scenes: list[dict[str, Any]],
     inventory: ProjectionInventory,
+    *,
+    include_pending: bool = True,
 ) -> None:
     for scene in scenes:
-        append_scene_evidence(nodes, edges, scene, inventory, include_pending=True)
+        append_scene_evidence(nodes, edges, scene, inventory, include_pending=include_pending)
 
 
 def _group_scenes(scenes: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -231,4 +284,4 @@ def _active_targets(dashboard: dict[str, Any]) -> set[str]:
     return {str(item.get("target") or "") for item in actions if isinstance(item, dict)}
 
 
-__all__ = ["book_graph", "chapter_graph", "scene_graph"]
+__all__ = ["book_graph", "chapter_graph", "constellation_graph", "scene_graph"]

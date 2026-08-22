@@ -4011,6 +4011,149 @@
         "summary": "Narrative Projection V3 Node"
       }
     },
+    "/narrative/projection/v4": {
+      "get": {
+        "operationId": "narrative_projection_v4_narrative_projection_v4_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "grammar",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "title": "Grammar",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Projection V4"
+      }
+    },
+    "/narrative/projection/v4/nodes/{node_id}": {
+      "get": {
+        "operationId": "narrative_projection_v4_node_narrative_projection_v4_nodes__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "grammar",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "title": "Grammar",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Projection V4 Node"
+      }
+    },
     "/narrative/stream": {
       "get": {
         "operationId": "narrative_stream_narrative_stream_get",
@@ -4173,6 +4316,93 @@
           }
         },
         "summary": "Narrative Stream V3"
+      }
+    },
+    "/narrative/stream/v4": {
+      "get": {
+        "operationId": "narrative_stream_v4_narrative_stream_v4_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "default": "book",
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "focus",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "grammar",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "title": "Grammar",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_seconds",
+            "required": false,
+            "schema": {
+              "default": 6.0,
+              "title": "Interval Seconds",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narrative Stream V4"
       }
     },
     "/project/creative-quality": {

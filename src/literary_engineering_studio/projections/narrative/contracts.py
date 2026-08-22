@@ -21,6 +21,81 @@ class NarrativeFocusLevel(str, Enum):
             return cls.BOOK
 
 
+class CreativeNodeKind(str, Enum):
+    PROJECT = "project"
+    STORY_ARCHITECTURE = "story-architecture"
+    WORD_BUDGET = "word-budget"
+    STYLE = "style"
+    WORLD = "world"
+    LOCATION = "location"
+    ORGANIZATION = "organization"
+    CHARACTER = "character"
+    RELATIONSHIP = "relationship"
+    VOLUME = "volume"
+    CHAPTER = "chapter"
+    SCENE = "scene"
+    EVENT = "event"
+    BRANCH = "branch"
+    READER_QUESTION = "reader-question"
+    PROMISE = "promise"
+    PAYOFF = "payoff"
+    DRAFT = "draft"
+    FORMAL_PROSE = "formal-prose"
+    REVIEW = "review"
+    REVISION = "revision"
+    CANON = "canon"
+    HUMAN_DECISION = "human-decision"
+    DELIVERY = "delivery"
+
+
+class CreativeNodeLifecycle(str, Enum):
+    LATENT = "latent"
+    LOCKED = "locked"
+    AVAILABLE = "available"
+    ACTIVE = "active"
+    AWAITING = "awaiting"
+    REVIEWING = "reviewing"
+    REVISION = "revision"
+    FORMAL = "formal"
+    BLOCKED = "blocked"
+    SUPERSEDED = "superseded"
+    DELIVERED = "delivered"
+
+
+class NodeActionKind(str, Enum):
+    INSPECT = "inspect"
+    FOCUS = "focus"
+    OPEN_WORKSPACE = "open-workspace"
+    COMPARE = "compare"
+    PROPOSE_EDIT = "propose-edit"
+    REQUEST_AGENT = "request-agent"
+    RUN_CREATIVE_STEP = "run-creative-step"
+    CHOOSE_BRANCH = "choose-branch"
+    REQUEST_REVISION = "request-revision"
+    PROMOTE = "promote"
+    APPROVE = "approve"
+    EXPORT = "export"
+
+
+@dataclass(frozen=True)
+class NodeActionDescriptor:
+    action_id: str
+    kind: NodeActionKind
+    label: str
+    target: str
+    mutates_project: bool = False
+    requires_confirmation: bool = False
+    risk_level: str = "read"
+    enabled: bool = True
+    reason: str = ""
+    workspace: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["kind"] = self.kind.value
+        return payload
+
+
 class RelationFamily(str, Enum):
     NARRATIVE_SPINE = "narrative-spine"
     CHAPTER_SCENE = "chapter-scene"

@@ -90,6 +90,10 @@ from .narrative_projection_v3 import (
     spatial_projection_delta,
     spatial_projection_motion_events,
 )
+from .narrative_projection_v4 import (
+    build_narrative_node_detail_v4,
+    build_narrative_projection_v4,
+)
 from .orchestration import orchestration_settings as _orchestration_settings
 from .project_progress import build_project_progress
 from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
@@ -156,8 +160,10 @@ def _narrative_dependencies(
     cached_read_model: Callable[..., dict[str, Any]],
     dashboard_snapshot: Callable[[Path], dict[str, Any]],
     narrative_evidence_snapshot: Callable[[Path], dict[str, Any]],
+    library_snapshot: Callable[[Path], dict[str, Any]],
     v2_stream_state: dict[str, dict[str, Any]],
     v3_stream_state: dict[str, dict[str, Any]],
+    v4_stream_state: dict[str, dict[str, Any]],
     stream_lock: threading.Lock,
 ) -> NarrativeRouterDependencies:
     return NarrativeRouterDependencies(
@@ -165,16 +171,20 @@ def _narrative_dependencies(
         cached_read_model=cached_read_model,
         dashboard_snapshot=dashboard_snapshot,
         narrative_evidence_snapshot=narrative_evidence_snapshot,
+        library_snapshot=library_snapshot,
         build_projection=build_narrative_projection,
         projection_delta=projection_delta,
         projection_motion_events=projection_motion_events,
         build_projection_v3=build_narrative_projection_v3,
         build_node_detail_v3=build_narrative_node_detail_v3,
+        build_projection_v4=build_narrative_projection_v4,
+        build_node_detail_v4=build_narrative_node_detail_v4,
         spatial_projection_delta=spatial_projection_delta,
         spatial_projection_motion_events=spatial_projection_motion_events,
         spatial_projection_patch=build_spatial_projection_patch,
         v2_stream_state=v2_stream_state,
         v3_stream_state=v3_stream_state,
+        v4_stream_state=v4_stream_state,
         stream_lock=stream_lock,
         sse=_sse,
     )
@@ -222,6 +232,7 @@ def create_app(
     jobs, advisor, autopilot, style_mounts = lifecycle.persistence.facade, services.advisor, services.autopilot, services.style_mounts
     narrative_stream_state: dict[str, dict[str, Any]] = {}
     narrative_v3_stream_state: dict[str, dict[str, Any]] = {}
+    narrative_v4_stream_state: dict[str, dict[str, Any]] = {}
     narrative_stream_lock = threading.Lock()
     app = FastAPI(title="ArcVellum", version=__version__)
     app.add_middleware(
@@ -442,8 +453,10 @@ def create_app(
                 cached_read_model,
                 dashboard_snapshot,
                 narrative_evidence_snapshot,
+                library_snapshot,
                 narrative_stream_state,
                 narrative_v3_stream_state,
+                narrative_v4_stream_state,
                 narrative_stream_lock,
             )
         )

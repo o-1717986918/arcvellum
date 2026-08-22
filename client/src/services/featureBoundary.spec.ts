@@ -41,7 +41,7 @@ describe("frontend feature boundaries", () => {
       "/advisor/sessions",
       "/application/bootstrap",
       "/autopilot/status",
-      "/narrative/projection/v3",
+      "/narrative/projection/v4",
       "/project/delivery",
       "/projects",
       "/workflow/dashboard",

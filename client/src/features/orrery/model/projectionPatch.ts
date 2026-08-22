@@ -24,7 +24,7 @@ export function applySpatialProjectionPatch(
     ...base,
     ...patch.meta,
     ok: true,
-    schema: "arcvellum/narrative-projection/v3",
+    schema: patch.projection_schema || previous.schema,
     revision: patch.target_revision,
     projection_revision: patch.target_revision,
     sequence: patch.sequence,

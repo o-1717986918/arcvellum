@@ -107,7 +107,7 @@ describe("spatial projection store", () => {
     await store.open(initial.project_root);
     const identity = store.projection;
 
-    streamCallback?.("narrative.v3.projection", projection("projection-1", 1) as unknown as Record<string, unknown>);
+    streamCallback?.("narrative.v4.projection", projection("projection-1", 1) as unknown as Record<string, unknown>);
 
     expect(store.projection).toBe(identity);
   });
@@ -180,7 +180,7 @@ describe("spatial projection store", () => {
     await store.open(initial.project_root);
     const identity = store.projection;
 
-    streamCallback?.("narrative.v3.projection", projection("projection-2", 1) as unknown as Record<string, unknown>);
+    streamCallback?.("narrative.v4.projection", projection("projection-2", 1) as unknown as Record<string, unknown>);
 
     expect(store.projection).not.toBe(identity);
     expect(store.projection?.projection_revision).toBe("projection-2");
@@ -193,7 +193,7 @@ describe("spatial projection store", () => {
     const store = useSpatialProjectionStore();
     await store.open(initial.project_root);
 
-    streamCallback?.("narrative.v3.patch", patch("projection-1", "projection-2") as unknown as Record<string, unknown>);
+    streamCallback?.("narrative.v4.patch", patch("projection-1", "projection-2") as unknown as Record<string, unknown>);
 
     expect(store.projection?.projection_revision).toBe("projection-2");
     expect(store.projection?.summary).toEqual({ changed: true });
@@ -207,7 +207,7 @@ describe("spatial projection store", () => {
     const store = useSpatialProjectionStore();
     await store.open(initial.project_root);
 
-    streamCallback?.("narrative.v3.patch", patch("unknown-base", "projection-2") as unknown as Record<string, unknown>);
+    streamCallback?.("narrative.v4.patch", patch("unknown-base", "projection-2") as unknown as Record<string, unknown>);
 
     await vi.waitFor(() => expect(store.projection?.projection_revision).toBe("projection-3"));
     expect(apiMock).toHaveBeenCalledTimes(2);

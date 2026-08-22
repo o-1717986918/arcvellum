@@ -39,6 +39,7 @@ def build_projection_patch(
     return {
         "ok": True,
         "schema": PATCH_SCHEMA,
+        "projection_schema": str(current.get("schema") or previous.get("schema") or ""),
         "base_revision": _revision(previous),
         "target_revision": _revision(current),
         "sequence": int(sequence),
@@ -77,7 +78,7 @@ def apply_projection_patch(
     result.update(
         {
             "ok": True,
-            "schema": "arcvellum/narrative-projection/v3",
+            "schema": str(patch.get("projection_schema") or previous.get("schema") or ""),
             "revision": target_revision,
             "projection_revision": target_revision,
             "sequence": int(patch.get("sequence") or 0),

@@ -25,17 +25,17 @@ export function createOrreryClient(transport: ApiTransport = featureTransport) {
       `/narrative/stream?${transport.query({ project_root: projectRoot, level, focus, interval_seconds: 2 })}`,
       (event, data) => { if (event === "narrative.projection") onProjection(data as unknown as NarrativeProjection); },
     ),
-    spatialProjection: (view: OrreryViewQuery) => transport.request<SpatialNarrativeProjection>(`/narrative/projection/v3?${params(view)}`),
+    spatialProjection: (view: OrreryViewQuery) => transport.request<SpatialNarrativeProjection>(`/narrative/projection/v4?${params(view)}`),
     observeSpatialProjection: (
       view: OrreryViewQuery,
       onProjection: (value: SpatialNarrativeProjection) => void,
       onPatch: (value: SpatialNarrativeProjectionPatch) => void,
       onError?: (cause: unknown) => void,
     ) => transport.connect(
-      `/narrative/stream/v3?${params(view)}&interval_seconds=2`,
+      `/narrative/stream/v4?${params(view)}&interval_seconds=2`,
       (event, data) => {
-        if (event === "narrative.v3.patch") onPatch(data as unknown as SpatialNarrativeProjectionPatch);
-        if (event === "narrative.v3.projection") onProjection(data as unknown as SpatialNarrativeProjection);
+        if (event === "narrative.v4.patch") onPatch(data as unknown as SpatialNarrativeProjectionPatch);
+        if (event === "narrative.v4.projection") onProjection(data as unknown as SpatialNarrativeProjection);
       },
       onError,
     ),

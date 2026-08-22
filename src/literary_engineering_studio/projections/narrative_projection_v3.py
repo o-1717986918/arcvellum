@@ -46,17 +46,17 @@ def build_narrative_projection_v3(
     )
     base = build_compatible_base(config, project_root, level, focus, dashboard_payload, effective_library)
     selected_grammar = resolve_grammar(grammar, base)
-    rhythm_hints = _rhythm_hints(project_root)
+    rhythm_hints = build_rhythm_hints(project_root)
     character_references = build_character_references(effective_library)
     raw_nodes, raw_edges = augment_character_graph(
         base.get("nodes", []),
         base.get("edges", []),
         character_references,
     )
-    nodes = _spatial_nodes(raw_nodes, raw_edges, selected_grammar, rhythm_hints)
+    nodes = decorate_spatial_nodes(raw_nodes, raw_edges, selected_grammar, rhythm_hints)
     edges, focus_scope, relation_profiles = build_focused_relations(
         raw_edges, nodes, level, requested_focus(focus, base))
-    clusters = _clusters(nodes)
+    clusters = build_spatial_clusters(nodes)
     # Reuse the v2 read-model entry so cached deployments and test fixtures
     # observe exactly the same reader evidence as the base projection.
     reader_payload = narrative_projection_v2.build_reader_manifest(project_root)
@@ -106,7 +106,7 @@ def build_narrative_projection_v3(
         "edges": edges,
         "clusters": clusters,
         "layout_hints": build_layout_hints(selected_grammar, focus_scope.level.value, nodes),
-        "lod_summary": _lod_summary(nodes),
+        "lod_summary": build_lod_summary(nodes),
         "timeline": base.get("timeline", []),
         "delta": projection_delta(None, {"nodes": nodes, "edges": edges}),
         "motion_events": [],
@@ -195,7 +195,14 @@ def spatial_projection_motion_events(previous: dict[str, Any] | None, current: d
     return projection_motion_events(previous, current, delta)
 
 
-def _spatial_nodes(items: Any, edges: Any, grammar: str, rhythm_hints: dict[str, dict[str, dict[str, Any]]]) -> list[dict[str, Any]]:
+def decorate_spatial_nodes(
+    items: Any,
+    edges: Any,
+    grammar: str,
+    rhythm_hints: dict[str, dict[str, dict[str, Any]]],
+    *,
+    detail_endpoint_prefix: str = "/narrative/projection/v3/nodes",
+) -> list[dict[str, Any]]:
     raw_nodes = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
     raw_edges = [item for item in edges if isinstance(item, dict)] if isinstance(edges, list) else []
     parent_map = _parent_map(raw_edges)
@@ -214,7 +221,7 @@ def _spatial_nodes(items: Any, edges: Any, grammar: str, rhythm_hints: dict[str,
                 "importance": _importance(node),
                 "detail_level": _detail_level(node, primary_count),
                 "world_hint": _world_hint(node, grammar, index),
-                "detail_endpoint": f"/narrative/projection/v3/nodes/{node_id}",
+                "detail_endpoint": f"{detail_endpoint_prefix}/{node_id}",
             }
         )
         hint = _rhythm_hint_for_node(node, rhythm_hints)
@@ -224,7 +231,7 @@ def _spatial_nodes(items: Any, edges: Any, grammar: str, rhythm_hints: dict[str,
     return result
 
 
-def _rhythm_hints(project_root: Path) -> dict[str, dict[str, dict[str, Any]]]:
+def build_rhythm_hints(project_root: Path) -> dict[str, dict[str, dict[str, Any]]]:
     """Build small projection hints from the formal rhythm plan.
 
     The spatial view never writes rhythm data or invents a second authority. It
@@ -332,7 +339,7 @@ def _positive_float(value: object) -> float:
         return 0.0
 
 
-def _clusters(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_spatial_clusters(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, list[str]] = {}
     for node in nodes:
         grouped.setdefault(str(node["cluster_id"]), []).append(str(node["node_id"]))
@@ -347,7 +354,7 @@ def _clusters(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _lod_summary(nodes: list[dict[str, Any]]) -> dict[str, int]:
+def build_lod_summary(nodes: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "far": sum(1 for node in nodes if node["detail_level"] == "far"),
         "mid": sum(1 for node in nodes if node["detail_level"] == "mid"),

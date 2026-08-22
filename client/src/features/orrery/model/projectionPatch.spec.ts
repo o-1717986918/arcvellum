@@ -82,6 +82,7 @@ function transition(): SpatialNarrativeProjectionPatch {
   return {
     ok: true,
     schema: "arcvellum/narrative-projection-patch/v1",
+    projection_schema: "arcvellum/narrative-projection/v4",
     base_revision: "revision-one",
     target_revision: "revision-two",
     sequence: 2,
