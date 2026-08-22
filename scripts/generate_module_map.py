@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,6 +45,12 @@ BOUNDARIES = (
 
 
 def render_module_map(root: Path) -> str:
+    root = root.resolve()
+    tracked_sources = _git_tracked_source_paths(root)
+
+    def source_file_count(path: Path) -> int:
+        return _source_file_count(path, repository_root=root, tracked_sources=tracked_sources)
+
     lines = [
         "# ArcVellum 模块所有权图",
         "",
@@ -59,7 +66,7 @@ def render_module_map(root: Path) -> str:
             + " | ".join(
                 (
                     f"`{item.path}`",
-                    str(_source_file_count(root / item.path)),
+                    str(source_file_count(root / item.path)),
                     item.owner,
                     f"`{item.public_entry}`",
                     item.may_depend_on,
@@ -71,11 +78,11 @@ def render_module_map(root: Path) -> str:
     lines.extend(("", "## Vue Feature 所有权", ""))
     lines.extend(("| Feature | 文件数 | 规则 |", "|---|---:|---|"))
     features = root / "client" / "src" / "features"
-    if features.is_dir():
-        for path in sorted(item for item in features.iterdir() if item.is_dir()):
-            lines.append(
-                f"| `{path.name}` | {_source_file_count(path)} | 只通过 feature client、共享只读合同或命令总线跨域协作 |"
-            )
+    for feature_name in _feature_names(features, root, tracked_sources):
+        path = features / feature_name
+        lines.append(
+            f"| `{feature_name}` | {source_file_count(path)} | 只通过 feature client、共享只读合同或命令总线跨域协作 |"
+        )
     lines.extend(
         (
             "",
@@ -101,7 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     rendered = render_module_map(root)
     if args.check:
         try:
-            current = output.read_text(encoding="utf-8")
+            with output.open("r", encoding="utf-8", newline="") as stream:
+                current = stream.read()
         except FileNotFoundError:
             print(f"module map is missing: {output}")
             return 1
@@ -111,12 +119,65 @@ def main(argv: list[str] | None = None) -> int:
         print(f"module map is current: {output}")
         return 0
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(rendered, encoding="utf-8")
+    output.write_text(rendered, encoding="utf-8", newline="\n")
     print(f"module map written: {output}")
     return 0
 
 
-def _source_file_count(root: Path) -> int:
+def _git_tracked_source_paths(root: Path) -> tuple[str, ...] | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    suffixes = {".py", ".ts", ".vue", ".rs"}
+    return tuple(
+        path
+        for path in result.stdout.split("\0")
+        if path and Path(path).suffix in suffixes
+    )
+
+
+def _feature_names(
+    features: Path,
+    repository_root: Path,
+    tracked_sources: tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    if tracked_sources is None:
+        if not features.is_dir():
+            return ()
+        return tuple(
+            sorted(
+                path.name
+                for path in features.iterdir()
+                if path.is_dir() and _source_file_count(path) > 0
+            )
+        )
+    prefix = features.relative_to(repository_root).as_posix().rstrip("/") + "/"
+    return tuple(
+        sorted(
+            {
+                path[len(prefix) :].split("/", 1)[0]
+                for path in tracked_sources
+                if path.startswith(prefix) and "/" in path[len(prefix) :]
+            }
+        )
+    )
+
+
+def _source_file_count(
+    root: Path,
+    *,
+    repository_root: Path | None = None,
+    tracked_sources: tuple[str, ...] | None = None,
+) -> int:
+    if tracked_sources is not None and repository_root is not None:
+        prefix = root.relative_to(repository_root).as_posix().rstrip("/") + "/"
+        return sum(1 for path in tracked_sources if path.startswith(prefix))
     if not root.is_dir():
         return 0
     suffixes = {".py", ".ts", ".vue", ".rs"}
