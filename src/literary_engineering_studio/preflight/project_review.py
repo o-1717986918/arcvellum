@@ -134,7 +134,13 @@ def _validate_initial(
             "如动作确为必修则使用非通过结论；如仅为可选建议则移入非阻断说明并清空动作数组。",
         )
     if not actionable:
-        _add_issue(issues, relative, action_field, "非通过结论必须提供至少一个结构化修复动作。", "为修复动作写出 target_path、action 和 verification。")
+        _add_issue(
+            issues,
+            relative,
+            action_field,
+            "非通过结论必须提供至少一个结构化修复动作。",
+            "先区分必修缺陷与可选建议：若只有 attention、偏好或后续润色，将结论改为 clean pass（Committee 使用 approve，Canon 使用 pass）并清空必修动作；只有确有作品文件必须修改时，才写出已有项目文件的 target_path、action 和 verification。",
+        )
         return
     _validate_action_fields(actionable, action_field, relative, issues)
     target_fields = [action_field]
@@ -156,7 +162,7 @@ def _validate_initial(
             relative,
             target_issue.selector,
             target_issue.message,
-            "从当前任务证据中选择项目里已存在的精确文件；不要编造章节、场景或候选文件名。",
+            "reviews/ 与 workflow/ 是只读证据，不是作品修复目标。若该条只是 attention、偏好或可选润色，将结论改为 clean pass 并清空必修动作；若确有阻断缺陷，只能选择项目中已存在且位于 canon/、characters/、plot/、scenes/ 或 drafts/candidates/ 的精确文本文件，并保留可验证的 action 与 verification。",
         )
 
 

@@ -31,9 +31,10 @@ output_contract:
   - Write committee JSON report Markdown and completion marker at declared paths.
   - JSON must contain schema subject final_recommendation reviewers disagreements action_items source_paths and minority_opinions; all collection fields are arrays even when empty.
   - Do not replace final_recommendation and action_items with generic verdict and findings fields.
+  - reviews/ and workflow/ are read-only evidence domains, never repair targets.
 review_requirements:
   - Verdict accounts for all blocking lenses and exact-source provenance.
-  - target_path must name one allowed project text file rather than a directory review artifact or workflow artifact.
+  - A required repair target_path must name an existing text file under canon/ characters/ plot/ scenes/ or drafts/candidates/ rather than a review or workflow artifact.
 forbidden_shortcuts:
   - Do not average away a blocking Canon review style lint or route gate failure.
 ---
@@ -52,13 +53,15 @@ Use this exact top-level JSON shape:
 {
   "schema": "literary-engineering-workbench/committee-review-agent/v1",
   "subject": "project-final-audit",
-  "final_recommendation": "approve | approve_with_notes | revise | reject",
+  "final_recommendation": "approve",
   "reviewers": [],
   "disagreements": [],
-  "action_items": [
-    {"target_path": "plot/example.md", "action": "exact repair", "verification": "observable proof"}
-  ],
+  "action_items": [],
   "source_paths": [],
   "minority_opinions": []
 }
 ```
+
+Use `approve_with_notes`, `revise`, or `reject` only when a concrete defect must change before export. In that case each action item must use
+`{"target_path": "<existing project artifact>", "action": "<exact repair>", "verification": "<observable before/after proof>"}` and the target
+must be an existing text file under `canon/`, `characters/`, `plot/`, `scenes/`, or `drafts/candidates/`. Never target `reviews/` or `workflow/`.

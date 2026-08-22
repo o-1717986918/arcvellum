@@ -83,7 +83,10 @@ class ProjectReviewPromptContractTests(unittest.TestCase):
 
             validate_project_review_contract(task, sandbox, issues)
 
-            self.assertTrue(any(item.path.endswith("#action_items") for item in issues))
+            action_issue = next(item for item in issues if item.path.endswith("#action_items"))
+            self.assertIn("clean pass", action_issue.repair)
+            self.assertIn("attention", action_issue.repair)
+            self.assertIn("target_path", action_issue.repair)
 
     def test_committee_rejects_invented_repair_targets_before_import(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -121,6 +124,43 @@ class ProjectReviewPromptContractTests(unittest.TestCase):
             self.assertIn("action_items[0].target_path", selectors)
             self.assertIn("action_items[1].target_path", selectors)
             self.assertTrue(all("does not exist" in item.message for item in issues))
+
+    def test_committee_review_artifact_target_gets_exact_domain_or_clean_pass_guidance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task, sandbox, review = self._fixture(Path(temporary), committee=True)
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/committee-review-agent/v1",
+                        "final_recommendation": "approve_with_notes",
+                        "reviewers": [],
+                        "disagreements": [],
+                        "action_items": [
+                            {
+                                "target_path": "reviews/longform/longform_audit.md",
+                                "action": "保留可选节奏建议。",
+                                "verification": "审计建议仍可见。",
+                            }
+                        ],
+                        "source_paths": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            issues: list[PreflightIssue] = []
+
+            validate_project_review_contract(task, sandbox, issues)
+
+            target_issue = next(
+                item
+                for item in issues
+                if item.path.endswith("#action_items[0].target_path")
+            )
+            self.assertIn("reviews/", target_issue.repair)
+            self.assertIn("clean pass", target_issue.repair)
+            self.assertIn("canon/", target_issue.repair)
+            self.assertIn("drafts/candidates/", target_issue.repair)
 
     def test_project_review_target_contract_accepts_existing_exact_file(self):
         with tempfile.TemporaryDirectory() as temporary:
