@@ -20,6 +20,7 @@ interface LayoutContext {
   sceneRank: Map<string, number>;
   chapterRank: Map<string, number>;
   sceneClusters: Map<string, SceneCluster>;
+  sceneClusterAxes: Map<string, number>;
   sceneClusterCount: number;
   rhythm: Map<string, NarrativeBeat>;
   temporalAxis: Map<string, number>;
@@ -88,6 +89,7 @@ function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
   const chapters = primary.filter((node) => node.type === "chapter");
   const sceneClusters = buildSceneClusters(scenes);
   const rhythm = smoothNarrativeBeats(primary);
+  const temporalAxis = buildTemporalAxis(primary, rhythm, sceneClusters);
   return {
     primary,
     scenes,
@@ -96,9 +98,10 @@ function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
     sceneRank: new Map(scenes.map((node, index) => [node.node_id, index])),
     chapterRank: new Map(chapters.map((node, index) => [node.node_id, index])),
     sceneClusters,
+    sceneClusterAxes: buildSceneClusterAxes(sceneClusters, temporalAxis),
     sceneClusterCount: new Set([...sceneClusters.values()].map((cluster) => cluster.id)).size,
     rhythm,
-    temporalAxis: buildTemporalAxis(primary, rhythm, sceneClusters),
+    temporalAxis,
   };
 }
 
@@ -116,7 +119,12 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
   // recurrent spatial rhythm.
   const timeline = rank + 1;
   const phase = timeline * 0.34;
-  const axis = context.temporalAxis.get(node.node_id) ?? narrativeAxis(timeline);
+  // Scenes keep their chronological footprint, but each chapter shares one
+  // local nucleus. The grammar can then fan the scenes around that nucleus in
+  // depth instead of rendering them as a nearly flat queue.
+  const axis = cluster
+    ? context.sceneClusterAxes.get(cluster.id) ?? context.temporalAxis.get(node.node_id) ?? narrativeAxis(timeline)
+    : context.temporalAxis.get(node.node_id) ?? narrativeAxis(timeline);
   const beat = context.rhythm.get(node.node_id) || narrativeBeat(node, rank, context.primary.length);
   const contour = bookContour(visualRank, visualCount);
   const lift = rhythmLift(beat);
@@ -236,6 +244,22 @@ function buildSceneClusters(scenes: SpatialNarrativeNode[]): Map<string, SceneCl
     });
   });
   return result;
+}
+
+function buildSceneClusterAxes(
+  clusters: Map<string, SceneCluster>,
+  temporalAxis: Map<string, number>,
+): Map<string, number> {
+  const totals = new Map<string, { total: number; count: number }>();
+  for (const [nodeId, cluster] of clusters) {
+    const axis = temporalAxis.get(nodeId);
+    if (axis === undefined) continue;
+    const current = totals.get(cluster.id) || { total: 0, count: 0 };
+    current.total += axis;
+    current.count += 1;
+    totals.set(cluster.id, current);
+  }
+  return new Map([...totals].map(([clusterId, value]) => [clusterId, value.total / Math.max(1, value.count)]));
 }
 
 function temporalSpacing(previous?: NarrativeBeat, current?: NarrativeBeat): number {

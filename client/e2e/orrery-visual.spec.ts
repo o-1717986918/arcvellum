@@ -110,6 +110,39 @@ test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ 
   expect((await canvasPixelEvidence(page)).variance).toBeGreaterThan(20);
 });
 
+test("left drag rotates empty sky while typographic nodes remain selectable", async ({ page }) => {
+  await openVisualProject(page, visualProjectRoot(100));
+  const canvas = page.locator(".narrative-parallax-stage canvas");
+  const node = page.locator(".orrery-v3-node").first();
+  await node.click();
+  await expect(node).toHaveClass(/selected/);
+
+  const dragPoint = await page.evaluate(() => {
+    const stage = document.querySelector(".orrery-v3-stage")?.getBoundingClientRect();
+    if (!stage) return null;
+    for (let row = 3; row <= 7; row += 1) {
+      for (let column = 3; column <= 7; column += 1) {
+        const x = stage.left + stage.width * column / 10;
+        const y = stage.top + stage.height * row / 10;
+        if (document.elementFromPoint(x, y)?.classList.contains("narrative-parallax-canvas")) return { x, y };
+      }
+    }
+    return null;
+  });
+  expect(dragPoint).not.toBeNull();
+  if (!dragPoint) return;
+
+  const before = await nodeCenters(page, 4);
+  await page.mouse.move(dragPoint.x, dragPoint.y);
+  await page.mouse.down({ button: "left" });
+  await page.mouse.move(dragPoint.x + 190, dragPoint.y - 84, { steps: 14 });
+  await page.mouse.up({ button: "left" });
+  await page.waitForTimeout(180);
+  const after = await nodeCenters(page, 4);
+  expect(relativeGeometryDelta(before, after)).toBeGreaterThan(1.5);
+  await expect(canvas).toHaveCount(1);
+});
+
 async function openVisualProject(page: Page, projectRoot: string): Promise<void> {
   await page.addInitScript((root) => {
     window.localStorage.setItem("arcvellum.currentProject", root);
@@ -170,6 +203,25 @@ async function verifySemanticField(
 async function visibleNodeCount(page: Page): Promise<number> {
   const caption = await page.locator(".orrery-v3-caption span").first().innerText();
   return Number(caption.match(/\d+/)?.[0] || 0);
+}
+
+async function nodeCenters(page: Page, limit: number): Promise<Array<{ x: number; y: number }>> {
+  return page.locator(".orrery-v3-node").evaluateAll((nodes, count) => nodes.slice(0, Number(count)).map((node) => {
+    const rect = node.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }), limit);
+}
+
+function relativeGeometryDelta(
+  before: Array<{ x: number; y: number }>,
+  after: Array<{ x: number; y: number }>,
+): number {
+  const distances = (points: Array<{ x: number; y: number }>) => points.slice(1).map((point, index) => (
+    Math.hypot(point.x - points[index].x, point.y - points[index].y)
+  ));
+  const first = distances(before);
+  const second = distances(after);
+  return Math.max(0, ...first.map((distance, index) => Math.abs(distance - (second[index] || 0))));
 }
 
 async function canvasPixelEvidence(page: Page): Promise<{ nonTransparent: number; luminous: number; variance: number }> {

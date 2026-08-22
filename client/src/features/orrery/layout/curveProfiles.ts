@@ -39,11 +39,22 @@ export function curveProfilePoint(grammar: SpatialGrammar, input: CurveProfileIn
   } = input;
   if (grammar === "braid") {
     const ribbon = Math.sin(phase * 1.18) * 2.15;
-    return { x: axis, y: 1.16 + rise + Math.sin(phase * 0.42) * 0.34, z: depth + ribbon * 0.54 };
+    const tangent = Math.atan2(Math.cos(phase * 1.18) * 0.74, 1);
+    const offset = clusterRibbonOffset(cluster, tangent, 1.22, 1.18);
+    return {
+      x: axis + offset.x,
+      y: 1.16 + rise + Math.sin(phase * 0.42) * 0.34 + offset.y,
+      z: depth + ribbon * 0.54 + offset.z,
+    };
   }
   if (grammar === "strata") {
     const stratum = Math.floor(rank / 12);
-    return { x: axis, y: 1.08 + rise - stratum * 0.66, z: depth + (rank % 12 - 5.5) * 0.11 };
+    const offset = clusterRibbonOffset(cluster, 0, 1.2, 1.34);
+    return {
+      x: axis + offset.x,
+      y: 1.08 + rise - stratum * 0.66 + offset.y,
+      z: depth + (rank % 12 - 5.5) * 0.11 + offset.z,
+    };
   }
   if (grammar === "constellation") {
     // Chapters form several stellar families instead of one decorative arc.
@@ -118,7 +129,8 @@ export function curveProfilePoint(grammar: SpatialGrammar, input: CurveProfileIn
       z: apronZ + swell * 0.24 + offset.z,
     };
   }
-  return { x: axis, y: 1.1 + rise, z: depth };
+  const offset = clusterRibbonOffset(cluster, 0, 1.2, 1.26);
+  return { x: axis + offset.x, y: 1.1 + rise + offset.y, z: depth + offset.z };
 }
 
 function constellationSceneOffset(cluster: CurveCluster | undefined, angle: number): WorldPoint {

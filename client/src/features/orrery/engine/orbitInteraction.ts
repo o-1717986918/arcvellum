@@ -11,9 +11,12 @@ export interface OrbitInteractionControls {
 export function attachOrbitInteraction(canvas: HTMLCanvasElement, controls: OrbitInteractionControls): () => void {
   let pointer: { pointerId: number; clientX: number; clientY: number; view: ParallaxView; pivot: WorldPoint | null } | null = null;
   const onPointerDown = (event: PointerEvent) => {
-    // Middle drag belongs to spatial translation. Holding Alt explicitly
-    // changes the same gesture into an unrestricted 2.5D orbit.
-    if (event.button !== 1 || !event.altKey) return;
+    // Left drag rotates empty sky while node clicks are handled by the DOM
+    // overlay. Middle drag remains spatial translation; Alt-middle is an
+    // equivalent orbit gesture for users who prefer a single navigation key.
+    const leftOrbit = event.button === 0;
+    const alternateOrbit = event.button === 1 && event.altKey;
+    if (!leftOrbit && !alternateOrbit) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     controls.cancelAnimation();

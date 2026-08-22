@@ -60,7 +60,7 @@ describe("parallax renderer modules", () => {
     ]);
   });
 
-  it("reserves plain middle drag for translation and uses Alt-middle for orbit", () => {
+  it("uses left drag for orbit, reserves middle drag for translation, and accepts Alt-middle orbit", () => {
     const canvas = document.createElement("canvas");
     const updateView = vi.fn();
     const pointer = (name: string, init: MouseEventInit, pointerId: number): Event => {
@@ -79,8 +79,13 @@ describe("parallax renderer modules", () => {
     canvas.dispatchEvent(pointer("pointermove", { button: 1, clientX: 60, clientY: 40 }, 1));
     expect(updateView).not.toHaveBeenCalled();
 
-    canvas.dispatchEvent(pointer("pointerdown", { button: 1, altKey: true, clientX: 20, clientY: 20 }, 2));
-    canvas.dispatchEvent(pointer("pointermove", { button: 1, altKey: true, clientX: 60, clientY: 40 }, 2));
+    canvas.dispatchEvent(pointer("pointerdown", { button: 0, clientX: 20, clientY: 20 }, 2));
+    canvas.dispatchEvent(pointer("pointermove", { button: 0, clientX: 60, clientY: 40 }, 2));
     expect(updateView).toHaveBeenCalledTimes(1);
+    canvas.dispatchEvent(pointer("pointerup", { button: 0, clientX: 60, clientY: 40 }, 2));
+
+    canvas.dispatchEvent(pointer("pointerdown", { button: 1, altKey: true, clientX: 20, clientY: 20 }, 3));
+    canvas.dispatchEvent(pointer("pointermove", { button: 1, altKey: true, clientX: 60, clientY: 40 }, 3));
+    expect(updateView).toHaveBeenCalledTimes(2);
   });
 });

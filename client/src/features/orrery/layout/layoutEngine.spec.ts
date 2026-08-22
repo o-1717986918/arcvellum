@@ -129,6 +129,22 @@ describe("buildSpatialLayout", () => {
     }
   });
 
+  it("gives chapter-local scenes readable depth instead of a flat queue", () => {
+    const clustered = Array.from({ length: 7 }, (_value, index) => {
+      const item = node(`scene:depth-${index + 1}`, "scene", index + 1);
+      item.metrics.chapter_id = "chapter_0001";
+      return item;
+    });
+    for (const grammar of ["spine", "braid", "strata"] as const) {
+      const result = buildSpatialLayout(grammar, `depth-${grammar}`, clustered, "project-seed");
+      const points = clustered.map((item) => result.points.get(item.node_id)!);
+      const depthSpan = Math.max(...points.map((point) => point.z)) - Math.min(...points.map((point) => point.z));
+      const widthSpan = Math.max(...points.map((point) => point.x)) - Math.min(...points.map((point) => point.x));
+      expect(depthSpan).toBeGreaterThan(1.2);
+      expect(widthSpan).toBeGreaterThan(5.2);
+    }
+  });
+
   it("arranges a long constellation as separated stellar families", () => {
     const chapters = Array.from({ length: 72 }, (_value, index) => {
       const item = node(`scene:${index + 1}`, "scene", index + 1);
