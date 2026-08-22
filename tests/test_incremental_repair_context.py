@@ -365,6 +365,67 @@ class IncrementalRepairContextTests(unittest.TestCase):
             self.assertIn("不是保持原长度的局部改词", prepared.prompt)
             self.assertIn("安全目标约 3000", prepared.prompt)
 
+    def test_target_length_revision_requires_a_measured_net_increase(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(
+                root,
+                ("drafts/revisions/scene_0005_revision.md",),
+                current_state="target-length-revision",
+            )
+            task.payload.update(
+                {
+                    "word_count_target": 5500,
+                    "word_count_min": 4950,
+                    "word_count_max": 6050,
+                }
+            )
+            sandbox = _sandbox(root)
+            output = sandbox.workspace / "drafts/revisions/scene_0005_revision.md"
+            output.parent.mkdir(parents=True)
+            output.write_text("正文" * 2586, encoding="utf-8")
+            first = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "candidate-style-lint-blocking",
+                        "drafts/revisions/scene_0005_revision.md",
+                        "逗号链。",
+                        "拆句。",
+                    ),
+                    PreflightIssue(
+                        "scene-revision-invalid",
+                        "drafts/revisions/scene_0005_revision.md",
+                        "目标长度修订仍不足：清洁正文 5172，最低要求 5215。",
+                        "扩写有效正文。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(task, sandbox)
+            coordinator.prepare(first, 1, 2)
+            coordinator.finalize()
+            second = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "scene-revision-invalid",
+                        "drafts/revisions/scene_0005_revision.md",
+                        "目标长度修订仍不足：清洁正文 5172，最低要求 5215。",
+                        "扩写有效正文。",
+                    ),
+                ),
+            )
+
+            prepared = coordinator.prepare(second, 2, 2)
+            coordinator.finalize()
+
+            self.assertIn("量化增量修订合同", prepared.prompt)
+            self.assertIn("实际缺口 43", prepared.prompt)
+            self.assertIn("净增至少 123", prepared.prompt)
+            self.assertIn("不低于 5295", prepared.prompt)
+            self.assertIn("不得等量替换", prepared.prompt)
+            self.assertNotIn("修订应优先等量替换", prepared.prompt)
+
     def test_prose_repair_keeps_style_and_budget_as_cross_turn_guards(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

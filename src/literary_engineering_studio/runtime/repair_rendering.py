@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Mapping
 
 
@@ -62,7 +63,7 @@ def render_repair_prompt(payload: Mapping[str, object]) -> str:
         f"- `{item}`" for item in target_rows
     ) or "- 无可映射目标。"
     reasoning_text = _reasoning_budget_text(payload)
-    quantitative_repair_text = _quantitative_repair_text(issue_rows)
+    quantitative_repair_text = _quantitative_repair_text(issue_rows, payload)
     regression_guard_text = _regression_guard_text(payload)
     stagnation_text = _stagnation_text(payload)
     session_text = (
@@ -121,13 +122,33 @@ def _stagnation_text(payload: Mapping[str, object]) -> str:
     )
 
 
-def _quantitative_repair_text(issue_rows: list[Mapping[str, object]]) -> str:
-    codes = {str(row.get("code") or "") for row in issue_rows}
-    if "candidate-word-budget-invalid" not in codes:
+def _quantitative_repair_text(
+    issue_rows: list[Mapping[str, object]],
+    payload: Mapping[str, object],
+) -> str:
+    length_issue = _length_shortfall(issue_rows)
+    if length_issue is None:
         return ""
+    current, minimum = length_issue
+    guard = payload.get("regression_guard")
+    guard_row = guard if isinstance(guard, Mapping) else {}
+    maximum = int(guard_row.get("word_count_max") or 0)
+    gap = max(0, minimum - current)
+    safe_gain = max(120, gap + 80)
+    if maximum > current:
+        safe_gain = min(safe_gain, max(gap, maximum - current - 20))
+    safe_minimum = current + safe_gain
+    measured_contract = (
+        f"确定性计数为当前 {current}、最低 {minimum}，实际缺口 {gap}。"
+        f"本回合写回的完整正文必须净增至少 {safe_gain} 个中文内容字符，"
+        f"把清洁正文推进到不低于 {safe_minimum}；"
+    )
     return (
-        "本回合含量化字数缺口：这里的“最小充分”指达到修复要求给出的安全目标，"
-        "不是保持原长度的局部改词；必须写回完整正文，并让新增材料承担已有事件链中的叙事功能。"
+        "\n\n## 量化增量修订合同\n\n"
+        + measured_contract
+        + "这里的“最小充分”不是保持原长度的局部改词，也不是只调整标点。"
+        "新增材料必须承担已有事件链中的因果、关系、信息或余波功能；完成新增后再处理 Style 问题，"
+        "并写回完整正文。\n\n"
     )
 
 
@@ -146,13 +167,43 @@ def _regression_guard_text(payload: Mapping[str, object]) -> str:
     )
     rules = guard.get("style_rules")
     rule_rows = rules if isinstance(rules, list) else []
+    issues = _rows(payload.get("issues"))
+    revision_policy = (
+        "本轮含量化字数缺口，不得等量替换；先满足上方净增合同，再保持其他已通过约束。"
+        if _length_shortfall(issues) is not None
+        else "修订应优先等量替换，不得用删减换 Style 通过，也不得用失控扩写换字数通过。"
+    )
     return (
         "\n\n## 跨回合稳定性合同\n\n"
         "本任务此前已触发正文 Style/字数联合门禁。即使本轮只剩其中一类问题，另一类仍是回归防线。"
         f"{range_text}"
         + "；".join(str(item) for item in rule_rows)
-        + "。修订应优先等量替换，不得用删减换 Style 通过，也不得用失控扩写换字数通过。\n\n"
+        + f"。{revision_policy}\n\n"
     )
+
+
+def _length_shortfall(
+    issue_rows: list[Mapping[str, object]],
+) -> tuple[int, int] | None:
+    length_codes = {"candidate-word-budget-invalid", "scene-revision-invalid"}
+    patterns = (
+        re.compile(r"清洁正文\s*(\d+)\D+最低要求\s*(\d+)"),
+        re.compile(
+            r"cleaned body has\s*(\d+)\s*Chinese content chars,\s*"
+            r"below min_chinese_chars=(\d+)",
+            re.IGNORECASE,
+        ),
+    )
+    for row in issue_rows:
+        if str(row.get("code") or "") not in length_codes:
+            continue
+        message = str(row.get("message") or "")
+        for pattern in patterns:
+            match = pattern.search(message)
+            if match:
+                current, minimum = (int(value) for value in match.groups())
+                return current, minimum
+    return None
 
 
 def _reasoning_budget_text(payload: Mapping[str, object]) -> str:
