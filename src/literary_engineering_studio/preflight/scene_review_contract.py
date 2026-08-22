@@ -124,8 +124,8 @@ def _schema_repair_instruction(path: str, message: str) -> str:
             "若现有对象中已有同一语义的数组，只把该数组原样提升为此字段；不得概括、删除或改写其中的审查意见。"
         )
     return (
-        "读取 CLI Protected Outputs 中的 scene review sidecar 和 scene_review.v1 schema；"
-        "保留真实审查结论，仅补齐缺失字段、正确类型与固定 schema 值。"
+        "遵循 Repair Context 内嵌的 scene_review.v1 语义输出合同；"
+        "保留真实审查结论，仅补齐缺失字段、正确类型、枚举、对象形状与固定 schema 值。"
     )
 
 

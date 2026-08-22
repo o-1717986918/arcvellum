@@ -55,6 +55,7 @@ def _task(
             "route": "scene-development",
             "current_state": current_state,
             "task_type": "platform-agent",
+            "scene_id": "scene_0001",
             "execution_policy": "agent-required",
             "agent_role": "independent-review-agent",
             "runtime_capabilities_required": [
@@ -92,6 +93,50 @@ def _sandbox(root: Path) -> SandboxManifest:
 
 
 class IncrementalRepairContextTests(unittest.TestCase):
+
+    def test_scene_review_repair_embeds_the_same_nested_semantic_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            review = "reviews/agent/scene_0001_scene_review.json"
+            task = _task(root, (review, "reviews/agent/scene_0001_scene_review.md"))
+            sandbox = _sandbox(root)
+            review_path = sandbox.workspace / review
+            review_path.parent.mkdir(parents=True, exist_ok=True)
+            review_path.write_text(
+                json.dumps(
+                    {
+                        "conclusion": "pass",
+                        "revision_integrity": {"verified": True},
+                        "new_character_register": {"registered_characters": []},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "scene-review-schema-invalid",
+                        f"{review}#revision_integrity.status",
+                        "revision_integrity.status is missing",
+                        "遵循内嵌合同补齐字段。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(task, sandbox)
+
+            prepared = coordinator.prepare(result, 1, 2)
+            payload = json.loads(prepared.artifact_path.read_text(encoding="utf-8"))
+            coordinator.finalize()
+
+            contract = payload["semantic_output_contract"]
+            self.assertEqual(contract["schema_name"], "scene_review.v1")
+            self.assertIn("revision_integrity", contract["object_shapes"])
+            self.assertIn("new_character_register", contract["object_shapes"])
+            self.assertIn("anti_evasion_checked", prepared.prompt)
+            self.assertIn("introduced", prepared.prompt)
+            self.assertIn("不需要也不允许另行读取 schema 文件", prepared.prompt)
 
     def test_unchanged_target_is_exposed_as_an_explicit_stagnation_contract(self):
         with tempfile.TemporaryDirectory() as temporary:

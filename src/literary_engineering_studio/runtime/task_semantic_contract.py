@@ -14,6 +14,7 @@ from .task_semantic_rendering import render_semantic_output_contract
 from .task_semantic_scene_contract import (
     canon_patch_candidate_contract,
     scene_candidate_contract,
+    scene_review_contract,
     scene_revision_contract,
 )
 from .task_semantic_workflow_contract import continuity_ledger_contract, state_requirements
@@ -25,6 +26,7 @@ def semantic_output_contract(task: TaskPackage) -> dict[str, Any]:
     for contract in (
         scene_revision_contract(task, current_state, scene_id),
         scene_candidate_contract(task, current_state, scene_id),
+        scene_review_contract(task, current_state, scene_id),
         canon_patch_candidate_contract(task, current_state, scene_id),
         continuity_ledger_contract(current_state, scene_id),
     ):
@@ -53,6 +55,7 @@ def _schema_backed_contract(
         "required_fields": list(schema.get("required") or []),
         "field_types": dict(schema.get("types") or {}),
         "allowed_values": dict(schema.get("enums") or {}),
+        "object_shapes": dict(schema.get("object_shapes") or {}),
         "locked_values": locked,
         "current_state": current_state,
     }

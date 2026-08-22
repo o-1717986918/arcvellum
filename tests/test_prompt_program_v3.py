@@ -430,6 +430,47 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertIn("writer_session_id", contract["studio_owned_fields"])
         self.assertNotIn("writer_session_id", contract["required_fields"])
 
+    def test_candidate_review_contract_projects_nested_authoritative_schema(self):
+        root = Path("C:/fixture")
+        task = TaskPackage(
+            project_root=root,
+            task_json_path=root / "task.json",
+            task_markdown_path=root / "task.md",
+            payload={
+                "task_id": "review",
+                "route": "scene-development",
+                "current_state": "candidate-review",
+                "task_type": "platform-agent-review",
+                "scene_id": "scene_0005",
+                "required_reading": [],
+                "source_paths": [],
+                "expected_outputs": [
+                    "reviews/agent/scene_0005_scene_review.json",
+                    "reviews/agent/scene_0005_scene_review.md",
+                ],
+                "validation_gates": [],
+                "forbidden_shortcuts": [],
+            },
+        )
+
+        contract = semantic_output_contract(task)
+
+        self.assertEqual(contract["schema_name"], "scene_review.v1")
+        self.assertEqual(
+            contract["path"],
+            "reviews/agent/scene_0005_scene_review.json",
+        )
+        self.assertIn("reviewer_session_id", contract["required_fields"])
+        self.assertIn("revision_integrity", contract["model_owned_fields"])
+        self.assertEqual(
+            contract["object_shapes"]["revision_integrity"]["status"],
+            "pass | not_applicable",
+        )
+        self.assertIn(
+            "blocking_issues",
+            contract["object_shapes"]["new_character_register"],
+        )
+
     def test_revision_contract_keeps_exact_identity_machine_owned(self):
         root = Path("C:/fixture")
         task = TaskPackage(

@@ -6,7 +6,47 @@ from typing import Any
 
 from ..contracts import TaskPackage
 from ..protocols.scene_artifacts import is_scene_revision_manifest_path
+from literary_engineering_studio_engine.public.prompting import load_schema_spec
 from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
+
+
+def scene_review_contract(
+    task: TaskPackage,
+    current_state: str,
+    scene_id: str,
+) -> dict[str, Any]:
+    if current_state not in {"candidate-review", "agent-review-task"}:
+        return {}
+    path = next(
+        (
+            item for item in task.expected_outputs
+            if item.endswith(".json")
+            and "scene_review" in item
+            and not item.endswith(".agent_completion.json")
+        ),
+        "",
+    )
+    if not path:
+        return {}
+    schema = load_schema_spec("scene_review.v1")
+    required = [str(item) for item in schema.get("required") or []]
+    formal_required = ["reviewer_session_id"]
+    model_owned = list(dict.fromkeys([*required, *formal_required]))
+    return {
+        "path": path,
+        "schema_name": "scene_review.v1",
+        "schema_value": str(schema.get("schema_value") or ""),
+        "required_fields": model_owned,
+        "field_types": dict(schema.get("types") or {}),
+        "allowed_values": dict(schema.get("enums") or {}),
+        "object_shapes": dict(schema.get("object_shapes") or {}),
+        "model_owned_fields": model_owned,
+        "studio_owned_fields": [],
+        "locked_values": {
+            "schema": str(schema.get("schema_value") or ""),
+            "scene_id": scene_id,
+        },
+    }
 
 
 def scene_revision_contract(
@@ -186,4 +226,9 @@ def new_character_register_shape(stage: str) -> dict[str, str]:
     }
 
 
-__all__ = ["canon_patch_candidate_contract", "scene_candidate_contract", "scene_revision_contract"]
+__all__ = [
+    "canon_patch_candidate_contract",
+    "scene_candidate_contract",
+    "scene_review_contract",
+    "scene_revision_contract",
+]

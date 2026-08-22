@@ -24,6 +24,7 @@ from .repair_snapshots import (
     snapshot_outputs,
 )
 from .sandbox import SandboxManifest
+from .task_semantic_contract import semantic_output_contract
 from .reasoning_policy import (
     ReasoningBudget,
     ReasoningUsage,
@@ -141,6 +142,9 @@ class RepairContextCoordinator:
         )
         semantic_payload["repair_session"] = "same-session" if self.same_session_required else "fresh-bounded-session"
         semantic_payload["repair_references"] = list(repair_references)
+        semantic_contract = _repair_semantic_contract(self.task, targets)
+        if semantic_contract:
+            semantic_payload["semantic_output_contract"] = semantic_contract
         semantic_payload["stagnation"] = stagnation
         self._previous_target_digests = target_digests
         digest = _canonical_sha256(semantic_payload)
@@ -243,6 +247,17 @@ def _repair_reference_paths(
     if source not in authorized or not (workspace / Path(source)).is_file():
         return ()
     return (source,)
+
+
+def _repair_semantic_contract(
+    task: TaskPackage,
+    targets: tuple[str, ...],
+) -> dict[str, Any]:
+    contract = semantic_output_contract(task)
+    path = str(contract.get("path") or "").strip().replace("\\", "/")
+    if not path or path not in set(targets):
+        return {}
+    return contract
 
 
 def _issue_ids(issue_rows: list[dict[str, str]]) -> tuple[str, ...]:

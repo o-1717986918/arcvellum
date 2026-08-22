@@ -66,6 +66,7 @@ def render_repair_prompt(payload: Mapping[str, object]) -> str:
     quantitative_repair_text = _quantitative_repair_text(issue_rows, payload)
     regression_guard_text = _regression_guard_text(payload)
     stagnation_text = _stagnation_text(payload)
+    semantic_contract_text = _semantic_contract_text(payload)
     session_text = (
         "这是同一 Agent session 内的有界修复回合。"
         if payload.get("repair_session") == "same-session"
@@ -86,6 +87,7 @@ Repair Context: `{payload.get('context_digest')}`
 ## 确定性问题
 
 {issue_text}
+{semantic_contract_text}
 
 ## 推理预算
 
@@ -107,6 +109,20 @@ Repair Context: `{payload.get('context_digest')}`
 
 把完整修复结果写入目标后立即结束；不要在模型上下文中重新读取或重复解释。Worker 会做本地格式验证，Studio 会再次运行完整确定性预检；不得伪造 pass、完成回执或审查结论。
 """
+
+
+def _semantic_contract_text(payload: Mapping[str, object]) -> str:
+    raw = payload.get("semantic_output_contract")
+    if not isinstance(raw, Mapping) or not raw:
+        return ""
+    return (
+        "\n## 本轮语义输出合同\n\n"
+        "以下合同来自任务的权威 schema 投影；它是本轮修复的结构依据，不需要也不允许另行读取 schema 文件。"
+        "保留真实判断，只补齐或修正合同要求的字段、类型、枚举和对象形状。\n\n"
+        "```json\n"
+        + json.dumps(dict(raw), ensure_ascii=False, indent=2, sort_keys=True)
+        + "\n```\n"
+    )
 
 
 def _stagnation_text(payload: Mapping[str, object]) -> str:
