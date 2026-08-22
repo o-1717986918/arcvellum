@@ -143,7 +143,7 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### Windows 桌面端
 
-1. 下载 [ArcVellum v0.98.0 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.98.0/ArcVellum_0.98.0_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
+1. 下载 [ArcVellum v0.99.0 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.99.0/ArcVellum_0.99.0_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
 2. 启动 ArcVellum。默认作品库为 `Documents/ArcVellum/Works`，也可在设置中调整。
 3. 打开 **设置 -> 连接与模型**，连接模型服务并为不同角色选择模型。
 4. 新建作品，写下创作大方向与约束，再选择协作、监督自动或全自动推进方式。
@@ -153,7 +153,7 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### 自动更新
 
-ArcVellum 的 Windows Release 包含安装包、Tauri 更新验签文件、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.98.0**。
+ArcVellum 的 Windows Release 包含安装包、Tauri 更新验签文件、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.99.0**。
 
 ## 开发者入口
 
@@ -216,7 +216,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 
 
 ## 项目状态与 v1.0 方向
 
-ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.98.0 将 Pi 专用文学 Worker 正式内置进安装包，并以同一作品连续完成第一场正文晋升、人物状态、Canon、连续性写回和下一场领取；同时完成 Prompt 分层与架构收敛，减少重复上下文和确定性预检空转。
+ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.99.0 完成应用层、Runtime、文学内核、持久化、事件与 Vue 功能端口的接口化收敛，并以普通用户的 `full_auto` 路径完成一部两章六场、30080 个中文内容字符的正式作品；六场正文均经独立审查、晋升、状态、Canon 与连续性写回，四条发布路线最终保持零阻断。
 
 走向 v1.0 的重点不是继续堆功能，而是积累证据：更多题材的长期项目样本、无人值守恢复验证、Windows 10/11 干净环境下的安装/覆盖升级矩阵、更强的模型连接诊断，以及在真实稿件上的创作质量评估。
 
@@ -228,6 +228,7 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新�
 - [Agent 面向接口开发标准](docs/architecture/agent-interface-development-standard.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
+- [v0.99.0 发行说明](docs/releases/v0.99.0.md)
 - [v0.98.0 发行说明](docs/releases/v0.98.0.md)
 - [v0.97.4 发行说明](docs/releases/v0.97.4.md)
 - [v0.97.2 发行说明](docs/releases/v0.97.2.md)

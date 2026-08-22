@@ -20,7 +20,7 @@ class PiWorkerBundleTests(unittest.TestCase):
         (worker / "src").mkdir(parents=True)
         (worker / "test").mkdir()
         (worker / "package.json").write_text(
-            json.dumps({"name": "@arcvellum/pi-worker", "version": "0.98.0"}),
+            json.dumps({"name": "@arcvellum/pi-worker", "version": "0.99.0"}),
             encoding="utf-8",
         )
         (worker / "package-lock.json").write_text("{}\n", encoding="utf-8")
@@ -45,7 +45,7 @@ class PiWorkerBundleTests(unittest.TestCase):
             verified = MODULE.verify_bundle(root=root, destination=destination)
             (destination / "dist" / "main.js").write_text("changed\n", encoding="utf-8")
 
-            self.assertEqual(verified["worker_version"], "0.98.0")
+            self.assertEqual(verified["worker_version"], "0.99.0")
             with self.assertRaisesRegex(RuntimeError, "bundle_sha256"):
                 MODULE.verify_bundle(root=root, destination=destination)
 

@@ -13,7 +13,7 @@ from literary_engineering_studio.integrations.pi_worker.installation import PiWo
 
 CATALOG = {
     "schema": "arcvellum/pi-worker-catalog/v1",
-    "worker_version": "0.98.0",
+    "worker_version": "0.99.0",
     "providers": [
         {
             "id": "deepseek",

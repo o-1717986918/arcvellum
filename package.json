@@ -1,7 +1,7 @@
 {
   "name": "arcvellum-studio",
   "private": true,
-  "version": "0.98.0",
+  "version": "0.99.0",
   "scripts": {
     "api:openapi": "python scripts/export_studio_openapi.py --output contracts/openapi/arcvellum-studio-v1.json",
     "api:types": "openapi-typescript contracts/openapi/arcvellum-studio-v1.json -o client/src/types/generated/api-schema.d.ts",
