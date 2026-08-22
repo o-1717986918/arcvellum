@@ -20,6 +20,7 @@ from literary_engineering_studio_engine.literary.review.longform_contract import
     LONGFORM_AUDIT_SCHEMA,
     LONGFORM_AUDIT_SOURCE_PATHS,
     audit_continuity_ledgers,
+    longform_audit_source_paths,
     longform_audit_gate_errors,
     longform_input_snapshot,
 )
@@ -232,7 +233,7 @@ class LongformQualityContractTests(unittest.TestCase):
                 "longform-audit-file",
                 "run longform audit",
             )
-            self.assertEqual(tuple(blueprint["source_paths"]), LONGFORM_AUDIT_SOURCE_PATHS)
+            self.assertEqual(tuple(blueprint["source_paths"]), longform_audit_source_paths(project))
             task = TaskPackage(
                 project_root=project,
                 task_json_path=project / "workflow" / "tasks" / "longform.task.json",
@@ -380,6 +381,39 @@ class LongformQualityContractTests(unittest.TestCase):
                     "scene_0001",
                 ).passed
             )
+
+            longform_blueprint = review_audit_blueprint_for_state(
+                root,
+                "longform-audit-file",
+                "build longform audit",
+            )
+            self.assertTrue(set(archive_paths).issubset(longform_blueprint["source_paths"]))
+            self._write(
+                root / "workflow/tasks/longform-history.agent_tasks.md",
+                "# deterministic longform audit\n",
+            )
+            longform_task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "workflow/tasks/longform-history.task.json",
+                task_markdown_path=root / "workflow/tasks/longform-history.agent_tasks.md",
+                payload={
+                    "task_id": "review-and-audit-project-review-longform-audit-file",
+                    "route": "review-and-audit",
+                    "current_state": "longform-audit-file",
+                    **longform_blueprint,
+                },
+            )
+            longform_sandbox = stage_task(
+                longform_task,
+                root / "longform-runs",
+                runtime="deterministic-engine",
+                materialize_agent_view=False,
+            )
+            for relative in archive_paths:
+                self.assertTrue((longform_sandbox.control_workspace / relative).is_file(), relative)
+            staged_audit = build_longform_audit(longform_sandbox.control_workspace)
+            staged_payload = json.loads(staged_audit.json_path.read_text(encoding="utf-8"))
+            self.assertEqual(staged_payload["scenes"][0]["status"], "ready")
 
             result = build_longform_audit(root)
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
@@ -660,6 +694,42 @@ class LongformQualityContractTests(unittest.TestCase):
             gates = build_route_gates(root, "export-and-release", [])
             longform_gate = next(item for item in gates if item["key"] == "review:longform-audit")
             self.assertEqual(longform_gate["status"], "fail")
+
+    def test_fresh_longform_findings_advance_to_committee_instead_of_rerunning_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write(root / "project.yaml", "project:\n  title: Committee evidence\n  target_length: 0\n")
+            lint = {
+                "schema": "literary-engineering-workbench/canon-lint/v0.1",
+                "contract_revision": CANON_LINT_CONTRACT_REVISION,
+                "status": "pass",
+                "summary": {"blocking_count": 0, "warning_count": 0},
+            }
+            self._write(root / "reviews/canon_lint.json", json.dumps(lint))
+            self._write(root / "reviews/canon_lint.md", "# Canon lint\n")
+            canon_task = write_platform_canon_review_task(root).task_path
+            canon_review = {
+                "schema": "literary-engineering-workbench/canon-review-agent/v1",
+                "conclusion": "pass",
+                "summary": "通过。",
+                "blocking_issues": [],
+                "warnings": [],
+                "unresolved_facts": [],
+                "timeline_risks": [],
+                "source_paths": [],
+                "recommendations": [],
+                "next_gate": "longform-audit",
+            }
+            self._write(root / "reviews/agent/canon_review.json", json.dumps(canon_review))
+            self._write(root / "reviews/agent/canon_review.md", "# Canon review\n")
+            write_agent_completion_marker(canon_task, root=root, handled_by="independent-reviewer")
+            build_longform_audit(root, target_length=0)
+
+            state = _review_audit_state(root)
+
+            longform_step = next(item for item in state["steps"] if item["key"] == "longform-audit-file")
+            self.assertEqual(longform_step["status"], "pass")
+            self.assertEqual(state["current_step"], "committee-task-file")
 
     def test_stale_longform_precedes_an_existing_committee_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

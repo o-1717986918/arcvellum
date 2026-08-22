@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from ..assets.continuity.ledger import normalize_ledger_rows
+from ..scene.promotion.historical import historical_promotion_archive_paths
 
 
 LONGFORM_AUDIT_SCHEMA = "literary-engineering-workbench/longform-audit/v0.1"
@@ -110,6 +111,11 @@ def longform_input_snapshot(root: Path) -> dict[str, Any]:
         for path in project.glob(pattern)
         if path.is_file()
     }
+    paths.update(
+        (project / relative).resolve()
+        for relative in _historical_input_paths(project)
+        if (project / relative).is_file()
+    )
     files: list[dict[str, str]] = []
     aggregate = hashlib.sha256()
     for path in sorted(paths, key=lambda item: item.relative_to(project).as_posix()):
@@ -121,6 +127,21 @@ def longform_input_snapshot(root: Path) -> dict[str, Any]:
         aggregate.update(b"\0")
         files.append({"path": relative, "sha256": digest})
     return {"digest": aggregate.hexdigest(), "file_count": len(files), "files": files}
+
+
+def longform_audit_source_paths(root: Path) -> tuple[str, ...]:
+    """Return deterministic audit inputs plus exact sealed scene archives."""
+
+    return tuple(dict.fromkeys((*LONGFORM_AUDIT_SOURCE_PATHS, *_historical_input_paths(root.resolve()))))
+
+
+def _historical_input_paths(root: Path) -> tuple[str, ...]:
+    paths: list[str] = []
+    for scene in sorted((root / "scenes").glob("*.yaml")):
+        if scene.name.startswith("_"):
+            continue
+        paths.extend(historical_promotion_archive_paths(root, scene.stem))
+    return tuple(dict.fromkeys(paths))
 
 
 def longform_audit_gate_errors(
@@ -306,6 +327,7 @@ __all__ = [
     "LONGFORM_AUDIT_SCHEMA",
     "LONGFORM_AUDIT_SOURCE_PATHS",
     "audit_continuity_ledgers",
+    "longform_audit_source_paths",
     "longform_audit_gate_errors",
     "longform_input_snapshot",
     "longform_issue_is_blocking",

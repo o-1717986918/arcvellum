@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...literary.assets.canon.contracts import CANON_LINT_SOURCE_PATHS
-from ...literary.review.longform_contract import LONGFORM_AUDIT_SOURCE_PATHS
+from ...literary.review.longform_contract import longform_audit_source_paths
 from .evidence import project_review_repair_targets
 
 
 @dataclass(frozen=True)
 class ReviewBlueprintContext:
+    root: Path
     patch: str
     patch_id: str
     patch_report: str
@@ -55,6 +56,7 @@ def _blueprint_context(root: Path, state: dict[str, object]) -> ReviewBlueprintC
     canon_review = "reviews/agent/canon_review"
     committee = "reviews/agent/committee_project-final-audit"
     return ReviewBlueprintContext(
+        root=root,
         patch=patch,
         patch_id=patch_id,
         patch_report=_related_path(patch, ".md"),
@@ -287,12 +289,12 @@ def _canon_review_revise(context: ReviewBlueprintContext) -> dict[str, object]:
     )
 
 
-def _longform_audit(_context: ReviewBlueprintContext) -> dict[str, object]:
+def _longform_audit(context: ReviewBlueprintContext) -> dict[str, object]:
     return _blueprint(
         "deterministic-cli",
         "route.review-audit.longform-audit.v1",
         "python -m literary_engineering_studio_engine longform-audit <project>",
-        list(LONGFORM_AUDIT_SOURCE_PATHS),
+        list(longform_audit_source_paths(context.root)),
         ["reviews/longform/longform_audit.md", "reviews/longform/longform_audit.json", "plot/longform_graph.json"],
         [
             "Run longform-audit after canon review so the committee sees structural risks, word-budget gaps, and chapter readiness.",

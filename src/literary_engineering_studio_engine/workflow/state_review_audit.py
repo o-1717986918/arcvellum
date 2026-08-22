@@ -252,7 +252,9 @@ def _longform_audit_step(
     required = (json_path.with_suffix(".md"), root / "plot" / "longform_graph.json")
     missing = [_rel(path, root) for path in required if not path.is_file()]
     errors = [f"missing {path}" for path in missing]
-    errors.extend(longform_audit_gate_errors(root, _read_json(json_path), require_clean=True))
+    # A current deterministic audit is evidence for the committee. Its literary
+    # findings require project repair, not repeated execution of this read-only task.
+    errors.extend(longform_audit_gate_errors(root, _read_json(json_path), require_clean=False))
     if not errors:
         return step
     stale = any("stale" in error.lower() for error in errors)
