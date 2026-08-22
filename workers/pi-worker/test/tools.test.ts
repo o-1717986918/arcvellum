@@ -152,6 +152,41 @@ describe("local output validation", () => {
 		expect([...workerState.writtenPaths].sort()).toEqual(["out/review.json", "out/review.md"]);
 	});
 
+	it("ignores top-level null placeholders when a provider submits a batch", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-batch-placeholders-"));
+		roots.push(root);
+		const workerState = state();
+		const write = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call", {
+			path: null,
+			content: "",
+			json: null,
+			outputs: [
+				{ path: "out/review.json", json: { verdict: "pass" } },
+				{ path: "out/review.md", content: "# Review\n" },
+			],
+		});
+
+		expect((await validateOutputs(context(), root)).passed).toBe(true);
+		expect([...workerState.writtenPaths].sort()).toEqual(["out/review.json", "out/review.md"]);
+	});
+
+	it("still rejects a batch mixed with a real top-level payload", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-mixed-batch-"));
+		roots.push(root);
+		const write = createWorkerTools(context(), options(root), state(), () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await expect(write?.execute("call", {
+			path: "out/review.md",
+			content: "# Conflicting single output\n",
+			json: null,
+			outputs: [{ path: "out/review.json", json: { verdict: "pass" } }],
+		})).rejects.toThrow("provide either one path payload or outputs");
+	});
+
 	it("rejects an omitted path when the remaining output type is ambiguous", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-ambiguous-"));
 		roots.push(root);

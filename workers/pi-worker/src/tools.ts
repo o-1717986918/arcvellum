@@ -364,7 +364,11 @@ function outputWrites(input: {
 	}>;
 }, contracts: readonly { path: string; format: string }[], writtenPaths: ReadonlySet<string>): Array<{ path: string; content: string }> {
 	const hasBatch = Array.isArray(input.outputs);
-	const hasSingleFields = input.path !== undefined || input.content !== undefined || input.json !== undefined;
+	const hasSingleFields = (
+		(typeof input.path === "string" && input.path.trim().length > 0)
+		|| (typeof input.content === "string" && input.content.length > 0)
+		|| structuredJson(input.json)
+	);
 	if (hasBatch && hasSingleFields) throw new Error("provide either one path payload or outputs");
 	const entries = hasBatch ? input.outputs ?? [] : [input];
 	const pending = contracts.filter((item) => !writtenPaths.has(item.path));
