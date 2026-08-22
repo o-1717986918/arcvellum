@@ -109,6 +109,11 @@ def _write_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline
 def _write_scene_inventory_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline_path: Path, task_path: Path, payload: dict) -> None:
     candidate = payload["candidate_outputs"]["scene_inventory_expansion"]
     review = payload["candidate_outputs"]["scene_inventory_review"]
+    totals = payload["totals"]
+    chapter_contract = "；".join(
+        f"{row['chapter_id']}={row['scene_count']}场/{row['target_words']}中文内容字符"
+        for row in payload["chapter_budgets"]
+    )
     source_paths = [markdown_path, json_path, root / "project.yaml", root / "scenes"]
     if outline_path.exists():
         source_paths.append(outline_path)
@@ -121,6 +126,8 @@ def _write_scene_inventory_agent_tasks(root: Path, markdown_path: Path, json_pat
             "这是字数预算到场景库存的绑定任务。",
             "CLI 已计算每章目标中文内容字符、目标场景数、实际 scene 文件数、已写正文中文内容字符、机器非空白字符诊断、缺失场景数和正文缺口。",
             "平台 agent 必须把缺口转化为新场景候选、关系转折、信息释放、行动后果和伏笔链，不得用灌水描写填字数。",
+            f"本次精确库存合同：全书必须恰好 {totals['scene_count']} 场、目标合计恰好 {totals['target_chinese_chars']} 中文内容字符；{chapter_contract}。",
+            "用户显式 target_scenes 与当前 word_budget.json 是硬约束。若创作判断确需改变场景数，先请求重做预算或记录获批的重新规划，不得在本任务擅自增减。",
             "候选场景列表未经审查和用户批准，不得直接写入 scenes/ 或覆盖 plot/outline.md。",
         ],
         tasks=[
@@ -130,11 +137,11 @@ def _write_scene_inventory_agent_tasks(root: Path, markdown_path: Path, json_pat
             ),
             (
                 "生成扩场景候选",
-                f"""创建或覆盖 `{candidate}`。这是后续物化正式 scenes/*.yaml 的机器可读合同，不是自由散文清单。每章先写 `### Ch 0001 — 章节名 |`，随后使用 11 列 Markdown 表格：`| SC-001 | 场景名 | 目标中文内容字符 | 功能 | 参与角色 | 冲突 | 信息释放 | 行动后果 | 伏笔设置/回收 | 节奏角色 | 读者义务 |`。一行对应一个独立场景，SC 编号全书唯一、目标为整数；不得拆成逐场景的说明卡、段落或只含字段/内容的二列表格。不得只写“增加描写”。""",
+                f"""创建或覆盖 `{candidate}`。这是后续物化正式 scenes/*.yaml 的机器可读合同，不是自由散文清单。必须恰好写 {totals['scene_count']} 个场景，目标字符合计恰好 {totals['target_chinese_chars']}；逐章严格满足：{chapter_contract}。每章先写 `### Ch 0001 — 章节名 |`，随后使用 11 列 Markdown 表格：`| SC-001 | 场景名 | 目标中文内容字符 | 功能 | 参与角色 | 冲突 | 信息释放 | 行动后果 | 伏笔设置/回收 | 节奏角色 | 读者义务 |`。一行对应一个独立场景，SC 编号从 SC-001 开始全书连续且唯一、目标为整数。修订旧候选时必须原位替换错误行并删除重复行，禁止在末尾追加修正版；不得拆成逐场景的说明卡、段落或只含字段/内容的二列表格。不得只写“增加描写”。""",
             ),
             (
                 "写入扩场景审查报告",
-                f"""创建或覆盖 `{review}`。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有候选场景足以支撑预算且不存在阻塞问题时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。说明哪些候选需要用户确认，哪些不能直接晋升。不要写入 `[AGENT_TASK: ...]`。""",
+                f"""创建或覆盖 `{review}`。报告必须重新解析候选表并明确记录实际总场数、逐章场数和目标字符合计，不得复用候选摘要中的自述数字。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有实际解析结果恰好满足 {totals['scene_count']} 场、{totals['target_chinese_chars']} 中文内容字符及逐章预算且不存在阻塞问题时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。说明哪些候选需要用户确认，哪些不能直接晋升。不要写入 `[AGENT_TASK: ...]`。""",
             ),
         ],
     )

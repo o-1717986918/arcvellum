@@ -211,7 +211,7 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
             "expected_outputs": ["plot/candidates/scenes/word_budget_scene_inventory.md", "reviews/word_budget/scene_inventory_review.md", "plot/word_budget/scene_inventory_expansion.agent_completion.json"],
             "hard_constraints": [
                 "Follow the exact scene-inventory prompt contract and create budgeted scene inventory candidates; Studio owns the lifecycle sidecar and receipt.",
-                "The inventory is a machine-readable materialization contract: use the required chapter heading and 11-column scene table, not free-form scene cards or prose summaries.",
+                "The inventory is a machine-readable materialization contract: use the required chapter heading and 11-column scene table, not free-form scene cards or prose summaries; preserve exact total/per-chapter scene and Chinese-character budgets, and replace invalid rows in place rather than appending a corrected copy unless the user explicitly replans.",
                 "Each added scene candidate needs target Chinese-content characters, function, participants, conflict, information release, consequence, and setup/payoff role.",
                 "The participants column contains durable human/character roles only. Do not list locations, vehicles, signals, objects, organizations, camera subjects, or unnamed crowds as characters; express those through conflict, information release, consequence, or setting.",
                 "Every participant is a bare stable identity label. Parentheses, action notes, aliases, reveal timing, and descriptive clauses belong in the other scene columns, never in a character identity.",
@@ -231,8 +231,8 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
             "expected_outputs": ["plot/candidates/scenes/word_budget_scene_inventory.md", "reviews/word_budget/scene_inventory_review.md"],
             "repair_targets": ["plot/candidates/scenes/word_budget_scene_inventory.md"],
             "hard_constraints": [
-                "Revise the scene inventory candidate against every review finding; changing only the conclusion is forbidden.",
-                "The scene inventory review conclusion must be pass before longform-planning is ready.",
+                "Revise the scene inventory candidate against every review finding by replacing invalid rows rather than appending duplicates; changing only the conclusion is forbidden.",
+                "The scene inventory review conclusion must be pass before longform-planning is ready, and must recount parsed rows and target_chars against word_budget.json instead of trusting asserted totals.",
             ],
             "style_constraints": [],
             "word_count_target": target_words,

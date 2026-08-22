@@ -49,12 +49,117 @@ def parse_chapter_obligations(text: str) -> dict[str, dict[str, str]]:
     return chapters
 
 
-def scene_inventory_contract_issues(text: str) -> list[str]:
+def scene_inventory_contract_issues(
+    text: str,
+    *,
+    budget: dict[str, object] | None = None,
+) -> list[str]:
     try:
-        parse_scene_inventory(text)
+        scenes = parse_scene_inventory(text)
     except ValueError as exc:
         return [str(exc)]
-    return []
+    return _scene_inventory_budget_issues(scenes, budget or {})
+
+
+def _scene_inventory_budget_issues(
+    scenes: list[dict[str, object]],
+    budget: dict[str, object],
+) -> list[str]:
+    """Bind Agent-authored rows to the deterministic user-approved budget."""
+
+    totals = _mapping(budget.get("totals"))
+    expected_count = _integer(totals.get("scene_count"))
+    expected_chapters = _expected_chapter_budgets(budget.get("chapter_budgets"))
+    return [
+        *_scene_inventory_identity_issues(scenes, expected_count),
+        *_scene_inventory_chapter_issues(scenes, expected_chapters),
+        *_scene_inventory_target_issues(scenes, totals),
+    ]
+
+
+def _scene_inventory_identity_issues(
+    scenes: list[dict[str, object]],
+    expected_count: int,
+) -> list[str]:
+    issues: list[str] = []
+    if expected_count and len(scenes) != expected_count:
+        issues.append(
+            f"scene inventory contains {len(scenes)} scenes, expected exactly {expected_count}"
+        )
+    expected_ids = [f"scene_{index:04d}" for index in range(1, expected_count + 1)]
+    actual_ids = [str(scene.get("scene_id") or "") for scene in scenes]
+    if expected_ids and actual_ids != expected_ids:
+        issues.append(
+            "scene ids must be one contiguous ordered sequence "
+            f"scene_0001..scene_{expected_count:04d}; got {', '.join(actual_ids)}"
+        )
+    return issues
+
+
+def _expected_chapter_budgets(value: object) -> dict[str, tuple[int, int]]:
+    expected_chapters: dict[str, tuple[int, int]] = {}
+    for row in value if isinstance(value, list) else []:
+        if not isinstance(row, dict):
+            continue
+        chapter_id = str(row.get("chapter_id") or "").strip()
+        if chapter_id:
+            expected_chapters[chapter_id] = (
+                _integer(row.get("scene_count")),
+                _integer(row.get("target_words")),
+            )
+    return expected_chapters
+
+
+def _scene_inventory_chapter_issues(
+    scenes: list[dict[str, object]],
+    expected_chapters: dict[str, tuple[int, int]],
+) -> list[str]:
+    issues: list[str] = []
+    actual_chapters: dict[str, list[dict[str, object]]] = {}
+    for scene in scenes:
+        actual_chapters.setdefault(str(scene.get("chapter_id") or ""), []).append(scene)
+    for chapter_id, (chapter_count, chapter_target) in expected_chapters.items():
+        rows = actual_chapters.get(chapter_id, [])
+        if chapter_count and len(rows) != chapter_count:
+            issues.append(
+                f"{chapter_id} contains {len(rows)} scenes, expected exactly {chapter_count}"
+            )
+        actual_target = sum(_integer(row.get("target_chars")) for row in rows)
+        if chapter_target and actual_target != chapter_target:
+            issues.append(
+                f"{chapter_id} target_chars sum is {actual_target}, expected exactly {chapter_target}"
+            )
+    unexpected_chapters = sorted(set(actual_chapters) - set(expected_chapters))
+    if expected_chapters and unexpected_chapters:
+        issues.append(
+            "scene inventory contains chapters outside the budget: "
+            + ", ".join(unexpected_chapters)
+        )
+    return issues
+
+
+def _scene_inventory_target_issues(
+    scenes: list[dict[str, object]],
+    totals: dict[str, object],
+) -> list[str]:
+    expected_target = _integer(
+        totals.get("target_chinese_chars") or totals.get("target_words")
+    )
+    actual_target = sum(_integer(scene.get("target_chars")) for scene in scenes)
+    if not expected_target or actual_target == expected_target:
+        return []
+    return [f"scene target_chars total is {actual_target}, expected exactly {expected_target}"]
+
+
+def _mapping(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _integer(value: object) -> int:
+    try:
+        return max(int(value or 0), 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _parse_table_inventory(text: str) -> list[dict[str, object]]:

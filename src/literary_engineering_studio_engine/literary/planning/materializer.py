@@ -50,7 +50,7 @@ def materialize_longform_plan(project_root: Path) -> LongformMaterializationResu
     obligation_text = required[1].read_text(encoding="utf-8", errors="ignore")
     scenes = parse_scene_inventory(inventory_text)
     obligations = parse_chapter_obligations(obligation_text)
-    _validate_scene_count(_read_json(required[3]), scenes)
+    _validate_scene_count(_read_json(required[3]), inventory_text)
     source_digest = _source_digest(required)
     manifest_path = root / "workflow" / "longform_materialization.json"
     reused = _reuse_existing(root, manifest_path, source_digest, scenes, obligations)
@@ -115,14 +115,11 @@ def _required_inputs(root: Path) -> tuple[Path, ...]:
 
 
 def _validate_scene_count(
-    budget: dict[str, object], scenes: list[dict[str, object]]
+    budget: dict[str, object], inventory_text: str
 ) -> None:
-    totals = budget.get("totals")
-    expected = int(totals.get("scene_count") or 0) if isinstance(totals, dict) else 0
-    if expected and len(scenes) != expected:
-        raise ValueError(
-            f"scene inventory contains {len(scenes)} scenes, expected {expected}"
-        )
+    issues = scene_inventory_contract_issues(inventory_text, budget=budget)
+    if issues:
+        raise ValueError("scene inventory budget contract: " + "; ".join(issues))
 
 
 def _reuse_existing(

@@ -44,6 +44,65 @@ from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELD
 
 
 class TaskPreflightTests(unittest.TestCase):
+    def test_scene_inventory_budget_mismatch_is_repaired_before_writeback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            candidate_rel = "plot/candidates/scenes/word_budget_scene_inventory.md"
+            candidate = workspace / candidate_rel
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text(
+                """### Ch 0001 — 起点 |
+| scene_id | name | target_chars | function | participants | conflict | information_release | consequence | setup_payoff_role | rhythm_role | obligation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SC-001 | 一 | 500 | setup | 主角 | 冲突一 | 信息一 | 后果一 | setup | setup | 义务一 |
+| SC-002 | 二 | 500 | turn | 主角 | 冲突二 | 信息二 | 后果二 | payoff | turn | 义务二 |
+| SC-003 | 重复追加 | 500 | turn | 主角 | 冲突三 | 信息三 | 后果三 | payoff | turn | 义务三 |
+""",
+                encoding="utf-8",
+            )
+            budget = workspace / "plot/word_budget/word_budget.json"
+            budget.parent.mkdir(parents=True)
+            budget.write_text(
+                json.dumps(
+                    {
+                        "totals": {"scene_count": 2, "target_chinese_chars": 1000},
+                        "chapter_budgets": [
+                            {"chapter_id": "chapter_0001", "scene_count": 2, "target_words": 1000}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "longform-planning-scene-inventory-agent-task",
+                    "route": "longform-planning",
+                    "current_state": "scene-inventory-agent-task",
+                    "source_paths": ["plot/word_budget/word_budget.json"],
+                    "expected_outputs": [candidate_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="scene-inventory-budget",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+            sandbox.baseline_path.write_text("{}", encoding="utf-8")
+
+            result = validate_task_outputs(task, sandbox)
+
+        issue = next(item for item in result.issues if item.code == "scene-inventory-contract")
+        self.assertIn("3 scenes, expected exactly 2", issue.message)
+        self.assertIn("禁止在文件末尾追加一套修正版", issue.repair)
+
     def test_candidate_language_gate_blocks_punctuation_before_writeback(self):
         issues: list[PreflightIssue] = []
         body = "\n".join([f"——第{index}条调度信息已经完成核对。" for index in range(20)])

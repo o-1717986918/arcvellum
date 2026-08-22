@@ -30,6 +30,31 @@ class LongformMaterializerTests(unittest.TestCase):
         self.assertIn("bare identity", issues[0])
         self.assertIn("幸存者（以信号点名身份现身）", issues[0])
 
+    def test_scene_inventory_contract_enforces_exact_user_budget(self):
+        from literary_engineering_studio_engine.literary.planning.materializer import (
+            scene_inventory_contract_issues,
+        )
+
+        inventory = """### Ch 0001 — 起点 |
+| scene_id | name | target_chars | function | participants | conflict | information_release | consequence | setup_payoff_role | rhythm_role | obligation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SC-001 | 一 | 500 | setup | 主角 | 冲突一 | 信息一 | 后果一 | setup | setup | 义务一 |
+| SC-002 | 二 | 500 | turn | 主角 | 冲突二 | 信息二 | 后果二 | payoff | turn | 义务二 |
+| SC-003 | 重复追加 | 500 | turn | 主角 | 冲突三 | 信息三 | 后果三 | payoff | turn | 义务三 |
+"""
+        budget = {
+            "totals": {"scene_count": 2, "target_chinese_chars": 1000},
+            "chapter_budgets": [
+                {"chapter_id": "chapter_0001", "scene_count": 2, "target_words": 1000}
+            ],
+        }
+
+        issues = scene_inventory_contract_issues(inventory, budget=budget)
+
+        self.assertTrue(any("3 scenes, expected exactly 2" in issue for issue in issues))
+        self.assertTrue(any("chapter_0001 contains 3 scenes" in issue for issue in issues))
+        self.assertTrue(any("target_chars total is 1500" in issue for issue in issues))
+
     def test_reviewed_inventory_materializes_formal_outline_and_scene_contracts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

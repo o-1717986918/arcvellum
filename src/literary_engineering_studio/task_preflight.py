@@ -105,8 +105,14 @@ def _validate_scene_inventory_contract(
     path = sandbox.workspace / relative
     if not path.is_file():
         return
+    budget_path = sandbox.workspace / "plot/word_budget/word_budget.json"
+    try:
+        budget = json.loads(budget_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        budget = {}
     messages = scene_inventory_contract_issues(
-        path.read_text(encoding="utf-8", errors="replace")
+        path.read_text(encoding="utf-8", errors="replace"),
+        budget=budget if isinstance(budget, dict) else {},
     )
     if not messages:
         return
@@ -116,10 +122,12 @@ def _validate_scene_inventory_contract(
             relative,
             "; ".join(messages),
             (
-                f"只修复 `{relative}` 的场景库存机械合同并保留创意内容。"
+                f"只修复 `{relative}` 的场景库存机械合同并保留有效创意内容。"
+                "以 word_budget.json 的 totals、chapter_budgets 和用户显式 target_scenes 为硬约束；"
+                "直接替换错误表格，删除重复或超额行并重新连续编号，禁止在文件末尾追加一套修正版。"
                 "participants 每项必须是稳定的裸身份标签；删除身份中的圆括号、方括号、动作、别名、"
                 "揭示时机或说明从句，并把被删除的信息移入同一场景的 conflict、information_release "
-                "或 consequence 列。不要合并、删除或新增场景来规避该问题。"
+                "或 consequence 列。若只有 participants 违规，不得改变已经满足预算的场景数量。"
             ),
         )
     )
