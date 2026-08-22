@@ -18,6 +18,11 @@ from literary_engineering_studio_engine.literary.scene.promotion.context_archive
     context_archive_output_paths,
     seal_context_archive,
 )
+from literary_engineering_studio_engine.literary.scene.promotion.legacy_context_bootstrap import (
+    LEGACY_BOOTSTRAP_ASSURANCE,
+    bootstrap_legacy_historical_context,
+    legacy_context_migration_output_paths,
+)
 from literary_engineering_studio_engine.literary.scene.promotion.context_migration import (
     migrate_legacy_historical_context,
 )
@@ -663,6 +668,47 @@ class HistoricalScenePromotionTests(unittest.TestCase):
             )
             self.assertEqual(len(context_archive_output_paths(root, "scene_0001", candidate)), 3)
 
+    def test_legacy_live_context_bootstrap_upgrades_before_revision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, manifest, _candidate, draft = self._sealed_promotion(Path(temporary))
+            evidence = dict(manifest["historical_evidence"])
+            evidence.pop("context_archive", None)
+            evidence.pop("migration_predecessor", None)
+            evidence.pop("evidence_sha256", None)
+            evidence["evidence_sha256"] = self._payload_sha(evidence)
+            legacy = dict(manifest)
+            legacy["historical_evidence"] = evidence
+            promotion_path = root / "drafts/promotions/scene_0001_promotion.json"
+            promotion_path.write_text(
+                json.dumps(legacy, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            outputs = legacy_context_migration_output_paths(root, "scene_0001")
+            self.assertIn("drafts/promotions/scene_0001_promotion.json", outputs)
+            self.assertTrue(any(path.endswith(".bootstrap.json") for path in outputs))
+
+            result = bootstrap_legacy_historical_context(root, "scene_0001")
+            self.assertIsNotNone(result)
+            migrated = json.loads(promotion_path.read_text(encoding="utf-8"))
+            archive = migrated["historical_evidence"]["context_archive"]
+            receipt = json.loads(result.receipt.read_text(encoding="utf-8"))
+            self.assertEqual(receipt["recovery_assurance"], LEGACY_BOOTSTRAP_ASSURANCE)
+            self.assertTrue((root / archive["archived_context_packet"]).is_file())
+            self.assertTrue((root / archive["archived_context_trace"]).is_file())
+
+            revision = build_scene_revision_task(
+                root,
+                scene=Path("scenes/scene_0001.yaml"),
+                draft=draft.relative_to(root),
+            )
+            prompt = json.loads(revision.prompt_manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                prompt["historical_context_snapshot"]["source_draft_sha256"],
+                self._sha(draft),
+            )
+            self.assertEqual(legacy_context_migration_output_paths(root, "scene_0001"), ())
+
     def _sealed_promotion(
         self,
         base: Path,
@@ -745,6 +791,16 @@ class HistoricalScenePromotionTests(unittest.TestCase):
                 {
                     "context": "memory/context_packets/scene_0001.md",
                     "context_trace": "memory/context_packets/scene_0001.trace.json",
+                    "sources": [
+                        {
+                            "path": "memory/context_packets/scene_0001.md",
+                            "chars": len(context.read_text(encoding="utf-8")),
+                        },
+                        {
+                            "path": "memory/context_packets/scene_0001.trace.json",
+                            "chars": len(trace.read_text(encoding="utf-8")),
+                        },
+                    ],
                 },
                 ensure_ascii=False,
                 indent=2,

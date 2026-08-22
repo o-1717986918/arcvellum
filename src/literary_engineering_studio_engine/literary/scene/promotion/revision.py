@@ -32,6 +32,7 @@ from ...style.snapshot import (
     active_style_prompt_path,
 )
 from .historical_context import build_historical_revision_context_snapshot
+from .legacy_context_bootstrap import bootstrap_legacy_historical_context
 from .revision_contract import revision_source_requires_anti_evasion_rows
 from .length_repair import target_length_instruction, target_length_repair_input
 
@@ -73,6 +74,9 @@ def build_scene_revision_task(
     if not draft_path.exists():
         raise FileNotFoundError(f"draft not found: {draft_path}")
     review_path = _resolve(root, review) if review else _find_review(root, scene_id)
+    formal_draft = root / "drafts" / "scenes" / f"{scene_id}.md"
+    if draft_path.resolve() == formal_draft.resolve():
+        bootstrap_legacy_historical_context(root, scene_id)
     context_path, context_trace_path, historical_context_snapshot = _revision_context(
         root, scene_id, scene_path, draft_path, rebuild_context, query
     )

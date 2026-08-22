@@ -11,6 +11,9 @@ from ...tasking.paths import read_json as _read_json
 from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from ...workflow_state import current_scene_candidate
 from ...literary.scene.promotion.context_archive import context_archive_output_paths
+from ...literary.scene.promotion.legacy_context_bootstrap import (
+    legacy_context_migration_output_paths,
+)
 from ...literary.scene.promotion.historical_context import (
     historical_revision_candidate_source_paths,
 )
@@ -122,6 +125,11 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     )
     review, revision_source, revision, historical_revision_sources = revision_blueprint_contract(
         root, scene_id, current_state, candidate
+    )
+    revision_migration_outputs = _legacy_revision_migration_outputs(
+        root,
+        scene_id,
+        revision_source,
     )
     state_patch = f"characters/state_patches/{scene_id}_state_patch"
     state_patch_character_files = _state_patch_character_files(root, state_patch)
@@ -578,8 +586,13 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 f"{revision}.prompt.json",
                 f"{revision}.agent_tasks.md",
                 f"{revision}.agent_completion.json",
+                *revision_migration_outputs,
             ],
-            "core_managed_outputs": [f"{revision}.prompt.json", f"{revision}.agent_tasks.md"],
+            "core_managed_outputs": [
+                f"{revision}.prompt.json",
+                f"{revision}.agent_tasks.md",
+                *revision_migration_outputs,
+            ],
             "hard_constraints": [
                 "The main creative Agent must execute the revision personally; subagents cannot write or polish prose.",
                 "Every blocking issue, warning, revision action, style deviation, budget gap, reader-contract gap, and rhythm/bridge gap must map to an observable prose change or remain explicitly blocking.",
@@ -743,8 +756,13 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 f"{revision}.prompt.json",
                 f"{revision}.agent_tasks.md",
                 f"{revision}.agent_completion.json",
+                *revision_migration_outputs,
             ],
-            "core_managed_outputs": [f"{revision}.prompt.json", f"{revision}.agent_tasks.md"],
+            "core_managed_outputs": [
+                f"{revision}.prompt.json",
+                f"{revision}.agent_tasks.md",
+                *revision_migration_outputs,
+            ],
             "hard_constraints": [
                 "The main creative Agent must revise the prose personally against every static review finding.",
                 "The revised body must differ from the promoted draft and remain a candidate.",
@@ -797,6 +815,16 @@ def _promotion_historical_sources(
         if candidate
         else ()
     )
+
+
+def _legacy_revision_migration_outputs(
+    root: Path,
+    scene_id: str,
+    revision_source: str,
+) -> tuple[str, ...]:
+    if revision_source != f"drafts/scenes/{scene_id}.md":
+        return ()
+    return legacy_context_migration_output_paths(root, scene_id)
 
 
 def _select_blueprint(

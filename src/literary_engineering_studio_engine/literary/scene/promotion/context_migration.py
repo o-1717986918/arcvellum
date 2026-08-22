@@ -101,7 +101,11 @@ def _migration_inputs(
     promotion_path = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
     promotion = _read_json(promotion_path)
     validation = validate_historical_promotion(root, scene_id, promotion)
-    if not validation.passed or validation.candidate_path is None or validation.draft_path is None:
+    if (
+        not legacy_promotion_is_migratable(validation)
+        or validation.candidate_path is None
+        or validation.draft_path is None
+    ):
         raise ValueError("legacy promotion is not valid: " + "; ".join(validation.errors))
     evidence = promotion.get("historical_evidence")
     if not isinstance(evidence, dict):
@@ -232,12 +236,23 @@ def _migration_receipt(
         "snapshot_prompt": inputs.snapshot_path.relative_to(root).as_posix(),
         "snapshot_prompt_sha256": _file_sha256(inputs.snapshot_path),
         "snapshot_sha256": str(inputs.snapshot.get("snapshot_sha256") or ""),
+        "recovery_assurance": str(inputs.snapshot.get("recovery_assurance") or "exact-snapshot"),
         "recovery_packet_source": str(packet_source.resolve()),
         "recovery_trace_source": str(trace_source.resolve()),
         "context_archive": archive,
     }
 
 
+def legacy_promotion_is_migratable(validation: object) -> bool:
+    errors = tuple(getattr(validation, "errors", ()) or ())
+    return bool(
+        getattr(validation, "candidate_path", None) is not None
+        and getattr(validation, "draft_path", None) is not None
+        and (
+            bool(getattr(validation, "passed", False))
+            or errors == ("historical context archive is missing",)
+        )
+    )
 def _resolve_project_path(root: Path, value: Path) -> Path:
     path = value if value.is_absolute() else root / value
     resolved = path.resolve()
@@ -281,5 +296,6 @@ def _read_json(path: Path) -> dict[str, object]:
 __all__ = [
     "HistoricalContextMigrationResult",
     "MIGRATION_SCHEMA",
+    "legacy_promotion_is_migratable",
     "migrate_legacy_historical_context",
 ]
