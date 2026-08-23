@@ -8,6 +8,7 @@ import NarrativeSpineLayer from "@/features/orrery/NarrativeSpineLayer.vue";
 import OrreryAccessibleView from "@/features/orrery/OrreryAccessibleView.vue";
 import NarrativeParallaxStage from "@/features/orrery/NarrativeParallaxStage.vue";
 import NarrativeHealthRail from "@/features/orrery/NarrativeHealthRail.vue";
+import CreativeProgressionLayer from "@/features/orrery/CreativeProgressionLayer.vue";
 import OrreryExplorationLayer from "@/features/orrery/OrreryExplorationLayer.vue";
 import OrreryNavigationLayer from "@/features/orrery/OrreryNavigationLayer.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
@@ -16,6 +17,7 @@ import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
 import WorkspaceDock from "@/features/spatial-os/WorkspaceDock.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
+import { buildCreativeProgression } from "@/features/orrery/model/creativeProgression";
 import { applyRelationLens } from "@/features/orrery/model/relationLens";
 import { viewBookmarkLabel, type OrreryHeatLens } from "@/features/orrery/model/exploration";
 import { nodeForReaderUnit, readerUnitForNode } from "@/features/orrery/model/readerLink";
@@ -102,6 +104,7 @@ const timeBounds = computed(() => {
     .map((node) => Number(node.time_band || 0)) || [0];
   return { min: Math.min(...bands), max: Math.max(...bands) };
 });
+const creativeProgression = computed(() => displayProjection.value ? buildCreativeProgression(displayProjection.value) : null);
 
 watch(() => app.currentProjectPath, (root) => {
   windows.clear();
@@ -225,6 +228,11 @@ function replayNode(node: SpatialNarrativeNode): void {
   navigationNodeId.value = node.node_id;
   const point = layout.value?.points.get(node.node_id);
   if (point) stage.value?.focus(point, node.node_id);
+}
+
+function focusProgressionNode(nodeId: string): void {
+  const node = projection.value?.nodes.find((item) => item.node_id === nodeId);
+  if (node) focusNodeObject(node);
 }
 
 function saveViewBookmark(): void {
@@ -390,6 +398,7 @@ async function loadChoices(): Promise<void> {
     <div v-else-if="displayProjection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
       <NarrativeParallaxStage ref="stage" :projection="displayProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
       <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
+      <CreativeProgressionLayer v-if="creativeProgression" :progression="creativeProgression" :anchors="anchors" @focus="focusProgressionNode" />
       <OrreryNodeOverlay
         :nodes="displayProjection.nodes"
         :anchors="anchors"

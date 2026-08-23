@@ -1,7 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { SpatialLayout, SpatialNarrativeProjection } from "@/types/spatial";
 import { constellationClusterSize, stageActSize } from "@/features/orrery/layout/curveProfiles";
-import { drawCelestialCanopy } from "./celestialCanopy";
 import { braidPath, spinePath } from "./renderMath";
 import type { NarrativeFrame, ScenePalette, StageExperience } from "./renderModel";
 
@@ -22,7 +21,6 @@ export interface StageSceneryOptions {
 }
 
 export function drawStageScenery(options: StageSceneryOptions): void {
-  drawCelestialCanopy(options);
   drawGrammarScenery(options);
 }
 

@@ -16,6 +16,7 @@ import {
   type ParallaxView,
 } from "./parallaxProjection";
 import { drawNarrativeRelations, syncRelationLod, type RelationLayers } from "./relationRenderer";
+import { fovForZoom, SkyMesh, skyAnglesFromView } from "./sky";
 import {
   DEFAULT_PALETTE,
   readPalette,
@@ -53,6 +54,7 @@ export class NarrativeParallaxRenderer {
   private readonly far = new Container();
   private readonly mid = new Container();
   private readonly near = new Container();
+  private readonly sky: SkyMesh;
   private layout: SpatialLayout | null = null;
   private projection: SpatialNarrativeProjection | null = null;
   private animation: CameraAnimation | null = null;
@@ -83,7 +85,9 @@ export class NarrativeParallaxRenderer {
     private readonly viewport: Viewport,
     private readonly app: Application,
     private experience: StageExperience,
+    sky: SkyMesh,
   ) {
+    this.sky = sky;
     this.detachOrbitInteraction = attachOrbitInteraction(app.canvas, {
       currentView: () => this.view,
       pivot: () => this.viewPivot(),
@@ -115,11 +119,15 @@ export class NarrativeParallaxRenderer {
       ticker: app.ticker,
       passiveWheel: false,
     });
-    const instance = new NarrativeParallaxRenderer(host, viewport, app, experience);
+    const sky = new SkyMesh(Math.max(1, host.clientWidth), Math.max(1, host.clientHeight));
+    const instance = new NarrativeParallaxRenderer(host, viewport, app, experience, sky);
     app.canvas.className = "narrative-parallax-canvas";
     app.canvas.addEventListener("webglcontextlost", instance.handleContextLost, false);
     app.canvas.addEventListener("webglcontextrestored", instance.handleContextRestored, false);
     host.append(app.canvas);
+    // The sky is a screen-space mesh, deliberately outside the moving narrative
+    // viewport. Scene noise therefore cannot drift with story nodes.
+    app.stage.addChildAt(sky.mesh, 0);
     app.stage.addChild(viewport);
     viewport.eventMode = "static";
     viewport.drag({ pressDrag: true, wheel: false, mouseButtons: "middle" })
@@ -145,6 +153,7 @@ export class NarrativeParallaxRenderer {
   resize(width: number, height: number): void {
     if (!width || !height) return;
     this.viewport.resize(width, height, WORLD_WIDTH, WORLD_HEIGHT);
+    this.sky.resize(width, height);
     this.emitAnchors(true);
   }
 
@@ -153,6 +162,7 @@ export class NarrativeParallaxRenderer {
     this.layout = layout;
     this.experience = readStageExperience();
     this.palette = readPalette(this.host);
+    this.sky.setQuality(this.experience.quality !== "efficient");
     this.clearLayers();
     drawStageScenery({
       layers: { far: this.far, mid: this.mid, near: this.near },
@@ -265,6 +275,16 @@ export class NarrativeParallaxRenderer {
       this.animation = step.animation;
     }
     this.syncParallax();
+    const angles = skyAnglesFromView(this.view);
+    const center = this.viewport.center;
+    this.sky.setCamera(
+      angles.yaw,
+      angles.pitch,
+      fovForZoom(this.viewport.scale.x),
+      (center.x - ORIGIN.x) * 0.0002,
+      (center.y - ORIGIN.y) * 0.0002,
+      this.elapsed / 1000,
+    );
     syncRelationLod(this.relationLayers, this.viewport.scale.x, Boolean(this.focusedNodeId));
     const revision = `${this.viewport.x.toFixed(1)}:${this.viewport.y.toFixed(1)}:${this.viewport.scale.x.toFixed(3)}`;
     const ambientMotion = this.effectiveMotion() === "full"
