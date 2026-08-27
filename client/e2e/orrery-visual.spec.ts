@@ -17,6 +17,10 @@ test.describe.configure({ mode: "serial" });
 test.setTimeout(600_000);
 
 test.beforeAll(async ({ request }) => {
+  const contractResponse = await request.get("http://127.0.0.1:8791/openapi.json");
+  expect(contractResponse.ok()).toBe(true);
+  const contract = await contractResponse.json() as { paths?: Record<string, unknown> };
+  expect(contract.paths).toHaveProperty("/narrative/projection/v4");
   await prepareVisualProjects(request);
 });
 
@@ -144,7 +148,8 @@ async function openVisualProject(page: Page, projectRoot: string): Promise<void>
     window.localStorage.setItem("arcvellum.onboarding-seen", "1");
   }, projectRoot);
   await page.goto("#/overview");
-  await expect(page.locator(".orrery-v3-stage")).toBeVisible({ timeout: 30_000 });
+  const largeScaleTimeout = projectRoot.endsWith("scenes-1000") ? 60_000 : 30_000;
+  await expect(page.locator(".orrery-v3-stage")).toBeVisible({ timeout: largeScaleTimeout });
   await expect(page.locator(".orrery-v3-heading h1")).toContainText("星仪规模验收作品");
   await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1);
 }
@@ -241,7 +246,6 @@ async function canvasPixelEvidence(page: Page): Promise<{ nonTransparent: number
   const width = Math.min(bounds.width, viewport.width - x);
   const height = Math.min(bounds.height, viewport.height - y);
   const buffer = await page.screenshot({
-    animations: "disabled",
     clip: { x, y, width, height },
   });
   const png = PNG.sync.read(buffer);
@@ -288,7 +292,6 @@ async function captureVisualEvidence(page: Page, testInfo: TestInfo, name: strin
   fs.mkdirSync(folder, { recursive: true });
   await page.screenshot({
     path: path.join(folder, name),
-    animations: "disabled",
     fullPage: false,
     timeout: 60_000,
   });

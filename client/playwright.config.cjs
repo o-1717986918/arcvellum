@@ -4,6 +4,10 @@ const { defineConfig } = require("@playwright/test");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const visualRoot = path.join(repositoryRoot, "build", "orrery-visual");
+const repositoryPythonPath = [
+  path.join(repositoryRoot, "src"),
+  process.env.PYTHONPATH,
+].filter(Boolean).join(path.delimiter);
 const browserCandidates = [
   process.env.PLAYWRIGHT_EXECUTABLE_PATH,
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -42,6 +46,9 @@ module.exports = defineConfig({
       env: {
         ...process.env,
         LES_DATA_ROOT: path.join(visualRoot, "data"),
+        // A developer may have another ArcVellum checkout installed in editable
+        // mode. Visual acceptance must always exercise this exact worktree.
+        PYTHONPATH: repositoryPythonPath,
       },
     },
     {
