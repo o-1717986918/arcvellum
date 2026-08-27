@@ -36,8 +36,8 @@ class ReleaseMetadataTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("TEMP: ${{ runner.temp }}", workflow)
-        self.assertIn("TMP: ${{ runner.temp }}", workflow)
+        self.assertIn("$env:TEMP = $env:RUNNER_TEMP", workflow)
+        self.assertIn("$env:TMP = $env:RUNNER_TEMP", workflow)
         python_contracts = workflow.index("- name: Test Python and prompt contracts")
         self.assertLess(workflow.index("- name: Test Vue client"), python_contracts)
         self.assertLess(workflow.index("- name: Test embedded Pi Worker"), python_contracts)
