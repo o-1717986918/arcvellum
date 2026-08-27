@@ -230,11 +230,10 @@ def _semantic_parents(
             parents[node_id] = parent_id
     selected: dict[str, tuple[int, str]] = {}
     for relation in edges:
-        source = str(relation.get("source") or "")
-        target = str(relation.get("target") or "")
-        if source not in known or target not in known or target in parents:
+        candidate = _parent_candidate(relation, known, parents)
+        if candidate is None:
             continue
-        weight = _PARENT_EDGE_PRIORITY.get(str(relation.get("type") or ""), 5)
+        target, weight, source = candidate
         if target not in selected or weight < selected[target][0]:
             selected[target] = (weight, source)
     parents.update({target: source for target, (_weight, source) in selected.items()})
@@ -250,6 +249,19 @@ def _explicit_parent(item: dict[str, Any]) -> str:
         "chapter", "character", "world", "style", "story-architecture", "word-budget", "human-decision",
     }
     return "project:origin" if node_type in project_children else ""
+
+
+def _parent_candidate(
+    relation: dict[str, Any],
+    known: set[str],
+    explicit_parents: dict[str, str],
+) -> tuple[str, int, str] | None:
+    source = str(relation.get("source") or "")
+    target = str(relation.get("target") or "")
+    if source not in known or target not in known or target in explicit_parents:
+        return None
+    weight = _PARENT_EDGE_PRIORITY.get(str(relation.get("type") or ""), 5)
+    return target, weight, source
 
 
 def _node_kind(item: dict[str, Any]) -> CreativeNodeKind:
