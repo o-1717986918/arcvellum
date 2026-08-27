@@ -1,6 +1,6 @@
 export type OrreryMode = "workbench" | "immersive";
-export type OrreryBackground = "plain" | "mineral" | "archive" | "ink" | "iris" | "obsidian" | "bookcase" | "modern";
-export type OrreryTheme = "moss" | "iris" | "obsidian" | "bookcase" | "modern";
+export type OrreryBackground = "mineral";
+export type OrreryTheme = "moss";
 export type OrreryMotion = "system" | "full" | "reduced" | "still";
 export type OrreryDepth = "deep" | "balanced" | "flat";
 export type OrreryRenderQuality = "auto" | "high" | "efficient";
@@ -16,20 +16,16 @@ export function normalizeOrreryMode(value: unknown, narrow = false): OrreryMode 
   return !narrow && value === "immersive" ? "immersive" : "workbench";
 }
 
-export function normalizeOrreryBackground(value: unknown): OrreryBackground {
-  return ["plain", "mineral", "archive", "ink", "iris", "obsidian", "bookcase", "modern"].includes(String(value))
-    ? value as OrreryBackground
-    : "mineral";
+export function normalizeOrreryBackground(_value: unknown): OrreryBackground {
+  return "mineral";
 }
 
 export function normalizeInstrumentVisibility(value: unknown): boolean {
   return value !== "hidden";
 }
 
-export function normalizeOrreryTheme(value: unknown): OrreryTheme {
-  return ["moss", "iris", "obsidian", "bookcase", "modern"].includes(String(value))
-    ? value as OrreryTheme
-    : "moss";
+export function normalizeOrreryTheme(_value: unknown): OrreryTheme {
+  return "moss";
 }
 
 export function normalizeOrreryMotion(value: unknown): OrreryMotion {
@@ -62,7 +58,11 @@ export function readOrreryExperience(): OrreryExperience {
 }
 
 export function applyOrreryExperience(experience: Partial<OrreryExperience>): OrreryExperience {
-  const next = { ...readOrreryExperience(), ...experience };
+  const next: OrreryExperience = {
+    ...readOrreryExperience(),
+    ...experience,
+    theme: "moss",
+  };
   window.localStorage.setItem("arcvellum.visualTheme", next.theme);
   window.localStorage.setItem("arcvellum.orreryMotion", next.motion);
   window.localStorage.setItem("arcvellum.orreryDepth", next.depth);
@@ -75,13 +75,8 @@ export function applyOrreryExperience(experience: Partial<OrreryExperience>): Or
   return next;
 }
 
-export function backgroundForTheme(theme: OrreryTheme): OrreryBackground {
-  const backgrounds: Record<OrreryTheme, OrreryBackground> = {
-    moss: "mineral",
-    iris: "iris",
-    obsidian: "obsidian",
-    bookcase: "bookcase",
-    modern: "modern",
-  };
-  return backgrounds[theme];
+export function resetOrreryColorIdentity(): void {
+  window.localStorage.setItem("arcvellum.visualTheme", "moss");
+  window.localStorage.setItem("arcvellum.orreryBackground", "mineral");
+  document.documentElement.dataset.arcvellumTheme = "moss";
 }

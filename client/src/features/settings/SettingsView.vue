@@ -6,7 +6,7 @@ import { settingsClient } from "@/features/settings/services/settingsClient";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
-import { applyOrreryExperience, readOrreryExperience, type OrreryDepth, type OrreryMotion, type OrreryRenderQuality, type OrreryTheme } from "@/services/orreryPreferences";
+import { applyOrreryExperience, readOrreryExperience, type OrreryDepth, type OrreryMotion, type OrreryRenderQuality } from "@/services/orreryPreferences";
 import { useAppStore } from "@/stores/app";
 import PiWorkerConnection from "./components/PiWorkerConnection.vue";
 
@@ -31,7 +31,6 @@ const updateResult = ref<UpdateCheckResult | null>(null);
 const updateProgress = ref({ downloaded: 0, total: 0 });
 const projectsRoot = ref("");
 const experience = reactive({
-  theme: "moss" as OrreryTheme,
   motion: "system" as OrreryMotion,
   depth: "balanced" as OrreryDepth,
   quality: "auto" as OrreryRenderQuality,
@@ -340,20 +339,9 @@ function pathValue(key: string): string {
       <section class="settings-section appearance-workbench">
         <header>
           <span class="section-icon iris"><Layers3 :size="18" /></span>
-          <div><h2>叙事场域</h2><p>这里控制星仪的材质、呼吸感与纵深。它不改变作品内容，只决定你如何观察和推进它。</p></div>
+          <div><h2>叙事场域</h2><p>ArcVellum 使用统一的苔夜矿物星仪。这里保留呼吸感、纵深与渲染质量，让长期创作仍然舒适流畅。</p></div>
         </header>
         <div class="appearance-control-grid">
-          <label class="appearance-control">
-            <span><Palette :size="16" />整体主题</span>
-            <select v-model="experience.theme" @change="saveExperience">
-              <option value="moss">苔夜星仪</option>
-              <option value="iris">靛紫航图</option>
-              <option value="obsidian">黑曜黄铜</option>
-              <option value="bookcase">书柜暖调</option>
-              <option value="modern">冷峻现代</option>
-            </select>
-            <small>更换星仪、仪表与窗口的综合色彩。</small>
-          </label>
           <label class="appearance-control">
             <span><Gauge :size="16" />场景动效</span>
             <select v-model="experience.motion" @change="saveExperience">

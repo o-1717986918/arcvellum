@@ -678,10 +678,6 @@ body.dragging-immersive-console .immersive-console-panel { transition: none; }
 @keyframes onboarding-orbit { 0%,100% { opacity: .35; transform: scale(.98); } 50% { opacity: .9; transform: scale(1.025); } }
 
 /* Complete theme inheritance for the shared shell and every immersive instrument. */
-html[data-arcvellum-theme="iris"] .startup-paper { background-image: linear-gradient(color-mix(in srgb, var(--instrument-deep) 18%, transparent), color-mix(in srgb, var(--instrument-deep) 38%, transparent)), url("../assets/orrery/iris-celestial-cartography.webp"); }
-html[data-arcvellum-theme="obsidian"] .startup-paper { background-image: linear-gradient(color-mix(in srgb, var(--instrument-deep) 14%, transparent), color-mix(in srgb, var(--instrument-deep) 38%, transparent)), url("../assets/orrery/obsidian-brass-astrarium.webp"); }
-html[data-arcvellum-theme="bookcase"] .startup-paper { background-image: linear-gradient(color-mix(in srgb, var(--instrument-deep) 8%, transparent), color-mix(in srgb, var(--instrument-deep) 30%, transparent)), url("../assets/orrery/bookcase-literary-observatory.webp"); }
-html[data-arcvellum-theme="modern"] .startup-paper { background-image: linear-gradient(color-mix(in srgb, var(--instrument-deep) 12%, transparent), color-mix(in srgb, var(--instrument-deep) 34%, transparent)), url("../assets/orrery/modern-graphite-observatory.webp"); }
 
 .story-line path.line-bed { stroke: var(--orrery-line); }
 .story-line path.line-progress { stroke: var(--orrery-core); }

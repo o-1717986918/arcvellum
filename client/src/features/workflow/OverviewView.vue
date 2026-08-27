@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Eye, EyeOff, Image, Palette, X } from "lucide-vue-next";
+import { Eye, EyeOff, X } from "lucide-vue-next";
 import { useRoute } from "vue-router";
 import WorkspaceOrreryHost from "@/components/WorkspaceOrreryHost.vue";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
@@ -9,12 +9,10 @@ import { readCreativeRuntime } from "@/services/runtimePreference";
 import { asList } from "@/services/presentation";
 import {
   applyOrreryExperience,
-  backgroundForTheme,
   normalizeInstrumentVisibility,
   normalizeOrreryBackground,
-  normalizeOrreryTheme,
+  resetOrreryColorIdentity,
   type OrreryBackground,
-  type OrreryTheme,
 } from "@/services/orreryPreferences";
 import { loadOrreryBackground } from "@/services/orreryAssets";
 import { useAppStore } from "@/stores/app";
@@ -37,7 +35,6 @@ const {
 
 const working = ref(false);
 const background = ref<OrreryBackground>(normalizeOrreryBackground(localStorage.getItem("arcvellum.orreryBackground")));
-const theme = ref<OrreryTheme>(normalizeOrreryTheme(localStorage.getItem("arcvellum.visualTheme")));
 const backgroundImage = ref("");
 const instrumentsVisible = ref(normalizeInstrumentVisibility(localStorage.getItem("arcvellum.orreryInstruments")));
 const heroStyle = computed(() => ({ "--orrery-background-image": backgroundImage.value ? `url("${backgroundImage.value}")` : "none" }));
@@ -54,6 +51,8 @@ const workspaceQueryKinds = new Set<Exclude<SpatialWindowKind, "node">>([
 ]);
 
 onMounted(async () => {
+  resetOrreryColorIdentity();
+  applyOrreryExperience({ theme: "moss" });
   localStorage.setItem("arcvellum.orreryMode", "immersive");
   document.documentElement.classList.add("orrery-immersive");
   await store.refreshWorkspace();
@@ -63,7 +62,6 @@ onMounted(async () => {
 
 onBeforeUnmount(() => document.documentElement.classList.remove("orrery-immersive"));
 
-watch(background, (value) => localStorage.setItem("arcvellum.orreryBackground", value));
 watch(background, async (value, _previous, onCleanup) => {
   let active = true;
   onCleanup(() => { active = false; });
@@ -74,10 +72,6 @@ watch(background, async (value, _previous, onCleanup) => {
   } catch {
     if (active) backgroundImage.value = "";
   }
-}, { immediate: true });
-watch(theme, (value, previous) => {
-  applyOrreryExperience({ theme: value });
-  if (previous && previous !== value) background.value = backgroundForTheme(value);
 }, { immediate: true });
 watch(instrumentsVisible, (value) => localStorage.setItem("arcvellum.orreryInstruments", value ? "visible" : "hidden"));
 watch(
@@ -185,8 +179,6 @@ function advanceSpatialRun(): void {
       />
 
       <div class="orrery-view-tools" aria-label="叙事星仪外观">
-        <label title="选择整体观测主题"><Palette :size="15" /><select v-model="theme" aria-label="选择整体观测主题"><option value="moss">苔夜星仪</option><option value="iris">靛紫航图</option><option value="obsidian">黑曜黄铜</option><option value="bookcase">米白书柜</option><option value="modern">冷峻现代</option></select></label>
-        <label title="选择星仪背景材质"><Image :size="15" /><select v-model="background" aria-label="选择星仪背景材质"><option value="plain">纯净夜色</option><option value="mineral">绿色矿物星仪</option><option value="iris">靛紫天文制图</option><option value="obsidian">黑曜黄铜机芯</option><option value="bookcase">米白书柜档案</option><option value="modern">冷灰现代观测</option><option value="archive">夜航档案</option><option value="ink">活墨宇宙</option></select></label>
         <button class="orrery-icon" :title="instrumentsVisible ? '暂隐边缘工作台' : '显示边缘工作台'" @click="instrumentsVisible = !instrumentsVisible">
           <EyeOff v-if="instrumentsVisible" :size="16" /><Eye v-else :size="16" />
         </button>

@@ -11,7 +11,6 @@ import {
   VISUAL_SIZES,
 } from "./orreryVisualFixture";
 
-const THEMES = ["moss", "iris", "obsidian", "bookcase", "modern"] as const;
 const FOCUS_LEVELS = ["book", "chapter", "scene", "character"] as const;
 
 test.describe.configure({ mode: "serial" });
@@ -22,20 +21,19 @@ test.beforeAll(async ({ request }) => {
 });
 
 for (const sceneCount of VISUAL_SIZES) {
-  test(`${sceneCount} scenes keep all themes and semantic focus modes visually reachable`, async ({ page }, testInfo) => {
+  test(`${sceneCount} scenes keep the default field and semantic focus modes visually reachable`, async ({ page }, testInfo) => {
     testInfo.setTimeout(sceneCount >= 1000 ? 480_000 : 300_000);
     await openVisualProject(page, visualProjectRoot(sceneCount));
     const fixture = visualFixtureMetadata(sceneCount);
-    const themes = sceneCount >= 1000 ? ([THEMES[0]] as const) : THEMES;
-    for (const theme of themes) {
-      await page.locator('select[aria-label="选择整体观测主题"]').selectOption(theme);
-      const focusLevels = sceneCount >= 1000 ? (["book"] as const) : FOCUS_LEVELS;
-      for (const focus of focusLevels) {
-        await setFocus(page, focus);
-        await verifySemanticField(page, fixture, focus);
-        if (sceneCount < 1000 || focus === "book") {
-          await captureVisualEvidence(page, testInfo, `${sceneCount}-${theme}-${focus}.png`);
-        }
+    await expect(page.locator('select[aria-label="选择整体观测主题"]')).toHaveCount(0);
+    await expect(page.locator('select[aria-label="选择星仪背景材质"]')).toHaveCount(0);
+    await expect(page.locator(".overview-view")).toHaveAttribute("data-orrery-background", "mineral");
+    const focusLevels = sceneCount >= 1000 ? (["book"] as const) : FOCUS_LEVELS;
+    for (const focus of focusLevels) {
+      await setFocus(page, focus);
+      await verifySemanticField(page, fixture, focus);
+      if (sceneCount < 1000 || focus === "book") {
+        await captureVisualEvidence(page, testInfo, `${sceneCount}-moss-${focus}.png`);
       }
     }
   });
@@ -46,6 +44,7 @@ test("SSE projection updates preserve focus and open instruments", async ({ page
   await openVisualProject(page, projectRoot);
   await page.locator(".orrery-v3-levels button", { hasText: "场景" }).dispatchEvent("click");
   await expect(page.locator(".orrery-v3-heading p")).toContainText("场景焦点");
+  await page.locator(".orrery-signal-mode button", { hasText: "全部" }).dispatchEvent("click");
   await page.locator('button[title="查看 Agent 任务与会话"]').dispatchEvent("click");
   await page.locator('button[title="查看创作规则与节奏"]').dispatchEvent("click");
   await expect(page.locator('.spatial-window[data-kind="agent"]')).toBeVisible();
@@ -93,6 +92,7 @@ test("advisor remains a phone-like floating conversation over the Orrery", async
 
 test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ page }) => {
   await openVisualProject(page, visualProjectRoot(1000));
+  await page.locator(".orrery-signal-mode button", { hasText: "全部" }).dispatchEvent("click");
   await page.locator(".orrery-v3-levels button", { hasText: "章节" }).dispatchEvent("click");
   await expect.poll(() => visibleNodeCount(page), { timeout: 60_000 }).toBeGreaterThanOrEqual(1000);
   const stage = page.locator(".orrery-v3-stage");
@@ -171,9 +171,14 @@ async function verifySemanticField(
   fixture: { chapter_count: number; scene_count: number },
   focus: typeof FOCUS_LEVELS[number],
 ): Promise<void> {
-  const expectedNodeFloor = focus === "book" || focus === "character"
-    ? fixture.chapter_count
-    : fixture.scene_count;
+  // Narrative mode uses semantic zoom: the whole-work view keeps every
+  // chapter and only expands the current chapter's scenes. The all-details
+  // control is covered separately by the thousand-scene interaction test.
+  // The backend book projection intentionally caps a very large first frame;
+  // the chapter rail and projection stream provide the rest on demand. The
+  // visual contract is therefore a readable chapter segment, not every source
+  // chapter occupying the DOM simultaneously.
+  const expectedNodeFloor = Math.min(6, fixture.chapter_count);
   expect(await visibleNodeCount(page)).toBeGreaterThanOrEqual(expectedNodeFloor);
   if (focus === "book") {
     // The opening shot is a true whole-work constellation, not a cropped

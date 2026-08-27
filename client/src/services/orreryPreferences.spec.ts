@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  backgroundForTheme,
   normalizeInstrumentVisibility,
   normalizeOrreryBackground,
   normalizeOrreryDepth,
@@ -14,10 +13,8 @@ import {
 describe("orrery preferences", () => {
   it("accepts known modes and backgrounds", () => {
     expect(normalizeOrreryMode("immersive")).toBe("immersive");
-    expect(normalizeOrreryBackground("ink")).toBe("ink");
-    expect(normalizeOrreryTheme("iris")).toBe("iris");
-    expect(normalizeOrreryTheme("bookcase")).toBe("bookcase");
-    expect(backgroundForTheme("modern")).toBe("modern");
+    expect(normalizeOrreryBackground("mineral")).toBe("mineral");
+    expect(normalizeOrreryTheme("moss")).toBe("moss");
   });
 
   it("falls back safely for narrow screens and invalid values", () => {
@@ -25,6 +22,8 @@ describe("orrery preferences", () => {
     expect(normalizeOrreryMode("broken")).toBe("workbench");
     expect(normalizeOrreryBackground("broken")).toBe("mineral");
     expect(normalizeOrreryTheme("broken")).toBe("moss");
+    expect(normalizeOrreryBackground("ink")).toBe("mineral");
+    expect(normalizeOrreryTheme("iris")).toBe("moss");
   });
 
   it("keeps instruments visible unless explicitly hidden", () => {
