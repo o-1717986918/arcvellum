@@ -151,7 +151,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v$($StudioVersion.Trim()) completes modular interface boundaries and a zero-blocker two-chapter, 30000-character full-auto release proof."
+        --notes "ArcVellum v$($StudioVersion.Trim()) removes Autopilot task, runtime, cost, and expiry ceilings; converges on one Moss/Mineral visual identity; and strengthens modular interface boundaries."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location
