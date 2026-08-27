@@ -222,11 +222,48 @@ def _spatial_streaming_response(
     )
 
 
-def build_narrative_router(deps: NarrativeRouterDependencies) -> APIRouter:
-    """Build projection endpoints without letting the client infer formal story state."""
+def _v2_streaming_response(
+    deps: NarrativeRouterDependencies,
+    root: Path,
+    level: str,
+    focus: str,
+    interval: float,
+    limit: int,
+) -> StreamingResponse:
+    def stream():
+        sent = 0
+        stream_key = f"{root}|{level}|{focus}"
+        while True:
+            projection = _projection(deps, root, level, focus)
+            revision = str(projection.get("revision") or "")
+            with deps.stream_lock:
+                state = deps.v2_stream_state.get(stream_key, {})
+                previous = state.get("projection") if isinstance(state.get("projection"), dict) else None
+                previous_revision = str((previous or {}).get("revision") or "")
+                delta = deps.projection_delta(previous, projection) if revision != previous_revision else None
+                sequence = int(state.get("sequence") or 0) + (1 if delta is not None else 0)
+                if delta is not None:
+                    projection["sequence"] = sequence
+                    projection["delta"] = delta
+                    projection["motion_events"] = deps.projection_motion_events(previous, projection, delta)
+                    deps.v2_stream_state[stream_key] = {"sequence": sequence, "projection": projection}
+            if delta is not None:
+                yield deps.sse("narrative.projection", projection, sequence)
+                sent += 1
+                if limit and sent >= limit:
+                    break
+            else:
+                yield ": narrative heartbeat\n\n"
+            time.sleep(interval)
 
-    router = APIRouter()
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
+
+def _register_v2_routes(router: APIRouter, deps: NarrativeRouterDependencies) -> None:
     @router.get("/narrative/projection")
     def narrative_projection(project_root: str, level: str = "book", focus: str = ""):
         root = resolve_project_root(project_root)
@@ -237,38 +274,10 @@ def build_narrative_router(deps: NarrativeRouterDependencies) -> APIRouter:
         root = resolve_project_root(project_root)
         interval = max(2.0, min(60.0, float(interval_seconds or 6.0)))
         limit = max(0, int(max_events or 0))
+        return _v2_streaming_response(deps, root, level, focus, interval, limit)
 
-        def stream():
-            sent = 0
-            stream_key = f"{root}|{level}|{focus}"
-            while True:
-                projection = _projection(deps, root, level, focus)
-                revision = str(projection.get("revision") or "")
-                with deps.stream_lock:
-                    state = deps.v2_stream_state.get(stream_key, {})
-                    previous_projection = state.get("projection") if isinstance(state.get("projection"), dict) else None
-                    previous_revision = str((previous_projection or {}).get("revision") or "")
-                    if revision != previous_revision:
-                        sequence = int(state.get("sequence") or 0) + 1
-                        delta = deps.projection_delta(previous_projection, projection)
-                        projection["sequence"] = sequence
-                        projection["delta"] = delta
-                        projection["motion_events"] = deps.projection_motion_events(previous_projection, projection, delta)
-                        deps.v2_stream_state[stream_key] = {"sequence": sequence, "projection": projection}
-                    else:
-                        sequence = int(state.get("sequence") or 0)
-                        delta = None
-                if delta is not None:
-                    yield deps.sse("narrative.projection", projection, sequence)
-                    sent += 1
-                    if limit and sent >= limit:
-                        break
-                else:
-                    yield ": narrative heartbeat\n\n"
-                time.sleep(interval)
 
-        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
+def _register_v3_routes(router: APIRouter, deps: NarrativeRouterDependencies) -> None:
     @router.get("/narrative/projection/v3")
     def narrative_projection_v3(project_root: str, level: str = "book", focus: str = "", grammar: str = "auto"):
         root = resolve_project_root(project_root)
@@ -300,6 +309,8 @@ def build_narrative_router(deps: NarrativeRouterDependencies) -> APIRouter:
         limit = max(0, int(max_events or 0))
         return _v3_streaming_response(deps, root, level, focus, grammar, interval, limit)
 
+
+def _register_v4_routes(router: APIRouter, deps: NarrativeRouterDependencies) -> None:
     @router.get("/narrative/projection/v4")
     def narrative_projection_v4(project_root: str, level: str = "book", focus: str = "", grammar: str = "auto"):
         root = resolve_project_root(project_root)
@@ -331,4 +342,12 @@ def build_narrative_router(deps: NarrativeRouterDependencies) -> APIRouter:
         limit = max(0, int(max_events or 0))
         return _v4_streaming_response(deps, root, level, focus, grammar, interval, limit)
 
+
+def build_narrative_router(deps: NarrativeRouterDependencies) -> APIRouter:
+    """Build projection endpoints without letting the client infer formal story state."""
+
+    router = APIRouter()
+    _register_v2_routes(router, deps)
+    _register_v3_routes(router, deps)
+    _register_v4_routes(router, deps)
     return router
