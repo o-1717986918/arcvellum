@@ -92,9 +92,10 @@ function rectanglesOverlap(left: { left: number; right: number; top: number; bot
 function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
   const anchor = props.anchors[node.node_id] || { x: -2000, y: -2000, scale: 1 };
   const heat = heatScore(node, props.heatLens || "");
+  const renderScale = Math.max(anchor.scale, minimumReadableScale(node));
   return {
-    transform: `translate3d(${anchor.x}px, ${anchor.y}px, 0) translate(-50%, -50%) scale(${anchor.scale})`,
-    zIndex: Math.round(100 + anchor.scale * 160 + node.importance * 100),
+    transform: `translate3d(${anchor.x}px, ${anchor.y}px, 0) translate(-50%, -50%) scale(${renderScale})`,
+    zIndex: Math.round(100 + renderScale * 160 + node.importance * 100),
     "--observation-weight": observationWeight(node, props.timeCursor || 0, props.timeWindow || 3).toFixed(3),
     "--heat-opacity": (0.54 + heat * 0.46).toFixed(3),
     "--heat-saturation": (0.72 + heat * 0.58).toFixed(3),
@@ -103,6 +104,15 @@ function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
     "--heat-mix": `${Math.round(24 + heat * 66)}%`,
     "--heat-shadow": `${Math.round(heat * 58)}%`,
   };
+}
+
+function minimumReadableScale(node: SpatialNarrativeNode): number {
+  const kind = node.creative_kind || node.type;
+  if (kind === "chapter") return 0.84;
+  if (kind === "scene") return 0.72;
+  if (kind === "project") return 0.9;
+  if (kind === "character") return 0.7;
+  return 0.74;
 }
 
 function labelFor(node: SpatialNarrativeNode): string {

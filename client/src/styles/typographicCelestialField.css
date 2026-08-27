@@ -50,16 +50,16 @@
 .orrery-v3-node .node-luminary {
   position: relative;
   display: grid;
-  width: 14px;
-  height: 24px;
+  width: 18px;
+  height: 28px;
   max-width: none;
   place-items: center;
   overflow: visible;
 }
 
 .orrery-v3-node .node-luminary i {
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
   background: color-mix(in srgb, var(--type-star) 76%, white);
   border: 1px solid color-mix(in srgb, white 72%, var(--type-star));
   border-radius: 50%;
@@ -68,7 +68,7 @@
 
 .orrery-v3-node .node-luminary b {
   position: absolute;
-  width: 14px;
+  width: 18px;
   height: 1px;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--type-star) 62%, transparent), transparent);
 }
@@ -106,7 +106,8 @@
 }
 
 .orrery-v3-node.typographic[data-type="chapter"] .node-title {
-  font-size: 15px;
+  font-size: 17px;
+  font-weight: 650;
 }
 
 .orrery-v3-node.typographic[data-type="scene"] {
@@ -114,7 +115,7 @@
 }
 
 .orrery-v3-node.typographic[data-type="scene"] .node-title {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .orrery-v3-node.typographic[data-type="character"] {
@@ -142,20 +143,20 @@
 
 .orrery-v3-node.typographic.overview .node-luminary {
   display: grid;
-  width: 10px;
-  height: 18px;
+  width: 14px;
+  height: 22px;
   transform: scale(1.56);
 }
 
 .orrery-v3-node.typographic.overview .node-luminary i {
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
   box-shadow: 0 0 9px var(--type-star), 0 0 24px color-mix(in srgb, var(--type-star) 58%, transparent);
 }
 
 .orrery-v3-node.typographic.overview[data-type="scene"] .node-luminary i {
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   background: color-mix(in srgb, var(--orrery-core) 58%, white);
   box-shadow: 0 0 4px white, 0 0 11px var(--orrery-core), 0 0 27px color-mix(in srgb, var(--orrery-core) 72%, transparent);
 }

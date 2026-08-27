@@ -87,6 +87,7 @@
 .overview-view.spatial-active .project-band-current,
 .overview-view.spatial-active .orrery-v3-controls label,
 .overview-view.spatial-active .orrery-v3-levels,
+.overview-view.spatial-active .orrery-signal-mode,
 .overview-view.spatial-active .orrery-v3-icon {
   background: color-mix(in srgb, var(--spatial-glass-deep) 82%, transparent);
   border-color: var(--spatial-hairline);
@@ -123,8 +124,8 @@
 }
 
 .orrery-v3-node.typographic .node-luminary {
-  width: 12px;
-  height: 22px;
+  width: 18px;
+  height: 28px;
 }
 
 .orrery-v3-node.typographic .node-luminary b {
@@ -132,8 +133,8 @@
 }
 
 .orrery-v3-node.typographic .node-luminary i {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border: 0;
   box-shadow: 0 0 3px color-mix(in srgb, var(--orrery-label) 92%, transparent), 0 0 14px var(--type-star);
 }
@@ -178,8 +179,8 @@
 
 .orrery-v3-node.symbolic .node-glyph {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   color: color-mix(in srgb, var(--orrery-branch) 76%, var(--orrery-label));
   background: color-mix(in srgb, var(--orrery-deep) 72%, transparent);

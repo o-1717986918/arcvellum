@@ -10,6 +10,7 @@ type SpineCluster = { id: string; node: SpatialNarrativeNode; anchor: Anchor; me
 const props = defineProps<{
   projection: SpatialNarrativeProjection;
   anchors: Record<string, Anchor>;
+  visibleNodeIds?: string[];
   activeCharacterId?: string;
   activeChapterId?: string;
 }>();
@@ -37,7 +38,8 @@ const spineSegments = computed(() => spineClusters.value.slice(1).map((cluster, 
   };
 }));
 const chapterSpokes = computed(() => spineClusters.value.flatMap((cluster) => cluster.members
-  .filter((member) => Math.hypot(member.anchor.x - cluster.anchor.x, member.anchor.y - cluster.anchor.y) > 3)
+  .filter((member) => visibleNodeIds.value.has(member.node.node_id)
+    && Math.hypot(member.anchor.x - cluster.anchor.x, member.anchor.y - cluster.anchor.y) > 3)
   .map((member) => ({
     id: `${cluster.id}:${member.node.node_id}`,
     start: cluster.anchor,
@@ -49,9 +51,11 @@ const nodesById = computed(() => new Map(props.projection.nodes.map((node) => [n
 const relationProfiles = computed(() => new Map(props.projection.relation_profiles.map((profile) => [profile.family, profile])));
 const activeChapterKey = computed(() => chapterKey(props.activeChapterId));
 const hasChapterFocus = computed(() => Boolean(activeChapterKey.value));
+const visibleNodeIds = computed(() => new Set(props.visibleNodeIds || props.projection.nodes.map((node) => node.node_id)));
 
 const characterRelations = computed(() => {
   return props.projection.edges
+    .filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target))
     .filter((edge) => edge.relation_family === "character-scene")
     .map((edge) => ({ edge, characterId: characterEndpoint(edge) }))
     .filter((item): item is { edge: SpatialNarrativeEdge; characterId: string } => Boolean(item.characterId));
@@ -61,6 +65,7 @@ const localFlowPaths = computed(() => {
   const acceptedTypes = props.projection.level === "book" ? new Set<string>() : new Set(["bridge"]);
   if (!acceptedTypes.size) return [];
   return props.projection.edges
+    .filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target))
     .filter((edge) => acceptedTypes.has(edge.type))
     .map((edge) => {
       const source = props.anchors[edge.source];
@@ -80,6 +85,7 @@ const localFlowPaths = computed(() => {
 const sceneEvidencePaths = computed(() => {
   const evidenceTypes = new Set(["branch", "promise", "reader-question", "review", "canon", "task", "character"]);
   return props.projection.edges
+    .filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target))
     .map((edge) => {
       const sourceNode = nodesById.value.get(edge.source);
       const targetNode = nodesById.value.get(edge.target);
