@@ -20,7 +20,7 @@
 | `src/literary_engineering_studio/runtime` | 94 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
 | `src/literary_engineering_studio/runtimes` | 18 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
 | `src/literary_engineering_studio/persistence` | 27 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
-| `src/literary_engineering_studio/projections` | 32 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
+| `src/literary_engineering_studio/projections` | 34 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
 | `src/literary_engineering_studio/preflight` | 28 | Writeback validation | `task_preflight facade` | contracts and deterministic validators | Agent creativity |
 | `src/literary_engineering_studio/observability` | 24 | Events and telemetry | `observability projections` | event contracts | task mutation |
 | `src/literary_engineering_studio/integrations` | 17 | External integrations | `integration-specific facades` | external SDKs and ports | literary policy |
@@ -41,11 +41,12 @@
 | `help` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `library` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `observatory` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `orrery` | 58 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `orrery` | 68 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `projects` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `quality` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `reader` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `settings` | 4 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `spatial-os` | 3 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `strategy` | 8 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `style-atelier` | 19 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `workflow` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
