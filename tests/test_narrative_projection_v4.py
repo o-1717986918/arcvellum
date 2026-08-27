@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.narrative_projection_v4 import (
+from literary_engineering_studio.projections.narrative_projection_v4 import (
     build_narrative_node_detail_v4,
     build_narrative_projection_v4,
 )

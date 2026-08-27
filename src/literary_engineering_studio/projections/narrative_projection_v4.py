@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from . import narrative_projection as narrative_projection_v2
 from .narrative.characters import augment_character_graph, build_character_references
-from .narrative.contracts import NarrativeFocusLevel
+from .narrative.contracts import NarrativeFocusLevel, NarrativeFocusScope
 from .narrative.creative_constellation import (
     augment_creative_constellation,
     enrich_creative_nodes,
@@ -35,6 +36,19 @@ PROJECTION_SCHEMA = "arcvellum/narrative-projection/v4"
 NODE_DETAIL_SCHEMA = "arcvellum/narrative-node-detail/v2"
 
 
+@dataclass(frozen=True)
+class _CreativeGraph:
+    inventory: ProjectionInventory
+    grammar: str
+    rhythm_hints: dict[str, dict[str, dict[str, Any]]]
+    nodes: list[dict[str, Any]]
+    edges: list[dict[str, Any]]
+    focus_scope: NarrativeFocusScope
+    relation_profiles: list[dict[str, Any]]
+    clusters: list[dict[str, Any]]
+    character_references: list[dict[str, Any]]
+
+
 def build_narrative_projection_v4(
     config: dict[str, Any],
     project_root: Path,
@@ -51,13 +65,46 @@ def build_narrative_projection_v4(
     dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else narrative_projection_v2.build_dashboard(config, root)
     library = library_payload if isinstance(library_payload, dict) else narrative_projection_v2.build_library(config, root)
     reader = narrative_projection_v2.build_reader_manifest(root)
-    inventory = ProjectionInventory.from_library(library)
     selected_level = NarrativeFocusLevel.parse(level)
-    focus_id = _resolve_focus(selected_level, focus, inventory, dashboard)
+    graph = _build_creative_graph(root, config, dashboard, library, reader, selected_level, focus, grammar)
+    base = narrative_projection_v2.build_narrative_projection(
+        config,
+        root,
+        level="book",
+        dashboard_payload=dashboard,
+        library_payload=library,
+    )
+    source_revisions = build_source_revisions(base, dashboard, library, reader, graph.rhythm_hints, _digest)
+    revision = build_projection_revision(
+        base_revision=base.get("revision"),
+        grammar=graph.grammar,
+        nodes=graph.nodes,
+        edges=graph.edges,
+        clusters=graph.clusters,
+        focus_scope=graph.focus_scope.as_dict(),
+        relation_profiles=graph.relation_profiles,
+        character_references=graph.character_references,
+        source_revisions=source_revisions,
+        digest=_digest,
+    )
+    return _projection_payload(root, base, dashboard, reader, graph, source_revisions, revision)
 
+
+def _build_creative_graph(
+    root: Path,
+    config: dict[str, Any],
+    dashboard: dict[str, Any],
+    library: dict[str, Any],
+    reader: dict[str, Any],
+    level: NarrativeFocusLevel,
+    focus: str,
+    grammar: str,
+) -> _CreativeGraph:
+    inventory = ProjectionInventory.from_library(library)
+    focus_id = _resolve_focus(level, focus, inventory, dashboard)
     raw_nodes, raw_edges = constellation_graph(inventory, reader, dashboard)
-    character_references = build_character_references(library)
-    raw_nodes, raw_edges = augment_character_graph(raw_nodes, raw_edges, character_references)
+    character_models = build_character_references(library)
+    raw_nodes, raw_edges = augment_character_graph(raw_nodes, raw_edges, character_models)
     raw_nodes, raw_edges = augment_creative_constellation(
         raw_nodes,
         raw_edges,
@@ -67,7 +114,6 @@ def build_narrative_projection_v4(
         project_title=_project_title(root, config),
     )
     raw_nodes, raw_edges = _normalize_graph(raw_nodes, raw_edges)
-
     grammar_base = {"nodes": raw_nodes, "edges": raw_edges, "summary": {"scene_count": len(inventory.scenes)}}
     selected_grammar = resolve_grammar(grammar, grammar_base)
     rhythm_hints = build_rhythm_hints(root)
@@ -79,44 +125,38 @@ def build_narrative_projection_v4(
         detail_endpoint_prefix="/narrative/projection/v4/nodes",
     )
     nodes = enrich_creative_nodes(nodes, raw_edges)
-    edges, focus_scope, relation_profiles = build_focused_relations(
-        raw_edges,
-        nodes,
-        selected_level.value,
-        focus_id,
-    )
-    clusters = build_spatial_clusters(nodes)
-
-    base = narrative_projection_v2.build_narrative_projection(
-        config,
-        root,
-        level="book",
-        dashboard_payload=dashboard,
-        library_payload=library,
-    )
-    references = [item.as_dict() for item in character_references]
-    source_revisions = build_source_revisions(base, dashboard, library, reader, rhythm_hints, _digest)
-    revision = build_projection_revision(
-        base_revision=base.get("revision"),
+    edges, focus_scope, relation_profiles = build_focused_relations(raw_edges, nodes, level.value, focus_id)
+    return _CreativeGraph(
+        inventory=inventory,
         grammar=selected_grammar,
+        rhythm_hints=rhythm_hints,
         nodes=nodes,
         edges=edges,
-        clusters=clusters,
-        focus_scope=focus_scope.as_dict(),
+        focus_scope=focus_scope,
         relation_profiles=relation_profiles,
-        character_references=references,
-        source_revisions=source_revisions,
-        digest=_digest,
+        clusters=build_spatial_clusters(nodes),
+        character_references=[item.as_dict() for item in character_models],
     )
+
+
+def _projection_payload(
+    root: Path,
+    base: dict[str, Any],
+    dashboard: dict[str, Any],
+    reader: dict[str, Any],
+    graph: _CreativeGraph,
+    source_revisions: dict[str, Any],
+    revision: str,
+) -> dict[str, Any]:
     summary = {
-        "node_count": len(nodes),
-        "edge_count": len(edges),
-        "scene_count": len(inventory.scenes),
-        "chapter_count": sum(1 for item in nodes if item.get("creative_kind") == "chapter"),
+        "node_count": len(graph.nodes),
+        "edge_count": len(graph.edges),
+        "scene_count": len(graph.inventory.scenes),
+        "chapter_count": sum(1 for item in graph.nodes if item.get("creative_kind") == "chapter"),
         "formal_prose_chars": int(reader.get("total_chinese_content_chars") or 0),
-        "interactive_node_count": sum(1 for item in nodes if item.get("available_actions")),
-        "cluster_count": len(clusters),
-        "spatial_grammar": selected_grammar,
+        "interactive_node_count": sum(1 for item in graph.nodes if item.get("available_actions")),
+        "cluster_count": len(graph.clusters),
+        "spatial_grammar": graph.grammar,
         "whole_graph": True,
     }
     projection = {
@@ -128,26 +168,26 @@ def build_narrative_projection_v4(
         "projection_revision": revision,
         "sequence": 0,
         "source_revisions": source_revisions,
-        "level": focus_scope.level.value,
-        "focus": focus_scope.focus_id,
-        "focus_scope": focus_scope.as_dict(),
-        "relation_profiles": relation_profiles,
-        "character_references": references,
-        "spatial_grammar": selected_grammar,
+        "level": graph.focus_scope.level.value,
+        "focus": graph.focus_scope.focus_id,
+        "focus_scope": graph.focus_scope.as_dict(),
+        "relation_profiles": graph.relation_profiles,
+        "character_references": graph.character_references,
+        "spatial_grammar": graph.grammar,
         "available_grammars": sorted(SPATIAL_GRAMMARS),
-        "layout_seed": _digest({"project": str(root), "grammar": selected_grammar})[:16],
+        "layout_seed": _digest({"project": str(root), "grammar": graph.grammar})[:16],
         "summary": summary,
-        "nodes": nodes,
-        "edges": edges,
-        "clusters": clusters,
-        "layout_hints": build_layout_hints(selected_grammar, focus_scope.level.value, nodes),
-        "lod_summary": build_lod_summary(nodes),
+        "nodes": graph.nodes,
+        "edges": graph.edges,
+        "clusters": graph.clusters,
+        "layout_hints": build_layout_hints(graph.grammar, graph.focus_scope.level.value, graph.nodes),
+        "lod_summary": build_lod_summary(graph.nodes),
         "timeline": base.get("timeline", []),
         "activities": project_activities(dashboard),
         "delta": {},
         "motion_events": [],
         "legend": base.get("legend", []),
-        "accessibility_summary": _accessibility_summary(focus_scope.as_dict(), nodes, edges),
+        "accessibility_summary": _accessibility_summary(graph.focus_scope.as_dict(), graph.nodes, graph.edges),
     }
     projection["delta"] = projection_delta(None, projection)
     return projection

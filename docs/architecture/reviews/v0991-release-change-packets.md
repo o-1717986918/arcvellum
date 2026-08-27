@@ -68,3 +68,76 @@ module_change_packet:
   documentation: ["docs/releases/v0.99.1.md", "docs/releases/v0.99.1-verification.md"]
 ```
 
+## Batch D1: Narrative Projection Convergence
+
+```yaml
+module_change_packet:
+  objective: "Reduce v4 projection complexity while preserving the complete creative constellation contract."
+  primary_module: "src/literary_engineering_studio/projections"
+  public_entry: "build_narrative_projection_v4()"
+  variation_point: "graph assembly, payload assembly, semantic-parent selection, and workflow activity projection"
+  inputs: ["v4 narrative projection inventory", "dashboard", "library", "reader manifest"]
+  outputs: ["contract-equivalent v4 projection and node detail"]
+  invariants:
+    - "No projection schema, node/edge meaning, activity status, focus behavior, or revision digest input changes."
+    - "Compatibility facades contain no business dependencies; unreleased v4 code uses its canonical module path."
+  allowed_dependencies: ["projection submodules", "read model DTOs"]
+  forbidden_dependencies: ["API transport", "new Gate logic", "new global state", "baseline relaxation"]
+  tests: ["narrative projection v4 tests", "architecture audit"]
+  rollback_unit: "v0.99.1 batch D1 commit"
+  documentation: ["generated module map", "v0.99.1 verification record", "this change packet"]
+```
+
+## Batch D2: API Composition Convergence
+
+```yaml
+module_change_packet:
+  objective: "Keep the API composition root and narrative router within architecture budgets without changing HTTP behavior."
+  primary_module: "src/literary_engineering_studio/api"
+  public_entry: "build_narrative_router() and create_app()"
+  variation_point: "versioned route registration and dependency composition"
+  inputs: ["NarrativeRouterDependencies", "HTTP query/path parameters"]
+  outputs: ["unchanged v2/v3/v4 HTTP and SSE endpoints"]
+  invariants: ["No path, query default, response schema, SSE event, or error status changes."]
+  allowed_dependencies: ["API DTOs", "projection public callables"]
+  forbidden_dependencies: ["router business state", "duplicate projection logic", "baseline relaxation"]
+  tests: ["API server tests", "narrative stream tests", "architecture audit"]
+  rollback_unit: "v0.99.1 batch D2 commit"
+  documentation: ["generated module map", "this change packet"]
+```
+
+## Batch D3: Orrery Layout Convergence
+
+```yaml
+module_change_packet:
+  objective: "Separate narrative timing from spatial placement while preserving every Orrery coordinate and layout grammar."
+  primary_module: "client/src/features/orrery/layout"
+  public_entry: "buildSpatialLayout()"
+  variation_point: "rhythm smoothing, temporal spacing, and scene clustering"
+  inputs: ["SpatialNarrativeNode[]", "SpatialGrammar", "layout hints"]
+  outputs: ["coordinate-identical SpatialLayout"]
+  invariants: ["No coordinate formula, stable seed, collision behavior, or focus behavior changes."]
+  allowed_dependencies: ["Orrery spatial types", "curve profiles", "layout hints"]
+  forbidden_dependencies: ["Vue stores", "backend DTO mutation", "new display heuristics"]
+  tests: ["Orrery layout unit tests", "Vitest", "visual Playwright", "architecture audit"]
+  rollback_unit: "v0.99.1 batch D3 commit"
+  documentation: ["generated module map", "this change packet"]
+```
+
+## Batch D4: Frontend Composition Convergence
+
+```yaml
+module_change_packet:
+  objective: "Remove concrete cross-feature component imports from Orrery and spatial feature modules."
+  primary_module: "client application workspace composition"
+  public_entry: "creativeWorkspaceRegistry and Orrery workspace dock"
+  variation_point: "application-level lazy component registration"
+  inputs: ["workspace id", "creative node kind", "window state"]
+  outputs: ["same visible workspace component and dock behavior"]
+  invariants: ["No workspace, title, supported node type, geometry, or interaction disappears.", "Feature modules do not own another feature's component."]
+  allowed_dependencies: ["application composition registry", "workspace descriptor contract", "Orrery window store"]
+  forbidden_dependencies: ["feature-to-feature concrete component import", "duplicate workspace metadata"]
+  tests: ["workspace registry tests", "Vitest", "architecture audit"]
+  rollback_unit: "v0.99.1 batch D4 commit"
+  documentation: ["generated module map", "this change packet"]
+```

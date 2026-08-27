@@ -37,6 +37,19 @@ _TYPE_KIND = {
     "project": CreativeNodeKind.PROJECT,
 }
 
+_PARENT_EDGE_PRIORITY = {
+    "contains": 0,
+    "branch": 1,
+    "review": 1,
+    "canon": 1,
+    "raises": 1,
+    "promise": 1,
+    "formal-prose": 1,
+    "participates": 4,
+    "sequence": 6,
+    "bridge": 6,
+}
+
 
 def augment_creative_constellation(
     nodes: list[dict[str, Any]],
@@ -119,25 +132,31 @@ def project_activities(dashboard: dict[str, Any]) -> list[dict[str, Any]]:
     current_route = str(current.get("route") or "")
     current_target = str(current.get("target") or current.get("scene_id") or "")
     return [
-        {
-            "activity_id": f"workflow:{index}:{item.get('route', 'auto')}:{item.get('target', '')}",
-            "kind": "workflow",
-            "status": (
-                "active"
-                if index == 0
-                and current_route
-                and current_route == str(item.get("route") or "")
-                and (not current_target or current_target == str(item.get("target") or ""))
-                else "available"
-            ),
-            "route": str(item.get("route") or "auto"),
-            "target": str(item.get("target") or ""),
-            "label": "下一项创作工作" if index == 0 else "后续创作工作",
-            "summary": str(item.get("friendly_action") or item.get("next_action") or "").strip(),
-        }
+        _project_activity(index, item, current_route, current_target)
         for index, item in enumerate(actions)
         if isinstance(item, dict)
     ]
+
+
+def _project_activity(
+    index: int,
+    item: dict[str, Any],
+    current_route: str,
+    current_target: str,
+) -> dict[str, Any]:
+    route = str(item.get("route") or "auto")
+    target = str(item.get("target") or "")
+    is_current = index == 0 and bool(current_route) and current_route == route
+    is_current = is_current and (not current_target or current_target == target)
+    return {
+        "activity_id": f"workflow:{index}:{route}:{target}",
+        "kind": "workflow",
+        "status": "active" if is_current else "available",
+        "route": route,
+        "target": target,
+        "label": "下一项创作工作" if index == 0 else "后续创作工作",
+        "summary": str(item.get("friendly_action") or item.get("next_action") or "").strip(),
+    }
 
 
 def _asset_node(
@@ -206,35 +225,31 @@ def _semantic_parents(
     parents: dict[str, str] = {}
     for item in nodes:
         node_id = str(item.get("node_id") or "")
-        node_type = str(item.get("type") or "")
-        metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
-        if node_type == "scene" and metrics.get("chapter_id"):
-            parents[node_id] = f"chapter:{metrics['chapter_id']}"
-        elif node_type in {"chapter", "character", "world", "style", "story-architecture", "word-budget", "human-decision"}:
-            parents[node_id] = "project:origin"
-    priority = {
-        "contains": 0,
-        "branch": 1,
-        "review": 1,
-        "canon": 1,
-        "raises": 1,
-        "promise": 1,
-        "formal-prose": 1,
-        "participates": 4,
-        "sequence": 6,
-        "bridge": 6,
-    }
+        parent_id = _explicit_parent(item)
+        if parent_id:
+            parents[node_id] = parent_id
     selected: dict[str, tuple[int, str]] = {}
     for relation in edges:
         source = str(relation.get("source") or "")
         target = str(relation.get("target") or "")
         if source not in known or target not in known or target in parents:
             continue
-        weight = priority.get(str(relation.get("type") or ""), 5)
+        weight = _PARENT_EDGE_PRIORITY.get(str(relation.get("type") or ""), 5)
         if target not in selected or weight < selected[target][0]:
             selected[target] = (weight, source)
     parents.update({target: source for target, (_weight, source) in selected.items()})
     return parents
+
+
+def _explicit_parent(item: dict[str, Any]) -> str:
+    node_type = str(item.get("type") or "")
+    metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
+    if node_type == "scene" and metrics.get("chapter_id"):
+        return f"chapter:{metrics['chapter_id']}"
+    project_children = {
+        "chapter", "character", "world", "style", "story-architecture", "word-budget", "human-decision",
+    }
+    return "project:origin" if node_type in project_children else ""
 
 
 def _node_kind(item: dict[str, Any]) -> CreativeNodeKind:

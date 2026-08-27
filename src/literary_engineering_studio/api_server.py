@@ -90,7 +90,7 @@ from .narrative_projection_v3 import (
     spatial_projection_delta,
     spatial_projection_motion_events,
 )
-from .narrative_projection_v4 import (
+from .projections.narrative_projection_v4 import (
     build_narrative_node_detail_v4,
     build_narrative_projection_v4,
 )
