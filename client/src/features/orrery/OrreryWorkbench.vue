@@ -14,10 +14,11 @@ import OrreryNavigationLayer from "@/features/orrery/OrreryNavigationLayer.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
 import RelationLensBar from "@/features/orrery/RelationLensBar.vue";
 import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
-import WorkspaceDock from "@/features/spatial-os/WorkspaceDock.vue";
+import WorkspaceDock from "@/features/orrery/WorkspaceDock.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import { buildCreativeProgression } from "@/features/orrery/model/creativeProgression";
+import { buildNarrativeSignalHierarchy, type OrrerySignalMode } from "@/features/orrery/model/narrativeSignalHierarchy";
 import { applyRelationLens } from "@/features/orrery/model/relationLens";
 import { viewBookmarkLabel, type OrreryHeatLens } from "@/features/orrery/model/exploration";
 import { nodeForReaderUnit, readerUnitForNode } from "@/features/orrery/model/readerLink";
@@ -54,6 +55,7 @@ const soloRelationFamily = ref<RelationFamily | "">("");
 const staticStage = ref(false);
 const forcedNodeIds = ref<string[]>([]);
 const showAllLabels = ref(false);
+const signalMode = ref<OrrerySignalMode>("narrative");
 const navigationNodeId = ref("");
 const heatLens = ref<OrreryHeatLens>("");
 const comparedNodeIds = ref<string[]>([]);
@@ -105,6 +107,18 @@ const timeBounds = computed(() => {
   return { min: Math.min(...bands), max: Math.max(...bands) };
 });
 const creativeProgression = computed(() => displayProjection.value ? buildCreativeProgression(displayProjection.value) : null);
+const signalHierarchy = computed(() => displayProjection.value
+  ? buildNarrativeSignalHierarchy(displayProjection.value.nodes, {
+      mode: signalMode.value,
+      edges: displayProjection.value.edges,
+      characterReferences: displayProjection.value.character_references,
+      level: displayProjection.value.level,
+      activeChapterId: activeChapterId.value,
+      pinnedNodeIds: [windows.selectedNodeId, navigationNodeId.value, ...forcedNodeIds.value],
+    })
+  : null);
+const stageNodes = computed(() => signalHierarchy.value?.nodes || []);
+const stageNodeIds = computed(() => [...(signalHierarchy.value?.nodeIds || [])]);
 
 watch(() => app.currentProjectPath, (root) => {
   windows.clear();
@@ -114,6 +128,7 @@ watch(() => app.currentProjectPath, (root) => {
   soloRelationFamily.value = "";
   forcedNodeIds.value = [];
   showAllLabels.value = false;
+  signalMode.value = "narrative";
   navigationNodeId.value = "";
   heatLens.value = "";
   comparedNodeIds.value = [];
@@ -384,6 +399,7 @@ async function loadChoices(): Promise<void> {
     <nav class="orrery-v3-controls" aria-label="叙事场域控制">
       <button v-if="spatial.canGoBack" class="orrery-v3-icon" title="返回上一个叙事焦点" aria-label="返回上一个叙事焦点" @click="goBack"><ArrowLeft :size="15" /></button>
       <div class="orrery-v3-levels" role="tablist"><button :class="{ active: spatial.level === 'book' }" @click="setLevel('book')">全书</button><button :class="{ active: spatial.level === 'chapter' }" @click="setLevel('chapter')">章节</button><button :class="{ active: spatial.level === 'scene' }" @click="setLevel('scene')">场景</button></div>
+      <div class="orrery-v3-levels orrery-signal-mode" role="group" aria-label="星仪信息密度"><button :class="{ active: signalMode === 'narrative' }" title="只显示作品主脉、主要人物和当前创作信号" @click="signalMode = 'narrative'">主脉</button><button :class="{ active: signalMode === 'all' }" title="显示项目中的全部工程事实" @click="signalMode = 'all'">全部</button></div>
       <label><Layers3 :size="14" /><select :value="spatial.grammar" aria-label="叙事空间构型" @change="setGrammar"><option v-for="grammar in projection?.available_grammars || []" :key="grammar" :value="grammar">{{ grammarLabel(grammar) }}</option></select></label>
       <label class="orrery-time-observer" title="调整观测时点；全书节点不会被删除"><Clock3 :size="14" /><input type="range" :min="timeBounds.min" :max="timeBounds.max" step="1" :value="spatial.timeCursor" aria-label="叙事观测时点" @input="spatial.setObservation({ cursor: Number(($event.target as HTMLInputElement).value) })" /><output>{{ Math.round(spatial.timeCursor) }}</output></label>
       <span></span>
@@ -397,10 +413,10 @@ async function loadChoices(): Promise<void> {
     <OrreryAccessibleView v-else-if="displayProjection && listMode" :nodes="displayProjection.nodes" :selected-node-id="windows.selectedNodeId" @select="selectNode" />
     <div v-else-if="displayProjection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
       <NarrativeParallaxStage ref="stage" :projection="displayProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
-      <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
+      <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :visible-node-ids="stageNodeIds" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
       <CreativeProgressionLayer v-if="creativeProgression" :progression="creativeProgression" :anchors="anchors" @focus="focusProgressionNode" />
       <OrreryNodeOverlay
-        :nodes="displayProjection.nodes"
+        :nodes="stageNodes"
         :anchors="anchors"
         :level="displayProjection.level"
         :motion-events="displayProjection.motion_events"
@@ -463,7 +479,7 @@ async function loadChoices(): Promise<void> {
         <i><b :style="{ height: `${Math.min(100, Math.max(0, overallProgress || 0))}%` }"></b></i>
         <small>{{ progress?.status === 'calibrated' ? '准备 / 正文 / 交付' : '先设置可靠字数目标' }}</small>
       </button>
-      <div class="orrery-v3-caption"><Maximize2 :size="14" /><span>{{ displayProjection.summary.node_count }} 个真实节点</span><i></i><span>{{ displayProjection.summary.cluster_count }} 个叙事构件</span></div>
+      <div class="orrery-v3-caption"><Maximize2 :size="14" /><span>{{ signalHierarchy?.nodes.length || 0 }} 个{{ signalMode === 'narrative' ? '主干' : '可见' }}节点</span><i></i><span>{{ signalHierarchy?.total || 0 }} 项作品事实</span></div>
     </div>
     <div v-else class="orrery-v3-empty"><i></i><strong>等待作品长出第一段脉络</strong><p>场景、人物或正文出现后，这里会形成可以进入的叙事场域。</p></div>
     <WorkspaceDock :pending-choices="choices.length" @open="windows.openInstrument" @organize="windows.constrainToViewport" />

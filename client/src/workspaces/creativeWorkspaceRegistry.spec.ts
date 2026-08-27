@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { creativeWorkspaceRegistry } from "./workspaceRegistry";
+import { creativeWorkspaceRegistry } from "./creativeWorkspaceRegistry";
 
 describe("creativeWorkspaceRegistry", () => {
   it("registers every migrated literary workspace as fullscreen-capable", () => {

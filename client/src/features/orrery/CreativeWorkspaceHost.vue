@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { creativeWorkspaceRegistry } from "@/features/spatial-os/model/workspaceRegistry";
+import { creativeWorkspaceRegistry } from "@/workspaces/creativeWorkspaceRegistry";
 import type { SpatialWindowKind } from "@/types/spatialWindows";
 
 const props = defineProps<{ kind: SpatialWindowKind }>();

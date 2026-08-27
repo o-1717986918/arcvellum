@@ -4,7 +4,7 @@ import { Activity, ArrowUpRight, BookOpenText, CircleAlert, CircleCheck, Downloa
 import SpatialWindowFrame from "@/features/orrery/SpatialWindowFrame.vue";
 import CreativeWorkspaceHost from "@/features/orrery/CreativeWorkspaceHost.vue";
 import { dispatchConstellationAction } from "@/features/spatial-os/model/actionDispatcher";
-import { creativeWorkspaceRegistry } from "@/features/spatial-os/model/workspaceRegistry";
+import { creativeWorkspaceRegistry } from "@/workspaces/creativeWorkspaceRegistry";
 import AutopilotPanel from "@/components/AutopilotPanel.vue";
 import ManuscriptReader from "@/components/ManuscriptReader.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
