@@ -28,7 +28,7 @@ class CampaignPauseReason(str, Enum):
 class CampaignPolicy:
     scope_kind: Literal["chapter", "book"]
     scope_key: str
-    max_autonomous_steps: int
+    max_autonomous_steps: int | None
     checkpoint_interval_steps: int
     pause_on: tuple[CampaignPauseReason, ...]
 
@@ -68,7 +68,10 @@ def campaign_step_allowed(
             reasons.append(
                 f"pause:{state.pending_pause_reasons[0].value}"
             )
-    if state.completed_steps >= policy.max_autonomous_steps:
+    if (
+        policy.max_autonomous_steps is not None
+        and state.completed_steps >= policy.max_autonomous_steps
+    ):
         reasons.append("max-autonomous-steps")
     return CampaignStepDecision(
         proceed=not reasons,
@@ -137,11 +140,14 @@ def campaign_violations(
                 message="last_checkpoint_step must not exceed completed_steps",
             )
         )
-    if not isinstance(policy.max_autonomous_steps, int) or policy.max_autonomous_steps < 1:
+    if policy.max_autonomous_steps is not None and (
+        not isinstance(policy.max_autonomous_steps, int)
+        or policy.max_autonomous_steps < 1
+    ):
         issues.append(
             CampaignViolation(
                 code="invalid-max-steps",
-                message="max_autonomous_steps must be a positive integer",
+                message="max_autonomous_steps must be a positive integer or null",
             )
         )
     if not isinstance(policy.checkpoint_interval_steps, int) or policy.checkpoint_interval_steps < 1:

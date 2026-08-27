@@ -17,9 +17,8 @@ const policy = {
   mode: "collaborative" as const,
   delegated_routes: [],
   delegated_decisions: [],
-  limits: { max_tasks: 500, max_runtime_hours: 24, max_consecutive_revisions: 3, max_failures_per_task: 2, max_cost: 100 },
+  limits: { max_consecutive_revisions: 3, max_failures_per_task: 2 },
   release_policy: "require_user" as const,
-  expires_at: "",
 };
 
 describe("AutopilotPanel", () => {
@@ -101,6 +100,8 @@ describe("AutopilotPanel", () => {
     expect(wrapper.text()).toContain("全自动模式已准备好");
     expect(wrapper.text()).toContain("确认授权并开始");
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("不设任务数、时长或费用上限");
+    expect(wrapper.text()).not.toContain("授权需要续期");
   });
 
   it("labels the counter as formal gate advances rather than finished creative works", async () => {

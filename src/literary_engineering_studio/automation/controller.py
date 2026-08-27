@@ -94,44 +94,28 @@ class AutopilotService:
     def policy(self, project_root: Path) -> dict[str, Any]:
         root = str(project_root.expanduser().resolve())
         stored = self.sessions.read_delegation_policy(root)
-        return stored or self.sessions.save_delegation_policy(root, default_policy())
+        if stored is None:
+            return self.sessions.save_delegation_policy(root, default_policy())
+        return {**stored, "policy": normalize_policy(stored.get("policy"))}
 
     def save_policy(self, project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         root = str(project_root.expanduser().resolve())
         active = self.runs.latest_autopilot_run(root)
         if active and active["status"] == "running":
-            raise ValueError("请先暂停自动创作，再修改授权范围。")
+            raise ValueError("请先暂停自动创作，再修改创作模式。")
         policy = normalize_policy(payload)
         saved = self.sessions.save_delegation_policy(root, policy)
-        # A paused run keeps a policy snapshot for auditability. Updating the
-        # project default alone cannot renew a cap that already stopped this
-        # particular run, so reflect an explicit user change into the paused
-        # run and leave a durable event explaining why it may resume.
+        # A paused run keeps a policy snapshot for auditability. Reflect an
+        # explicit mode or delegation change into that run so resume uses the
+        # same policy the user can see in the control panel.
         if active and active["status"] in {"paused", "blocked", "failed"}:
-            runtime_window_started_at = _now()
-            run_policy = {**policy, "runtime_window_started_at": runtime_window_started_at}
-            renewed = self.runs.update_autopilot_run_policy(active["run_id"], run_policy)
-            # A revision cap is deliberately a per-authorization safety window:
-            # its purpose is to stop an unattended run and request fresh human
-            # consent, not to permanently poison the run.  Without resetting
-            # this durable counter, the UI can successfully save and resume a
-            # renewed policy only for the controller to pause again before it
-            # is allowed to claim another task.
-            if str(active.get("stop_reason") or "") == "revision-limit":
-                renewed = self.runs.update_autopilot_run(
-                    active["run_id"],
-                    consecutive_revisions=0,
-                    last_error="",
-                    stop_reason="",
-                )
+            renewed = self.runs.update_autopilot_run_policy(active["run_id"], policy)
             self.runs.append_autopilot_event(
                 active["run_id"],
-                "autopilot.authorization_updated",
+                "autopilot.policy_updated",
                 {
                     "mode": policy["mode"],
                     "limits": policy["limits"],
-                    "runtime_window_started_at": runtime_window_started_at,
-                    "revision_window_reset": str(active.get("stop_reason") or "") == "revision-limit",
                 },
             )
             saved["run"] = renewed
@@ -158,14 +142,20 @@ class AutopilotService:
         if str(run_policy.get("mode") or run.get("mode") or "") == "full_auto" and not authorized:
             raise ValueError("全自动交付需要在推进仪表中明确确认授权后才能继续。")
         _validate_autopilot_project(Path(run["project_root"]), str(run.get("runtime") or ""))
+        quality_retry = str(run.get("stop_reason") or "") == "revision-limit"
         self.runs.update_autopilot_run(
             run_id,
             status="running",
             stop_reason="",
             last_error="",
             finished_at="",
+            **({"consecutive_revisions": 0} if quality_retry else {}),
         )
-        self.runs.append_autopilot_event(run_id, "autopilot.resumed", {})
+        self.runs.append_autopilot_event(
+            run_id,
+            "autopilot.resumed",
+            {"quality_retry_reset": quality_retry},
+        )
         self._launch(run_id)
         return self.runs.read_autopilot_run(run_id)
 
@@ -304,7 +294,7 @@ class AutopilotService:
                 self.runs,
                 project,
                 run_id,
-                max_autonomous_steps=int(policy.payload["limits"]["max_tasks"]),
+                max_autonomous_steps=None,
                 checkpoint_interval_steps=(
                     settings.campaign_checkpoint_interval_steps
                 ),

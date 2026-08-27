@@ -263,9 +263,29 @@ class AutopilotTests(unittest.TestCase):
         self.assertTrue(full.permits_writeback("scene-development"))
         self.assertTrue(full.permits("export-and-release", "release_approval"))
         self.assertFalse(full.permits("scene-development", "cross_asset_alignment"))
-        normalized = normalize_policy({"mode": "full_auto", "limits": {"max_tasks": 999999, "max_cost": -1}})
-        self.assertEqual(normalized["limits"]["max_tasks"], 10000)
-        self.assertEqual(normalized["limits"]["max_cost"], 0)
+        normalized = normalize_policy({
+            "mode": "full_auto",
+            "limits": {
+                "max_tasks": 1,
+                "max_runtime_hours": 0.1,
+                "max_cost": 0.01,
+                "max_consecutive_revisions": 4,
+            },
+            "expires_at": "2020-01-01T00:00:00+00:00",
+        })
+        self.assertEqual(
+            normalized["limits"],
+            {"max_consecutive_revisions": 4, "max_failures_per_task": 2},
+        )
+        self.assertNotIn("expires_at", normalized)
+        self.assertEqual(
+            full.limit_reason({
+                "tasks_completed": 999999,
+                "estimated_cost": 999999,
+                "consecutive_revisions": 0,
+            }),
+            "",
+        )
 
     def test_cancelled_steward_decision_never_records_a_choice(self):
         class CancellingSteward:
@@ -582,33 +602,34 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(completed["stalled_cycles"], 0)
             self.assertTrue(completed["progress_fingerprint"])
 
-    def test_explicit_authorization_renewal_updates_the_paused_run_snapshot(self):
+    def test_policy_update_discards_legacy_run_ceilings(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             store = JobStore(root / "studio.sqlite3")
             original = default_policy("supervised_auto")
             original["limits"]["max_runtime_hours"] = 1
+            original["limits"]["max_cost"] = 0.01
+            original["expires_at"] = "2020-01-01T00:00:00+00:00"
             run = store.create_autopilot_run(str(root), mode="supervised_auto", runtime="opencode", policy=original)
             store.update_autopilot_run(run["run_id"], status="paused", stop_reason="runtime-limit")
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
-            renewed = {**original, "limits": {**original["limits"], "max_runtime_hours": 12}}
 
-            result = service.save_policy(root, renewed)
+            result = service.save_policy(root, original)
 
             resumed_policy = store.read_autopilot_run(run["run_id"])["policy"]
-            self.assertEqual(resumed_policy["limits"]["max_runtime_hours"], 12)
-            self.assertTrue(resumed_policy.get("runtime_window_started_at"))
-            self.assertNotEqual(
-                DelegationPolicy(resumed_policy).limit_reason({**run, "started_at": "2020-01-01T00:00:00+00:00"}),
-                "runtime-limit",
+            self.assertEqual(
+                resumed_policy["limits"],
+                {"max_consecutive_revisions": 3, "max_failures_per_task": 2},
             )
+            self.assertNotIn("expires_at", resumed_policy)
             self.assertEqual(result["run"]["run_id"], run["run_id"])
             events = store.autopilot_events_since(run["run_id"])
-            self.assertTrue(any(event["event"] == "autopilot.authorization_updated" for event in events))
+            self.assertTrue(any(event["event"] == "autopilot.policy_updated" for event in events))
 
-    def test_explicit_authorization_renewal_resets_a_revision_limit_window(self):
+    def test_resume_resets_a_revision_quality_stop(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            (root / "project.yaml").write_text("title: Test\n", encoding="utf-8")
             store = JobStore(root / "studio.sqlite3")
             policy = default_policy("full_auto")
             run = store.create_autopilot_run(str(root), mode="full_auto", runtime="opencode", policy=policy)
@@ -617,19 +638,20 @@ class AutopilotTests(unittest.TestCase):
                 status="paused",
                 stop_reason="revision-limit",
                 consecutive_revisions=policy["limits"]["max_consecutive_revisions"],
-                last_error="自动创作已到达授权上限。",
+                last_error="连续修订没有解决当前质量问题。",
             )
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
-            service.save_policy(root, policy)
+            with patch.object(service, "_launch"):
+                service.resume(run["run_id"], authorized=True)
 
             renewed = store.read_autopilot_run(run["run_id"])
             self.assertEqual(renewed["consecutive_revisions"], 0)
             self.assertEqual(renewed["stop_reason"], "")
             self.assertEqual(renewed["last_error"], "")
             self.assertEqual(DelegationPolicy(renewed["policy"]).limit_reason(renewed), "")
-            event = next(item for item in reversed(store.autopilot_events_since(run["run_id"])) if item["event"] == "autopilot.authorization_updated")
-            self.assertTrue(event["data"]["revision_window_reset"])
+            event = next(item for item in reversed(store.autopilot_events_since(run["run_id"])) if item["event"] == "autopilot.resumed")
+            self.assertTrue(event["data"]["quality_retry_reset"])
 
     def test_runtime_failure_recovers_complete_sandbox_before_retrying(self):
         class RecoveringWorker:

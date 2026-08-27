@@ -1,11 +1,8 @@
-"""Delegation policy normalization and authorization limits for the Autopilot."""
+"""Delegation policy normalization and quality stops for Autopilot."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
-
-from .support import _parse_time
 
 
 POLICY_SCHEMA = "arcvellum/delegation-policy/v0.1"
@@ -61,14 +58,10 @@ def default_policy(mode: str = "collaborative") -> dict[str, Any]:
         "delegated_routes": delegated_routes,
         "delegated_decisions": decisions,
         "limits": {
-            "max_tasks": 500,
-            "max_runtime_hours": 24,
             "max_consecutive_revisions": 3,
             "max_failures_per_task": 2,
-            "max_cost": 100.0,
         },
         "release_policy": "delegated" if normalized == "full_auto" else "require_user",
-        "expires_at": "",
     }
 
 
@@ -78,16 +71,18 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
     if mode not in MODES:
         raise ValueError("mode must be collaborative, supervised_auto, or full_auto")
     policy = default_policy(mode)
-    for key in ("delegated_routes", "delegated_decisions", "release_policy", "expires_at"):
+    for key in ("delegated_routes", "delegated_decisions", "release_policy"):
         if key in incoming:
             policy[key] = incoming[key]
     limits = {**policy["limits"], **(incoming.get("limits") if isinstance(incoming.get("limits"), dict) else {})}
-    limits["max_tasks"] = max(1, min(10000, int(limits["max_tasks"])))
-    limits["max_runtime_hours"] = max(0.1, min(720.0, float(limits["max_runtime_hours"])))
-    limits["max_consecutive_revisions"] = max(1, min(20, int(limits["max_consecutive_revisions"])))
-    limits["max_failures_per_task"] = max(0, min(10, int(limits["max_failures_per_task"])))
-    limits["max_cost"] = max(0.0, min(100000.0, float(limits["max_cost"])))
-    policy["limits"] = limits
+    policy["limits"] = {
+        "max_consecutive_revisions": max(
+            1, min(20, int(limits["max_consecutive_revisions"]))
+        ),
+        "max_failures_per_task": max(
+            0, min(10, int(limits["max_failures_per_task"]))
+        ),
+    }
     policy["delegated_routes"] = sorted({str(item) for item in policy["delegated_routes"] if str(item) in ROUTE_ORDER})
     policy["delegated_decisions"] = sorted({str(item) for item in policy["delegated_decisions"]})
     if policy["release_policy"] not in {"require_user", "delegated"}:
@@ -97,10 +92,6 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
 
 class DelegationPolicy:
     def __init__(self, payload: dict[str, Any]):
-        # This run-only anchor is intentionally kept outside the reusable
-        # project policy.  A user who renews a paused run starts a new allowed
-        # runtime window instead of being charged for the days it was paused.
-        self.runtime_window_started_at = str(payload.get("runtime_window_started_at") or "")
         self.payload = normalize_policy(payload)
 
     @property
@@ -121,17 +112,9 @@ class DelegationPolicy:
         return route != "export-and-release" or self.payload["release_policy"] == "delegated"
 
     def limit_reason(self, run: dict[str, Any]) -> str:
+        """Return only a quality-loop stop; creative time and spend are open-ended."""
+
         limits = self.payload["limits"]
-        if int(run["tasks_completed"]) >= int(limits["max_tasks"]):
-            return "task-limit"
-        started = _parse_time(self.runtime_window_started_at or str(run["started_at"]))
-        if started and (datetime.now(timezone.utc) - started).total_seconds() > float(limits["max_runtime_hours"]) * 3600:
-            return "runtime-limit"
-        if float(run["estimated_cost"]) >= float(limits["max_cost"]) > 0:
-            return "cost-limit"
         if int(run["consecutive_revisions"]) >= int(limits["max_consecutive_revisions"]):
             return "revision-limit"
-        expires = _parse_time(str(self.payload.get("expires_at") or ""))
-        if expires and datetime.now(timezone.utc) >= expires:
-            return "authorization-expired"
         return ""

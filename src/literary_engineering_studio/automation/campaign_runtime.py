@@ -71,7 +71,7 @@ class CampaignRuntimeCoordinator:
         project: Path,
         run_id: str,
         *,
-        max_autonomous_steps: int,
+        max_autonomous_steps: int | None,
         checkpoint_interval_steps: int,
     ) -> None:
         self.runs = store
@@ -81,7 +81,11 @@ class CampaignRuntimeCoordinator:
         self.policy = CampaignPolicy(
             scope_kind="book",
             scope_key=self.scope_key,
-            max_autonomous_steps=max(1, int(max_autonomous_steps)),
+            max_autonomous_steps=(
+                None
+                if max_autonomous_steps is None
+                else max(1, int(max_autonomous_steps))
+            ),
             checkpoint_interval_steps=max(1, int(checkpoint_interval_steps)),
             pause_on=(),
         )

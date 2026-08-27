@@ -66,7 +66,7 @@ class ClaimedRunLoop:
     def run(self) -> None:
         while not self.stop.is_set():
             run = self.host.runs.read_autopilot_run(self.run_id)
-            if self._pause_at_authorization_limit(run):
+            if self._pause_at_quality_limit(run):
                 return
             if self._campaign_stopped(run):
                 return
@@ -91,14 +91,14 @@ class ClaimedRunLoop:
             if self.results.handle(run, cycle, result, progress_before):
                 return
 
-    def _pause_at_authorization_limit(self, run: dict[str, Any]) -> bool:
+    def _pause_at_quality_limit(self, run: dict[str, Any]) -> bool:
         reason = self.policy.limit_reason(run)
         if not reason:
             return False
         self.host._pause_for(
             self.run_id,
             reason,
-            "自动创作已到达授权上限。",
+            "连续修订没有解决当前质量问题，自动创作已暂停并保留全部成果。",
         )
         return True
 

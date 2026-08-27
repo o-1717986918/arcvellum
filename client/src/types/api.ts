@@ -371,14 +371,10 @@ export interface DelegationPolicy {
   delegated_routes: string[];
   delegated_decisions: string[];
   limits: {
-    max_tasks: number;
-    max_runtime_hours: number;
     max_consecutive_revisions: number;
     max_failures_per_task: number;
-    max_cost: number;
   };
   release_policy: "require_user" | "delegated";
-  expires_at: string;
 }
 
 export interface FailureRecoveryAction {
