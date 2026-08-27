@@ -32,6 +32,16 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertEqual(set(versions.values()), {__version__}, versions)
         self.assertTrue((ROOT / "docs" / "releases" / f"v{__version__}.md").is_file())
 
+    def test_windows_release_prepares_runtime_assets_before_python_contracts(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("TEMP: ${{ runner.temp }}", workflow)
+        self.assertIn("TMP: ${{ runner.temp }}", workflow)
+        python_contracts = workflow.index("- name: Test Python and prompt contracts")
+        self.assertLess(workflow.index("- name: Test Vue client"), python_contracts)
+        self.assertLess(workflow.index("- name: Test embedded Pi Worker"), python_contracts)
+
 
 if __name__ == "__main__":
     unittest.main()

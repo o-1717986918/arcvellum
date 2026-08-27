@@ -15,6 +15,11 @@ jobs:
     timeout-minutes: 90
     env:
       PYTHONUTF8: "1"
+      # GitHub's default Windows TEMP may use an 8.3 alias (RUNNER~1) while
+      # pathlib resolves descendants through the long runneradmin path. Keep
+      # one canonical spelling so containment checks remain deterministic.
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
@@ -61,6 +66,22 @@ jobs:
             throw "Tag $tag does not match package version $version."
           }
 
+      # API integration tests intentionally exercise the built static client
+      # and discover the compiled source-checkout Pi Worker. Build and test
+      # those owned artifacts before the Python integration contract suite.
+      - name: Test Vue client
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run client:test
+          npm run client:build
+
+      - name: Test embedded Pi Worker
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run pi-worker:check
+
       - name: Test Python and prompt contracts
         shell: pwsh
         run: |
@@ -75,19 +96,6 @@ jobs:
           # user-managed provider connection, so only deterministic prompt-contract
           # regressions may block a signed installer release.
           python -m literary_engineering_studio prompt-eval --output dist/prompt-evaluation.json
-
-      - name: Test Vue client
-        shell: pwsh
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run client:test
-          npm run client:build
-
-      - name: Test embedded Pi Worker
-        shell: pwsh
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run pi-worker:check
 
       # The Tauri build requires the frozen Python sidecar, which is generated
       # by build_desktop.ps1 and intentionally not tracked in Git. That script
