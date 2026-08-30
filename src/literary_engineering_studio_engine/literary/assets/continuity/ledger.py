@@ -25,6 +25,7 @@ LEDGER_SCHEMA = "literary-engineering-workbench/continuity-ledger/v1"
 _CHANGE_STATUSES = {
     "add": "open",
     "advance": "open",
+    "advanced": "open",
     "close": "resolved",
     "closure": "resolved",
     "delay": "delayed",
@@ -97,7 +98,9 @@ def prepare_continuity_ledger(project_root: Path, scene_id: str) -> tuple[Path, 
         tasks=[(
             "提取读者问题与承诺变化候选",
             f"由当前主平台 Agent 读取已晋升正文、promotion manifest 和现有账本，填写 `{target.relative_to(root).as_posix()}`。\n\n"
-            "只记录正文有证据的变化：提出、推进、延迟、兑现、反转、关闭。每条必须有稳定 ID、type/content/status、evidence 和目标窗口。"
+            "只记录正文有证据的变化：提出、推进、延迟、兑现、反转、关闭。顶层 evidence_paths 填已晋升正文路径；"
+            "每条变化必须另有稳定 ID、type/content/status、非空字符串 evidence 和目标窗口。evidence 要写正文中的具体事实、"
+            "原句或可核验概述，不能用条目内的 evidence_paths 代替。"
             "若本场没有新变化，两个列表可为空，但 no_change_reason 必须具体。不要把猜测、作者解释或未晋升候选写入正式账本。"
         )],
         notes=["账本变化仍是 Candidate；必须通过独立审查和 apply 才进入下场 Context。"],
@@ -342,7 +345,7 @@ def _ledger_item_id(
 def _ledger_status(item: dict[str, Any]) -> str:
     status = str(item.get("status") or "").strip().lower()
     if status:
-        return status
+        return _CHANGE_STATUSES.get(status, status)
     change = str(item.get("change") or item.get("type") or "").strip().lower()
     return _CHANGE_STATUSES.get(change, "")
 

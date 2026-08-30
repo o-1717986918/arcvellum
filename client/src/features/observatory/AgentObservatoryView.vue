@@ -63,7 +63,7 @@ function eventLabel(value: string): string {
           <dl v-if="app.agentObservability.active_task">
             <div><dt>角色</dt><dd>{{ roleLabel(app.agentObservability.active_task.role) }} <small>{{ app.agentObservability.active_task.role }}</small></dd></div>
             <div><dt>路线</dt><dd>{{ app.agentObservability.active_task.route }}</dd></div>
-            <div><dt>任务</dt><dd>{{ app.agentObservability.active_task.task_id }}</dd></div>
+            <div><dt>任务</dt><dd class="observatory-task-identity" :title="app.agentObservability.active_task.task_id">{{ app.agentObservability.active_task.task_id }}</dd></div>
             <div><dt>阶段</dt><dd>{{ app.agentObservability.active_task.stage }}</dd></div>
           </dl>
           <p v-else class="strategy-empty">当前没有正在运行的任务。</p>
@@ -129,6 +129,7 @@ function eventLabel(value: string): string {
             <span class="event-dot" aria-hidden="true"></span>
             <strong>{{ eventLabel(event.event) }}</strong>
             <code>{{ event.route }}</code>
+            <code class="observatory-event-task" :title="event.task_id">{{ event.task_id }}</code>
             <small>{{ event.event }}</small>
             <small>{{ event.stage }}</small>
             <time>{{ event.at }}</time>

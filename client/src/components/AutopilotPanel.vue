@@ -29,6 +29,7 @@ const failure = computed(() => run.value?.failure || null);
 const running = computed(() => run.value?.status === "running");
 const mode = computed(() => selectedMode.value);
 const needsFullAutoAuthorization = computed(() => mode.value === "full_auto" && (!run.value || authorizationConfirmationRequired.value));
+const readOnlyDemo = computed(() => Boolean(store.currentProject?.is_demo && store.currentProject?.read_only));
 const elapsedText = computed(() => {
   tick.value;
   const started = streamStartedAt.value;
@@ -275,8 +276,13 @@ function routeText(route: string): string {
       </span>
     </header>
 
+    <section v-if="readOnlyDemo" class="autopilot-mode-notice" aria-live="polite">
+      <ShieldAlert :size="16" />
+      <span><strong>演示原作保持只读</strong><small>回到作品页复制为可编辑作品后，才能启动推演、改写或自动创作。</small></span>
+    </section>
+
     <div class="mode-selector">
-      <button v-for="item in modes" :key="item.id" :class="{ active: mode === item.id, pending: busy && mode === item.id }" :aria-pressed="mode === item.id" :disabled="running || busy" @click="selectMode(item.id)">
+      <button v-for="item in modes" :key="item.id" :class="{ active: mode === item.id, pending: busy && mode === item.id }" :aria-pressed="mode === item.id" :disabled="running || busy || readOnlyDemo" @click="selectMode(item.id)">
         <Bot v-if="item.id === 'full_auto'" :size="18" />
         <Sparkles v-else-if="item.id === 'supervised_auto'" :size="18" />
         <CircleCheck v-else :size="18" />
@@ -305,14 +311,18 @@ function routeText(route: string): string {
       <div class="autopilot-copy">
         <span>{{ running ? routeText(run?.current_route || '') : '当前状态' }}</span>
         <strong>{{ running ? liveStage : statusText }}</strong>
+        <div v-if="run?.current_task_id" class="autopilot-task-identity">
+          <span>当前正式任务</span>
+          <code :title="run.current_task_id">{{ run.current_task_id }}</code>
+        </div>
         <p v-if="running">{{ liveDetail }}</p>
         <small v-if="run">已通过正式门禁 {{ run.tasks_completed }} 次 · 预计费用 ${{ run.estimated_cost.toFixed(2) }}</small>
         <small v-else>你可以随时暂停、改变方向，再从原处继续。</small>
       </div>
       <div class="autopilot-controls">
         <button v-if="running" class="secondary-button" :disabled="busy" @click="pause"><Pause :size="16" />暂停</button>
-        <button v-else-if="run && run.status !== 'complete'" class="primary-button" :disabled="busy || (needsFullAutoAuthorization && !authorized)" @click="resume"><RefreshCw :size="16" />{{ needsFullAutoAuthorization ? '确认授权并继续' : '继续' }}</button>
-        <button v-else-if="run?.status !== 'complete'" class="primary-button" :disabled="busy || (needsFullAutoAuthorization && !authorized)" @click="start"><Play :size="16" />{{ needsFullAutoAuthorization ? '确认授权并开始' : '开始' }}</button>
+        <button v-else-if="run && run.status !== 'complete'" class="primary-button" :disabled="readOnlyDemo || busy || (needsFullAutoAuthorization && !authorized)" @click="resume"><RefreshCw :size="16" />{{ needsFullAutoAuthorization ? '确认授权并继续' : '继续' }}</button>
+        <button v-else-if="run?.status !== 'complete'" class="primary-button" :disabled="readOnlyDemo || busy || (needsFullAutoAuthorization && !authorized)" @click="start"><Play :size="16" />{{ needsFullAutoAuthorization ? '确认授权并开始' : '开始' }}</button>
       </div>
     </div>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Layers3, List, Maximize2, Network, PackageCheck, RotateCcw, Settings2 } from "lucide-vue-next";
+import { ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Layers3, List, Maximize2, Network, RotateCcw, Settings2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
@@ -482,8 +482,7 @@ async function loadChoices(): Promise<void> {
       <div class="orrery-v3-caption"><Maximize2 :size="14" /><span>{{ signalHierarchy?.nodes.length || 0 }} 个{{ signalMode === 'narrative' ? '主干' : '可见' }}节点</span><i></i><span>{{ signalHierarchy?.total || 0 }} 项作品事实</span></div>
     </div>
     <div v-else class="orrery-v3-empty"><i></i><strong>等待作品长出第一段脉络</strong><p>场景、人物或正文出现后，这里会形成可以进入的叙事场域。</p></div>
-    <WorkspaceDock :pending-choices="choices.length" @open="windows.openInstrument" @organize="windows.constrainToViewport" />
-    <button class="orrery-v3-delivery-beacon" :class="{ ready: deliveryReady }" :disabled="!deliveryReady" :title="deliveryReady ? '作品已具备交付条件' : '交付条件尚未满足'" @click="windows.openInstrument('delivery')"><PackageCheck :size="17" /><span>{{ deliveryReady ? '可以交付' : '交付待命' }}</span></button>
+    <WorkspaceDock :pending-choices="choices.length" :delivery-ready="deliveryReady" @open="windows.openInstrument" @organize="windows.constrainToViewport" />
     <ChapterRail :chapters="chapterNodes" :selected-node-id="activeChapterRailNodeId" @select="openChapterFromRail" />
     <SpatialWindowLayer :projection="projection" :dashboard="props.dashboard" :choices="choices" :delivery="app.delivery" :progress="progress" :prose="prose" @advance="emit('advance')" @inspect-task="emit('inspectTask')" @open-reader="emit('openReader')" @read-node="openReaderForNode" @choose="emit('choose', $event)" @focus-node="focusNode" />
   </section>

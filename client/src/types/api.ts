@@ -25,6 +25,21 @@ export interface ProjectSummary {
   premise: string;
   direction_count: number;
   last_opened?: string;
+  is_demo?: boolean;
+  read_only?: boolean;
+  demo_version?: string;
+  demo_work_id?: string;
+  demo_author?: string;
+}
+
+export interface DemoBundleSummary {
+  bundle_id: string;
+  version: string;
+  title: string;
+  author: string;
+  work_id: string;
+  available: boolean;
+  errors: string[];
 }
 
 export interface BootstrapSnapshot {

@@ -22,13 +22,20 @@ from literary_engineering_studio_engine.public import (
 EXPECTED_SYMBOLS = {
     "projects": (
         "INGEST_MODES",
+        "AUTHORIZED_DEMO_PROJECT_SCHEMA",
         "TEXT_EXTENSIONS",
+        "AuthorizedDemoProjectResult",
+        "DistributionScope",
         "InitOptions",
         "atomic_write_batch",
         "atomic_write_text",
+        "build_authorized_demo_project",
         "engine_root",
         "ingest_existing_work",
         "init_work_project",
+        "is_authorized_demo_reference",
+        "load_authorized_work_manifest",
+        "seal_authorized_demo_project",
     ),
     "tasking": (
         "agent_task_completion_status",
@@ -61,7 +68,9 @@ EXPECTED_SYMBOLS = {
         "count_delivery_chinese_content_chars",
         "display_counts",
         "final_body_from_workbench_text",
+        "load_authorized_reader_units",
         "markdown_to_display_text",
+        "read_authorized_reader_body",
         "scalar_from_yaml_text",
     ),
     "orchestration": (

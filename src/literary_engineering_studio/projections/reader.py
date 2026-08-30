@@ -14,7 +14,9 @@ from urllib.parse import quote
 
 from literary_engineering_studio_engine.public.projections import (
     display_counts,
+    load_authorized_reader_units,
     markdown_to_display_text,
+    read_authorized_reader_body,
     scalar_from_yaml_text,
 )
 from literary_engineering_studio_engine.public.projections import final_body_from_workbench_text
@@ -37,44 +39,7 @@ def build_reader_manifest(project_root: Path) -> dict[str, Any]:
             return copy.deepcopy(cached[1])
 
     scenes = _scene_catalog(root)
-    warnings: list[dict[str, str]] = []
-    units: list[dict[str, Any]] = []
-    covered_scenes: set[str] = set()
-
-    for chapter_id in _chapter_ids(root, scenes):
-        chapter_scenes = [item for item in scenes if item["chapter_id"] == chapter_id]
-        chapter_unit, chapter_warnings = _best_chapter_unit(root, chapter_id, chapter_scenes)
-        warnings.extend(chapter_warnings)
-        if chapter_unit:
-            units.append(chapter_unit)
-            covered_scenes.update(str(item) for item in chapter_unit.get("coverage", []))
-
-    for scene in scenes:
-        scene_id = str(scene["scene_id"])
-        if scene_id in covered_scenes:
-            continue
-        source = root / "drafts" / "scenes" / f"{scene_id}.md"
-        if not source.is_file():
-            continue
-        body = _clean_body(source)
-        if not body:
-            continue
-        units.append(
-            _unit(
-                root,
-                unit_id=f"{scene['chapter_id']}.{scene_id}",
-                volume_id=str(scene.get("volume_id") or ""),
-                chapter_id=str(scene["chapter_id"]),
-                scene_id=scene_id,
-                order_key=tuple(scene["order_key"]),
-                title=str(scene.get("title") or _human_scene_title(scene_id)),
-                status="promoted",
-                source_kind="scene",
-                source=source,
-                body=body,
-                coverage=[scene_id],
-            )
-        )
+    units, warnings = _reader_units(root, scenes)
 
     units.sort(key=lambda item: tuple(item.pop("_order_key")))
     for order, unit in enumerate(units, 1):
@@ -97,6 +62,68 @@ def build_reader_manifest(project_root: Path) -> dict[str, Any]:
     return manifest
 
 
+def _reader_units(
+    root: Path,
+    scenes: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    units = [_authorized_manifest_unit(root, item) for item in load_authorized_reader_units(root)]
+    warnings: list[dict[str, str]] = []
+    covered_scenes: set[str] = set()
+    for chapter_id in _chapter_ids(root, scenes):
+        chapter_scenes = [item for item in scenes if item["chapter_id"] == chapter_id]
+        chapter_unit, chapter_warnings = _best_chapter_unit(root, chapter_id, chapter_scenes)
+        warnings.extend(chapter_warnings)
+        if chapter_unit:
+            units.append(chapter_unit)
+            covered_scenes.update(str(item) for item in chapter_unit.get("coverage", []))
+    units.extend(_uncovered_scene_units(root, scenes, covered_scenes))
+    return units, warnings
+
+
+def _authorized_manifest_unit(root: Path, item: dict[str, Any]) -> dict[str, Any]:
+    body = str(item.pop("body", ""))
+    return _authorized_unit(
+        root,
+        item=item,
+        order_key=(-1, 0, int(item.get("order") or 0), 0),
+        body=body,
+    )
+
+
+def _uncovered_scene_units(
+    root: Path,
+    scenes: list[dict[str, Any]],
+    covered_scenes: set[str],
+) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    for scene in scenes:
+        scene_id = str(scene["scene_id"])
+        source = root / "drafts" / "scenes" / f"{scene_id}.md"
+        body = "" if scene_id in covered_scenes or not source.is_file() else _clean_body(source)
+        if not body:
+            continue
+        units.append(_scene_reader_unit(root, scene, source, body))
+    return units
+
+
+def _scene_reader_unit(root: Path, scene: dict[str, Any], source: Path, body: str) -> dict[str, Any]:
+    scene_id = str(scene["scene_id"])
+    return _unit(
+        root,
+        unit_id=f"{scene['chapter_id']}.{scene_id}",
+        volume_id=str(scene.get("volume_id") or ""),
+        chapter_id=str(scene["chapter_id"]),
+        scene_id=scene_id,
+        order_key=tuple(scene["order_key"]),
+        title=str(scene.get("title") or _human_scene_title(scene_id)),
+        status="promoted",
+        source_kind="scene",
+        source=source,
+        body=body,
+        coverage=[scene_id],
+    )
+
+
 def public_reader_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     """Remove internal file references from the browser-facing projection."""
 
@@ -114,7 +141,7 @@ def read_reader_unit(project_root: Path, unit_id: str) -> dict[str, Any]:
     if not unit:
         raise FileNotFoundError(f"reader unit not found: {unit_id}")
     source = _resolve_source(root, str(unit.get("source_path") or ""))
-    body = _clean_body(source)
+    body = _body_for_unit(root, unit, source)
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
     if digest != unit.get("content_hash"):
         raise RuntimeError("reader source changed while the unit was being loaded; refresh the manifest")
@@ -130,7 +157,7 @@ def search_reader(project_root: Path, query: str, *, limit: int = 40) -> dict[st
     matches: list[dict[str, Any]] = []
     for unit in manifest["units"]:
         source = _resolve_source(project_root, str(unit.get("source_path") or ""))
-        body = _clean_body(source)
+        body = _body_for_unit(project_root.resolve(), unit, source)
         folded = body.casefold()
         cursor = folded.find(needle)
         if cursor < 0 and needle not in str(unit.get("title") or "").casefold():
@@ -316,11 +343,57 @@ def _unit(
     }
 
 
+def _authorized_unit(
+    root: Path,
+    *,
+    item: dict[str, Any],
+    order_key: tuple[int, ...],
+    body: str,
+) -> dict[str, Any]:
+    counts = display_counts(body)
+    volume_id, scene_id, coverage = _authorized_scene_binding(item)
+    return {
+        "unit_id": str(item.get("unit_id") or ""),
+        "volume_id": volume_id,
+        "chapter_id": str(item.get("chapter_id") or ""),
+        "scene_id": scene_id,
+        "order": 0,
+        "title": str(item.get("title") or item.get("authorized_work_title") or "授权正文"),
+        "status": "authorized",
+        "source_kind": "authorized_source",
+        "source_revision": str(item.get("content_hash") or "")[:16],
+        "content_hash": str(item.get("content_hash") or ""),
+        "chinese_content_chars": counts["chinese_content_chars"],
+        "machine_nonspace_chars": counts["machine_nonspace_chars"],
+        "coverage": coverage,
+        "body_endpoint": f"/reader/units/{quote(str(item.get('unit_id') or ''), safe='')}",
+        "source_path": str(item.get("source_path") or ""),
+        "authorized_work_id": str(item.get("authorized_work_id") or ""),
+        "authorized_work_title": str(item.get("authorized_work_title") or ""),
+        "authorized_author": str(item.get("authorized_author") or ""),
+        "char_start": int(item.get("char_start") or 0),
+        "char_end": int(item.get("char_end") or 0),
+        "_order_key": order_key,
+    }
+
+
+def _authorized_scene_binding(item: dict[str, Any]) -> tuple[str, str, list[str]]:
+    volume_id = str(item.get("volume_id") or "")
+    scene_id = str(item.get("scene_id") or "")
+    return volume_id, scene_id, [scene_id] if scene_id else []
+
+
 def _clean_body(path: Path) -> str:
     if not path.is_file():
         return ""
     raw = path.read_text(encoding="utf-8", errors="ignore")
     return markdown_to_display_text(final_body_from_workbench_text(raw), limit=0)
+
+
+def _body_for_unit(root: Path, unit: dict[str, Any], source: Path) -> str:
+    if unit.get("source_kind") == "authorized_source":
+        return read_authorized_reader_body(root, unit)
+    return _clean_body(source)
 
 
 def _resolve_source(root: Path, value: str) -> Path:
@@ -343,6 +416,8 @@ def _project_fingerprint(root: Path) -> str:
         root / "exports",
         root / "releases",
         root / "plot" / "chapters",
+        root / "sources" / "authorized",
+        root / "sources" / "imports",
     ]
     for candidate in roots:
         paths = [candidate] if candidate.is_file() else sorted(path for path in candidate.rglob("*") if path.is_file()) if candidate.is_dir() else []

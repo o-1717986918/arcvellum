@@ -45,7 +45,10 @@ def scan_agent_tasks(root: Path) -> list[AgentTaskRecord]:
         missing = tuple(item for item in expected if not _path_exists(root, item))
         missing_sources = tuple(item for item in sources if not _path_exists(root, item))
         completion_state = agent_task_completion_status(path, root=root)
-        registered_status = str(_registered_task_payload(path).get("status") or "")
+        registered_status = (
+            _intrinsic_sidecar_status(root, path)
+            or str(_registered_task_payload(path).get("status") or "")
+        )
         status, missing, missing_sources = _record_status(
             registered_status,
             expected,
@@ -108,6 +111,40 @@ def _registered_task_payload(path: Path) -> dict[str, object]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _intrinsic_sidecar_status(root: Path, path: Path) -> str:
+    """Retire semantic sidecars whose structured candidate needs no judgment.
+
+    Empty character-state patches are a deterministic no-op.  Their historical
+    sidecars may have stale completion digests after a patch rebuild, but
+    requiring a fresh Agent review would create a task that cannot change any
+    durable state.  Keep this projection structural to avoid importing the
+    literary writeback layer back into task inventory.
+    """
+
+    try:
+        relative = path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return ""
+    match = re.fullmatch(
+        r"characters/state_patches/([^/]+)_state_patch\.agent_tasks\.md",
+        relative,
+    )
+    if not match:
+        return ""
+    patch = path.with_name(f"{match.group(1)}_state_patch.json")
+    try:
+        payload = json.loads(patch.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict) or "characters" not in payload:
+        return ""
+    characters = payload.get("characters")
+    unresolved = payload.get("unresolved_changes", [])
+    if isinstance(characters, list) and not characters and isinstance(unresolved, list) and not unresolved:
+        return "superseded"
+    return ""
 
 
 def _extract_expected_paths(root: Path, text: str) -> list[str]:

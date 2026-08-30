@@ -9,7 +9,7 @@ import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { validateReasoningBudget } from "./reasoning-budget.ts";
 import { runWorker } from "./worker.ts";
 
-const VERSION = "0.99.1";
+const VERSION = "0.99.2";
 const DEFAULT_STATES = ["asset-creation-agent-task", "canon-review-agent-task", "candidate-review"];
 
 async function main(): Promise<number> {

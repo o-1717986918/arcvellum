@@ -17,6 +17,7 @@ from literary_engineering_studio_engine.public.workflow import (
     next_scene_workflow_state,
 )
 from literary_engineering_studio_engine.public.literary import target_length_repair_pending
+from literary_engineering_studio_engine.public.projects import is_authorized_demo_reference
 
 
 PROGRESS_ROOTS = (
@@ -25,6 +26,9 @@ PROGRESS_ROOTS = (
 )
 PROGRESS_EXCLUDED_PARTS = {
     ".git", "__pycache__", "dashboard", "runtime_choices", "task_runs", "worker_runs", "logs",
+    # Task packages, event logs and controller run records are operational
+    # evidence. Rewriting them does not mean the novel advanced.
+    "tasks", "events", "runs",
 }
 
 def _run_steward_decision(
@@ -41,6 +45,14 @@ def _run_steward_decision(
     if "cancel_event" in parameters:
         kwargs["cancel_event"] = stop
     return steward.decide(project, choice, **kwargs)
+
+
+def _repeated_completion_result(host: Any, run: dict[str, Any], run_id: str, task_id: str, route: str) -> bool | None:
+    """Stop lifecycle-file churn when a completed task is requested again."""
+
+    if not task_id or str(run.get("current_task_id") or "") != task_id:
+        return None
+    return host._register_no_progress(run_id, task_id, route, "同一项已完成任务被状态机再次请求，正式路线没有前进。")
 
 
 def _pending_asset_dependency(project: Path) -> bool:
@@ -83,6 +95,8 @@ def _validate_autopilot_project(project: Path, runtime: str) -> None:
         raise ValueError("自动创作需要先选择一个包含 project.yaml 的有效作品目录。")
     if not str(runtime or "").strip():
         raise ValueError("自动创作需要一个可用的 Agent Runtime。")
+    if is_authorized_demo_reference(project):
+        raise ValueError("授权演示母本只用于阅读和观察；请先复制为可编辑作品再开始自动创作。")
 
 
 def _project_progress_fingerprint(project: Path) -> str:
@@ -97,6 +111,8 @@ def _project_progress_fingerprint(project: Path) -> str:
                 continue
             rel = path.relative_to(project)
             if any(part.lower() in PROGRESS_EXCLUDED_PARTS for part in rel.parts):
+                continue
+            if path.name.endswith((".agent_tasks.md", ".agent_completion.json")):
                 continue
             try:
                 stat = path.stat()

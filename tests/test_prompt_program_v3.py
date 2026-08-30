@@ -1625,6 +1625,7 @@ class PromptProgramV3Tests(unittest.TestCase):
                     "route": "scene-development",
                     "task_type": "platform-agent-judgment",
                     "current_state": "continuity-ledger-agent-task",
+                    "prompt_asset_id": "route.scene-development.continuity-ledger.v1",
                     "agent_role": "main-review-agent",
                     "scene_id": "scene_0001",
                     "source_paths": list(files),
@@ -1662,6 +1663,8 @@ class PromptProgramV3Tests(unittest.TestCase):
             self.assertLess(projection["metrics"]["total_characters"], 18_000)
             self.assertIn("尚未回答的问题", prompt)
             self.assertIn("信号仍未确认", prompt)
+            self.assertIn('"change_item_contracts"', prompt)
+            self.assertIn('"item_evidence_rule"', prompt)
             self.assertNotIn("状态变化", prompt)
             self.assertNotIn("不得进入首轮", prompt)
             self.assertNotIn("全局创作方向", prompt)

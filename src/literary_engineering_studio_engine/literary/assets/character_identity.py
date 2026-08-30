@@ -76,13 +76,31 @@ def _append_promoted_aliases(root: Path, aliases: set[str]) -> None:
 
 def _list_value(text: str, key: str) -> list[str]:
     inline = re.search(rf"(?m)^\s*{re.escape(key)}:\s*\[(.*?)\]\s*$", text)
-    if not inline:
-        return []
-    return [
-        item.strip().strip("'\"")
-        for item in inline.group(1).split(",")
-        if item.strip()
-    ]
+    if inline:
+        return [
+            item.strip().strip("'\"")
+            for item in inline.group(1).split(",")
+            if item.strip()
+        ]
+    values: list[str] = []
+    in_block = False
+    base_indent = 0
+    for line in text.splitlines():
+        if re.match(rf"^\s*{re.escape(key)}:\s*$", line):
+            in_block = True
+            base_indent = len(line) - len(line.lstrip())
+            continue
+        if not in_block or not line.strip():
+            continue
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if indent <= base_indent and not stripped.startswith("-"):
+            break
+        if stripped.startswith("-"):
+            value = stripped[1:].strip().strip("'\"")
+            if value:
+                values.append(value)
+    return values
 
 
 def _is_protagonist_identity(path_stem: str, character_id: str, role: str) -> bool:

@@ -22,7 +22,7 @@ function observabilityFixture() {
       role: "main-creative-agent",
       runtime: "opencode",
       route: "scene-development",
-      task_id: "task-1",
+      task_id: "scene_0002-state-agent-task",
       status: "running",
       stage: "generation-agent-task",
       message: "",
@@ -64,7 +64,7 @@ function observabilityFixture() {
         event: "task.started",
         stage: "generation",
         message: "",
-        task_id: "task-1",
+        task_id: "scene_0002-state-agent-task",
         route: "scene-development",
       },
     ],
@@ -92,7 +92,7 @@ describe("AgentObservatoryView", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("main-creative-agent");
-    expect(wrapper.text()).toContain("task-1");
+    expect(wrapper.text()).toContain("scene_0002-state-agent-task");
     expect(wrapper.text()).toContain("writer");
     expect(wrapper.text()).toContain("task.started");
     expect(wrapper.text()).toContain("主创 Agent");

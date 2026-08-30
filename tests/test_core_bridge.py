@@ -1,5 +1,6 @@
 from contextlib import redirect_stderr
 from io import StringIO
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -84,6 +85,8 @@ class CoreBridgeTests(unittest.TestCase):
         env = run.call_args.kwargs["env"]
         self.assertEqual(env["PYTHONUTF8"], "1")
         self.assertEqual(env["PYTHONIOENCODING"], "utf-8")
+        source_root = Path(env["PYTHONPATH"].split(os.pathsep)[0])
+        self.assertEqual(source_root, bridge.working_dir / "src")
 
     def test_rejects_embedded_model_provider_commands(self):
         for args in (

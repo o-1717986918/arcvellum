@@ -1,7 +1,7 @@
 {
   "name": "arcvellum-studio",
   "private": true,
-  "version": "0.99.1",
+  "version": "0.99.2",
   "scripts": {
     "api:openapi": "python scripts/export_studio_openapi.py --output contracts/openapi/arcvellum-studio-v1.json",
     "api:types": "openapi-typescript contracts/openapi/arcvellum-studio-v1.json -o client/src/types/generated/api-schema.d.ts",
@@ -23,7 +23,8 @@
     "desktop:dev": "npm run client:build && tauri dev",
     "desktop:verify-sidecar": "python packaging/sidecar_provenance.py verify --root . --binary desktop/src-tauri/binaries/literary-engineering-studio-sidecar-x86_64-pc-windows-msvc.exe --manifest build/sidecar-provenance.json",
     "desktop:verify-pi-worker": "python packaging/pi_worker_bundle.py verify --root . --destination desktop/src-tauri/resources/pi-worker",
-    "desktop:build": "npm run client:build && npm run desktop:verify-sidecar && npm run desktop:verify-pi-worker && tauri build",
+    "desktop:verify-demo": "python packaging/demo_project_bundle.py --directory desktop/src-tauri/resources/demo-projects --require-work-id yu-hua-i-am-timid-as-a-mouse",
+    "desktop:build": "npm run client:build && npm run desktop:verify-sidecar && npm run desktop:verify-pi-worker && npm run desktop:verify-demo && tauri build",
     "desktop:icons": "tauri icon desktop/app-icon.svg --output desktop/src-tauri/icons"
   },
   "devDependencies": {

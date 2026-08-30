@@ -54,9 +54,12 @@ def _list_after(text: str, key: str) -> list[str]:
                 if not sub.strip():
                     continue
                 indent = len(sub) - len(sub.lstrip())
-                if indent <= base_indent:
-                    break
                 stripped = sub.strip()
+                # YAML permits an indentationless sequence immediately below
+                # a mapping key (``aliases:\n- name``).  Treat that standard
+                # form as part of the value instead of ending the block.
+                if indent <= base_indent and not stripped.startswith("-"):
+                    break
                 if stripped.startswith("-"):
                     item = stripped[1:].strip()
                     if item:

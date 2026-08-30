@@ -7,11 +7,16 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 from typing import Any
 
+from literary_engineering_studio_engine.public.literary import (
+    ensure_default_style_mount,
+)
 from literary_engineering_studio_engine.public.projects import InitOptions, init_work_project
 
-from .config import default_config_path, default_projects_root
+from .config import default_config_path, default_projects_root, repository_root
+from .demo_distribution import clone_demo_project, install_demo_bundle, verify_demo_bundle
 
 
 REGISTRY_SCHEMA = "literary-engineering-studio/project-registry/v0.1"
@@ -77,6 +82,7 @@ def project_registry_path() -> Path:
 
 
 def list_projects() -> dict[str, Any]:
+    _install_first_run_demo_if_needed()
     registry = _load_registry()
     projects: list[dict[str, Any]] = []
     for item in registry.get("recent", []):
@@ -124,6 +130,7 @@ def create_project(
             genre=genre.strip(),
         )
     )
+    ensure_default_style_mount(target)
     return register_project(target)
 
 
@@ -159,6 +166,12 @@ def current_project() -> dict[str, Any]:
 def project_summary(project_root: Path | str) -> dict[str, Any]:
     root = Path(project_root).expanduser().resolve()
     values = _read_project_yaml(root / "project.yaml")
+    demo = _read_json(root / ".arcvellum-demo.json")
+    installation = _read_json(root / ".arcvellum-demo-install.json")
+    read_only_demo = bool(
+        demo.get("schema") == "arcvellum/authorized-demo-project/v1"
+        and demo.get("read_only_reference") is True
+    )
     return {
         "path": str(root),
         "title": str(values.get("title") or root.name),
@@ -170,7 +183,60 @@ def project_summary(project_root: Path | str) -> dict[str, Any]:
         "genre": str(values.get("genre") or ""),
         "premise": str(values.get("premise") or ""),
         "direction_count": len(read_directions(root, limit=200)),
+        "is_demo": read_only_demo,
+        "read_only": read_only_demo,
+        "demo_version": str(installation.get("version") or ""),
+        "demo_work_id": str(demo.get("work_id") or ""),
+        "demo_author": str(demo.get("author") or ""),
     }
+
+
+def list_demo_bundles() -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    for path in sorted(_bundled_demo_root().glob("*.arcvellum-demo")):
+        verification = verify_demo_bundle(path)
+        manifest = verification.manifest
+        items.append(
+            {
+                "bundle_id": str(manifest.get("bundle_id") or path.stem),
+                "version": str(manifest.get("version") or ""),
+                "title": str(manifest.get("title") or path.stem),
+                "author": str(manifest.get("author") or ""),
+                "work_id": str(manifest.get("work_id") or ""),
+                "available": verification.ok,
+                "errors": list(verification.errors),
+            }
+        )
+    return {"ok": True, "items": items}
+
+
+def install_bundled_demo(bundle_id: str, *, restore_as: str = "") -> dict[str, Any]:
+    bundle = _find_demo_bundle(bundle_id)
+    result = install_demo_bundle(
+        bundle,
+        _configured_projects_root(),
+        restore_as=restore_as,
+    )
+    return {
+        "ok": True,
+        "status": result.status,
+        "project": register_project(result.project_root),
+    }
+
+
+def clone_bundled_demo(
+    project_root: Path | str,
+    *,
+    parent_directory: str = "",
+    folder_name: str = "",
+    title: str = "",
+) -> dict[str, Any]:
+    source = Path(project_root).expanduser().resolve()
+    parent = Path(parent_directory).expanduser().resolve() if parent_directory.strip() else _configured_projects_root()
+    parent.mkdir(parents=True, exist_ok=True)
+    destination = parent / _safe_folder_name(folder_name or title or f"{source.name}-editable")
+    clone_demo_project(source, destination, title=title)
+    return {"ok": True, "project": register_project(destination)}
 
 
 def record_direction(project_root: Path | str, message: str, *, actor: str = "user") -> dict[str, Any]:
@@ -229,6 +295,80 @@ def _load_registry() -> dict[str, Any]:
     payload.setdefault("current_project", "")
     payload.setdefault("recent", [])
     return payload
+
+
+def _install_first_run_demo_if_needed() -> None:
+    registry = _load_registry()
+    valid = [
+        item
+        for item in registry.get("recent", [])
+        if (Path(str(item.get("path") or "")).expanduser() / "project.yaml").is_file()
+    ]
+    if valid:
+        return
+    catalog = list_demo_bundles().get("items", [])
+    available = next((item for item in catalog if item.get("available")), None)
+    if not available:
+        return
+    try:
+        result = install_demo_bundle(
+            _find_demo_bundle(str(available["bundle_id"])),
+            _configured_projects_root(),
+        )
+    except (OSError, ValueError):
+        return
+    now = _now()
+    _save_registry(
+        {
+            "schema": REGISTRY_SCHEMA,
+            "current_project": str(result.project_root),
+            "recent": [{"path": str(result.project_root), "last_opened": now}],
+        }
+    )
+
+
+def _configured_projects_root() -> Path:
+    config_path = default_config_path()
+    payload = _read_json(config_path)
+    application = payload.get("application") if isinstance(payload.get("application"), dict) else {}
+    value = str(application.get("projects_root") or "").strip()
+    return Path(value).expanduser().resolve() if value else default_projects_root().resolve()
+
+
+def _bundled_demo_root() -> Path:
+    override = os.environ.get("LES_DEMO_BUNDLES_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    frozen = getattr(sys, "_MEIPASS", "")
+    candidates = []
+    if frozen:
+        candidates.append(Path(frozen) / "resources" / "demo-projects")
+    candidates.extend(
+        [
+            repository_root() / "build" / "demo-projects",
+            repository_root() / "resources" / "demo-projects",
+        ]
+    )
+    return next((path for path in candidates if path.is_dir()), candidates[0])
+
+
+def _find_demo_bundle(bundle_id: str) -> Path:
+    clean = bundle_id.strip()
+    for path in sorted(_bundled_demo_root().glob("*.arcvellum-demo")):
+        verification = verify_demo_bundle(path)
+        if verification.ok and str(verification.manifest.get("bundle_id") or "") == clean:
+            return path
+    raise FileNotFoundError(f"没有找到可安装的演示作品：{clean}")
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _save_registry(payload: dict[str, Any]) -> None:

@@ -101,6 +101,19 @@ Project Archaeology 的确定性源文本层位于 `src/literary_engineering_stu
 
 v2 的正式顺序为 chunk extraction → deterministic fan-in → identity resolution → candidate reconstruction → five-domain review → deterministic materialization。`analysis` 模式在通过 analysis-only review 后结束，不物化可晋升资产；其余模式也只能进入已注册的 Archive candidate 目录，继续复用独立 review、当前内容批准和原子 promotion。
 
+### Authorized Single-Work Demo
+
+授权演示不是另一条创作 route，也不是可绕过来源审查的项目模板。边界如下：
+
+- `literary/ingest/authorized/` 只拥有授权来源清单、分发范围、源文件与凭据哈希校验，以及按原文字符范围建立的只读 Reader 单元；它不判断法律效力，也不下载正文；
+- `projects/authorized_demo.py` 只把已校验的单一作品交给 `source-ingest/v2`，写入授权身份和只读阅读投影；它不得生成虚假的正文晋升、AgentReview、RP、分支或资产 promotion 历史；
+- `application/demo_distribution/` 拥有演示包校验、原子安装、恢复和“复制为可编辑项目”；它不得解释文学事实或扩大授权范围；
+- `application/demo_distribution/completeness.py` 是生产演示包的完整性 Gate。低层 ZIP 构造成功不代表演示可发布，生产脚本必须先通过该 Gate；
+- Desktop 只携带已验证的 `.arcvellum-demo` 资源，并通过 `LES_DEMO_BUNDLES_DIR` 告知 Sidecar 位置；不得直接解压覆盖用户项目；
+- Frontend 只能把演示母本作为只读参考打开。续写、改写和正式任务执行必须先克隆为普通项目。
+
+首个产品演示固定为余华《我胆小如鼠》单篇，`work_id=yu-hua-i-am-timid-as-a-mouse`。不得把同名作品集中的其他篇目混入、用生成文本补足旧的十万字目标，或在授权原文缺失时根据公开梗概伪造正文和项目资产。授权正文与凭据原件不进入 Git 仓库；本地生产构建按目标渠道逐项校验授权 scope。
+
 ### Longform-Planning Route
 
 `src/literary_engineering_studio_engine/longform_planning_route.py` 负责长篇规划任务包、故事架构 Gate、字数预算/场景库存/章节义务的候选-审查链，以及物化前的保护性约束。其文学顺序必须保持为：story architecture → independent review → word budget → inventory → chapter obligations → reviewed materialization。

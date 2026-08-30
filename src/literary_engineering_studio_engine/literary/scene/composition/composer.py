@@ -421,7 +421,7 @@ def _write_composition_agent_tasks(
             ),
             (
                 "检查写回候选",
-                """审查 writeback_candidates，标出哪些新增事实、人物状态、关系变化和伏笔变化必须在正文和 review 后再次确认。不要直接写入 canon 或 characters/*.yaml。""",
+                """审查 writeback_candidates，标出哪些新增事实、人物状态、关系变化和伏笔变化必须在正文和 review 后再次确认。character_changes 和 relationship_changes 只能记录本场正文会实际发生的变化；未来意图、可能变化和明确尚未落地的变化必须进入 next_scene_inputs。不要直接写入 canon 或 characters/*.yaml。""",
             ),
         ],
     )

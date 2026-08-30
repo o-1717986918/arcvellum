@@ -6,6 +6,7 @@ import {
   Fingerprint,
   Gauge,
   GitBranch,
+  PackageCheck,
   PanelsTopLeft,
   ScanSearch,
   ShieldCheck,
@@ -17,7 +18,7 @@ import { computed } from "vue";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
 import type { SpatialWindowKind } from "@/types/spatialWindows";
 
-defineProps<{ pendingChoices: number }>();
+const props = defineProps<{ pendingChoices: number; deliveryReady: boolean }>();
 const emit = defineEmits<{ open: [kind: Exclude<SpatialWindowKind, "node">]; organize: [] }>();
 const windows = useSpatialWindowsStore();
 
@@ -28,6 +29,7 @@ const instruments = [
   { kind: "agent", label: "执行", title: "查看 Agent 任务与会话", icon: Activity },
   { kind: "decisions", label: "决策", title: "处理等待你的创作决定", icon: GitBranch },
   { kind: "rules", label: "规则", title: "查看创作规则与节奏", icon: SlidersHorizontal },
+  { kind: "delivery", label: "交付", title: "查看交付准备状态与正式文件", icon: PackageCheck },
 ] as const;
 
 const workspaces = [
@@ -47,7 +49,11 @@ const workspaces = [
       <button
         v-for="item in instruments"
         :key="item.kind"
-        :class="{ active: openKinds.has(item.kind), urgent: item.kind === 'decisions' && pendingChoices > 0 }"
+        :class="{
+          active: openKinds.has(item.kind),
+          urgent: item.kind === 'decisions' && pendingChoices > 0,
+          'delivery-ready': item.kind === 'delivery' && props.deliveryReady,
+        }"
         :title="item.title"
         :data-count="item.kind === 'decisions' && pendingChoices ? pendingChoices : undefined"
         @click="emit('open', item.kind)"

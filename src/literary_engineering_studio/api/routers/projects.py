@@ -10,7 +10,15 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException
 
 from ..common import call_handler, project_root as resolve_project_root
-from ..models import DirectionRequest, ProjectCreateRequest, ProjectLocationRequest, ProjectOpenRequest, ProjectsRootRequest
+from ..models import (
+    DemoCloneRequest,
+    DemoInstallRequest,
+    DirectionRequest,
+    ProjectCreateRequest,
+    ProjectLocationRequest,
+    ProjectOpenRequest,
+    ProjectsRootRequest,
+)
 
 
 @dataclass(frozen=True)
@@ -25,10 +33,36 @@ class ProjectRouterDependencies:
     create_project: Callable[..., dict[str, Any]]
     read_directions: Callable[[Path, int], list[dict[str, Any]]]
     record_direction: Callable[[Path, str], dict[str, Any]]
+    list_demo_bundles: Callable[[], dict[str, Any]]
+    install_bundled_demo: Callable[..., dict[str, Any]]
+    clone_bundled_demo: Callable[..., dict[str, Any]]
 
 
 def _payload_values(payload: Any) -> dict[str, Any]:
     return payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+
+
+def _register_demo_routes(router: APIRouter, deps: ProjectRouterDependencies) -> None:
+    @router.get("/projects/demos")
+    def projects_demos():
+        return deps.list_demo_bundles()
+
+    @router.post("/projects/demos/install")
+    def projects_demo_install(payload: DemoInstallRequest):
+        return call_handler(
+            lambda: deps.install_bundled_demo(payload.bundle_id, restore_as=payload.restore_as)
+        )
+
+    @router.post("/projects/demos/clone")
+    def projects_demo_clone(payload: DemoCloneRequest):
+        return call_handler(
+            lambda: deps.clone_bundled_demo(
+                payload.project_root,
+                parent_directory=payload.parent_directory,
+                folder_name=payload.folder_name,
+                title=payload.title,
+            )
+        )
 
 
 def build_project_router(deps: ProjectRouterDependencies) -> APIRouter:
@@ -79,6 +113,8 @@ def build_project_router(deps: ProjectRouterDependencies) -> APIRouter:
     @router.post("/projects/create")
     def projects_create(payload: ProjectCreateRequest):
         return call_handler(lambda: {"ok": True, "project": deps.create_project(**_payload_values(payload))})
+
+    _register_demo_routes(router, deps)
 
     @router.get("/projects/directions")
     def projects_directions(project_root: str, limit: int = 20):

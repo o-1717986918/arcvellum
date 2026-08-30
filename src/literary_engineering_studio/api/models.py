@@ -122,6 +122,18 @@ class ProjectsRootRequest(BaseModel):
     projects_root: str
 
 
+class DemoInstallRequest(BaseModel):
+    bundle_id: str
+    restore_as: str = ""
+
+
+class DemoCloneRequest(BaseModel):
+    project_root: str
+    parent_directory: str = ""
+    folder_name: str = ""
+    title: str = ""
+
+
 class DirectionRequest(BaseModel):
     project_root: str
     message: str
@@ -354,6 +366,8 @@ __all__ = [
     "OpenCodeCredentialRequest",
     "PiWorkerCredentialRequest",
     "ProjectCreateRequest",
+    "DemoCloneRequest",
+    "DemoInstallRequest",
     "ProjectLocationRequest",
     "ProjectOpenRequest",
     "ProjectsRootRequest",

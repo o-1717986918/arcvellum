@@ -1,0 +1,32 @@
+{
+  "schema": "arcvellum/authorized-literary-source/v1",
+  "work_id": "yu-hua-i-am-timid-as-a-mouse",
+  "title": "我胆小如鼠",
+  "author": "余华",
+  "edition": "REPLACE_WITH_LOCAL_SOURCE_EDITION",
+  "language": "zh-CN",
+  "work_type": "novella",
+  "source_files": [
+    {
+      "source_id": "primary-text",
+      "filename": "source/primary.txt",
+      "media_type": "text/plain",
+      "sha256": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "byte_size": 0
+    }
+  ],
+  "authorization": {
+    "basis": "user_attested_private_research",
+    "rights_holder": "",
+    "licensee": "",
+    "declaration": "用户确认该文本仅用于本机私人研究，不由 ArcVellum 再分发。",
+    "evidence_ref": "",
+    "evidence_sha256": "",
+    "scopes": [
+      "local_analysis"
+    ],
+    "issued_on": "",
+    "expires_on": "",
+    "notes": ""
+  }
+}

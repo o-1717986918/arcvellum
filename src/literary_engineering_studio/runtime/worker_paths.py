@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from literary_engineering_studio_engine.public.projects import is_authorized_demo_reference
+
 
 def validate_project(value: Path) -> Path:
     project = value.expanduser().resolve()
@@ -11,6 +13,10 @@ def validate_project(value: Path) -> Path:
         raise FileNotFoundError(f"work project not found: {project}")
     if not (project / "project.yaml").exists():
         raise ValueError(f"not a Literary Engineering work project: {project}")
+    if is_authorized_demo_reference(project):
+        raise ValueError(
+            "授权演示母本为只读项目；请先在作品页复制为可编辑作品，再启动 Agent 任务。"
+        )
     return project
 
 

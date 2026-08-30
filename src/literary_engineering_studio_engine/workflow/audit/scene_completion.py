@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ...agent_tasks import agent_task_completion_status
 from ...canon_evolver import canon_writeback_status
+from ...character_state_apply import state_patch_writeback_status
 from ...route_audit_common import _add_gate
 from ...route_audit_evidence import _mounted_style_exists, _style_adherence_status
 
@@ -36,14 +37,24 @@ def add_scene_completion_gates(
         f"{scene_id} state evolution report exists",
         f"{scene_id} 缺少 characters/state_patches/{scene_id}_state_patch.md；平台 Agent 需审查人物状态演化候选。",
     )
+    state_status = state_patch_writeback_status(root, scene_id)
+    state_status_value = str(state_status.get("status") or "")
     completion = agent_task_completion_status(state_task, root=root)
+    review_not_required = state_status_value == "not_required"
     _add_gate(
         gates,
         f"{scene_id}:state-agent-task-complete",
-        completion.get("complete") is True,
+        review_not_required or completion.get("complete") is True,
         "blocking",
-        f"{scene_id} state-evolve platform-agent task completed",
-        f"{scene_id} 的 state-evolve sidecar 未完成：{completion.get('message')}",
+        (
+            f"{scene_id} state semantic review is not required for an empty durable patch"
+            if review_not_required
+            else f"{scene_id} state-evolve platform-agent task completed"
+        ),
+        (
+            f"{scene_id} 的 state-evolve sidecar 未完成：{completion.get('message')}；"
+            f"聚合写回状态：{state_status_value or 'missing'}"
+        ),
     )
     canon_status = canon_writeback_status(root, scene_id)
     _add_gate(

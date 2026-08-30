@@ -102,6 +102,18 @@ _RULES = (
         ),
     ),
     _FailureRule(
+        code="state_writeback_needs_revision",
+        category="workflow_gate",
+        title="人物状态候选需要重新归属",
+        summary="正文已经保留，但人物或关系变化尚未能归入明确角色，系统已停止重复审查。",
+        impact="当前场景停在状态写回阶段；正文不会丢失，也不会把不确定变化写入人物档案。",
+        patterns=("state patch has unresolved character or relationship changes",),
+        actions=(
+            RecoveryAction("refresh-task", "重建人物状态候选并继续"),
+            RecoveryAction("open-workflow", "查看当前步骤", "navigate", "overview"),
+        ),
+    ),
+    _FailureRule(
         code="workflow_evidence_pending",
         category="workflow_gate",
         title="创作流程还缺一份正式证据",

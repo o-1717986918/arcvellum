@@ -10,6 +10,7 @@ import sys
 
 VERSION_PATTERN = re.compile(r'^\s*version\s*=\s*"([^"]+)"', re.MULTILINE)
 PYTHON_PATTERN = re.compile(r'__version__\s*=\s*"([^"]+)"')
+WORKER_PATTERN = re.compile(r'const\s+VERSION\s*=\s*"([^"]+)"')
 
 
 def version_matrix(root: Path) -> dict[str, str]:
@@ -23,11 +24,18 @@ def version_matrix(root: Path) -> dict[str, str]:
     if not pyproject_match or not cargo_match:
         raise RuntimeError("could not read project or desktop package version")
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    worker_package = json.loads((root / "workers/pi-worker/package.json").read_text(encoding="utf-8"))
+    worker_source = (root / "workers/pi-worker/src/main.ts").read_text(encoding="utf-8")
+    worker_match = WORKER_PATTERN.search(worker_source)
+    if not worker_match:
+        raise RuntimeError("could not read Pi Worker runtime version")
     tauri = json.loads((root / "desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
     return {
         "python": python_match.group(1),
         "pyproject": pyproject_match.group(1),
         "node": str(package.get("version") or ""),
+        "pi-worker-node": str(worker_package.get("version") or ""),
+        "pi-worker-runtime": worker_match.group(1),
         "cargo": cargo_match.group(1),
         "tauri": str(tauri.get("version") or ""),
     }

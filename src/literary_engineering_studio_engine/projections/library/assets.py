@@ -116,6 +116,7 @@ def _scene_items(
     for path in _bounded_paths(folder.glob("*.yaml"), limit):
         text = _read_text(path)
         scene_id = scalar_from_yaml_text(text, "scene_id") or path.stem
+        title = _scene_title(text, scene_id)
         chapter_id = scalar_from_yaml_text(text, "chapter_id") or "未分章"
         goal = scalar_from_yaml_text(text, "scene_goal") or nested_scalar_from_yaml_text(text, "reader_experience", "reader_question")
         participants = list_from_yaml_text(text, "participants", limit=32)
@@ -124,7 +125,7 @@ def _scene_items(
         item = {
             "kind": "scenes",
             "id": scene_id,
-            "title": _display_scene_name(scene_id),
+            "title": title,
             "participants": participants,
             "participant_refs": participant_refs,
             "subtitle": chapter_id,
@@ -142,6 +143,10 @@ def _scene_items(
         }
         items.append(_apply_overrides(item, overrides))
     return items
+
+
+def _scene_title(text: str, scene_id: str) -> str:
+    return scalar_from_yaml_text(text, "title") or _display_scene_name(scene_id)
 
 def _branch_items(root: Path, overrides: dict[str, object], *, limit: int | None = 250) -> list[dict[str, object]]:
     folder = root / "branches"

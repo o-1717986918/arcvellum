@@ -34,6 +34,7 @@ class NarrativeEvidenceProjectionTests(unittest.TestCase):
             )
 
         self.assertEqual(len(library["sections"]["scenes"]), 250)
+        self.assertEqual(library["sections"]["scenes"][0]["title"], "场景 1")
         self.assertEqual(len(evidence["sections"]["scenes"]), 300)
         self.assertEqual(projection["summary"]["scene_count"], 300)
         self.assertIn("scene:scene_0300", {item["node_id"] for item in projection["nodes"]})

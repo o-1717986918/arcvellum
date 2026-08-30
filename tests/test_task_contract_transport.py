@@ -805,6 +805,33 @@ class TaskContractTransportTests(unittest.TestCase):
 
         self.assertFalse(exists)
 
+    def test_agent_task_status_retires_empty_state_patch_semantic_sidecar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state_dir = root / "characters" / "state_patches"
+            state_dir.mkdir(parents=True)
+            patch = state_dir / "scene_0001_state_patch.json"
+            patch.write_text(
+                json.dumps(
+                    {"scene_id": "scene_0001", "characters": [], "unresolved_changes": []},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            sidecar = state_dir / "scene_0001_state_patch.agent_tasks.md"
+            sidecar.write_text("# state review\n", encoding="utf-8")
+            sidecar.with_name("scene_0001_state_patch.agent_completion.json").write_text(
+                json.dumps({"status": "complete"}),
+                encoding="utf-8",
+            )
+
+            result = build_agent_task_status(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["summary"]["partial_count"], 0)
+            self.assertEqual(payload["summary"]["superseded_count"], 1)
+            self.assertEqual(payload["tasks"][0]["status"], "superseded")
+
     def test_submit_and_complete_require_exact_declared_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

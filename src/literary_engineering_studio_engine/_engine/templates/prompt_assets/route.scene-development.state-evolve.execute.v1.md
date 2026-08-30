@@ -26,6 +26,7 @@ output_contract:
   - Write only the state patch review JSON at the declared path. Studio materializes the lifecycle receipt after deterministic preflight succeeds.
 review_requirements:
   - Verify every proposed character, relationship and arc change against the exact source artifact.
+  - A pass may contain only changes that visibly occurred in the exact scene prose. A future intention or explicitly not-yet-realized turn must be returned for reclassification as next_scene_inputs, not approved as state.
   - Check that the patch does not smuggle Canon, plot or unregistered persistent characters into character state.
   - Record a concrete finding even when the patch is approved; do not use an empty approval.
 forbidden_shortcuts:

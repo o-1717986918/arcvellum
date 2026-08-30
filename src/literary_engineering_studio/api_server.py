@@ -69,8 +69,11 @@ from .opencode_control import (
 )
 from .runner_probe import probe_agent_runner
 from .project_manager import (
+    clone_bundled_demo,
     create_project,
     current_project,
+    install_bundled_demo,
+    list_demo_bundles,
     list_projects,
     read_directions,
     record_direction,
@@ -182,6 +185,24 @@ def _project_read_models(config: dict[str, Any], lifecycle: Any, autopilot: Any)
     )
 
 
+def _project_router_dependencies(config: dict[str, Any]) -> ProjectRouterDependencies:
+    return ProjectRouterDependencies(
+        config=config,
+        default_projects_root=default_projects_root,
+        save_config=save_config,
+        list_projects=list_projects,
+        current_project=current_project,
+        register_project=register_project,
+        validate_project_location=validate_project_location,
+        create_project=create_project,
+        read_directions=lambda root, limit: read_directions(root, limit=limit),
+        record_direction=record_direction,
+        list_demo_bundles=list_demo_bundles,
+        install_bundled_demo=install_bundled_demo,
+        clone_bundled_demo=clone_bundled_demo,
+    )
+
+
 def create_app(
     config_override: dict[str, Any] | None = None,
     *,
@@ -287,22 +308,7 @@ def create_app(
         )
     )
     app.include_router(build_pi_worker_router(config))
-    app.include_router(
-        build_project_router(
-            ProjectRouterDependencies(
-                config=config,
-                default_projects_root=lambda: default_projects_root(),
-                save_config=lambda settings: save_config(settings),
-                list_projects=lambda: list_projects(),
-                current_project=lambda: current_project(),
-                register_project=lambda path: register_project(path),
-                validate_project_location=lambda **values: validate_project_location(**values),
-                create_project=lambda **values: create_project(**values),
-                read_directions=lambda root, limit: read_directions(root, limit=limit),
-                record_direction=lambda root, message: record_direction(root, message),
-            )
-        )
-    )
+    app.include_router(build_project_router(_project_router_dependencies(config)))
 
     app.include_router(
         build_quality_router(

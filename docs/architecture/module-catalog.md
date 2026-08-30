@@ -44,11 +44,11 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `tasking/` | TaskPackage、semantic artifact、agent sidecar、生命周期和 Gate 通用合同 | `public/tasking.py` | foundation、route-neutral contract | 执行 Agent、Studio job、Provider 调用 | `test_task_contract_transport.py`、`test_task_lifecycle_facade.py` |
 | `routes/` | 正式 route 目录、任务顺序、route-specific Gate | `routes/catalog.py`；Studio 消费时用 `public/orchestration.py`/`public/workflow.py` | tasking、literary services | Studio 生命周期、Runtime adapter | `test_route_catalog.py`、各 route 测试 |
 | `workflow/` | 从项目事实派生 workflow state、dashboard 和审计 | `public/workflow.py` | tasking、routes、项目事实 | 调 Agent、写正式产物 | `test_scene_workflow_order.py`、dashboard/audit 测试 |
-| `literary/` | Canon、人物、场景、规划、文风、审查、状态、连续性、导出等文学规则 | `public/literary.py` | foundation、task contracts | FastAPI、SDK、Studio persistence | `test_scene_*`、`test_longform_*`、`test_style_*`、`test_asset_*` |
+| `literary/` | Canon、人物、场景、规划、文风、审查、状态、连续性、导出，以及授权来源合同和只读原文投影 | `public/literary.py`、`public/projections.py` | foundation、task contracts | FastAPI、SDK、Studio persistence、下载受版权保护的正文 | `test_scene_*`、`test_longform_*`、`test_style_*`、`test_asset_*`、`test_authorized_source_contract.py` |
 | `prompting/` | 版本化 Prompt Asset、schema 和 payload validation | `public/prompting.py` | Engine 文学合同 | Provider transport、会话复用 | `test_prompt_compiler.py`、`test_prompt_program_v3.py` |
 | `orchestration/` | 只读 FormalTask/Gate/route macro 目录 | `public/orchestration.py` | task/gate catalogs | Planner 执行、计划持久化、Worker | `tests/orchestration/test_ao0_foundation.py`、默认路线等价测试 |
 | `projections/` | 面向读取的正文、计数和展示投影 | `public/projections.py` | 正式项目事实 | promotion、writeback、隐藏修复 | projection/reader/API 测试 |
-| `projects/` | 初始化、现有作品导入、项目级原子文件操作 | `public/projects.py` | foundation、literary ingest | Studio data root、UI 生命周期 | project init/source ingest 测试 |
+| `projects/` | 初始化、现有作品导入、授权单篇演示形式化、项目级原子文件操作 | `public/projects.py` | foundation、literary ingest | Studio data root、UI 生命周期、伪造 Agent 创作或晋升历史 | project init/source ingest、`test_authorized_source_contract.py` |
 | `command_line/` | Engine CLI 解析与命令分发 adapter | `command_line/main.py` | Engine public/domain services | 新文学规则、第二套 Gate | CLI/route surface 测试 |
 | `director/` | 创作总监的正式任务模板和选择逻辑 | 现有 director facade | Engine contracts | Provider HTTP、Studio 会话 | creative director 测试 |
 
@@ -68,7 +68,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 
 | 模块 | 所有权与职责 | 稳定入口 | 允许依赖 | 禁止事项 | 关键验证 |
 |---|---|---|---|---|---|
-| `application/` | 用户用例、生命周期、项目管理、资产事务、文风挂载 | `application/container.py`、具体 application service | application ports、Engine public API | FastAPI Request、SQLite row、Provider payload | `test_application_container.py`、application/service tests |
+| `application/` | 用户用例、生命周期、项目管理、资产事务、文风挂载，以及授权演示包的安装、恢复和克隆 | `application/container.py`、具体 application service | application ports、Engine public API | FastAPI Request、SQLite row、Provider payload、解释或扩大授权范围 | `test_application_container.py`、application/service tests、`test_authorized_source_contract.py` |
 | `application/ports.py` | 事件、缓存、进程、Runtime pool、执行协调器等替换边界 | `ApplicationPorts` | DTO、Protocol | adapter 构造、业务默认值 | `test_application_container.py`、composition tests |
 | `application/persistence_ports.py` | job/autopilot/session/ledger/receipt/lease/plan/asset/event/UoW 合同 | `PersistencePorts` | DTO、Protocol | SQL、路径布局、文学决策 | `test_persistence_ports.py` |
 | `automation/` | 自动创作 Campaign、授权窗口、推进与恢复 | `automation/controller.py`、`campaign_runtime.py` | application/runtime ports、Engine state | 重写 Engine Gate、隐式批准高风险事实 | `test_autopilot.py`、`tests/automation/*` |

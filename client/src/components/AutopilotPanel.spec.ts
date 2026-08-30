@@ -117,7 +117,7 @@ describe("AutopilotPanel", () => {
             runtime: "opencode",
             status: "running",
             current_route: "scene-development",
-            current_task_id: "scene-review",
+            current_task_id: "scene_0002-state-agent-task",
             tasks_completed: 85,
             failures: 0,
             consecutive_revisions: 0,
@@ -137,6 +137,8 @@ describe("AutopilotPanel", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("已通过正式门禁 85 次");
+    expect(wrapper.text()).toContain("当前正式任务");
+    expect(wrapper.text()).toContain("scene_0002-state-agent-task");
     expect(wrapper.text()).not.toContain("已经完成 85 项创作任务");
   });
 

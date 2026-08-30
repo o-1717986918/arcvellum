@@ -100,6 +100,22 @@ class ContinuityLedgerTests(unittest.TestCase):
         self.assertEqual(rows[0]["status"], "resolved")
         self.assertEqual(rows[0]["actual_payoff_scene"], "scene_0003")
 
+    def test_event_terms_in_status_are_normalized_to_ledger_statuses(self):
+        rows = normalize_ledger_rows(
+            "reader_questions",
+            [
+                {
+                    "question_id": "q1",
+                    "question": "钟声为何多了一次？",
+                    "status": "advanced",
+                    "evidence": "钟声由一次变为两次。",
+                    "target_scene": "scene_0003",
+                }
+            ],
+        )
+
+        self.assertEqual(rows[0]["status"], "open")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -658,6 +658,52 @@
         "title": "CustomProviderModelRequest",
         "type": "object"
       },
+      "DemoCloneRequest": {
+        "properties": {
+          "folder_name": {
+            "default": "",
+            "title": "Folder Name",
+            "type": "string"
+          },
+          "parent_directory": {
+            "default": "",
+            "title": "Parent Directory",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "DemoCloneRequest",
+        "type": "object"
+      },
+      "DemoInstallRequest": {
+        "properties": {
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "restore_as": {
+            "default": "",
+            "title": "Restore As",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_id"
+        ],
+        "title": "DemoInstallRequest",
+        "type": "object"
+      },
       "DirectionRequest": {
         "properties": {
           "message": {
@@ -1358,7 +1404,7 @@
   },
   "info": {
     "title": "ArcVellum",
-    "version": "0.99.1"
+    "version": "0.99.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -5364,6 +5410,94 @@
           }
         },
         "summary": "Projects Default Location Update"
+      }
+    },
+    "/projects/demos": {
+      "get": {
+        "operationId": "projects_demos_projects_demos_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Projects Demos"
+      }
+    },
+    "/projects/demos/clone": {
+      "post": {
+        "operationId": "projects_demo_clone_projects_demos_clone_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DemoCloneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Demo Clone"
+      }
+    },
+    "/projects/demos/install": {
+      "post": {
+        "operationId": "projects_demo_install_projects_demos_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DemoInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projects Demo Install"
       }
     },
     "/projects/directions": {

@@ -53,6 +53,30 @@ def continuity_ledger_contract(current_state: str, scene_id: str) -> dict[str, A
                 "scene_id": scene_id,
                 "source_draft": f"drafts/scenes/{scene_id}.md",
             },
+            "change_item_contracts": {
+                "reader_question_changes[]": {
+                    "required_fields": ["status", "evidence"],
+                    "content_or_reference": [
+                        "question", "visible_question", "question_id",
+                    ],
+                    "open_window_or_responsibility": [
+                        "target_window", "target_scene", "responsibility",
+                    ],
+                },
+                "promise_changes[]": {
+                    "required_fields": ["status", "evidence"],
+                    "content_or_reference": [
+                        "promise", "promised_effect", "promise_id",
+                    ],
+                    "open_window_or_responsibility": [
+                        "due_window", "due_scene", "target_scene", "responsibility",
+                    ],
+                },
+            },
+            "item_evidence_rule": (
+                "Every changed row needs a non-empty scalar evidence string grounded in the promoted scene. "
+                "A nested evidence_paths list does not satisfy row-level evidence."
+            ),
             "continuity_kind": "delta",
         }
     if current_state == "continuity-ledger-review":

@@ -1658,6 +1658,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/demos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projects Demos */
+        get: operations["projects_demos_projects_demos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/demos/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Projects Demo Clone */
+        post: operations["projects_demo_clone_projects_demos_clone_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/demos/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Projects Demo Install */
+        post: operations["projects_demo_install_projects_demos_install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/directions": {
         parameters: {
             query?: never;
@@ -2694,6 +2745,36 @@ export interface components {
              * @default 0
              */
             output: number;
+        };
+        /** DemoCloneRequest */
+        DemoCloneRequest: {
+            /**
+             * Folder Name
+             * @default
+             */
+            folder_name: string;
+            /**
+             * Parent Directory
+             * @default
+             */
+            parent_directory: string;
+            /** Project Root */
+            project_root: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** DemoInstallRequest */
+        DemoInstallRequest: {
+            /** Bundle Id */
+            bundle_id: string;
+            /**
+             * Restore As
+             * @default
+             */
+            restore_as: string;
         };
         /** DirectionRequest */
         DirectionRequest: {
@@ -6160,6 +6241,92 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProjectsRootRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    projects_demos_projects_demos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    projects_demo_clone_projects_demos_clone_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoCloneRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    projects_demo_install_projects_demos_install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoInstallRequest"];
             };
         };
         responses: {

@@ -446,6 +446,8 @@ class TaskPreflightTests(unittest.TestCase):
             issue = next(item for item in failed.issues if item.code == "continuity-ledger-contract")
             self.assertIn("incomplete", issue.message)
             self.assertIn("no_change_reason", issue.repair)
+            self.assertIn("每一条记录写入非空字符串 `evidence`", issue.repair)
+            self.assertIn("`evidence_paths` 不能替代 `evidence`", issue.repair)
 
             payload = json.loads(delta.read_text(encoding="utf-8"))
             payload.update({"status": "complete", "no_change_reason": "本场没有新增或改变读者责任。"})

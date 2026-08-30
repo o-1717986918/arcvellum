@@ -14,12 +14,8 @@ from .campaign_runtime import CampaignRuntimeCoordinator, FormalProgressEvidence
 from .policy import DelegationPolicy, next_revision_count
 from .route_dependencies import dependency_label, dependency_pending
 from .run_result_contracts import RouteCycle, RunLoopHost
-from .support import _now, _operational_decision, _project_progress_fingerprint
-
-
+from .support import _now, _operational_decision, _project_progress_fingerprint, _repeated_completion_result
 _TRANSPORT_FAILURE_KINDS = frozenset({"transient_network", "first_event_timeout", "idle_timeout"})
-
-
 class ClaimedRunResultHandler:
     """Handle one Worker result without owning the run loop or persistence."""
 
@@ -211,6 +207,9 @@ class ClaimedRunResultHandler:
         task_key = result.task_id or f"{cycle.route}:unknown"
         self.failure_by_task.pop(task_key, None)
         self.transport_failure_by_task.pop(task_key, None)
+        repeated = _repeated_completion_result(self.host, run, self.run_id, result.task_id, cycle.route)
+        if repeated is not None:
+            return repeated
         progress_after, evidence = self.progress_identity()
         if progress_after == progress_before:
             return self._record_stall(cycle, result, emit_event)

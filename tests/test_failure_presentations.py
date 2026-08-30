@@ -32,6 +32,17 @@ class FailurePresentationTests(unittest.TestCase):
         self.assertEqual(stalled.code, "agent_no_progress")
         self.assertEqual(preflight.code, "output_validation_failed")
 
+    def test_unresolved_state_patch_is_not_misreported_as_missing_receipt(self):
+        failure = present_failure(
+            "state patch has unresolved character or relationship changes; "
+            "rebuild the patch contract instead of repeating semantic review"
+        )
+
+        self.assertIsNotNone(failure)
+        assert failure is not None
+        self.assertEqual(failure.code, "state_writeback_needs_revision")
+        self.assertIn("重新归属", failure.title)
+
     def test_run_projection_keeps_diagnostic_nested_but_humanizes_compat_field(self):
         raw = "no-progress guard stopped 2 identical turns"
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -13,6 +14,13 @@ WRITEBACK_KEYS = (
     "relationship_changes",
     "foreshadowing_changes",
     "approval_items",
+    "next_scene_inputs",
+)
+
+_DEFERRED_STATE_PATTERNS = (
+    re.compile(r"(?:尚未|还未|并未|未曾).{0,24}(?:落地|发生|实现|形成|兑现|完成)"),
+    re.compile(r"(?:留待|等待|计划在).{0,16}(?:后续|下一场|未来)"),
+    re.compile(r"(?:后续|下一场|未来).{0,16}(?:再|才|将).{0,12}(?:落地|发生|实现|形成|兑现|完成)"),
 )
 
 
@@ -27,6 +35,18 @@ def normalize_writeback_candidates(value: object) -> dict[str, list[str]]:
             for item in items
             if str(item).strip().casefold() not in {"", "无", "无。", "none", "n/a"}
         )
+    deferred: list[str] = []
+    for key in ("character_changes", "relationship_changes"):
+        durable: list[str] = []
+        for item in result[key]:
+            if _is_explicitly_deferred(item):
+                deferred.append(item)
+            else:
+                durable.append(item)
+        result[key] = durable
+    # A future intention is useful planning pressure, but it is not a state
+    # mutation until prose has actually made it happen.
+    result["next_scene_inputs"] = _unique([*result["next_scene_inputs"], *deferred])
     return result
 
 
@@ -64,6 +84,10 @@ def merge_writeback_candidates(*values: dict[str, list[str]]) -> dict[str, list[
 
 def has_state_changes(value: dict[str, list[str]]) -> bool:
     return bool(value.get("character_changes") or value.get("relationship_changes"))
+
+
+def _is_explicitly_deferred(value: str) -> bool:
+    return any(pattern.search(value) for pattern in _DEFERRED_STATE_PATTERNS)
 
 
 def _read_json(path: Path) -> dict[str, Any]:

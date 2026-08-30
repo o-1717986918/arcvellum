@@ -253,6 +253,14 @@
   border-color: color-mix(in srgb, var(--orrery-warning) 38%, transparent);
 }
 
+.spatial-workspace-dock button.delivery-ready {
+  color: #fff8e9;
+  background: color-mix(in srgb, var(--orrery-canon) 18%, transparent);
+  border-color: color-mix(in srgb, var(--orrery-canon) 68%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orrery-canon) 7%, transparent), 0 0 18px color-mix(in srgb, var(--orrery-canon) 22%, transparent);
+  animation: delivery-dock-ready 2.8s ease-in-out infinite;
+}
+
 .spatial-workspace-dock button[data-count]::after {
   position: absolute;
   top: -5px;
@@ -463,6 +471,10 @@
 }
 
 @keyframes workspace-calibration { to { transform: rotate(360deg); } }
+
+@keyframes delivery-dock-ready {
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--orrery-canon) 5%, transparent), 0 0 26px color-mix(in srgb, var(--orrery-canon) 32%, transparent); }
+}
 
 @media (max-width: 1120px) {
   .overview-view.spatial-active .orrery-view-tools { right: 270px; }

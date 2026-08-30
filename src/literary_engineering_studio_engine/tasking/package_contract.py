@@ -13,7 +13,7 @@ from .context_contract import CONTEXT_CONTRACT_FINGERPRINT_FIELDS, normalize_con
 from .markdown_renderer import render_task_markdown
 from .prompt_projection import project_prompt_asset
 from ..prompt_registry import resolve_prompt_asset
-TASK_CONTRACT_REVISION = "2026-08-20.33"
+TASK_CONTRACT_REVISION = "2026-08-20.34"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 RECHECK_REQUIRED_STATES = {
     "asset-review-pass",

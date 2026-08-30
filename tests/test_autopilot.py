@@ -546,6 +546,50 @@ class AutopilotTests(unittest.TestCase):
             )
             self.assertTrue(any(event["event"] == "task.recovery_requested" for event in events))
 
+    def test_repeated_task_id_pauses_even_when_lifecycle_files_keep_changing(self):
+        class ChurningWorker:
+            calls = 0
+
+            def __init__(self, config, **kwargs):
+                self.config = config
+
+            def run_once(self, project, *, route, runtime_id):
+                self.__class__.calls += 1
+                lifecycle = project / "workflow" / "tasks" / "same-task.task.json"
+                lifecycle.parent.mkdir(parents=True, exist_ok=True)
+                lifecycle.write_text(
+                    json.dumps({"attempt": self.__class__.calls}),
+                    encoding="utf-8",
+                )
+                return WorkerRunResult(
+                    "complete", project, route, "same-task", runtime_id,
+                    None, None, "lifecycle receipt refreshed",
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            run = store.create_autopilot_run(
+                str(project.resolve()), mode="full_auto", runtime="opencode",
+                policy=default_policy("full_auto"),
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            with (
+                patch("literary_engineering_studio.autopilot.AgentWorker", ChurningWorker),
+                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+            ):
+                service._run(run["run_id"], threading.Event())
+
+            stopped = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(stopped["status"], "paused")
+            self.assertEqual(stopped["stop_reason"], "no-progress")
+            self.assertLessEqual(ChurningWorker.calls, 4)
+
     def test_formal_file_change_resets_stall_counter_and_persists_route_index(self):
         class ProgressingWorker:
             calls = 0

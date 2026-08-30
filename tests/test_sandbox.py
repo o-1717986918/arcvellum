@@ -838,8 +838,12 @@ class SandboxTests(unittest.TestCase):
             program = render_worker_program(ledger_task)
 
             self.assertEqual(context["semantic_output_contract"]["continuity_kind"], "delta")
+            item_contracts = context["semantic_output_contract"]["change_item_contracts"]
+            self.assertIn("evidence", item_contracts["reader_question_changes[]"]["required_fields"])
+            self.assertIn("evidence", item_contracts["promise_changes[]"]["required_fields"])
             self.assertIn("pending_agent_judgment", program)
             self.assertIn("no_change_reason", program)
+            self.assertIn("条目内部的 `evidence_paths` 不能替代 `evidence`", program)
             self.assertIn("不要编辑 `plot/reader_questions/ledger.json`", program)
             allowed = program.split("## Semantic Evidence", 1)[0]
             self.assertIn("scene_0001.json", allowed)

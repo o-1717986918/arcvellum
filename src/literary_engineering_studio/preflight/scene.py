@@ -8,9 +8,7 @@ from pathlib import Path
 
 from ..contracts import TaskPackage
 from .common import PreflightIssue
-from .scene_review_contract import (
-    validate_scene_review_contract as _validate_scene_review_contract,
-)
+from .scene_review_contract import validate_scene_review_contract as _validate_scene_review_contract
 from .scene_manifest_metadata import scene_revision_paths
 from .scene_length_repair import target_length_revision_errors
 from ..sandbox import SandboxManifest
@@ -401,9 +399,10 @@ def _continuity_ledger_repair_instruction(scene_id: str, *, review: bool) -> str
         )
     return (
         f"重写 `plot/ledger_deltas/{scene_id}.json`，不能保留 pending 初始化模板。保留 schema、scene_id 和 "
-        "source_draft；以已晋升正文为唯一证据。若新增/更新读者问题或承诺，写入非空 evidence_paths 与具体 "
-        "changes；若确实无变化，两个 changes 列表可为空，但必须写出具体 no_change_reason。完成后设置 "
-        "`status=complete`；不要编辑正式账本或创建 completion receipt。"
+        "source_draft；以已晋升正文为唯一证据。若新增/更新读者问题或承诺，顶层写入非空 evidence_paths，并为 "
+        "changes 中的每一条记录写入非空字符串 `evidence`，内容必须是正文中的具体事实、原句或可核验概述；"
+        "条目内的 `evidence_paths` 不能替代 `evidence`。开放中的问题/承诺还必须写明目标窗口或责任。若确实无变化，"
+        "两个 changes 列表可为空，但必须写出具体 no_change_reason。完成后设置 `status=complete`；不要编辑正式账本或创建 completion receipt。"
     )
 
 

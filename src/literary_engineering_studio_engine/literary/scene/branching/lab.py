@@ -303,7 +303,7 @@ def _write_branch_agent_tasks(
             ),
             (
                 "写入正式分支提案",
-                f"""编辑已经预置精确 JSON 形状的 `{proposal_path.relative_to(root).as_posix()}`，保留顶层 schema、scene_id 和 source_artifact。把其中恰好 {payload['branch_count']} 个占位提案逐一改为真实内容；每条 `branch_id` 使用唯一 `agent_branch_<slug>`，不得改名为 id、rationale、irreversible_cost 或 next_scene_pressure。`state_writeback` 的五个字段都保持字符串列表；`beat_plan` 每拍保留 beat_id、function、visible_action、causal_change、pace、detail_level、serves，且 serves 必须是义务名称列表，整份计划覆盖 incoming_bridge、goal、turn、cost、reader_effect、outgoing_hook。不同提案必须在因果、行动链、代价、读者效果和写回上都真实不同。设置 status=complete，引用实际 evidence_paths，并在 findings 说明差异依据。""",
+                f"""编辑已经预置精确 JSON 形状的 `{proposal_path.relative_to(root).as_posix()}`，保留顶层 schema、scene_id 和 source_artifact。把其中恰好 {payload['branch_count']} 个占位提案逐一改为真实内容；每条 `branch_id` 使用唯一 `agent_branch_<slug>`，不得改名为 id、rationale、irreversible_cost 或 next_scene_pressure。`state_writeback` 的五个字段都保持字符串列表；只有本场可见发生的变化才能写入 character_changes 或 relationship_changes，未来意图、可能变化和明确尚未落地的变化必须写入 next_scene_inputs。`beat_plan` 每拍保留 beat_id、function、visible_action、causal_change、pace、detail_level、serves，且 serves 必须是义务名称列表，整份计划覆盖 incoming_bridge、goal、turn、cost、reader_effect、outgoing_hook。不同提案必须在因果、行动链、代价、读者效果和写回上都真实不同。设置 status=complete，引用实际 evidence_paths，并在 findings 说明差异依据。""",
             ),
             (
                 "决定选择策略",

@@ -22,6 +22,7 @@ hard_constraints:
   - Every proposal must differ in causal premise, action chain, irreversible cost, reader effect, and concrete state writeback.
   - Preserve the exact branch_proposals.json scaffold field names; never substitute id, rationale, irreversible_cost, or next_scene_pressure for branch_id, causal_premise, cost, or reader_effect.
   - Keep state_writeback values as string lists, and keep every beat serves value as a list of obligation names.
+  - Put only changes that visibly occur in this scene into character_changes or relationship_changes. Put intentions, possible future turns, and explicitly not-yet-realized changes into next_scene_inputs instead.
   - Keep alternatives concise: normally use the supplied two-beat scaffold; add at most one third beat only when the causal turn cannot be represented clearly in two. A beat may serve several obligations.
   - Across each beat_plan cover incoming_bridge goal turn cost reader_effect and outgoing_hook; each beat declares pace and detail_level.
   - Score character consistency canon safety dramatic yield future cost and reader promise.

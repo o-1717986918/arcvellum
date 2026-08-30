@@ -11,10 +11,83 @@ from literary_engineering_studio_engine.agent_tasks import write_agent_completio
 from literary_engineering_studio_engine.approval import record_workflow_approval
 from literary_engineering_studio_engine.character_state_apply import apply_character_state_patch, state_patch_writeback_status
 from literary_engineering_studio_engine.character_state_evolver import build_character_state_patch
-from literary_engineering_studio_engine.workflow.state_scene import _state_patch_writeback_step
+from literary_engineering_studio_engine.workflow.state_scene import (
+    _state_patch_review_step,
+    _state_patch_writeback_step,
+)
+from literary_engineering_studio_engine.workflow.audit.scene_completion import (
+    add_scene_completion_gates,
+)
 
 
 class StateWritebackContractTests(unittest.TestCase):
+    def test_indentationless_yaml_alias_routes_change_to_declared_character(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir(parents=True)
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nparticipants:\n- 叙述者\n",
+                encoding="utf-8",
+            )
+            (root / "characters").mkdir(parents=True)
+            (root / "characters" / "narrator.yaml").write_text(
+                "character_id: narrator\nname: 我\naliases:\n- 叙述者\nrole: 主角\n",
+                encoding="utf-8",
+            )
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("## 正文草稿\n\n叙述者承认自己数错了。\n", encoding="utf-8")
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            composition.write_text(
+                json.dumps(
+                    {"writeback_candidates": {"character_changes": ["叙述者承认自己数错了。"]}},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_character_state_patch(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual([item["character_id"] for item in payload["characters"]], ["narrator"])
+            self.assertEqual(payload["unresolved_changes"], [])
+
+    def test_explicitly_not_yet_realized_change_is_deferred_not_written_back(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir(parents=True)
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nparticipants: [叙述者]\n",
+                encoding="utf-8",
+            )
+            (root / "characters").mkdir(parents=True)
+            (root / "characters" / "narrator.yaml").write_text(
+                "character_id: narrator\nname: 叙述者\nrole: 主角\n",
+                encoding="utf-8",
+            )
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("## 正文草稿\n\n叙述者仍不肯承认结果。\n", encoding="utf-8")
+            composition = root / "drafts" / "compositions" / "scene_0001_composition.json"
+            composition.parent.mkdir(parents=True)
+            deferred = "叙述者的道德线转向允许自己数对一次，尚未在本场景内实际落地。"
+            composition.write_text(
+                json.dumps(
+                    {"writeback_candidates": {"character_changes": [deferred]}},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_character_state_patch(root)
+            payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["characters"], [])
+            self.assertEqual(payload["unresolved_changes"], [])
+            self.assertEqual(payload["source_changes"]["next_scene_inputs"], [deferred])
+            self.assertEqual(state_patch_writeback_status(root, "scene_0001")["status"], "not_required")
+
     def test_symbolic_protagonist_does_not_match_secondary_protagonist(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -230,6 +303,7 @@ class StateWritebackContractTests(unittest.TestCase):
             "needs_approval": "state-patch-approval",
             "pending_apply": "state-apply",
             "missing": "state-agent-task",
+            "semantic_incomplete": "state-agent-task",
             "pass": "state-writeback",
             "rejected": "state-writeback",
         }
@@ -241,6 +315,69 @@ class StateWritebackContractTests(unittest.TestCase):
                 step = _state_patch_writeback_step(Path("C:/example"), "scene_0001")
                 self.assertEqual(step["key"], expected_key)
                 self.assertEqual(step["display_key"], "state-writeback")
+
+    def test_unresolved_patch_returns_to_patch_rebuild_not_completed_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            patch_path = root / "characters" / "state_patches" / "scene_0001_state_patch.json"
+            patch_path.parent.mkdir(parents=True)
+            patch_path.write_text(
+                json.dumps(
+                    {
+                        "scene_id": "scene_0001",
+                        "characters": [],
+                        "unresolved_changes": [{"kind": "character_changes", "text": "某人改变决定。"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            status = state_patch_writeback_status(root, "scene_0001")
+            step = _state_patch_writeback_step(root, "scene_0001")
+
+            self.assertEqual(status["status"], "needs_revision")
+            self.assertEqual(step["key"], "state-patch-json")
+            self.assertIn("instead of repeating semantic review", step["message"])
+
+    def test_empty_state_patch_skips_semantic_review_receipt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            patch_path = root / "characters" / "state_patches" / "scene_0001_state_patch.json"
+            patch_path.parent.mkdir(parents=True)
+            patch_path.write_text(
+                json.dumps(
+                    {"scene_id": "scene_0001", "characters": [], "unresolved_changes": []},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            step = _state_patch_review_step(root, "scene_0001")
+
+            self.assertEqual(step["status"], "pass")
+            self.assertIn("not required", step["message"])
+
+    def test_route_audit_does_not_require_review_receipt_for_empty_state_patch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            patch_path = root / "characters" / "state_patches" / "scene_0001_state_patch.json"
+            patch_path.parent.mkdir(parents=True)
+            patch_path.write_text(
+                json.dumps(
+                    {"scene_id": "scene_0001", "characters": [], "unresolved_changes": []},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            patch_path.with_suffix(".md").write_text("# No durable state change\n", encoding="utf-8")
+            gates: list[dict[str, str]] = []
+
+            add_scene_completion_gates(gates, root, "scene_0001", {})
+
+            gate = next(item for item in gates if item["key"] == "scene_0001:state-agent-task-complete")
+            self.assertEqual(gate["status"], "pass")
+            self.assertIn("not required", gate["message"])
 
     def test_state_apply_gate_imports_the_modular_writeback_status(self):
         from literary_engineering_studio_engine.routes.scene.gates import _state_gate_validation

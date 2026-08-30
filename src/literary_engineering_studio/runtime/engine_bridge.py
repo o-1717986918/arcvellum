@@ -81,6 +81,7 @@ class CoreBridge:
         # project path before Studio validates the task package.
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
+        _prefer_source_checkout(env, self.working_dir, self.module)
         with ENGINE_ACCESS_LOCK:
             completed = run_hidden(
                 command,
@@ -232,6 +233,20 @@ def _source_checkout_python(working_dir: Path, module: str, configured_python: s
     if (working_dir / "pyproject.toml").is_file() and module_dir.is_dir() and configured_python.lower().endswith(".exe"):
         return sys.executable
     return configured_python
+
+
+def _prefer_source_checkout(env: dict[str, str], working_dir: Path, module: str) -> None:
+    """Keep the CLI subprocess on the same Engine revision as Studio."""
+
+    if getattr(sys, "frozen", False):
+        return
+    source_root = working_dir / "src"
+    module_dir = source_root / module.replace(".", os.sep)
+    if not (working_dir / "pyproject.toml").is_file() or not module_dir.is_dir():
+        return
+    existing = str(env.get("PYTHONPATH") or "")
+    values = [str(source_root), *[item for item in existing.split(os.pathsep) if item]]
+    env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(values))
 
 
 def _assert_studio_engine_args(args: list[str]) -> None:

@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ArrowRight, BookPlus, Check, FolderOpen, LocateFixed, Sparkles } from "lucide-vue-next";
+import { ArrowRight, BookOpenText, BookPlus, Check, Copy, FolderOpen, LocateFixed, ShieldCheck, Sparkles } from "lucide-vue-next";
 import { projectsClient } from "@/features/projects/services/projectsClient";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { friendlyError, useAppStore } from "@/stores/app";
+import type { DemoBundleSummary } from "@/types/api";
 
 const store = useAppStore();
 const router = useRouter();
 const busy = ref(false);
 const directoryBusy = ref<"create" | "open" | "">("");
 const feedback = ref("");
+const demos = ref<DemoBundleSummary[]>([]);
 const advancedPaths = ref(!DesktopBridge.isDesktop);
 const manualOpenPath = ref(!DesktopBridge.isDesktop);
 const createForm = reactive({
@@ -27,14 +29,24 @@ const createForm = reactive({
 const openPath = ref(localStorage.getItem("arcvellum.openDirectory") || "");
 
 onMounted(async () => {
-  if (createForm.parent_directory) return;
   try {
-    const location = await projectsClient.defaultLocation();
-    createForm.parent_directory = location.projects_root || "";
+    const [catalog, location] = await Promise.all([
+      projectsClient.demos(),
+      projectsClient.defaultLocation(),
+    ]);
+    demos.value = catalog.items || [];
+    if (!createForm.parent_directory) createForm.parent_directory = location.projects_root || "";
   } catch {
     advancedPaths.value = true;
   }
 });
+
+const primaryDemo = computed(() => demos.value.find((item) => item.available) || null);
+const installedDemo = computed(() =>
+  primaryDemo.value
+    ? store.projects.find((item) => item.is_demo && item.demo_work_id === primaryDemo.value?.work_id) || null
+    : null,
+);
 
 const targetLabel = computed(() =>
   createForm.target_length >= 10000 ? `${Math.round(createForm.target_length / 10000)} 万字` : `${createForm.target_length} 字`,
@@ -111,7 +123,46 @@ async function openProject(): Promise<void> {
 
 async function continueProject(path: string): Promise<void> {
   store.setCurrentProject(path);
-  await router.push("/overview");
+  const project = store.projects.find((item) => item.path === path);
+  await router.push(project?.is_demo ? "/reader" : "/overview");
+}
+
+async function openOrInstallDemo(): Promise<void> {
+  if (!primaryDemo.value || busy.value) return;
+  feedback.value = "";
+  busy.value = true;
+  try {
+    const project = installedDemo.value || (await projectsClient.installDemo(primaryDemo.value.bundle_id)).project;
+    await store.loadProjects();
+    store.setCurrentProject(project.path);
+    await router.push("/reader");
+  } catch (cause) {
+    feedback.value = friendlyError(cause, "演示作品没有成功安装，请检查安装资源是否完整。 ");
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function copyDemoForWriting(): Promise<void> {
+  if (!primaryDemo.value || busy.value) return;
+  feedback.value = "";
+  busy.value = true;
+  try {
+    const demo = installedDemo.value || (await projectsClient.installDemo(primaryDemo.value.bundle_id)).project;
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 12);
+    const response = await projectsClient.cloneDemo({
+      project_root: demo.path,
+      title: `${primaryDemo.value.title} - 创作副本`,
+      folder_name: `${primaryDemo.value.work_id}-editable-${stamp}`,
+    });
+    await store.loadProjects();
+    store.setCurrentProject(response.project.path);
+    await router.push("/overview");
+  } catch (cause) {
+    feedback.value = friendlyError(cause, "演示作品没有成功复制，请换一个保存位置后重试。 ");
+  } finally {
+    busy.value = false;
+  }
 }
 </script>
 
@@ -127,6 +178,20 @@ async function continueProject(path: string): Promise<void> {
     </section>
 
     <p v-if="feedback" class="inline-feedback danger" role="alert">{{ feedback }}</p>
+
+    <section v-if="primaryDemo" class="authorized-demo-band">
+      <div class="demo-seal" aria-hidden="true"><BookOpenText :size="26" /><span>授权原作</span></div>
+      <div class="demo-copy">
+        <span class="eyebrow">随安装版提供的文学工程示范</span>
+        <h2>先走进《{{ primaryDemo.title }}》，再决定怎样开始自己的作品。</h2>
+        <p>{{ primaryDemo.author }} · {{ primaryDemo.version }}。原文、人物、世界、情节与文风资料在同一工程中呈现；演示母本只读，不会被创作流程改写。</p>
+        <div class="demo-trust"><ShieldCheck :size="15" /><span>授权来源可追溯</span><i></i><span>原文未伪装为 AI 生成稿</span><i></i><span>复制后才进入创作模式</span></div>
+      </div>
+      <div class="demo-actions">
+        <button class="primary-button" :disabled="busy" @click="openOrInstallDemo"><BookOpenText :size="17" />{{ installedDemo ? "继续阅读" : "打开演示作品" }}</button>
+        <button class="secondary-button" :disabled="busy" @click="copyDemoForWriting"><Copy :size="16" />复制为可编辑作品</button>
+      </div>
+    </section>
 
     <section class="project-maker">
       <form class="creation-form" @submit.prevent="createProject">
@@ -199,10 +264,10 @@ async function continueProject(path: string): Promise<void> {
       <header><div><span class="eyebrow">最近作品</span><h2>继续上次停下的地方</h2></div><span>{{ store.projects.length }} 部作品</span></header>
       <div v-if="store.projects.length" class="work-shelf">
         <button v-for="project in store.projects" :key="project.path" class="work-spine" @click="continueProject(project.path)">
-          <span class="spine-status">{{ project.status || "创作中" }}</span>
+          <span class="spine-status">{{ project.is_demo ? "授权演示 · 只读" : (project.status || "创作中") }}</span>
           <strong>{{ project.title }}</strong>
           <p>{{ project.premise || "尚未填写作品简介" }}</p>
-          <div><span>{{ project.genre || project.work_type }}</span><span>{{ Math.round((project.target_length || 0) / 10000) }} 万字目标</span></div>
+          <div><span>{{ project.demo_author || project.genre || project.work_type }}</span><span>{{ project.is_demo ? "按原作实际篇幅" : `${Math.round((project.target_length || 0) / 10000)} 万字目标` }}</span></div>
         </button>
       </div>
       <div v-else class="empty-shelf">第一部作品建立后，会固定在这里。</div>

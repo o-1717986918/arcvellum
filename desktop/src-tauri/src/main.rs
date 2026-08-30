@@ -137,6 +137,9 @@ fn main() {
             let pi_worker_entrypoint = app
                 .path()
                 .resolve("resources/pi-worker/dist/main.js", BaseDirectory::Resource)?;
+            let demo_bundles = app
+                .path()
+                .resolve("resources/demo-projects", BaseDirectory::Resource)?;
             let (mut events, child) = app
                 .shell()
                 .sidecar("literary-engineering-studio-sidecar")?
@@ -157,6 +160,7 @@ fn main() {
                 .env("LES_OPENCODE_EXECUTABLE", opencode)
                 .env("LES_PI_WORKER_EXECUTABLE", pi_worker_node)
                 .env("LES_PI_WORKER_ENTRYPOINT", pi_worker_entrypoint)
+                .env("LES_DEMO_BUNDLES_DIR", demo_bundles)
                 .spawn()?;
             app.manage(StudioSidecar(Mutex::new(Some(child))));
             let event_window = main_window.clone();

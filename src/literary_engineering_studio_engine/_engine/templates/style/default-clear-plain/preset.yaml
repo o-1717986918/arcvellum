@@ -1,0 +1,33 @@
+schema: arcvellum/builtin-style-preset/v1
+preset_id: clear-plain-zh
+style_id: arcvellum-clear-plain-prose
+author_id: arcvellum
+profile_id: clear-plain-prose
+display_name: 清简叙事
+description: 以准确动作、具体细节、自然句法和克制情绪呈现为核心的中文通用基础文风。
+scope: project
+priority: highest
+auto_mount_for_new_studio_projects: true
+source_mode: project-original-editorial-synthesis
+theory_basis:
+  - 句法变化服务意义、视角和强调
+  - 具体主语与准确动词优先
+  - 细节必须改变读者理解
+  - 标点先表达结构与停顿，再表达风格节奏
+prompt_contract:
+  stable_prefix:
+    - identity-and-boundary
+    - instruction-priority
+    - positive-style-mechanism
+  scene_adaptation:
+    - transition
+    - conflict
+    - relationship
+    - revelation
+    - aftermath
+  silent_execution_passes:
+    - fact-causality-viewpoint
+    - function-distance-rhythm
+    - anti-template-punctuation
+  exception_policy: sparse-functional-and-semantically-justified
+  output_boundary: prose-only

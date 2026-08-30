@@ -1,6 +1,6 @@
 import type { ApiTransport } from "@/services/api";
 import { featureTransport } from "@/services/featureTransport";
-import type { ProjectSummary, ProjectsResponse } from "@/types/api";
+import type { DemoBundleSummary, ProjectSummary, ProjectsResponse } from "@/types/api";
 
 export interface ProjectLocationCheck {
   valid: boolean;
@@ -28,6 +28,16 @@ export function createProjectsClient(transport: ApiTransport = featureTransport)
       "/projects/validate-location",
       { method: "POST", body: JSON.stringify(payload) },
     ),
+    demos: () => transport.request<{ ok: boolean; items: DemoBundleSummary[] }>("/projects/demos"),
+    installDemo: (bundleId: string, restoreAs = "") => transport.request<{ ok: boolean; project: ProjectSummary; status: string }>(
+      "/projects/demos/install",
+      { method: "POST", body: JSON.stringify({ bundle_id: bundleId, restore_as: restoreAs }) },
+    ),
+    cloneDemo: (payload: { project_root: string; title?: string; folder_name?: string; parent_directory?: string }) =>
+      transport.request<{ ok: boolean; project: ProjectSummary }>(
+        "/projects/demos/clone",
+        { method: "POST", body: JSON.stringify(payload) },
+      ),
     addDirection: (projectRoot: string, message: string) => transport.request<Record<string, unknown>>(
       "/projects/directions",
       { method: "POST", body: JSON.stringify({ project_root: projectRoot, message }) },

@@ -64,6 +64,7 @@ from ..literary.scene.promotion.revision_contract import (
     revision_source_requires_anti_evasion_rows,
 )
 from ..literary.style.anti_ai import style_lint_gate
+from ..literary.style.defaults import ensure_default_style_mount
 from ..literary.style.lab import (
     active_project_style,
     create_author_project,
@@ -141,6 +142,7 @@ __all__ = [
     "creative_quality_profile_exists",
     "creative_quality_profile_path",
     "default_style_library_root",
+    "ensure_default_style_mount",
     "ensure_style_library",
     "export_markdown_to_docx",
     "file_sha256",

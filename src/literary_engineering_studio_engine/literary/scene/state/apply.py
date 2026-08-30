@@ -352,8 +352,8 @@ def state_patch_writeback_status(root: Path, scene_id: str) -> dict[str, object]
         return result
     if unresolved and not characters:
         result.update({
-            "status": "semantic_incomplete",
-            "message": "state patch has unresolved character or relationship changes",
+            "status": "needs_revision",
+            "message": "state patch has unresolved character or relationship changes; rebuild the patch contract instead of repeating semantic review",
         })
         return result
     if not characters:

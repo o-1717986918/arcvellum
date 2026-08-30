@@ -310,6 +310,7 @@ onBeforeUnmount(() => {
           <section class="agent-current-task">
             <span>当前阶段</span>
             <strong>{{ observedTask?.stage || '等待状态机分派下一项任务' }}</strong>
+            <code v-if="observedTask?.task_id" class="agent-task-identity" :title="observedTask.task_id">{{ observedTask.task_id }}</code>
             <p>{{ observedTask?.message || '这里会显示已被正式领取的任务，不展示隐藏提示词、凭证或原始工具输出。' }}</p>
           </section>
           <dl class="agent-runtime-facts">
@@ -347,7 +348,7 @@ onBeforeUnmount(() => {
                 <dl>
                   <div><dt>会话</dt><dd>{{ session.session_id }}</dd></div>
                   <div><dt>模型</dt><dd>{{ session.model || '未记录' }}</dd></div>
-                  <div><dt>任务</dt><dd>{{ session.task_id || session.route || '项目咨询' }}</dd></div>
+                  <div class="agent-session-task"><dt>任务</dt><dd :title="session.task_id || session.route || '项目咨询'">{{ session.task_id || session.route || '项目咨询' }}</dd></div>
                   <div><dt>耗时</dt><dd>{{ elapsedLabel(session.elapsed_seconds) }}</dd></div>
                 </dl>
                 <footer><span>{{ session.event_count }} 次状态更新</span><span v-if="session.retry_count">{{ session.retry_count }} 次受控重试</span></footer>

@@ -23,6 +23,7 @@ from .historical_truth import candidate_supersedes_promotion
 from .historical_truth import preserve_current_historical_style_steps
 from .scene_length_repair import target_length_revision_step
 from .scene_scope import started_scene_ids
+from .state_scene_writeback import state_patch_review_step as _state_patch_review_step
 from .state_common import (
     _file_step, _read, _read_json, _rel, _semantic_task_step,
     _task_step,
@@ -151,7 +152,7 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
         _promoted_draft_step(root, scene_id, candidate),
         _static_review_step(root, scene_id),
         _file_step("state-patch-json", root / "characters" / "state_patches" / f"{scene_id}_state_patch.json", "run state-evolve --agent-tasks"),
-        _semantic_task_step("state-agent-task", root, scene_id, root / "characters" / "state_patches" / f"{scene_id}_state_patch.agent_tasks.md", "complete the state semantic review and sidecar marker"),
+        _state_patch_review_step(root, scene_id),
         _state_patch_writeback_step(root, scene_id),
         _canon_writeback_step(root, scene_id),
         _file_step("continuity-ledger-prepare", root / "plot" / "ledger_deltas" / f"{scene_id}.agent_tasks.md", "run prepare-continuity-ledger after the promoted scene"),
@@ -240,23 +241,17 @@ def _state_patch_writeback_step(root: Path, scene_id: str) -> dict[str, object]:
     value = str(status.get("status") or "missing")
     passed = value in {"pass", "not_required", "rejected"}
     if value == "needs_revision":
-        key = "state-patch-json"
-        next_action = "rebuild the state patch from the current structured writeback contract after the revise decision"
+        key, next_action = "state-patch-json", "rebuild the state patch from the current structured writeback contract after the revise decision"
     elif value == "needs_approval":
-        key = "state-patch-approval"
-        next_action = "record a digest-bound state_patch_confirmation for the current state patch"
+        key, next_action = "state-patch-approval", "record a digest-bound state_patch_confirmation for the current state patch"
     elif value == "pending_apply":
-        key = "state-apply"
-        next_action = "run state-apply with the recorded approval run id"
+        key, next_action = "state-apply", "run state-apply with the recorded approval run id"
     elif value == "stale_source":
-        key = "state-patch-json"
-        next_action = "rerun state-evolve from the current structured writeback contract"
+        key, next_action = "state-patch-json", "rerun state-evolve from the current structured writeback contract"
     elif passed:
-        key = "state-writeback"
-        next_action = ""
+        key, next_action = "state-writeback", ""
     else:
-        key = "state-agent-task"
-        next_action = "complete the state patch semantic review before state writeback"
+        key, next_action = "state-agent-task", "complete the state patch semantic review before state writeback"
     return {
         "key": key,
         "display_key": "state-writeback",

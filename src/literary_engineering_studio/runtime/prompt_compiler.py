@@ -316,6 +316,8 @@ def _output_contract(context: Mapping[str, Any]) -> dict[str, object]:
             "pass_requirements",
             "revision_requirements",
             "continuity_kind",
+            "change_item_contracts",
+            "item_evidence_rule",
             "branch_proposal_contract",
             "object_shapes",
             "model_owned_fields",
