@@ -50,14 +50,14 @@ describe("narrative signal hierarchy", () => {
     expect(hierarchy.nodes.map((item) => item.node_id)).toEqual(["scene:1"]);
   });
 
-  it("collapses ordinary scenes to chapters in the book overview", () => {
+  it("keeps chapter scenes in the book constellation", () => {
     const nodes = [
       node("chapter:1", "chapter", { source_id: "chapter_0001" }),
       node("scene:1", "scene", { metrics: { chapter_id: "chapter_0001" } }),
       node("scene:2", "scene", { metrics: { chapter_id: "chapter_0001" }, status: "current", completion_state: "active" }),
     ];
     const hierarchy = buildNarrativeSignalHierarchy(nodes, { mode: "narrative", level: "book", edges: [] });
-    expect(hierarchy.nodes.map((item) => item.node_id)).toEqual(["chapter:1", "scene:2"]);
+    expect(hierarchy.nodes.map((item) => item.node_id)).toEqual(["chapter:1", "scene:1", "scene:2"]);
   });
 });
 

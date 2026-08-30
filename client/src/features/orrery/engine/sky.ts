@@ -78,9 +78,9 @@ void main() {
   direction = normalize(direction);
 
   float horizonMix = clamp(direction.y * 2.4, -1.0, 1.0);
-  vec3 zenith = vec3(0.035, 0.078, 0.145);
-  vec3 horizon = vec3(0.009, 0.022, 0.043);
-  vec3 nadir = vec3(0.004, 0.009, 0.021);
+  vec3 zenith = vec3(0.034, 0.074, 0.152);
+  vec3 horizon = vec3(0.008, 0.026, 0.047);
+  vec3 nadir = vec3(0.004, 0.012, 0.025);
   vec3 sky = horizonMix > 0.0 ? mix(horizon, zenith, horizonMix) : mix(horizon, nadir, -horizonMix);
 
   // Three sparse star layers give the background depth without adding scene nodes.
@@ -123,6 +123,24 @@ void main() {
   float dust = fbm(vec2(spherical.x * 4.0 + uTime * 0.008, spherical.y * 22.0), 3);
   sky += vec3(0.82, 0.78, 0.72) * band * dust * 0.05;
   sky += vec3(0.16, 0.62, 0.5) * fbm(vec2(spherical.x * 5.0 + uTime * 0.012, spherical.y * 16.0), 3) * exp(-pow((spherical.y - 0.36 - 0.05 * sin(spherical.x * 3.0 + uTime * 0.02)) * 12.0, 2.0)) * 0.05;
+
+  // ArcVellum's two persistent sky signatures. They are directional light
+  // fields on the sky dome, not extra narrative nodes, so camera orbit reveals
+  // them without making the project graph feel like a decorated map.
+  vec2 jadeDelta = spherical - vec2(-1.18, 0.22);
+  jadeDelta.x = sin(jadeDelta.x * 0.5) * 2.0;
+  float jadeField = exp(-(jadeDelta.x * jadeDelta.x * 1.15 + jadeDelta.y * jadeDelta.y * 8.4));
+  float jadeVeil = fbm(spherical * vec2(3.1, 10.0) + vec2(uTime * 0.003, 7.3), 4);
+  sky += vec3(0.06, 0.52, 0.4) * jadeField * jadeVeil * 0.13;
+
+  vec2 irisDelta = spherical - vec2(1.72, -0.1);
+  irisDelta.x = sin(irisDelta.x * 0.5) * 2.0;
+  float irisField = exp(-(irisDelta.x * irisDelta.x * 1.5 + irisDelta.y * irisDelta.y * 10.5));
+  float irisVeil = fbm(spherical * vec2(4.6, 13.0) + vec2(19.0, -uTime * 0.002), 4);
+  sky += vec3(0.34, 0.18, 0.56) * irisField * irisVeil * 0.11;
+
+  float emberRift = exp(-pow((spherical.y + 0.28 - 0.06 * sin(spherical.x * 2.6)) * 14.0, 2.0));
+  sky += vec3(0.62, 0.17, 0.09) * emberRift * fbm(vec2(spherical.x * 7.0, spherical.y * 18.0), 3) * 0.035;
   sky += stars;
   finalColor = vec4(pow(sky, vec3(0.92)), 1.0);
 }

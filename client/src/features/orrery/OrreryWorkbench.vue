@@ -119,6 +119,15 @@ const signalHierarchy = computed(() => displayProjection.value
   : null);
 const stageNodes = computed(() => signalHierarchy.value?.nodes || []);
 const stageNodeIds = computed(() => [...(signalHierarchy.value?.nodeIds || [])]);
+const stageProjection = computed<SpatialNarrativeProjection | null>(() => {
+  if (!displayProjection.value || !signalHierarchy.value) return null;
+  const ids = signalHierarchy.value.nodeIds;
+  return {
+    ...displayProjection.value,
+    nodes: signalHierarchy.value.nodes,
+    edges: displayProjection.value.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
+  };
+});
 
 watch(() => app.currentProjectPath, (root) => {
   windows.clear();
@@ -412,7 +421,7 @@ async function loadChoices(): Promise<void> {
     <div v-else-if="spatial.error && !projection" class="orrery-v3-empty error"><strong>暂时无法读取叙事场域</strong><p>{{ spatial.error }}</p><button class="secondary-button" @click="spatial.refresh()">重新连接</button></div>
     <OrreryAccessibleView v-else-if="displayProjection && listMode" :nodes="displayProjection.nodes" :selected-node-id="windows.selectedNodeId" @select="selectNode" />
     <div v-else-if="displayProjection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
-      <NarrativeParallaxStage ref="stage" :projection="displayProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
+      <NarrativeParallaxStage v-if="stageProjection" ref="stage" :projection="stageProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
       <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :visible-node-ids="stageNodeIds" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
       <CreativeProgressionLayer v-if="creativeProgression" :progression="creativeProgression" :anchors="anchors" @focus="focusProgressionNode" />
       <OrreryNodeOverlay

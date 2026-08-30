@@ -1,0 +1,162 @@
+/* ArcVellum spatial identity layer. This file owns the final screen-space
+   hierarchy; world geometry remains in the renderer and layout modules. */
+
+.orrery-v3-node {
+  --type-star: var(--orrery-core);
+  opacity: max(.72, var(--observation-weight, 1));
+}
+
+.orrery-v3-node.typographic {
+  grid-template-columns: 20px minmax(0, auto);
+  min-width: 118px;
+  max-width: 248px;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+}
+
+.orrery-v3-node.typographic .node-luminary {
+  width: 20px;
+  height: 32px;
+}
+
+.orrery-v3-node.typographic .node-luminary i {
+  width: 11px;
+  height: 11px;
+  background: color-mix(in srgb, var(--type-star) 84%, white);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--type-star) 92%, white), 0 0 20px var(--type-star);
+}
+
+.orrery-v3-node .node-copy {
+  max-width: 220px;
+  gap: 3px;
+  padding: 1px 2px 2px;
+  text-align: left;
+}
+
+.orrery-v3-node .node-kicker {
+  font-size: 7px;
+  letter-spacing: .12em;
+}
+
+.orrery-v3-node .node-title {
+  max-width: 220px;
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 1.22;
+}
+
+.orrery-v3-node .node-meta {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--orrery-label) 48%, transparent);
+  font-family: var(--font-utility);
+  font-size: 7px;
+  letter-spacing: .04em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orrery-v3-node[data-kind="chapter"] {
+  --type-star: var(--orrery-canon);
+  min-width: 154px;
+  padding-left: 7px;
+}
+
+.orrery-v3-node[data-kind="chapter"] .node-luminary {
+  width: 25px;
+}
+
+.orrery-v3-node[data-kind="chapter"] .node-luminary::after {
+  position: absolute;
+  top: 22px;
+  left: 1px;
+  width: 12px;
+  height: 1px;
+  background: color-mix(in srgb, var(--orrery-canon) 72%, transparent);
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--orrery-canon) 22%, transparent);
+  content: "";
+  transform: rotate(-42deg);
+  transform-origin: left center;
+}
+
+.orrery-v3-node[data-kind="chapter"] .node-luminary i {
+  width: 14px;
+  height: 14px;
+  background: color-mix(in srgb, var(--orrery-canon) 72%, white);
+  box-shadow: 0 0 5px #fff7d8, 0 0 22px var(--orrery-canon), 0 0 42px color-mix(in srgb, var(--orrery-canon) 34%, transparent);
+}
+
+.orrery-v3-node[data-kind="chapter"] .node-title {
+  font-size: 16px;
+  letter-spacing: .04em;
+}
+
+.orrery-v3-node[data-kind="chapter"] .node-meta {
+  display: block;
+  color: color-mix(in srgb, var(--orrery-canon) 54%, var(--orrery-label));
+  font-size: 8px;
+}
+
+.orrery-v3-node[data-kind="scene"] { --type-star: color-mix(in srgb, var(--orrery-core) 76%, #bde9de); }
+.orrery-v3-node[data-kind="scene"] .node-title { font-size: 14px; }
+.orrery-v3-node[data-kind="character"] { --type-star: var(--orrery-branch); }
+.orrery-v3-node[data-kind="character"] .node-title { font-size: 13px; }
+.orrery-v3-node:is([data-kind="review"], [data-kind="reader-question"]) { --type-star: #76aee6; }
+.orrery-v3-node:is([data-kind="branch"], [data-kind="human-decision"]) { --type-star: var(--orrery-warning); }
+.orrery-v3-node[data-kind="promise"] { --type-star: #9a87c6; }
+.orrery-v3-node[data-kind="formal-prose"] { --type-star: var(--orrery-canon); }
+
+.orrery-v3-node.symbolic .node-glyph {
+  color: color-mix(in srgb, var(--type-star) 78%, white);
+  background: color-mix(in srgb, var(--orrery-deep) 84%, var(--type-star));
+  border: 1px solid color-mix(in srgb, var(--type-star) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--type-star) 7%, transparent), 0 0 18px color-mix(in srgb, var(--type-star) 16%, transparent);
+}
+
+.orrery-v3-node[data-lod="mid"] .node-meta,
+.orrery-v3-node[data-lod="far"] .node-meta,
+.orrery-v3-node[data-lod="far"] .node-kicker { display: none; }
+
+.orrery-v3-node[data-lod="far"]:not([data-kind="chapter"]):not([data-kind="project"]) .node-copy { opacity: 0; pointer-events: none; }
+.orrery-v3-node[data-lod="far"][data-kind="chapter"] .node-copy,
+.orrery-v3-node[data-lod="far"][data-kind="project"] .node-copy { display: grid; opacity: 1; }
+.orrery-v3-node.overview[data-kind="chapter"] .node-copy,
+.orrery-v3-node.overview[data-kind="project"] .node-copy { display: grid; }
+
+.narrative-chapter-anchor-halo { display: none; }
+.narrative-chapter-anchor-tick {
+  fill: none;
+  stroke: color-mix(in srgb, var(--orrery-canon) 68%, transparent);
+  stroke-linecap: round;
+  stroke-width: 1.2;
+}
+.narrative-chapter-anchor-core { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--orrery-canon) 72%, transparent)); }
+.narrative-chapter-anchor[data-completion="completed"] .narrative-chapter-anchor-core { opacity: 1; }
+.narrative-chapter-anchor:not([data-completion="completed"]):not(.active) .narrative-chapter-anchor-core { opacity: .48; }
+
+.creative-progression-stage {
+  min-width: 124px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 7px;
+  padding: 6px 9px 6px 6px;
+  background: color-mix(in srgb, var(--orrery-deep) 76%, transparent);
+  border-color: color-mix(in srgb, var(--orrery-label) 13%, transparent);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .2), inset 0 1px 0 color-mix(in srgb, var(--orrery-label) 8%, transparent);
+}
+.creative-progression-copy small { font-size: 7px; }
+.creative-progression-copy strong { font-size: 12px; letter-spacing: .04em; }
+.creative-progression-copy em { font-size: 8px; }
+.creative-progression-orbit { width: 19px; height: 19px; }
+
+@media (max-width: 760px) {
+  .orrery-v3-node.typographic { min-width: 96px; max-width: 170px; padding: 5px 6px; }
+  .orrery-v3-node .node-title { max-width: 148px; font-size: 11px; }
+  .orrery-v3-node[data-kind="chapter"] .node-title { font-size: 14px; }
+  .orrery-v3-node .node-meta { display: none; }
+  .creative-progression-stage { min-width: 108px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orrery-v3-node, .creative-progression-stage { transition: none; }
+}

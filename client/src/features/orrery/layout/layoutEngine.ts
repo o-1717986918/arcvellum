@@ -1,17 +1,8 @@
 import type { SpatialGrammar, SpatialLayout, SpatialNarrativeNode, WorldPoint } from "@/types/spatial";
-import { curveProfilePoint } from "@/features/orrery/layout/curveProfiles";
 import { applyValidatedLayoutHints } from "@/features/orrery/layout/layoutHints";
 import {
-  CHAPTER_CLUSTER_GAP,
-  SCENE_STEP,
-  bookContour,
   buildSceneClusters,
-  buildTemporalAxis,
   chapterIdentity,
-  narrativeBeat,
-  rhythmLift,
-  smoothNarrativeBeats,
-  type NarrativeBeat,
   type SceneCluster,
 } from "@/features/orrery/layout/narrativeTiming";
 
@@ -32,16 +23,16 @@ interface LayoutContext {
   sceneClusters: Map<string, SceneCluster>;
   chapterClusterRanks: Map<string, number>;
   sceneClusterCount: number;
-  rhythm: Map<string, NarrativeBeat>;
-  temporalAxis: Map<string, number>;
 }
+
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 
 /**
- * Positions are deliberately semantic and stable rather than a generic force
- * graph. The book is allowed to grow at its leading edge, while the established
- * portion retains its spatial memory. Small deterministic offsets create depth
- * and relieve local collisions without making a revision reshuffle the stage.
+ * The primary geometry is the production port of the independent Orrery demo:
+ * a project nucleus, count-aware chapter constellations, golden-angle scene
+ * orbits and typed satellites. Only bounded satellite collision relief and
+ * validated project hints may alter that reference arrangement.
  */
 export function buildSpatialLayout(
   grammar: SpatialGrammar,
@@ -56,17 +47,33 @@ export function buildSpatialLayout(
   const seeded = seedFrom(layoutSeed);
 
   nodes.filter((node) => (node.creative_kind || node.type) === "project")
-    .forEach((node) => points.set(node.node_id, { x: 0, y: 0.4, z: 0 }));
+    .forEach((node) => points.set(node.node_id, { x: 0, y: 0, z: 0 }));
 
   // Chapter nuclei are the fixed celestial architecture. Scenes then orbit
   // their own chapter nucleus instead of being laid on one generic rail.
   context.chapters.forEach((node, index) => points.set(node.node_id, primaryPoint(grammar, node, index, context)));
   context.scenes.forEach((node, index) => points.set(node.node_id, primaryPoint(grammar, node, index, context)));
-  nodes.filter((node) => !PRIMARY.has(node.type)).forEach((node) => {
-    if (points.has(node.node_id)) return;
-    const parent = relatedAnchor(node, points) || (node.parent_id ? points.get(node.parent_id) : undefined);
-    points.set(node.node_id, satellitePoint(grammar, parent || semanticAnchor(node, context), node, seeded));
-  });
+  nodes
+    .filter((node) => !PRIMARY.has(node.type) && (node.creative_kind || node.type) !== "project")
+    .forEach((node, index) => {
+      const parent = relatedAnchor(node, points) || (node.parent_id ? points.get(node.parent_id) : undefined);
+      points.set(node.node_id, satellitePoint(grammar, parent || semanticAnchor(node, context), node, index));
+    });
+
+
+  // The extracted Orrery demo treats a braid as one continuous procession,
+  // rather than preserving chapter-local satellites. Keep that exact spatial
+  // grammar in production so switching constructs is visually equivalent.
+  if (grammar === "braid") {
+    const center = demoAxis(context.primary.length / 2, 8);
+    context.primary.forEach((node, index) => {
+      points.set(node.node_id, {
+        x: demoAxis(index, 8) - center,
+        y: Math.sin(index * 0.9) * 10,
+        z: Math.cos(index * 0.9) * 13,
+      });
+    });
+  }
 
   relaxLocalCollisions(points, nodes, seeded);
   applyValidatedLayoutHints(points, nodes, layoutHints);
@@ -95,8 +102,6 @@ function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
     if (chapterClusterRanks.has(cluster.id)) continue;
     chapterClusterRanks.set(cluster.id, chapterRanks.get(cluster.id) ?? cluster.rank);
   }
-  const rhythm = smoothNarrativeBeats(primary);
-  const temporalAxis = buildTemporalAxis(primary, rhythm, sceneClusters);
   return {
     primary,
     scenes,
@@ -107,8 +112,6 @@ function buildContext(primary: SpatialNarrativeNode[]): LayoutContext {
     sceneClusters,
     chapterClusterRanks,
     sceneClusterCount: Math.max(chapters.length, new Set([...sceneClusters.values()].map((cluster) => cluster.id)).size),
-    rhythm,
-    temporalAxis,
   };
 }
 
@@ -116,178 +119,92 @@ function primaryPoint(grammar: SpatialGrammar, node: SpatialNarrativeNode, fallb
   const isChapter = node.type === "chapter";
   const rank = isChapter ? context.chapterRank.get(node.node_id) ?? fallbackIndex : context.sceneRank.get(node.node_id) ?? fallbackIndex;
   const cluster = isChapter ? undefined : context.sceneClusters.get(node.node_id);
-  if (cluster) return clusteredScenePoint(grammar, node, cluster, context);
-  const visualRank = rank;
-  const visualCount = isChapter ? context.chapters.length : context.primary.length;
-  // Every primary projection owns a stable ordinal. The old implementation
-  // multiplied chapter ordinals into a high-frequency sine/cosine wave. Long
-  // books therefore curled back across themselves and then had to be squeezed
-  // into one viewport. A primary route now advances monotonically; only the
-  // explicit `braid`, `loop`, and `constellation` grammars may introduce a
-  // recurrent spatial rhythm.
-  const timeline = rank + 1;
-  const phase = timeline * 0.34;
-  // Scenes keep their chronological footprint, but each chapter shares one
-  // local nucleus. The grammar can then fan the scenes around that nucleus in
-  // depth instead of rendering them as a nearly flat queue.
-  const axis = isChapter
-    ? chapterAxis(rank)
-    : context.temporalAxis.get(node.node_id) ?? narrativeAxis(timeline);
-  const beat = context.rhythm.get(node.node_id) || narrativeBeat(node, rank, context.primary.length);
-  const contour = bookContour(visualRank, visualCount);
-  const lift = rhythmLift(beat);
-  const depth = narrativeDepth(timeline) + (isChapter ? 0.38 : 0) + lift * 0.22;
-  // This is a forward-moving cadence, not a repeating map ornament. It gives
-  // a long scene sequence room to inhale and release without ever folding the
-  // reading order back over itself.
-  const cadence = Math.sin(phase * 0.88) * 0.31 + Math.sin(phase * 0.31 + 0.7) * 0.19;
-  const rise = narrativeRise(timeline) + contour * 0.58 + lift + cadence;
-  const arc = Math.sin(phase * 0.82);
-  const swell = Math.cos(phase * 0.96);
-
-  if (isChapter && grammar === "constellation") {
-    return constellationNucleus(rank, Math.max(1, context.chapters.length), lift);
-  }
-
-  return curveProfilePoint(grammar, {
-    axis, phase, depth, rise, arc, swell, cadence, lift,
-    visualRank, visualCount, rank,
-  });
+  if (cluster) return demoScenePoint(grammar, cluster, rank, context);
+  return demoChapterPoint(grammar, rank, Math.max(1, context.chapters.length));
 }
 
-function clusteredScenePoint(
+function demoScenePoint(
   grammar: SpatialGrammar,
-  node: SpatialNarrativeNode,
   cluster: SceneCluster,
+  sceneRank: number,
   context: LayoutContext,
 ): WorldPoint {
   const nucleusRank = context.chapterClusterRanks.get(cluster.id) ?? cluster.rank;
-  const count = Math.max(1, context.sceneClusterCount);
-  const timeline = nucleusRank + 1;
-  const phase = timeline * 0.34;
-  const beat = context.rhythm.get(node.node_id) || narrativeBeat(node, nucleusRank, count);
-  const contour = bookContour(nucleusRank, count);
-  const lift = rhythmLift(beat);
-  const depth = narrativeDepth(timeline) + 0.38 + lift * 0.22;
-  const cadence = Math.sin(phase * 0.88) * 0.31 + Math.sin(phase * 0.31 + 0.7) * 0.19;
-  const rise = narrativeRise(timeline) + contour * 0.58 + lift + cadence;
-  const nucleus = grammar === "constellation"
-    ? constellationNucleus(nucleusRank, count, lift)
-    : curveProfilePoint(grammar, {
-      axis: chapterAxis(nucleusRank),
-      phase,
-      depth,
-      rise,
-      arc: Math.sin(phase * 0.82),
-      swell: Math.cos(phase * 0.96),
-      cadence,
-      lift,
-      visualRank: nucleusRank,
-      visualCount: count,
-      rank: nucleusRank,
-      });
-  const local = chapterOrbitOffset(grammar, cluster, lift);
-  return { x: nucleus.x + local.x, y: nucleus.y + local.y, z: nucleus.z + local.z };
-}
-
-function constellationNucleus(rank: number, count: number, lift: number): WorldPoint {
-  // The visual-orrery experiment proved that a few legible celestial
-  // latitudes communicate chapter families more clearly than a mathematically
-  // uniform sphere. Generalise that idea without assuming a fixed volume
-  // count: chapters advance around two or three offset latitude bands, while
-  // every band remains readable from the recommended oblique camera.
-  const bandCount = count < 6 ? 2 : 3;
-  const perBand = Math.max(1, Math.ceil(count / bandCount));
-  const band = Math.min(bandCount - 1, Math.floor(rank / perBand));
-  const within = rank % perBand;
-  const members = Math.min(perBand, count - band * perBand);
-  const normalizedY = 0.58 - band * (1.16 / (bandCount - 1));
-  const shellRadius = Math.max(38, Math.sqrt(Math.max(1, count)) * 8.8);
-  const horizontalRadius = Math.sqrt(Math.max(0.08, 1 - normalizedY * normalizedY)) * shellRadius;
-  const angle = (within / Math.max(1, members)) * Math.PI * 2 + band * 0.84 + 0.28;
+  const nucleus = demoChapterPoint(grammar, nucleusRank, Math.max(1, context.sceneClusterCount));
+  const angle = cluster.localRank * GOLDEN_ANGLE + sceneRank * 0.61;
+  const radius = 7 + cluster.localRank * 2.3;
+  if (grammar === "strata") {
+    return {
+      x: nucleus.x + Math.cos(angle) * radius,
+      y: -2,
+      z: nucleus.z + Math.sin(angle) * 3,
+    };
+  }
   return {
-    x: Math.cos(angle) * horizontalRadius,
-    y: normalizedY * shellRadius * 0.82 + (within - (members - 1) / 2) * 0.42 + lift * 0.5,
-    z: Math.sin(angle) * horizontalRadius,
+    x: nucleus.x + Math.cos(angle) * radius,
+    y: nucleus.y + Math.sin(angle * 0.82) * 3.8,
+    z: nucleus.z + Math.sin(angle) * radius * 0.86,
   };
 }
 
-function chapterOrbitOffset(grammar: SpatialGrammar, cluster: SceneCluster, lift: number): WorldPoint {
-  if (cluster.size <= 1) return { x: 0, y: lift * 0.12, z: 0 };
-  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-  const angle = cluster.localRank * goldenAngle + cluster.rank * 0.61;
-  const radius = 2.25 + Math.sqrt(cluster.localRank + 0.72) * 1.42;
-  const centered = cluster.localRank - (cluster.size - 1) / 2;
-  const depthRatio = grammar === "strata" ? 0.48 : grammar === "stage" ? 0.66 : 0.86;
-  return {
-    x: Math.cos(angle) * radius + centered * 0.22,
-    y: Math.sin(angle * 0.82) * 0.72 + lift * 0.18 + (cluster.localRank % 2 ? 0.12 : -0.12),
-    z: Math.sin(angle) * radius * depthRatio + Math.cos(centered * 0.94) * 0.34,
-  };
+function demoChapterPoint(grammar: SpatialGrammar, rank: number, count: number): WorldPoint {
+  // This is the reference demo's literal chapter geometry. Chapter count is
+  // intentionally part of the composition, so a growing book rebalances the
+  // constellation instead of preserving a lopsided historical arrangement.
+  const demoCentered = rank - 1;
+  if (grammar === "constellation") {
+    const angle = rank / Math.max(1, count) * Math.PI * 2 + 0.3;
+    return {
+      x: Math.cos(angle) * 25,
+      y: demoCentered * 8.2,
+      z: Math.sin(angle) * 25,
+    };
+  }
+  if (grammar === "spine") return { x: demoAxis(demoCentered, 25), y: 5, z: Math.sin(rank * 1.2) * 3 };
+  if (grammar === "braid") return { x: demoAxis(demoCentered, 23), y: Math.sin(rank * Math.PI) * 10 + 5, z: Math.cos(rank * Math.PI) * 12 };
+  if (grammar === "strata") return { x: demoAxis(demoCentered, 24), y: 14, z: rank % 2 ? 8 : -8 };
+  if (grammar === "loop") {
+    const angle = rank / Math.max(1, count) * Math.PI * 2;
+    return { x: Math.cos(angle) * 28, y: Math.sin(angle) * 7, z: Math.sin(angle) * 28 };
+  }
+  return { x: demoAxis(demoCentered, 25), y: rank % 2 ? 9 : -6, z: rank % 2 ? -10 : 10 };
 }
 
-function chapterAxis(rank: number): number {
-  return rank * CHAPTER_CLUSTER_GAP - 4.8;
-}
-
-function narrativeAxis(timeline: number): number {
-  // Linear spacing preserves a legible local cadence as a project grows.
-  // It depends only on the entity ordinal, so adding a later chapter leaves
-  // every established position untouched.
-  return (Math.max(1, timeline) - 1) * SCENE_STEP - 4.8;
-}
-
-function narrativeDepth(timeline: number): number {
-  const index = Math.max(0, timeline - 1);
-  return 8.6 - index * 0.052 - index * index * 0.00011;
-}
-
-function narrativeRise(timeline: number): number {
-  const index = Math.max(0, timeline - 1);
-  return -index * 0.0065 - index * index * 0.000015;
+/** The reference demo is exact across the working horizon. Beyond 24 anchors,
+ * retain its direction and order while compressing only the distant tail so a
+ * thousand-node projection stays inside the production navigation world. */
+function demoAxis(rank: number, stride: number, tailStride = 2.5): number {
+  const sign = rank < 0 ? -1 : 1;
+  const absolute = Math.abs(rank);
+  if (absolute <= 24) return rank * stride;
+  return sign * (24 * stride + (absolute - 24) * tailStride);
 }
 
 function semanticAnchor(node: SpatialNarrativeNode, context: LayoutContext): WorldPoint {
   const hash = hashNode(node.cluster_id || node.node_id, 177);
-  const timeline = 1 + (hash % 128);
-  const spine = { x: narrativeAxis(timeline), y: 1.1, z: narrativeDepth(timeline) };
+  const chapterCount = Math.max(1, context.chapters.length);
+  const spine = demoChapterPoint("spine", hash % chapterCount, chapterCount);
   if (node.type === "character") return { x: spine.x - 3.4 + (hash % 3) * 3.4, y: 3.8, z: spine.z + 0.8 };
   if (node.type === "canon") return { x: spine.x, y: -0.15, z: spine.z - 2.2 };
   if (node.type === "task" || node.type === "review") return { x: spine.x + 1.3, y: 4.55, z: spine.z + 1.6 };
   if (node.type === "branch") return { x: spine.x + 4.8, y: 2.6, z: spine.z + 0.9 };
   if (node.type === "promise" || node.type === "reader-question") return { x: spine.x - 4.4, y: 2.7, z: spine.z + 0.6 };
   const nearest = context.primary[hash % Math.max(1, context.primary.length)];
-  return nearest ? { x: narrativeAxis((context.primaryRank.get(nearest.node_id) || 0) + 1), y: 2.1, z: narrativeDepth((context.primaryRank.get(nearest.node_id) || 0) + 1) } : spine;
+  return nearest ? context.primaryRank.has(nearest.node_id)
+    ? demoChapterPoint("spine", context.primaryRank.get(nearest.node_id) || 0, Math.max(1, context.primary.length))
+    : spine : spine;
 }
 
-function satellitePoint(grammar: SpatialGrammar, anchor: WorldPoint, node: SpatialNarrativeNode, seed: number): WorldPoint {
-  const identity = hashNode(node.node_id, 29);
-  const angle = pseudo(seed + identity) * Math.PI * 2;
-  const role = satelliteProfile(node.type);
-  const hierarchy = Math.max(0, Number(node.hierarchy_depth || 0));
-  const magnitude = role.radius + (identity % 4) * role.spread + Math.max(0, hierarchy - 1) * 0.34;
-  const elevation = role.elevation + (identity % 3) * 0.32;
-  const depth = grammar === "strata" ? Math.cos(angle) * magnitude * 0.45 : Math.sin(angle) * magnitude;
+function satellitePoint(grammar: SpatialGrammar, anchor: WorldPoint, node: SpatialNarrativeNode, index: number): WorldPoint {
+  const angle = index * GOLDEN_ANGLE + (node.type === "character" ? 0.8 : 2.1);
+  const magnitude = node.type === "character" ? 13 : 9;
+  const elevation = node.type === "character" ? 10 : -8;
+  const depth = grammar === "strata" ? Math.sin(angle) * magnitude * 0.36 : Math.sin(angle) * magnitude;
   return {
     x: anchor.x + Math.cos(angle) * magnitude,
-    y: Math.max(-0.35, anchor.y + elevation),
-    z: anchor.z + depth + role.depthBias,
+    y: anchor.y + elevation + (index % 3) * 2,
+    z: anchor.z + depth,
   };
-}
-
-function satelliteProfile(type: string): { radius: number; spread: number; elevation: number; depthBias: number } {
-  if (type === "story-architecture") return { radius: 5.8, spread: 0.36, elevation: 2.4, depthBias: -0.8 };
-  if (type === "word-budget") return { radius: 5.2, spread: 0.34, elevation: -2.5, depthBias: -0.5 };
-  if (type === "style") return { radius: 5.6, spread: 0.44, elevation: 1.2, depthBias: 2.1 };
-  if (type === "world" || type === "location" || type === "organization") return { radius: 6.2, spread: 0.72, elevation: -1.25, depthBias: -2.5 };
-  if (type === "character") return { radius: 3.8, spread: 0.72, elevation: 1.35, depthBias: 0.95 };
-  if (type === "canon") return { radius: 2.8, spread: 0.56, elevation: -1.48, depthBias: -2.35 };
-  if (type === "task" || type === "review") return { radius: 3.1, spread: 0.62, elevation: 3.15, depthBias: 1.38 };
-  if (type === "branch") return { radius: 4.25, spread: 0.88, elevation: 1.8, depthBias: 0.82 };
-  if (type === "promise" || type === "reader-question") return { radius: 3.45, spread: 0.72, elevation: 2.02, depthBias: 0.52 };
-  if (type === "draft" || type === "formal-prose") return { radius: 2.35, spread: 0.38, elevation: -1.85, depthBias: 0.2 };
-  if (type === "human-decision") return { radius: 4.4, spread: 0.5, elevation: 3.25, depthBias: 1.4 };
-  return { radius: 2.2, spread: 0.5, elevation: 1.25, depthBias: 0.35 };
 }
 
 function relatedAnchor(node: SpatialNarrativeNode, points: Map<string, WorldPoint>): WorldPoint | undefined {

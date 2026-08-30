@@ -188,10 +188,22 @@ export class NarrativeParallaxRenderer {
     this.focusedNodeId = "";
     this.emitAnchors(true);
     const frame = this.narrativeFrame();
-    const width = Math.max(480, this.host.clientWidth - 164);
-    const height = Math.max(380, this.host.clientHeight - 176);
+    const compact = this.host.clientHeight < 470;
+    const safe = compact
+      ? { left: 132, right: 150, top: 78, bottom: 68 }
+      : { left: 172, right: 178, top: 128, bottom: 116 };
+    const width = Math.max(420, this.host.clientWidth - safe.left - safe.right);
+    const height = Math.max(250, this.host.clientHeight - safe.top - safe.bottom);
     const scale = Math.min(width / frame.width, height / frame.height);
-    this.animateTo(frame.centerX, frame.centerY, Math.min(0.78, Math.max(0.012, scale)), 560);
+    const fittedScale = Math.min(0.92, Math.max(0.012, scale));
+    const screenOffsetX = (safe.left - safe.right) / 2;
+    const screenOffsetY = (safe.top - safe.bottom) / 2;
+    this.animateTo(
+      frame.centerX - screenOffsetX / fittedScale,
+      frame.centerY - screenOffsetY / fittedScale,
+      fittedScale,
+      560,
+    );
   }
 
   showOpeningSegment(): void {
@@ -208,7 +220,7 @@ export class NarrativeParallaxRenderer {
     const availableWidth = Math.max(480, this.host.clientWidth - 148);
     const stageGrammar = this.layout.grammar === "stage";
     const radialGrammar = this.layout.grammar === "loop" || this.layout.grammar === "constellation";
-    const visibleCount = stageGrammar ? 3 : Math.max(5, Math.min(7, Math.floor(availableWidth / 172)));
+    const visibleCount = stageGrammar ? 3 : Math.max(4, Math.min(6, Math.floor(availableWidth / 196)));
     const points = primary.slice(start, Math.min(primary.length, start + visibleCount))
       .map((node) => this.layout?.points.get(node.node_id))
       .filter((point): point is WorldPoint => Boolean(point))
@@ -218,11 +230,11 @@ export class NarrativeParallaxRenderer {
     const maxX = Math.max(...points.map((point) => point.x));
     const minY = Math.min(...points.map((point) => point.y));
     const maxY = Math.max(...points.map((point) => point.y));
-    const width = Math.max(680, maxX - minX + 360);
-    const height = Math.max(520, maxY - minY + 420);
+    const width = Math.max(620, maxX - minX + 300);
+    const height = Math.max(440, maxY - minY + 310);
     const availableHeight = Math.max(380, this.host.clientHeight - 170);
-    const minimumScale = stageGrammar ? 0.52 : radialGrammar ? 0.56 : 0.16;
-    const scale = Math.min(0.98, Math.max(minimumScale, Math.min(availableWidth / width, availableHeight / height)));
+    const minimumScale = stageGrammar ? 0.58 : radialGrammar ? 0.68 : 0.22;
+    const scale = Math.min(1.08, Math.max(minimumScale, Math.min(availableWidth / width, availableHeight / height)));
     this.viewport.moveCenter((minX + maxX) / 2, (minY + maxY) / 2);
     this.viewport.setZoom(scale, true);
     this.emitAnchors(true);

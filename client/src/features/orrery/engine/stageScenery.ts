@@ -71,38 +71,54 @@ function drawConstellations(
   families.forEach((family, index) => {
     const width = Math.max(260, family.width + 260);
     const height = Math.max(170, family.height + 190);
-    shadow.ellipse(family.centerX + 24, family.centerY + 30, width * 0.64, height * 0.64)
-      .fill({ color: palette.shadow, alpha: 0.045 })
-      .stroke({ color: palette.shadow, width: 18, alpha: 0.1 });
-    silhouette.ellipse(family.centerX - width * 0.04, family.centerY + height * 0.03, width * 0.58, height * 0.54)
-      .fill({ color: index % 2 ? palette.branch : palette.core, alpha: 0.052 })
-      .stroke({ color: index % 2 ? palette.branch : palette.core, width: 2, alpha: 0.26 });
-    silhouette.ellipse(family.centerX + width * 0.05, family.centerY - height * 0.025, width * 0.43, height * 0.39)
-      .fill({ color: palette.canon, alpha: 0.055 })
-      .stroke({ color: palette.canon, width: 1.4, alpha: 0.22 });
-    silhouette.ellipse(family.centerX - width * 0.02, family.centerY, width * 0.22, height * 0.2)
-      .fill({ color: palette.label, alpha: 0.045 })
-      .stroke({ color: palette.label, width: 1, alpha: 0.18 });
-    const starCount = experience.quality === "efficient" ? 18 : 32;
+    // A constellation is an open stellar field, not a planetary system.
+    // Closed concentric ellipses visually trapped every chapter inside a
+    // decorative ring and competed with the real narrative spine.
+    const direction = index % 2 ? -1 : 1;
+    const left = family.centerX - width * 0.52;
+    const right = family.centerX + width * 0.52;
+    const top = family.centerY - height * 0.34 * direction;
+    const bottom = family.centerY + height * 0.28 * direction;
+    shadow.moveTo(left + 18, bottom + 28)
+      .bezierCurveTo(
+        family.centerX - width * 0.18, top + 46,
+        family.centerX + width * 0.2, bottom - 38,
+        right + 18, top + 30,
+      ).stroke({ color: palette.shadow, width: Math.max(30, height * 0.18), alpha: 0.12 });
+    silhouette.moveTo(left, bottom)
+      .bezierCurveTo(
+        family.centerX - width * 0.22, top,
+        family.centerX + width * 0.18, bottom,
+        right, top,
+      ).stroke({ color: index % 2 ? palette.branch : palette.core, width: 7, alpha: 0.18 });
+    silhouette.moveTo(left + width * 0.08, bottom - height * 0.04)
+      .bezierCurveTo(
+        family.centerX - width * 0.12, top + height * 0.08,
+        family.centerX + width * 0.26, bottom - height * 0.13,
+        right - width * 0.06, top + height * 0.05,
+      ).stroke({ color: palette.canon, width: 1.4, alpha: 0.24 });
+    const starCount = experience.quality === "efficient" ? 24 : 44;
     for (let star = 0; star < starCount; star += 1) {
       const theta = star * 2.399963 + index * 0.73;
       const unitRadius = Math.sqrt((star + 1) / starCount);
-      const x = family.centerX + Math.cos(theta) * width * 0.48 * unitRadius;
-      const y = family.centerY + Math.sin(theta) * height * 0.42 * unitRadius;
+      const x = family.centerX + Math.cos(theta) * width * 0.52 * unitRadius;
+      const flow = Math.sin((x - family.centerX) / Math.max(1, width) * Math.PI * 1.45 + index) * height * 0.11;
+      const y = family.centerY + flow + Math.sin(theta) * height * 0.31 * unitRadius;
       const bright = star % 11 === 0;
+      const starColor = star % 7 === 0 ? palette.branch : star % 5 === 0 ? palette.core : star % 3 === 0 ? palette.canon : palette.label;
       silhouette.circle(x, y, bright ? 2.8 : star % 4 === 0 ? 1.65 : 0.9)
-        .fill({ color: star % 3 === 0 ? palette.canon : palette.label, alpha: bright ? 0.58 : 0.3 });
+        .fill({ color: starColor, alpha: bright ? 0.58 : 0.3 });
       if (bright) {
         silhouette.moveTo(x - 7, y).lineTo(x + 7, y)
           .moveTo(x, y - 5).lineTo(x, y + 5)
           .stroke({ color: palette.label, width: 1, alpha: 0.32 });
       }
     }
-    silhouette.moveTo(family.centerX - width * 0.48, family.centerY + height * 0.07)
+    silhouette.moveTo(family.centerX - width * 0.48, family.centerY + height * 0.07 * direction)
       .bezierCurveTo(
-        family.centerX - width * 0.2, family.centerY - height * 0.36,
-        family.centerX + width * 0.3, family.centerY - height * 0.24,
-        family.centerX + width * 0.5, family.centerY + height * 0.1,
+        family.centerX - width * 0.2, family.centerY - height * 0.28 * direction,
+        family.centerX + width * 0.3, family.centerY + height * 0.2 * direction,
+        family.centerX + width * 0.5, family.centerY - height * 0.08 * direction,
       ).stroke({ color: index % 2 ? palette.core : palette.branch, width: 5, alpha: 0.16 });
     if (index) drawConstellationBridge(silhouette, families[index - 1], family, palette);
   });

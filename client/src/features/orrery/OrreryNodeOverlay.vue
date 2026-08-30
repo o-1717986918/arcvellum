@@ -59,13 +59,15 @@ function nodePriority(node: SpatialNarrativeNode): number {
 }
 
 function isPinned(node: SpatialNarrativeNode): boolean {
+  const sceneCount = visible.value.filter((item) => (item.creative_kind || item.type) === "scene").length;
   return node.node_id === props.selectedNodeId
     || node.node_id === props.focusNodeId
     || node.node_id === props.navigationNodeId
     || Boolean(props.forcedNodeIds?.includes(node.node_id))
     || node.status === "current"
     || node.status === "blocked"
-    || node.type === "chapter";
+    || node.type === "chapter"
+    || (node.type === "scene" && sceneCount <= 28);
 }
 
 function isTypographic(node: SpatialNarrativeNode): boolean {
@@ -74,14 +76,35 @@ function isTypographic(node: SpatialNarrativeNode): boolean {
 
 function isOverview(node: SpatialNarrativeNode): boolean {
   const anchor = props.anchors[node.node_id];
-  return Boolean(anchor && anchor.scale < 0.59);
+  return Boolean(anchor && effectiveNodeScale(node, anchor.scale) < farLodThreshold(node));
+}
+
+function farLodThreshold(node: SpatialNarrativeNode): number {
+  const kind = node.creative_kind || node.type;
+  if (kind === "chapter" || kind === "project") return 0.42;
+  if (kind === "scene") return 0.54;
+  return 0.62;
+}
+
+function lodFor(node: SpatialNarrativeNode): "far" | "mid" | "near" {
+  const scale = effectiveNodeScale(node, props.anchors[node.node_id]?.scale || 0);
+  if (scale < farLodThreshold(node)) return "far";
+  return scale < 0.92 ? "mid" : "near";
+}
+
+function effectiveNodeScale(node: SpatialNarrativeNode, scale: number): number {
+  const kind = node.creative_kind || node.type;
+  return ["project", "chapter", "scene", "character"].includes(kind)
+    ? Math.max(scale, minimumReadableScale(node))
+    : scale;
 }
 
 function labelRectangle(node: SpatialNarrativeNode, anchor: { x: number; y: number; scale: number }): { left: number; right: number; top: number; bottom: number } {
-  const overview = anchor.scale < 0.59;
+  const scale = effectiveNodeScale(node, anchor.scale);
+  const overview = scale < 0.59;
   const compactWidth = node.type === "chapter" ? 68 : node.type === "scene" ? 24 : 58;
-  const width = (overview ? compactWidth : Math.min(184, Math.max(76, node.label.length * 11.2))) * Math.max(0.74, anchor.scale);
-  const height = (overview ? 25 : 46) * Math.max(0.8, anchor.scale);
+  const width = (overview ? compactWidth : Math.min(206, Math.max(86, node.label.length * 11.8))) * Math.max(0.74, scale);
+  const height = (overview ? 25 : 52) * Math.max(0.8, scale);
   return { left: anchor.x - width / 2, right: anchor.x + width / 2, top: anchor.y - 10, bottom: anchor.y + height };
 }
 
@@ -108,11 +131,12 @@ function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
 
 function minimumReadableScale(node: SpatialNarrativeNode): number {
   const kind = node.creative_kind || node.type;
-  if (kind === "chapter") return 0.84;
-  if (kind === "scene") return 0.72;
-  if (kind === "project") return 0.9;
-  if (kind === "character") return 0.7;
-  return 0.74;
+  if (kind === "chapter") return 1.04;
+  if (kind === "scene") return 0.86;
+  if (kind === "project") return 1.08;
+  if (kind === "character") return 0.82;
+  if (["branch", "review", "promise", "reader-question", "human-decision"].includes(kind)) return 0.8;
+  return 0.84;
 }
 
 function labelFor(node: SpatialNarrativeNode): string {
@@ -135,7 +159,24 @@ function compactLabelFor(node: SpatialNarrativeNode): string {
 }
 
 function displayLabelFor(node: SpatialNarrativeNode): string {
-  return node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label;
+  return node.label.length > 30 ? `${node.label.slice(0, 29)}…` : node.label;
+}
+
+function nodeMetaFor(node: SpatialNarrativeNode): string {
+  const kind = node.creative_kind || node.type;
+  const formalChars = Number(node.metrics.formal_chars || 0);
+  const wordTarget = Number(node.metrics.word_target || 0);
+  if (kind === "chapter" && (formalChars || wordTarget)) {
+    return `${formalChars.toLocaleString()}${wordTarget ? ` / ${wordTarget.toLocaleString()}` : ""} 字`;
+  }
+  if (kind === "scene" && formalChars) return `${formalChars.toLocaleString()} 字正文`;
+  return ({
+    current: "正在形成",
+    blocked: "等待处理",
+    formal: "已进入正式项目",
+    alternative: "候选路径",
+    memory: "已写回记忆",
+  } as Record<string, string>)[node.status] || "作品事实";
 }
 
 function iconFor(node: SpatialNarrativeNode): Component {
@@ -205,6 +246,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       class="orrery-v3-node"
       :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
       :data-status="node.status"
+      :data-lod="lodFor(node)"
       :data-completion="node.completion_state"
       :data-type="node.type"
       :data-kind="node.creative_kind || node.type"
@@ -219,6 +261,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       <span class="node-copy">
         <small class="node-kicker">{{ compactLabelFor(node) }}</small>
         <span class="node-title">{{ displayLabelFor(node) }}</span>
+        <small class="node-meta">{{ nodeMetaFor(node) }}</small>
       </span>
     </button>
   </div>

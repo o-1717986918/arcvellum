@@ -55,7 +55,10 @@ export function buildNarrativeSignalHierarchy(
     if (attention.has(node.node_id)) return true;
 
     if (kind === "scene") {
-      return context.level !== "book" && sceneChapterId(node) === detailChapterId;
+      // The reference Orrery keeps the scenes in the same spatial field as
+      // their chapters. Book mode is therefore a real narrative constellation,
+      // not a chapter-only table of contents with the story hidden from view.
+      return context.level === "book" || sceneChapterId(node) === detailChapterId;
     }
 
     if (kind === "character") {

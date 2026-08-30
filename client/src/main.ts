@@ -9,5 +9,6 @@ import "./styles/v08.css";
 import "./styles/orreryV3.css";
 import "./styles/typographicCelestialField.css";
 import "./styles/spatialOperatingSystem.css";
+import "./styles/spatialIdentity.css";
 
 createApp(App).use(createPinia()).use(router).mount("#app");

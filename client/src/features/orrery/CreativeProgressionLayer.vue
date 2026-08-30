@@ -22,14 +22,16 @@ const stagePoints = computed(() => {
   const available = provisional.filter((point): point is typeof point & { x: number; y: number } => point.x !== null && point.y !== null);
   const centerX = available.length ? available.reduce((sum, point) => sum + point.x, 0) / available.length : 420;
   const centerY = available.length ? available.reduce((sum, point) => sum + point.y, 0) / available.length : 260;
-  const spread = Math.max(112, Math.min(184, window.innerWidth * 0.12));
+  const spread = Math.max(126, Math.min(174, window.innerWidth * 0.105));
   const middle = (provisional.length - 1) / 2;
+  const routeCenterX = Math.max(360, Math.min(window.innerWidth - 320, centerX));
+  const routeY = Math.max(82, Math.min(148, centerY - 190));
   return provisional.map((point, index) => {
     const arcOffset = index - middle;
     return {
       stage: point.stage,
-      x: (point.x ?? centerX) + arcOffset * spread,
-      y: (point.y ?? centerY) - Math.min(100, 58 + Math.abs(arcOffset) * 8),
+      x: routeCenterX + arcOffset * spread,
+      y: routeY + Math.cos(arcOffset * .8) * 14,
       visible: point.visible || point.x === null,
     };
   });
