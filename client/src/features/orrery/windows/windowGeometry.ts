@@ -8,12 +8,12 @@ import type {
 } from "@/types/spatialWindows";
 
 export const DEFAULT_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
-  node: { width: 294, height: 348 },
-  progress: { width: 342, height: 438 },
-  agent: { width: 368, height: 510 },
-  reader: { width: 332, height: 540 },
-  decisions: { width: 328, height: 340 },
-  rules: { width: 456, height: 600 },
+  node: { width: 310, height: 330 },
+  progress: { width: 334, height: 424 },
+  agent: { width: 360, height: 486 },
+  reader: { width: 348, height: 540 },
+  decisions: { width: 320, height: 272 },
+  rules: { width: 456, height: 500 },
   health: { width: 258, height: 290 },
   delivery: { width: 294, height: 282 },
   archive: { width: 720, height: 590 },
@@ -29,8 +29,8 @@ const MIN_SIZES: Record<SpatialWindowKind, SpatialWindowSize> = {
   progress: { width: 286, height: 316 },
   agent: { width: 304, height: 336 },
   reader: { width: 300, height: 370 },
-  decisions: { width: 300, height: 248 },
-  rules: { width: 360, height: 430 },
+  decisions: { width: 300, height: 224 },
+  rules: { width: 360, height: 386 },
   health: { width: 258, height: 240 },
   delivery: { width: 260, height: 210 },
   archive: { width: 520, height: 420 },
@@ -74,17 +74,17 @@ export function instrumentPosition(
   const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
   const positions: Record<Exclude<SpatialWindowKind, "node">, SpatialWindowPosition> = {
     progress: { left: viewportWidth - size.width - 30, top: 148 },
-    agent: { left: viewportWidth - size.width - 42, top: 184 },
+    agent: { left: viewportWidth - size.width - 42, top: 122 },
     reader: { left: 82, top: 148 },
     decisions: { left: viewportWidth - size.width - 42, top: 196 },
-    rules: { left: viewportWidth - size.width - 52, top: 150 },
+    rules: { left: viewportWidth - size.width - 52, top: 116 },
     health: { left: 26, top: viewportHeight - size.height - 34 },
-    delivery: { left: viewportWidth - size.width - 44, top: viewportHeight - size.height - 40 },
+    delivery: { left: viewportWidth - size.width - 44, top: 168 },
     archive: { left: Math.round((viewportWidth - size.width) / 2), top: 96 },
     style: { left: Math.round((viewportWidth - size.width) / 2), top: 104 },
-    quality: { left: viewportWidth - size.width - 40, top: 110 },
+    quality: { left: Math.round((viewportWidth - size.width) / 2), top: 104 },
     strategy: { left: 46, top: 112 },
-    observatory: { left: viewportWidth - size.width - 38, top: 98 },
+    observatory: { left: Math.round((viewportWidth - size.width) / 2), top: 96 },
     archaeology: { left: 52, top: 104 },
   };
   return clampPosition({ left: positions[kind].left - offset * 12, top: positions[kind].top + offset * 12 }, size);
@@ -157,7 +157,17 @@ export function anchoredPositionFor(
   anchor: SpatialWindowAnchor,
   size: SpatialWindowSize,
 ): SpatialWindowPosition {
-  return clampPosition({ left: point.x + anchor.offsetX, top: point.y + anchor.offsetY }, size);
+  const position = clampPosition({ left: point.x + anchor.offsetX, top: point.y + anchor.offsetY }, size);
+  if (typeof window === "undefined") return position;
+  // The advisor is a user-controlled floating console, not disposable chrome.
+  // Node inspectors yield upward when their preferred anchor would cover it.
+  const advisorSafeLeft = window.innerWidth - 116;
+  const advisorSafeTop = window.innerHeight - 118;
+  const overlapsAdvisor = position.left + size.width > advisorSafeLeft
+    && position.top + size.height > advisorSafeTop;
+  return overlapsAdvisor
+    ? clampPosition({ left: position.left, top: advisorSafeTop - size.height - 12 }, size)
+    : position;
 }
 
 export function anchoredPosition(

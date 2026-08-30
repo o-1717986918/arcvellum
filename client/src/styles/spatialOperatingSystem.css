@@ -362,7 +362,26 @@
 
 .spatial-window-scroll {
   padding: 9px;
+  overflow-x: hidden;
 }
+
+.spatial-window::after {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--instrument-accent) 32%, transparent), transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.spatial-window[data-kind="archive"] { --instrument-accent: var(--orrery-core); }
+.spatial-window[data-kind="style"] { --instrument-accent: var(--orrery-branch); }
+.spatial-window[data-kind="quality"] { --instrument-accent: var(--orrery-warning); }
+.spatial-window[data-kind="strategy"] { --instrument-accent: var(--orrery-branch); }
+.spatial-window[data-kind="observatory"] { --instrument-accent: var(--orrery-ready); }
+.spatial-window[data-kind="archaeology"] { --instrument-accent: var(--orrery-canon); }
 
 .node-action-deck {
   display: grid;
@@ -417,6 +436,12 @@
   color: var(--instrument-ink);
 }
 
+.creative-workspace-host h1 {
+  max-width: 22ch;
+  font-size: 26px !important;
+  line-height: 1.16 !important;
+}
+
 .creative-workspace-host :is(p, small, .eyebrow) {
   color: var(--instrument-muted);
 }
@@ -428,6 +453,77 @@
 .creative-workspace-host :is(input, textarea, select) {
   color: var(--instrument-ink);
   background: color-mix(in srgb, var(--instrument-panel) 82%, transparent);
+  border-color: var(--instrument-line);
+}
+
+.creative-workspace-host .secondary-button {
+  color: var(--instrument-ink);
+  background: color-mix(in srgb, var(--instrument-panel) 82%, transparent);
+  border-color: color-mix(in srgb, var(--instrument-accent) 28%, var(--instrument-line));
+}
+
+.creative-workspace-host .secondary-button:hover {
+  background: color-mix(in srgb, var(--instrument-accent) 12%, var(--instrument-panel));
+  border-color: color-mix(in srgb, var(--instrument-accent) 62%, var(--instrument-line));
+}
+
+.creative-workspace-host .primary-button {
+  color: color-mix(in srgb, var(--orrery-deep) 92%, #09120f);
+  background: color-mix(in srgb, var(--instrument-accent) 84%, #dce9e4);
+  border-color: color-mix(in srgb, var(--instrument-accent) 74%, transparent);
+}
+
+.creative-workspace-host :is(.primary-button, .secondary-button):disabled {
+  color: color-mix(in srgb, var(--instrument-muted) 74%, transparent);
+  background: color-mix(in srgb, var(--instrument-panel) 58%, transparent);
+  border-color: var(--instrument-line);
+  opacity: .72;
+}
+
+.creative-workspace-host .archaeology-refresh {
+  color: var(--instrument-muted);
+  background: color-mix(in srgb, var(--instrument-panel) 78%, transparent);
+  border-color: color-mix(in srgb, var(--instrument-accent) 24%, var(--instrument-line));
+}
+
+.creative-workspace-host .archaeology-refresh:hover {
+  color: var(--instrument-ink);
+  background: color-mix(in srgb, var(--instrument-accent) 11%, var(--instrument-panel));
+}
+
+/* Full-page quality controls are re-composed as an observatory instrument when
+ * embedded. This prevents the page's mineral-white surfaces from leaking into
+ * a dark floating workspace without maintaining a second component tree. */
+.creative-workspace-host :is(
+  .quality-presets button,
+  .quality-controls,
+  .quality-preview,
+  .quality-savebar,
+  .profile-stamp
+) {
+  color: var(--instrument-ink);
+  background: color-mix(in srgb, var(--instrument-panel) 78%, transparent);
+  border-color: color-mix(in srgb, var(--instrument-accent) 22%, var(--instrument-line));
+  box-shadow: none;
+}
+
+.creative-workspace-host .quality-presets button.active {
+  color: var(--instrument-ink);
+  background: color-mix(in srgb, var(--instrument-accent) 15%, var(--instrument-panel));
+  border-color: color-mix(in srgb, var(--instrument-accent) 62%, var(--instrument-line));
+}
+
+.creative-workspace-host .quality-savebar {
+  bottom: 0;
+  margin-inline: 0;
+  backdrop-filter: blur(18px);
+}
+
+.creative-workspace-host .quality-preview > textarea,
+.creative-workspace-host .quality-exceptions :is(input, select),
+.creative-workspace-host .preview-scope input {
+  color: var(--instrument-ink);
+  background: color-mix(in srgb, var(--instrument-deep) 88%, transparent);
   border-color: var(--instrument-line);
 }
 
