@@ -34,11 +34,13 @@ describe("bounded worker lifecycle", () => {
 		expect(writer.digest).toBe(writerAgain.digest);
 		expect(writer.digest).not.toBe(reviewer.digest);
 		expect(writer.systemPrompt).toContain("FIRST assistant action");
+		expect(writer.systemPrompt).toContain("4800 text characters");
+		expect(writer.systemPrompt).toContain("operation=append");
 		expect(reviewer.systemPrompt).toContain("FIRST assistant action");
 		expect(writer.systemPrompt).not.toContain("SKILL.md");
 		const repair = workerProfile("main-creative-agent", "repair");
 		expect(repair.systemPrompt).toContain("incremental-repair Worker");
-		expect(repair.systemPrompt).toContain("one complete target per call");
+		expect(repair.systemPrompt).toContain("operation=append chunks");
 		expect(repair.systemPrompt).toContain("Do not stop after the first target");
 		expect(repair.systemPrompt).not.toContain("FIRST assistant action");
 		expect(repair.digest).not.toBe(writer.digest);

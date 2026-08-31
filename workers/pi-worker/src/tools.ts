@@ -10,6 +10,7 @@ import { validateSemanticOutput } from "./semantic-output.ts";
 import { previewOutputContracts } from "./artifact-preview.ts";
 
 const EMPTY_PARAMETERS = Type.Object({});
+export const MAX_WRITE_CHUNK_CHARACTERS = 4_800;
 
 export function createWorkerTools(
 	context: TaskContext,
@@ -21,6 +22,7 @@ export function createWorkerTools(
 	const previewContracts = new Map(
 		previewOutputContracts(context).map((item) => [item.path, item]),
 	);
+	const partialPaths = new Set<string>();
 	const readablePaths = new Set([...context.exactOnDemand, ...ownedPaths]);
 	const tools: AgentTool[] = [
 		{
@@ -64,15 +66,17 @@ export function createWorkerTools(
 		{
 			name: "write_expected_output",
 			label: "Write Expected Output",
-			description: "Atomically write one or several Agent-owned expected outputs. For JSON artifacts, pass a structured json object instead of an escaped content string; Studio serializes it and later restores protected machine fields. Batch only compact artifacts whose combined content is safely below 12000 characters; otherwise write one complete artifact per call. The result includes aggregate local validation. Completion receipts are never writable by the Agent.",
+			description: "Atomically write Agent-owned expected outputs. Each text content argument is limited to 4800 characters. For a longer text artifact, start with operation=replace and final=false, continue with operation=append and final=false, then send the last chunk with operation=append and final=true. Only a final chunk counts as submitted. For JSON artifacts, pass a structured json object. Batch only compact final artifacts. Completion receipts are never writable by the Agent.",
 			parameters: Type.Object({
 				path: Type.Optional(Type.String()),
-				content: Type.Optional(Type.Union([Type.String({ maxLength: 2_000_000 }), Type.Null()])),
+				operation: Type.Optional(Type.Union([Type.Literal("replace"), Type.Literal("append")])),
+				final: Type.Optional(Type.Boolean()),
+				content: Type.Optional(Type.Union([Type.String({ maxLength: MAX_WRITE_CHUNK_CHARACTERS }), Type.Null()])),
 				json: Type.Optional(Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.Null()])),
 				outputs: Type.Optional(Type.Array(
 					Type.Object({
 						path: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-						content: Type.Optional(Type.Union([Type.String({ maxLength: 2_000_000 }), Type.Null()])),
+						content: Type.Optional(Type.Union([Type.String({ maxLength: MAX_WRITE_CHUNK_CHARACTERS }), Type.Null()])),
 						json: Type.Optional(Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.Null()])),
 					}),
 					{ minItems: 1, maxItems: 64 },
@@ -82,6 +86,8 @@ export function createWorkerTools(
 			execute: async (_id, params) => {
 				const input = params as {
 					path?: string | null;
+					operation?: "replace" | "append";
+					final?: boolean;
 					content?: string | null;
 					json?: Record<string, unknown> | null;
 					outputs?: Array<{
@@ -94,6 +100,8 @@ export function createWorkerTools(
 				const normalized = values.map((item) => ({
 					path: normalizeRelativePath(item.path),
 					content: normalizeText(item.content),
+					operation: item.operation,
+					final: item.final,
 				}));
 				if (new Set(normalized.map((item) => item.path)).size !== normalized.length) {
 					throw new Error("a batch cannot contain duplicate output paths");
@@ -102,6 +110,16 @@ export function createWorkerTools(
 					throw new Error("path is not an Agent-owned expected output");
 				}
 				for (const item of normalized) {
+					if (item.content.length > MAX_WRITE_CHUNK_CHARACTERS) {
+						throw new Error(`text chunks must not exceed ${MAX_WRITE_CHUNK_CHARACTERS} characters`);
+					}
+					let committedContent = item.content;
+					if (item.operation === "append") {
+						if (!partialPaths.has(item.path)) {
+							throw new Error("append requires an unfinished output started with operation=replace and final=false");
+						}
+						committedContent = `${await readAuthorizedFile(options.workspace, item.path)}${item.content}`;
+					}
 					const preview = previewContracts.get(item.path);
 					if (preview && (preview.previewMode === "prose_stream" || preview.previewMode === "markdown_stream")) {
 						emit("artifact.preview.snapshot", {
@@ -111,14 +129,20 @@ export function createWorkerTools(
 							preview_mode: preview.previewMode,
 							identity: "streaming_preview",
 							revision: 1,
-							content: item.content,
-							characters: item.content.length,
+							content: committedContent,
+							characters: committedContent.length,
 							replace: true,
 							source: "tool-commit",
 						});
 					}
-					await atomicWriteAuthorizedFile(options.workspace, item.path, item.content);
-					state.writtenPaths.add(item.path);
+					await atomicWriteAuthorizedFile(options.workspace, item.path, committedContent);
+					if (item.final) {
+						partialPaths.delete(item.path);
+						state.writtenPaths.add(item.path);
+					} else {
+						partialPaths.add(item.path);
+						state.writtenPaths.delete(item.path);
+					}
 					emit("file.changed", { path: item.path });
 				}
 				state.lastValidation = await validateSubmittedOutputs(
@@ -126,25 +150,27 @@ export function createWorkerTools(
 					options.workspace,
 					state.writtenPaths,
 				);
-				for (const item of normalized) {
+				for (const item of normalized.filter((candidate) => candidate.final)) {
 					const contract = previewContracts.get(item.path);
+					const committedContent = await readAuthorizedFile(options.workspace, item.path);
 					emit("artifact.checkpoint.written", {
 						path: item.path,
 						kind: contract?.kind ?? "agent-authored",
 						format: contract?.format ?? "text",
 						preview_mode: contract?.previewMode ?? "metadata_only",
 						identity: "candidate_written",
-						characters: item.content.length,
-						sha256: createHash("sha256").update(item.content, "utf8").digest("hex"),
+						characters: committedContent.length,
+						sha256: createHash("sha256").update(committedContent, "utf8").digest("hex"),
 						validation_passed: state.lastValidation.passed,
 					});
 				}
 				return result({
-					message: "outputs written",
+					message: partialPaths.size ? "output chunk accepted; continue the unfinished artifact" : "outputs written",
 					validation: state.lastValidation,
 				}, {
 					paths: normalized.map((item) => item.path),
 					characters: normalized.reduce((total, item) => total + item.content.length, 0),
+					unfinishedPaths: [...partialPaths].sort(),
 					validationPassed: state.lastValidation.passed,
 				});
 			},
@@ -387,6 +413,8 @@ function normalizeText(value: string): string {
 
 function outputWrites(input: {
 	path?: string | null;
+	operation?: "replace" | "append";
+	final?: boolean;
 	content?: string | null;
 	json?: Record<string, unknown> | null;
 	outputs?: Array<{
@@ -394,13 +422,16 @@ function outputWrites(input: {
 		content?: string | null;
 		json?: Record<string, unknown> | null;
 	}>;
-}, contracts: readonly { path: string; format: string }[], writtenPaths: ReadonlySet<string>): Array<{ path: string; content: string }> {
+}, contracts: readonly { path: string; format: string }[], writtenPaths: ReadonlySet<string>): Array<{ path: string; content: string; operation: "replace" | "append"; final: boolean }> {
 	const hasBatch = Array.isArray(input.outputs);
 	const hasSingleFields = (
 		(typeof input.path === "string" && input.path.trim().length > 0)
 		|| (typeof input.content === "string" && input.content.length > 0)
 		|| structuredJson(input.json)
 	);
+	if (hasBatch && (input.operation !== undefined || input.final !== undefined)) {
+		throw new Error("chunk controls are only valid for a single output");
+	}
 	if (hasBatch && hasSingleFields) throw new Error("provide either one path payload or outputs");
 	const entries = hasBatch ? input.outputs ?? [] : [input];
 	const pending = contracts.filter((item) => !writtenPaths.has(item.path));
@@ -411,7 +442,12 @@ function outputWrites(input: {
 		const explicit = typeof item.path === "string" && item.path.trim() ? item.path : "";
 		const path = explicit || inferOutputPath(pending, assigned, payloadFormat);
 		assigned.add(path);
-		return { path, content };
+		return {
+			path,
+			content,
+			operation: hasBatch ? "replace" : input.operation ?? "replace",
+			final: hasBatch ? true : input.final ?? true,
+		};
 	});
 }
 

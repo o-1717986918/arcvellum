@@ -21,6 +21,7 @@ hard_constraints:
   - Add event pressure when inventory is insufficient; never ask prose to fill a structural deficit.
   - Distinguish setup payoff delay and intentional non-resolution.
   - Keep the plan candidate-only until semantic review and approval pass.
+  - Write the plan in ordered chunks of no more than five chapter rows per write_expected_output call.
 output_contract:
   - Write only the declared chapter-obligation plan and semantic review; Studio owns lifecycle completion receipts.
   - The review must contain a standalone line exactly shaped as - 结论： pass, - 结论： revise_required, or - 结论： reject.
@@ -35,6 +36,8 @@ forbidden_shortcuts:
 # Chapter Obligation And Reader Experience Planning
 
 Build one chapter row for every planned chapter. Each row must identify `chapter_id`, target Chinese-content characters, target scene count, `chapter_function`, `must_payoff`, `must_setup`, `must_change`, `must_not_resolve`, inherited hooks, ending hook, inventory sufficiency, and any expansion needed.
+
+Write at most five consecutive chapter rows in one tool call. Start the plan with `operation=replace, final=false`; append later groups with `operation=append`. Mark only the group containing the final planned chapter as `final=true`. Never repeat an earlier chapter row in a later chunk.
 
 For each chapter, state the question the reader carries in, the reward the chapter promises, information deliberately withheld, promises paid here, promises delayed, and the concrete causal pressure passed to the next chapter. A chapter can be quiet, transitional, or aftermath-focused, but it cannot be structurally empty. Where the current inventory cannot sustain the allocated length, prescribe additional events, relationship pressure, information release, failure, or consequence rather than decorative expansion.
 

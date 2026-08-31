@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -114,6 +114,61 @@ describe("local output validation", () => {
 		expect((await validateOutputs(context(), root)).passed).toBe(true);
 		expect([...workerState.writtenPaths].sort()).toEqual(["out/review.json", "out/review.md"]);
 		expect(workerState.lastValidation.passed).toBe(true);
+	});
+
+	it("assembles a long text artifact from bounded chunks before marking it submitted", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-chunks-"));
+		roots.push(root);
+		const taskContext = {
+			...context(),
+			expectedOutputs: ["out/long-plan.md"],
+			agentOwnedOutputs: [{ path: "out/long-plan.md", kind: "agent-authored", format: "markdown", schemaName: "" }],
+			writablePaths: ["out/long-plan.md"],
+		};
+		const workerState = state();
+		const write = createWorkerTools(taskContext, options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		const first = await write?.execute("call-1", {
+			path: "out/long-plan.md",
+			operation: "replace",
+			final: false,
+			content: "# Plan\n\nPart one.\n",
+		});
+		expect(workerState.writtenPaths.has("out/long-plan.md")).toBe(false);
+		expect(JSON.parse(first?.content[0]?.text ?? "{}").message).toContain("chunk accepted");
+
+		await write?.execute("call-2", {
+			path: "out/long-plan.md",
+			operation: "append",
+			final: false,
+			content: "\nPart two.\n",
+		});
+		await write?.execute("call-3", {
+			path: "out/long-plan.md",
+			operation: "append",
+			final: true,
+			content: "\nPart three.\n",
+		});
+
+		expect(await readFile(join(root, "out", "long-plan.md"), "utf8"))
+			.toBe("# Plan\n\nPart one.\n\nPart two.\n\nPart three.\n");
+		expect(workerState.writtenPaths.has("out/long-plan.md")).toBe(true);
+		expect(workerState.lastValidation.passed).toBe(true);
+	});
+
+	it("rejects append when no unfinished artifact owns the target", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-orphan-chunk-"));
+		roots.push(root);
+		const write = createWorkerTools(context(), options(root), state(), () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await expect(write?.execute("call", {
+			path: "out/review.md",
+			operation: "append",
+			final: true,
+			content: "orphan",
+		})).rejects.toThrow("append requires an unfinished output");
 	});
 
 	it("emits an honest snapshot when only the completed write tool is observable", async () => {
