@@ -82,22 +82,24 @@ function shortName(path: string): string {
           <button :class="{ active: sideMode === 'session' }" @click="openSessionMode"><UsersRound :size="13" />会话</button>
           <button :class="{ active: sideMode === 'revision' }" @click="openRevisionMode"><GitCompareArrows :size="13" />修订</button>
         </nav>
-        <template v-if="sideMode === 'review'">
-          <ReviewRail :reviews="live.snapshot?.reviews" />
-          <ExecutionTimeline :items="live.snapshot?.activity" />
-        </template>
-        <template v-else-if="sideMode === 'session'">
-          <div v-if="sessions.length > 1" class="creative-session-selector">
-            <button v-for="session in sessions" :key="session.session_id" :class="{ active: live.activeSession?.session_id === session.session_id }" @click="live.selectSession(session.session_id)">{{ session.role || 'Agent' }}</button>
-          </div>
-          <SessionTranscript :session="live.activeSession" />
-        </template>
-        <template v-else>
-          <div v-if="live.revisions.length" class="creative-revision-selector">
-            <button v-for="revision in live.revisions" :key="revision.revision_id" :class="{ active: live.selectedRevision?.revision_id === revision.revision_id }" @click="live.loadRevision(revision.revision_id)">{{ revision.identity === 'promoted' ? '正式晋升' : '候选修订' }} · {{ revision.characters.toLocaleString('zh-CN') }}</button>
-          </div>
-          <RevisionDiff :revision="live.selectedRevision" />
-        </template>
+        <div class="creative-live-side-scroll">
+          <template v-if="sideMode === 'review'">
+            <ReviewRail :reviews="live.snapshot?.reviews" />
+            <ExecutionTimeline :items="live.snapshot?.activity" />
+          </template>
+          <template v-else-if="sideMode === 'session'">
+            <div v-if="sessions.length > 1" class="creative-session-selector">
+              <button v-for="session in sessions" :key="session.session_id" :class="{ active: live.activeSession?.session_id === session.session_id }" @click="live.selectSession(session.session_id)">{{ session.role || 'Agent' }}</button>
+            </div>
+            <SessionTranscript :session="live.activeSession" />
+          </template>
+          <template v-else>
+            <div v-if="live.revisions.length" class="creative-revision-selector">
+              <button v-for="revision in live.revisions" :key="revision.revision_id" :class="{ active: live.selectedRevision?.revision_id === revision.revision_id }" @click="live.loadRevision(revision.revision_id)">{{ revision.identity === 'promoted' ? '正式晋升' : '候选修订' }} · {{ revision.characters.toLocaleString('zh-CN') }}</button>
+            </div>
+            <RevisionDiff :revision="live.selectedRevision" />
+          </template>
+        </div>
       </aside>
     </div>
 
