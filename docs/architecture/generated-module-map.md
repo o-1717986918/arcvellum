@@ -45,7 +45,7 @@
 | `projects` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `quality` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `reader` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `settings` | 4 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `settings` | 3 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `spatial-os` | 3 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `strategy` | 8 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `style-atelier` | 19 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
