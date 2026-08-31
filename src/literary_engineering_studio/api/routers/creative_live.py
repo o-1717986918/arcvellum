@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 from typing import Any, Callable
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from fastapi.responses import StreamingResponse
 
 from ...observability.creative_live.contracts import project_channel
@@ -41,10 +41,12 @@ def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRoute
         channels: str = "activity,artifact,review,transcript,usage,control",
         after: int = 0,
         max_events: int = 0,
+        last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ):
         root = resolve_project_root(project_root)
         selected = {item.strip() for item in channels.split(",") if item.strip()}
-        return _stream(deps, root, selected, max(0, after), max(0, max_events))
+        cursor = _resume_cursor(after, last_event_id)
+        return _stream(deps, root, selected, cursor, max(0, max_events))
 
     @router.get("/creative-live/runs/{controller_id}/snapshot")
     def creative_run_snapshot(controller_id: str):
@@ -208,6 +210,19 @@ def _stream(
                 last_heartbeat = time.monotonic()
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers=sse_headers())
+
+
+def _resume_cursor(after: int, last_event_id: str | None) -> int:
+    cursor = max(0, int(after or 0))
+    value = str(last_event_id or "").strip()
+    if value.startswith("live:"):
+        value = value.removeprefix("live:")
+    else:
+        return cursor
+    try:
+        return max(cursor, int(value))
+    except ValueError:
+        return cursor
 
 
 __all__ = ["CreativeLiveRouterDependencies", "build_creative_live_router"]

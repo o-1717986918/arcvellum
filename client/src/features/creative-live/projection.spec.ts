@@ -104,5 +104,22 @@ describe("Creative Live projection", () => {
     expect(value.sessions[0].tools[0].tool).toBe("read_task_source");
     expect(value.usage).toEqual({ total_tokens: 900, cost_usd: 0.02, updates: 1 });
   });
-});
 
+  it("keeps a thirty-thousand-character prose stream readable while bounding event history", () => {
+    const chunk = "潮声落在舷窗外。".repeat(75);
+    let value = snapshot();
+    for (let index = 1; index <= 50; index += 1) {
+      value = applyCreativeEvent(value, event({
+        event_id: `long-${index}`,
+        sequence: index,
+        data: { delta: chunk },
+        artifact: { ...event().artifact!, characters: chunk.length * index },
+      }));
+    }
+
+    expect(value.artifacts[0].content).toHaveLength(30_000);
+    expect(value.artifacts[0].truncated).toBe(false);
+    expect(value.events).toHaveLength(50);
+    expect(value.cursor).toBe(50);
+  });
+});

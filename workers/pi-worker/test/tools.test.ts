@@ -116,6 +116,45 @@ describe("local output validation", () => {
 		expect(workerState.lastValidation.passed).toBe(true);
 	});
 
+	it("emits an honest snapshot when only the completed write tool is observable", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-snapshot-fallback-"));
+		roots.push(root);
+		const taskContext = {
+			...context(),
+			agentRole: "main-writing-agent",
+			expectedOutputs: ["drafts/scenes/scene_0001_candidate.md"],
+			agentOwnedOutputs: [{
+				path: "drafts/scenes/scene_0001_candidate.md",
+				kind: "prose",
+				format: "markdown",
+				schemaName: "",
+			}],
+			writablePaths: ["drafts/scenes/scene_0001_candidate.md"],
+		};
+		const events: Array<{ event: string; data: Record<string, unknown> }> = [];
+		const write = createWorkerTools(taskContext, options(root), state(), (event, data = {}) => {
+			events.push({ event, data });
+		}).find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call", {
+			path: "drafts/scenes/scene_0001_candidate.md",
+			content: "完整候选正文。",
+		});
+
+		expect(events).toContainEqual(expect.objectContaining({
+			event: "artifact.preview.snapshot",
+			data: expect.objectContaining({
+				content: "完整候选正文。",
+				source: "tool-commit",
+				identity: "streaming_preview",
+			}),
+		}));
+		expect(events).toContainEqual(expect.objectContaining({
+			event: "artifact.checkpoint.written",
+			data: expect.objectContaining({ identity: "candidate_written" }),
+		}));
+	});
+
 	it("serializes structured JSON without requiring escaped content", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-json-"));
 		roots.push(root);
