@@ -263,4 +263,4 @@
 - V2 已完成：高频仪器窗统一为紧凑磨砂 Window Shell，拖动前后尺寸契约一致，正文、推进、规则与 Agent 观测内容均可在受限视口内滚动。
 - R1 已完成：内置 Pi Worker 成为主创、审查、顾问、代理用户、文风和反推的默认运行时；角色模型选择进入同一 Pi 配置，OpenCode 保留为可选外部兼容适配器且不再随桌面包分发。
 - P1 工程实现已完成：Windows、macOS arm64、macOS x64 具备独立资源装配和 CI 构建路径；macOS 无 Apple 凭据时只发布带 `unsigned-preview` 标识的 DMG。
-- F1 正在执行：全量回归、生产安装包、GitHub Actions 双架构验证与 Release 发布。
+- F1 已完成：全量回归、Windows 生产安装包、GitHub Actions 双 macOS 架构验证与 `v0.99.3` Release 均已通过。
