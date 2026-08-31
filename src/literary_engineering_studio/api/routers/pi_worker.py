@@ -44,7 +44,7 @@ def build_pi_worker_router(config: dict[str, Any]) -> APIRouter:
     @router.put("/model-connections/pi-worker/model")
     def select(payload: ModelSelectionRequest):
         def apply():
-            result = select_pi_model(config, payload.model)
+            result = select_pi_model(config, payload.model, role=payload.role)
             save_config(config)
             clear_agent_runner_status_cache()
             return {"ok": True, **result}

@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 from typing import Iterable
 from urllib.request import urlopen
 import zipfile
@@ -16,13 +17,32 @@ import zipfile
 
 SCHEMA = "arcvellum/pi-worker-installation/v1"
 NODE_VERSION = "22.19.0"
-NODE_ARCHIVE = f"node-v{NODE_VERSION}-win-x64.zip"
-NODE_ARCHIVE_SHA256 = "ea3fad0e67a991d8477d8c01344b56e69c676ccb733f065b22436994b1253f86"
-NODE_ARCHIVE_URL = f"https://nodejs.org/dist/v{NODE_VERSION}/{NODE_ARCHIVE}"
 RECEIPT_NAME = "pi-worker-installation.json"
+TARGETS = {
+    "windows-x64": {
+        "archive": f"node-v{NODE_VERSION}-win-x64.zip",
+        "sha256": "ea3fad0e67a991d8477d8c01344b56e69c676ccb733f065b22436994b1253f86",
+        "member": f"node-v{NODE_VERSION}-win-x64/node.exe",
+        "executable": "node.exe",
+    },
+    "macos-arm64": {
+        "archive": f"node-v{NODE_VERSION}-darwin-arm64.tar.gz",
+        "sha256": "c59006db713c770d6ec63ae16cb3edc11f49ee093b5c415d667bb4f436c6526d",
+        "member": f"node-v{NODE_VERSION}-darwin-arm64/bin/node",
+        "executable": "node",
+    },
+    "macos-x64": {
+        "archive": f"node-v{NODE_VERSION}-darwin-x64.tar.gz",
+        "sha256": "3cfed4795cd97277559763c5f56e711852d2cc2420bda1cea30c8aa9ac77ce0c",
+        "member": f"node-v{NODE_VERSION}-darwin-x64/bin/node",
+        "executable": "node",
+    },
+}
 
 
-def stage_bundle(*, root: Path, destination: Path, cache_root: Path) -> dict[str, object]:
+def stage_bundle(
+    *, root: Path, destination: Path, cache_root: Path, target: str | None = None
+) -> dict[str, object]:
     root = root.resolve()
     worker = root / "workers" / "pi-worker"
     _require_worker_source(worker)
@@ -30,9 +50,11 @@ def stage_bundle(*, root: Path, destination: Path, cache_root: Path) -> dict[str
     _run([npm, "ci", "--ignore-scripts"], cwd=worker)
     _run([npm, "run", "build"], cwd=worker)
 
-    archive = _node_archive(cache_root.resolve())
+    target_id = target or _host_target()
+    spec = _target_spec(target_id)
+    archive = _node_archive(cache_root.resolve(), spec)
     _reset_directory(destination.resolve(), root / "desktop" / "src-tauri" / "resources")
-    _extract_node_executable(archive, destination / "node.exe")
+    _extract_node_executable(archive, destination / str(spec["executable"]), spec)
     (destination / "dist").mkdir(parents=True, exist_ok=True)
     shutil.copy2(worker / "dist" / "main.js", destination / "dist" / "main.js")
     for name in ("package.json", "package-lock.json", "README.md"):
@@ -40,7 +62,7 @@ def stage_bundle(*, root: Path, destination: Path, cache_root: Path) -> dict[str
     shutil.copy2(root / "third_party" / "pi" / "PI-AGENT-LICENSE.txt", destination / "PI-AGENT-LICENSE.txt")
     shutil.copy2(root / "third_party" / "pi" / "PI-AGENT-NOTICE.md", destination / "PI-AGENT-NOTICE.md")
 
-    payload = _receipt_payload(root=root, destination=destination)
+    payload = _receipt_payload(root=root, destination=destination, target=target_id)
     (destination / RECEIPT_NAME).write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -57,10 +79,13 @@ def verify_bundle(*, root: Path, destination: Path) -> dict[str, object]:
     payload = json.loads(receipt_path.read_text(encoding="utf-8"))
     if payload.get("schema") != SCHEMA:
         raise RuntimeError("Pi Worker installation receipt schema is unsupported")
-    expected = _receipt_payload(root=root, destination=destination)
+    target_id = str(payload.get("target") or _host_target())
+    expected = _receipt_payload(root=root, destination=destination, target=target_id)
     fields = (
+        "target",
         "worker_version",
         "node_version",
+        "node_archive",
         "node_archive_sha256",
         "worker_source_sha256",
         "package_lock_sha256",
@@ -73,21 +98,26 @@ def verify_bundle(*, root: Path, destination: Path) -> dict[str, object]:
     return payload
 
 
-def _receipt_payload(*, root: Path, destination: Path) -> dict[str, object]:
+def _receipt_payload(
+    *, root: Path, destination: Path, target: str | None = None
+) -> dict[str, object]:
+    target_id = target or _host_target()
+    spec = _target_spec(target_id)
     package = json.loads((root / "workers" / "pi-worker" / "package.json").read_text(encoding="utf-8"))
     bundled_files = tuple(_bundle_files(destination))
     return {
         "schema": SCHEMA,
+        "target": target_id,
         "worker_version": str(package.get("version") or ""),
         "node_version": NODE_VERSION,
-        "node_archive": NODE_ARCHIVE,
-        "node_archive_sha256": NODE_ARCHIVE_SHA256,
+        "node_archive": str(spec["archive"]),
+        "node_archive_sha256": str(spec["sha256"]),
         "worker_source_sha256": _worker_source_sha256(root / "workers" / "pi-worker"),
         "package_lock_sha256": _sha256(root / "workers" / "pi-worker" / "package-lock.json"),
         "bundle_sha256": _tree_sha256(destination, bundled_files),
         "file_count": len(bundled_files),
         "entrypoint": "dist/main.js",
-        "executable": "node.exe",
+        "executable": str(spec["executable"]),
     }
 
 
@@ -128,26 +158,55 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _node_archive(cache_root: Path) -> Path:
+def _node_archive(cache_root: Path, spec: dict[str, str]) -> Path:
     cache_root.mkdir(parents=True, exist_ok=True)
-    archive = cache_root / NODE_ARCHIVE
-    if not archive.is_file() or _sha256(archive) != NODE_ARCHIVE_SHA256:
+    archive = cache_root / spec["archive"]
+    if not archive.is_file() or _sha256(archive) != spec["sha256"]:
         temporary = archive.with_suffix(".download")
         temporary.unlink(missing_ok=True)
-        with urlopen(NODE_ARCHIVE_URL, timeout=120) as response, temporary.open("wb") as output:
+        url = f"https://nodejs.org/dist/v{NODE_VERSION}/{spec['archive']}"
+        with urlopen(url, timeout=120) as response, temporary.open("wb") as output:
             shutil.copyfileobj(response, output)
-        if _sha256(temporary) != NODE_ARCHIVE_SHA256:
+        if _sha256(temporary) != spec["sha256"]:
             temporary.unlink(missing_ok=True)
             raise RuntimeError("downloaded Node.js archive failed SHA-256 verification")
         temporary.replace(archive)
     return archive
 
 
-def _extract_node_executable(archive: Path, destination: Path) -> None:
-    member = f"node-v{NODE_VERSION}-win-x64/node.exe"
-    with zipfile.ZipFile(archive) as bundle:
-        with bundle.open(member) as source, destination.open("wb") as output:
-            shutil.copyfileobj(source, output)
+def _extract_node_executable(
+    archive: Path, destination: Path, spec: dict[str, str]
+) -> None:
+    member = spec["member"]
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive) as bundle:
+            with bundle.open(member) as source, destination.open("wb") as output:
+                shutil.copyfileobj(source, output)
+    else:
+        with tarfile.open(archive, "r:gz") as bundle:
+            source = bundle.extractfile(member)
+            if source is None:
+                raise RuntimeError(f"Node.js archive member is missing: {member}")
+            with source, destination.open("wb") as output:
+                shutil.copyfileobj(source, output)
+        destination.chmod(0o755)
+
+
+def _target_spec(target: str) -> dict[str, str]:
+    try:
+        return TARGETS[target]
+    except KeyError as exc:
+        raise ValueError(f"unsupported Pi Worker bundle target: {target}") from exc
+
+
+def _host_target() -> str:
+    if sys.platform == "win32":
+        return "windows-x64"
+    if sys.platform == "darwin":
+        import platform
+
+        return "macos-arm64" if platform.machine().lower() in {"arm64", "aarch64"} else "macos-x64"
+    raise RuntimeError("Pi Worker desktop resources support Windows and macOS hosts")
 
 
 def _reset_directory(path: Path, allowed_parent: Path) -> None:
@@ -185,10 +244,16 @@ def main() -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--cache-root", type=Path)
+    parser.add_argument("--target", choices=tuple(TARGETS))
     args = parser.parse_args()
     if args.command == "stage":
         cache_root = args.cache_root or args.root / "build" / "vendor" / f"node-v{NODE_VERSION}"
-        result = stage_bundle(root=args.root, destination=args.destination, cache_root=cache_root)
+        result = stage_bundle(
+            root=args.root,
+            destination=args.destination,
+            cache_root=cache_root,
+            target=args.target,
+        )
     else:
         result = verify_bundle(root=args.root, destination=args.destination)
     print(json.dumps(result, ensure_ascii=False, indent=2))

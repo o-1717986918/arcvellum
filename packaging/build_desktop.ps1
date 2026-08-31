@@ -21,8 +21,6 @@ $ResourceDir = Join-Path $TauriRoot "resources"
 $SidecarSource = Join-Path $Root "dist\literary-engineering-studio-sidecar.exe"
 $SidecarTarget = Join-Path $BinaryDir "literary-engineering-studio-sidecar-$TargetTriple.exe"
 $SidecarProvenance = Join-Path $Root "build\sidecar-provenance.json"
-$OpenCodeSource = Join-Path $Root "build\vendor\opencode-v1.18.3\expanded\opencode.exe"
-$OpenCodeReceipt = Join-Path (Split-Path $OpenCodeSource) "opencode-installation.json"
 $PiWorkerResource = Join-Path $ResourceDir "pi-worker"
 
 function Assert-NativeSuccess([string]$Step) {
@@ -85,14 +83,6 @@ try {
         cmd /c npm install
         Assert-NativeSuccess "Node dependency installation"
     }
-    if (-not (Test-Path $OpenCodeSource)) {
-        python -m literary_engineering_studio opencode-install --destination (Split-Path $OpenCodeSource)
-        Assert-NativeSuccess "OpenCode installation"
-    }
-    if (-not (Test-Path $OpenCodeReceipt)) {
-        throw "Pinned OpenCode installation receipt is missing. Remove the vendor directory and run opencode-install again."
-    }
-
     cmd /c npm run client:build
     Assert-NativeSuccess "Vue client production build"
 
@@ -101,20 +91,20 @@ try {
     python -m PyInstaller --noconfirm --clean (Join-Path $Root "packaging\studio_sidecar.spec")
     Assert-NativeSuccess "Python sidecar build"
     New-Item -ItemType Directory -Force -Path $BinaryDir, $ResourceDir | Out-Null
+    @("opencode.exe", "opencode-installation.json", "OPENCODE-NOTICE.md", "OPENCODE-LICENSE.txt") | ForEach-Object {
+        Remove-Item -Force -LiteralPath (Join-Path $ResourceDir $_) -ErrorAction SilentlyContinue
+    }
     Copy-Item -Force -LiteralPath $SidecarSource -Destination $SidecarTarget
     python (Join-Path $Root "packaging\sidecar_provenance.py") write `
         --root $Root `
         --binary $SidecarTarget `
         --manifest $SidecarProvenance
     Assert-NativeSuccess "Frozen sidecar provenance write"
-    Copy-Item -Force -LiteralPath $OpenCodeSource -Destination (Join-Path $ResourceDir "opencode.exe")
-    Copy-Item -Force -LiteralPath $OpenCodeReceipt -Destination (Join-Path $ResourceDir "opencode-installation.json")
-    Copy-Item -Force -LiteralPath (Join-Path $Root "src\literary_engineering_studio\vendor\OPENCODE-NOTICE.md") -Destination (Join-Path $ResourceDir "OPENCODE-NOTICE.md")
-    Copy-Item -Force -LiteralPath (Join-Path $Root "src\literary_engineering_studio\vendor\OPENCODE-LICENSE.txt") -Destination (Join-Path $ResourceDir "OPENCODE-LICENSE.txt")
     python (Join-Path $Root "packaging\pi_worker_bundle.py") stage `
         --root $Root `
         --destination $PiWorkerResource `
-        --cache-root (Join-Path $Root "build\vendor\node-v22.19.0")
+        --cache-root (Join-Path $Root "build\vendor\node-v22.19.0") `
+        --target windows-x64
     Assert-NativeSuccess "Embedded Pi Worker staging"
 
     cmd /c npm run desktop:icons

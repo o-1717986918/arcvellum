@@ -52,6 +52,9 @@ class OpenCodeRuntimePoolTests(unittest.TestCase):
             workspace.mkdir()
             config = default_config()
             config["application"]["data_root"] = str(root / "data")
+            config["agent_runners"]["opencode"].update(
+                {"enabled": True, "model": "fixture/model"}
+            )
             manager = _ProcessManager()
             factory = _ServerFactory()
             with (
@@ -95,6 +98,9 @@ class OpenCodeRuntimePoolTests(unittest.TestCase):
             workspace.mkdir()
             config = default_config()
             config["application"]["data_root"] = str(root / "data")
+            config["agent_runners"]["opencode"].update(
+                {"enabled": True, "model": "fixture/model"}
+            )
             manager = _ProcessManager()
             factory = _ServerFactory()
             with (

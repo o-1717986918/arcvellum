@@ -204,6 +204,9 @@ class OpenCodeRuntimeExecutionTests(unittest.TestCase):
 
     def test_runtime_builder_applies_role_without_mutating_persisted_settings(self):
         config = default_config()
+        config["agent_runners"]["opencode"].update(
+            {"enabled": True, "model": "fixture/model"}
+        )
         runtime = build_runtime("opencode", config, role="reviewer")
         self.assertIsInstance(runtime, OpenCodeRuntime)
         self.assertEqual(runtime.settings["role"], "reviewer")

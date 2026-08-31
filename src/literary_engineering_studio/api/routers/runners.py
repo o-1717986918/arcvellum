@@ -1,4 +1,4 @@
-"""Agent Runner discovery, bundled OpenCode, and model connection routes."""
+"""Agent Runner discovery and optional external OpenCode controls."""
 
 from __future__ import annotations
 

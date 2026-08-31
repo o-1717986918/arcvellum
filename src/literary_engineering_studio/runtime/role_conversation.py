@@ -40,16 +40,8 @@ class RoleConversationGateway:
         runtime_id = runtime_for_role(self.config, role)
         if runtime_id != "pi-worker":
             raise RuntimeError(f"tool-free role conversation is unsupported by runtime: {runtime_id}")
-        settings = self.config.get("agent_runners", {}).get("pi-worker", {})
-        settings = settings if isinstance(settings, dict) else {}
-        model = str(settings.get("model") or "").strip()
-        if "/" not in model:
-            raise RuntimeError(f"select a Pi Worker provider/model before using the {role} role")
-
-        run_root = self.data_root / role / "runs" / f"run-{int(time.time() * 1000)}"
-        run_root.mkdir(parents=True, exist_ok=False)
-        prompt_path = run_root / "conversation.prompt.md"
-        prompt_path.write_text(prompt, encoding="utf-8")
+        settings, model = _role_settings(self.config, role)
+        run_root, prompt_path = _prepare_run(self.data_root, role, prompt)
         pieces: list[str] = []
 
         def observe(event: str, data: dict[str, Any]) -> None:
@@ -58,8 +50,7 @@ class RoleConversationGateway:
             if event_sink is not None:
                 event_sink(event, data)
 
-        runtime = build_runtime("pi-worker", self.config, role=role)
-        result = runtime.execute(
+        result = build_runtime("pi-worker", self.config, role=role).execute(
             workspace,
             prompt_path,
             run_root,
@@ -72,8 +63,7 @@ class RoleConversationGateway:
             max_tool_calls=1,
             max_repairs=0,
         )
-        metadata = result.metadata if isinstance(result.metadata, dict) else {}
-        worker_result = metadata.get("worker_result") if isinstance(metadata.get("worker_result"), dict) else {}
+        worker_result = _worker_result(result.metadata)
         answer = "".join(pieces).strip() or str(worker_result.get("answer") or "").strip()
         if result.status != "completed":
             raise RuntimeError(result.message or f"{role} conversation failed")
@@ -85,4 +75,28 @@ class RoleConversationGateway:
             model=model,
             answer=answer,
         )
+
+
+def _role_settings(config: dict[str, Any], role: str) -> tuple[dict[str, Any], str]:
+    settings = config.get("agent_runners", {}).get("pi-worker", {})
+    settings = settings if isinstance(settings, dict) else {}
+    models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
+    model = str(models.get(role) or settings.get("model") or "").strip()
+    if "/" not in model:
+        raise RuntimeError(f"select a Pi Worker provider/model before using the {role} role")
+    return settings, model
+
+
+def _prepare_run(data_root: Path, role: str, prompt: str) -> tuple[Path, Path]:
+    run_root = data_root / role / "runs" / f"run-{int(time.time() * 1000)}"
+    run_root.mkdir(parents=True, exist_ok=False)
+    prompt_path = run_root / "conversation.prompt.md"
+    prompt_path.write_text(prompt, encoding="utf-8")
+    return run_root, prompt_path
+
+
+def _worker_result(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    values = metadata if isinstance(metadata, dict) else {}
+    result = values.get("worker_result")
+    return result if isinstance(result, dict) else {}
 __all__ = ["RoleConversationGateway", "RoleConversationResult"]

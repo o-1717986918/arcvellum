@@ -186,7 +186,7 @@ class AdvisorRuntimeExecutor:
         settings = raw_settings if isinstance(raw_settings, dict) else {}
         executable = locate_opencode(settings)
         if executable is None:
-            raise RuntimeError("bundled OpenCode Runner is not installed")
+            raise RuntimeError("optional external OpenCode Runner is not installed")
         models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
         model = str(models.get("advisor") or settings.get("advisor_model") or settings.get("model") or "").strip()
         if "/" not in model:

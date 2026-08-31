@@ -8,7 +8,6 @@ import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
 import { applyOrreryExperience, readOrreryExperience, type OrreryDepth, type OrreryMotion, type OrreryRenderQuality } from "@/services/orreryPreferences";
 import { useAppStore } from "@/stores/app";
-import PiWorkerConnection from "./components/PiWorkerConnection.vue";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
@@ -277,8 +276,6 @@ function pathValue(key: string): string {
       <div><span class="summary-symbol"><WandSparkles :size="21" /></span><p>正文模型<strong>{{ store.modelCatalog?.selected_models?.worker || store.modelCatalog?.selected_model || "尚未选择" }}</strong></p></div>
     </section>
 
-    <PiWorkerConnection />
-
     <div class="settings-grid">
       <section class="settings-section">
         <header><span class="section-icon"><WandSparkles :size="18" /></span><div><h2>按工作选择模型</h2><p>高质量正文、快速对话和日常审批可以各用合适的模型。</p></div></header>
@@ -301,15 +298,15 @@ function pathValue(key: string): string {
           <article v-for="provider in providers" :key="provider.id" :class="{ connected: provider.connected }">
             <span class="provider-state"><Check v-if="provider.connected" :size="14" /><span v-else></span></span>
             <div><strong>{{ provider.name }}</strong><p>{{ provider.connected ? `${provider.model_count} 个模型可用` : "尚未连接" }}</p></div>
-            <button v-if="provider.connected && provider.id !== 'opencode'" class="icon-button" title="断开连接" @click="disconnect(provider.id)"><Unplug :size="16" /></button>
+            <button v-if="provider.connected" class="icon-button" title="断开连接" @click="disconnect(provider.id)"><Unplug :size="16" /></button>
           </article>
         </div>
       </section>
 
       <section class="settings-section connection-form-section">
-        <header><span class="section-icon iris"><KeyRound :size="18" /></span><div><h2>连接模型服务</h2><p>预设服务即连即用；兼容接口可填写专属地址和模型。密钥只交给本机 OpenCode 凭证存储。</p></div></header>
+        <header><span class="section-icon iris"><KeyRound :size="18" /></span><div><h2>连接模型服务</h2><p>常用服务直接连接；密钥只写入本机 Pi Worker 凭证库，不进入作品与普通配置。</p></div></header>
         <form @submit.prevent="connectProvider">
-          <label class="field"><span>服务</span><select v-model="credential.provider_id"><optgroup v-for="group in presetGroups" :key="group.label" :label="group.label"><option v-for="preset in group.items" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup><option value="__custom__">自定义 OpenAI 兼容接口</option></select></label>
+          <label class="field"><span>服务</span><select v-model="credential.provider_id"><optgroup v-for="group in presetGroups" :key="group.label" :label="group.label"><option v-for="preset in group.items" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup><option value="__custom__">自定义兼容接口（外部 OpenCode）</option></select></label>
           <template v-if="isCustomProvider">
             <label class="field"><span>服务标识</span><input v-model.trim="customProvider.provider_id" required placeholder="例如 my-company-gateway" /></label>
             <label class="field"><span>显示名称</span><input v-model.trim="customProvider.display_name" required placeholder="例如 我的团队模型网关" /></label>
@@ -317,6 +314,7 @@ function pathValue(key: string): string {
             <label class="field"><span>模型 ID</span><textarea v-model="customProvider.models_text" required rows="3" placeholder="一行一个；可写“模型ID | 显示名称”&#10;例如 qwen-plus | Qwen Plus"></textarea></label>
             <div class="connection-limits"><label class="field"><span>上下文长度（可选）</span><input v-model="customProvider.context" inputmode="numeric" placeholder="例如 128000" /></label><label class="field"><span>最大输出（可选）</span><input v-model="customProvider.output" inputmode="numeric" placeholder="例如 8192" /></label></div>
           </template>
+          <p v-if="isCustomProvider" class="privacy-note">自定义兼容接口暂由可选的外部 OpenCode 适配器承载；内置 Pi Worker 的常用服务无需安装其他 Agent。</p>
           <label class="field"><span>API 密钥</span><input v-model="credential.credential" required type="password" autocomplete="new-password" placeholder="输入后不会再次显示" /></label>
           <button class="primary-button wide" :disabled="busy || !credential.credential || (isCustomProvider && (!customProvider.provider_id || !customProvider.base_url || !customProvider.models_text))"><KeyRound :size="16" />建立连接</button>
         </form>
@@ -397,7 +395,8 @@ function pathValue(key: string): string {
           <header><span class="section-icon iris"><Info :size="18" /></span><div><h2>运行信息</h2><p>用于确认当前客户端与创作能力。</p></div></header>
           <dl>
             <div><dt>文学工程内核</dt><dd>{{ appInfo?.engine?.protocol_version || '未知' }}</dd></div>
-            <div><dt>OpenCode</dt><dd>{{ appInfo?.opencode?.version || (appInfo?.opencode?.installed ? '已安装' : '未安装') }}</dd></div>
+            <div><dt>内置 Pi Worker</dt><dd>{{ appInfo?.pi_worker?.installed ? '已就绪' : '不可用' }}</dd></div>
+            <div><dt>外部 OpenCode</dt><dd>{{ appInfo?.opencode?.version || (appInfo?.opencode?.installed ? '已连接' : '未配置') }}</dd></div>
             <div><dt>默认模型</dt><dd>{{ appInfo?.current_model || '尚未选择' }}</dd></div>
             <div><dt>许可证</dt><dd>{{ appInfo?.license || 'MIT' }}</dd></div>
           </dl>

@@ -216,6 +216,18 @@ def default_config() -> dict[str, Any]:
                 "executable": "",
                 "entrypoint": "",
                 "model": "",
+                "models": {
+                    role: ""
+                    for role in (
+                        "worker",
+                        "reviewer",
+                        "planner",
+                        "advisor",
+                        "steward",
+                        "style",
+                        "archaeology",
+                    )
+                },
                 "auth_path": "",
                 "thinking": "low",
                 "max_turns": 6,

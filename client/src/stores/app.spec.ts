@@ -34,7 +34,7 @@ const bootstrap = {
   notices: ["模型目录将在后台重试。"],
   project: null,
   project_count: 1,
-  model_catalog: { selected_model: "opencode/big-pickle", providers: [] },
+  model_catalog: { selected_model: "deepseek/deepseek-v4-flash", providers: [] },
   model_warmup: { status: "degraded", attempted_at: "", loaded_at: "", error: "离线" },
 };
 
@@ -94,7 +94,7 @@ describe("application store", () => {
     expect(bootstrapDesktopSessionMock).toHaveBeenCalledOnce();
     expect(store.initialized).toBe(true);
     expect(store.currentProject?.title).toBe("潮汐之后");
-    expect(store.modelCatalog?.selected_model).toBe("opencode/big-pickle");
+    expect(store.modelCatalog?.selected_model).toBe("deepseek/deepseek-v4-flash");
     expect(streamConnections).toHaveLength(1);
   });
 
@@ -103,7 +103,7 @@ describe("application store", () => {
     const store = useAppStore();
     await store.initialize();
     apiMock.mockImplementation(async (path: string) => {
-      if (path === "/model-connections/opencode/catalog") {
+      if (path === "/model-connections/pi-worker/catalog") {
         return {
           selected_model: "deepseek/deepseek-chat",
           selected_models: { worker: "deepseek/deepseek-chat" },

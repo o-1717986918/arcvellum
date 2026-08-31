@@ -92,13 +92,48 @@ jobs:
           python -m PyInstaller --noconfirm --clean packaging/studio_sidecar.spec
           New-Item -ItemType Directory -Force -Path desktop/src-tauri/binaries | Out-Null
           Copy-Item -Force dist/literary-engineering-studio-sidecar.exe desktop/src-tauri/binaries/literary-engineering-studio-sidecar-x86_64-pc-windows-msvc.exe
-          python -m literary_engineering_studio opencode-install --destination build/vendor/opencode-v1.18.3/expanded
           New-Item -ItemType Directory -Force -Path desktop/src-tauri/resources | Out-Null
-          Copy-Item -Force build/vendor/opencode-v1.18.3/expanded/opencode.exe desktop/src-tauri/resources/opencode.exe
-          Copy-Item -Force build/vendor/opencode-v1.18.3/expanded/opencode-installation.json desktop/src-tauri/resources/opencode-installation.json
-          Copy-Item -Force src/literary_engineering_studio/vendor/OPENCODE-NOTICE.md desktop/src-tauri/resources/OPENCODE-NOTICE.md
-          Copy-Item -Force src/literary_engineering_studio/vendor/OPENCODE-LICENSE.txt desktop/src-tauri/resources/OPENCODE-LICENSE.txt
-          python packaging/pi_worker_bundle.py stage --root . --destination desktop/src-tauri/resources/pi-worker --cache-root build/vendor/node-v22.19.0
+          python packaging/pi_worker_bundle.py stage --root . --destination desktop/src-tauri/resources/pi-worker --cache-root build/vendor/node-v22.19.0 --target windows-x64
       - name: Check Tauri shell compilation against the frozen resource
         shell: pwsh
         run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
+
+  desktop-shell-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            pi_target: macos-arm64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            pi_target: macos-x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Prepare the native sidecar and embedded Pi Worker
+        run: |
+          python -m pip install -e ".[api,test]"
+          python -m pip install "pyinstaller==6.21.0"
+          npm ci
+          npm run pi-worker:install
+          npm run client:build
+          python -m PyInstaller --noconfirm --clean packaging/studio_sidecar.spec
+          mkdir -p desktop/src-tauri/binaries desktop/src-tauri/resources
+          cp dist/literary-engineering-studio-sidecar "desktop/src-tauri/binaries/literary-engineering-studio-sidecar-${{ matrix.target }}"
+          chmod +x "desktop/src-tauri/binaries/literary-engineering-studio-sidecar-${{ matrix.target }}"
+          python packaging/pi_worker_bundle.py stage --root . --destination desktop/src-tauri/resources/pi-worker --cache-root build/vendor/node-v22.19.0 --target "${{ matrix.pi_target }}"
+      - name: Check the macOS Tauri shell
+        run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml --target "${{ matrix.target }}"

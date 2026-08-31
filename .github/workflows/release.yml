@@ -1,4 +1,4 @@
-name: ArcVellum signed Windows release
+name: ArcVellum desktop release
 
 on:
   workflow_dispatch:
@@ -48,7 +48,6 @@ jobs:
           python -m pip install "pyinstaller==6.21.0"
           npm ci
           npm run pi-worker:install
-          python -m literary_engineering_studio opencode-install --destination build/vendor/opencode-v1.18.3/expanded
 
       - name: Verify release version
         if: startsWith(github.ref, 'refs/tags/')
@@ -114,19 +113,69 @@ jobs:
           path: dist/release/*
           if-no-files-found: error
 
-      - name: Publish GitHub Release
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            artifact: macos-arm64-preview
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            artifact: macos-x64-preview
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install build dependencies
+        run: |
+          python -m pip install -e ".[api,test]"
+          python -m pip install "pyinstaller==6.21.0"
+          npm ci
+          npm run pi-worker:install
+      - name: Verify release version
         if: startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
+        run: |
+          version="$(PYTHONPATH=src python -c 'from literary_engineering_studio import __version__; print(__version__)')"
+          test "$version" = "${GITHUB_REF_NAME#v}"
+      - name: Build macOS preview package
+        run: bash packaging/build_desktop_macos.sh "${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArcVellum-${{ github.ref_name }}-${{ matrix.artifact }}
+          path: dist/release/*.dmg
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/release-assets
+          merge-multiple: true
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $notes = "docs/releases/${{ github.ref_name }}.md"
-          if (-not (Test-Path -LiteralPath $notes)) {
-            throw "Release notes are missing: $notes"
-          }
-          gh release view "${{ github.ref_name }}" *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload "${{ github.ref_name }}" dist/release/* --clobber
-          } else {
-            gh release create "${{ github.ref_name }}" dist/release/* --title "ArcVellum ${{ github.ref_name }}" --notes-file $notes
-          }
+          notes="docs/releases/${{ github.ref_name }}.md"
+          test -f "$notes"
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release upload "${{ github.ref_name }}" dist/release-assets/* --clobber
+          else
+            gh release create "${{ github.ref_name }}" dist/release-assets/* --title "ArcVellum ${{ github.ref_name }}" --notes-file "$notes"
+          fi

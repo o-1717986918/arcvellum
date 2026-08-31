@@ -67,7 +67,7 @@ def build_runtime(
 ) -> AgentRuntimePort:
     normalized = str(runtime_id or "").strip().lower()
     descriptor = registry.descriptor(normalized)
-    settings = _runtime_settings(config, normalized)
+    settings = _runtime_settings(config, normalized, role=role)
     if settings.get("enabled") is False:
         raise RuntimeError(f"Agent runtime is disabled: {normalized}")
     if settings.get("experiment_only") is True and settings.get("experiment_authorized") is not True:
@@ -143,12 +143,20 @@ def _status_cache_key(
     )
 
 
-def _runtime_settings(config: dict[str, object], runtime_id: str) -> dict[str, object]:
+def _runtime_settings(
+    config: dict[str, object], runtime_id: str, *, role: str | None = None
+) -> dict[str, object]:
     runners = config.get("agent_runners", {}) if isinstance(config.get("agent_runners"), dict) else {}
     if not runners and isinstance(config.get("runtimes"), dict):
         runners = config["runtimes"]
     value = runners.get(runtime_id)
-    return dict(value) if isinstance(value, dict) else {}
+    settings = dict(value) if isinstance(value, dict) else {}
+    models = settings.get("models")
+    if role and isinstance(models, dict):
+        role_model = str(models.get(role) or "").strip()
+        if role_model:
+            settings["model"] = role_model
+    return settings
 
 
 def runtime_status(config: dict[str, object]) -> list[dict[str, object]]:

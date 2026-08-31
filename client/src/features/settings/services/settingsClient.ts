@@ -33,9 +33,9 @@ export function createSettingsClient(
     ),
     applicationInfo: () => transport.request<Record<string, any>>("/application/info"),
     legalDocuments: <T>() => transport.request<T>("/application/legal"),
-    modelCatalog: () => transport.request<ModelCatalog & { ok: boolean }>("/model-connections/opencode/catalog"),
+    modelCatalog: () => transport.request<ModelCatalog & { ok: boolean }>("/model-connections/pi-worker/catalog"),
     saveProviderCredential: (payload: Record<string, unknown>) => transport.request<any>(
-      "/model-connections/opencode/credential",
+      "/model-connections/pi-worker/credential",
       { method: "PUT", body: JSON.stringify(payload) },
     ),
     saveCustomProvider: (payload: Record<string, unknown>) => transport.request<any>(
@@ -43,11 +43,11 @@ export function createSettingsClient(
       { method: "PUT", body: JSON.stringify(payload) },
     ),
     selectModel: (model: string, role: string) => transport.request<any>(
-      "/model-connections/opencode/model",
+      "/model-connections/pi-worker/model",
       { method: "PUT", body: JSON.stringify({ model, role }) },
     ),
     disconnectProvider: (providerId: string) => transport.request(
-      `/model-connections/opencode/credential/${encodeURIComponent(providerId)}`,
+      `/model-connections/pi-worker/credential/${encodeURIComponent(providerId)}`,
       { method: "DELETE" },
     ),
     exportDiagnostics: () => transport.authorizedFetch("/application/diagnostics/export", { method: "POST" }),

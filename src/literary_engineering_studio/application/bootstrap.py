@@ -138,7 +138,7 @@ class ApplicationBootstrapService:
                     if available_runners
                     else "暂未发现可用的创作执行器；仍可浏览和整理作品。"
                 ),
-                recovery_action="在“连接与模型”中安装或连接 OpenCode。",
+                recovery_action="在“连接与模型”中为内置 Pi Worker 连接模型服务。",
             ),
             _step(
                 "model_catalog",

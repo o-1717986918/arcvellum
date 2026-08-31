@@ -14,6 +14,13 @@ use tauri_plugin_shell::{
 };
 use uuid::Uuid;
 
+#[cfg(target_os = "windows")]
+const PI_WORKER_NODE: &str = "resources/pi-worker/node.exe";
+#[cfg(target_os = "macos")]
+const PI_WORKER_NODE: &str = "resources/pi-worker/node";
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+const PI_WORKER_NODE: &str = "resources/pi-worker/node";
+
 struct StudioSidecar(Mutex<Option<CommandChild>>);
 
 fn emit_startup_error(window: &WebviewWindow, message: &str) {
@@ -128,12 +135,9 @@ fn main() {
                     token
                 ))
                 .build()?;
-            let opencode = app
-                .path()
-                .resolve("resources/opencode.exe", BaseDirectory::Resource)?;
             let pi_worker_node = app
                 .path()
-                .resolve("resources/pi-worker/node.exe", BaseDirectory::Resource)?;
+                .resolve(PI_WORKER_NODE, BaseDirectory::Resource)?;
             let pi_worker_entrypoint = app
                 .path()
                 .resolve("resources/pi-worker/dist/main.js", BaseDirectory::Resource)?;
@@ -157,7 +161,6 @@ fn main() {
                 .env("LES_API_TOKEN", &token)
                 .env("LES_STARTUP_NONCE", &startup_nonce)
                 .env("LES_PROJECTS_ROOT", &projects_root)
-                .env("LES_OPENCODE_EXECUTABLE", opencode)
                 .env("LES_PI_WORKER_EXECUTABLE", pi_worker_node)
                 .env("LES_PI_WORKER_ENTRYPOINT", pi_worker_entrypoint)
                 .env("LES_DEMO_BUNDLES_DIR", demo_bundles)

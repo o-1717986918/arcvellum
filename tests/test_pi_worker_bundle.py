@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
+import os
 from pathlib import Path
+import tarfile
 import tempfile
 import unittest
 
@@ -46,8 +49,36 @@ class PiWorkerBundleTests(unittest.TestCase):
             (destination / "dist" / "main.js").write_text("changed\n", encoding="utf-8")
 
             self.assertEqual(verified["worker_version"], "0.99.0")
+            self.assertEqual(verified["target"], "windows-x64")
             with self.assertRaisesRegex(RuntimeError, "bundle_sha256"):
                 MODULE.verify_bundle(root=root, destination=destination)
+
+    def test_macos_target_extracts_an_executable_node_binary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "node.tar.gz"
+            member = MODULE.TARGETS["macos-arm64"]["member"]
+            content = b"mac-node-fixture"
+            info = tarfile.TarInfo(member)
+            info.size = len(content)
+            info.mode = 0o755
+            with tarfile.open(archive, "w:gz") as bundle:
+                bundle.addfile(info, io.BytesIO(content))
+            destination = root / "node"
+
+            MODULE._extract_node_executable(
+                archive,
+                destination,
+                MODULE.TARGETS["macos-arm64"],
+            )
+
+            self.assertEqual(destination.read_bytes(), content)
+            if os.name != "nt":
+                self.assertTrue(destination.stat().st_mode & 0o100)
+
+    def test_unknown_bundle_target_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "unsupported Pi Worker bundle target"):
+            MODULE._target_spec("unknown")
 
 
 if __name__ == "__main__":

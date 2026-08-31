@@ -15,6 +15,7 @@ from .config import default_config_path, default_data_root
 from .compatibility import compatibility_summary
 from ..model_connections import model_connection_status
 from ..opencode_binary import locate_opencode, verify_opencode
+from ..integrations.pi_worker import locate_pi_worker
 from .project_manager import list_projects
 from ..runtimes import agent_runner_status
 
@@ -30,6 +31,8 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
     opencode_settings = _opencode_settings(config)
     executable = locate_opencode(opencode_settings)
     verification = verify_opencode(executable) if executable else {}
+    pi_settings = config.get("agent_runners", {}).get("pi-worker", {})
+    pi_installation = locate_pi_worker(pi_settings if isinstance(pi_settings, dict) else {})
     updates = config.get("updates") if isinstance(config.get("updates"), dict) else {}
     return {
         "ok": True,
@@ -55,6 +58,10 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
             "version": str(verification.get("version") or ""),
             "verified": bool(verification.get("verified")),
         },
+        "pi_worker": {
+            "installed": pi_installation.available,
+            "source": pi_installation.source,
+        },
         "current_model": _selected_model(config),
         "compatibility": compatibility_summary(),
         "paths": {
@@ -66,7 +73,8 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
         },
         "license": "MIT",
         "third_party_notices": [
-            "OpenCode is distributed under its own license and notice.",
+            "The embedded Pi Worker includes Pi Agent components under their respective licenses.",
+            "OpenCode remains available as an optional external adapter under its own license.",
             "Tauri, Vue, FastAPI and other dependencies retain their respective licenses.",
         ],
         "privacy": "作品与流程数据保存在本机；模型请求由用户选择的 Agent Runner 和模型服务处理。",
@@ -103,9 +111,10 @@ def build_legal_documents() -> dict[str, Any]:
             {
                 "id": "third-party",
                 "title": "第三方组件",
-                "summary": "ArcVellum 使用 Tauri、Vue、FastAPI、OpenCode 等组件；各组件与模型服务保留各自许可和服务条款。",
+                "summary": "ArcVellum 使用 Tauri、Vue、FastAPI 与 Pi Agent 等组件；各组件与模型服务保留各自许可和服务条款。",
                 "sections": [
-                    {"title": "OpenCode Runner", "body": "捆绑的 OpenCode 执行器按其开源许可分发。使用托管模型或账号连接时，还需遵守相应提供商条款。"},
+                    {"title": "Pi Worker", "body": "内置 Pi Worker 及其 Pi Agent 依赖按各自开源许可分发，并受 ArcVellum 的任务沙箱与写回门禁约束。"},
+                    {"title": "外部 Agent 适配器", "body": "OpenCode 等外部适配器不再随安装包捆绑；用户显式配置后，其许可和服务条款独立适用。"},
                     {"title": "模型提供商", "body": "模型可用性、拒答、限额、价格和内容政策由提供商决定，并可能在 ArcVellum 版本之外变化。"},
                 ],
             },

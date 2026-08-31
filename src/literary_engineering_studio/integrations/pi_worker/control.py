@@ -15,6 +15,7 @@ from .installation import locate_pi_worker
 
 
 _PROVIDER_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+_MODEL_ROLES = ("worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology")
 
 
 def pi_worker_catalog(config: dict[str, Any]) -> dict[str, Any]:
@@ -23,11 +24,25 @@ def pi_worker_catalog(config: dict[str, Any]) -> dict[str, Any]:
     if not installation.available or installation.entrypoint is None:
         raise RuntimeError("ArcVellum Pi Worker is not installed")
     auth_path = pi_auth_path(settings)
+    payload = _run_catalog(installation.executable, installation.entrypoint, auth_path)
+    selected = str(settings.get("model") or "")
+    return {
+        **payload,
+        "runner": "pi-worker",
+        "selected_model": selected,
+        "selected_models": _selected_models(settings, selected),
+        "available_model_count": len(_available_models(payload)),
+        "installed": True,
+        "auth_path": _public_auth_location(auth_path),
+    }
+
+
+def _run_catalog(executable: str, entrypoint: Path, auth_path: Path) -> dict[str, Any]:
     try:
         completed = run_hidden(
             [
-                installation.executable,
-                str(installation.entrypoint),
+                executable,
+                str(entrypoint),
                 "--catalog",
                 "--auth-path",
                 str(auth_path),
@@ -50,13 +65,25 @@ def pi_worker_catalog(config: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("Pi Worker returned an invalid model catalog") from exc
     if not isinstance(payload, dict) or payload.get("schema") != "arcvellum/pi-worker-catalog/v1":
         raise RuntimeError("Pi Worker returned an unsupported model catalog")
-    selected = str(settings.get("model") or "")
+    return payload
+
+
+def _selected_models(settings: dict[str, Any], selected: str) -> dict[str, str]:
+    role_models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
     return {
-        **payload,
-        "runner": "pi-worker",
-        "selected_model": selected,
-        "installed": True,
-        "auth_path": _public_auth_location(auth_path),
+        role: str(role_models.get(role) or selected)
+        for role in _MODEL_ROLES
+    }
+
+
+def _available_models(payload: dict[str, Any]) -> set[str]:
+    providers = payload.get("providers") if isinstance(payload.get("providers"), list) else []
+    return {
+        str(item.get("qualified_id") or "")
+        for provider in providers
+        if isinstance(provider, dict) and provider.get("connected")
+        for item in provider.get("models", [])
+        if isinstance(item, dict) and item.get("qualified_id")
     }
 
 
@@ -81,23 +108,40 @@ def disconnect_pi_provider(config: dict[str, Any], provider_id: str) -> dict[str
     settings = _settings(config)
     if str(settings.get("model") or "").startswith(provider + "/"):
         settings["model"] = ""
+    models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
+    for role, model in list(models.items()):
+        if str(model).startswith(provider + "/"):
+            models[role] = ""
     return pi_worker_catalog(config)
 
 
-def select_pi_model(config: dict[str, Any], model: str) -> dict[str, Any]:
+def select_pi_model(
+    config: dict[str, Any], model: str, *, role: str = "all"
+) -> dict[str, Any]:
     value = str(model or "").strip()
     catalog = pi_worker_catalog(config)
-    available = {
-        str(item.get("qualified_id") or "")
-        for provider in catalog.get("providers", [])
-        if isinstance(provider, dict) and provider.get("connected")
-        for item in provider.get("models", [])
-        if isinstance(item, dict)
-    }
-    if value not in available:
+    if value not in _available_models(catalog):
         raise ValueError("selected Pi Worker model is not connected or unavailable")
-    _settings(config)["model"] = value
-    return {**catalog, "selected_model": value}
+    settings = _settings(config)
+    _store_model_selection(settings, value, str(role or "all").strip().lower())
+    refreshed = pi_worker_catalog(config)
+    return {**refreshed, "selected_model": str(settings.get("model") or value)}
+
+
+def _store_model_selection(settings: dict[str, Any], value: str, role: str) -> None:
+    models = settings.setdefault("models", {})
+    if not isinstance(models, dict):
+        raise ValueError("Pi Worker role model configuration must be an object")
+    if role == "all":
+        settings["model"] = value
+        for name in _MODEL_ROLES:
+            models[name] = value
+    elif role in _MODEL_ROLES:
+        models[role] = value
+        if role == "worker" or not str(settings.get("model") or "").strip():
+            settings["model"] = value
+    else:
+        raise ValueError(f"unsupported Pi Worker model role: {role}")
 
 
 def pi_auth_path(settings: dict[str, Any]) -> Path:

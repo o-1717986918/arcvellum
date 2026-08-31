@@ -188,7 +188,7 @@ def _steward_runtime_settings(config: dict[str, Any]) -> tuple[Path, str, Path]:
     settings = settings if isinstance(settings, dict) else {}
     executable = locate_opencode(settings)
     if executable is None:
-        raise RuntimeError("bundled OpenCode Runner is not installed")
+        raise RuntimeError("optional external OpenCode Runner is not installed")
     models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
     model = str(models.get("steward") or settings.get("steward_model") or settings.get("model") or "").strip()
     if "/" not in model:

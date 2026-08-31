@@ -20,22 +20,21 @@ vi.mock("@/services/updater", () => ({
 
 const models = [
   { id: "deepseek-chat", qualified_id: "deepseek/deepseek-chat", name: "DeepSeek Chat" },
-  { id: "deepseek-v4-flash-free", qualified_id: "opencode/deepseek-v4-flash-free", name: "DeepSeek V4 Flash Free" },
+  { id: "deepseek-v4-flash", qualified_id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash" },
 ];
 
-function catalog(worker = "opencode/deepseek-v4-flash-free") {
+function catalog(worker = "deepseek/deepseek-v4-flash") {
   return {
     ok: true,
     selected_model: worker,
     selected_models: {
       worker,
-      advisor: "opencode/deepseek-v4-flash-free",
-      steward: "opencode/deepseek-v4-flash-free",
+      advisor: "deepseek/deepseek-v4-flash",
+      steward: "deepseek/deepseek-v4-flash",
     },
     available_model_count: models.length,
     providers: [
-      { id: "deepseek", name: "DeepSeek", connected: true, model_count: 1, models: [models[0]] },
-      { id: "opencode", name: "OpenCode Zen", connected: true, model_count: 1, models: [models[1]] },
+      { id: "deepseek", name: "DeepSeek", connected: true, model_count: 2, models },
     ],
     connection_presets: [],
   };
@@ -46,9 +45,9 @@ describe("settings model selection", () => {
     localStorage.clear();
     apiMock.mockReset();
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path === "/model-connections/opencode/catalog") return catalog();
+      if (path === "/model-connections/pi-worker/catalog") return catalog();
       if (path === "/application/info") return { paths: { projects_root: "C:\\ArcVellum\\Works" } };
-      if (path === "/model-connections/opencode/model" && init?.method === "PUT") {
+      if (path === "/model-connections/pi-worker/model" && init?.method === "PUT") {
         const payload = JSON.parse(String(init.body));
         return { catalog: catalog(payload.model), runtime: { pending_roles: [] } };
       }
@@ -67,7 +66,7 @@ describe("settings model selection", () => {
     await flushPromises();
 
     expect(apiMock).toHaveBeenCalledWith(
-      "/model-connections/opencode/model",
+      "/model-connections/pi-worker/model",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ model: "deepseek/deepseek-chat", role: "worker" }),

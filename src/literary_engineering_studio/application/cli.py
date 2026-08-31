@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     runner_probe.add_argument("--runner", choices=["opencode", "claude-code", "codex-cli"], required=True)
     runner_probe.add_argument("--model", default="")
     runner_probe.add_argument("--timeout", type=int, default=90)
-    opencode_install = sub.add_parser("opencode-install", help="Install and verify the pinned bundled OpenCode Runner.")
+    opencode_install = sub.add_parser("opencode-install", help="Install the optional external OpenCode compatibility adapter.")
     opencode_install.add_argument("--destination", default="")
     prompt_eval = sub.add_parser("prompt-eval", help="Run deterministic and optional live semantic prompt regressions.")
     prompt_eval.add_argument("--output", default="")

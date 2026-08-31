@@ -10,7 +10,7 @@ import { validateReasoningBudget } from "./reasoning-budget.ts";
 import { runWorker } from "./worker.ts";
 import { runConversation } from "./conversation.ts";
 
-const VERSION = "0.99.2";
+const VERSION = "0.99.3";
 const DEFAULT_STATES = ["asset-creation-agent-task", "canon-review-agent-task", "candidate-review"];
 
 async function main(): Promise<number> {

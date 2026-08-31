@@ -65,6 +65,7 @@ class PiWorkerControlTests(unittest.TestCase):
                 result = control.pi_worker_catalog(config)
 
         self.assertEqual(result["selected_model"], "deepseek/deepseek-v4-flash")
+        self.assertEqual(result["selected_models"]["advisor"], "deepseek/deepseek-v4-flash")
         self.assertEqual(result["auth_path"], "自定义本机凭证库")
         self.assertNotIn(str(root), json.dumps(result, ensure_ascii=False))
 
@@ -96,6 +97,7 @@ class PiWorkerControlTests(unittest.TestCase):
                     "pi-worker": {
                         "auth_path": str(auth),
                         "model": "deepseek/deepseek-v4-flash",
+                        "models": {"worker": "deepseek/deepseek-v4-flash", "advisor": "deepseek/deepseek-v4-flash"},
                     }
                 }
             }
@@ -110,6 +112,31 @@ class PiWorkerControlTests(unittest.TestCase):
 
         self.assertNotIn("deepseek", stored)
         self.assertEqual(config["agent_runners"]["pi-worker"]["model"], "")
+        self.assertEqual(config["agent_runners"]["pi-worker"]["models"]["advisor"], "")
+
+    def test_role_model_selection_does_not_replace_other_roles(self):
+        config = {
+            "agent_runners": {
+                "pi-worker": {
+                    "model": "deepseek/deepseek-v4-flash",
+                    "models": {
+                        "worker": "deepseek/deepseek-v4-flash",
+                        "advisor": "deepseek/deepseek-v4-flash",
+                    },
+                }
+            }
+        }
+        connected = {**CATALOG, "selected_model": "deepseek/deepseek-v4-flash"}
+        with patch.object(control, "pi_worker_catalog", return_value=connected):
+            control.select_pi_model(
+                config,
+                "deepseek/deepseek-v4-flash",
+                role="advisor",
+            )
+
+        models = config["agent_runners"]["pi-worker"]["models"]
+        self.assertEqual(models["worker"], "deepseek/deepseek-v4-flash")
+        self.assertEqual(models["advisor"], "deepseek/deepseek-v4-flash")
 
 
 if __name__ == "__main__":

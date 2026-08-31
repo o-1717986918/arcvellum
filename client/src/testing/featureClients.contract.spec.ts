@@ -54,7 +54,7 @@ describe("feature clients over MockFeatureTransport", () => {
 
   it("keeps settings offline and persists explicit role model selection", async () => {
     const { transport, clients } = createFeatureClientHarness();
-    transport.respond("PUT", "/model-connections/opencode/model", { selected_model: "deepseek/deepseek-chat" });
+    transport.respond("PUT", "/model-connections/pi-worker/model", { selected_model: "deepseek/deepseek-chat" });
 
     await expect(clients.settings.bootstrapDesktopSession()).resolves.toBeUndefined();
     await clients.settings.selectModel("deepseek/deepseek-chat", "worker");

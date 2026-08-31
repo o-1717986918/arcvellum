@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/o-1717986918/arcvellum?display_name=tag&sort=semver)](https://github.com/o-1717986918/arcvellum/releases)
 [![License](https://img.shields.io/github/license/o-1717986918/arcvellum)](LICENSE)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-2d7465)](https://github.com/o-1717986918/arcvellum/releases)
+[![macOS Preview](https://img.shields.io/badge/macOS-unsigned%20preview-b8954b)](https://github.com/o-1717986918/arcvellum/releases)
 
 ArcVellum 是一款面向小说、剧本与伪记录作品的本地 Agent 创作平台。它不把长篇创作当成一段越滚越长的聊天记录，而是把人物、世界观、场景、文风、字数预算、审查证据和正式正文维护成一个可持续推进的文学项目。
 
@@ -71,7 +72,7 @@ flowchart LR
 
     Engine --> Package["任务包\n允许资料、预期产物、约束"]
     Package --> Sandbox["隔离任务工作区"]
-    Sandbox --> Runtime["Agent Runtime\nOpenCode Worker / 兼容执行器"]
+    Sandbox --> Runtime["Agent Runtime\n内置 Pi Worker / 可选外部适配器"]
     Runtime --> Preflight["预检\nSchema、溯源、Lint、差异"]
     Preflight --> Engine
 
@@ -128,14 +129,14 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 | 产品界面 | Vue 3 + TypeScript + Vite | 星仪、阅读器、决策、设置与流式项目视图 |
 | 应用服务 | FastAPI + SSE | 本地认证 API、实时读模型、事件流与项目控制 |
 | 文学工程内核 | Python CLI | 路线状态机、任务包、Schema、门禁、审计与交付准备 |
-| Agent Runtime | 内置 Pi Worker + OpenCode Runner | 受控文学任务执行、权限隔离、独立主创与审查 Profile |
-| 模型连接 | Runner Provider Catalog | 常用厂商预设、按角色选模、OpenAI 兼容自定义端点 |
+| Agent Runtime | 内置 Pi Worker + 可选外部适配器 | 受控文学任务执行、权限隔离、独立主创与审查 Profile |
+| 模型连接 | Pi Provider Catalog | 常用厂商预设、按角色持久选模、OpenAI 兼容自定义端点 |
 | 项目格式 | 人类可读文件 + 账本 | Canon、人物、场景、Review 和交付物的长期保存 |
 | 交付 | Markdown/DOCX 管线 | 过滤流程痕迹后的完整作品输出 |
 
 ### 模型连接不锁定厂商
 
-内置 Runner 提供 DeepSeek、智谱 AI、阿里云百炼、Moonshot、MiniMax、SiliconFlow、OpenAI、Anthropic、Google、OpenRouter、Groq 等常用预设，也支持自定义 OpenAI-compatible 接口。
+内置 Pi Worker 提供 DeepSeek、智谱 AI、阿里云百炼、Moonshot、MiniMax、SiliconFlow、OpenAI、Anthropic、Google、OpenRouter、Groq 等常用预设，也支持自定义 OpenAI-compatible 接口。OpenCode 仍可作为显式启用的外部兼容适配器，但不再是默认运行时或安装包依赖。
 
 模型选择按角色持久保存。切换模型时，未来的空闲 Worker 会更新为新选择，正在运行的任务不会被粗暴中断。凭证由 Runner 的认证机制管理，不进入项目文件、任务包、普通日志或 Studio 常规配置。
 
@@ -143,17 +144,21 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 
 ### Windows 桌面端
 
-1. 下载 [ArcVellum v0.99.0 Windows x64 安装程序](https://github.com/o-1717986918/arcvellum/releases/download/v0.99.0/ArcVellum_0.99.0_x64-setup.exe)，或前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 查看全部版本。
+1. 前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 下载最新 Windows x64 安装程序。
 2. 启动 ArcVellum。默认作品库为 `Documents/ArcVellum/Works`，也可在设置中调整。
 3. 打开 **设置 -> 连接与模型**，连接模型服务并为不同角色选择模型。
 4. 新建作品，写下创作大方向与约束，再选择协作、监督自动或全自动推进方式。
 5. 通过星仪理解项目，通过阅读器阅读已晋升正文，通过“交付”导出完整作品。
 
-安装包包含本地应用服务、文学工程内核、Pi Worker 及其固定运行时和 OpenCode Runner；无需预先安装 Python、Node.js、Rust、浏览器或其他 Agent 平台。模型推理仍需要用户自行选择并授权的模型服务或本地端点。
+安装包包含本地应用服务、文学工程内核、Pi Worker 及其固定 Node 运行时；无需预先安装 Python、Node.js、Rust、浏览器、OpenCode 或其他 Agent 平台。模型推理仍需要用户自行选择并授权的模型服务或本地端点。
+
+### macOS 预览包
+
+CI 同时构建 Apple Silicon 与 Intel 两种 DMG。当前资产明确标记为 `unsigned-preview`，用于验证架构、界面和本地运行链；在完成 Developer ID 签名与 Apple notarization 之前，它不等同于面向普通用户的正式 macOS 稳定版。
 
 ### 自动更新
 
-ArcVellum 的 Windows Release 包含安装包、Tauri 更新验签文件、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。当前正式版本为 **v0.99.0**。
+ArcVellum 的 Windows Release 包含安装包、Tauri 更新验签文件、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。最新版本以 Releases 页面为准。
 
 ## 开发者入口
 
