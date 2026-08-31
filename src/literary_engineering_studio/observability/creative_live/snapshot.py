@@ -149,10 +149,24 @@ def _usage(events: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         data = item.get("data") if isinstance(item.get("data"), dict) else {}
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-        total_tokens += int(usage.get("total_tokens") or 0)
-        cost += float(data.get("cost_usd") or 0)
+        total_tokens += _safe_non_negative_int(usage.get("total_tokens"))
+        cost += _safe_non_negative_float(data.get("cost_usd"))
         requests += 1
     return {"total_tokens": total_tokens, "cost_usd": round(cost, 8), "updates": requests}
+
+
+def _safe_non_negative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_non_negative_float(value: Any) -> float:
+    try:
+        return max(0.0, float(value or 0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _route_title(route: str) -> str:

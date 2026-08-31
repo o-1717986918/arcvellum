@@ -13,6 +13,43 @@ from literary_engineering_studio.runtime.resources import ResourceClaim, project
 
 
 class DurableJobTests(unittest.TestCase):
+    def test_persisted_events_keep_usage_metrics_and_redact_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            run = store.create_autopilot_run(
+                "C:/work",
+                mode="full_auto",
+                runtime="pi-worker",
+                policy={"mode": "full_auto"},
+            )
+            store.append_autopilot_event(
+                run["run_id"],
+                "usage.updated",
+                {
+                    "usage": {
+                        "input_tokens": 120,
+                        "output_tokens": 30,
+                        "total_tokens": 150,
+                    },
+                    "max_tokens": 4_000,
+                    "access_token": "private-provider-token",
+                    "api_key": "private-provider-key",
+                    "client_secret": "private-client-secret",
+                    "secret_key": "private-secret-key",
+                },
+            )
+
+            event = store.autopilot_events_since(run["run_id"])[-1]
+
+            self.assertEqual(event["data"]["usage"]["input_tokens"], 120)
+            self.assertEqual(event["data"]["usage"]["output_tokens"], 30)
+            self.assertEqual(event["data"]["usage"]["total_tokens"], 150)
+            self.assertEqual(event["data"]["max_tokens"], 4_000)
+            self.assertEqual(event["data"]["access_token"], "[REDACTED]")
+            self.assertEqual(event["data"]["api_key"], "[REDACTED]")
+            self.assertEqual(event["data"]["client_secret"], "[REDACTED]")
+            self.assertEqual(event["data"]["secret_key"], "[REDACTED]")
+
     def test_latest_autopilot_event_filters_type_and_returns_latest(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary) / "studio.sqlite3")

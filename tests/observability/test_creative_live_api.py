@@ -52,6 +52,34 @@ class CreativeLiveApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["revisions"][0]["artifact_id"], artifact["artifact_id"])
 
+    def test_snapshot_api_survives_legacy_redacted_usage_events(self) -> None:
+        store = self.client.app.state.lifecycle.persistence.facade
+        run = store.create_autopilot_run(
+            str(self.project),
+            mode="full_auto",
+            runtime="pi-worker",
+            policy={"mode": "full_auto"},
+        )
+        store.append_autopilot_event(
+            run["run_id"],
+            "usage.updated",
+            {
+                "usage": {"total_tokens": "[REDACTED]"},
+                "cost_usd": "[REDACTED]",
+            },
+        )
+
+        response = self.client.get(
+            "/creative-live", params={"project_root": str(self.project)}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.assertEqual(
+            response.json()["usage"],
+            {"total_tokens": 0, "cost_usd": 0.0, "updates": 1},
+        )
+
     def test_project_stream_starts_with_snapshot_then_real_event(self) -> None:
         self._publish_preview("流式候选。", revision=1)
         with self.client.stream(

@@ -56,7 +56,7 @@ def _public_request(request: dict[str, Any]) -> dict[str, Any]:
 def _redact(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: "[REDACTED]" if any(token in key.lower() for token in ("secret", "token", "password", "api_key")) else _redact(item)
+            key: "[REDACTED]" if _is_sensitive_key(key) else _redact(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -64,6 +64,29 @@ def _redact(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_redact(item) for item in value]
     return value
+
+
+def _is_sensitive_key(key: Any) -> bool:
+    """Distinguish credentials from public token-usage telemetry.
+
+    Token counts and budgets are ordinary numeric observability fields.  The
+    former substring check redacted them together with bearer/API tokens,
+    which made persisted usage events impossible to project back into typed
+    read models.
+    """
+
+    normalized = str(key or "").strip().casefold().replace("-", "_")
+    public_token_metrics = {
+        "cache_read_tokens", "cache_write_tokens", "completion_tokens", "input_tokens",
+        "max_output_tokens", "max_tokens", "output_tokens", "prompt_tokens",
+        "reasoning_tokens", "token_budget", "token_count", "token_limit", "total_tokens",
+    }
+    if normalized in public_token_metrics:
+        return False
+    return any(
+        marker in normalized
+        for marker in ("api_key", "apikey", "credential", "password", "private_key", "secret", "token")
+    ) or normalized == "authorization"
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))

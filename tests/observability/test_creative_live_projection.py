@@ -80,6 +80,25 @@ class CreativeLiveProjectionTests(unittest.TestCase):
         self.assertEqual(snapshot["artifacts"][0]["content"], "第一段。第二段。")
         self.assertEqual(snapshot["artifacts"][0]["identity"], "candidate_written")
 
+    def test_snapshot_tolerates_legacy_redacted_usage_metrics(self):
+        snapshot = build_creative_live_snapshot(
+            ".",
+            [
+                {
+                    "sequence": 1,
+                    "event": "usage.updated",
+                    "at": "2026-08-31T00:00:00+00:00",
+                    "data": {
+                        "runtime_event_id": "usage-1",
+                        "usage": {"total_tokens": "[REDACTED]"},
+                        "cost_usd": "[REDACTED]",
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(snapshot["usage"], {"total_tokens": 0, "cost_usd": 0.0, "updates": 1})
+
     def test_projection_redacts_credentials_and_host_paths(self):
         event = project_runtime_event(
             {
