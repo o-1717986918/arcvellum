@@ -11,7 +11,7 @@ ArcVellum 是一款面向小说、剧本与伪记录作品的本地 Agent 创作
 
 它要解决的不是“让 AI 多写一点”，而是“让几十万字之后的作品，仍然记得自己为什么这样写”。
 
-![ArcVellum 叙事星仪](docs/images/arcvellum-orrery-v093.png)
+![ArcVellum v0.99.3 叙事星仪](docs/images/arcvellum-orrery-v0993.png)
 
 ## 写作者能得到什么
 
@@ -41,7 +41,7 @@ ArcVellum 的中心不是普通仪表盘，而是一片可平移、缩放、聚�
 
 通过门禁的场景会自动进入正式正文阅读器。阅读器支持连续/分章模式、全文搜索、目录、书签、阅读位置恢复、字号、行距、日夜主题与全屏。创作继续推进时，新晋升的正文会温和提示，不会把读者从当前页强行拽走。
 
-![ArcVellum 正文阅读器](docs/images/arcvellum-reader-v093.png)
+![ArcVellum v0.99.3 正文阅读器](docs/images/arcvellum-reader-v0993.png)
 
 ### 一位有边界的创作顾问
 
@@ -88,6 +88,23 @@ flowchart LR
 2. **Agent 只能在任务范围内工作。** 每个任务包都声明允许读取的资料和允许产出的文件。Agent 在沙箱里工作，只有通过预检的结果才能写回正式项目。
 3. **创作候选与项目事实必须分层。** 正文候选、Canon 提案、人物状态补丁与已晋升正文不是同一种东西，各自拥有不同的来源、审查和写回规则。
 4. **界面只展示真实状态。** 星仪、决策中心、阅读器、任务面板与进度条都投影自同一份受内核验证的项目状态，而不是演示数据。
+
+## v0.99.3 技术基线
+
+| 能力 | 当前实现 |
+| --- | --- |
+| 正式文学路线 | 7 条：长篇规划、场景开发、来源导入、文风工程、人物与世界资产、审查审计、导出发布 |
+| 内置 Agent | Pi Worker，随桌面包提供固定 Node 运行时；OpenCode 仅保留为显式外部适配器 |
+| Agent 边界 | 双工作区、白名单资料、声明输出、确定性预检、事务写回与有限修复 |
+| 提示词工程 | Prompt v3 按 structured / planning / prose / review / style 等 Recipe 编译任务 |
+| 文学求解 | 字数预算、场景功能、角色推演、分支选择、节奏与衔接、Review CI、状态与 Canon 写回 |
+| 只读产品投影 | Narrative Projection 为星仪、正文、决策、档案和 Agent 运行中心提供统一状态 |
+| 连续验证样本 | 两章六场、30,080 个中文内容字符，完成审查、晋升、状态、Canon 与连续性闭环 |
+| 当前阶段 | Beta，继续积累多题材长篇、无人值守恢复、干净机器安装和 macOS 签名证据 |
+
+Pi Worker 继续采用“薄领域内核、强确定性宿主、量化后扩张”的专业化路线。正文提示示例由 189,908 字符降至 29,218 字符；现有结构化任务 A/B 样本中，总 Token 下降约 31%，成本下降约 28%，时长下降约 17%。审查任务总 Token 下降约 16%，时延仍需结合 Provider 往返与工具调用继续优化。完整决策与继续投资门槛见 [Pi Worker 专业化成本收益决策](docs/architecture/pi-worker-specialization-cost-benefit-decision.md)。
+
+![ArcVellum v0.99.3 Agent 运行中心](docs/images/arcvellum-agent-runtime-v0993.png)
 
 这使 ArcVellum 能同时保留文学创作的自由度与大型项目应有的约束力。
 
@@ -229,6 +246,7 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新�
 
 - [当前内核审查](docs/architecture/current-core-review.md)
 - [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
+- [Pi Worker 专业化成本收益决策](docs/architecture/pi-worker-specialization-cost-benefit-decision.md)
 - [模块目录](docs/architecture/module-catalog.md)
 - [Agent 面向接口开发标准](docs/architecture/agent-interface-development-standard.md)
 - [模块边界](docs/architecture/module-boundaries.md)
