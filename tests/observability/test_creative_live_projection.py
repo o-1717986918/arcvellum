@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from literary_engineering_studio.observability.creative_live.projector import (
     project_runtime_event,
@@ -133,6 +136,37 @@ class CreativeLiveProjectionTests(unittest.TestCase):
 
         self.assertEqual(event["artifact"]["identity"], "promoted")
         self.assertEqual(event["channel"], "artifact")
+
+    def test_exact_review_digest_advances_only_the_matching_candidate(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            review_path = root / "reviews" / "agent" / "scene_0001_scene_review.json"
+            review_path.parent.mkdir(parents=True)
+            review_path.write_text(json.dumps({
+                "schema": "scene_review.v1",
+                "scene_id": "scene_0001",
+                "candidate_sha256": "a" * 64,
+                "conclusion": "pass",
+                "summary": "人物选择与当前设定一致。",
+                "findings": [],
+            }), encoding="utf-8")
+            raw = [
+                _raw(1, "artifact.checkpoint.written", {
+                    "identity": "candidate_written", "sha256": "a" * 64,
+                }),
+                _raw(2, "artifact.checkpoint.written", {
+                    "path": "reviews/agent/scene_0001_scene_review.json",
+                    "kind": "review", "format": "json", "identity": "candidate_written",
+                    "sha256": "b" * 64,
+                }),
+            ]
+
+            snapshot = build_creative_live_snapshot(root, raw)
+            candidate = next(item for item in snapshot["artifacts"] if item["path"].startswith("drafts/"))
+
+            self.assertEqual(candidate["identity"], "semantic_review_passed")
+            self.assertEqual(snapshot["reviews"][0]["status"], "pass")
+            self.assertEqual(snapshot["reviews"][0]["message"], "人物选择与当前设定一致。")
 
 
 def _raw(sequence: int, event: str, changes: dict) -> dict:

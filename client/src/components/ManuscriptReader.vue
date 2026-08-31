@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-vue-next";
 import { deliveryClient } from "@/features/delivery/services/deliveryClient";
+import { useCreativeLiveStore } from "@/features/creative-live/stores/creativeLive";
 import { displayValue } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import { useReaderNavigationStore } from "@/stores/readerNavigation";
@@ -28,6 +29,7 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ modeChange: [mode: ReaderWindowMode] }>();
 const store = useAppStore();
+const creativeLive = useCreativeLiveStore();
 const readerNavigation = useReaderNavigationStore();
 const index = ref(0);
 const localMode = ref<ReaderWindowMode>(props.mode || (props.immersive ? "immersive" : "reading"));
@@ -77,6 +79,7 @@ watch(currentId, (unitId) => {
   readerNavigation.activate(unitId);
   void loadCurrent();
 }, { immediate: true });
+watch(() => store.currentProjectPath, (root) => { if (root) void creativeLive.connect(root); }, { immediate: true });
 watch([() => readerNavigation.requestSequence, () => units.value.length], () => {
   const requested = readerNavigation.requestedUnitId;
   if (!requested) return;
@@ -236,6 +239,10 @@ function chapterLabel(value: unknown): string {
   const labels: Record<string, string> = { promoted: "已晋升正文", chapter: "章节正文", exported: "已导出", published: "已发布" };
   return labels[text] || text || "正式正文";
 }
+
+function openCreativeLive(): void {
+  window.location.hash = "#/observatory";
+}
 </script>
 
 <template>
@@ -270,6 +277,11 @@ function chapterLabel(value: unknown): string {
         </button>
       </div>
     </header>
+
+    <button v-if="creativeLive.proseIsStreaming" class="reader-live-candidate" @click="openCreativeLive">
+      <span><i></i>一段新正文正在创作</span>
+      <strong>候选稿尚未晋升，点此查看实时形成与审查过程</strong>
+    </button>
 
     <div v-if="readerMode === 'peek'" class="reader-peek-body">
       <template v-if="current">

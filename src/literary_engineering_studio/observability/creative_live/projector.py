@@ -26,37 +26,45 @@ def project_runtime_event(
     source: str = "runtime",
 ) -> dict[str, Any]:
     event = canonical_runtime_event(str(raw.get("event") or "runtime.activity"))
-    data = public_runtime_data(raw.get("data") if isinstance(raw.get("data"), dict) else {})
-    if not isinstance(data, dict):
-        data = {}
-    sequence = max(0, int(raw.get("sequence") or 0))
+    data = _public_data(raw)
+    sequence = _non_negative_int(raw.get("sequence"))
     at = str(raw.get("at") or "")
     project = project_id(project_root)
-    channel = _channel(event)
-    visibility = _visibility(event)
     data.setdefault("title", _title(event, data))
     data.setdefault("message", _message(event, data))
-    artifact = _artifact(project, event, data)
-    event_id = str(data.get("runtime_event_id") or "") or _fallback_event_id(
-        source, event, sequence, at, data
-    )
+    event_id = _first_text(data, "runtime_event_id")
+    if not event_id:
+        event_id = _fallback_event_id(source, event, sequence, at, data)
+    context = _event_context(data)
     return CreativeLiveEvent.create(
         event_id=event_id,
         sequence=sequence,
         event=event if "." in event else f"runtime.{event}",
-        channel=channel,
-        visibility=visibility,
+        channel=_channel(event),
+        visibility=_visibility(event),
         durability=classify_runtime_event(event).value,
         at=at,
         project_id=project,
-        run_id=str(data.get("run_id") or data.get("controller_id") or ""),
-        session_id=str(data.get("session_id") or data.get("run_session_id") or ""),
-        task_id=str(data.get("task_id") or ""),
-        route=str(data.get("route") or ""),
-        attempt_id=str(data.get("attempt_id") or ""),
-        artifact=artifact,
+        artifact=_artifact(project, event, data),
         data=data,
+        **context,
     ).as_dict()
+
+
+def _public_data(raw: dict[str, Any]) -> dict[str, Any]:
+    source = raw.get("data")
+    safe = public_runtime_data(source if isinstance(source, dict) else {})
+    return safe if isinstance(safe, dict) else {}
+
+
+def _event_context(data: dict[str, Any]) -> dict[str, str]:
+    return {
+        "run_id": _first_text(data, "run_id", "controller_id"),
+        "session_id": _first_text(data, "session_id", "run_session_id"),
+        "task_id": _first_text(data, "task_id"),
+        "route": _first_text(data, "route"),
+        "attempt_id": _first_text(data, "attempt_id"),
+    }
 
 
 def _channel(event: str) -> EventChannel:
@@ -84,25 +92,46 @@ def _visibility(event: str) -> EventVisibility:
 
 
 def _artifact(project: str, event: str, data: dict[str, Any]) -> dict[str, Any] | None:
-    receipt = data.get("receipt") if isinstance(data.get("receipt"), dict) else {}
-    path = str(data.get("path") or receipt.get("target") or "")
-    if not path or not (
-        event.startswith(("artifact.", "file.", "writeback."))
-        or event == "mutation.receipt"
-    ):
+    receipt = _mapping(data.get("receipt"))
+    path = _first_text(data, "path") or _first_text(receipt, "target")
+    if not path or not _is_artifact_event(event):
         return None
-    identity = str(data.get("identity") or _identity(event, {**data, **receipt}))
-    attempt = str(data.get("attempt_id") or data.get("run_id") or receipt.get("run_id") or "")
+    combined = {**data, **receipt}
+    identity = _first_text(data, "identity") or _identity(event, combined)
+    attempt = _first_text(data, "attempt_id", "run_id") or _first_text(receipt, "run_id")
     return {
         "artifact_id": artifact_id(project, path, attempt),
         "path": path.replace("\\", "/"),
-        "kind": str(data.get("kind") or "agent-authored"),
-        "format": str(data.get("format") or _format(path)),
+        "kind": _first_text(data, "kind") or "agent-authored",
+        "format": _first_text(data, "format") or _format(path),
         "identity": identity,
-        "revision": max(0, int(data.get("revision") or 0)),
-        "digest": str(data.get("sha256") or data.get("digest") or receipt.get("result_sha256") or ""),
-        "characters": max(0, int(data.get("characters") or 0)),
+        "revision": _non_negative_int(data.get("revision")),
+        "digest": _first_text(data, "sha256", "digest") or _first_text(receipt, "result_sha256"),
+        "characters": _non_negative_int(data.get("characters")),
     }
+
+
+def _is_artifact_event(event: str) -> bool:
+    return event.startswith(("artifact.", "file.", "writeback.")) or event == "mutation.receipt"
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _first_text(source: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = str(source.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _non_negative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _identity(event: str, data: dict[str, Any]) -> str:

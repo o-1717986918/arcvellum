@@ -38,7 +38,7 @@ const workspaces = [
   { kind: "style", label: "文风", title: "打开文风工坊", icon: Fingerprint },
   { kind: "quality", label: "质量", title: "调整语言与审查规则", icon: ShieldCheck },
   { kind: "strategy", label: "策略", title: "查看创作计划与结构", icon: Waypoints },
-  { kind: "observatory", label: "观测", title: "打开 Agent 观测台", icon: Telescope },
+  { kind: "observatory", label: "现场", title: "打开创作现场", icon: Telescope },
   { kind: "archaeology", label: "考古", title: "从已有作品反向建立工程", icon: ScanSearch },
 ] as const;
 </script>

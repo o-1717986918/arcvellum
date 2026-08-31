@@ -17,7 +17,9 @@ import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
 import WorkspaceDock from "@/features/orrery/WorkspaceDock.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
+import { useOrreryCreativeLive } from "@/features/orrery/live/useOrreryCreativeLive";
 import { buildCreativeProgression } from "@/features/orrery/model/creativeProgression";
+import { grammarLabel } from "@/features/orrery/model/grammarPresentation";
 import { buildNarrativeSignalHierarchy, type OrrerySignalMode } from "@/features/orrery/model/narrativeSignalHierarchy";
 import { applyRelationLens } from "@/features/orrery/model/relationLens";
 import { viewBookmarkLabel, type OrreryHeatLens } from "@/features/orrery/model/exploration";
@@ -62,6 +64,10 @@ const comparedNodeIds = ref<string[]>([]);
 let appliedReaderUnitId = "";
 
 const projection = computed(() => spatial.projection);
+const { creativeLive, liveNodeIds, creativeLiveLabel, openCreativeLive } = useOrreryCreativeLive({
+  projectRoot: () => app.currentProjectPath, nodes: () => projection.value?.nodes || [],
+  openWorkspace: () => windows.openInstrument("observatory"), navigate: navigateNode,
+});
 const displayProjection = computed(() => projection.value
   ? applyRelationLens(projection.value, { hidden: hiddenRelationFamilies.value, solo: soloRelationFamily.value })
   : null);
@@ -369,18 +375,6 @@ function resetRelationLens(): void {
   soloRelationFamily.value = "";
 }
 
-function grammarLabel(grammar: SpatialGrammar): string {
-  const labels: Record<SpatialGrammar, string> = {
-    spine: "脊柱",
-    braid: "编织",
-    strata: "层室",
-    constellation: "星簇",
-    loop: "回环",
-    stage: "舞台",
-  };
-  return labels[grammar];
-}
-
 async function loadChoices(): Promise<void> {
   if (!app.currentProjectPath) {
     humanChoices.reset();
@@ -422,7 +416,7 @@ async function loadChoices(): Promise<void> {
     <OrreryAccessibleView v-else-if="displayProjection && listMode" :nodes="displayProjection.nodes" :selected-node-id="windows.selectedNodeId" @select="selectNode" />
     <div v-else-if="displayProjection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
       <NarrativeParallaxStage v-if="stageProjection" ref="stage" :projection="stageProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
-      <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :visible-node-ids="stageNodeIds" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" />
+      <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :visible-node-ids="stageNodeIds" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" :live-node-ids="liveNodeIds" />
       <CreativeProgressionLayer v-if="creativeProgression" :progression="creativeProgression" :anchors="anchors" @focus="focusProgressionNode" />
       <OrreryNodeOverlay
         :nodes="stageNodes"
@@ -430,6 +424,7 @@ async function loadChoices(): Promise<void> {
         :level="displayProjection.level"
         :motion-events="displayProjection.motion_events"
         :activities="displayProjection.activities"
+        :live-node-ids="liveNodeIds"
         :time-cursor="spatial.timeCursor"
         :time-window="spatial.timeWindow"
         :selected-node-id="windows.selectedNodeId"
@@ -482,6 +477,11 @@ async function loadChoices(): Promise<void> {
         :active-chapter-id="activeChapterId"
         @select="selectCharacter"
       />
+      <button class="orrery-creative-live-beacon" :class="{ active: creativeLive.snapshot?.status === 'active', blocked: creativeLive.snapshot?.status === 'blocked' }" title="打开创作现场并定位正在处理的作品节点" @click="openCreativeLive">
+        <span><i></i>{{ creativeLive.snapshot?.status === 'active' ? 'LIVE' : '现场' }}</span>
+        <strong>{{ creativeLiveLabel }}</strong>
+        <small>{{ creativeLive.activeArtifact?.identity === 'streaming_preview' ? `${creativeLive.activeArtifact.content.length.toLocaleString('zh-CN')} 字符正在形成` : '查看 Agent、正文与审查轨迹' }}</small>
+      </button>
       <button class="orrery-v3-progress-spindle" :class="{ 'is-calibrated': progress?.status === 'calibrated' }" title="查看作品总体进度" @click="windows.openInstrument('progress')">
         <span>WORK IN FORMATION</span>
         <strong>{{ Number.isFinite(overallProgress) ? `${overallProgress.toFixed(1)}%` : '待校准' }}</strong>

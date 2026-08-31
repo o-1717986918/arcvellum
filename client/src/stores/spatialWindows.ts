@@ -40,7 +40,7 @@ const INSTRUMENT_TITLES: Record<Exclude<SpatialWindowKind, "node">, string> = {
   style: "文风工作台",
   quality: "审查与质量",
   strategy: "创作策略",
-  observatory: "Agent 观测台",
+  observatory: "创作现场",
   archaeology: "作品反推",
 };
 

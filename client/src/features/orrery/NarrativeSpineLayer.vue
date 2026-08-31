@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { relationModeForLevel } from "@/features/orrery/model/relationLens";
+import { edgeCarriesLiveWork } from "@/features/orrery/live/liveEdgeState";
 import type { SpatialCompletionState, SpatialNarrativeEdge, SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
 
 type Anchor = { x: number; y: number; visible: boolean; scale: number };
@@ -13,6 +14,7 @@ const props = defineProps<{
   visibleNodeIds?: string[];
   activeCharacterId?: string;
   activeChapterId?: string;
+  liveNodeIds?: string[];
 }>();
 
 const host = ref<SVGSVGElement | null>(null);
@@ -34,6 +36,7 @@ const spineSegments = computed(() => spineClusters.value.slice(1).map((cluster, 
     id: `${previous.id}>${cluster.id}`,
     path: buildPath([previous.anchor, cluster.anchor]),
     completion: chapterCompletion(cluster),
+    live: cluster.members.some((member) => liveNodeIds.value.has(member.node.node_id)),
     ...chapterState(cluster.id),
   };
 }));
@@ -46,12 +49,14 @@ const chapterSpokes = computed(() => spineClusters.value.flatMap((cluster) => cl
     end: member.anchor,
     ...chapterState(cluster.id),
     completion: chapterCompletion(cluster),
+    live: liveNodeIds.value.has(member.node.node_id),
   }))));
 const nodesById = computed(() => new Map(props.projection.nodes.map((node) => [node.node_id, node])));
 const relationProfiles = computed(() => new Map(props.projection.relation_profiles.map((profile) => [profile.family, profile])));
 const activeChapterKey = computed(() => chapterKey(props.activeChapterId));
 const hasChapterFocus = computed(() => Boolean(activeChapterKey.value));
 const visibleNodeIds = computed(() => new Set(props.visibleNodeIds || props.projection.nodes.map((node) => node.node_id)));
+const liveNodeIds = computed(() => new Set(props.liveNodeIds || []));
 
 const characterRelations = computed(() => {
   return props.projection.edges
@@ -76,6 +81,7 @@ const localFlowPaths = computed(() => {
         type: edge.type,
         family: edge.relation_family,
         mode: edgeRelationMode(edge),
+        live: edgeCarriesLiveWork(edge, liveNodeIds.value),
         ...edgeChapterState(edge),
       } : null;
     })
@@ -103,6 +109,7 @@ const sceneEvidencePaths = computed(() => {
         family: edge.relation_family,
         mode: edgeRelationMode(edge),
         nodeType: evidenceNode.type,
+        live: edgeCarriesLiveWork(edge, liveNodeIds.value),
         ...edgeChapterState(edge),
       };
     })
@@ -127,9 +134,10 @@ const characterPaths = computed(() => characterRelations.value
       path: relationshipPath(source, target, edge.edge_id),
       color: threadColor(characterId),
       mode: edgeRelationMode(edge),
+      live: edgeCarriesLiveWork(edge, liveNodeIds.value),
     };
   })
-  .filter((item): item is { id: string; active: boolean; muted: boolean; path: string; color: string; mode: string } => Boolean(item))
+  .filter((item): item is { id: string; active: boolean; muted: boolean; path: string; color: string; mode: string; live: boolean } => Boolean(item))
   .sort((left, right) => Number(right.active) - Number(left.active)));
 
 onMounted(() => {
@@ -332,12 +340,12 @@ function threadColor(value: string): string {
       v-for="spoke in chapterSpokes"
       :key="spoke.id"
       class="narrative-chapter-spoke"
-      :class="{ active: spoke.active, muted: spoke.muted }"
+      :class="{ active: spoke.active, muted: spoke.muted, 'creative-live-edge': spoke.live }"
       :data-completion="spoke.completion"
       :d="`M ${spoke.start.x} ${spoke.start.y} L ${spoke.end.x} ${spoke.end.y}`"
     />
     <path v-if="spinePath" class="narrative-spine-foundation" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
-    <g v-for="segment in spineSegments" :key="segment.id" class="narrative-spine-segment" :class="{ active: segment.active, muted: segment.muted }" :data-completion="segment.completion">
+    <g v-for="segment in spineSegments" :key="segment.id" class="narrative-spine-segment" :class="{ active: segment.active, muted: segment.muted, 'creative-live-edge': segment.live }" :data-completion="segment.completion">
       <path class="narrative-spine-glow" :class="{ detail: isDetailView }" :d="segment.path" />
       <path class="narrative-spine-track" :class="{ detail: isDetailView }" :d="segment.path" />
       <path class="narrative-spine-signal" :class="{ detail: isDetailView }" :d="segment.path" />
@@ -351,7 +359,7 @@ function threadColor(value: string): string {
       v-for="connection in localFlowPaths"
       :key="connection.id"
       class="narrative-local-flow"
-      :class="{ active: connection.active, muted: connection.muted }"
+      :class="{ active: connection.active, muted: connection.muted, 'creative-live-edge': connection.live }"
       :data-level="projection.level"
       :data-type="connection.type"
       :data-family="connection.family"
@@ -362,7 +370,7 @@ function threadColor(value: string): string {
       v-for="connection in sceneEvidencePaths"
       :key="connection.id"
       class="narrative-evidence-flow"
-      :class="{ active: connection.active, muted: connection.muted }"
+      :class="{ active: connection.active, muted: connection.muted, 'creative-live-edge': connection.live }"
       :data-type="connection.type"
       :data-family="connection.family"
       :data-lod="connection.mode"
@@ -373,7 +381,7 @@ function threadColor(value: string): string {
       v-for="relation in characterPaths"
       :key="relation.id"
       class="narrative-character-thread"
-      :class="{ active: relation.active, muted: relation.muted }"
+      :class="{ active: relation.active, muted: relation.muted, 'creative-live-edge': relation.live }"
       data-family="character-scene"
       :data-lod="relation.mode"
       :stroke="relation.color"

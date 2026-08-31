@@ -10,5 +10,6 @@ import "./styles/orreryV3.css";
 import "./styles/typographicCelestialField.css";
 import "./styles/spatialOperatingSystem.css";
 import "./styles/spatialIdentity.css";
+import "./styles/creativeLive.css";
 
 createApp(App).use(createPinia()).use(router).mount("#app");

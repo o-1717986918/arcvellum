@@ -19,6 +19,7 @@ const props = defineProps<{
   level?: NarrativeFocusLevel;
   motionEvents?: SpatialNarrativeProjection["motion_events"];
   activities?: SpatialNarrativeProjection["activities"];
+  liveNodeIds?: string[];
   timeCursor?: number;
   timeWindow?: number;
 }>();
@@ -244,7 +245,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       v-for="node in visible"
       :key="node.node_id"
       class="orrery-v3-node"
-      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
+      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens), 'creative-live-active': liveNodeIds?.includes(node.node_id), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
       :data-status="node.status"
       :data-lod="lodFor(node)"
       :data-completion="node.completion_state"

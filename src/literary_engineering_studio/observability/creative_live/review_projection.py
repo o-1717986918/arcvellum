@@ -16,6 +16,9 @@ def review_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "title": (item.get("data") or {}).get("title"),
             "message": (item.get("data") or {}).get("message"),
             "passed": _passed(item),
+            "status": (item.get("data") or {}).get("status"),
+            "findings": (item.get("data") or {}).get("findings") or [],
+            "artifact_id": (item.get("artifact") or {}).get("artifact_id"),
         }
         for item in events
         if item.get("channel") == "review"

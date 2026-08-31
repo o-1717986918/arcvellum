@@ -23,6 +23,7 @@ class CreativeLiveRouterDependencies:
     jobs: Any
     autopilot: Any
     live_events: Any
+    context_ledgers: Any
     sse: Callable[[str, dict[str, Any], int | str | None], str]
 
 
@@ -63,7 +64,11 @@ def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRoute
         )
         if session is None:
             raise ValueError("creative session was not found")
-        return {"ok": True, "schema": "arcvellum/creative-live-session/v1", "session": session}
+        return {
+            "ok": True,
+            "schema": "arcvellum/creative-live-session/v1",
+            "session": {**session, "context": _context_summary(deps, session)},
+        }
 
     @router.get("/creative-live/artifacts/{artifact_id}/revisions")
     def creative_artifact_revisions(artifact_id: str, project_root: str):
@@ -135,6 +140,40 @@ def _revision_summary(item: dict[str, Any]) -> dict[str, Any]:
             "revision_id", "artifact_id", "event_id", "at", "identity",
             "digest", "characters", "finding_refs",
         )
+    }
+
+
+def _context_summary(
+    deps: CreativeLiveRouterDependencies, session: dict[str, Any]
+) -> dict[str, Any] | None:
+    ledger_id = str(session.get("context_ledger_id") or "")
+    digest = str(session.get("context_ledger_digest") or "")
+    if not ledger_id:
+        return {"available": False, "digest": digest, "entry_count": 0, "entries": []}
+    try:
+        ledger = deps.context_ledgers.read_context_ledger(ledger_id)
+    except (FileNotFoundError, ValueError):
+        return {"available": False, "digest": digest, "entry_count": 0, "entries": []}
+    entries = [_context_entry(item) for item in ledger.get("entries", []) if isinstance(item, dict)]
+    return {
+        "available": True,
+        "digest": str(ledger.get("digest") or digest),
+        "entry_count": len(entries),
+        "included_count": sum(1 for item in entries if item["included"]),
+        "character_count": sum(item["character_count"] for item in entries if item["included"]),
+        "entries": entries[:80],
+    }
+
+
+def _context_entry(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "title": str(item.get("title") or "创作资料"),
+        "purpose": str(item.get("purpose") or ""),
+        "partition": str(item.get("partition") or ""),
+        "character_count": max(0, int(item.get("character_count") or 0)),
+        "included": bool(item.get("included")),
+        "truncated": bool(item.get("truncated")),
+        "visibility": str(item.get("visibility_tier") or "authorized"),
     }
 
 

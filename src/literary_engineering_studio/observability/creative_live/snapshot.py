@@ -11,6 +11,7 @@ from .artifact_projection import reduce_artifacts
 from .contracts import project_id
 from .projector import project_runtime_event
 from .review_projection import review_events
+from .review_artifacts import apply_review_identities, project_review_artifacts
 from .transcript_projection import reduce_sessions
 
 
@@ -29,7 +30,10 @@ def build_creative_live_snapshot(
         for item in raw_events
     )
     visible = [item for item in projected if item.get("visibility") != "restricted"]
-    artifacts = reduce_artifacts(visible)
+    visible.extend(project_review_artifacts(project_root, visible))
+    visible = _unique_events(visible)
+    projected_reviews = [item for item in visible if item.get("channel") == "review"]
+    artifacts = apply_review_identities(reduce_artifacts(visible), projected_reviews)
     session_projection = reduce_sessions(visible, sessions)
     current_run = run or {}
     revision_source = {

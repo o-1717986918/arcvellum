@@ -365,6 +365,7 @@ def create_app(
                 jobs=jobs,
                 autopilot=autopilot,
                 live_events=lifecycle.live_events,
+                context_ledgers=lifecycle.persistence.context_ledgers,
                 sse=_sse,
             )
         )
