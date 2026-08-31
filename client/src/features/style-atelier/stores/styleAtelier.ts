@@ -217,7 +217,7 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
       project_root: projectRoot.value,
       author_id: authorId,
       profile_id: profileId,
-      runtime: "opencode",
+      runtime: "pi-worker",
     };
     await engineering.launch(() => advanceStyleProfile(payload));
   }
@@ -233,7 +233,7 @@ export const useStyleAtelierStore = defineStore("style-atelier", () => {
       project_root: projectRoot.value,
       author_id: authorId,
       profile_id: profileId,
-      runtime: "opencode",
+      runtime: "pi-worker",
     };
     await engineering.launch(() => buildStyleProfile(payload));
   }

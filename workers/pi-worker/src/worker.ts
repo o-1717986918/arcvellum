@@ -60,6 +60,8 @@ export interface WorkerResult {
 }
 
 export async function runWorker(options: WorkerOptions, prompt: string, emit: RuntimeEventSink): Promise<WorkerResult> {
+	if (options.mode === "conversation") throw new Error("conversation mode must use the tool-free conversation runner");
+	const executionMode = options.mode;
 	const context = await loadTaskContext(
 		options.workspace,
 		options.allowedStates,
@@ -96,8 +98,8 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		lastToolError: null,
 		progressDigests: [],
 	};
-	const profile = workerProfile(context.agentRole, options.mode);
-	const identities = executionIdentities(context, profile, options.model, options.mode);
+	const profile = workerProfile(context.agentRole, executionMode);
+	const identities = executionIdentities(context, profile, options.model, executionMode);
 	const sessionId = identities.runSessionId;
 	const strategy = workerExecutionStrategy(context.agentRole);
 	const repairSources = options.mode === "repair"

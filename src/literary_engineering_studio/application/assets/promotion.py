@@ -16,6 +16,7 @@ from literary_engineering_studio_engine.public.literary import (
 )
 from literary_engineering_studio_engine.public.workflow import asset_candidate_states
 
+from ...runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME
 from .staleness import build_formal_stale_preview, build_formal_stale_propagation
 
 
@@ -131,7 +132,7 @@ class CandidatePromotionService:
         return {
             "project_root": str(root),
             "route": "character-and-world-assets",
-            "runtime": "opencode",
+            "runtime": DEFAULT_CREATIVE_RUNTIME,
             "task_id": "",
             "scene": candidate_id,
             "idempotency_key": f"archive-promotion:{candidate_id}:{preview_digest}",

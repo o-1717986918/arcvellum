@@ -57,7 +57,7 @@ export function runArchaeologyTask(
     body: JSON.stringify({
       project_root: projectRoot,
       route: "source-ingest",
-      runtime: "opencode",
+      runtime: "pi-worker",
     }),
   });
 }

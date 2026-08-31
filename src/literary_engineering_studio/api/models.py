@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME
+
 try:
     from pydantic import BaseModel
 except ImportError:  # pragma: no cover - keeps the base package importable
@@ -18,7 +20,7 @@ except ImportError:  # pragma: no cover - keeps the base package importable
 class WorkerRequest(BaseModel):
     project_root: str
     route: str = "scene-development"
-    runtime: str = "opencode"
+    runtime: str = DEFAULT_CREATIVE_RUNTIME
     task_id: str = ""
     scene: str = ""
     idempotency_key: str = ""
@@ -78,21 +80,21 @@ class StyleCompileRequest(BaseModel):
     display_name: str = ""
     training_sources: list[StyleSourceSelectionRequest]
     holdout_sources: list[StyleSourceSelectionRequest]
-    runtime: str = "opencode"
+    runtime: str = DEFAULT_CREATIVE_RUNTIME
 
 
 class StyleBuildRequest(BaseModel):
     project_root: str
     author_id: str
     profile_id: str
-    runtime: str = "opencode"
+    runtime: str = DEFAULT_CREATIVE_RUNTIME
 
 
 class StyleAdvanceRequest(BaseModel):
     project_root: str
     author_id: str
     profile_id: str
-    runtime: str = "opencode"
+    runtime: str = DEFAULT_CREATIVE_RUNTIME
 
 
 class ProjectCreateRequest(BaseModel):
@@ -228,7 +230,7 @@ class AutopilotPolicyRequest(BaseModel):
 
 class AutopilotStartRequest(BaseModel):
     project_root: str
-    runtime: str = "opencode"
+    runtime: str = DEFAULT_CREATIVE_RUNTIME
     authorized: bool = False
 
 

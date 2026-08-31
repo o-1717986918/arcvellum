@@ -161,7 +161,7 @@ function startCompilation(): void {
     display_name: displayName.value.trim(),
     training_sources: trainingSources.value,
     holdout_sources: holdoutSources.value,
-    runtime: "opencode",
+    runtime: "pi-worker",
   });
 }
 

@@ -1,4 +1,4 @@
-"""OpenCode runtime lifecycle for read-only advisor conversations."""
+"""Runtime-neutral lifecycle for read-only advisor conversations."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from ..integrations.opencode.opencode_binary import locate_opencode
 from ..integrations.opencode.opencode_server import OpenCodeServer
 from ..observability.runtime_events import normalize_opencode_event
 from ..process_manager import ProcessManager
+from ..runtime.role_conversation import RoleConversationGateway
+from ..runtime.runtime_selection import runtime_for_role
 from .answer_parser import parse_answer
 from .streaming import PublicAnswerStream
 
@@ -62,6 +64,15 @@ class AdvisorRuntimeExecutor:
         timeout: int,
         event_sink: Callable[[str, dict[str, Any]], None] | None,
     ) -> dict[str, Any]:
+        if runtime_for_role(self.config, "advisor") == "pi-worker":
+            return self._run_pi(
+                workspace,
+                project_root=project_root,
+                studio_session_id=studio_session_id,
+                prompt_factory=prompt_factory,
+                timeout=timeout,
+                event_sink=event_sink,
+            )
         executable, model = self._runner_config()
         run_root = self.data_root / "advisor" / "runs" / f"run-{int(time.time() * 1000)}"
         run_root.mkdir(parents=True, exist_ok=False)
@@ -106,6 +117,69 @@ class AdvisorRuntimeExecutor:
             if event_thread is not None:
                 event_thread.join(timeout=3)
             resources.close(self.runtime_pool)
+
+    def _run_pi(
+        self,
+        workspace: Path,
+        *,
+        project_root: Path,
+        studio_session_id: str,
+        prompt_factory: Callable[[bool], str],
+        timeout: int,
+        event_sink: Callable[[str, dict[str, Any]], None] | None,
+    ) -> dict[str, Any]:
+        stream = PublicAnswerStream(event_sink)
+        gateway = RoleConversationGateway(self.config, data_root=self.data_root)
+
+        def observe(event: str, data: dict[str, Any]) -> None:
+            if event == "agent.message.delta":
+                stream.feed(str(data.get("text") or ""))
+            elif event == "usage.updated" and event_sink is not None:
+                event_sink("advisor.usage", data)
+            elif event == "runner.warning" and event_sink is not None:
+                event_sink("advisor.notice", {"message": "顾问连接正在恢复，请稍候。"})
+
+        self.session_event_tracker(
+            project_root=str(project_root),
+            role="advisor",
+            runtime="pi-worker",
+            controller_id=studio_session_id,
+            event="advisor.session.started",
+            data={"public_message": "项目顾问正在阅读当前只读快照并组织答复。"},
+        )
+        try:
+            conversation = gateway.run(
+                workspace,
+                prompt_factory(False),
+                role="advisor",
+                timeout=timeout,
+                event_sink=observe,
+            )
+            result = parse_answer(conversation.answer)
+            stream.finish(result["message"])
+            self.session_event_tracker(
+                project_root=str(project_root),
+                role="advisor",
+                runtime="pi-worker",
+                controller_id=studio_session_id,
+                event="advisor.session.finished",
+                data={
+                    "session_id": conversation.run_id,
+                    "model": conversation.model,
+                    "status": "complete",
+                },
+            )
+            return result
+        except Exception:
+            self.session_event_tracker(
+                project_root=str(project_root),
+                role="advisor",
+                runtime="pi-worker",
+                controller_id=studio_session_id,
+                event="advisor.session.finished",
+                data={"status": "failed", "reason": "advisor_error"},
+            )
+            raise
 
     def _runner_config(self) -> tuple[Path, str]:
         raw_settings = self.config.get("agent_runners", {}).get("opencode", {})

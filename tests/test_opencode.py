@@ -246,6 +246,15 @@ class OpenCodeFoundationTests(unittest.TestCase):
     def test_disconnect_selected_provider_restores_starter_model(self):
         with tempfile.TemporaryDirectory() as temporary:
             config = default_config()
+            config["model_connections"]["connections"] = [
+                {
+                    "connection_id": "opencode-starter",
+                    "provider_family": "opencode",
+                    "connection_method": "external-agent-runtime",
+                    "agent_runner": "opencode",
+                    "selected_model": "opencode/big-pickle",
+                }
+            ]
             config["agent_runners"]["opencode"]["model"] = "deepseek/deepseek-chat"
             config["model_connections"]["connections"][0].update(
                 {"provider_family": "deepseek", "selected_model": "deepseek/deepseek-chat"}

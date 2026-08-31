@@ -44,7 +44,7 @@ export interface WorkerOptions {
 	allowedStates: string[];
 	reasoningBudget: ReasoningBudget;
 	providerReliability: ProviderReliabilityPolicy;
-	mode: "task" | "repair";
+	mode: "task" | "repair" | "conversation";
 	repairTargets: string[];
 	repairReferences: string[];
 }

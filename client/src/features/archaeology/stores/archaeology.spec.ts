@@ -58,7 +58,7 @@ describe("Project Archaeology store", () => {
         expect(JSON.parse(String(init.body))).toMatchObject({
           project_root: "C:\\ArcVellum\\潮线",
           route: "source-ingest",
-          runtime: "opencode",
+          runtime: "pi-worker",
         });
         return { job_id: "job-archaeology", status: "queued", revision: 1 };
       }

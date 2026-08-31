@@ -114,13 +114,13 @@ def _default_worker_config() -> dict[str, Any]:
 
 def _default_opencode_config() -> dict[str, Any]:
     return {
-        "enabled": True,
+        "enabled": False,
         "executable": "",
-        "model": "opencode/big-pickle",
+        "model": "",
         "models": {
-            "worker": "opencode/big-pickle",
-            "advisor": "opencode/big-pickle",
-            "steward": "opencode/big-pickle",
+            "worker": "",
+            "advisor": "",
+            "steward": "",
         },
         # Public endpoint/model definitions only. API keys remain in
         # OpenCode's credential store, never in this file.
@@ -142,6 +142,33 @@ def _default_opencode_config() -> dict[str, Any]:
     }
 
 
+def _default_agent_runtime_roles() -> dict[str, str]:
+    return {
+        role: "pi-worker"
+        for role in ("worker", "advisor", "steward", "style", "archaeology")
+    }
+
+
+def _default_model_connections() -> dict[str, Any]:
+    return {
+        "managed_by": "agent-runner",
+        "connections": [
+            {
+                "connection_id": "pi-worker-managed",
+                "provider_family": "pi-worker",
+                "connection_method": "embedded-agent-runtime",
+                "agent_runner": "pi-worker",
+                "authentication_state": "configuration-required",
+                "selected_model": "",
+                "available_models": [],
+                "endpoint_health": "probe-required",
+                "privacy_class": "cloud",
+                "detail": "Providers and models are managed by the embedded Pi Worker.",
+            }
+        ],
+    }
+
+
 def default_config() -> dict[str, Any]:
     return {
         "schema": CONFIG_SCHEMA,
@@ -160,6 +187,7 @@ def default_config() -> dict[str, Any]:
         },
         "worker": _default_worker_config(),
         "orchestration": _default_orchestration_config(),
+        "agent_runtime_roles": _default_agent_runtime_roles(),
         "agent_runners": {
             "opencode": _default_opencode_config(),
             "host-agent": {"enabled": True},
@@ -202,23 +230,7 @@ def default_config() -> dict[str, Any]:
                 "reasoning_visibility": "activity",
             },
         },
-        "model_connections": {
-            "managed_by": "agent-runner",
-            "connections": [
-                {
-                    "connection_id": "opencode-starter",
-                    "provider_family": "opencode",
-                    "connection_method": "bundled-free-provider",
-                    "agent_runner": "opencode",
-                    "authentication_state": "runner-managed",
-                    "selected_model": "opencode/big-pickle",
-                    "available_models": [],
-                    "endpoint_health": "probe-required",
-                    "privacy_class": "cloud",
-                    "detail": "Starter connection; availability and limits are verified by the bundled Runner."
-                }
-            ],
-        },
+        "model_connections": _default_model_connections(),
         "server": {"host": "127.0.0.1", "port": 8791},
         "updates": {
             "channel": "stable",

@@ -19,32 +19,9 @@ from .base import (
     executable_prefix,
 )
 from .pi_worker_failures import worker_failure_result
+from .pi_worker_protocol import WORKER_EVENTS, last_worker_result, public_event_data
 from .pi_worker_repair import run_pi_worker_repairs
 
-
-_WORKER_EVENTS = frozenset(
-    {
-        "runner.ready",
-        "runner.execution.identity",
-        "runner.strategy.bound",
-        "runner.session.created",
-        "runner.session.finished",
-        "runner.session.status",
-        "runner.provider.request.started",
-        "runner.reasoning.started",
-        "runner.reasoning.activity",
-        "runner.reasoning.completed",
-        "agent.message.delta",
-        "agent.message.completed",
-        "tool.started",
-        "tool.completed",
-        "tool.denied",
-        "usage.updated",
-        "file.changed",
-        "runner.worker.result",
-        "runner.warning",
-    }
-)
 _THINKING_LEVELS = frozenset({"off", "minimal", "low", "medium", "high", "xhigh", "max"})
 _DEFAULT_STATES = (
     "asset-creation-agent-task",
@@ -153,7 +130,7 @@ class PiWorkerRuntime(AgentRuntime):
             authentication_state="runner-managed-not-probed",
             provider=provider,
             selected_model=model,
-            execution_modes=("single-task", "bounded-tools", "jsonl", "embedded"),
+            execution_modes=("single-task", "bounded-tools", "tool-free-conversation", "jsonl", "embedded"),
             structured_output=True,
             streaming_events=True,
             model_selection=True,
@@ -197,10 +174,10 @@ class PiWorkerRuntime(AgentRuntime):
         if not isinstance(payload, dict):
             return (("runner.warning", {"kind": "worker_protocol", "detail": "non-object worker event omitted"}),)
         event = str(payload.get("event") or "")
-        if event not in _WORKER_EVENTS:
+        if event not in WORKER_EVENTS:
             return (("runner.warning", {"kind": "worker_protocol", "detail": "unknown worker event omitted"}),)
         data = payload.get("data")
-        return ((event, _public_event_data(data if isinstance(data, dict) else {})),)
+        return ((event, public_event_data(data if isinstance(data, dict) else {})),)
 
     def execute(
         self,
@@ -224,6 +201,7 @@ class PiWorkerRuntime(AgentRuntime):
         progress_digest_builder=None,
         allowed_states: Sequence[str] | None = None,
         initial_repair_targets: Sequence[str] | None = None,
+        worker_mode: str | None = None,
     ) -> RuntimeResult:
         overrides = {
             "max_repair_attempts": max_repairs,
@@ -235,6 +213,7 @@ class PiWorkerRuntime(AgentRuntime):
             "inter_event_timeout": inter_event_timeout,
             "provider_total_timeout": max(30, min(int(timeout), 900)),
             "allowed_states": tuple(allowed_states) if allowed_states is not None else None,
+            "worker_mode": worker_mode,
         }
         self._execution_overrides = {key: value for key, value in overrides.items() if value is not None}
         try:
@@ -314,7 +293,7 @@ class PiWorkerRuntime(AgentRuntime):
             self._execution_overrides = previous
 
     def _with_worker_result(self, result: RuntimeResult) -> RuntimeResult:
-        worker_result = _last_worker_result(result.output_path)
+        worker_result = last_worker_result(result.output_path)
         if not worker_result:
             return result
         status = str(worker_result.get("status") or "")
@@ -352,10 +331,10 @@ class PiWorkerRuntime(AgentRuntime):
         expected = self._execution_overrides.get("reasoning_budget")
         receipt = worker_result.get("reasoning_budget")
         if not isinstance(expected, Mapping):
-            return _public_event_data(receipt) if isinstance(receipt, dict) else {}
+            return public_event_data(receipt) if isinstance(receipt, dict) else {}
         if not isinstance(receipt, dict):
             return {"status": "missing", "provider_support": "unknown"}
-        public = _public_event_data(receipt)
+        public = public_event_data(receipt)
         requested = public.get("requested")
         matches = isinstance(requested, dict) and all(
             requested.get(key) == expected.get(key)
@@ -440,44 +419,6 @@ def _ensure_repair_operation_budget(
             operation_floor,
         )
         overrides["reasoning_budget"] = normalized
-
-
-def _public_event_data(value: dict[str, Any]) -> dict[str, Any]:
-    return {key: _public_value(item) for key, item in value.items() if not _secret_key(key)}
-
-
-def _public_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        return _public_event_data(value)
-    if isinstance(value, list):
-        return [_public_value(item) for item in value[:100]]
-    if isinstance(value, str):
-        return value[:20_000]
-    if value is None or isinstance(value, (bool, int, float)):
-        return value
-    return str(value)[:2_000]
-
-
-def _secret_key(value: object) -> bool:
-    normalized = str(value).lower().replace("-", "_")
-    return any(token in normalized for token in ("api_key", "apikey", "password", "secret", "credential", "auth"))
-
-
-def _last_worker_result(output_path: Path | None) -> dict[str, Any]:
-    if output_path is None or not output_path.is_file():
-        return {}
-    result: dict[str, Any] = {}
-    for line in output_path.read_text(encoding="utf-8", errors="replace").splitlines():
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict) or payload.get("event") != "runner.worker.result":
-            continue
-        data = payload.get("data")
-        if isinstance(data, dict):
-            result = _public_event_data(data)
-    return result
 
 
 def _positive_budget_value(budget: Mapping[str, object], name: str) -> int:

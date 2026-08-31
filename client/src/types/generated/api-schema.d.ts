@@ -2684,7 +2684,7 @@ export interface components {
             project_root: string;
             /**
              * Runtime
-             * @default opencode
+             * @default pi-worker
              */
             runtime: string;
         };
@@ -2952,7 +2952,7 @@ export interface components {
             project_root: string;
             /**
              * Runtime
-             * @default opencode
+             * @default pi-worker
              */
             runtime: string;
         };
@@ -2982,7 +2982,7 @@ export interface components {
             project_root: string;
             /**
              * Runtime
-             * @default opencode
+             * @default pi-worker
              */
             runtime: string;
         };
@@ -3006,7 +3006,7 @@ export interface components {
             project_root: string;
             /**
              * Runtime
-             * @default opencode
+             * @default pi-worker
              */
             runtime: string;
             /**
@@ -3128,7 +3128,7 @@ export interface components {
             route: string;
             /**
              * Runtime
-             * @default opencode
+             * @default pi-worker
              */
             runtime: string;
             /**

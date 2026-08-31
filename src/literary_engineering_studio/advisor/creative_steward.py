@@ -13,6 +13,8 @@ from .advisor_snapshot import create_advisor_snapshot, project_hashes
 from ..integrations.opencode.opencode_binary import locate_opencode
 from ..integrations.opencode.opencode_server import OpenCodeServer
 from ..process_manager import ProcessManager
+from ..runtime.role_conversation import RoleConversationGateway
+from ..runtime.runtime_selection import runtime_for_role
 
 
 DECISION_SCHEMA = "arcvellum/delegated-decision/v0.1"
@@ -78,6 +80,15 @@ class CreativeSteward:
         timeout: int,
         cancel_event: threading.Event | None,
     ) -> dict[str, Any]:
+        if runtime_for_role(self.config, "steward") == "pi-worker":
+            return self._run_pi(
+                workspace,
+                choice,
+                evidence_packet=evidence_packet,
+                project_direction=project_direction,
+                timeout=timeout,
+                cancel_event=cancel_event,
+            )
         executable, model, data_root = _steward_runtime_settings(self.config)
         run_root = data_root / "steward" / "runs" / f"run-{int(time.time() * 1000)}"
         run_root.mkdir(parents=True, exist_ok=False)
@@ -111,6 +122,61 @@ class CreativeSteward:
                 server.stop(handle)
             if manager is not None:
                 manager.shutdown()
+
+    def _run_pi(
+        self,
+        workspace: Path,
+        choice: dict[str, Any],
+        *,
+        evidence_packet: str,
+        project_direction: str,
+        timeout: int,
+        cancel_event: threading.Event | None,
+    ) -> dict[str, Any]:
+        data_root = Path(str(self.config.get("application", {}).get("data_root") or ".")).expanduser().resolve()
+        gateway = RoleConversationGateway(self.config, data_root=data_root)
+        prompt = _decision_prompt(choice, project_direction, evidence_packet)
+        self._emit("steward.session.started", {"runtime": "pi-worker"})
+        try:
+            conversation = gateway.run(
+                workspace,
+                prompt,
+                role="steward",
+                timeout=timeout,
+                event_sink=self._forward_pi_event,
+                cancel_event=cancel_event,
+            )
+            try:
+                result = _parse_decision(conversation.answer)
+                if not _has_declared_selection(result, choice):
+                    raise RuntimeError("Creative Steward selected an option outside the proposal")
+            except (RuntimeError, json.JSONDecodeError):
+                self._emit("steward.decision.repair_started", {"runtime": "pi-worker"})
+                repaired = gateway.run(
+                    workspace,
+                    prompt + "\n\nPrevious response was invalid.\n" + _decision_repair_prompt(choice),
+                    role="steward",
+                    timeout=timeout,
+                    event_sink=self._forward_pi_event,
+                    cancel_event=cancel_event,
+                )
+                result = _parse_decision(repaired.answer)
+                if not _has_declared_selection(result, choice):
+                    raise RuntimeError("Creative Steward selected an option outside the proposal after one repair attempt")
+            self._emit(
+                "steward.session.finished",
+                {"runtime": "pi-worker", "model": conversation.model, "status": "complete"},
+            )
+            return result
+        except Exception:
+            self._emit("steward.session.finished", {"runtime": "pi-worker", "status": "failed"})
+            raise
+
+    def _forward_pi_event(self, event: str, data: dict[str, Any]) -> None:
+        if event == "usage.updated":
+            self._emit("steward.usage", data)
+        elif event == "runner.warning":
+            self._emit("steward.notice", data)
 
     def _emit(self, event: str, data: dict[str, Any]) -> None:
         if self.event_sink is not None:

@@ -37,6 +37,7 @@ from .support import (
     _validate_autopilot_project,
 )
 from ..projections.core_read_models import current_choices
+from ..runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME, runtime_for_role
 from ..application.style.mount_service import StyleMountApplicationService
 from ..application.autopilot_dependencies import resolve_autopilot_persistence
 from ..application.failures import present_run
@@ -121,7 +122,7 @@ class AutopilotService:
             saved["run"] = renewed
         return saved
 
-    def start(self, project_root: Path, *, runtime: str = "opencode") -> dict[str, Any]:
+    def start(self, project_root: Path, *, runtime: str = DEFAULT_CREATIVE_RUNTIME) -> dict[str, Any]:
         root = project_root.expanduser().resolve()
         _validate_autopilot_project(root, runtime)
         active = self.runs.latest_autopilot_run(str(root))
@@ -429,7 +430,7 @@ class AutopilotService:
         self._session_event_tracker(
             project_root=str(run.get("project_root") or ""),
             role="worker",
-            runtime=str(run.get("runtime") or "opencode"),
+            runtime=str(run.get("runtime") or DEFAULT_CREATIVE_RUNTIME),
             controller_id=run_id,
             task_id=str(run.get("current_task_id") or ""),
             route=str(run.get("current_route") or ""),
@@ -456,7 +457,7 @@ class AutopilotService:
         self._session_event_tracker(
             project_root=str(run.get("project_root") or ""),
             role="steward",
-            runtime="opencode",
+            runtime=runtime_for_role(self.config, "steward"),
             controller_id=run_id,
             task_id=str(run.get("current_task_id") or ""),
             route=str(run.get("current_route") or ""),

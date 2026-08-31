@@ -89,6 +89,9 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config["agent_runners"]["pi-rpc"]["experiment_only"])
         self.assertTrue(config["agent_runners"]["pi-worker"]["enabled"])
         self.assertFalse(config["agent_runners"]["pi-worker"]["experiment_only"])
+        self.assertFalse(config["agent_runners"]["opencode"]["enabled"])
+        self.assertEqual(config["agent_runtime_roles"]["worker"], "pi-worker")
+        self.assertEqual(config["agent_runtime_roles"]["advisor"], "pi-worker")
         self.assertIn("model_connections", config)
         self.assertNotIn("runtimes", config)
         self.assertEqual(

@@ -45,7 +45,7 @@ describe("StyleEngineeringConsole", () => {
       display_name: "克制叙事",
       training_sources: [{ work_id: "work-one", source_id: "source-one" }],
       holdout_sources: [{ work_id: "work-one", source_id: "source-two" }],
-      runtime: "opencode",
+      runtime: "pi-worker",
     });
     wrapper.unmount();
   });

@@ -20,6 +20,7 @@ from literary_engineering_studio_engine.public.literary import (
     inspect_style_profile_version,
     plan_style_profile_version,
 )
+from ...runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME
 
 
 class StyleBuildIntentError(ValueError):
@@ -158,7 +159,7 @@ class StyleTaskService:
             {
                 "project_root": str(project),
                 "route": "style-engineering",
-                "runtime": runtime.strip() or "opencode",
+                "runtime": runtime.strip() or DEFAULT_CREATIVE_RUNTIME,
                 "task_id": issued.task_id,
                 "scene": relative,
                 "idempotency_key": f"style-task:{issued.task_id}:{contract_digest}",

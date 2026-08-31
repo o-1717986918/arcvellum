@@ -47,7 +47,7 @@ class ApiServerTests(unittest.TestCase):
         pi_status = next(item for item in payload["agent_runners"] if item["runner_id"] == "pi-rpc")
         self.assertFalse(pi_status["enabled"])
         self.assertFalse(pi_status["probed"])
-        self.assertEqual(payload["model_connections"][0]["connection_id"], "opencode-starter")
+        self.assertEqual(payload["model_connections"][0]["connection_id"], "pi-worker-managed")
         runners = self.client.get("/agent-runners").json()
         self.assertEqual(len(runners["items"]), 6)
         connections = self.client.get("/model-connections").json()

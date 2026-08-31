@@ -213,7 +213,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
                 raise ValueError("active jobs cannot be retried")
             request_data = dict(previous.get("request") or {})
             if payload.runtime.strip():
-                if payload.runtime not in {"opencode", "host-agent", "claude-code", "codex-cli"}:
+                if payload.runtime not in {"pi-worker", "opencode", "host-agent", "claude-code", "codex-cli"}:
                     raise ValueError("unknown Agent Runner")
                 request_data["runtime"] = payload.runtime
             request_data["idempotency_key"] = ""

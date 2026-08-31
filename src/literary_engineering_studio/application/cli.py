@@ -24,6 +24,7 @@ from ..runtime.sidecar_protocol import (
     write_ready_file as _write_ready_file,
 )
 from ..runtime.worker import AgentWorker
+from ..runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -257,7 +258,7 @@ def _task_arguments(parser: argparse.ArgumentParser, *, include_task_id: bool = 
     parser.add_argument(
         "--runtime",
         choices=["opencode", "host-agent", "claude-code", "codex-cli", "pi-worker"],
-        default="opencode",
+        default=DEFAULT_CREATIVE_RUNTIME,
     )
     parser.add_argument("--scene", default="")
     if include_task_id:

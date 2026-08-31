@@ -8,6 +8,7 @@ import type { ReasoningBudget, RuntimeEventSink, WorkerOptions } from "./contrac
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { validateReasoningBudget } from "./reasoning-budget.ts";
 import { runWorker } from "./worker.ts";
+import { runConversation } from "./conversation.ts";
 
 const VERSION = "0.99.2";
 const DEFAULT_STATES = ["asset-creation-agent-task", "canon-review-agent-task", "candidate-review"];
@@ -29,7 +30,9 @@ async function main(): Promise<number> {
 	};
 	try {
 		emit("runner.ready", { runner_id: "pi-worker", version: VERSION });
-		const result = await runWorker(options, prompt, emit);
+		const result = options.mode === "conversation"
+			? await runConversation(options, prompt, emit)
+			: await runWorker(options, prompt, emit);
 		emit("runner.worker.result", result as unknown as Record<string, unknown>);
 		return result.status === "completed" ? 0 : 2;
 	} catch (error) {
@@ -192,7 +195,7 @@ function isThinkingLevel(value: string): value is WorkerOptions["thinking"] {
 }
 
 function isWorkerMode(value: string): value is WorkerOptions["mode"] {
-	return value === "task" || value === "repair";
+	return value === "task" || value === "repair" || value === "conversation";
 }
 
 function sanitizeError(error: unknown, options: WorkerOptions): string {
