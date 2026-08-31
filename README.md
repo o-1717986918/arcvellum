@@ -1,6 +1,6 @@
 # ArcVellum
 
-> A literary engineering studio for long-form fiction: let agents create, let the system remember, and let people stay in command.
+> 面向长篇虚构创作的文学工程工作室：让 Agent 创作，让系统记忆，让人始终掌握作品方向。
 
 [![Release](https://img.shields.io/github/v/release/o-1717986918/arcvellum?display_name=tag&sort=semver)](https://github.com/o-1717986918/arcvellum/releases)
 [![License](https://img.shields.io/github/license/o-1717986918/arcvellum)](LICENSE)
@@ -42,6 +42,14 @@ ArcVellum 的中心不是普通仪表盘，而是一片可平移、缩放、聚�
 通过门禁的场景会自动进入正式正文阅读器。阅读器支持连续/分章模式、全文搜索、目录、书签、阅读位置恢复、字号、行距、日夜主题与全屏。创作继续推进时，新晋升的正文会温和提示，不会把读者从当前页强行拽走。
 
 ![ArcVellum v0.99.3 正文阅读器](docs/images/arcvellum-reader-v0993.png)
+
+### 看见 Agent 正在写什么
+
+v0.99.4 新增“创作现场”。正文候选会在 Pi Worker 写入正式文件之前以临时预览呈现，随后沿着候选写入、确定性预检、语义审读、修订和正式晋升逐级变化。左侧说明当前文学任务与产物身份，中间持续显示候选文本，右侧汇集审查证据、可见 Agent 会话、工具活动和修订差异。
+
+这条实时链与正式项目权力严格分开：断线只影响观察，不影响 Worker；临时候选不会进入阅读器、导出、Canon 或人物状态；重连会依靠事件游标与完整快照恢复，而不会要求模型重新生成内容。
+
+![ArcVellum v0.99.4 创作现场](docs/images/arcvellum-creative-live-v0994.png)
 
 ### 一位有边界的创作顾问
 
@@ -89,7 +97,7 @@ flowchart LR
 3. **创作候选与项目事实必须分层。** 正文候选、Canon 提案、人物状态补丁与已晋升正文不是同一种东西，各自拥有不同的来源、审查和写回规则。
 4. **界面只展示真实状态。** 星仪、决策中心、阅读器、任务面板与进度条都投影自同一份受内核验证的项目状态，而不是演示数据。
 
-## v0.99.3 技术基线
+## v0.99.4 技术基线
 
 | 能力 | 当前实现 |
 | --- | --- |
@@ -99,6 +107,7 @@ flowchart LR
 | 提示词工程 | Prompt v3 按 structured / planning / prose / review / style 等 Recipe 编译任务 |
 | 文学求解 | 字数预算、场景功能、角色推演、分支选择、节奏与衔接、Review CI、状态与 Canon 写回 |
 | 只读产品投影 | Narrative Projection 为星仪、正文、决策、档案和 Agent 运行中心提供统一状态 |
+| 创作可观测性 | Creative Live Event、项目级 SSE、候选正文快照、会话、Review、Diff 与用量投影 |
 | 连续验证样本 | 两章六场、30,080 个中文内容字符，完成审查、晋升、状态、Canon 与连续性闭环 |
 | 当前阶段 | Beta，继续积累多题材长篇、无人值守恢复、干净机器安装和 macOS 签名证据 |
 

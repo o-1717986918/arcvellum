@@ -76,7 +76,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `advisor/` | 只读项目顾问、persona、会话、动作建议与通知 | `advisor/service.py`、answer contract | read models、Runtime port、session repository | 直接写项目、隐式执行任意命令 | advisor/inbox/persona tests |
 | `preflight/` | 写回前确定性规范化与验证 | `preflight/task_preflight.py` facade | contracts、deterministic validators | 代替 Agent 作文学判断、偷偷修复失败产物 | preflight/worker writeback tests |
 | `projections/` | Library、Archive、Orrery、Agent 会话、模型连接等只读模型 | projection service/facade | read ports、Engine public facts | promotion、task completion、请求时隐藏写入 | API/read-model/observability tests |
-| `observability/` | session、context ledger、mutation receipt、telemetry、安全预览 | observability contracts/projectors | event/session ports | 正式 task mutation、保存秘密或隐藏推理正文 | `test_agent_observability.py`、context ledger tests |
+| `observability/` | session、context ledger、mutation receipt、telemetry、安全预览与 Creative Live 项目投影 | `observability/creative_live/*`、observability contracts/projectors | event/session ports | 正式 task mutation、保存秘密或隐藏推理正文 | `test_agent_observability.py`、`tests/observability/test_creative_live_*.py`、context ledger tests |
 
 ## 5. Runtime 与外部集成
 
@@ -128,6 +128,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `style-atelier` | `services/styleAtelierClient.ts` | 作家语料、文风工程、挂载 |
 | `delivery` | `services/deliveryClient.ts` | 交付就绪与导出 |
 | `settings` | `services/settingsClient.ts` | Runtime、Provider、模型和应用设置 |
+| `creative-live` | `services/creativeLiveClient.ts` | 候选产物、Agent 会话、审查证据、修订快照与项目级 SSE |
 
 通用 transport 位于 `client/src/services/api.ts`；跨 feature 用户命令位于 `workspaceCommands.ts`。新增 feature 必须提供 mock client/fixture，并在 `client/src/testing/featureClients.contract.spec.ts` 或同等级合同测试中验证。
 

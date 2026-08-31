@@ -1404,7 +1404,7 @@
   },
   "info": {
     "title": "ArcVellum",
-    "version": "0.99.2"
+    "version": "0.99.4"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3505,6 +3505,310 @@
           }
         },
         "summary": "Autopilot Status"
+      }
+    },
+    "/creative-live": {
+      "get": {
+        "operationId": "creative_live_creative_live_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creative Live"
+      }
+    },
+    "/creative-live/artifacts/{artifact_id}/revisions": {
+      "get": {
+        "operationId": "creative_artifact_revisions_creative_live_artifacts__artifact_id__revisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creative Artifact Revisions"
+      }
+    },
+    "/creative-live/artifacts/{artifact_id}/revisions/{revision_id}": {
+      "get": {
+        "operationId": "creative_artifact_revision_creative_live_artifacts__artifact_id__revisions__revision_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creative Artifact Revision"
+      }
+    },
+    "/creative-live/runs/{controller_id}/snapshot": {
+      "get": {
+        "operationId": "creative_run_snapshot_creative_live_runs__controller_id__snapshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "controller_id",
+            "required": true,
+            "schema": {
+              "title": "Controller Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creative Run Snapshot"
+      }
+    },
+    "/creative-live/sessions/{session_id}": {
+      "get": {
+        "operationId": "creative_session_creative_live_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creative Session"
+      }
+    },
+    "/creative-live/stream": {
+      "get": {
+        "operationId": "creative_live_stream_creative_live_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channels",
+            "required": false,
+            "schema": {
+              "default": "activity,artifact,review,transcript,usage,control",
+              "title": "Channels",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Events",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creative Live Stream"
       }
     },
     "/desktop/session": {

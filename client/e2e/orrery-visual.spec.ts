@@ -24,6 +24,37 @@ test.beforeAll(async ({ request }) => {
   await prepareVisualProjects(request);
 });
 
+// Exercise orbit interaction before the large semantic fields. Some Windows
+// WebGL drivers retain pressure from hundreds of prior animated DOM anchors
+// even after a test page closes, which makes a later pointer test needlessly
+// nondeterministic without increasing product coverage.
+test("left drag rotates empty sky while typographic nodes remain selectable", async ({ page }) => {
+  await openVisualProject(page, visualProjectRoot(100));
+  const canvas = page.locator(".narrative-parallax-stage canvas");
+  const node = page.locator(".orrery-v3-node").first();
+  // The spatial camera continuously animates node transforms. Dispatch the
+  // semantic click without asking Playwright to wait for a still frame.
+  await node.dispatchEvent("click");
+  await expect(node).toHaveClass(/selected/);
+
+  const canvasBounds = await canvas.boundingBox();
+  const dragPoint = canvasBounds
+    ? { x: canvasBounds.x + canvasBounds.width * 0.22, y: canvasBounds.y + canvasBounds.height * 0.52 }
+    : null;
+  expect(dragPoint).not.toBeNull();
+  if (!dragPoint) return;
+
+  const before = await nodeCenters(page, 4);
+  await page.mouse.move(dragPoint.x, dragPoint.y);
+  await page.mouse.down({ button: "left" });
+  await page.mouse.move(dragPoint.x + 190, dragPoint.y - 84, { steps: 14 });
+  await page.mouse.up({ button: "left" });
+  await page.waitForTimeout(180);
+  const after = await nodeCenters(page, 4);
+  expect(relativeGeometryDelta(before, after)).toBeGreaterThan(1.5);
+  await expect(canvas).toHaveCount(1);
+});
+
 for (const sceneCount of VISUAL_SIZES) {
   test(`${sceneCount} scenes keep the default field and semantic focus modes visually reachable`, async ({ page }, testInfo) => {
     testInfo.setTimeout(sceneCount >= 1000 ? 480_000 : 300_000);
@@ -112,33 +143,6 @@ test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ 
   await expect(stage).toBeVisible();
   await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1, { timeout: 120_000 });
   expect((await canvasPixelEvidence(page)).variance).toBeGreaterThan(20);
-});
-
-test("left drag rotates empty sky while typographic nodes remain selectable", async ({ page }) => {
-  await openVisualProject(page, visualProjectRoot(100));
-  const canvas = page.locator(".narrative-parallax-stage canvas");
-  const node = page.locator(".orrery-v3-node").first();
-  // The spatial camera continuously animates node transforms. Dispatch the
-  // semantic click without asking Playwright to wait for a still frame.
-  await node.dispatchEvent("click");
-  await expect(node).toHaveClass(/selected/);
-
-  const canvasBounds = await canvas.boundingBox();
-  const dragPoint = canvasBounds
-    ? { x: canvasBounds.x + canvasBounds.width * 0.22, y: canvasBounds.y + canvasBounds.height * 0.52 }
-    : null;
-  expect(dragPoint).not.toBeNull();
-  if (!dragPoint) return;
-
-  const before = await nodeCenters(page, 4);
-  await page.mouse.move(dragPoint.x, dragPoint.y);
-  await page.mouse.down({ button: "left" });
-  await page.mouse.move(dragPoint.x + 190, dragPoint.y - 84, { steps: 14 });
-  await page.mouse.up({ button: "left" });
-  await page.waitForTimeout(180);
-  const after = await nodeCenters(page, 4);
-  expect(relativeGeometryDelta(before, after)).toBeGreaterThan(1.5);
-  await expect(canvas).toHaveCount(1);
 });
 
 async function openVisualProject(page: Page, projectRoot: string): Promise<void> {

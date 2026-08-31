@@ -1,7 +1,7 @@
 {
   "name": "arcvellum-studio",
   "private": true,
-  "version": "0.99.3",
+  "version": "0.99.4",
   "scripts": {
     "api:openapi": "python scripts/export_studio_openapi.py --output contracts/openapi/arcvellum-studio-v1.json",
     "api:types": "openapi-typescript contracts/openapi/arcvellum-studio-v1.json -o client/src/types/generated/api-schema.d.ts",
@@ -13,7 +13,7 @@
     "client:benchmark:narrative": "vitest run --config client/vitest.config.ts client/src/features/orrery/layout/largeScaleLayout.spec.ts --reporter verbose",
     "client:test": "vitest run --configLoader runner --config client/vitest.config.ts",
     "client:test:watch": "vitest --configLoader runner --config client/vitest.config.ts",
-    "client:test:visual": "playwright test --config client/playwright.config.cjs",
+    "client:test:visual": "playwright test client/e2e/orrery-visual.spec.ts --config client/playwright.config.cjs && playwright test client/e2e/creative-live-visual.spec.ts --config client/playwright.config.cjs",
     "client:test:visual:headed": "playwright test --config client/playwright.config.cjs --headed",
     "pi-worker:install": "npm --prefix workers/pi-worker ci --ignore-scripts",
     "pi-worker:build": "npm --prefix workers/pi-worker run build",

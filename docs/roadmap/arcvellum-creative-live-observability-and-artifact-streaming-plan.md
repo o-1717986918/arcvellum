@@ -1,6 +1,6 @@
 # ArcVellum 创作现场、Agent 会话与产物流实施方案
 
-状态：Proposed  
+状态：Implemented in v0.99.4
 基线版本：ArcVellum v0.99.3  
 日期：2026-08-31  
 适用仓库：`literary-engineering-studio-v099-work`
@@ -939,3 +939,20 @@ CL-0 合同
 ```
 
 CL-6 星仪联动在创作现场稳定后实施。这样可以先证明事件、正文和正式身份正确，再投入高成本视觉动画。第一可用版本应优先让用户看见“正在写什么、为什么修改、何时成为正式正文”，随后再把这些事实转化为 ArcVellum 的空间叙事体验。
+
+## 19. v0.99.4 实施记录
+
+CL-0 至 CL-7 已按本文边界完成，正式文学状态机、Gate、Promotion、State/Canon 写回和 Reader 权威未被改写。
+
+| 批次 | 交付结果 | 主要证据 |
+| --- | --- | --- |
+| CL-0 | Python、TypeScript、Pi Worker 共用 Creative Live Event v1 与产物身份阶梯 | `protocol/observability/creative-live-event.schema.json`、三端合同测试 |
+| CL-1 | Runtime 临时事件进入项目频道和 Autopilot 实时频道，持久进度指纹不消费 delta | `automation/runtime_event_routing.py`、routing tests |
+| CL-2 | `write_expected_output` 支持有界候选预览；无工具参数流时发送诚实 snapshot | `workers/pi-worker/src/artifact-preview.ts`、Pi tests |
+| CL-3 | 项目 Snapshot、SSE、会话、上下文摘要与修订 API 可用，支持 `Last-Event-ID: live:<sequence>` | `api/routers/creative_live.py`、API reconnect tests |
+| CL-4 | candidate、review、revision、mutation receipt 与 promotion 由 exact artifact digest 关联 | 完整身份链 API/投影测试 |
+| CL-5 | 创作现场完成三栏工作台、Markdown 正文、审查轨迹、会话、工具、Diff 与用量展示 | Vue tests、Playwright 视觉证据 |
+| CL-6 | 星仪高亮当前节点与关系，Reader 只提示流式候选并继续只读已晋升正文 | Orrery/Reader binding tests |
+| CL-7 | Python、Pi、Vue、Rust、OpenAPI、视觉与桌面构建进入发布矩阵 | `docs/releases/v0.99.4-verification.md` |
+
+确定性最小闭环已覆盖同一产物的 `streaming_preview -> candidate_written -> semantic review -> revision -> mutation receipt -> promoted`，并验证 30,000 字符候选投影。真实 Pi 请求已经抵达配置的 DeepSeek Provider 与 `deepseek-v4-pro` 模型；外部账户返回 `402 Insufficient Balance`，因此该次环境验证只证明真实连接与错误归类，不作为“真实模型完整文学闭环成功”的证据。完整通过项与这一外部阻断均记录在发布验证文档中。

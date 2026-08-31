@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { BookOpenText, Bot, CircleHelp, Compass, FileDown, Gauge, RotateCw, ShieldCheck, Sparkles } from "lucide-vue-next";
+import { BookOpenText, Bot, CircleHelp, Compass, FileDown, Gauge, Radio, RotateCw, ShieldCheck, Sparkles } from "lucide-vue-next";
 import { settingsClient } from "@/features/settings/services/settingsClient";
 import { useAppStore } from "@/stores/app";
 
@@ -26,6 +26,7 @@ function replayTour(): void {
       <article><Gauge :size="20" /><h2>为什么会停住</h2><p>分支选择、设定写回、修订方向和最终交付会等待明确决定。阻塞不是故障，而是作品完整性正在被保护。</p></article>
       <article><Bot :size="20" /><h2>Agent 与模型</h2><p>Agent 执行受控任务，模型提供创作判断。它们只能读取任务包允许的资料，正式产物仍要经过验收与晋升。</p></article>
       <article><BookOpenText :size="20" /><h2>边写边读</h2><p>进入“阅读”即可按卷章连续阅读已经晋升的正文。候选稿、审查备注和项目标记不会混入阅读内容。</p></article>
+      <article><Radio :size="20" /><h2>创作现场</h2><p>从星仪打开“现场”，可以实时查看候选正文、审查轨迹、Agent 会话和修订差异。这里出现的临时文字只有完成晋升后才会进入正式阅读器。</p></article>
       <article><ShieldCheck :size="20" /><h2>你的数据在哪里</h2><p>作品默认保存在本机作品库。连接第三方模型时，当前任务所需材料会交给对应提供商，具体政策由提供商决定。</p></article>
       <article><FileDown :size="20" /><h2>交付与备份</h2><p>只有通过正式门禁的正文会进入交付。更新应用不会删除作品；卸载前仍建议备份作品库。</p></article>
     </div>

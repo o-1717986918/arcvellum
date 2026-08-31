@@ -4,6 +4,11 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = REPOSITORY_ROOT / "src"
 
 
 def main() -> int:
@@ -13,6 +18,7 @@ def main() -> int:
     args = parser.parse_args()
 
     os.environ.setdefault("LES_SKIP_PROVIDER_PROBE", "1")
+    sys.path.insert(0, str(SOURCE_ROOT))
     from literary_engineering_studio.api_server import create_app
 
     payload = create_app().openapi()
