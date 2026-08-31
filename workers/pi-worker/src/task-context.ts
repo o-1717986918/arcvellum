@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { OutputContract, TaskContext } from "./contracts.ts";
 import { normalizeRelativePath } from "./path-policy.ts";
+import { previewOutputContracts } from "./artifact-preview.ts";
 
 export async function loadTaskContext(
 	workspace: string,
@@ -113,6 +114,10 @@ export function publicTaskProjection(context: TaskContext): Record<string, unkno
 			path: item.path,
 			format: item.format,
 			schema_name: item.schemaName,
+		})),
+		output_preview: previewOutputContracts(context).map((item) => ({
+			path: item.path,
+			mode: item.previewMode,
 		})),
 		exact_on_demand: context.exactOnDemand,
 		word_count: context.wordCount,

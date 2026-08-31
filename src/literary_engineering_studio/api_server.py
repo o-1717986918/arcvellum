@@ -27,6 +27,7 @@ from .api.routers.projects import ProjectRouterDependencies, build_project_route
 from .api.routers.quality import QualityRouterDependencies, build_quality_router
 from .api.routers.advisor import AdvisorRouterDependencies, build_advisor_router
 from .api.routers.automation import AutomationRouterDependencies, build_automation_router
+from .api.routers.creative_live import CreativeLiveRouterDependencies, build_creative_live_router
 from .api.routers.workflow import WorkflowRouterDependencies, build_workflow_router
 from .api.routers.library import LibraryRouterDependencies, build_library_router
 from .api.routers.narrative import NarrativeRouterDependencies, build_narrative_router
@@ -353,6 +354,17 @@ def create_app(
                 lifecycle=lifecycle,
                 dashboard_snapshot=dashboard_snapshot,
                 build_agent_observability=lambda *args, **kwargs: build_agent_observability(*args, **kwargs),
+                sse=_sse,
+            )
+        )
+    )
+
+    app.include_router(
+        build_creative_live_router(
+            CreativeLiveRouterDependencies(
+                jobs=jobs,
+                autopilot=autopilot,
+                live_events=lifecycle.live_events,
                 sse=_sse,
             )
         )

@@ -14,6 +14,7 @@ from ..streaming import numeric_resume_cursor, sse_headers, stream_terminal
 from ..common import call_handler, project_root as resolve_project_root
 from ..models import AutopilotControlRequest, AutopilotPolicyRequest, AutopilotStartRequest
 from ...application.failures import present_run
+from ...observability.live_events import coalesce_live_events
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,7 @@ def _autopilot_stream_response(
 ) -> StreamingResponse:
     def stream():
         cursor = resume_after
+        live_cursor = 0
         previous_status_revision = ""
         last_heartbeat = time.monotonic()
         while True:
@@ -102,6 +104,14 @@ def _autopilot_stream_response(
                     "autopilot.status", {"run": projected_run, "cursor": cursor}, None
                 )
                 previous_status_revision = status_revision
+            live = deps.lifecycle.live_events.wait_since(
+                f"autopilot:{run_id}", live_cursor, timeout=0.1
+            )
+            for item in coalesce_live_events(live):
+                live_cursor = max(live_cursor, int(item.get("sequence") or 0))
+                yield deps.sse(
+                    str(item.get("event") or "runtime.activity"), item, None
+                )
             if run["status"] in {
                 "complete", "paused", "blocked", "cancelled", "failed"
             }:
@@ -110,7 +120,9 @@ def _autopilot_stream_response(
             if time.monotonic() - last_heartbeat >= 10:
                 yield ": autopilot heartbeat\n\n"
                 last_heartbeat = time.monotonic()
-            time.sleep(0.7)
+            deps.lifecycle.live_events.wait_since(
+                f"autopilot:{run_id}", live_cursor, timeout=0.7
+            )
 
     return StreamingResponse(
         stream(),

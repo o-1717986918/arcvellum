@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { RuntimeEventSink, WorkerState } from "./contracts.ts";
+import type { ArtifactPreviewExtractor } from "./artifact-preview.ts";
 
 export class WorkerEventAdapter {
 	private pendingReasoningEvents = 0;
@@ -13,15 +14,18 @@ export class WorkerEventAdapter {
 	private readonly sessionId: string;
 	private readonly state: WorkerState;
 	private readonly emit: RuntimeEventSink;
+	private readonly artifactPreview?: ArtifactPreviewExtractor;
 
 	constructor(
 		sessionId: string,
 		state: WorkerState,
 		emit: RuntimeEventSink,
+		artifactPreview?: ArtifactPreviewExtractor,
 	) {
 		this.sessionId = sessionId;
 		this.state = state;
 		this.emit = emit;
+		this.artifactPreview = artifactPreview;
 	}
 
 	handle(event: AgentEvent): void {
@@ -85,6 +89,7 @@ export class WorkerEventAdapter {
 
 	private handleMessageUpdate(value: unknown): void {
 		if (!isRecord(value)) return;
+		this.artifactPreview?.handle(value);
 		const type = String(value.type ?? "");
 		const delta = typeof value.delta === "string" ? value.delta : "";
 		if (type === "thinking_delta") {

@@ -13,6 +13,8 @@ class EventDurability(str, Enum):
 EPHEMERAL_RUNTIME_EVENTS = frozenset(
     {
         "agent.message.delta",
+        "artifact.preview.delta",
+        "artifact.preview.snapshot",
         "runner.reasoning.activity",
         "runner.session.status",
     }

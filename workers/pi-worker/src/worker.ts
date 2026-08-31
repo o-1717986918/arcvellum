@@ -3,6 +3,7 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { RuntimeEventSink, WorkerOptions, WorkerState } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { WorkerEventAdapter } from "./event-adapter.ts";
+import { ArtifactPreviewExtractor } from "./artifact-preview.ts";
 import {
 	providerBudgetSupport,
 	reasoningBudgetReceipt,
@@ -128,7 +129,8 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			reason: "provider-does-not-support-requested-level-without-upshift",
 		});
 	}
-	const eventAdapter = new WorkerEventAdapter(sessionId, state, emit);
+	const artifactPreview = new ArtifactPreviewExtractor(context, emit);
+	const eventAdapter = new WorkerEventAdapter(sessionId, state, emit, artifactPreview);
 	const tools = createWorkerTools(context, options, state, emit);
 	let requiredToolLease = "";
 	let agent!: Agent;

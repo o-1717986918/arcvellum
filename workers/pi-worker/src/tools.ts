@@ -7,6 +7,7 @@ import { atomicWriteAuthorizedFile, normalizeRelativePath, readAuthorizedFile, r
 import { publicTaskProjection } from "./task-context.ts";
 import { completeRepairReadHandoff } from "./repair-phase.ts";
 import { validateSemanticOutput } from "./semantic-output.ts";
+import { previewOutputContracts } from "./artifact-preview.ts";
 
 const EMPTY_PARAMETERS = Type.Object({});
 
@@ -17,6 +18,9 @@ export function createWorkerTools(
 	emit: RuntimeEventSink,
 ): AgentTool[] {
 	const ownedPaths = new Set(context.agentOwnedOutputs.map((item) => item.path));
+	const previewContracts = new Map(
+		previewOutputContracts(context).map((item) => [item.path, item]),
+	);
 	const readablePaths = new Set([...context.exactOnDemand, ...ownedPaths]);
 	const tools: AgentTool[] = [
 		{
@@ -98,6 +102,21 @@ export function createWorkerTools(
 					throw new Error("path is not an Agent-owned expected output");
 				}
 				for (const item of normalized) {
+					const preview = previewContracts.get(item.path);
+					if (preview && (preview.previewMode === "prose_stream" || preview.previewMode === "markdown_stream")) {
+						emit("artifact.preview.snapshot", {
+							path: item.path,
+							kind: preview.kind,
+							format: preview.format,
+							preview_mode: preview.previewMode,
+							identity: "streaming_preview",
+							revision: 1,
+							content: item.content,
+							characters: item.content.length,
+							replace: true,
+							source: "tool-commit",
+						});
+					}
 					await atomicWriteAuthorizedFile(options.workspace, item.path, item.content);
 					state.writtenPaths.add(item.path);
 					emit("file.changed", { path: item.path });
@@ -107,6 +126,19 @@ export function createWorkerTools(
 					options.workspace,
 					state.writtenPaths,
 				);
+				for (const item of normalized) {
+					const contract = previewContracts.get(item.path);
+					emit("artifact.checkpoint.written", {
+						path: item.path,
+						kind: contract?.kind ?? "agent-authored",
+						format: contract?.format ?? "text",
+						preview_mode: contract?.previewMode ?? "metadata_only",
+						identity: "candidate_written",
+						characters: item.content.length,
+						sha256: createHash("sha256").update(item.content, "utf8").digest("hex"),
+						validation_passed: state.lastValidation.passed,
+					});
+				}
 				return result({
 					message: "outputs written",
 					validation: state.lastValidation,

@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 import time
+import uuid
 from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Request
@@ -13,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from ..streaming import numeric_resume_cursor, sse_headers, stream_terminal
 
 from ...observability.event_policy import EventDurability, classify_runtime_event
+from ...observability.creative_live.contracts import project_channel
 from ...observability.context_ledger_tracking import persist_prepared_context
 from ...observability.mutation_receipt_tracking import (
     persist_mutation_receipt_event,
@@ -56,22 +58,37 @@ def launch_worker(deps: WorkerRouterDependencies, payload: WorkerRequest, *, res
 
     def execute(cancel_event) -> dict[str, Any]:
         def emit(event: str, data: dict[str, Any]) -> None:
+            project = str(resolve_project_root(payload.project_root))
+            enriched = {
+                **data,
+                "runtime_event_id": str(data.get("runtime_event_id") or uuid.uuid4().hex),
+                "controller_id": str(job["job_id"]),
+                "run_id": str(data.get("run_id") or job["job_id"]),
+                "task_id": str(data.get("task_id") or payload.task_id),
+                "route": str(data.get("route") or payload.route),
+                "runtime": str(data.get("runtime") or payload.runtime),
+                "attempt_id": str(
+                    data.get("attempt_id") or data.get("run_id") or job["job_id"]
+                ),
+                "source_event": event,
+            }
             deps.track_agent_session_event(
-                project_root=str(resolve_project_root(payload.project_root)),
+                project_root=project,
                 role="worker",
                 runtime=payload.runtime,
                 controller_id=str(job["job_id"]),
                 task_id=payload.task_id,
                 route=payload.route,
                 event=event,
-                data=data,
+                data=enriched,
             )
             channel = f"worker:{job['job_id']}"
             if classify_runtime_event(event) is EventDurability.EPHEMERAL:
-                deps.lifecycle.live_events.publish(channel, event, data)
+                deps.lifecycle.live_events.publish(channel, event, enriched)
             else:
-                deps.jobs.append_event(str(job["job_id"]), event, data)
+                deps.jobs.append_event(str(job["job_id"]), event, enriched)
                 deps.lifecycle.live_events.notify()
+            deps.lifecycle.live_events.publish(project_channel(project), event, enriched)
             if event == "sandbox.prepared":
                 deps.jobs.register_resources(
                     str(job["job_id"]),

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/creative-live-event/v1",
+  "title": "ArcVellum Creative Live Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "event_id",
+    "sequence",
+    "event",
+    "channel",
+    "visibility",
+    "durability",
+    "at",
+    "project_id",
+    "run_id",
+    "session_id",
+    "task_id",
+    "route",
+    "attempt_id",
+    "data"
+  ],
+  "properties": {
+    "schema": {"const": "arcvellum/creative-live-event/v1"},
+    "event_id": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 0},
+    "event": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+    "channel": {
+      "enum": ["activity", "transcript", "artifact", "review", "usage", "control"]
+    },
+    "visibility": {
+      "enum": ["user", "advanced", "diagnostic", "restricted"]
+    },
+    "durability": {"enum": ["ephemeral", "durable"]},
+    "at": {"type": "string", "format": "date-time"},
+    "project_id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "session_id": {"type": "string"},
+    "task_id": {"type": "string"},
+    "route": {"type": "string"},
+    "attempt_id": {"type": "string"},
+    "artifact": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["artifact_id", "path", "kind", "format", "identity", "revision"],
+      "properties": {
+        "artifact_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string"},
+        "kind": {"type": "string"},
+        "format": {"type": "string"},
+        "identity": {
+          "enum": [
+            "streaming_preview",
+            "candidate_written",
+            "deterministic_preflight_passed",
+            "semantic_review_passed",
+            "promoted",
+            "state_and_canon_applied",
+            "validation_failed",
+            "revision_streaming",
+            "revision_written",
+            "superseded",
+            "rejected"
+          ]
+        },
+        "revision": {"type": "integer", "minimum": 0},
+        "digest": {"type": "string"},
+        "characters": {"type": "integer", "minimum": 0}
+      }
+    },
+    "data": {"type": "object"}
+  }
+}

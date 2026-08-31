@@ -73,6 +73,7 @@ def build_application_container(
         execution_coordinator=ports.execution_coordinator,
         style_mount_service=style_mounts,
         prepared_context_cache=ports.prepared_context_cache,
+        live_events=ports.live_events,
     )
     return ApplicationContainer(
         config=config,
