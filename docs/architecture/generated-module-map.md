@@ -7,7 +7,7 @@
 |---|---:|---|---|---|---|
 | `src/literary_engineering_studio_engine/foundation` | 11 | Engine foundation | `package exports` | standard library | Studio runtime or UI |
 | `src/literary_engineering_studio_engine/tasking` | 21 | Formal task contracts | `tasking/__init__.py` | Engine foundation | Agent execution |
-| `src/literary_engineering_studio_engine/routes` | 49 | Formal route catalog | `routes/catalog.py` | tasking and literary services | Studio lifecycle |
+| `src/literary_engineering_studio_engine/routes` | 52 | Formal route catalog | `routes/catalog.py` | tasking and literary services | Studio lifecycle |
 | `src/literary_engineering_studio_engine/workflow` | 36 | Workflow projections | `workflow_state facade` | tasking and routes | Runtime adapters |
 | `src/literary_engineering_studio_engine/literary` | 169 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
 | `src/literary_engineering_studio_engine/prompting` | 11 | Prompt programs | `prompt registry/compiler` | literary contracts | Provider transport |

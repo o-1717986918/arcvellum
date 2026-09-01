@@ -4,6 +4,7 @@
 > 适用对象：维护者、代码 Agent、Runtime/Exporter/Read Model/前端 Feature 开发者
 > 机器生成的目录计数见 [generated-module-map.md](generated-module-map.md)，更细的历史拆分说明见
 > [module-boundaries.md](module-boundaries.md)。本文只回答“需求归谁、从哪里进入、不能越过什么边界”。
+> 已知报错或用户症状请先查 [故障反查与模块定位](troubleshooting-module-index.md)。
 
 ## 1. 如何使用本目录
 

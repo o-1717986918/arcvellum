@@ -5,6 +5,7 @@ ArcVellum is a local literary-engineering studio. Contributions should preserve 
 ## Before opening a pull request
 
 1. Locate the owner and stable entry in `docs/architecture/module-catalog.md`.
+   When starting from a runtime symptom, use `docs/architecture/troubleshooting-module-index.md` first.
 2. Follow `docs/architecture/agent-interface-development-standard.md` and record a Module Change Packet before editing.
 3. Create a focused branch from `main`; keep contract changes, adapter migrations, behavior changes, tests, and release metadata reviewable.
 4. Do not commit credentials, generated installers, local work projects, full prose fixtures, model transcripts, or private paths.
