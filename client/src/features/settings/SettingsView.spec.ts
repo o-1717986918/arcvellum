@@ -45,9 +45,9 @@ describe("settings model selection", () => {
     localStorage.clear();
     apiMock.mockReset();
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path === "/model-connections/pi-worker/catalog") return catalog();
+      if (path === "/model-connections/opencode/catalog") return catalog();
       if (path === "/application/info") return { paths: { projects_root: "C:\\ArcVellum\\Works" } };
-      if (path === "/model-connections/pi-worker/model" && init?.method === "PUT") {
+      if (path === "/model-connections/opencode/model" && init?.method === "PUT") {
         const payload = JSON.parse(String(init.body));
         return { catalog: catalog(payload.model), runtime: { pending_roles: [] } };
       }
@@ -66,7 +66,7 @@ describe("settings model selection", () => {
     await flushPromises();
 
     expect(apiMock).toHaveBeenCalledWith(
-      "/model-connections/pi-worker/model",
+      "/model-connections/opencode/model",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ model: "deepseek/deepseek-chat", role: "worker" }),

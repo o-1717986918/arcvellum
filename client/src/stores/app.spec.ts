@@ -103,7 +103,7 @@ describe("application store", () => {
     const store = useAppStore();
     await store.initialize();
     apiMock.mockImplementation(async (path: string) => {
-      if (path === "/model-connections/pi-worker/catalog") {
+      if (path === "/model-connections/opencode/catalog") {
         return {
           selected_model: "deepseek/deepseek-chat",
           selected_models: { worker: "deepseek/deepseek-chat" },
