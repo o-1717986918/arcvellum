@@ -18,6 +18,8 @@ from literary_engineering_studio_engine.public.workflow import (
 )
 from literary_engineering_studio_engine.public.literary import target_length_repair_pending
 from literary_engineering_studio_engine.public.projects import is_authorized_demo_reference
+from ..runtime.readiness import require_runtime_ready
+from ..runtime.runtime_selection import runtime_for_role
 
 
 PROGRESS_ROOTS = (
@@ -97,6 +99,18 @@ def _validate_autopilot_project(project: Path, runtime: str) -> None:
         raise ValueError("自动创作需要一个可用的 Agent Runtime。")
     if is_authorized_demo_reference(project):
         raise ValueError("授权演示母本只用于阅读和观察；请先复制为可编辑作品再开始自动创作。")
+
+
+def _validate_autopilot_runtime(
+    config: dict[str, Any], runtime: str, *, mode: str
+) -> None:
+    require_runtime_ready(config, runtime, role="worker")
+    if str(mode or "").strip().lower() == "full_auto":
+        require_runtime_ready(
+            config,
+            runtime_for_role(config, "steward"),
+            role="steward",
+        )
 
 
 def _project_progress_fingerprint(project: Path) -> str:

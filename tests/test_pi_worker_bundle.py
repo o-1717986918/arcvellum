@@ -40,7 +40,11 @@ class PiWorkerBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             destination = self._fixture(root)
-            payload = MODULE._receipt_payload(root=root, destination=destination)
+            payload = MODULE._receipt_payload(
+                root=root,
+                destination=destination,
+                target="windows-x64",
+            )
             (destination / MODULE.RECEIPT_NAME).write_text(
                 json.dumps(payload), encoding="utf-8"
             )

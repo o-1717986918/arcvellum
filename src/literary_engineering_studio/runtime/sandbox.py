@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 from typing import Any, Iterable, Mapping
+from uuid import uuid4
 
 from literary_engineering_studio_engine.public.projects import engine_root
 from ..contracts import TaskPackage
@@ -363,9 +364,9 @@ def _unexpected_changes(
 
 
 def _run_id(task_id: str) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", task_id).strip("-")[:48]
-    return f"{stamp}-{safe}"
+    return f"{stamp}-{uuid4().hex[:8]}-{safe}"
 
 
 def _project_key(project: Path) -> str:

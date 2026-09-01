@@ -92,6 +92,16 @@ class SandboxTests(unittest.TestCase):
         task.task_json_path.write_text(json.dumps(payload), encoding="utf-8")
         return load_task_package(root, task.task_json_path)
 
+    def test_generated_run_ids_are_unique_within_the_same_second(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
+            task = self._task(Path(temporary))
+
+            first = stage_task(task, Path(runs), runtime="host-agent")
+            second = stage_task(task, Path(runs), runtime="host-agent")
+
+            self.assertNotEqual(first.run_id, second.run_id)
+            self.assertNotEqual(first.run_root, second.run_root)
+
     def test_prepared_context_cache_reuses_only_exact_declared_content(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as runs:
             task = self._cacheable_task(Path(temporary))

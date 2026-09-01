@@ -39,6 +39,7 @@ from .support import (
     _parse_time,
     _pending_asset_dependency,
     _validate_autopilot_project,
+    _validate_autopilot_runtime,
 )
 from ..projections.core_read_models import current_choices
 from ..runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME, runtime_for_role
@@ -135,6 +136,7 @@ class AutopilotService:
         if active and active["status"] == "running":
             return active
         policy = self.policy(root)["policy"]
+        _validate_autopilot_runtime(self.config, runtime, mode=policy["mode"])
         run = self.runs.create_autopilot_run(str(root), mode=policy["mode"], runtime=runtime, policy=policy)
         self._launch(run["run_id"])
         return run
@@ -148,7 +150,13 @@ class AutopilotService:
         run_policy = run.get("policy") if isinstance(run.get("policy"), dict) else {}
         if str(run_policy.get("mode") or run.get("mode") or "") == "full_auto" and not authorized:
             raise ValueError("全自动交付需要在推进仪表中明确确认授权后才能继续。")
-        _validate_autopilot_project(Path(run["project_root"]), str(run.get("runtime") or ""))
+        runtime = str(run.get("runtime") or "")
+        _validate_autopilot_project(Path(run["project_root"]), runtime)
+        _validate_autopilot_runtime(
+            self.config,
+            runtime,
+            mode=str(run_policy.get("mode") or run.get("mode") or ""),
+        )
         quality_retry = str(run.get("stop_reason") or "") == "revision-limit"
         self.runs.update_autopilot_run(
             run_id,
