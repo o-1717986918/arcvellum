@@ -85,7 +85,8 @@ def prepare_story_architecture_review(project_root: Path) -> tuple[Path, Path]:
     target = review_path(root)
     target.parent.mkdir(parents=True, exist_ok=True)
     candidate_sha = _sha256(candidate)
-    if not target.exists():
+    existing = _read_json(target) if target.exists() else {}
+    if str(existing.get("candidate_sha256") or "") != candidate_sha:
         payload = {
             "schema": ARCHITECTURE_REVIEW_SCHEMA,
             "status": "pending_agent_judgment",
@@ -152,7 +153,38 @@ def story_architecture_task_status(project_root: Path, *, review: bool = False) 
     marker = agent_task_completion_status(sidecar, root=root)
     if marker.get("complete") is not True:
         return False, str(marker.get("message") or "story architecture sidecar pending")
-    return story_architecture_status(root, require_review=review)[:2]
+    if review:
+        complete, message, _verdict = story_architecture_review_status(root)
+        return complete, message
+    return story_architecture_status(root, require_review=False)[:2]
+
+
+def story_architecture_review_status(project_root: Path) -> tuple[bool, str, str]:
+    """Validate a completed review without treating ``revise`` as a final pass."""
+
+    root = project_root.resolve()
+    candidate = candidate_path(root)
+    review = review_path(root)
+    if not candidate.is_file() or not review.is_file():
+        return False, "story architecture candidate or review is missing", ""
+    candidate_payload = _read_json(candidate)
+    payload = _read_json(review)
+    if payload.get("schema") != ARCHITECTURE_REVIEW_SCHEMA:
+        return False, "story architecture review schema is invalid", ""
+    if str(payload.get("candidate_sha256") or "") != _sha256(candidate):
+        return False, "story architecture review is stale for current candidate", ""
+    writer = str(candidate_payload.get("writer_session_id") or "")
+    reviewer = str(payload.get("reviewer_session_id") or "")
+    if not writer or not reviewer or writer == reviewer:
+        return False, "story architecture review must use a different non-empty reviewer session", ""
+    verdict = str(payload.get("verdict") or "").lower()
+    if str(payload.get("status") or "").lower() != "complete" or verdict not in {
+        "pass",
+        "revise",
+        "block",
+    }:
+        return False, "story architecture review has no completed terminal verdict", verdict
+    return True, f"story architecture review recorded: {verdict}", verdict
 
 
 def _meaningful(value: Any) -> bool:

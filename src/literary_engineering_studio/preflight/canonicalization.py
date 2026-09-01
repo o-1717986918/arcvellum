@@ -220,7 +220,7 @@ def _canonicalize_story_architecture_metadata(task: TaskPackage, sandbox: Sandbo
     candidate_rel = "plot/story_architecture.candidate.json"
     review_rel = "reviews/longform/story_architecture_review.json"
     changes: list[dict[str, str]] = []
-    if state == "story-architecture-agent-task":
+    if state in {"story-architecture-agent-task", "story-architecture-revision"}:
         path = sandbox.workspace / candidate_rel
         payload = _read_object(path)
         if payload is not None:

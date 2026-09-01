@@ -16,6 +16,12 @@ _AGENT_SOURCES = {
         "plot/story_architecture.candidate.json",
         "reviews/longform/story_architecture_review.json",
     ),
+    "story-architecture-revision": (
+        "project.yaml",
+        "plot/outline.md",
+        "plot/story_architecture.candidate.json",
+        "reviews/longform/story_architecture_review.json",
+    ),
     "budget-agent-task": (
         "project.yaml",
         "plot/outline.md",

@@ -13,7 +13,11 @@ import re
 
 from ...agent_tasks import agent_task_completion_status
 from ...longform_materializer import longform_materialization_status, planned_longform_outputs
-from ...story_architecture import story_architecture_status, story_architecture_task_status
+from ...story_architecture import (
+    story_architecture_review_status,
+    story_architecture_status,
+    story_architecture_task_status,
+)
 from ...task_paths import TASK_SCHEMA, normalize_relative_path, now, relative_path, resolve_project_path, task_id
 from .context_policy import agent_context_payload, apply_agent_context_policy
 
@@ -141,8 +145,33 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
             "expected_outputs": ["reviews/longform/story_architecture_review.json", "reviews/longform/story_architecture_review.agent_completion.json"],
             "hard_constraints": ["Reviewer session must differ from writer session and must not edit the candidate in place."],
             "style_constraints": [],
-            "validation_gates": ["independent review binds to exact candidate sha256", "verdict is pass", "sidecar completion exists"],
-            "next_allowed_states": ["word-budget-file"],
+            "validation_gates": ["independent review binds to exact candidate sha256", "terminal verdict is recorded", "sidecar completion exists"],
+            "next_allowed_states": ["story-architecture-revision", "word-budget-file"],
+        },
+        "story-architecture-revision": {
+            "task_type": "platform-agent-revision",
+            "prompt_asset_id": "route.longform-planning.story-architecture.execute.v1",
+            "command": "",
+            "source_paths": [
+                "project.yaml",
+                "plot/outline.md",
+                "plot/story_architecture.candidate.json",
+                "plot/story_architecture.agent_tasks.md",
+                "reviews/longform/story_architecture_review.json",
+            ],
+            "expected_outputs": [
+                "plot/story_architecture.candidate.json",
+                "plot/story_architecture.agent_completion.json",
+            ],
+            "repair_targets": ["plot/story_architecture.candidate.json"],
+            "hard_constraints": [
+                "Revise the exact story architecture candidate against every required_changes item; do not edit the review verdict.",
+                "Preserve every valid architecture field and make a substantive causal change rather than paraphrasing the same answer.",
+                "A fresh independent review bound to the revised candidate digest is mandatory before word budgeting.",
+            ],
+            "style_constraints": [],
+            "validation_gates": ["architecture candidate changed", "candidate remains complete", "fresh independent review is required"],
+            "next_allowed_states": ["story-architecture-review-prepare"],
         },
         "word-budget-file": {
             "task_type": "deterministic-cli",
@@ -341,6 +370,12 @@ def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[
         passed, message = story_architecture_task_status(root, review=True)
         if not passed:
             errors.append(message)
+    if current_state == "story-architecture-revision":
+        errors.extend(_story_architecture_revision_review_errors(root, task))
+        errors.extend(_repair_targets_changed(root, task, "story-architecture revision"))
+        candidate_passed, candidate_message = story_architecture_task_status(root, review=False)
+        if not candidate_passed:
+            errors.append(candidate_message)
     planning_states = {
         "word-budget-file", "budget-agent-task", "budget-review", "scene-inventory-agent-task",
         "scene-inventory-review", "chapter-obligation-agent-task", "chapter-obligation-review", "planning-materialization",
@@ -440,6 +475,37 @@ def _repair_targets_changed(root: Path, task: dict[str, object], label: str) -> 
         if path.is_file() and previous and _file_sha256(path) != previous:
             return []
     return [f"{label} did not change any declared planning candidate; review-only edits cannot complete revision"]
+
+
+def _story_architecture_revision_review_errors(
+    root: Path,
+    task: dict[str, object],
+) -> list[str]:
+    review, error = _read_optional_json(
+        root / "reviews" / "longform" / "story_architecture_review.json"
+    )
+    if error:
+        return [error]
+    before = task.get("repair_target_sha256_before_revision")
+    prior = (
+        str(before.get("plot/story_architecture.candidate.json") or "").strip().lower()
+        if isinstance(before, dict)
+        else ""
+    )
+    errors: list[str] = []
+    if review.get("schema") != "literary-engineering-workbench/story-architecture-review/v1":
+        errors.append("story architecture revision review schema is invalid")
+    if not prior or str(review.get("candidate_sha256") or "").strip().lower() != prior:
+        errors.append("story architecture revision review is not bound to the pre-revision candidate")
+    if str(review.get("status") or "").strip().lower() != "complete" or str(
+        review.get("verdict") or ""
+    ).strip().lower() != "revise":
+        errors.append("story architecture revision requires a completed revise verdict")
+    writer = str(review.get("writer_session_id") or "").strip()
+    reviewer = str(review.get("reviewer_session_id") or "").strip()
+    if not writer or not reviewer or writer == reviewer:
+        errors.append("story architecture revision requires an independent pre-revision review")
+    return errors
 
 
 def _file_sha256(path: Path) -> str:

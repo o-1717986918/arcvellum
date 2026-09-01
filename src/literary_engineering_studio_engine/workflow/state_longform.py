@@ -5,7 +5,12 @@ from pathlib import Path
 
 from ..agent_tasks import agent_task_completion_status
 from ..longform_materializer import longform_materialization_status
-from ..story_architecture import story_architecture_task_status
+from ..story_architecture import (
+    candidate_path,
+    review_path,
+    story_architecture_review_status,
+    story_architecture_task_status,
+)
 from .state_common import _file_step, _longform_review_step, _read_json, _rel
 def _longform_state(root: Path) -> dict[str, object]:
     steps = [
@@ -13,6 +18,7 @@ def _longform_state(root: Path) -> dict[str, object]:
         _story_architecture_step(root, review=False),
         _story_architecture_review_prepare_step(root),
         _story_architecture_step(root, review=True),
+        _story_architecture_revision_step(root),
         _word_budget_file_step(root),
         _longform_task_step(
             "budget-agent-task",
@@ -75,6 +81,21 @@ def _story_architecture_prepare_step(root: Path) -> dict[str, object]:
 
 def _story_architecture_review_prepare_step(root: Path) -> dict[str, object]:
     path = root / "reviews" / "longform" / "story_architecture_review.agent_tasks.md"
+    candidate = candidate_path(root)
+    review = review_path(root)
+    current = (
+        candidate.is_file()
+        and review.is_file()
+        and str(_read_json(review).get("candidate_sha256") or "") == _sha256(candidate)
+    )
+    if not current:
+        return {
+            "key": "story-architecture-review-prepare",
+            "status": "missing",
+            "path": _rel(path, root),
+            "message": "story architecture review must be prepared for the exact current candidate",
+            "next_action": "run prepare-story-architecture-review for the current candidate digest",
+        }
     return _file_step(
         "story-architecture-review-prepare",
         path,
@@ -95,6 +116,47 @@ def _story_architecture_step(root: Path, *, review: bool) -> dict[str, object]:
             else "complete the story architecture candidate and its platform-agent sidecar"
         ),
     }
+
+
+def _story_architecture_revision_step(root: Path) -> dict[str, object]:
+    complete, message, verdict = story_architecture_review_status(root)
+    if not complete:
+        return {
+            "key": "story-architecture-revision",
+            "status": "blocked",
+            "path": "plot/story_architecture.candidate.json",
+            "message": message,
+            "next_action": "complete the exact-candidate architecture review before revision",
+        }
+    if verdict == "pass":
+        return {
+            "key": "story-architecture-revision",
+            "status": "pass",
+            "path": "plot/story_architecture.candidate.json",
+            "message": "story architecture requires no revision",
+            "next_action": "",
+        }
+    if verdict == "block":
+        return {
+            "key": "story-architecture-revision",
+            "status": "blocked",
+            "path": "reviews/longform/story_architecture_review.json",
+            "message": "story architecture review blocked further planning",
+            "next_action": "resolve the blocking architecture decision with the user",
+        }
+    return {
+        "key": "story-architecture-revision",
+        "status": "blocked",
+        "path": "plot/story_architecture.candidate.json",
+        "message": "story architecture review requires a writer revision",
+        "next_action": "revise the exact architecture candidate against every required change",
+    }
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _word_budget_file_step(root: Path) -> dict[str, object]:
