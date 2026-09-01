@@ -12,6 +12,7 @@ from literary_engineering_studio_engine.literary.style.review import (
     prepare_style_semantic_review,
     style_review_machine_values,
 )
+from literary_engineering_studio_engine.literary.style.evaluator import StyleEvalOptions, evaluate_style
 
 
 def _quality_prompt() -> str:
@@ -186,6 +187,50 @@ class StyleEvaluationLoopTests(unittest.TestCase):
             stale = _style_engineering_state(root, profile)
             self.assertEqual(stale["current_step"], "style-review-task-file")
 
+
+class StyleEvaluatorMetricFallbackTests(unittest.TestCase):
+    def test_builtin_qualitative_profile_uses_reference_metric_targets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = root / "style" / "builtin"
+            profile.mkdir(parents=True)
+            (profile / "style_metrics.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "arcvellum/builtin-style-metrics/v1",
+                        "preset_id": "clear-plain-zh",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            reference = root / "reference.txt"
+            reference.write_text(
+                "暗灯沿旧路移动。风声擦过墙角，河水带着冷意。灯光看不清门后的人影。\n",
+                encoding="utf-8",
+            )
+            candidate = root / "candidate.txt"
+            candidate.write_text(
+                "细灯贴着新街穿行。雨声绕过屋檐，石阶染上凉意。灯火照不到窗边的暗影。\n",
+                encoding="utf-8",
+            )
+            out_dir = profile / "evaluation_results" / "test"
+
+            result = evaluate_style(
+                StyleEvalOptions(
+                    profile_dir=profile,
+                    reference=reference,
+                    candidate=candidate,
+                    mode="blind-review",
+                    out_dir=out_dir,
+                )
+            )
+            payload = json.loads((out_dir / "style_eval_current.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(result.overall_score, payload["overall_score"])
+            self.assertGreater(payload["scores"]["punctuation"]["score"], 0)
+            self.assertGreater(payload["scores"]["sensory_profile"]["score"], 0)
 
 if __name__ == "__main__":
     unittest.main()

@@ -106,9 +106,15 @@ def _score_style_match(
     candidate_text: str,
 ) -> dict[str, object]:
     rhythm = _rhythm_score(profile, reference, candidate)
-    punctuation = _counter_similarity_score(profile.get("punctuation_top", []), candidate.get("punctuation_top", []))
+    punctuation = _counter_similarity_score(
+        profile.get("punctuation_top") or reference.get("punctuation_top", []),
+        candidate.get("punctuation_top", []),
+    )
     lexical = _weighted_overlap_score(reference.get("top_bigrams", []), candidate.get("top_bigrams", []))
-    sensory = _dict_vector_score(profile.get("sensory_counts", {}), candidate.get("sensory_counts", {}))
+    sensory = _dict_vector_score(
+        profile.get("sensory_counts") or reference.get("sensory_counts", {}),
+        candidate.get("sensory_counts", {}),
+    )
     narrative = _density_score(profile, reference, candidate)
     structure = _structure_score(reference, candidate)
     originality = _originality_score(reference_text, candidate_text)
