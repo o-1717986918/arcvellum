@@ -34,7 +34,10 @@ def canonicalize_style_machine_metadata(
     if not profile_dir:
         return []
     changes: list[dict[str, str]] = []
-    if state != "style-review-agent-task":
+    # A canonicalizer may only rewrite artifacts owned by the active task.
+    # During style-eval-agent-task the prompt manifest is read-only evidence;
+    # touching it here creates an unexpected sandbox change after restoration.
+    if state in {"style-prompt-agent-task", "style-prompt-quality", "style-eval-revision"}:
         changes.extend(_canonicalize_prompt(task, sandbox, profile_dir))
     if state in {"style-eval-agent-task", "style-eval-revision"}:
         changes.extend(_canonicalize_evaluation(task, sandbox, profile_dir))

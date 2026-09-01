@@ -10,6 +10,7 @@ from literary_engineering_studio_engine.style_engineering_route import build_tas
 from literary_engineering_studio_engine.workflow_state import _style_engineering_state
 from literary_engineering_studio_engine.literary.style.review import (
     prepare_style_semantic_review,
+    style_eval_generation_digest_errors,
     style_review_machine_values,
 )
 
@@ -61,6 +62,48 @@ def _write_current_score(profile: Path, score: float) -> None:
 
 
 class StyleEvaluationLoopTests(unittest.TestCase):
+    def test_formal_session_candidate_digest_does_not_depend_on_future_score(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project_yaml = root / "project.yaml"
+            project_yaml.write_text("title: 潮线\n", encoding="utf-8")
+            profile = _profile(root)
+            holdout = profile / "evaluation_inputs" / "holdout" / "reference.txt"
+            holdout.parent.mkdir(parents=True)
+            holdout.write_text("潮声落在石阶上。\n" * 20, encoding="utf-8")
+            (profile / "style_session.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "arcvellum/style-engineering-session/v1",
+                        "holdout_sources": [
+                            {"path": "evaluation_inputs/holdout/reference.txt"}
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            evaluation = profile / "evaluation_results" / "formal"
+            evaluation.mkdir(parents=True)
+            candidate = evaluation / "platform_agent_candidate.md"
+            candidate.write_text("守门人看见界桩向里挪了三步。\n" * 20, encoding="utf-8")
+            manifest = {
+                "style_prompt_sha256": hashlib.sha256(
+                    (profile / "style_prompt.md").read_bytes()
+                ).hexdigest(),
+                "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                "input_sha256": hashlib.sha256(project_yaml.read_bytes()).hexdigest(),
+                "reference_sha256": hashlib.sha256(holdout.read_bytes()).hexdigest(),
+                "writer_session_id": "studio:writer:formal-style-test",
+            }
+            (evaluation / "platform_agent_candidate.prompt.json").write_text(
+                json.dumps(manifest, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            self.assertFalse((evaluation / "style_eval_current.json").exists())
+            self.assertEqual(style_eval_generation_digest_errors(root, profile), [])
+
     def test_low_quality_initial_prompt_can_finish_then_route_to_revision(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

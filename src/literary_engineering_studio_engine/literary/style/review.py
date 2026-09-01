@@ -12,7 +12,7 @@ from typing import Any
 from ...agent_tasks import agent_task_completion_status, write_agent_tasks
 from ...atomic_io import atomic_write_text
 from ...task_paths import relative_path, task_id
-from .session import load_style_session
+from .session import load_style_session, style_session_holdout_reference
 
 
 STYLE_REVIEW_SCHEMA = "arcvellum/style-semantic-review/v1"
@@ -300,8 +300,8 @@ def style_eval_generation_digest_errors(project_root: Path, profile_dir: Path) -
     for field, path in paths.items():
         if not path.is_file() or str(manifest.get(field) or "") != _sha256(path):
             errors.append(f"formal style evaluation manifest has stale {field}")
-    score = _read_object(evaluation / "style_eval_current.json")
-    reference_sha = str(score.get("reference_sha256") or "")
+    reference = style_session_holdout_reference(profile_dir)
+    reference_sha = _sha256(reference) if reference is not None else ""
     if not reference_sha or str(manifest.get("reference_sha256") or "") != reference_sha:
         errors.append("formal style evaluation manifest has stale reference_sha256")
     if not str(manifest.get("writer_session_id") or "").strip():
