@@ -52,14 +52,27 @@ describe("feature clients over MockFeatureTransport", () => {
     expect(transport.lastCall("fetch")?.path).toBe(path);
   });
 
-  it("keeps settings offline and persists explicit role model selection", async () => {
+  it("keeps settings model controls on the OpenCode boundary", async () => {
     const { transport, clients } = createFeatureClientHarness();
-    transport.respond("PUT", "/model-connections/pi-worker/model", { selected_model: "deepseek/deepseek-chat" });
+    transport.respond("GET", "/model-connections/opencode/catalog", { ok: true, providers: [] });
+    transport.respond("PUT", "/model-connections/opencode/credential", { ok: true });
+    transport.respond("PUT", "/model-connections/opencode/model", { selected_model: "deepseek/deepseek-chat" });
+    transport.respond("DELETE", "/model-connections/opencode/credential/deepseek", { ok: true });
 
     await expect(clients.settings.bootstrapDesktopSession()).resolves.toBeUndefined();
+    await clients.settings.modelCatalog();
+    await clients.settings.saveProviderCredential({ provider_id: "deepseek", credential: "unused" });
     await clients.settings.selectModel("deepseek/deepseek-chat", "worker");
+    await clients.settings.disconnectProvider("deepseek");
 
-    expect(transport.lastCall("request")?.body).toEqual({ model: "deepseek/deepseek-chat", role: "worker" });
+    const requests = transport.calls.filter((call) => call.kind === "request");
+    expect(requests.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /model-connections/opencode/catalog",
+      "PUT /model-connections/opencode/credential",
+      "PUT /model-connections/opencode/model",
+      "DELETE /model-connections/opencode/credential/deepseek",
+    ]);
+    expect(requests[2]?.body).toEqual({ model: "deepseek/deepseek-chat", role: "worker" });
   });
 
   it("sends the complete quality profile through the quality boundary", async () => {
