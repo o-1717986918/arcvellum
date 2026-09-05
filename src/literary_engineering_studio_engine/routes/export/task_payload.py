@@ -4,14 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...task_paths import (
-    TASK_SCHEMA,
-    normalize_relative_path as _normalize_rel,
-    now as _now,
-    task_id as _task_id,
-)
+from ...tasking.builder import TaskBuilder, WordCountContract
 from .blueprints import export_release_blueprint_for_state
-from .evidence import unique
 
 
 DEFAULT_REQUIRED_READING = [
@@ -46,37 +40,18 @@ def build_export_release_task_payload(
     current_state = str(state.get("current_step") or "")
     next_action = str(state.get("next_action") or "")
     blueprint = export_release_blueprint_for_state(root, chapter_id, current_state, next_action)
-    task_id = _task_id(route, chapter_id, current_state)
-    expected_outputs = unique([_normalize_rel(item) for item in blueprint["expected_outputs"]])
-    source_paths = unique([_normalize_rel(item) for item in blueprint["source_paths"]])
-    return {
-        "schema": TASK_SCHEMA,
-        "task_id": task_id,
-        "status": "issued",
-        "created_at": _now(),
-        "route": route,
-        "scene_id": chapter_id,
-        "target_id": chapter_id,
-        "chapter_id": chapter_id,
-        "current_state": current_state,
-        "task_type": blueprint["task_type"],
-        "prompt_asset_id": blueprint["prompt_asset_id"],
-        "command": blueprint["command"],
-        "required_reading": list(blueprint.get("required_reading", DEFAULT_REQUIRED_READING)),
-        "source_paths": source_paths,
-        "context_trace": blueprint.get("context_trace", ""),
-        "hard_constraints": blueprint["hard_constraints"],
-        "style_constraints": blueprint["style_constraints"],
-        "word_count_target": blueprint.get("word_count_target", 0),
-        "word_count_min": 0,
-        "word_count_max": 0,
-        "expected_outputs": expected_outputs,
-        "submission_command": f"python -m literary_engineering_studio_engine task-submit <project> --task-id {task_id} --from <artifact>",
-        "completion_command": f"python -m literary_engineering_studio_engine task-complete <project> --task-id {task_id}",
-        "validation_gates": blueprint["validation_gates"],
-        "forbidden_shortcuts": FORBIDDEN_SHORTCUTS.copy(),
-        "next_allowed_states": blueprint["next_allowed_states"],
-    }
+    return TaskBuilder(
+        root=root,
+        route=route,
+        target_id=chapter_id,
+        scene_id=chapter_id,
+        current_state=current_state,
+        blueprint=blueprint,
+        required_reading=DEFAULT_REQUIRED_READING,
+        forbidden_shortcuts=FORBIDDEN_SHORTCUTS,
+        route_fields={"chapter_id": chapter_id},
+        word_count=WordCountContract(target=blueprint.get("word_count_target", 0)),
+    ).build()
 
 
 __all__ = ["build_export_release_task_payload"]

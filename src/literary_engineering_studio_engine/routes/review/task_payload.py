@@ -4,16 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...task_paths import (
-    TASK_SCHEMA,
-    normalize_relative_path as _normalize_rel,
-    now as _now,
-    resolve_project_path as _resolve_project_path,
-    task_id as _task_id,
-)
+from ...tasking.builder import TaskBuilder
 from ...tasking.context_contract import CONTEXT_CONTRACT_SCHEMA
 from .blueprints import review_audit_blueprint_for_state
-from .evidence import file_sha256, unique
+from .evidence import unique
 
 
 DEFAULT_REQUIRED_READING = [
@@ -43,91 +37,23 @@ def build_review_audit_task_payload(root: Path, route: str, state: dict[str, obj
     next_action = str(state.get("next_action") or "")
     blueprint = review_audit_blueprint_for_state(root, current_state, next_action, state)
     target_id = str(state.get("patch_id") or "project-review")
-    task_id = _task_id(route, target_id, current_state)
-    expected_outputs = unique([_normalize_rel(item) for item in blueprint["expected_outputs"]])
-    source_paths = unique([_normalize_rel(item) for item in blueprint["source_paths"]])
-    payload = _base_payload(
+    payload = TaskBuilder(
+        root=root,
         route=route,
-        state=state,
-        blueprint=blueprint,
-        task_id=task_id,
         target_id=target_id,
+        scene_id=str(state.get("scene_id") or "project-review"),
         current_state=current_state,
-        source_paths=source_paths,
-        expected_outputs=expected_outputs,
-    )
-    _attach_repair_provenance(root, payload, blueprint)
+        blueprint=blueprint,
+        required_reading=DEFAULT_REQUIRED_READING,
+        forbidden_shortcuts=FORBIDDEN_SHORTCUTS,
+        route_fields={
+            "patch": str(state.get("patch") or ""),
+            "patch_id": str(state.get("patch_id") or ""),
+            "candidate_sha256": str(state.get("candidate_sha256") or ""),
+        },
+    ).build()
     _attach_repair_context_contract(payload, blueprint)
     return payload
-
-
-def _base_payload(
-    *,
-    route: str,
-    state: dict[str, object],
-    blueprint: dict[str, object],
-    task_id: str,
-    target_id: str,
-    current_state: str,
-    source_paths: list[str],
-    expected_outputs: list[str],
-) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "schema": TASK_SCHEMA,
-        "task_id": task_id,
-        "status": "issued",
-        "created_at": _now(),
-        "route": route,
-        "scene_id": str(state.get("scene_id") or "project-review"),
-        "target_id": target_id,
-        "patch": str(state.get("patch") or ""),
-        "patch_id": str(state.get("patch_id") or ""),
-        "candidate_sha256": str(state.get("candidate_sha256") or ""),
-        "current_state": current_state,
-        "task_type": blueprint["task_type"],
-        "prompt_asset_id": blueprint["prompt_asset_id"],
-        "command": blueprint["command"],
-        "required_reading": list(blueprint.get("required_reading", DEFAULT_REQUIRED_READING)),
-        "source_paths": source_paths,
-        "context_trace": blueprint.get("context_trace", ""),
-        "hard_constraints": blueprint["hard_constraints"],
-        "style_constraints": blueprint["style_constraints"],
-        "word_count_target": 0,
-        "word_count_min": 0,
-        "word_count_max": 0,
-        "expected_outputs": expected_outputs,
-        "submission_command": f"python -m literary_engineering_studio_engine task-submit <project> --task-id {task_id} --from <artifact>",
-        "completion_command": f"python -m literary_engineering_studio_engine task-complete <project> --task-id {task_id}",
-        "validation_gates": blueprint["validation_gates"],
-        "forbidden_shortcuts": FORBIDDEN_SHORTCUTS.copy(),
-        "next_allowed_states": blueprint["next_allowed_states"],
-    }
-    core_managed_outputs = unique(
-        [
-            _normalize_rel(item)
-            for item in blueprint.get("core_managed_outputs", [])
-            if _normalize_rel(item) in expected_outputs
-        ]
-    )
-    if core_managed_outputs:
-        payload["core_managed_outputs"] = core_managed_outputs
-    return payload
-
-
-def _attach_repair_provenance(
-    root: Path,
-    payload: dict[str, object],
-    blueprint: dict[str, object],
-) -> None:
-    repair_targets = [str(item) for item in blueprint.get("repair_targets", [])]
-    if not repair_targets:
-        return
-    payload["repair_targets"] = repair_targets
-    payload["repair_target_sha256_before_revision"] = {
-        relative: file_sha256(_resolve_project_path(root, relative))
-        for relative in repair_targets
-        if _resolve_project_path(root, relative).is_file()
-    }
 
 
 def _attach_repair_context_contract(
@@ -139,7 +65,7 @@ def _attach_repair_context_contract(
     targets = unique([str(item) for item in blueprint.get("repair_targets", [])])
     if not targets:
         return
-    sources = unique([str(item) for item in blueprint.get("source_paths", [])])
+    sources = unique([str(item) for item in payload.get("source_paths", [])])
     primary_review = next(
         (
             item

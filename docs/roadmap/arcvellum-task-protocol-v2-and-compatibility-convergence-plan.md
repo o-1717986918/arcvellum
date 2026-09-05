@@ -367,3 +367,23 @@ Route Domain
 - agent_task.v2.json：JSON 解析通过；
 - scripts/architecture_audit.py：通过，未增加大文件、复杂函数、循环依赖或边界违规；
 - git diff --check：通过。
+
+### 2026-09-06：TD-4 完成
+
+- [x] 新增 Route-neutral `TaskBuilder` 与 `WordCountContract`，统一任务身份、路径归一化、字数、提交/完成命令和 blueprint 公共附件；
+- [x] scene、longform、source-ingest、style、assets、review、export 七条正式 Route 全部改用共享构造器；
+- [x] Route 模块只保留自身文学语义、专有上下文、系统字段、Gate 和审批边界；
+- [x] repair target 摘要、agent source、core-managed output 与 system-owned field 投影由共享构造器统一处理；
+- [x] `routes/scene/blueprints.py` 的文件系统证据推导拆到 `blueprint_support.py`，主状态表聚焦场景文学流程；
+- [x] `tasking/protocol.py` 拆出协议值对象与 Markdown/JSON 渲染职责；
+- [x] `prompting/platform_tasks.py` 拆出共享结果类型、路径、文风资料与资产标识工具；
+- [x] 七条 Route 内重复的 task schema、issued lifecycle、submission/completion command 构造归零。
+
+验证：
+
+- test_task_builder.py：2 项通过；
+- Route、TaskPackage、协议、文风、资产与审查定向测试：101 项通过；
+- 全量 Python：1361 项通过，1 项跳过；
+- verify_compatibility_surface.py：通过；
+- scripts/architecture_audit.py：通过，保持 16 个既有大文件、104 个既有复杂函数、0 新增违规；
+- git diff --check：通过。

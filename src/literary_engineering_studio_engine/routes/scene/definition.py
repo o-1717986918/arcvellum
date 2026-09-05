@@ -20,13 +20,18 @@ from ...scene_route_gates import (
 )
 from ...scene_route_support import _file_sha256, _static_review_conclusion, _unique
 from ...semantic_task_contracts import semantic_artifact_contract
-from ...task_paths import (
-    TASK_SCHEMA,
-    normalize_relative_path as _normalize_rel,
-    now as _now,
-    resolve_project_path as _resolve_project_path,
-    task_id as _task_id,
-)
+from ...task_paths import resolve_project_path as _resolve_project_path
+from ...tasking.builder import TaskBuilder, WordCountContract
+
+
+DEFAULT_REQUIRED_READING = [
+    "SKILL.md",
+    "AGENTS.md",
+    "agentread.yaml",
+    "references/agent-run-protocol.md",
+    "references/cli-run-protocol.md",
+    "references/punctuation-standard.md",
+]
 
 
 def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) -> dict[str, object]:
@@ -35,46 +40,32 @@ def _build_task_payload(root: Path, route: str, scene_state: dict[str, object]) 
     current_state = str(scene_state.get("current_step") or "")
     next_action = str(scene_state.get("next_action") or "")
     blueprint = _blueprint_for_state(root, scene_id, scene_rel, current_state, next_action)
-    task_id = _task_id(route, scene_id, current_state)
-    expected_outputs = _unique([_normalize_rel(item) for item in blueprint["expected_outputs"]])
-    source_paths = _unique([_normalize_rel(item) for item in blueprint["source_paths"]])
     word_target, word_minimum, word_maximum = _scene_word_count_contract(root, scene_rel, blueprint)
-    payload = {
-        "schema": TASK_SCHEMA,
-        "task_id": task_id,
-        "status": "issued",
-        "created_at": _now(),
-        "route": route,
-        "scene_id": scene_id,
-        "scene": scene_rel,
-        "current_state": current_state,
-        "task_type": blueprint["task_type"],
-        "prompt_asset_id": blueprint["prompt_asset_id"],
-        "command": blueprint["command"],
-        "required_reading": [
-            "SKILL.md", "AGENTS.md", "agentread.yaml", "references/agent-run-protocol.md", "references/cli-run-protocol.md", "references/punctuation-standard.md",
-        ],
-        "source_paths": source_paths,
-        "context_trace": blueprint.get("context_trace", ""),
-        "hard_constraints": blueprint["hard_constraints"],
-        "style_constraints": blueprint["style_constraints"],
-        "word_count_target": word_target,
-        "word_count_min": word_minimum,
-        "word_count_max": word_maximum,
-        "agent_source_paths": _agent_reading_paths(root, source_paths, current_state=current_state, scene_id=scene_id),
-        "expected_outputs": expected_outputs,
-        "submission_command": f"python -m literary_engineering_studio_engine task-submit <project> --task-id {task_id} --from <artifact>",
-        "completion_command": f"python -m literary_engineering_studio_engine task-complete <project> --task-id {task_id}",
-        "validation_gates": blueprint["validation_gates"],
-        "forbidden_shortcuts": [
+    payload = TaskBuilder(
+        root=root,
+        route=route,
+        target_id=scene_id,
+        scene_id=scene_id,
+        current_state=current_state,
+        blueprint=blueprint,
+        required_reading=DEFAULT_REQUIRED_READING,
+        forbidden_shortcuts=[
             "Do not hand-write same-named formal files to bypass the documented command.",
             "Do not use debug/bypass flags such as --allow-unreviewed, --allow-review-notes, --include-blocked, --allow-unapproved, --allow-missing-composition, --allow-unselected-composition, --allow-recommended-branch, or --allow-missing-branch.",
             "Do not treat this task as complete until task-submit and task-complete have succeeded.",
             "Do not let subagents draft, revise, polish, expand, or finalize creative body text.",
             "Do not write API keys or provider secrets into the work project.",
         ],
-        "next_allowed_states": blueprint["next_allowed_states"],
-    }
+        route_fields={"scene": scene_rel},
+        word_count=WordCountContract(word_target, word_minimum, word_maximum),
+        include_target_id=False,
+    ).build()
+    payload["agent_source_paths"] = _agent_reading_paths(
+        root,
+        [str(item) for item in payload["source_paths"]],
+        current_state=current_state,
+        scene_id=scene_id,
+    )
     _apply_blueprint_contracts(payload, blueprint, root, current_state, scene_id)
     payload.update(scene_context_contract(root, payload))
     return payload
@@ -92,23 +83,7 @@ def _apply_blueprint_contracts(
             payload[key] = blueprint[key]
     if blueprint.get("scene_character_assets"):
         payload["scene_character_assets"] = blueprint["scene_character_assets"]
-    if blueprint.get("core_managed_outputs"):
-        payload["core_managed_outputs"] = [str(item) for item in blueprint["core_managed_outputs"]]
-    _apply_repair_contract(payload, blueprint, root)
     _apply_semantic_contract(payload, blueprint, root, current_state, scene_id)
-
-
-def _apply_repair_contract(
-    payload: dict[str, object], blueprint: dict[str, object], root: Path
-) -> None:
-    repair_targets = [str(item) for item in blueprint.get("repair_targets", []) if str(item).strip()]
-    if repair_targets:
-        payload["repair_targets"] = repair_targets
-        payload["repair_target_sha256_before_revision"] = {
-            relative: _file_sha256(path)
-            for relative in repair_targets
-            if (path := _resolve_project_path(root, relative)).is_file()
-        }
 
 
 def _apply_semantic_contract(
@@ -302,7 +277,7 @@ def _reader_experience_reading_paths(root: Path, scene_id: str) -> list[str]:
         "plot/word_budget/word_budget.json",
         generated_scaffold,
         *(
-            _normalize_rel(path.relative_to(root))
+            path.relative_to(root).as_posix()
             for path in sorted((root / "scenes").glob("*.yaml"))
             if load_scene_facts(path).chapter_id == chapter_id
         ),

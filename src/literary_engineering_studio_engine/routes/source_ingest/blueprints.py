@@ -5,13 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...task_paths import (
-    TASK_SCHEMA,
-    normalize_relative_path,
-    now,
     read_json,
     resolve_project_path,
-    task_id,
 )
+from ...tasking.builder import TaskBuilder
 from .support import (
     SOURCE_INGEST_FORBIDDEN_SHORTCUTS,
     SOURCE_INGEST_REQUIRED_READING,
@@ -21,7 +18,6 @@ from .support import (
     extraction_source_paths,
     file_sha256,
     source_ingest_contract_language,
-    unique,
 )
 from .reconstruction_blueprints import (
     aggregate_path as _aggregate_path,
@@ -50,93 +46,21 @@ def build_task_payload(
     )
     chunk_id = str(state.get("chunk_id") or "")
     identity = f"{work_id}--{chunk_id}" if chunk_id else work_id
-    identifier = task_id(route, identity or "source", current_state)
-    payload = _task_envelope(
+    return TaskBuilder(
+        root=root,
         route=route,
-        work_id=work_id,
-        chunk_id=chunk_id,
+        target_id=identity or "source",
+        scene_id=work_id,
         current_state=current_state,
-        identifier=identifier,
         blueprint=blueprint,
-    )
-    _attach_optional_contract(root, payload, blueprint)
-    return payload
-
-
-def _task_envelope(
-    *,
-    route: str,
-    work_id: str,
-    chunk_id: str,
-    current_state: str,
-    identifier: str,
-    blueprint: dict[str, object],
-) -> dict[str, object]:
-    expected = unique(
-        [normalize_relative_path(item) for item in blueprint["expected_outputs"]]
-    )
-    sources = unique(
-        [normalize_relative_path(item) for item in blueprint["source_paths"]]
-    )
-    return {
-        "schema": TASK_SCHEMA,
-        "task_id": identifier,
-        "status": "issued",
-        "created_at": now(),
-        "route": route,
-        "scene_id": work_id,
-        "target_id": work_id,
-        "work_id": work_id,
-        "chunk_id": chunk_id,
-        "current_state": current_state,
-        "task_type": blueprint["task_type"],
-        "prompt_asset_id": blueprint["prompt_asset_id"],
-        "command": blueprint["command"],
-        "required_reading": blueprint.get("required_reading", SOURCE_INGEST_REQUIRED_READING),
-        "source_paths": sources,
-        "context_trace": blueprint.get("context_trace", ""),
-        "hard_constraints": blueprint["hard_constraints"],
-        "style_constraints": blueprint["style_constraints"],
-        "word_count_target": 0,
-        "word_count_min": 0,
-        "word_count_max": 0,
-        "expected_outputs": expected,
-        "submission_command": (
-            "python -m literary_engineering_studio_engine task-submit "
-            f"<project> --task-id {identifier} --from <artifact>"
-        ),
-        "completion_command": (
-            "python -m literary_engineering_studio_engine task-complete "
-            f"<project> --task-id {identifier}"
-        ),
-        "validation_gates": blueprint["validation_gates"],
-        "forbidden_shortcuts": SOURCE_INGEST_FORBIDDEN_SHORTCUTS,
-        "next_allowed_states": blueprint["next_allowed_states"],
-    }
-
-
-def _attach_optional_contract(
-    root: Path,
-    payload: dict[str, object],
-    blueprint: dict[str, object],
-) -> None:
-    owned = blueprint.get("system_owned_fields")
-    if isinstance(owned, dict):
-        payload["system_owned_fields"] = owned
-    agent_sources = blueprint.get("agent_source_paths")
-    if isinstance(agent_sources, list):
-        payload["agent_source_paths"] = unique(
-            [normalize_relative_path(item) for item in agent_sources]
-        )
-    repair_targets = [str(item) for item in blueprint.get("repair_targets", [])]
-    if not repair_targets:
-        return
-    payload["repair_targets"] = repair_targets
-    payload["repair_target_sha256_before_revision"] = {
-        relative: file_sha256(resolve_project_path(root, relative))
-        for relative in repair_targets
-        if resolve_project_path(root, relative).is_file()
-    }
+        required_reading=SOURCE_INGEST_REQUIRED_READING,
+        forbidden_shortcuts=SOURCE_INGEST_FORBIDDEN_SHORTCUTS,
+        route_fields={
+            "target_id": work_id,
+            "work_id": work_id,
+            "chunk_id": chunk_id,
+        },
+    ).build()
 
 
 def blueprint_for_state(

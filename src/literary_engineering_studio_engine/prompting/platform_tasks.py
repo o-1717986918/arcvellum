@@ -8,15 +8,12 @@ skill, then downstream gates validate the artifacts that platform agent writes.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
-import re
 
 from ..agent_tasks import write_agent_tasks
 from ..agent_schema import compact_schema_contract
 from ..anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE
-from ..asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES, ASSET_TYPES
+from ..asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES
 from ..asset_context import compact_asset_context_paths
 from ..context_broker import default_context_trace_path
 from ..creative_quality import (
@@ -35,13 +32,18 @@ from ..resources import engine_path
 from ..style_prompt import STYLE_PROMPT_LENGTH_RULE, STYLE_PROMPT_QUALITY_RULE
 from ..word_budget import scene_word_budget_contract
 from .style_task_contract import render_scene_review_style_task, scene_review_style_materials
-
-
-@dataclass(frozen=True)
-class PlatformAgentTaskResult:
-    task_path: Path
-    expected_report_path: Path
-    expected_json_path: Path
+from .platform_task_support import (
+    PlatformAgentTaskResult,
+    asset_candidate_id as _asset_candidate_id,
+    extend_unique as _extend_unique,
+    normalize_asset_type as _normalize_asset_type,
+    read_optional as _read_optional,
+    relative_path as _rel,
+    resolve_optional as _resolve_optional,
+    safe_label as _safe_label,
+    stamp as _stamp,
+    style_source_paths as _style_source_paths,
+)
 
 
 def write_platform_scene_review_task(
@@ -362,7 +364,6 @@ Canon 声明不得留空：如果正文产生会跨场景持续约束未来创�
         ],
     )
     return PlatformAgentTaskResult(task_path, candidate, manifest)
-
 
 def write_platform_asset_creation_task(
     root: Path,
@@ -771,99 +772,3 @@ def write_platform_style_prompt_eval_task(
         ],
     )
     return PlatformAgentTaskResult(task_path, candidate, manifest)
-
-
-def _rel(path: Path, root: Path) -> str:
-    try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
-        return str(path)
-
-
-def _extend_unique(target: list[Path], paths: list[Path]) -> None:
-    seen = {path.resolve() for path in target if path.exists()}
-    for path in paths:
-        if not path.exists():
-            continue
-        resolved = path.resolve()
-        if resolved in seen:
-            continue
-        target.append(path)
-        seen.add(resolved)
-
-
-def _style_source_paths(root: Path) -> list[Path]:
-    paths: list[Path] = []
-    active = root / "style" / "active_style_skill.json"
-    if active.exists():
-        paths.append(active)
-        try:
-            payload = json.loads(active.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            payload = {}
-        for key in ("prompt", "style_skill", "mount_path"):
-            value = str(payload.get(key) or "").strip()
-            if not value:
-                continue
-            candidate = root / value
-            if candidate.is_dir():
-                for name in ("prompt.md", "style_skill.json", "style-profile.md", "style_metrics.json"):
-                    child = candidate / name
-                    if child.exists():
-                        paths.append(child)
-            elif candidate.exists():
-                paths.append(candidate)
-    fallback_candidates = [
-        root / "style" / "style_prompt.md",
-        root / "style" / "demo-author" / "style_prompt.md",
-        root / "style" / "style-profile.md",
-    ]
-    paths.extend(path for path in fallback_candidates if path.exists())
-    unique: list[Path] = []
-    _extend_unique(unique, paths)
-    return unique
-
-
-def _normalize_asset_type(value: str) -> str:
-    normalized = value.strip().lower().replace("_", "-")
-    aliases = {
-        "background": "background-story",
-        "background_story": "background-story",
-        "relationships": "relationship",
-        "world-rules": "world",
-        "chapter": "chapter-plan",
-        "scenes": "scene-list",
-    }
-    normalized = aliases.get(normalized, normalized)
-    if normalized not in ASSET_TYPES:
-        raise ValueError(f"unknown asset type: {value}. valid: {', '.join(ASSET_TYPES)}")
-    return normalized
-
-
-def _asset_candidate_id(asset_type: str, seed: str) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    slug = _slug(seed)[:28] or "candidate"
-    return f"{asset_type}-{slug}-platform-agent-{stamp}"
-
-
-def _slug(value: str) -> str:
-    text = re.sub(r"[^A-Za-z0-9\u4e00-\u9fff]+", "-", str(value).strip()).strip("-")
-    return text or "asset"
-
-
-def _resolve_optional(root: Path, path: Path | None) -> Path | None:
-    if path is None:
-        return None
-    return path if path.is_absolute() else root / path
-
-
-def _read_optional(path: Path) -> str:
-    return path.read_text(encoding="utf-8") if path.exists() else ""
-
-
-def _safe_label(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_.\-\u4e00-\u9fff]+", "-", value.strip()).strip("-") or "task"
-
-
-def _stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

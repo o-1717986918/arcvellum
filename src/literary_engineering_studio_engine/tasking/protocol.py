@@ -2,24 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-import json
-
-
-@dataclass(frozen=True)
-class ProtocolRoute:
-    key: str
-    title: str
-    purpose: str
-    read: tuple[str, ...]
-    preflight: tuple[str, ...]
-    cli_chain: tuple[str, ...]
-    platform_agent_handoffs: tuple[str, ...]
-    completion_gates: tuple[str, ...]
-    forbidden_shortcuts: tuple[str, ...]
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+from .protocol_model import ProtocolRoute
+from .protocol_rendering import (
+    protocol_to_json as _protocol_to_json,
+    render_protocol as _render_protocol,
+    render_protocol_list as _render_protocol_list,
+)
 
 
 COMMON_PREFLIGHT = (
@@ -520,41 +508,12 @@ def resolve_protocol_route(route: str) -> ProtocolRoute:
 
 
 def render_protocol(route: ProtocolRoute) -> str:
-    sections = [
-        f"# {route.title} Protocol",
-        "",
-        f"route: `{route.key}`",
-        "",
-        route.purpose,
-        "",
-        _render_list("Read First", route.read),
-        _render_list("Preflight", route.preflight),
-        _render_list("Suggested CLI Chain", route.cli_chain),
-        _render_list("Platform Agent Handoffs", route.platform_agent_handoffs),
-        _render_list("Completion Gates", route.completion_gates),
-        _render_list("Forbidden Shortcuts", route.forbidden_shortcuts),
-    ]
-    return "\n".join(sections).rstrip() + "\n"
+    return _render_protocol(route)
 
 
 def render_protocol_list() -> str:
-    lines = ["# Available Protocol Routes", ""]
-    for route in list_protocol_routes():
-        lines.append(f"- `{route.key}`: {route.purpose}")
-    return "\n".join(lines) + "\n"
+    return _render_protocol_list(list_protocol_routes())
 
 
 def protocol_to_json(route: ProtocolRoute | None = None) -> str:
-    payload: object
-    if route is None:
-        payload = [item.to_dict() for item in list_protocol_routes()]
-    else:
-        payload = route.to_dict()
-    return json.dumps(payload, ensure_ascii=False, indent=2)
-
-
-def _render_list(title: str, items: tuple[str, ...]) -> str:
-    lines = [f"## {title}", ""]
-    lines.extend(f"- {item}" for item in items)
-    lines.append("")
-    return "\n".join(lines)
+    return _protocol_to_json(route, list_protocol_routes())

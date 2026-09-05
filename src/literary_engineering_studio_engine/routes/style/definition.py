@@ -18,13 +18,10 @@ from ...literary.style.session import (
 )
 from ...style_prompt import style_prompt_quality_report
 from ...task_paths import (
-    TASK_SCHEMA,
-    normalize_relative_path,
-    now,
     relative_path,
     resolve_project_path,
-    task_id,
 )
+from ...tasking.builder import TaskBuilder
 from .session_contract import build_style_route_session_context
 from .review_contract import style_review_blueprints, validate_style_review_task
 from .version_contract import style_version_blueprints, validate_style_version_task
@@ -33,8 +30,27 @@ from .support import (
     declared_repair_targets_changed,
     read_optional_json as _read_optional_json,
     read_text as _read_text,
-    unique as _unique,
 )
+
+
+DEFAULT_REQUIRED_READING = [
+    "SKILL.md",
+    "AGENTS.md",
+    "agentread.yaml",
+    "references/agent-run-protocol.md",
+    "references/cli-run-protocol.md",
+    "references/workflows.md",
+    "docs/modules/style-compiler.md",
+    "docs/implementation/phase26-style-prompt-effectiveness.md",
+]
+
+FORBIDDEN_SHORTCUTS = [
+    "Do not mount a Style Skill from an under-specified prompt.",
+    "Do not use --allow-unreviewed for formal Skill-host work.",
+    "Do not treat style metrics or a dry profile report as an LLM-facing prompt.",
+    "Do not pursue exact author imitation unless the corpus is public-domain, authorized, or user-owned.",
+    "Do not treat this task as complete until task-submit and task-complete have succeeded.",
+]
 
 
 def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict[str, object]:
@@ -45,70 +61,21 @@ def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict
     current_state = str(state.get("current_step") or "")
     next_action = str(state.get("next_action") or "")
     blueprint = blueprint_for_state(root, profile_id, profile_dir, current_state, next_action)
-    identifier = task_id(route, profile_id or "style-profile", current_state)
-    expected_outputs = _unique([normalize_relative_path(item) for item in blueprint["expected_outputs"]])
-    source_paths = _unique([normalize_relative_path(item) for item in blueprint["source_paths"]])
-    payload: dict[str, object] = {
-        "schema": TASK_SCHEMA,
-        "task_id": identifier,
-        "status": "issued",
-        "created_at": now(),
-        "route": route,
-        "scene_id": profile_id,
-        "target_id": profile_id,
-        "profile_id": profile_id,
-        "profile_dir": profile_dir,
-        "current_state": current_state,
-        "task_type": blueprint["task_type"],
-        "prompt_asset_id": blueprint["prompt_asset_id"],
-        "command": blueprint["command"],
-        "required_reading": blueprint.get(
-            "required_reading",
-            [
-                "SKILL.md",
-                "AGENTS.md",
-                "agentread.yaml",
-                "references/agent-run-protocol.md",
-                "references/cli-run-protocol.md",
-                "references/workflows.md",
-                "docs/modules/style-compiler.md",
-                "docs/implementation/phase26-style-prompt-effectiveness.md",
-            ],
-        ),
-        "source_paths": source_paths,
-        "context_trace": blueprint.get("context_trace", ""),
-        "hard_constraints": blueprint["hard_constraints"],
-        "style_constraints": blueprint["style_constraints"],
-        "word_count_target": 0,
-        "word_count_min": 0,
-        "word_count_max": 0,
-        "expected_outputs": expected_outputs,
-        "submission_command": f"python -m literary_engineering_studio_engine task-submit <project> --task-id {identifier} --from <artifact>",
-        "completion_command": f"python -m literary_engineering_studio_engine task-complete <project> --task-id {identifier}",
-        "validation_gates": blueprint["validation_gates"],
-        "forbidden_shortcuts": [
-            "Do not mount a Style Skill from an under-specified prompt.",
-            "Do not use --allow-unreviewed for formal Skill-host work.",
-            "Do not treat style metrics or a dry profile report as an LLM-facing prompt.",
-            "Do not pursue exact author imitation unless the corpus is public-domain, authorized, or user-owned.",
-            "Do not treat this task as complete until task-submit and task-complete have succeeded.",
-        ],
-        "next_allowed_states": blueprint["next_allowed_states"],
-    }
-    if blueprint.get("agent_source_paths"):
-        payload["agent_source_paths"] = [
-            normalize_relative_path(item)
-            for item in blueprint["agent_source_paths"]
-        ]
-    repair_targets = [str(item) for item in blueprint.get("repair_targets", [])]
-    if repair_targets:
-        payload["repair_targets"] = repair_targets
-        payload["repair_target_sha256_before_revision"] = {
-            relative: _file_sha256(resolve_project_path(root, relative))
-            for relative in repair_targets
-            if resolve_project_path(root, relative).is_file()
-        }
-    return payload
+    return TaskBuilder(
+        root=root,
+        route=route,
+        target_id=profile_id or "style-profile",
+        scene_id=profile_id,
+        current_state=current_state,
+        blueprint=blueprint,
+        required_reading=DEFAULT_REQUIRED_READING,
+        forbidden_shortcuts=FORBIDDEN_SHORTCUTS,
+        route_fields={
+            "target_id": profile_id,
+            "profile_id": profile_id,
+            "profile_dir": profile_dir,
+        },
+    ).build()
 
 
 def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_state: str, next_action: str) -> dict[str, object]:
