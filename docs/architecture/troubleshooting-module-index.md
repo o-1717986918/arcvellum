@@ -26,6 +26,7 @@
 | 任务产物存在但 completion 无效 | Engine `tasking/` | `public/tasking.py`、sidecar lifecycle | `test_task_lifecycle_facade.py`、task contract tests |
 | 自动创作启动后才发现模型未配置 | Studio `runtime/` | `runtime/readiness.py`、`runtime/runtime_selection.py` | `tests/runtime/test_runtime_readiness.py` |
 | 模型长时间无可见活动或流断开 | 对应 `runtimes/` adapter | `runtimes/base.py::AgentRuntimePort`、具体 adapter | adapter contract、runtime benchmark、连续 E2E |
+| 本地测试看似修改无效、堆栈指向另一个 checkout | 仓库测试入口 | `scripts/verify_checkout_import.py`、`scripts/run_tests.ps1` / `.sh` | `tests/test_checkout_verifier.py`，随后使用统一脚本跑目标测试 |
 
 ## 文学工程
 
@@ -38,6 +39,9 @@
 | 正文审查、修订、晋升相互错位 | Engine `routes/scene/` | `routes/scene/blueprints.py`、`gates.py` | scene workflow、promotion、revision tests |
 | Canon 或人物状态无法写回 | Engine `routes/review/` 或 scene state | 对应 blueprint/gate 与 `literary/scene/state/` | canon/state writeback contract tests |
 | 正文字数看似够但 Gate 判断不一致 | Engine `foundation/` 与 planning/review | `foundation/text_counts.py`、`foundation/draft_text.py` | text-count、target-length tests |
+| 同一 Scene YAML 在 Context、字数、节奏或人物模块中得到不同结果 | Engine `literary/scene/` | `literary/scene/facts.py` | `tests/test_scene_facts.py` 加对应消费模块合同测试 |
+| 前场已经完成但长篇审计未发现缺失交接或后场未承接 | Engine `literary/review/` | `literary/review/longform_handoffs.py`、`longform_contract.py` | `tests/test_longform_quality_contract.py`、`tests/test_scene_handoff.py` |
+| 旧 source-ingest 项目要求读取不存在的 archaeology aggregate | Engine `routes/source_ingest/` | `routes/source_ingest/blueprints.py`、`support.py` | `tests/test_source_ingest_route.py`；确认 v1 为 `migration-only`，新导入使用 v2 |
 
 ## 产品、桌面与前端
 

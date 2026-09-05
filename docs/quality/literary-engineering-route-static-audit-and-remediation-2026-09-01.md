@@ -45,6 +45,15 @@
 
 第三批最终验收：checkout 验证确认 Studio 与 Engine 均加载当前工作树；全量回归 `1339 tests passed, 1 skipped`。后续批次不得恢复手写 Scene YAML 解析器、公开下一状态提示或 Legacy v1 新建入口。
 
+Batch 6 的静态与受控生命周期验收也已完成：
+
+- 版本同步为 `0.99.4`，Compatibility Surface、源码编译、Architecture Audit、generated module map、Prompt Registry 和 `git diff --check` 全部通过。
+- Scene Handoff、确定性正文审查与晋升、Pi 连续闭环证据、Campaign checkpoint/no-progress/recovery 共 `17` 项生命周期测试通过。
+- 本轮触及的大文件没有新增 file/function debt；Source Ingest 蓝图在分流改造后保持在 500 行预算以内。
+- 故障反查索引已补充 checkout 污染、Scene YAML 解析分歧、Longform Handoff 漏审和 Legacy v1 错误输入四类症状。
+
+边界说明：上述结果证明正式代码合同和受控 Runtime 生命周期闭合，尚不等于真实付费 Provider 的无人值守多章节 Campaign 验收。真实 Provider 会受凭证、额度、网络和模型输出影响，仍应在发布候选环境单独保存运行收据，不能用 fixture 测试替代该证据。
+
 ---
 
 ## 0. 文档用途
