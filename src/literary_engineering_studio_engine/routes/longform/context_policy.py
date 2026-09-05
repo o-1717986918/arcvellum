@@ -27,9 +27,31 @@ _AGENT_SOURCES = {
         "plot/outline.md",
         "plot/word_budget/word_budget.json",
     ),
+    "budget-review": (
+        "project.yaml",
+        "plot/word_budget/word_budget.json",
+        "plot/candidates/outlines/word_budget_expansion.md",
+        "reviews/word_budget/word_budget_review.json",
+    ),
+    "budget-revision": (
+        "project.yaml",
+        "plot/word_budget/word_budget.json",
+        "plot/candidates/outlines/word_budget_expansion.md",
+        "reviews/word_budget/word_budget_review.json",
+    ),
     "scene-inventory-agent-task": (
         "plot/word_budget/word_budget.json",
         "plot/candidates/outlines/word_budget_expansion.md",
+    ),
+    "scene-inventory-review": (
+        "plot/word_budget/word_budget.json",
+        "plot/candidates/scenes/word_budget_scene_inventory.md",
+        "reviews/word_budget/scene_inventory_review.json",
+    ),
+    "scene-inventory-revision": (
+        "plot/word_budget/word_budget.json",
+        "plot/candidates/scenes/word_budget_scene_inventory.md",
+        "reviews/word_budget/scene_inventory_review.json",
     ),
     "chapter-obligation-agent-task": (
         "project.yaml",
@@ -40,7 +62,13 @@ _AGENT_SOURCES = {
     "chapter-obligation-review": (
         "plot/word_budget/word_budget.json",
         "plot/candidates/chapters/chapter_obligation_plan.md",
-        "reviews/word_budget/chapter_obligation_review.md",
+        "reviews/word_budget/chapter_obligation_review.json",
+    ),
+    "chapter-obligation-revision": (
+        "project.yaml",
+        "plot/word_budget/word_budget.json",
+        "plot/candidates/chapters/chapter_obligation_plan.md",
+        "reviews/word_budget/chapter_obligation_review.json",
     ),
 }
 

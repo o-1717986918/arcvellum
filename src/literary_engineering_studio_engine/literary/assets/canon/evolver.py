@@ -14,6 +14,8 @@ from ....agent_tasks import agent_task_completion_status, write_agent_tasks
 from ....atomic_io import atomic_write_batch
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
 from ....semantic_task_contracts import semantic_artifact_errors
+from .apply_status import canon_application_status
+from .approval import approval_matches_patch, approval_record_for_run, patch_requires_approval
 from .paths import (
     canon_apply_manifest_path,
     canon_apply_report_path,
@@ -200,10 +202,10 @@ def apply_canon_patch(
     if errors:
         raise ValueError("canon patch is not apply-ready: " + "; ".join(errors))
     patch_id = patch_path.stem
-    required_approval = _patch_requires_approval(payload)
+    required_approval = patch_requires_approval(payload)
     approval_id = approval_run_id.strip() or patch_id
-    approval = _approval_record_for_run(root, approval_id)
-    approval_matches = _approval_matches_patch(approval, patch_path)
+    approval = approval_record_for_run(root, approval_id)
+    approval_matches = approval_matches_patch(approval, patch_path)
     if required_approval and (str(approval.get("decision") or "") != "approve" or not approval_matches) and not allow_unapproved:
         raise RuntimeError(f"canon-apply requires approve record for run_id {approval_id}; got {approval.get('decision') or 'missing'}")
 
@@ -324,7 +326,7 @@ def canon_writeback_status(
             result["message"] = "canon patch items are incomplete: " + "; ".join(item_errors[:6])
             return result
         if payload.get("applied") is True:
-            return _canon_apply_status(root, json_path, payload, result)
+            return canon_application_status(root, json_path, payload, result)
         if not require_review:
             result["status"] = "pass"
             result["message"] = "canon change candidate patch is ready for independent review"
@@ -338,101 +340,10 @@ def canon_writeback_status(
             result["status"] = "semantic_incomplete"
             result["message"] = "canon semantic review incomplete: " + "; ".join(review_errors[:4])
             return result
-        return _canon_apply_status(root, json_path, payload, result)
+        return canon_application_status(root, json_path, payload, result)
     result["status"] = "unknown"
     result["message"] = "unrecognized canon_change declaration"
     return result
-
-
-def _canon_apply_status(
-    root: Path,
-    patch_path: Path,
-    payload: dict[str, Any],
-    result: dict[str, Any],
-) -> dict[str, Any]:
-    """Require a reviewed durable fact candidate to reach a terminal decision.
-
-    A scene cannot become ready while its accepted world facts are waiting in
-    the project-level backlog.  The next scene's Context must observe the same
-    Canon state that the handoff records.
-    """
-
-    patch_id = patch_path.stem
-    patch_sha256 = hashlib.sha256(patch_path.read_bytes()).hexdigest()
-    apply_manifest = canon_apply_manifest_path(root, patch_id)
-    applied = _read_json(apply_manifest)
-    applied_patch_sha256 = str(applied.get("applied_patch_sha256") or "").strip().lower()
-    legacy_candidate_sha256 = _legacy_pre_apply_sha256(payload) if payload.get("applied") is True else ""
-    applied_current = (
-        payload.get("applied") is True
-        and str(payload.get("apply_manifest") or "") == _rel(apply_manifest, root)
-        and str(applied.get("status") or "") == "applied"
-        and str(applied.get("patch") or "") == _rel(patch_path, root)
-        and (
-            applied_patch_sha256 == patch_sha256
-            or (
-                not applied_patch_sha256
-                and legacy_candidate_sha256
-                and str(applied.get("candidate_sha256") or "").lower() == legacy_candidate_sha256
-            )
-        )
-    )
-    if applied_current:
-        result.update(
-            status="pass",
-            message="canon change candidate completed and applied to canon ledger",
-            patch_id=patch_id,
-            candidate_sha256=str(applied.get("candidate_sha256") or ""),
-            applied_patch_sha256=patch_sha256,
-            approval_run_id=str(applied.get("approval_run_id") or patch_id),
-            approval_decision=str(
-                (applied.get("approval") if isinstance(applied.get("approval"), dict) else {}).get("decision") or ""
-            ),
-            approval_current=True,
-            applied=True,
-            apply_manifest=_rel(apply_manifest, root),
-        )
-        return result
-
-    approval = _approval_record_for_run(root, patch_id)
-    approval_current = _approval_matches_patch(approval, patch_path)
-    decision = str(approval.get("decision") or "").strip().lower() if approval_current else ""
-    result.update(
-        {
-            "patch_id": patch_id,
-            "candidate_sha256": patch_sha256,
-            "approval_run_id": patch_id,
-            "approval_decision": decision,
-            "approval_current": approval_current,
-        }
-    )
-    if decision == "revise":
-        result.update(status="needs_revision", message="canon patch has a current revise decision")
-        return result
-    if decision == "reject":
-        result.update(status="rejected", message="canon patch was rejected and must be reconciled with the promoted scene")
-        return result
-    if decision == "defer":
-        result.update(status="deferred", message="canon patch is deferred; chronological scene work is paused")
-        return result
-
-    if _patch_requires_approval(payload) and not (decision == "approve" and approval_current):
-        result.update(status="needs_approval", message="canon patch needs an approve decision bound to its exact digest")
-        return result
-    result.update(status="pending_apply", message="reviewed canon patch is ready for deterministic canon-apply")
-    return result
-
-
-def _legacy_pre_apply_sha256(payload: dict[str, Any]) -> str:
-    """Rebuild the pre-apply candidate digest emitted by older apply manifests."""
-
-    candidate = dict(payload)
-    candidate["status"] = "candidate"
-    candidate["applied"] = False
-    for key in ("applied_at", "approval_run_id", "apply_manifest", "canon_change_log"):
-        candidate.pop(key, None)
-    text = json.dumps(candidate, ensure_ascii=False, indent=2) + "\n"
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _canon_patch_paths(root: Path) -> list[Path]:
@@ -454,11 +365,11 @@ def _patch_backlog_item(root: Path, path: Path) -> dict[str, Any]:
     payload = _read_json(path)
     errors = _canon_patch_payload_errors(root, path, payload, require_completion=False)
     approval_id = path.stem
-    approval = _approval_record_for_run(root, approval_id)
+    approval = approval_record_for_run(root, approval_id)
     change = _canon_change_value(payload.get("canon_change"))
     applied = payload.get("applied") is True or str(payload.get("status") or "").strip().lower() == "applied"
     candidate_sha256 = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
-    approval_current = _approval_matches_patch(approval, path)
+    approval_current = approval_matches_patch(approval, path)
     completion = agent_task_completion_status(path.with_suffix(".agent_tasks.md"), root=root)
     if applied:
         status = "applied"
@@ -466,7 +377,7 @@ def _patch_backlog_item(root: Path, path: Path) -> dict[str, Any]:
         status = "invalid"
     elif change is not True:
         status = "not_applicable"
-    elif _patch_requires_approval(payload) and (
+    elif patch_requires_approval(payload) and (
         str(approval.get("decision") or "") != "approve" or not approval_current
     ):
         status = "needs_approval"
@@ -485,7 +396,7 @@ def _patch_backlog_item(root: Path, path: Path) -> dict[str, Any]:
         "candidate_sha256": candidate_sha256,
         "completion_status": completion.get("status", ""),
         "completion_message": completion.get("message", ""),
-        "requires_user_approval": _patch_requires_approval(payload),
+        "requires_user_approval": patch_requires_approval(payload),
         "item_count": len(payload.get("items") if isinstance(payload.get("items"), list) else []),
         "errors": errors,
         "apply_manifest": str(payload.get("apply_manifest") or ""),
@@ -540,46 +451,6 @@ def _canon_patch_payload_errors(root: Path, patch_path: Path, payload: dict[str,
             scene_id = str(payload.get("scene_id") or patch_path.stem.replace("_canon_patch", ""))
             errors.extend(semantic_artifact_errors(root, "canon-agent-task", scene_id))
     return errors
-
-
-def _patch_requires_approval(payload: dict[str, Any]) -> bool:
-    if payload.get("requires_user_approval") is True:
-        return True
-    items = payload.get("items") if isinstance(payload.get("items"), list) else []
-    return any(isinstance(item, dict) and item.get("requires_user_approval") is True for item in items)
-
-
-def _approval_record_for_run(root: Path, run_id: str) -> dict[str, Any]:
-    index = root / "workflow" / "approvals" / "index.jsonl"
-    if not index.exists():
-        return {}
-    latest: dict[str, Any] = {}
-    for line in index.read_text(encoding="utf-8", errors="ignore").splitlines():
-        if not line.strip():
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict) and payload.get("run_id") == run_id:
-            latest = payload
-    return latest
-
-
-def _approval_matches_patch(approval: dict[str, Any], patch: Path) -> bool:
-    if not approval or not patch.is_file():
-        return False
-    actual = hashlib.sha256(patch.read_bytes()).hexdigest()
-    recorded = str(approval.get("subject_sha256") or "").strip().lower()
-    if recorded:
-        return recorded == actual
-    try:
-        recorded_at = datetime.fromisoformat(str(approval.get("recorded_at") or "").replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if recorded_at.tzinfo is None:
-        recorded_at = recorded_at.replace(tzinfo=timezone.utc)
-    return datetime.fromtimestamp(patch.stat().st_mtime, tz=timezone.utc) <= recorded_at.astimezone(timezone.utc)
 
 
 def _render_backlog(payload: dict[str, Any], root: Path) -> str:

@@ -1,0 +1,7 @@
+{
+  "schema_id": "longform_planning_review.v1",
+  "schema_value": "literary-engineering-workbench/longform-planning-review/v1",
+  "required": ["schema", "review_kind", "status", "candidate_path", "candidate_sha256", "writer_session_id", "reviewer_session_id", "verdict", "summary", "evidence_paths", "findings", "required_changes", "checked_dimensions"],
+  "types": {"schema": "str", "review_kind": "str", "status": "str", "candidate_path": "str", "candidate_sha256": "str", "writer_session_id": "str", "reviewer_session_id": "str", "verdict": "str", "summary": "str", "evidence_paths": "list", "findings": "list", "required_changes": "list", "checked_dimensions": "list"},
+  "enums": {"review_kind": ["budget", "scene_inventory", "chapter_obligation"], "status": ["complete"], "verdict": ["pass", "revise", "block"]}
+}

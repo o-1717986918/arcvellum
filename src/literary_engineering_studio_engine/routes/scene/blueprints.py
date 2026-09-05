@@ -17,6 +17,7 @@ from ...literary.scene.promotion.legacy_context_bootstrap import (
 from ...literary.scene.promotion.historical_context import (
     historical_revision_candidate_source_paths,
 )
+from ...literary.planning.review import all_planning_review_evidence_paths
 from ...scene_route_support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
     _read_text, _unique,
@@ -183,9 +184,12 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
         "plot/word_budget/word_budget.agent_completion.json",
         "plot/word_budget/scene_inventory_expansion.agent_tasks.md",
         "plot/word_budget/scene_inventory_expansion.agent_completion.json",
-        "reviews/word_budget/word_budget_review.md",
-        "reviews/word_budget/scene_inventory_review.md",
-        "reviews/word_budget/chapter_obligation_review.md",
+        "plot/chapter_obligations/chapter_obligations.agent_tasks.md",
+        "plot/chapter_obligations/chapter_obligations.agent_completion.json",
+        "plot/candidates/outlines/word_budget_expansion.md",
+        "plot/candidates/scenes/word_budget_scene_inventory.md",
+        "plot/candidates/chapters/chapter_obligation_plan.md",
+        *all_planning_review_evidence_paths(root),
     ]
     scene_runtime_sources = list(
         dict.fromkeys(

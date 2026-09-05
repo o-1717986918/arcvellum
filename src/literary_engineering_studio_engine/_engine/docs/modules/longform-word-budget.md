@@ -16,19 +16,20 @@
 3. 运行或等价执行预算拆分：
 
 ```powershell
-python -m literary_engineering_workbench protocol longform-planning
-python -m literary_engineering_workbench word-budget "<work-dir>" --target-words 500000 --volumes 5 --genre mystery
+python -m literary_engineering_studio_engine protocol longform-planning
+python -m literary_engineering_studio_engine word-budget "<work-dir>" --target-words 500000 --volumes 5 --genre mystery
 ```
 
 4. 读取 `plot/word_budget/word_budget.agent_tasks.md`。
 5. 读取 `plot/word_budget/scene_inventory_expansion.agent_tasks.md`。
 6. 读取 `plot/chapter_obligations/chapter_obligations.agent_tasks.md`。
-7. 平台 agent 写出预算化大纲候选、预算审查、分章分场景库存候选、库存审查、章节义务规划和章节义务审查。
-8. 预算化大纲、分场景库存与章节义务通过审查与用户批准前，不得覆盖正式 `plot/outline.md` 或 `scenes/*.yaml`。
-9. 将预算落到正式 scene 库存：每个正式 `scenes/*.yaml` 必须有能映射预算行的 `chapter_id`；需要时写入 `word_count_target`、`word_count_min`、`word_count_max`。
-10. 单章正文生成前运行 `chapter-obligation --chapter-id <chapter_id>`，让平台 agent 填写本章承诺、设置、变化、暂不解决项、章末钩子和逐场读者体验契约。
-11. 后续 context packet、`compose-scene`、`generate-scene` 的 prompt manifest 和 `.agent_tasks.md` 自动加载本场景预算契约和读者体验契约。
-12. AgentReview、`promote-candidate`、`route-audit`、`chapter-workspace`、`longform-audit` 和正式导出都会用清洗后的可交付正文复核字数、叙事负载和 reader promise/payoff。
+7. 三个 Writer 任务分别写出预算化大纲、分章分场景库存和章节义务候选，不得同时给自己的候选判定通过。
+8. 每个候选随后执行 `prepare-longform-review --kind <kind>`，由身份独立的 Reviewer 写摘要绑定的 JSON 裁决和 Markdown 说明；`revise` 后必须重新准备并重新审查，`block` 进入人工边界。
+9. 三项结构化审查通过且用户批准前，不得覆盖正式 `plot/outline.md` 或 `scenes/*.yaml`。
+10. 将预算落到正式 scene 库存：每个正式 `scenes/*.yaml` 必须有能映射预算行的 `chapter_id`；需要时写入 `word_count_target`、`word_count_min`、`word_count_max`。
+11. 单章正文生成前运行 `chapter-obligation --chapter-id <chapter_id>`，让平台 agent 填写本章承诺、设置、变化、暂不解决项、章末钩子和逐场读者体验契约。
+12. 后续 context packet、`compose-scene`、`generate-scene` 的 prompt manifest 和 `.agent_tasks.md` 自动加载本场景预算契约和读者体验契约。
+13. AgentReview、`promote-candidate`、`route-audit`、`chapter-workspace`、`longform-audit` 和正式导出都会用清洗后的可交付正文复核字数、叙事负载和 reader promise/payoff。
 
 ## 计数口径
 
@@ -93,8 +94,11 @@ CLI 不负责判断“这个故事怎样才好看”，也不自动改写正式�
 - `plot/candidates/outlines/word_budget_expansion.md`
 - `plot/candidates/scenes/word_budget_scene_inventory.md`
 - `reviews/word_budget/word_budget_review.md`
+- `reviews/word_budget/word_budget_review.json`
 - `reviews/word_budget/scene_inventory_review.md`
+- `reviews/word_budget/scene_inventory_review.json`
 - `reviews/word_budget/chapter_obligation_review.md`
+- `reviews/word_budget/chapter_obligation_review.json`
 
 ## 生成前门禁
 
@@ -103,8 +107,8 @@ CLI 不负责判断“这个故事怎样才好看”，也不自动改写正式�
 - 当前目标中文内容字符是否超过 100000。
 - 是否存在 `plot/word_budget/word_budget.json`。
 - `plot/word_budget/word_budget.agent_tasks.md` 是否已有 `.agent_completion.json` 完成标记。
-- 是否存在 `reviews/word_budget/word_budget_review.md`。
-- 是否存在 `reviews/word_budget/chapter_obligation_review.md`。
+- 三项审查 JSON 是否分别绑定当前候选摘要与 Writer 身份，并由不同 Reviewer 会话给出 `pass`。
+- Markdown 说明是否与 JSON 配套存在；Markdown 文本本身不能充当机器裁决。
 - 预算状态是否为 `pass`，且不是 `needs_expansion`。
 - 当前 `scene.yaml` 是否有能映射预算行的 `chapter_id`。
 - 当前 `scene.yaml` 的 `word_count_target/min/max` 是否与章节预算一致，或已有人工说明的合理 override。

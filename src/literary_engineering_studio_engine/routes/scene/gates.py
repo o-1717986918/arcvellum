@@ -7,19 +7,17 @@ import re
 
 from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
 from ...anti_ai_style import style_lint_gate, style_lint_gate_message
-from ...canon_evolver import canon_writeback_status
 from ...candidate_promotion import candidate_generation_gate, candidate_review_gate
 from ...literary.scene.promotion.historical import validate_historical_promotion
 from ...context_broker import context_trace_status
 from ...creative_quality import load_creative_quality_profile
+from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
 from ...draft_text import final_body_from_draft_path
 from ...flow_gates import FlowGateError, branch_selection_status, ensure_composition_ready_for_generation
 from ...narrative_rhythm import narrative_rhythm_contract
 from ...reader_experience import ensure_reader_experience_ready, reader_experience_adherence_for_body
 from ...scene_character_assets import scene_character_asset_requirements
 from ...semantic_task_contracts import semantic_artifact_errors
-from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
-from ...scene_handoff import scene_handoff_source_status
 from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from ...tasking.state_contracts import SCENE_REVISION_STATES
 from ...word_budget import ensure_scene_word_budget_ready, word_budget_adherence_for_body
@@ -30,21 +28,40 @@ from ...scene_route_support import (
 from .branch_contract import branch_manifest_gate_errors as _branch_manifest_gate_errors
 from .branch_contract import branch_selection_gate as _branch_selection_gate
 from .length_repair import target_length_revision_gate_errors
-from ..review.canon_gates import (
-    canon_patch_apply_gate_errors,
-    canon_patch_candidate_gate_errors,
-    canon_patch_decision_gate_errors,
+from .writeback_gates import (
+    continuity_and_handoff_gate_validation as _continuity_and_handoff_gate_validation,
+    state_and_canon_gate_validation as _state_and_canon_gate_validation,
 )
-from ..review.evidence import declared_repair_targets_changed
 def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[str], list[str]]:
     """Run current-state-specific gates after expected outputs exist."""
 
     current_state = str(task.get("current_state") or "")
     scene_id = str(task.get("scene_id") or "")
+    if not current_state:
+        return [], []
+    errors, notes = _preparation_gate_validation(root, task, current_state, scene_id)
+    errors.extend(_candidate_gate_validation(root, task, current_state, scene_id))
+    errors.extend(_state_and_canon_gate_validation(root, task, current_state, scene_id))
+    errors.extend(
+        _continuity_and_handoff_gate_validation(
+            root,
+            current_state,
+            scene_id,
+            status_reader=continuity_ledger_status,
+            task_status_reader=continuity_ledger_task_status,
+        )
+    )
+    return errors, notes
+
+
+def _preparation_gate_validation(
+    root: Path,
+    task: dict[str, object],
+    current_state: str,
+    scene_id: str,
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     notes: list[str] = []
-    if not current_state:
-        return errors, notes
 
     if current_state in {"context-packet", "context-trace"}:
         errors.extend(_context_trace_gate_errors(root, scene_id))
@@ -71,6 +88,16 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
         errors.extend(_reader_experience_gate_errors(root, task))
     if current_state == "scene-rhythm-contract":
         errors.extend(_narrative_rhythm_gate_errors(root, scene_id))
+    return errors, notes
+
+
+def _candidate_gate_validation(
+    root: Path,
+    task: dict[str, object],
+    current_state: str,
+    scene_id: str,
+) -> list[str]:
+    errors: list[str] = []
     if current_state in {"candidate-generation-provenance", "generation-agent-task"}:
         candidate = _candidate_path_for_task(root, task)
         errors.extend(_candidate_generation_gate_errors(root, task, candidate))
@@ -89,48 +116,9 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
     if current_state == "static-review":
         errors.extend(_static_review_gate_errors(root, scene_id, require_pass=False))
     if current_state == "target-length-revision":
+        candidate = _candidate_path_for_task(root, task)
         errors.extend(target_length_revision_gate_errors(root, scene_id, candidate))
-    if current_state in {"state-patch-json", "state-agent-task"}:
-        errors.extend(_state_patch_gate_errors(root, scene_id))
-    if current_state == "state-agent-task":
-        errors.extend(semantic_artifact_errors(root, current_state, scene_id))
-    if current_state in {"state-patch-approval", "state-apply"}:
-        from ...character_state_apply import state_patch_writeback_status
-
-        state_status = state_patch_writeback_status(root, scene_id)
-        value = str(state_status.get("status") or "")
-        if current_state == "state-patch-approval" and value not in {"pending_apply", "pass", "not_required"}:
-            errors.append(str(state_status.get("message") or "state patch approval is incomplete"))
-        if current_state == "state-apply" and value != "pass":
-            errors.append(str(state_status.get("message") or "state apply is incomplete"))
-    if current_state == "canon-patch-json":
-        errors.extend(_canon_writeback_gate_errors(root, scene_id, require_review=False))
-    if current_state == "canon-agent-task":
-        errors.extend(_canon_writeback_gate_errors(root, scene_id, require_review=True))
-    if current_state == "canon-agent-task":
-        errors.extend(semantic_artifact_errors(root, current_state, scene_id))
-    if current_state == "canon-patch-revision":
-        errors.extend(declared_repair_targets_changed(root, task, "canon-patch revision"))
-        errors.extend(canon_patch_candidate_gate_errors(root, task))
-    if current_state in {"canon-patch-approval", "canon-patch-deferred"}:
-        errors.extend(canon_patch_decision_gate_errors(root, task, require_approve=False))
-    if current_state == "canon-patch-apply":
-        errors.extend(canon_patch_apply_gate_errors(root, task))
-    if current_state in {"continuity-ledger-agent-task", "continuity-ledger-review", "continuity-ledger-apply"}:
-        passed, message, _delta = continuity_ledger_status(root, scene_id, require_review=current_state != "continuity-ledger-agent-task")
-        if not passed:
-            errors.append(message)
-    if current_state in {"continuity-ledger-agent-task", "continuity-ledger-review"}:
-        passed, message = continuity_ledger_task_status(root, scene_id, review=current_state == "continuity-ledger-review")
-        if not passed:
-            errors.append(message)
-    if current_state == "continuity-ledger-apply" and not (root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json").is_file():
-        errors.append("continuity ledger apply receipt is missing")
-    if current_state == "scene-handoff":
-        passed, message, _payload = scene_handoff_source_status(root, scene_id)
-        if not passed:
-            errors.append(message)
-    return errors, notes
+    return errors
 
 
 def _context_trace_gate_errors(root: Path, scene_id: str) -> list[str]:
@@ -214,16 +202,7 @@ def _word_budget_gate_errors(root: Path, task: dict[str, object]) -> list[str]:
         return [str(exc)]
     if contract.get("status") == "not_required":
         return []
-    errors: list[str] = []
-    scene_inventory_task = root / "plot" / "word_budget" / "scene_inventory_expansion.agent_tasks.md"
-    if scene_inventory_task.exists():
-        completion = agent_task_completion_status(scene_inventory_task, root=root)
-        if completion.get("complete") is not True:
-            errors.append(f"scene-inventory word-budget sidecar is incomplete: {completion.get('message')}")
-    scene_inventory_review = root / "reviews" / "word_budget" / "scene_inventory_review.md"
-    if scene_inventory_task.exists() and not scene_inventory_review.exists():
-        errors.append("formal longform scene generation requires reviews/word_budget/scene_inventory_review.md")
-    return errors
+    return []
 
 
 def _reader_experience_gate_errors(root: Path, task: dict[str, object]) -> list[str]:
@@ -441,36 +420,6 @@ def _static_review_matches_draft(review: Path, draft: Path) -> bool:
         return False
     match = re.search(r"(?m)^-\s*审查对象 SHA-256：`([0-9a-fA-F]{64})`\s*$", _read_text(review))
     return bool(match and match.group(1).lower() == _file_sha256(draft))
-
-
-def _state_patch_gate_errors(root: Path, scene_id: str) -> list[str]:
-    path = root / "characters" / "state_patches" / f"{scene_id}_state_patch.json"
-    payload, error = _read_optional_json(path)
-    if error:
-        return [error]
-    if not payload:
-        return [f"state patch JSON is missing or empty: {_rel(path, root)}"]
-    errors: list[str] = []
-    if str(payload.get("schema") or "") != "literary-engineering-workbench/character-state-patch/v0.1":
-        errors.append("state patch JSON has wrong or missing schema")
-    if str(payload.get("scene_id") or "") not in {"", scene_id}:
-        errors.append(f"state patch scene_id mismatch: {payload.get('scene_id')}")
-    if str(payload.get("status") or "").strip().lower() not in {"pending_human_approval", "candidate", "reviewed", "approved"}:
-        errors.append("state patch status must remain candidate/review/approval-scoped")
-    return errors
-
-
-def _canon_writeback_gate_errors(
-    root: Path,
-    scene_id: str,
-    *,
-    require_review: bool = True,
-) -> list[str]:
-    status = canon_writeback_status(root, scene_id, require_review=require_review)
-    state = str(status.get("status") or "")
-    if state in {"pass", "not_required"}:
-        return []
-    return [f"canon writeback gate is not complete for {scene_id}: {status.get('message')}"]
 
 
 def _candidate_path_for_task(root: Path, task: dict[str, object]) -> Path:

@@ -21,14 +21,10 @@ hard_constraints:
   - Reconcile project volume and chapter Han-character targets and planned scene counts.
   - Do not enumerate every scene in this task; the formal scene-inventory task owns scene-level expansion.
   - Keep the expanded outline as candidate material pending human approval.
-  - Use pass only when inventory supports the target and no blocking issue remains.
-  - Do not use pass_with_notes; nonblocking observations belong in a notes section under pass.
 output_contract:
-  - Write only the declared outline candidate and review report; Studio writes lifecycle completion evidence after deterministic preflight.
-  - The review must contain a standalone machine-readable line exactly shaped as - 结论： pass, - 结论： revise_required, or - 结论： reject.
+  - Write only the declared outline candidate; Studio writes lifecycle completion evidence and assigns a separate Reviewer task.
 review_requirements:
-  - Verify event density causal chains relationship changes information release consequences and setup/payoff inventory.
-  - Treat missing inventory as revise_required rather than hiding it in notes.
+  - A separate digest-bound Reviewer must approve the completed candidate before downstream planning.
 forbidden_shortcuts:
   - Do not declare pass merely because numeric totals reconcile.
   - Do not create or edit lifecycle completion receipts.
@@ -40,4 +36,4 @@ Build a candidate longform structure whose event inventory can actually carry th
 
 The candidate must be organized from volume to chapter. For every chapter, record its target Chinese-content character count, planned scene count, chapter function, key dramatic turn, main-plot load, subplot load, character-change load, world/canon load, consequence load, detail level, reader obligation, incoming causal pressure, and outgoing handoff. For every volume, summarize the inventory of core events, action or investigation chains, relationship changes, information releases, failures and costs, setup/payoff obligations, and the planned chapter and scene totals. Numeric reconciliation alone is insufficient: every allocated block must correspond to enough distinct causal events to sustain the requested scale without repetitive prose or summary compression.
 
-The review status is a formal gate. Write one standalone status line in the exact form required by the output contract. Use `pass` when remaining observations are genuinely nonblocking and place those observations in a separate notes section. Use `revise_required` whenever the outline still lacks events, causality, obligations, or sufficient reader payoff inventory. Do not create the completion receipt; Studio writes it only after both semantic outputs pass deterministic preflight.
+Do not review your own candidate or write a review verdict. A separate digest-bound Reviewer task evaluates event density, causality, obligations, and reader payoff inventory after this candidate is complete. Do not create the completion receipt; Studio writes it after deterministic preflight.

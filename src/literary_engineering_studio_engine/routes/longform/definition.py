@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...task_paths import TASK_SCHEMA, normalize_relative_path, now, resolve_project_path, task_id
+from ...semantic_task_contracts import semantic_artifact_contract
 from .blueprints import blueprint_for_state
 from .context_policy import agent_context_payload
 from .gates import repair_targets_changed, validate_task, word_budget_file_gate_errors
@@ -78,6 +79,11 @@ def build_task_payload(root: Path, route: str, state: dict[str, object]) -> dict
         "next_allowed_states": blueprint["next_allowed_states"],
     }
     payload.update(agent_context_payload(blueprint))
+    semantic = semantic_artifact_contract(current_state, "longform")
+    if semantic is not None:
+        payload["semantic_artifact"] = semantic
+    if isinstance(blueprint.get("system_owned_fields"), dict):
+        payload["system_owned_fields"] = dict(blueprint["system_owned_fields"])
     repair_targets = [str(item) for item in blueprint.get("repair_targets", [])]
     if repair_targets:
         payload["repair_targets"] = repair_targets

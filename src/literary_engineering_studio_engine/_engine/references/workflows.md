@@ -163,13 +163,13 @@ python -m literary_engineering_studio_engine word-budget "<work-dir>" `
 - `plot/word_budget/scene_inventory_expansion.agent_tasks.md`
 - `plot/chapter_obligations/chapter_obligations.agent_tasks.md`
 
-The platform agent must read the task sidecar and write:
+The three Writer tasks create:
 
 - `plot/candidates/outlines/word_budget_expansion.md`
-- `reviews/word_budget/word_budget_review.md`
 - `plot/candidates/scenes/word_budget_scene_inventory.md`
-- `reviews/word_budget/scene_inventory_review.md`
-- `reviews/word_budget/chapter_obligation_review.md`
+- `plot/candidates/chapters/chapter_obligation_plan.md`
+
+Each candidate then receives a separate `prepare-longform-review` step and an identity-independent Reviewer task. Authoritative verdicts live in `reviews/word_budget/{word_budget|scene_inventory|chapter_obligation}_review.json`; adjacent Markdown files are readable explanations only. Reviews are bound to the exact candidate digest, reject Writer/Reviewer identity reuse, and must be reissued after revision.
 
 The budgeted outline candidate should map Chinese-content target length to narrative inventory: volumes, chapters, scenes, relationship turns, world-pressure events, consequences, setup/payoff, and pacing relief. The scene-inventory candidate should bind each chapter to target Chinese-content characters, actual cleaned-body Chinese-content characters, machine count diagnostics, missing scene counts, and expansion tasks. The chapter-obligation review should confirm every chapter has reader questions, promised rewards, withheld information, payoff/delay strategy, and anti-summary requirements. Do not overwrite `plot/outline.md` or formal `scenes/*.yaml` until the candidate passes review and the user approves it.
 

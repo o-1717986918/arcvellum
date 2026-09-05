@@ -53,6 +53,24 @@ SEMANTIC_ARTIFACTS: dict[str, dict[str, str]] = {
         "filename": "{scene_id}_canon_patch_review.json",
         "consumed_by": "ready",
     },
+    "budget-review": {
+        "schema_name": "longform_planning_review.v1",
+        "kind": "longform-planning-review",
+        "filename": "word_budget_review.json",
+        "consumed_by": "budget-revision",
+    },
+    "scene-inventory-review": {
+        "schema_name": "longform_planning_review.v1",
+        "kind": "longform-planning-review",
+        "filename": "scene_inventory_review.json",
+        "consumed_by": "scene-inventory-revision",
+    },
+    "chapter-obligation-review": {
+        "schema_name": "longform_planning_review.v1",
+        "kind": "longform-planning-review",
+        "filename": "chapter_obligation_review.json",
+        "consumed_by": "chapter-obligation-revision",
+    },
 }
 
 
@@ -76,6 +94,12 @@ def semantic_artifact_relative_path(current_state: str, scene_id: str) -> str:
         return f"characters/state_patches/{filename}"
     if current_state == "canon-agent-task":
         return f"canon/patches/{filename}"
+    if current_state in {
+        "budget-review",
+        "scene-inventory-review",
+        "chapter-obligation-review",
+    }:
+        return f"reviews/word_budget/{filename}"
     return ""
 
 
@@ -158,7 +182,31 @@ def semantic_artifact_template(
             "approval_recommendation": "hold",
             "required_changes": [],
         }
+    if current_state in {
+        "budget-review",
+        "scene-inventory-review",
+        "chapter-obligation-review",
+    }:
+        return _longform_review_template(source)
     raise ValueError(f"no semantic template is defined for {current_state}")
+
+
+def _longform_review_template(source: str) -> dict[str, Any]:
+    return {
+        "schema": "literary-engineering-workbench/longform-planning-review/v1",
+        "review_kind": "",
+        "status": "pending_agent_judgment",
+        "candidate_path": source,
+        "candidate_sha256": "",
+        "writer_session_id": "",
+        "reviewer_session_id": "",
+        "verdict": "pending",
+        "summary": "",
+        "evidence_paths": [],
+        "findings": [],
+        "required_changes": [],
+        "checked_dimensions": [],
+    }
 
 
 def write_semantic_artifact_template(
@@ -288,9 +336,26 @@ def _semantic_quality_errors(
     special_handler = {
         "roleplay-agent-task": _roleplay_semantic_errors,
         "branch-agent-task": _branch_semantic_errors,
+        "budget-review": _longform_planning_review_semantic_errors,
+        "scene-inventory-review": _longform_planning_review_semantic_errors,
+        "chapter-obligation-review": _longform_planning_review_semantic_errors,
     }.get(current_state)
     if special_handler is not None:
         return [*errors, *special_handler(root, payload, scene_id, relative)]
+
+    errors.extend(_semantic_source_binding_errors(root, current_state, scene_id, payload, relative))
+    errors.extend(_semantic_terminal_errors(current_state, payload, relative))
+    return errors
+
+
+def _semantic_source_binding_errors(
+    root: Path,
+    current_state: str,
+    scene_id: str,
+    payload: dict[str, Any],
+    relative: str,
+) -> list[str]:
+    errors: list[str] = []
 
     source_rel = str(payload.get("source_artifact") or "").replace("\\", "/").strip()
     expected = {
@@ -313,6 +378,13 @@ def _semantic_quality_errors(
             actual = hashlib.sha256(source.read_bytes()).hexdigest()
             if str(payload.get(digest_key) or "").lower() != actual:
                 errors.append(f"semantic artifact {digest_key} must match exact source: {relative}")
+    return errors
+
+
+def _semantic_terminal_errors(
+    current_state: str, payload: dict[str, Any], relative: str
+) -> list[str]:
+    errors: list[str] = []
     if str(payload.get("verdict") or "") != "pass":
         errors.append(f"semantic artifact verdict must be pass before route advance: {relative}")
     if current_state == "composition-agent-task" and payload.get("ready_for_generation") is not True:
@@ -336,6 +408,29 @@ def _roleplay_semantic_errors(_root: Path, payload: dict[str, Any], _scene_id: s
         values = payload.get(field)
         if not isinstance(values, list) or not values:
             errors.append(f"roleplay semantic artifact requires a non-empty {field}: {relative}")
+    return errors
+
+
+def _longform_planning_review_semantic_errors(
+    _root: Path,
+    payload: dict[str, Any],
+    _scene_id: str,
+    relative: str,
+) -> list[str]:
+    errors: list[str] = []
+    verdict = str(payload.get("verdict") or "").strip().lower()
+    required_changes = payload.get("required_changes")
+    if verdict not in {"pass", "revise", "block"}:
+        errors.append(f"longform planning review needs a terminal verdict: {relative}")
+    if not str(payload.get("summary") or "").strip():
+        errors.append(f"longform planning review requires a summary: {relative}")
+    if verdict == "pass" and required_changes:
+        errors.append(f"passing longform planning review cannot retain required_changes: {relative}")
+    if verdict in {"revise", "block"} and not (
+        isinstance(required_changes, list)
+        and any(str(item).strip() for item in required_changes)
+    ):
+        errors.append(f"{verdict} longform planning review requires concrete changes: {relative}")
     return errors
 
 

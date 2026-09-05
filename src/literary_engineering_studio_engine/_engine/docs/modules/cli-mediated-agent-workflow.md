@@ -64,7 +64,7 @@ python -m literary_engineering_workbench workflow-dashboard <project>
 $env:PYTHONPATH = "src"
 python -m literary_engineering_workbench task-next <project> --route longform-planning
 python -m literary_engineering_workbench task-open <project> --task-id <task-id>
-# 平台 Agent 按 task 执行 word-budget、预算化大纲、预算 review、场景库存候选、库存 review、章节义务规划和章节义务 review
+# 平台 Agent 按 task 执行三个 Writer 候选和三个独立、摘要绑定的 Reviewer 任务
 python -m literary_engineering_workbench task-submit <project> --task-id <task-id> --from <artifact>
 python -m literary_engineering_workbench task-complete <project> --task-id <task-id>
 python -m literary_engineering_workbench workflow-advance <project> --route longform-planning
@@ -113,9 +113,9 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 
 从 `v0.84.1` 起，`task-complete` 不只检查文件是否存在。它会按当前状态验证 CLI provenance、sidecar completion、branch selection、composition readiness、word-budget sidecar/review、candidate generation manifest、Style Lint、exact-candidate AgentReview、promotion waiver、static review 和 state patch JSON。失败时任务会进入 `blocked`，失败信息就是下一步修复任务。
 
-从 `v0.84.2` 起，`task_registry.py` 使用 route registry 分发表、选择器、任务构建器和门禁函数。`longform-planning` 已接入同一生命周期：`word-budget-file`、`budget-agent-task`、`budget-review`、`scene-inventory-agent-task`、`scene-inventory-review`。预算 sidecar 的 completion marker 不能单独放行；预算化大纲候选、分场景库存候选和对应 clean `pass` review 也必须存在。
+`task_registry.py` 使用 route registry 分发表、选择器、任务构建器和门禁函数。`longform-planning` 为三类候选分别执行 Writer、review prepare、独立 Reviewer 和按裁决 revision。completion marker 不能单独放行；候选、摘要绑定 JSON 审查、独立会话身份和完整维度必须同时有效。
 
-从 `v0.88.0` 起，`longform-planning` 在 scene inventory 后新增 `chapter-obligation-agent-task` 和 `chapter-obligation-review`。`word-budget` 会生成 `plot/chapter_obligations/chapter_obligations.agent_tasks.md`，平台 Agent 必须完成章节义务规划、写 clean review 和 completion marker。单章正式生成前还要通过 `chapter-obligation --chapter-id <chapter_id>` 建立 per-chapter reader contract；缺失时 scene-development 会停在 `reader-experience-contract`，不会进入正文候选生成。
+章节义务规划也遵循同一独立审查闭环。`word-budget` 会生成 `plot/chapter_obligations/chapter_obligations.agent_tasks.md`，Writer 只创建候选，Reviewer 给出结构化裁决。单章正式生成前还要通过 `chapter-obligation --chapter-id <chapter_id>` 建立 per-chapter reader contract；缺失时 scene-development 会停在 `reader-experience-contract`，不会进入正文候选生成。
 
 从 `v0.89.0` 起，`workflow-dashboard` 提供跨路线只读 cockpit。它会把 `workflow-state --route overall`、`agent-task-status`、七条正式 route audit 和最近 event log 汇总到 `workflow/dashboard/workflow_dashboard.json`、`.md`、`.html`。这个 dashboard 只展示状态，不完成任务、不创建创作产物、不允许跳过 `task-next/task-open/task-submit/task-complete`。
 
@@ -168,11 +168,18 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 
 1. `word-budget-file`
 2. `budget-agent-task`
-3. `budget-review`
-4. `scene-inventory-agent-task`
-5. `scene-inventory-review`
-6. `chapter-obligation-agent-task`
-7. `chapter-obligation-review`
+3. `budget-review-prepare`
+4. `budget-review`
+5. `budget-revision`（仅 `revise` 时执行）
+6. `scene-inventory-agent-task`
+7. `scene-inventory-review-prepare`
+8. `scene-inventory-review`
+9. `scene-inventory-revision`（仅 `revise` 时执行）
+10. `chapter-obligation-agent-task`
+11. `chapter-obligation-review-prepare`
+12. `chapter-obligation-review`
+13. `chapter-obligation-revision`（仅 `revise` 时执行）
+14. `planning-materialization`
 
 对应硬产物：
 
@@ -181,14 +188,17 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 3. `plot/word_budget/word_budget.agent_tasks.md`
 4. `plot/word_budget/word_budget.agent_completion.json`
 5. `plot/candidates/outlines/word_budget_expansion.md`
-6. `reviews/word_budget/word_budget_review.md`，结论必须为 `pass`
+6. `reviews/word_budget/word_budget_review.json`，必须绑定精确候选摘要且结论为 `pass`
 7. `plot/word_budget/scene_inventory_expansion.agent_tasks.md`
 8. `plot/word_budget/scene_inventory_expansion.agent_completion.json`
 9. `plot/candidates/scenes/word_budget_scene_inventory.md`
-10. `reviews/word_budget/scene_inventory_review.md`，结论必须为 `pass`
+10. `reviews/word_budget/scene_inventory_review.json`，必须绑定精确候选摘要且结论为 `pass`
 11. `plot/chapter_obligations/chapter_obligations.agent_tasks.md`
 12. `plot/chapter_obligations/chapter_obligations.agent_completion.json`
-13. `reviews/word_budget/chapter_obligation_review.md`，结论必须为 `pass`
+13. `plot/candidates/chapters/chapter_obligation_plan.md`
+14. `reviews/word_budget/chapter_obligation_review.json`，必须绑定精确候选摘要且结论为 `pass`
+
+每项 JSON 均配有 `.md` 可读报告与 Reviewer sidecar/completion。Markdown 中写出 `pass`、沿用旧摘要或让 Writer 自审都不能推进状态。
 
 这条路线专门堵住“预算文件生成了但没人读”的漏洞。正式批量场景生成前，平台 Agent 必须完成预算化大纲、场景库存和章节义务三类判断，不能只靠拉长每个场景满足目标字数，也不能把章节写成缺乏读者承诺的事件摘要。
 

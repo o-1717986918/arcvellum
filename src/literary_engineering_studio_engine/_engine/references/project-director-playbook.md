@@ -125,13 +125,14 @@ Do not paste long source passages into candidate files. Do not convert source-de
 
 When the user gives a target such as 10 万字、50 万字、百万字、5 卷或多季，不要 jump straight into prose. First determine whether the current project has enough narrative inventory.
 
-Use `word-budget` / `longform-budget` when deterministic scaffolding is useful. Then, as platform agent:
+Use `word-budget` / `longform-budget` when deterministic scaffolding is useful. Then follow the route-issued Writer/Reviewer separation:
 
 1. Read `plot/word_budget/word_budget.agent_tasks.md`.
 2. Expand the outline as a candidate under `plot/candidates/outlines/word_budget_expansion.md`.
-3. Write `reviews/word_budget/word_budget_review.md`.
-4. Check whether the target length is supported by scenes, relationship turns, consequences, setup/payoff, world pressure, and time-span progression.
-5. Ask the user to approve major scope changes before replacing formal `plot/outline.md`.
+3. Run `prepare-longform-review --kind budget`; a different Reviewer session checks whether scenes, relationship turns, consequences, setup/payoff, world pressure, and time-span progression support the target.
+4. Repeat the same digest-bound review sequence for `scene_inventory` and `chapter_obligation`.
+5. Treat the JSON verdicts as authoritative. `revise` returns to the exact candidate, `block` pauses for the user, and candidate changes invalidate prior reviews.
+6. Ask the user to approve major scope changes before replacing formal `plot/outline.md`.
 
 Do not solve an undersized outline by making each scene verbose. If the project asks for 50 万字 but only has a short novella's event inventory, recommend one of four changes: expand plot inventory, add relationship/world/subplot load, increase time-span/volume structure, or reduce the target length.
 

@@ -53,6 +53,6 @@ Write `plot/candidates/scenes/word_budget_scene_inventory.md` in this exact repe
 
 Use one unique `SC-###` row for every planned scene. `target_chars` must be a positive integer. The 11 data columns are mandatory, and the total row count must reconcile with `word_budget.json`.
 
-Before reporting `pass`, parse the data rows rather than trusting prose summaries: the total row count, contiguous `SC-001..SC-N` sequence, each chapter's row count, each chapter's `target_chars` sum, and the whole-book sum must exactly match `word_budget.json`.
+Before finishing the candidate, reconcile the total row count, contiguous `SC-001..SC-N` sequence, each chapter's row count, each chapter's `target_chars` sum, and the whole-book sum with `word_budget.json`. Do not write a verdict; a separate Reviewer will parse and judge the finished candidate.
 
 `participants` is a character contract, not a list of every noun present in the scene. Use `主角` for the foundational protagonist until a canonical name is fixed. List another participant only when the story intends that person or durable character role to receive a reusable formal character asset before roleplay and prose. Each item must be a bare identity such as `幸存者` or `调度员`; `幸存者（以信号点名身份现身）` is invalid because the parenthetical belongs in information release. Put stations, ships, signals, interfaces, organizations, objects, anonymous crowds, scenery, actions, aliases, and reveal notes into the conflict, information-release, consequence, or setting wording instead.

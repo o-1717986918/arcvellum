@@ -86,7 +86,8 @@ def _load_template(task: TaskPackage, semantic: dict[str, str]) -> dict[str, Any
 def _locked_values(template: dict[str, Any]) -> dict[str, Any]:
     fields = (
         "schema", "scene_id", "source_artifact", "composition_sha256",
-        "state_patch_sha256", "canon_patch_sha256",
+        "state_patch_sha256", "canon_patch_sha256", "review_kind",
+        "candidate_path", "candidate_sha256", "writer_session_id",
     )
     return {
         field: template[field]

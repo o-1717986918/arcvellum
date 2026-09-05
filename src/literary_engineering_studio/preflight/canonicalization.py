@@ -42,6 +42,7 @@ def canonicalize_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> li
     changes.extend(_canonicalize_semantic_artifact_metadata(task, sandbox))
     changes.extend(_canonicalize_canon_patch_candidate_metadata(task, sandbox))
     changes.extend(_canonicalize_story_architecture_metadata(task, sandbox))
+    changes.extend(_canonicalize_longform_planning_review_metadata(task, sandbox))
     changes.extend(_canonicalize_continuity_ledger_metadata(task, sandbox))
     changes.extend(canonicalize_style_machine_metadata(task, sandbox))
     changes.extend(canonicalize_project_review_repair_scope(task, sandbox))
@@ -258,6 +259,53 @@ def _canonicalize_story_architecture_metadata(task: TaskPackage, sandbox: Sandbo
                 expected["status"] = "complete"
             changes.extend(_write_machine_fields(path, review_rel, payload, expected, "story-architecture-review"))
     return changes
+
+
+def _canonicalize_longform_planning_review_metadata(
+    task: TaskPackage, sandbox: SandboxManifest
+) -> list[dict[str, str]]:
+    """Bind planning reviews to the prepared candidate and formal task roles."""
+
+    state = str(task.current_state or "")
+    paths = {
+        "budget-review": "reviews/word_budget/word_budget_review.json",
+        "scene-inventory-review": "reviews/word_budget/scene_inventory_review.json",
+        "chapter-obligation-review": "reviews/word_budget/chapter_obligation_review.json",
+    }
+    relative = paths.get(state)
+    if relative is None:
+        return []
+    owned = task.payload.get("system_owned_fields")
+    owned = owned if isinstance(owned, dict) else {}
+    contract = owned.get("longform_planning_review")
+    contract = contract if isinstance(contract, dict) else {}
+    path = sandbox.workspace / relative
+    payload = _read_object(path)
+    candidate_rel = str(contract.get("candidate_path") or "")
+    candidate = sandbox.workspace / candidate_rel
+    if payload is None or not candidate_rel or not candidate.is_file():
+        return []
+    expected: dict[str, Any] = {
+        "schema": "literary-engineering-workbench/longform-planning-review/v1",
+        "review_kind": str(contract.get("review_kind") or ""),
+        "candidate_path": candidate_rel,
+        "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+        "writer_session_id": str(contract.get("writer_session_id") or ""),
+        "reviewer_session_id": _session_identity(task, "reviewer"),
+    }
+    if str(payload.get("verdict") or "").strip().lower() in {
+        "pass",
+        "revise",
+        "block",
+    }:
+        expected["status"] = "complete"
+    return _write_machine_fields(
+        path,
+        relative,
+        payload,
+        expected,
+        "longform-planning-review",
+    )
 
 
 

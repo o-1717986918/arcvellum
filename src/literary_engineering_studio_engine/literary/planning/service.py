@@ -83,14 +83,7 @@ def build_word_budget(
     inventory = _outline_inventory(root, outline_path)
     scene_inventory_binding = _scene_inventory_binding(root, chapter_budgets)
     issues = _budget_issues(totals, inventory, scene_inventory_binding)
-    candidate_outputs = {
-        "budgeted_outline_candidate": "plot/candidates/outlines/word_budget_expansion.md",
-        "budget_review": "reviews/word_budget/word_budget_review.md",
-        "scene_inventory_expansion": "plot/candidates/scenes/word_budget_scene_inventory.md",
-        "scene_inventory_review": "reviews/word_budget/scene_inventory_review.md",
-        "chapter_obligations": "plot/chapter_obligations/",
-        "chapter_obligation_review": "reviews/word_budget/chapter_obligation_review.md",
-    }
+    candidate_outputs = _candidate_outputs()
     status = "pass" if not [issue for issue in issues if issue["severity"] in {"high", "medium"}] else "needs_expansion"
 
     markdown_path = _resolve_output(root, output, "plot", "word_budget", "word_budget.md")
@@ -168,3 +161,17 @@ def build_word_budget(
         status=status,
         issue_count=len(issues),
     )
+
+
+def _candidate_outputs() -> dict[str, str]:
+    return {
+        "budgeted_outline_candidate": "plot/candidates/outlines/word_budget_expansion.md",
+        "budget_review": "reviews/word_budget/word_budget_review.md",
+        "budget_review_contract": "reviews/word_budget/word_budget_review.json",
+        "scene_inventory_expansion": "plot/candidates/scenes/word_budget_scene_inventory.md",
+        "scene_inventory_review": "reviews/word_budget/scene_inventory_review.md",
+        "scene_inventory_review_contract": "reviews/word_budget/scene_inventory_review.json",
+        "chapter_obligations": "plot/chapter_obligations/",
+        "chapter_obligation_review": "reviews/word_budget/chapter_obligation_review.md",
+        "chapter_obligation_review_contract": "reviews/word_budget/chapter_obligation_review.json",
+    }

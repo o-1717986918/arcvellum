@@ -94,6 +94,13 @@ def _apply_blueprint_contracts(
         payload["scene_character_assets"] = blueprint["scene_character_assets"]
     if blueprint.get("core_managed_outputs"):
         payload["core_managed_outputs"] = [str(item) for item in blueprint["core_managed_outputs"]]
+    _apply_repair_contract(payload, blueprint, root)
+    _apply_semantic_contract(payload, blueprint, root, current_state, scene_id)
+
+
+def _apply_repair_contract(
+    payload: dict[str, object], blueprint: dict[str, object], root: Path
+) -> None:
     repair_targets = [str(item) for item in blueprint.get("repair_targets", []) if str(item).strip()]
     if repair_targets:
         payload["repair_targets"] = repair_targets
@@ -102,6 +109,15 @@ def _apply_blueprint_contracts(
             for relative in repair_targets
             if (path := _resolve_project_path(root, relative)).is_file()
         }
+
+
+def _apply_semantic_contract(
+    payload: dict[str, object],
+    blueprint: dict[str, object],
+    root: Path,
+    current_state: str,
+    scene_id: str,
+) -> None:
     if current_state == "reader-experience-contract":
         payload["system_owned_fields"] = {
             "chapter_obligation": chapter_obligation_machine_contract(

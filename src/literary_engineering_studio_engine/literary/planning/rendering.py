@@ -71,7 +71,6 @@ def render_scene_word_budget_contract(
 
 def _write_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline_path: Path, task_path: Path, payload: dict) -> None:
     candidate = payload["candidate_outputs"]["budgeted_outline_candidate"]
-    review = payload["candidate_outputs"]["budget_review"]
     source_paths = [markdown_path, json_path, root / "project.yaml"]
     if outline_path.exists():
         source_paths.append(outline_path)
@@ -99,16 +98,11 @@ def _write_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline
                 "建立字数-剧情量映射",
                 """为每卷写出剧情库存说明：核心事件数、调查/行动链数、人物关系变化数、信息释放点、失败/代价点、伏笔设置和回收点，并给出计划章节数与计划场景总数。若某卷目标约10万字，场景库存通常应达到60-90个；不足时必须标注 underbuilt，但不要在这里逐条创作全部场景。""",
             ),
-            (
-                "写入预算审查报告",
-                f"""创建或覆盖 `{review}`。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有剧情库存足以支撑目标长度且不存在阻塞问题时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。说明哪里欠剧情库存、哪些卷需要扩展、哪些内容需要用户确认。不要写入 `[AGENT_TASK: ...]`。""",
-            ),
         ],
     )
 
 def _write_scene_inventory_agent_tasks(root: Path, markdown_path: Path, json_path: Path, outline_path: Path, task_path: Path, payload: dict) -> None:
     candidate = payload["candidate_outputs"]["scene_inventory_expansion"]
-    review = payload["candidate_outputs"]["scene_inventory_review"]
     totals = payload["totals"]
     chapter_contract = "；".join(
         f"{row['chapter_id']}={row['scene_count']}场/{row['target_words']}中文内容字符"
@@ -139,15 +133,10 @@ def _write_scene_inventory_agent_tasks(root: Path, markdown_path: Path, json_pat
                 "生成扩场景候选",
                 f"""创建或覆盖 `{candidate}`。这是后续物化正式 scenes/*.yaml 的机器可读合同，不是自由散文清单。必须恰好写 {totals['scene_count']} 个场景，目标字符合计恰好 {totals['target_chinese_chars']}；逐章严格满足：{chapter_contract}。每章先写 `### Ch 0001 — 章节名 |`，随后使用 11 列 Markdown 表格：`| SC-001 | 场景名 | 目标中文内容字符 | 功能 | 参与角色 | 冲突 | 信息释放 | 行动后果 | 伏笔设置/回收 | 节奏角色 | 读者义务 |`。一行对应一个独立场景，SC 编号从 SC-001 开始全书连续且唯一、目标为整数。修订旧候选时必须原位替换错误行并删除重复行，禁止在末尾追加修正版；不得拆成逐场景的说明卡、段落或只含字段/内容的二列表格。不得只写“增加描写”。""",
             ),
-            (
-                "写入扩场景审查报告",
-                f"""创建或覆盖 `{review}`。报告必须重新解析候选表并明确记录实际总场数、逐章场数和目标字符合计，不得复用候选摘要中的自述数字。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有实际解析结果恰好满足 {totals['scene_count']} 场、{totals['target_chinese_chars']} 中文内容字符及逐章预算且不存在阻塞问题时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。说明哪些候选需要用户确认，哪些不能直接晋升。不要写入 `[AGENT_TASK: ...]`。""",
-            ),
         ],
     )
 
 def _write_chapter_obligation_plan_tasks(root: Path, markdown_path: Path, json_path: Path, outline_path: Path, task_path: Path, payload: dict) -> None:
-    review = payload["candidate_outputs"]["chapter_obligation_review"]
     source_paths = [markdown_path, json_path, root / "project.yaml", root / "scenes"]
     if outline_path.exists():
         source_paths.append(outline_path)
@@ -169,10 +158,6 @@ def _write_chapter_obligation_plan_tasks(root: Path, markdown_path: Path, json_p
             (
                 "建立读者体验规划",
                 """为每章列出读者将带着什么问题进入、期望什么回报、哪些信息暂扣、哪些承诺本章兑现、哪些必须延迟到后文。重点检查剧情库存是否支撑目标中文内容字符；不足时补事件链、关系压力、信息释放和后果，而不是要求正文灌水。""",
-            ),
-            (
-                "写入章节义务审查报告",
-                f"""创建或覆盖 `{review}`。报告必须包含独占一行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。只有全部主要章节都有可执行的读者体验契约时才能使用 pass；非阻塞备注列入 notes，不使用 pass_with_notes。否则不得进入批量 scene-development。""",
             ),
         ],
     )

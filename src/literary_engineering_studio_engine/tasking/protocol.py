@@ -260,9 +260,9 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         cli_chain=(
             "python -m literary_engineering_studio_engine protocol longform-planning",
             "python -m literary_engineering_studio_engine word-budget <project> --target-words 500000 --volumes 5 --genre mystery",
-            "Read plot/word_budget/word_budget.agent_tasks.md and write plot/candidates/outlines/word_budget_expansion.md plus reviews/word_budget/word_budget_review.md.",
-            "Read plot/word_budget/scene_inventory_expansion.agent_tasks.md and write plot/candidates/scenes/word_budget_scene_inventory.md plus reviews/word_budget/scene_inventory_review.md.",
-            "Read plot/chapter_obligations/chapter_obligations.agent_tasks.md and write reviews/word_budget/chapter_obligation_review.md plus the completion marker.",
+            "Complete the budget Writer task, then run prepare-longform-review --kind budget and complete its independent digest-bound Reviewer task.",
+            "Complete the scene-inventory Writer task, then run prepare-longform-review --kind scene_inventory and complete its independent digest-bound Reviewer task.",
+            "Complete the chapter-obligation Writer task, then run prepare-longform-review --kind chapter_obligation and complete its independent digest-bound Reviewer task.",
             "For each chapter entering prose, run python -m literary_engineering_studio_engine chapter-obligation <project> --chapter-id <chapter_id>, then fill the per-chapter reader contract and completion marker.",
             "python -m literary_engineering_studio_engine route-audit <project> --route longform-planning",
             "python -m literary_engineering_studio_engine longform-audit <project> --target-length 500000",

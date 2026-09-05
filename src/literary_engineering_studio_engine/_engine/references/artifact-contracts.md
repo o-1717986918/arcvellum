@@ -306,15 +306,15 @@ plot/chapter_obligations/chapter_obligations.agent_tasks.md
 
 The CLI only calculates target distribution and scans existing inventory. It does not decide that the outline is good enough, does not write final plot, and does not satisfy a target length by stretching prose.
 
-Expected platform-agent outputs after completing the sidecar:
+Expected Writer outputs after completing the three planning sidecars:
 
 ```text
 plot/candidates/outlines/word_budget_expansion.md
-reviews/word_budget/word_budget_review.md
 plot/candidates/scenes/word_budget_scene_inventory.md
-reviews/word_budget/scene_inventory_review.md
-reviews/word_budget/chapter_obligation_review.md
+plot/candidates/chapters/chapter_obligation_plan.md
 ```
+
+Each Writer output must pass an independent structured review prepared by `prepare-longform-review`. The authoritative files are `reviews/word_budget/word_budget_review.json`, `scene_inventory_review.json`, and `chapter_obligation_review.json`; readable `.md` companions cannot satisfy a Gate by themselves. Every JSON review records the exact candidate path and SHA-256, the Writer session, a distinct Reviewer session, checked dimensions, findings, required changes, and a terminal `pass|revise|block` verdict.
 
 The budgeted outline candidate must include enough scene-level inventory to support the target length through story events, relationship turns, consequence chains, setup/payoff, time/space pressure, and world information. The scene inventory candidate must bind each chapter to target Chinese-content characters, existing cleaned-body Chinese-content characters, machine-count diagnostics, missing scene count, and expansion tasks. The chapter-obligation review must confirm each chapter has reader questions, promised rewards, withheld information, payoff/delay strategy, anti-summary requirements, and ending hooks. It must not rely on filler, repeated introspection, or longer descriptive padding.
 

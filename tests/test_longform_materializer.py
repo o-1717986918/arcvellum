@@ -8,6 +8,10 @@ from literary_engineering_studio_engine.longform_materializer import (
     materialize_longform_plan,
     planned_longform_outputs,
 )
+from tests.longform_planning_support import (
+    complete_all_planning_reviews,
+    complete_planning_review,
+)
 
 
 class LongformMaterializerTests(unittest.TestCase):
@@ -111,6 +115,7 @@ class LongformMaterializerTests(unittest.TestCase):
             original_outline = outline_path.read_text(encoding="utf-8")
             expansion = root / "plot/candidates/outlines/word_budget_expansion.md"
             expansion.write_text(expansion.read_text(encoding="utf-8") + "\n<!-- revised planning note -->\n", encoding="utf-8")
+            complete_planning_review(root, "budget")
 
             result = materialize_longform_plan(root)
 
@@ -133,6 +138,7 @@ class LongformMaterializerTests(unittest.TestCase):
             )
             expansion = root / "plot/candidates/outlines/word_budget_expansion.md"
             expansion.write_text(expansion.read_text(encoding="utf-8") + "\n<!-- revised planning note -->\n", encoding="utf-8")
+            complete_planning_review(root, "budget")
 
             with self.assertRaisesRegex(ValueError, "manual reconciliation required"):
                 materialize_longform_plan(root)
@@ -177,6 +183,7 @@ class LongformMaterializerTests(unittest.TestCase):
 """,
                 encoding="utf-8",
             )
+            complete_planning_review(root, "scene_inventory")
             scaffold = root / "scenes/scene_0001.yaml"
             scaffold.parent.mkdir(parents=True)
             scaffold.write_text('scene_id: ""\nchapter_id: ""\n', encoding="utf-8")
@@ -202,6 +209,7 @@ class LongformMaterializerTests(unittest.TestCase):
                 + "| --- | --- | --- |\n| SC-001 | 1200 | 50% |\n| SC-002 | 1200 | 50% |\n",
                 encoding="utf-8",
             )
+            complete_planning_review(root, "scene_inventory")
 
             result = materialize_longform_plan(root)
 
@@ -266,6 +274,7 @@ class LongformMaterializerTests(unittest.TestCase):
             path = root / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
+        complete_all_planning_reviews(root)
 
 
 if __name__ == "__main__":

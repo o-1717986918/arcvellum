@@ -3,15 +3,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..agent_tasks import agent_task_completion_status
 from ..longform_materializer import longform_materialization_status
+from ..literary.planning.review import (
+    planning_candidate_status,
+    planning_review_prepare_status,
+    planning_review_status,
+    planning_review_task_status,
+    review_spec,
+)
 from ..story_architecture import (
     candidate_path,
     review_path,
     story_architecture_review_status,
     story_architecture_task_status,
 )
-from .state_common import _file_step, _longform_review_step, _read_json, _rel
+from .state_common import _file_step, _read_json, _rel
 def _longform_state(root: Path) -> dict[str, object]:
     steps = [
         _story_architecture_prepare_step(root),
@@ -20,42 +26,9 @@ def _longform_state(root: Path) -> dict[str, object]:
         _story_architecture_step(root, review=True),
         _story_architecture_revision_step(root),
         _word_budget_file_step(root),
-        _longform_task_step(
-            "budget-agent-task",
-            root,
-            root / "plot" / "word_budget" / "word_budget.agent_tasks.md",
-            [root / "plot" / "candidates" / "outlines" / "word_budget_expansion.md"],
-            "complete word_budget.agent_tasks.md, budgeted outline candidate, and budget review",
-        ),
-        _longform_review_step(
-            "budget-review",
-            root / "reviews" / "word_budget" / "word_budget_review.md",
-            "write a clean word-budget review with conclusion: pass",
-        ),
-        _longform_task_step(
-            "scene-inventory-agent-task",
-            root,
-            root / "plot" / "word_budget" / "scene_inventory_expansion.agent_tasks.md",
-            [root / "plot" / "candidates" / "scenes" / "word_budget_scene_inventory.md"],
-            "complete scene_inventory_expansion.agent_tasks.md, scene inventory candidate, and review",
-        ),
-        _longform_review_step(
-            "scene-inventory-review",
-            root / "reviews" / "word_budget" / "scene_inventory_review.md",
-            "write a clean scene inventory review with conclusion: pass",
-        ),
-        _longform_task_step(
-            "chapter-obligation-agent-task",
-            root,
-            root / "plot" / "chapter_obligations" / "chapter_obligations.agent_tasks.md",
-            [root / "plot" / "candidates" / "chapters" / "chapter_obligation_plan.md"],
-            "complete chapter_obligations.agent_tasks.md and write per-chapter reader contracts",
-        ),
-        _longform_review_step(
-            "chapter-obligation-review",
-            root / "reviews" / "word_budget" / "chapter_obligation_review.md",
-            "write a clean chapter obligation review with conclusion: pass",
-        ),
+        *_planning_candidate_review_steps(root, "budget", "budget-agent-task"),
+        *_planning_candidate_review_steps(root, "scene_inventory", "scene-inventory-agent-task"),
+        *_planning_candidate_review_steps(root, "chapter_obligation", "chapter-obligation-agent-task"),
         _longform_materialization_step(root),
     ]
     first_open = next((step for step in steps if step["status"] != "pass"), None)
@@ -207,18 +180,92 @@ def _longform_materialization_step(root: Path) -> dict[str, object]:
         "next_action": "" if passed else "materialize the reviewed longform plan, safely adopting matching existing formal contracts without overwriting them",
     }
 
-def _longform_task_step(key: str, root: Path, path: Path, required_outputs: list[Path], next_action: str) -> dict[str, object]:
-    state = agent_task_completion_status(path, root=root)
-    missing = [_rel(item, root) for item in required_outputs if not item.exists()]
-    complete = state.get("complete") is True and not missing
-    message = str(state.get("message") or "")
-    if missing:
-        message = (message + "; " if message else "") + "missing " + ", ".join(missing)
+
+def _planning_candidate_review_steps(
+    root: Path, kind: str, author_state: str
+) -> list[dict[str, object]]:
+    spec = review_spec(kind)
+    return [
+        _planning_candidate_step(root, kind, author_state),
+        _planning_review_prepare_step(root, kind),
+        _planning_review_agent_step(root, kind),
+        _planning_revision_step(root, kind),
+    ]
+
+
+def _planning_candidate_step(
+    root: Path, kind: str, key: str
+) -> dict[str, object]:
+    spec = review_spec(kind)
+    passed, message = planning_candidate_status(root, kind)
     return {
         "key": key,
-        "status": "pass" if complete else str(state.get("status") or "pending"),
-        "path": _rel(path, root),
-        "completion": state.get("completion", ""),
+        "status": "pass" if passed else "blocked",
+        "path": spec.candidate,
         "message": message,
-        "next_action": "" if complete else next_action,
+        "next_action": "" if passed else f"complete the {spec.label} author task and candidate",
+    }
+
+
+def _planning_review_prepare_step(root: Path, kind: str) -> dict[str, object]:
+    spec = review_spec(kind)
+    passed, message = planning_review_prepare_status(root, kind)
+    key = f"{kind.replace('_', '-')}-review-prepare"
+    return {
+        "key": key,
+        "status": "pass" if passed else "missing",
+        "path": spec.review_task,
+        "message": message,
+        "next_action": "" if passed else f"run prepare-longform-review --kind {kind}",
+    }
+
+
+def _planning_review_agent_step(root: Path, kind: str) -> dict[str, object]:
+    spec = review_spec(kind)
+    complete, message, verdict = planning_review_task_status(root, kind)
+    key = f"{kind.replace('_', '-')}-review"
+    return {
+        "key": key,
+        "status": "pass" if complete else "blocked",
+        "path": spec.review,
+        "message": message,
+        "verdict": verdict,
+        "next_action": "" if complete else f"complete the independent {spec.label} review task",
+    }
+
+
+def _planning_revision_step(root: Path, kind: str) -> dict[str, object]:
+    spec = review_spec(kind)
+    complete, message, verdict = planning_review_status(root, kind)
+    key = f"{kind.replace('_', '-')}-revision"
+    if not complete:
+        return {
+            "key": key,
+            "status": "blocked",
+            "path": spec.candidate,
+            "message": message,
+            "next_action": "complete the exact-candidate independent review before revision",
+        }
+    if verdict == "pass":
+        return {
+            "key": key,
+            "status": "pass",
+            "path": spec.candidate,
+            "message": f"{spec.label} requires no revision",
+            "next_action": "",
+        }
+    if verdict == "block":
+        return {
+            "key": key,
+            "status": "blocked",
+            "path": spec.review,
+            "message": f"{spec.label} review blocked further planning",
+            "next_action": "resolve the blocking planning decision with the user",
+        }
+    return {
+        "key": key,
+        "status": "blocked",
+        "path": spec.candidate,
+        "message": f"{spec.label} review requires writer revision",
+        "next_action": "revise the exact candidate against every required change",
     }

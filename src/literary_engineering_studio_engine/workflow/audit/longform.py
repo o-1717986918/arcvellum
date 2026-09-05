@@ -4,21 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...agent_tasks import agent_task_completion_status
-from ...route_audit_common import _add_gate, _project_target_words, _read_json
+from ...literary.planning.review import planning_review_pass_status
+from ...route_audit_common import _add_gate, _project_target_words
 def _add_longform_budget_gates(gates: list[dict[str, str]], root: Path, *, force: bool) -> None:
     target_words = _project_target_words(root)
     if not force and target_words < 100000:
         return
     budget_json = root / "plot" / "word_budget" / "word_budget.json"
-    budget_task = root / "plot" / "word_budget" / "word_budget.agent_tasks.md"
-    scene_task = root / "plot" / "word_budget" / "scene_inventory_expansion.agent_tasks.md"
-    obligation_task = root / "plot" / "chapter_obligations" / "chapter_obligations.agent_tasks.md"
-    review = root / "reviews" / "word_budget" / "word_budget_review.md"
-    obligation_review = root / "reviews" / "word_budget" / "chapter_obligation_review.md"
-    candidate = root / "plot" / "candidates" / "outlines" / "word_budget_expansion.md"
-    scene_plan = root / "plot" / "candidates" / "scenes" / "word_budget_scene_inventory.md"
-    scene_review = root / "reviews" / "word_budget" / "scene_inventory_review.md"
-
     prefix = "longform" if force else "longform-required"
     _add_gate(
         gates,
@@ -31,17 +23,33 @@ def _add_longform_budget_gates(gates: list[dict[str, str]], root: Path, *, force
     if not budget_json.exists():
         return
 
-    payload = _read_json(budget_json)
-    status = str(payload.get("status") or "").strip().lower()
+    _add_budget_review_gates(gates, root, prefix)
+    _add_chapter_obligation_gates(gates, root, prefix)
+    _add_scene_inventory_gates(gates, root, prefix)
+
+
+def _add_budget_review_gates(gates: list[dict[str, str]], root: Path, prefix: str) -> None:
+    budget_task = root / "plot" / "word_budget" / "word_budget.agent_tasks.md"
+    candidate = root / "plot" / "candidates" / "outlines" / "word_budget_expansion.md"
+
+    budget_review_pass, budget_review_message = planning_review_pass_status(root, "budget")
     _add_gate(
         gates,
         f"{prefix}:word-budget-review",
-        review.exists(),
+        budget_review_pass,
         "blocking",
-        "word-budget platform review exists",
-        "平台 Agent 必须写 reviews/word_budget/word_budget_review.md，确认字数-剧情库存映射后才能进入批量场景开发。",
+        "word-budget independent review passes",
+        budget_review_message,
     )
     budget_completion = agent_task_completion_status(budget_task, root=root)
+    _add_gate(
+        gates,
+        f"{prefix}:budgeted-outline-candidate",
+        candidate.exists(),
+        "blocking",
+        "budgeted outline candidate exists",
+        "平台 Agent 需完成独立的预算化大纲候选，不能只保留数字预算。",
+    )
     _add_gate(
         gates,
         f"{prefix}:word-budget-task-complete",
@@ -50,6 +58,11 @@ def _add_longform_budget_gates(gates: list[dict[str, str]], root: Path, *, force
         "word-budget platform-agent task completed",
         f"word_budget.agent_tasks.md 未完成：{budget_completion.get('message')}",
     )
+
+
+def _add_chapter_obligation_gates(gates: list[dict[str, str]], root: Path, prefix: str) -> None:
+    obligation_task = root / "plot" / "chapter_obligations" / "chapter_obligations.agent_tasks.md"
+    obligation_plan = root / "plot" / "candidates" / "chapters" / "chapter_obligation_plan.md"
     _add_gate(
         gates,
         f"{prefix}:chapter-obligation-task",
@@ -67,24 +80,30 @@ def _add_longform_budget_gates(gates: list[dict[str, str]], root: Path, *, force
         "chapter obligation planning task completed",
         f"chapter_obligations.agent_tasks.md 未完成：{obligation_completion.get('message')}",
     )
+    obligation_review_pass, obligation_review_message = planning_review_pass_status(root, "chapter_obligation")
     _add_gate(
         gates,
         f"{prefix}:chapter-obligation-review",
-        obligation_review.exists(),
+        obligation_review_pass,
         "blocking",
-        "chapter obligation review exists",
-        "平台 Agent 必须写 reviews/word_budget/chapter_obligation_review.md，确认每章承诺、兑现/延迟和读者问题后才能批量生成。",
+        "chapter obligation independent review passes",
+        obligation_review_message,
     )
-    if status == "needs_expansion":
-        _add_gate(gates, f"{prefix}:budgeted-outline-candidate", candidate.exists(), "blocking", "budgeted outline candidate exists", "预算显示剧情库存不足；平台 Agent 需处理 word_budget.agent_tasks.md。")
-        _add_gate(gates, f"{prefix}:scene-inventory-expansion", scene_plan.exists(), "blocking", "scene inventory expansion candidate exists", "预算显示场景库存不足；平台 Agent 需处理 scene_inventory_expansion.agent_tasks.md。")
-        _add_gate(gates, f"{prefix}:scene-inventory-review", scene_review.exists(), "blocking", "scene inventory review exists", "扩展场景库存后，平台 Agent 需写 reviews/word_budget/scene_inventory_review.md。")
-        scene_completion = agent_task_completion_status(scene_task, root=root)
-        _add_gate(
-            gates,
-            f"{prefix}:scene-inventory-task-complete",
-            scene_completion.get("complete") is True,
-            "blocking",
-            "scene inventory platform-agent task completed",
-            f"scene_inventory_expansion.agent_tasks.md 未完成：{scene_completion.get('message')}",
-        )
+    _add_gate(gates, f"{prefix}:chapter-obligation-plan", obligation_plan.exists(), "blocking", "chapter obligation plan candidate exists", "章节义务候选缺失。")
+
+
+def _add_scene_inventory_gates(gates: list[dict[str, str]], root: Path, prefix: str) -> None:
+    scene_task = root / "plot" / "word_budget" / "scene_inventory_expansion.agent_tasks.md"
+    scene_plan = root / "plot" / "candidates" / "scenes" / "word_budget_scene_inventory.md"
+    _add_gate(gates, f"{prefix}:scene-inventory-expansion", scene_plan.exists(), "blocking", "scene inventory expansion candidate exists", "平台 Agent 需完成全书场景库存候选。")
+    scene_review_pass, scene_review_message = planning_review_pass_status(root, "scene_inventory")
+    _add_gate(gates, f"{prefix}:scene-inventory-review", scene_review_pass, "blocking", "scene inventory independent review passes", scene_review_message)
+    scene_completion = agent_task_completion_status(scene_task, root=root)
+    _add_gate(
+        gates,
+        f"{prefix}:scene-inventory-task-complete",
+        scene_completion.get("complete") is True,
+        "blocking",
+        "scene inventory platform-agent task completed",
+        f"scene_inventory_expansion.agent_tasks.md 未完成：{scene_completion.get('message')}",
+    )

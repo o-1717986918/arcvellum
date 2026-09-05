@@ -13,6 +13,7 @@ from ...draft_text import (
 )
 from ...longform_materializer import longform_materialization_status
 from ...text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
+from .review import all_planning_reviews_pass
 from .common import _project_int, _read, _read_json, _rel, _scalar, _to_int
 from .inventory import (
     _budget_issues,
@@ -261,17 +262,17 @@ def ensure_scene_word_budget_ready(
         return contract
     if contract.get("status") == "pass":
         budget_task = root / "plot" / "word_budget" / "word_budget.agent_tasks.md"
-        budget_review = root / "reviews" / "word_budget" / "word_budget_review.md"
         completion = agent_task_completion_status(budget_task, root=root)
         if completion.get("complete") is not True:
             raise ValueError(
                 "formal scene generation requires the word-budget platform-agent task to be completed before prose: "
                 f"{completion.get('message')}"
             )
-        if not budget_review.exists():
+        reviews_pass, review_message = all_planning_reviews_pass(root)
+        if not reviews_pass:
             raise ValueError(
-                "formal scene generation requires reviews/word_budget/word_budget_review.md before prose. "
-                "The platform agent must review the word-budget to confirm the target-length to narrative-inventory mapping."
+                "formal scene generation requires independent digest-bound longform planning reviews before prose: "
+                + review_message
             )
         return contract
     raise ValueError(

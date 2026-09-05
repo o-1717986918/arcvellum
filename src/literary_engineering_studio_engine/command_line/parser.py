@@ -11,6 +11,7 @@ from ..knowledge_store import KNOWLEDGE_BACKENDS
 from ..source_ingest import INGEST_MODES
 from ..workflow_runner import WORKFLOW_MODES
 from .length_repair_parser import add_length_repair_parser
+from .parser_handoffs import register_handoff_commands
 from .parser_style import register_style_commands
 def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -541,9 +542,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     )
     materialize_longform.add_argument("project", help="Work project directory.")
 
-    handoff = sub.add_parser("scene-handoff", help="Materialize a promoted scene continuity handoff for the next formal scene.")
-    handoff.add_argument("project", help="Work project directory.")
-    handoff.add_argument("--scene", default="scenes/scene_0001.yaml", help="Promoted scene whose post-scene handoff is recorded.")
+    register_handoff_commands(sub)
 
     architecture = sub.add_parser("prepare-story-architecture", help="Prepare the formal story-architecture candidate task.")
     architecture.add_argument("project", help="Work project directory.")

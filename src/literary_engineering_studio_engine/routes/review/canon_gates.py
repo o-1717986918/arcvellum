@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...literary.assets.canon.approval import patch_requires_approval
 from ...literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from ...literary.review.project_targets import project_review_repair_target_issues
 
@@ -125,17 +126,32 @@ def _canon_apply_manifest_errors(payload: dict[str, object], patch: dict[str, ob
         errors.append("canon apply used allow_unapproved")
     approval = payload.get("approval") if isinstance(payload.get("approval"), dict) else {}
     candidate_sha256 = str(payload.get("candidate_sha256") or "").strip().lower()
-    requires_approval = patch.get("requires_user_approval") is True or any(
-        isinstance(item, dict) and item.get("requires_user_approval") is True
-        for item in (patch.get("items") if isinstance(patch.get("items"), list) else [])
+    errors.extend(
+        _canon_apply_approval_errors(
+            approval,
+            candidate_sha256,
+            requires_approval=patch_requires_approval(patch),
+        )
     )
-    if requires_approval:
-        if approval.get("decision") != "approve":
-            errors.append("canon apply manifest must carry an approve record")
-        if not candidate_sha256 or str(approval.get("subject_sha256") or "").strip().lower() != candidate_sha256:
-            errors.append("canon apply approval digest does not match the pre-apply patch candidate")
-    elif approval.get("decision") not in {"approve", "not_required"}:
-        errors.append("canon apply manifest must record approve or not_required")
+    return errors
+
+
+def _canon_apply_approval_errors(
+    approval: dict[str, object],
+    candidate_sha256: str,
+    *,
+    requires_approval: bool,
+) -> list[str]:
+    if not requires_approval:
+        return [] if approval.get("decision") in {"approve", "not_required"} else [
+            "canon apply manifest must record approve or not_required"
+        ]
+    errors: list[str] = []
+    if approval.get("decision") != "approve":
+        errors.append("canon apply manifest must carry an approve record")
+    subject = str(approval.get("subject_sha256") or "").strip().lower()
+    if not candidate_sha256 or subject != candidate_sha256:
+        errors.append("canon apply approval digest does not match the pre-apply patch candidate")
     return errors
 
 

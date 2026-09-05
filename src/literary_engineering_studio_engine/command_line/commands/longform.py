@@ -11,6 +11,7 @@ from ...docx_export import export_markdown_to_docx
 from ...export_package import build_export_package
 from ...longform_audit import build_longform_audit
 from ...longform_materializer import materialize_longform_plan
+from ...literary.planning.review import prepare_longform_review
 from ...orchestration_blueprint import build_orchestration_blueprint
 from ...publish import publish_chapter
 from ...reader_experience import build_chapter_obligation_tasks
@@ -155,6 +156,20 @@ def handle(args, parser) -> int | None:
         print(f"status: {'pass' if passed else 'blocked'}")
         print(f"message: {message}")
         return 0 if passed else 2
+
+    if args.command == "prepare-longform-review":
+        try:
+            result = prepare_longform_review(Path(args.project), args.kind)
+        except (FileNotFoundError, ValueError) as exc:
+            parser.error(str(exc))
+        print(f"kind: {result.kind}")
+        print(f"candidate: {result.candidate_path}")
+        print(f"candidate_sha256: {result.candidate_sha256}")
+        print(f"review: {result.review_path}")
+        print(f"report: {result.report_path}")
+        print(f"agent_tasks: {result.task_path}")
+        _print_agent_task_notice(result.task_path, project=Path(args.project).resolve())
+        return 0
 
     if args.command == "prepare-continuity-ledger":
         target, sidecar = prepare_continuity_ledger(Path(args.project), Path(args.scene).stem)

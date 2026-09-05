@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 
 from ...atomic_io import atomic_write_text
+from .review import all_planning_reviews_pass
 from .materialization_parser import (
     parse_chapter_obligations,
     parse_scene_inventory,
@@ -46,6 +47,9 @@ def materialize_longform_plan(project_root: Path) -> LongformMaterializationResu
         raise FileNotFoundError(
             "missing reviewed longform planning inputs: " + ", ".join(missing)
         )
+    reviews_pass, review_message = all_planning_reviews_pass(root)
+    if not reviews_pass:
+        raise ValueError("longform planning reviews are not ready: " + review_message)
     inventory_text = required[0].read_text(encoding="utf-8", errors="ignore")
     obligation_text = required[1].read_text(encoding="utf-8", errors="ignore")
     scenes = parse_scene_inventory(inventory_text)
@@ -111,6 +115,9 @@ def _required_inputs(root: Path) -> tuple[Path, ...]:
         root / "plot" / "candidates" / "chapters" / "chapter_obligation_plan.md",
         root / "plot" / "candidates" / "outlines" / "word_budget_expansion.md",
         root / "plot" / "word_budget" / "word_budget.json",
+        root / "reviews" / "word_budget" / "word_budget_review.json",
+        root / "reviews" / "word_budget" / "scene_inventory_review.json",
+        root / "reviews" / "word_budget" / "chapter_obligation_review.json",
     )
 
 

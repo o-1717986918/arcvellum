@@ -23,7 +23,17 @@
 
 实现与原计划存在一项有意差异：本文早期建议为 Handoff 新增语义 Agent 任务；实际审查源码后确认 State、Canon 与 Continuity 已分别承载所需语义判断，因此 Handoff 采用确定性、摘要绑定的最终投影更符合低成本、高鲁棒性原则。
 
-下一批实施目标是把字数预算、场景库存、章节义务从“同一 Agent 写 Markdown 后自报通过”升级为独立身份、候选摘要绑定的结构化 Review。
+第二批源码修复已完成并通过 120 项聚焦回归测试：
+
+- 字数预算、场景库存、章节义务均已拆分为 Writer 候选、确定性 review prepare、身份独立 Reviewer、按裁决修订/阻断四段闭环。
+- 三类审查以摘要绑定 JSON 为机器权威，Markdown 仅供阅读；Writer 与 Reviewer 会话相同、候选被改动、缺少维度或只写“pass”文字都会被拒绝。
+- `revise` 使用锁定的修订前摘要验证旧裁决，候选改变后必须重新生成 review task 并取得新裁决，避免修订流程自锁或沿用旧结论。
+- 正式 Writer 身份被纳入沙箱证据集，审查任务复制到临时工作区后仍能核验来源，不会因只看到精简资料集而反复越界读取。
+- 长篇 materializer、Scene Route 与 route audit 统一要求三项独立审查通过。
+- 本批同步拆分 CLI parser、Canon approval/apply status、Scene writeback gates、handoff 构造与长篇审查蓝图；架构审计重新达到零新增违规。
+- 最终验收：Prompt Registry 59 个资产覆盖 73 个任务提示词 ID；架构审计 `ok: true`；全量回归 `1332 tests passed, 1 skipped`。
+
+后续批次从本文 P2 项继续，不回退本批建立的审查权威和身份边界。
 
 ---
 

@@ -71,49 +71,46 @@ def build_scene_handoff(project_root: Path, scene_id: str) -> Path:
     errors = scene_handoff_source_errors(root, scene_id)
     if errors:
         raise ValueError("scene handoff is not ready: " + "; ".join(errors))
+    payload = _handoff_payload(root, scene_id, _handoff_artifacts(root, scene_id))
+    target = handoff_path(root, scene_id)
+    atomic_write_text(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return target
 
-    scene_path = root / "scenes" / f"{scene_id}.yaml"
-    draft = root / "drafts" / "scenes" / f"{scene_id}.md"
-    promotion = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
-    state_patch = root / "characters" / "state_patches" / f"{scene_id}_state_patch.json"
-    state_apply = root / "characters" / "state_patches" / f"{scene_id}_state_apply.json"
-    canon_patch = canon_patch_path(root, scene_id)
-    canon_apply = canon_apply_manifest_for_scene(root, scene_id)
-    continuity_delta = delta_path(root, scene_id)
-    continuity_review = root / "reviews" / "continuity" / f"{scene_id}_ledger_review.json"
-    continuity_apply = root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json"
 
-    facts = load_scene_facts(scene_path)
-    scene_payload = _read_yaml(scene_path)
-    state_payload = _read_json(state_patch)
-    state_apply_payload = _read_json(state_apply)
+def _handoff_payload(
+    root: Path, scene_id: str, artifacts: dict[str, Path]
+) -> dict[str, Any]:
+    facts = load_scene_facts(artifacts["scene"])
+    scene_payload = _read_yaml(artifacts["scene"])
+    state_payload = _read_json(artifacts["state_patch"])
+    state_apply_payload = _read_json(artifacts["state_apply"])
     canon_status = canon_writeback_status(root, scene_id)
-    continuity_payload = _read_json(continuity_delta)
+    continuity_payload = _read_json(artifacts["continuity_delta"])
     evidence = {
-        "promoted_draft": _evidence(root, draft, "applied"),
-        "promotion_manifest": _evidence(root, promotion, "applied"),
-        "state_patch": _evidence(root, state_patch, str(state_patch_writeback_status(root, scene_id).get("status") or "")),
-        "state_apply": _evidence(root, state_apply, _optional_status(state_apply_payload, "not_required")),
-        "canon_patch": _evidence(root, canon_patch, str(canon_status.get("status") or "")),
-        "canon_apply": _evidence(root, canon_apply, _optional_status(_read_json(canon_apply), "not_required")),
-        "continuity_delta": _evidence(root, continuity_delta, "reviewed"),
-        "continuity_review": _evidence(root, continuity_review, "pass"),
-        "continuity_apply": _evidence(root, continuity_apply, "applied"),
+        "promoted_draft": _evidence(root, artifacts["draft"], "applied"),
+        "promotion_manifest": _evidence(root, artifacts["promotion"], "applied"),
+        "state_patch": _evidence(root, artifacts["state_patch"], str(state_patch_writeback_status(root, scene_id).get("status") or "")),
+        "state_apply": _evidence(root, artifacts["state_apply"], _optional_status(state_apply_payload, "not_required")),
+        "canon_patch": _evidence(root, artifacts["canon_patch"], str(canon_status.get("status") or "")),
+        "canon_apply": _evidence(root, artifacts["canon_apply"], _optional_status(_read_json(artifacts["canon_apply"]), "not_required")),
+        "continuity_delta": _evidence(root, artifacts["continuity_delta"], "reviewed"),
+        "continuity_review": _evidence(root, artifacts["continuity_review"], "pass"),
+        "continuity_apply": _evidence(root, artifacts["continuity_apply"], "applied"),
     }
     relationship_debts = _relationship_debts(state_payload)
     unresolved_actions = _unresolved_actions(state_payload)
     information_distribution = _information_distribution(continuity_payload)
     outgoing_hooks = list(facts.next_hooks)
     emotional_aftertaste = _emotional_aftertaste(scene_payload)
-    payload: dict[str, Any] = {
+    return {
         "schema": HANDOFF_SCHEMA,
         "scene_id": scene_id,
         "source_scene_id": scene_id,
         "successor_scene_id": next_scene_id(root, scene_id),
         "previous_scene_id": previous_scene_id(root, scene_id),
-        "promoted_draft": _rel(draft, root),
-        "promoted_draft_sha256": _sha256(draft),
-        "promotion_manifest": _rel(promotion, root),
+        "promoted_draft": _rel(artifacts["draft"], root),
+        "promoted_draft_sha256": _sha256(artifacts["draft"]),
+        "promotion_manifest": _rel(artifacts["promotion"], root),
         "evidence": evidence,
         "time_after": _story_time(scene_payload),
         "location_after": facts.location or _text(scene_payload.get("location_after")),
@@ -132,8 +129,8 @@ def build_scene_handoff(project_root: Path, scene_id: str) -> Path:
             "information_distribution": _coverage(information_distribution, "reviewed continuity delta contains no question or promise change"),
             "emotional_aftertaste": _coverage(emotional_aftertaste, "scene contract declares no explicit emotional aftertaste"),
         },
-        "approved_state_apply": _apply_ref(state_apply_payload, state_apply, root),
-        "approved_canon_apply": _apply_ref(_read_json(canon_apply), canon_apply, root),
+        "approved_state_apply": _apply_ref(state_apply_payload, artifacts["state_apply"], root),
+        "approved_canon_apply": _apply_ref(_read_json(artifacts["canon_apply"]), artifacts["canon_apply"], root),
         "agent_summary": {
             "status": "complete",
             "note": "Deterministically composed from reviewed State, Canon, and continuity artifacts.",
@@ -143,33 +140,61 @@ def build_scene_handoff(project_root: Path, scene_id: str) -> Path:
         "status": "complete",
         "created_at": _now(),
     }
-    target = handoff_path(root, scene_id)
-    atomic_write_text(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
-    return target
+
+
+def _handoff_artifacts(root: Path, scene_id: str) -> dict[str, Path]:
+    return {
+        "scene": root / "scenes" / f"{scene_id}.yaml",
+        "draft": root / "drafts" / "scenes" / f"{scene_id}.md",
+        "promotion": root / "drafts" / "promotions" / f"{scene_id}_promotion.json",
+        "state_patch": root / "characters" / "state_patches" / f"{scene_id}_state_patch.json",
+        "state_apply": root / "characters" / "state_patches" / f"{scene_id}_state_apply.json",
+        "canon_patch": canon_patch_path(root, scene_id),
+        "canon_apply": canon_apply_manifest_for_scene(root, scene_id),
+        "continuity_delta": delta_path(root, scene_id),
+        "continuity_review": root / "reviews" / "continuity" / f"{scene_id}_ledger_review.json",
+        "continuity_apply": root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json",
+    }
 
 
 def scene_handoff_source_errors(root: Path, scene_id: str) -> list[str]:
     """Return exact upstream reasons why ``scene_id`` cannot emit a handoff."""
 
     root = root.resolve()
-    draft = root / "drafts" / "scenes" / f"{scene_id}.md"
-    promotion = root / "drafts" / "promotions" / f"{scene_id}_promotion.json"
-    errors: list[str] = []
+    artifacts = _handoff_artifacts(root, scene_id)
+    errors = _promotion_source_errors(artifacts["draft"], artifacts["promotion"], scene_id)
+    if len(errors) == 1 and errors[0].startswith("promoted draft"):
+        return errors
+    errors.extend(_writeback_source_errors(root, scene_id))
+    errors.extend(_continuity_source_errors(root, scene_id, artifacts))
+    return errors
+
+
+def _promotion_source_errors(draft: Path, promotion: Path, scene_id: str) -> list[str]:
     if not draft.is_file() or not promotion.is_file():
         return [f"promoted draft and promotion manifest are required for {scene_id}"]
     promoted = _read_json(promotion)
     recorded_draft = str(promoted.get("draft_sha256") or "").lower()
     if not recorded_draft or recorded_draft != _sha256(draft):
-        errors.append("promotion manifest does not bind the current promoted draft")
+        return ["promotion manifest does not bind the current promoted draft"]
+    return []
 
+
+def _writeback_source_errors(root: Path, scene_id: str) -> list[str]:
+    errors: list[str] = []
     state_status = state_patch_writeback_status(root, scene_id)
     if str(state_status.get("status") or "") not in {"pass", "not_required", "rejected"}:
         errors.append(f"state writeback is incomplete: {state_status.get('message')}")
-
     canon_status = canon_writeback_status(root, scene_id)
     if str(canon_status.get("status") or "") not in {"pass", "not_required"}:
         errors.append(f"canon writeback is incomplete: {canon_status.get('message')}")
+    return errors
 
+
+def _continuity_source_errors(
+    root: Path, scene_id: str, artifacts: dict[str, Path]
+) -> list[str]:
+    errors: list[str] = []
     continuity_ok, continuity_message, _payload = continuity_ledger_status(root, scene_id, require_review=True)
     if not continuity_ok:
         errors.append(continuity_message)
@@ -177,9 +202,8 @@ def scene_handoff_source_errors(root: Path, scene_id: str) -> list[str]:
         task_ok, task_message = continuity_ledger_task_status(root, scene_id, review=review)
         if not task_ok:
             errors.append(task_message)
-    apply_path = root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json"
-    apply_payload = _read_json(apply_path)
-    delta = delta_path(root, scene_id)
+    apply_payload = _read_json(artifacts["continuity_apply"])
+    delta = artifacts["continuity_delta"]
     if (
         str(apply_payload.get("status") or "") != "applied"
         or not delta.is_file()

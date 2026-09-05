@@ -5,6 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...longform_materializer import planned_longform_outputs
+from ...literary.planning.review import (
+    all_planning_review_evidence_paths,
+    planning_candidate_evidence_paths,
+    planning_review_evidence_paths,
+    planning_review_status,
+    review_machine_contract,
+    review_spec,
+)
 from .context_policy import apply_agent_context_policy
 from .support import project_int, project_scalar, read_text
 
@@ -28,8 +36,8 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
     common_sources = ["project.yaml", "plot/outline.md", "scenes/"]
     table = {
         **_story_architecture_blueprints(),
-        **_budget_blueprints(target_words, command, common_sources),
-        **_inventory_blueprints(target_words),
+        **_budget_blueprints(root, target_words, command, common_sources),
+        **_inventory_blueprints(root, target_words),
         **_chapter_blueprints(root, target_words),
     }
     blueprint = table.get(current_state) or _fallback_blueprint(
@@ -104,7 +112,7 @@ def _story_architecture_blueprints() -> dict[str, dict[str, object]]:
 
 
 def _budget_blueprints(
-    target_words: int, command: str, common_sources: list[str]
+    root: Path, target_words: int, command: str, common_sources: list[str]
 ) -> dict[str, dict[str, object]]:
     return {
         "word-budget-file": {
@@ -131,44 +139,29 @@ def _budget_blueprints(
             "prompt_asset_id": "route.longform-planning.budget-expansion.execute.v1",
             "command": "",
             "source_paths": ["project.yaml", "plot/outline.md", "plot/word_budget/word_budget.md", "plot/word_budget/word_budget.json", "plot/word_budget/word_budget.agent_tasks.md"],
-            "expected_outputs": ["plot/candidates/outlines/word_budget_expansion.md", "reviews/word_budget/word_budget_review.md", "plot/word_budget/word_budget.agent_completion.json"],
+            "expected_outputs": ["plot/candidates/outlines/word_budget_expansion.md", "plot/word_budget/word_budget.agent_completion.json"],
             "hard_constraints": [
-                "Write only the budgeted outline candidate and its semantic review; Studio owns lifecycle completion receipts.",
+                "Write only the budgeted outline candidate; Studio owns lifecycle completion receipts and a separate Reviewer owns the review.",
                 "Judge whether the narrative inventory can support target length; do not solve shortfall by padding scenes.",
-                "Keep expanded outline as candidate material until review and user approval.",
+                "Keep expanded outline as candidate material until an independent digest-bound review passes.",
             ],
             "style_constraints": [],
             "word_count_target": target_words,
-            "validation_gates": ["budget sidecar completion marker exists", "budgeted outline candidate exists", "word-budget review conclusion is recorded"],
-            "next_allowed_states": ["budget-review", "scene-inventory-agent-task"],
+            "validation_gates": ["budget sidecar completion marker exists", "budgeted outline candidate exists"],
+            "next_allowed_states": ["budget-review-prepare"],
         },
-        "budget-review": {
-            "task_type": "platform-agent-revision",
-            "prompt_asset_id": "route.longform-planning.budget-review.v1",
-            "command": "",
-            "source_paths": ["plot/word_budget/word_budget.json", "plot/candidates/outlines/word_budget_expansion.md", "reviews/word_budget/word_budget_review.md"],
-            "expected_outputs": ["plot/candidates/outlines/word_budget_expansion.md", "reviews/word_budget/word_budget_review.md"],
-            "repair_targets": ["plot/candidates/outlines/word_budget_expansion.md"],
-            "hard_constraints": [
-                "Revise the budgeted outline candidate against every review finding; changing only the conclusion is forbidden.",
-                "The review conclusion must be pass before scene inventory planning is treated as formal.",
-            ],
-            "style_constraints": [],
-            "word_count_target": target_words,
-            "validation_gates": ["word-budget review conclusion is pass"],
-            "next_allowed_states": ["scene-inventory-agent-task"],
-        },
+        **_planning_review_blueprints(root, "budget", "budget", target_words),
     }
 
 
-def _inventory_blueprints(target_words: int) -> dict[str, dict[str, object]]:
+def _inventory_blueprints(root: Path, target_words: int) -> dict[str, dict[str, object]]:
     return {
         "scene-inventory-agent-task": {
             "task_type": "platform-agent-judgment",
             "prompt_asset_id": "route.longform-planning.scene-inventory.execute.v1",
             "command": "",
             "source_paths": ["plot/word_budget/word_budget.json", "plot/word_budget/scene_inventory_expansion.agent_tasks.md", "plot/candidates/outlines/word_budget_expansion.md"],
-            "expected_outputs": ["plot/candidates/scenes/word_budget_scene_inventory.md", "reviews/word_budget/scene_inventory_review.md", "plot/word_budget/scene_inventory_expansion.agent_completion.json"],
+            "expected_outputs": ["plot/candidates/scenes/word_budget_scene_inventory.md", "plot/word_budget/scene_inventory_expansion.agent_completion.json"],
             "hard_constraints": [
                 "Follow the exact scene-inventory prompt contract and create budgeted scene inventory candidates; Studio owns the lifecycle sidecar and receipt.",
                 "The inventory is a machine-readable materialization contract: use the required chapter heading and 11-column scene table, not free-form scene cards or prose summaries; preserve exact total/per-chapter scene and Chinese-character budgets, and replace invalid rows in place rather than appending a corrected copy unless the user explicitly replans.",
@@ -176,29 +169,14 @@ def _inventory_blueprints(target_words: int) -> dict[str, dict[str, object]]:
                 "The participants column contains durable human/character roles only. Do not list locations, vehicles, signals, objects, organizations, camera subjects, or unnamed crowds as characters; express those through conflict, information release, consequence, or setting.",
                 "Every participant is a bare stable identity label. Parentheses, action notes, aliases, reveal timing, and descriptive clauses belong in the other scene columns, never in a character identity.",
                 "Use the stable symbolic label 主角 for the foundational protagonist before its canonical name is fixed. Any other participant listed here is a deliberate request for a reusable character asset before RP and prose.",
-                "Scene inventory remains candidate material until review and user approval.",
+                "Scene inventory remains candidate material until an independent digest-bound review passes.",
             ],
             "style_constraints": [],
             "word_count_target": target_words,
-            "validation_gates": ["scene inventory sidecar completion marker exists", "scene inventory candidate exists", "scene inventory review conclusion is recorded"],
-            "next_allowed_states": ["scene-inventory-review"],
+            "validation_gates": ["scene inventory sidecar completion marker exists", "scene inventory candidate exists"],
+            "next_allowed_states": ["scene-inventory-review-prepare"],
         },
-        "scene-inventory-review": {
-            "task_type": "platform-agent-revision",
-            "prompt_asset_id": "route.longform-planning.scene-inventory-review.v1",
-            "command": "",
-            "source_paths": ["plot/word_budget/word_budget.json", "plot/candidates/scenes/word_budget_scene_inventory.md", "reviews/word_budget/scene_inventory_review.md"],
-            "expected_outputs": ["plot/candidates/scenes/word_budget_scene_inventory.md", "reviews/word_budget/scene_inventory_review.md"],
-            "repair_targets": ["plot/candidates/scenes/word_budget_scene_inventory.md"],
-            "hard_constraints": [
-                "Revise the scene inventory candidate against every review finding by replacing invalid rows rather than appending duplicates; changing only the conclusion is forbidden.",
-                "The scene inventory review conclusion must be pass before longform-planning is ready, and must recount parsed rows and target_chars against word_budget.json instead of trusting asserted totals.",
-            ],
-            "style_constraints": [],
-            "word_count_target": target_words,
-            "validation_gates": ["scene inventory review conclusion is pass"],
-            "next_allowed_states": ["chapter-obligation-agent-task"],
-        },
+        **_planning_review_blueprints(root, "scene_inventory", "scene-inventory", target_words),
     }
 
 
@@ -209,7 +187,7 @@ def _chapter_blueprints(root: Path, target_words: int) -> dict[str, dict[str, ob
             "prompt_asset_id": "route.longform-planning.chapter-obligation.execute.v1",
             "command": "",
             "source_paths": ["project.yaml", "plot/outline.md", "plot/word_budget/word_budget.json", "plot/chapter_obligations/chapter_obligations.agent_tasks.md", "plot/candidates/scenes/word_budget_scene_inventory.md"],
-            "expected_outputs": ["plot/candidates/chapters/chapter_obligation_plan.md", "reviews/word_budget/chapter_obligation_review.md", "plot/chapter_obligations/chapter_obligations.agent_completion.json"],
+            "expected_outputs": ["plot/candidates/chapters/chapter_obligation_plan.md", "plot/chapter_obligations/chapter_obligations.agent_completion.json"],
             "hard_constraints": [
                 "Follow the exact chapter-obligation prompt contract and build a chapter-level promise/payoff plan; Studio owns the lifecycle sidecar and receipt.",
                 "Each chapter must map target Chinese-content characters to reader questions, promised rewards, withheld information, payoff/delay, and anti-summary requirements.",
@@ -217,25 +195,10 @@ def _chapter_blueprints(root: Path, target_words: int) -> dict[str, dict[str, ob
             ],
             "style_constraints": [],
             "word_count_target": target_words,
-            "validation_gates": ["chapter obligation sidecar completion marker exists", "chapter obligation plan candidate exists", "chapter obligation review conclusion is recorded"],
-            "next_allowed_states": ["chapter-obligation-review"],
+            "validation_gates": ["chapter obligation sidecar completion marker exists", "chapter obligation plan candidate exists"],
+            "next_allowed_states": ["chapter-obligation-review-prepare"],
         },
-        "chapter-obligation-review": {
-            "task_type": "platform-agent-revision",
-            "prompt_asset_id": "route.longform-planning.chapter-obligation-review.v1",
-            "command": "",
-            "source_paths": ["plot/word_budget/word_budget.json", "plot/chapter_obligations/chapter_obligations.agent_tasks.md", "plot/candidates/chapters/chapter_obligation_plan.md", "reviews/word_budget/chapter_obligation_review.md"],
-            "expected_outputs": ["plot/candidates/chapters/chapter_obligation_plan.md", "reviews/word_budget/chapter_obligation_review.md"],
-            "repair_targets": ["plot/candidates/chapters/chapter_obligation_plan.md"],
-            "hard_constraints": [
-                "Revise the chapter obligation plan against every review finding; changing only the conclusion is forbidden.",
-                "The chapter obligation review conclusion must be pass before longform-planning is ready.",
-            ],
-            "style_constraints": [],
-            "word_count_target": target_words,
-            "validation_gates": ["chapter obligation review conclusion is pass"],
-            "next_allowed_states": ["planning-materialization"],
-        },
+        **_planning_review_blueprints(root, "chapter_obligation", "chapter-obligation", target_words),
         "planning-materialization": {
             "task_type": "deterministic-cli",
             "prompt_asset_id": "route.longform-planning.materialize.v1",
@@ -243,8 +206,8 @@ def _chapter_blueprints(root: Path, target_words: int) -> dict[str, dict[str, ob
             "source_paths": [
                 "project.yaml", "plot/word_budget/word_budget.json", "plot/candidates/outlines/word_budget_expansion.md",
                 "plot/candidates/scenes/word_budget_scene_inventory.md", "plot/candidates/chapters/chapter_obligation_plan.md",
-                "reviews/word_budget/word_budget_review.md", "reviews/word_budget/scene_inventory_review.md",
-                "reviews/word_budget/chapter_obligation_review.md", "scenes/scene_0001.yaml",
+                *all_planning_review_evidence_paths(root),
+                "scenes/scene_0001.yaml",
             ],
             "expected_outputs": planned_longform_outputs(root),
             "hard_constraints": [
@@ -257,6 +220,153 @@ def _chapter_blueprints(root: Path, target_words: int) -> dict[str, dict[str, ob
             "validation_gates": ["materialization manifest is current", "formal outline exists", "all budgeted formal scene YAML files exist"],
             "next_allowed_states": ["ready"],
         },
+    }
+
+
+def _planning_review_blueprints(
+    root: Path,
+    kind: str,
+    state_prefix: str,
+    target_words: int,
+) -> dict[str, dict[str, object]]:
+    spec = review_spec(kind)
+    prepare_state = f"{state_prefix}-review-prepare"
+    review_state = f"{state_prefix}-review"
+    revision_state = f"{state_prefix}-revision"
+    review_prompt = f"route.longform-planning.{state_prefix}-review.v1"
+    next_after_pass = {
+        "budget": "scene-inventory-agent-task",
+        "scene_inventory": "chapter-obligation-agent-task",
+        "chapter_obligation": "planning-materialization",
+    }[kind]
+    return {
+        prepare_state: _planning_review_prepare_blueprint(
+            root, kind, review_state, review_prompt, target_words
+        ),
+        review_state: _planning_review_agent_blueprint(
+            root, kind, revision_state, next_after_pass, review_prompt, target_words
+        ),
+        revision_state: _planning_review_revision_blueprint(
+            root, kind, prepare_state, review_prompt, target_words
+        ),
+    }
+
+
+def _planning_review_prepare_blueprint(
+    root: Path,
+    kind: str,
+    review_state: str,
+    review_prompt: str,
+    target_words: int,
+) -> dict[str, object]:
+    spec = review_spec(kind)
+    return {
+        "task_type": "deterministic-cli",
+        "prompt_asset_id": review_prompt,
+        "command": f"python -m literary_engineering_studio_engine prepare-longform-review <project> --kind {kind}",
+        "source_paths": [
+            "project.yaml",
+            "plot/word_budget/word_budget.json",
+            *planning_candidate_evidence_paths(root, kind),
+        ],
+        "expected_outputs": [spec.review, spec.review_task],
+        "hard_constraints": [
+            f"Prepare a separate Reviewer task bound to the exact {spec.label} candidate digest and Writer identity.",
+            "This deterministic step does not judge or edit the candidate.",
+        ],
+        "style_constraints": [],
+        "word_count_target": target_words,
+        "validation_gates": [f"{spec.label} review template and sidecar bind the current candidate"],
+        "next_allowed_states": [review_state],
+    }
+
+
+def _planning_review_agent_blueprint(
+    root: Path,
+    kind: str,
+    revision_state: str,
+    next_after_pass: str,
+    review_prompt: str,
+    target_words: int,
+) -> dict[str, object]:
+    spec = review_spec(kind)
+    completion = spec.review_task.replace(".agent_tasks.md", ".agent_completion.json")
+    return {
+        "task_type": "platform-agent-review",
+        "prompt_asset_id": review_prompt,
+        "command": "",
+        "source_paths": [
+            "project.yaml",
+            "plot/word_budget/word_budget.json",
+            *planning_review_evidence_paths(root, kind),
+        ],
+        "expected_outputs": [spec.review, spec.report, completion],
+        "system_owned_fields": {"longform_planning_review": review_machine_contract(root, kind)},
+        "hard_constraints": [
+            f"Independently review the exact {spec.label} candidate without editing it.",
+            "The Reviewer session must differ from the Writer session. Use pass/revise/block; required work cannot be hidden in passing notes.",
+            "Write the authoritative structured JSON and a readable Markdown explanation. Studio owns machine identity and lifecycle receipts.",
+        ],
+        "style_constraints": [],
+        "word_count_target": target_words,
+        "validation_gates": [
+            f"independent {spec.label} review binds exact candidate digest",
+            "terminal verdict is recorded",
+        ],
+        "next_allowed_states": [revision_state, next_after_pass],
+    }
+
+
+def _planning_review_revision_blueprint(
+    root: Path,
+    kind: str,
+    prepare_state: str,
+    review_prompt: str,
+    target_words: int,
+) -> dict[str, object]:
+    spec = review_spec(kind)
+    complete, _message, verdict = planning_review_status(root, kind)
+    if complete and verdict == "block":
+        return {
+            "task_type": "route-diagnostic-boundary",
+            "prompt_asset_id": review_prompt,
+            "command": "",
+            "source_paths": planning_review_evidence_paths(root, kind),
+            "expected_outputs": [],
+            "hard_constraints": [
+                f"The independent {spec.label} review returned block. Pause for a human planning decision.",
+                "Do not invoke an Agent, rewrite the verdict, or retry automatically.",
+            ],
+            "style_constraints": [],
+            "word_count_target": target_words,
+            "validation_gates": [f"{spec.label} blocking decision resolved"],
+            "next_allowed_states": [],
+        }
+    revision_prompt = {
+        "budget": "route.longform-planning.budget-expansion.execute.v1",
+        "scene_inventory": "route.longform-planning.scene-inventory.execute.v1",
+        "chapter_obligation": "route.longform-planning.chapter-obligation.execute.v1",
+    }[kind]
+    return {
+        "task_type": "platform-agent-revision",
+        "prompt_asset_id": revision_prompt,
+        "command": "",
+        "source_paths": [
+            "project.yaml",
+            "plot/word_budget/word_budget.json",
+            *planning_review_evidence_paths(root, kind),
+        ],
+        "expected_outputs": [spec.candidate],
+        "repair_targets": [spec.candidate],
+        "hard_constraints": [
+            f"Revise only the exact {spec.label} candidate against every required_changes item.",
+            "Do not edit the independent review or its verdict; a fresh digest-bound review is mandatory after revision.",
+            "Make a substantive planning change instead of paraphrasing the same answer.",
+        ],
+        "style_constraints": [],
+        "word_count_target": target_words,
+        "validation_gates": [f"{spec.label} candidate changed and remains valid"],
+        "next_allowed_states": [prepare_state],
     }
 
 

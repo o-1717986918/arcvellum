@@ -4,34 +4,48 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
 from ...longform_materializer import longform_materialization_status
+from ...literary.planning.review import (
+    all_planning_reviews_pass,
+    planning_candidate_status,
+    planning_review_prepare_status,
+    planning_revision_review_status,
+    planning_review_status,
+    planning_review_task_status,
+    review_spec,
+)
 from ...story_architecture import (
     story_architecture_status,
     story_architecture_task_status,
 )
 from ...task_paths import relative_path, resolve_project_path
-from .support import file_sha256, read_optional_json, static_review_conclusion, to_int
+from .support import file_sha256, read_optional_json, to_int
 
 
 _PLANNING_STATES = {
     "word-budget-file",
     "budget-agent-task",
+    "budget-review-prepare",
     "budget-review",
+    "budget-revision",
     "scene-inventory-agent-task",
+    "scene-inventory-review-prepare",
     "scene-inventory-review",
+    "scene-inventory-revision",
     "chapter-obligation-agent-task",
+    "chapter-obligation-review-prepare",
     "chapter-obligation-review",
+    "chapter-obligation-revision",
     "planning-materialization",
 }
 
 _SUCCESS_NOTES = {
-    "budget-agent-task": "word-budget expansion reviewed",
-    "budget-review": "word-budget expansion reviewed",
-    "scene-inventory-agent-task": "scene inventory reviewed",
-    "scene-inventory-review": "scene inventory reviewed",
-    "chapter-obligation-agent-task": "chapter obligation reviewed",
-    "chapter-obligation-review": "chapter obligation reviewed",
+    "budget-agent-task": "word-budget expansion candidate completed",
+    "budget-review": "word-budget expansion independently reviewed",
+    "scene-inventory-agent-task": "scene inventory candidate completed",
+    "scene-inventory-review": "scene inventory independently reviewed",
+    "chapter-obligation-agent-task": "chapter obligation candidate completed",
+    "chapter-obligation-review": "chapter obligation plan independently reviewed",
 }
 
 
@@ -57,43 +71,31 @@ def _planning_state_errors(
     errors: list[str] = []
     if current_state == "word-budget-file":
         return word_budget_file_gate_errors(root)
-    if current_state in {"budget-agent-task", "budget-review"}:
-        _validate_candidate_review(
-            root, task, current_state, errors,
-            task_path=root / "plot" / "word_budget" / "word_budget.agent_tasks.md",
-            candidate=root / "plot" / "candidates" / "outlines" / "word_budget_expansion.md",
-            review=root / "reviews" / "word_budget" / "word_budget_review.md",
-            planning_label="word-budget expansion",
-            review_label="word-budget review",
-            revision_label="word-budget revision",
-        )
-    elif current_state in {"scene-inventory-agent-task", "scene-inventory-review"}:
-        _validate_candidate_review(
-            root, task, current_state, errors,
-            task_path=root / "plot" / "word_budget" / "scene_inventory_expansion.agent_tasks.md",
-            candidate=root / "plot" / "candidates" / "scenes" / "word_budget_scene_inventory.md",
-            review=root / "reviews" / "word_budget" / "scene_inventory_review.md",
-            planning_label="scene-inventory expansion",
-            review_label="scene-inventory review",
-            revision_label="scene-inventory revision",
-        )
-    elif current_state in {"chapter-obligation-agent-task", "chapter-obligation-review"}:
-        _validate_candidate_review(
-            root, task, current_state, errors,
-            task_path=root / "plot" / "chapter_obligations" / "chapter_obligations.agent_tasks.md",
-            candidate=root / "plot" / "candidates" / "chapters" / "chapter_obligation_plan.md",
-            review=root / "reviews" / "word_budget" / "chapter_obligation_review.md",
-            planning_label="chapter obligation planning",
-            review_label="chapter obligation review",
-            revision_label="chapter-obligation revision",
-        )
+    planning_kind = _planning_kind(current_state)
+    if planning_kind:
+        errors.extend(word_budget_file_gate_errors(root))
+        if current_state.endswith("agent-task"):
+            passed, message = planning_candidate_status(root, planning_kind)
+            if not passed:
+                errors.append(message)
+        elif current_state.endswith("review-prepare"):
+            passed, message = planning_review_prepare_status(root, planning_kind)
+            if not passed:
+                errors.append(message)
+        elif current_state.endswith("-review"):
+            passed, message, _verdict = planning_review_task_status(root, planning_kind)
+            if not passed:
+                errors.append(message)
+        elif current_state.endswith("-revision"):
+            errors.extend(_planning_revision_errors(root, task, planning_kind))
     if current_state == "planning-materialization":
+        passed, message = all_planning_reviews_pass(root)
+        if not passed:
+            errors.append(message)
         passed, message = longform_materialization_status(root)
         if not passed:
             errors.append(message)
     return errors
-
-
 def _success_notes(root: Path, current_state: str, errors: list[str]) -> list[str]:
     if errors:
         return []
@@ -135,26 +137,31 @@ def _story_architecture_gate_errors(
     return errors
 
 
-def _validate_candidate_review(
-    root: Path,
-    task: dict[str, object],
-    current_state: str,
-    errors: list[str],
-    *,
-    task_path: Path,
-    candidate: Path,
-    review: Path,
-    planning_label: str,
-    review_label: str,
-    revision_label: str,
-) -> None:
-    errors.extend(word_budget_file_gate_errors(root))
-    errors.extend(_sidecar_completion_errors(task_path, root, planning_label))
-    errors.extend(_required_artifact_errors(root, [candidate], planning_label))
-    revision_state = current_state.endswith("-review")
-    errors.extend(_review_gate_errors(review, root, review_label, require_pass=revision_state))
-    if revision_state:
-        errors.extend(repair_targets_changed(root, task, revision_label))
+def _planning_kind(current_state: str) -> str:
+    if current_state.startswith("budget-"):
+        return "budget"
+    if current_state.startswith("scene-inventory-"):
+        return "scene_inventory"
+    if current_state.startswith("chapter-obligation-"):
+        return "chapter_obligation"
+    return ""
+
+
+def _planning_revision_errors(
+    root: Path, task: dict[str, object], kind: str
+) -> list[str]:
+    spec = review_spec(kind)
+    hashes = task.get("repair_target_sha256_before_revision")
+    before = hashes if isinstance(hashes, dict) else {}
+    prior = str(before.get(spec.candidate) or "").strip().lower()
+    authorized, message = planning_revision_review_status(root, kind, prior)
+    if not authorized:
+        return [message]
+    errors = repair_targets_changed(root, task, f"{spec.label} revision")
+    candidate_ok, candidate_message = planning_candidate_status(root, kind)
+    if not candidate_ok:
+        errors.append(candidate_message)
+    return errors
 
 
 def word_budget_file_gate_errors(root: Path) -> list[str]:
@@ -229,21 +236,3 @@ def _story_architecture_review_contract_errors(
     if status != "complete" or verdict != "revise":
         errors.append("story architecture revision requires a completed revise verdict")
     return errors
-
-
-def _sidecar_completion_errors(task_path: Path, root: Path, label: str) -> list[str]:
-    state = agent_task_completion_status(task_path, root=root)
-    return [] if state.get("complete") is True else [f"{label} sidecar is incomplete: {state.get('message')}"]
-
-
-def _required_artifact_errors(root: Path, paths: list[Path], label: str) -> list[str]:
-    missing = [relative_path(path, root) for path in paths if not path.exists()]
-    return [] if not missing else [f"{label} required artifact missing: {', '.join(missing)}"]
-
-
-def _review_gate_errors(path: Path, root: Path, label: str, *, require_pass: bool = True) -> list[str]:
-    conclusion = static_review_conclusion(path)
-    allowed = {"pass", "pass_with_notes", "revise_required", "reject"}
-    if conclusion not in allowed:
-        return [f"{label} conclusion must be recorded; got {conclusion or 'missing'} at {relative_path(path, root)}"]
-    return [] if not require_pass or conclusion == "pass" else [f"{label} conclusion must be pass; got {conclusion or 'missing'} at {relative_path(path, root)}"]
