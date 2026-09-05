@@ -13,6 +13,14 @@ from ..tasking.semantic_contracts import (
     semantic_artifact_template,
     validated_branch_proposal_ids,
 )
+from ..tasking.operations import (
+    ENGINE_OPERATION_SCHEMA,
+    operation_from_legacy_command,
+    operation_from_payload,
+    operation_parameters,
+    OPERATION_REGISTRY,
+    resolve_operation_argv,
+)
 from ..tasking.state_contracts import SCENE_CANDIDATE_STATES, SCENE_REVISION_STATES
 from ..tasking.spec import (
     EngineOperation,
@@ -37,14 +45,20 @@ __all__ = [
     "agent_task_completion_status",
     "branch_selection_status",
     "derive_execution_policy",
+    "ENGINE_OPERATION_SCHEMA",
     "EngineOperation",
     "HumanGate",
     "infer_human_gate",
     "issue_next_task",
+    "operation_from_legacy_command",
+    "operation_from_payload",
+    "operation_parameters",
+    "OPERATION_REGISTRY",
     "OutputContract",
     "parse_execution_contract",
     "parse_output_contracts",
     "parse_task_document",
+    "resolve_operation_argv",
     "semantic_artifact_definition",
     "semantic_artifact_errors",
     "semantic_artifact_relative_path",

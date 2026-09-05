@@ -133,12 +133,31 @@ class EngineOperation:
             freeze_mapping(dict(self.arguments)),
         )
 
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "schema": "arcvellum/engine-operation/v1",
+            "operation_id": self.operation_id,
+            "arguments": thaw_mapping(self.arguments),
+            "display_command": self.display_command,
+        }
+
 
 @dataclass(frozen=True)
 class TaskOperations:
     prepare: EngineOperation | None = None
     submit: EngineOperation | None = None
     complete: EngineOperation | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            name: operation.as_dict()
+            for name, operation in (
+                ("prepare", self.prepare),
+                ("submit", self.submit),
+                ("complete", self.complete),
+            )
+            if operation is not None
+        }
 
 
 @dataclass(frozen=True)

@@ -34,7 +34,7 @@
           "drafts/candidates/scene_0001-platform-agent.agent_completion.json": "automatic"
         },
         "completion_receipts": 1,
-        "fingerprint": "6bae63879a1856af5acf8f8f3f7742318fd5d89e775c4909b12f6caacba27f15"
+        "fingerprint": "8b30ee2bbe8486556fa87e4130c07d462dab692bdeb5215125ce746e2205edc1"
       }
     },
     {
@@ -66,7 +66,7 @@
           "plot/word_budget/word_budget.json": "automatic"
         },
         "completion_receipts": 0,
-        "fingerprint": "4fab94c18ac48c71548a6cb3d442bafb06e20f3be1abb31f434bdeae3647497f"
+        "fingerprint": "288b2e5a0af6ff823406beb51c8da48a3ccb7b6396bdfd2b234c126126cedbce"
       }
     },
     {
@@ -102,7 +102,7 @@
           "sources/imports/work-001/extract_project_files.agent_completion.json": "automatic"
         },
         "completion_receipts": 1,
-        "fingerprint": "c62cb6a641eaef4768363e5f7371395d9bcb7d81ef544deb4ab7fd6d2c70c41f"
+        "fingerprint": "09ccece612739f3311373dfec445248bde06caa157b0df52256def7102308b73"
       }
     },
     {
@@ -138,7 +138,7 @@
           "style/prompts/plain-style.agent_completion.json": "automatic"
         },
         "completion_receipts": 1,
-        "fingerprint": "8b0c93934a3b3427728338f121ba95d53f103615b19b40b0557cbad71f3a7ce1"
+        "fingerprint": "316b6a65564a0fbd70412d670a4fea4b48056c00e02a0a7b8f6a602d26c5635f"
       }
     },
     {
@@ -174,7 +174,7 @@
           "characters/candidates/protagonist.agent_completion.json": "automatic"
         },
         "completion_receipts": 1,
-        "fingerprint": "ef60cea2d4d3e9e79c4ce14114b05120ae8237530a85295ad9044b1e0c38468a"
+        "fingerprint": "e837a9e2555bad7abaaddd68a03ec2d86dce71eb047f9247008c15315a04e925"
       }
     },
     {
@@ -210,7 +210,7 @@
           "reviews/agent/canon_review.agent_completion.json": "automatic"
         },
         "completion_receipts": 1,
-        "fingerprint": "e9f4c2bca5888bcc35b35704b26fd84302cf97b7beee23e4ec83a558a6d6ecd4"
+        "fingerprint": "5832a97f65e6146a85e35048844ef3e00fe7079f7b7562a6601fae8d22250a05"
       }
     },
     {
@@ -242,7 +242,7 @@
           "decisions/release/chapter_0001.json": "approval-required"
         },
         "completion_receipts": 0,
-        "fingerprint": "62eb8d768963cf185b9841bfd91f6054c6a21511a63f8bda653e1e6812f55eec"
+        "fingerprint": "644d9613825f03cabb05813a3d0962139f32ec4b8af40e00f9ff1f9e36adddf7"
       }
     }
   ]

@@ -70,8 +70,18 @@ class TaskSpecTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             spec.extensions["prompt_asset"]["version"] = "changed"
 
-    def test_legacy_commands_are_typed_as_compatibility_operations(self):
-        payload = enrich_task_payload(self.cases[1]["payload"])
+    def test_new_tasks_use_registered_operations_and_raw_v1_stays_readable(self):
+        raw = self.cases[1]["payload"]
+        legacy = parse_task_document(
+            raw,
+            normalize_path=normalize_relative_path,
+        ).spec
+        self.assertEqual(
+            legacy.operations.prepare.operation_id,
+            "legacy.command.prepare",
+        )
+
+        payload = enrich_task_payload(raw)
         spec = parse_task_document(
             payload,
             normalize_path=normalize_relative_path,
@@ -79,11 +89,11 @@ class TaskSpecTests(unittest.TestCase):
 
         self.assertEqual(
             spec.operations.prepare.operation_id,
-            "legacy.command.prepare",
+            "arcvellum.engine/word-budget.v1",
         )
         self.assertEqual(
-            spec.operations.prepare.arguments["command"],
-            payload["command"],
+            spec.operations.prepare.arguments["argv"][0],
+            "word-budget",
         )
         self.assertEqual(
             spec.operations.submit.display_command,

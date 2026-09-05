@@ -231,7 +231,9 @@ def _complete_candidate_generation(
     candidate-review contract used by production.
     """
 
-    bridge.execute_task_command(task.command, project)
+    if task.prepare_operation is None:
+        raise RuntimeError("scene generation task has no prepare operation")
+    bridge.execute_task_operation(task.prepare_operation, project)
     candidate = project / "drafts" / "candidates" / f"{_SCENE_ID}-platform-agent.md"
     candidate.write_text(_benchmark_candidate_text(), encoding="utf-8")
     prompt_path = candidate.with_suffix(".prompt.json")

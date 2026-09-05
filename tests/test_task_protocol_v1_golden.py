@@ -61,6 +61,13 @@ class TaskProtocolV1GoldenTests(unittest.TestCase):
                 self.assertEqual(
                     len(receipts), expected["completion_receipts"]
                 )
+                self.assertIn("operations", enriched)
+                if str(enriched.get("command") or "").startswith("python -m "):
+                    self.assertIn("prepare", enriched["operations"])
+                if enriched.get("submission_command"):
+                    self.assertIn("submit", enriched["operations"])
+                if enriched.get("completion_command"):
+                    self.assertIn("complete", enriched["operations"])
                 self.assertEqual(
                     task_contract_fingerprint(enriched),
                     expected["fingerprint"],

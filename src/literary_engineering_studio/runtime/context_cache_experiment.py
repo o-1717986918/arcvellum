@@ -44,8 +44,8 @@ def run_prepared_context_cache_experiment(
         bridge = CoreBridge(config)
         bridge.task_contract_replay(isolated_project, task_id)
         task = load_task_package(isolated_project, _task_path(isolated_project, task_id))
-        if task.command:
-            bridge.execute_task_command(task.command, isolated_project)
+        if task.prepare_operation is not None:
+            bridge.execute_task_operation(task.prepare_operation, isolated_project)
             task = load_task_package(isolated_project, _task_path(isolated_project, task_id))
         report = measure_prepared_context_cache_reuse(
             task,

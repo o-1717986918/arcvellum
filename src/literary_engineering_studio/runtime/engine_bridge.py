@@ -5,28 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
-import re
-import shlex
 import sys
 from typing import Iterable
+
+from literary_engineering_studio_engine.public.tasking import (
+    EngineOperation,
+    operation_from_legacy_command,
+    operation_parameters,
+    resolve_operation_argv,
+)
 
 from ..application.config import repository_root
 from ..projections.core_read_models import ENGINE_ACCESS_LOCK
 from .subprocess_utils import run_hidden
 
-
-FORBIDDEN_COMMAND_TOKENS = (
-    "--allow-unreviewed",
-    "--allow-review-notes",
-    "--include-blocked",
-    "--allow-unapproved",
-    "--allow-unresolved",
-    "--allow-missing-composition",
-    "--allow-unselected-composition",
-    "--allow-recommended-branch",
-    "--allow-missing-branch",
-    "LEW_MAINTAINER_MODE",
-)
 
 FORBIDDEN_ENGINE_SUBCOMMANDS = {
     "agent-run",
@@ -156,31 +148,23 @@ class CoreBridge:
         return self.run(["route-audit", str(project.resolve()), "--route", route]).require_success()
 
     def execute_task_command(self, command: str, project: Path, *, timeout: int = 600) -> CoreCommandResult:
-        """Execute only trusted core-generated `python -m literary_engineering_studio_engine` commands."""
+        """Upgrade a persisted v1 command and execute its registered operation."""
 
         if not command.strip():
             raise ValueError("task command is empty")
-        parameters = task_command_parameters(command)
-        if parameters:
-            raise ValueError("task command is a template and requires: " + ", ".join(parameters))
-        if any(token in command for token in FORBIDDEN_COMMAND_TOKENS):
-            raise ValueError("task command contains a formal-mode bypass token")
-        # Commands run as an argument vector, never through a shell.  Keep the
-        # reject list for real shell-control syntax, but only after unresolved
-        # template fields have been surfaced as a human gate above.
-        shell_check = command.replace("<project>", "")
-        if any(token in shell_check for token in ("&&", "||", "|", ">", "< ", ";", "`")):
-            raise ValueError("task command contains unsupported shell syntax")
-        parts = [_unquote(item) for item in shlex.split(command, posix=False)]
-        try:
-            module_index = parts.index("-m")
-        except ValueError as exc:
-            raise ValueError("task command must use python -m literary_engineering_studio_engine") from exc
-        if module_index + 1 >= len(parts) or parts[module_index + 1] != self.module:
-            raise ValueError(f"task command module is not allowed: {parts[module_index + 1:]}")
-        args = [_replace_project_placeholder(item, project.resolve()) for item in parts[module_index + 2 :]]
-        if not args:
-            raise ValueError("task command does not contain a core subcommand")
+        operation = operation_from_legacy_command(command)
+        if operation is None:
+            raise ValueError("task command must use python -m literary_engineering_studio_engine")
+        return self.execute_task_operation(operation, project, timeout=timeout)
+
+    def execute_task_operation(
+        self,
+        operation: EngineOperation,
+        project: Path,
+        *,
+        timeout: int = 600,
+    ) -> CoreCommandResult:
+        args = resolve_operation_argv(operation, project)
         return self.run(args, timeout=timeout).require_success()
 
 
@@ -193,12 +177,10 @@ def task_command_parameters(command: str) -> tuple[str, ...]:
     the task look like a shell failure instead of an honest decision gate.
     """
 
-    normalized = str(command or "").replace("<project>", "")
-    optional_values = [item.strip() for item in re.findall(r"\[([^\]]+)\]", normalized)]
-    required_source = re.sub(r"\[[^\]]+\]", "", normalized)
-    values = [item.strip() for item in re.findall(r"<([^>]+)>", required_source)]
-    values.extend(optional_values)
-    return tuple(dict.fromkeys(item for item in values if item))
+    operation = operation_from_legacy_command(command)
+    if operation is None:
+        return ()
+    return operation_parameters(operation)
 
 
 def parse_cli_fields(stdout: str) -> dict[str, str]:
@@ -211,17 +193,6 @@ def parse_cli_fields(stdout: str) -> dict[str, str]:
         if normalized and all(char.isalnum() or char in "_-" for char in normalized):
             fields[normalized] = value.strip()
     return fields
-
-
-def _replace_project_placeholder(value: str, project: Path) -> str:
-    normalized = value.replace("<project>", str(project))
-    return normalized.replace("/", os.sep) if normalized.startswith(str(project)) else normalized
-
-
-def _unquote(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        return value[1:-1]
-    return value
 
 
 def _source_checkout_python(working_dir: Path, module: str, configured_python: str) -> str:

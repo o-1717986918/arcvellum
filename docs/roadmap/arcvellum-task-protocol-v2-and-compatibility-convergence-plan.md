@@ -290,7 +290,7 @@ Route Domain
 - [x] 确定先做 TD-0、TD-1，再改程序执行协议；
 - [x] TD-0 兼容基线；
 - [x] TD-1 内部强类型 Task IR；
-- [ ] TD-2 结构化 Engine Operation。
+- [x] TD-2 结构化 Engine Operation。
 
 ### 2026-09-05：TD-0 完成
 
@@ -326,4 +326,23 @@ Route Domain
 - test_task_preflight.py：37 项通过；
 - test_prompt_program_v3.py：37 项通过；
 - scripts/architecture_audit.py：通过，债务基线未增加；
+- git diff --check：通过。
+
+### 2026-09-06：TD-2 完成
+
+- [x] 新增 Engine Operation Registry，登记正式 prepare 操作与 task submit/complete 生命周期操作；
+- [x] 新发 v1 TaskPackage 同时携带结构化 `operations` 和兼容显示命令；
+- [x] Studio Worker 直接解析 typed operation 并将参数向量交给 Engine，不再用 `shlex` 反解析正式任务；
+- [x] 旧 v1 command 只在 Engine 兼容适配器中升级，未知 operation、绕过参数和 Shell 控制符均 fail closed；
+- [x] 自适应场景编排在追加 RP 深度或分支数量时同步更新 prepare operation；
+- [x] Worker task context 投影当前 prepare operation，为 v2 去除程序命令字符串建立消费端基础；
+- [x] 新增中文路径双场景跨进程 E2E，连续执行两个 context Operation 并验证独立上下文与 trace。
+
+验证：
+
+- 全量 Python：1353 项通过，1 项跳过；
+- test_engine_operations.py：6 项通过；
+- test_engine_operation_e2e.py：1 项通过；
+- 七条 Route 的 v1 golden 指纹已按 `2026-09-05.36` 执行契约升级显式更新；
+- scripts/architecture_audit.py：通过，未增加大文件、复杂函数、循环依赖或边界违规；
 - git diff --check：通过。

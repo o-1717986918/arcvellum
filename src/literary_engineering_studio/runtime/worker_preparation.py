@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ..contracts import TaskPackage
-from ..core_bridge import CoreBridge, task_command_parameters
+from ..core_bridge import CoreBridge
+from literary_engineering_studio_engine.public.tasking import operation_parameters
 from .context_budget import TaskContextBudget, resolve_task_context_budget
 from .execution_profiles import TaskExecutionProfile
 from .prepared_context_cache import PreparedContextCache
@@ -188,9 +189,10 @@ def _run_core_command(
     worker_config: Mapping[str, Any],
     prepared_context_cache: PreparedContextCache | None,
 ) -> tuple[SandboxManifest | None, WorkerRunResult] | None:
-    if not task.command:
+    operation = task.prepare_operation
+    if operation is None:
         return None
-    unresolved = task_command_parameters(task.command)
+    unresolved = operation_parameters(operation)
     if unresolved:
         return None, _parameters_required_result(
             task,
@@ -202,8 +204,8 @@ def _run_core_command(
 
     observer.emit("core.command_started", {"task_id": task.task_id})
     try:
-        command_result = bridge.execute_task_command(
-            task.command,
+        command_result = bridge.execute_task_operation(
+            operation,
             sandbox.control_workspace or sandbox.workspace,
         )
     except (RuntimeError, ValueError, FileNotFoundError) as exc:
@@ -306,7 +308,7 @@ def _complete_core_command_preparation(
 def _materialize_agent_view_immediately(task: TaskPackage) -> bool:
     return (
         task.execution_contract.execution_policy == "agent-required"
-        and not task.command
+        and task.prepare_operation is None
     )
 
 

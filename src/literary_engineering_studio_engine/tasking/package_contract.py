@@ -11,9 +11,10 @@ import json
 from pathlib import Path
 from .context_contract import CONTEXT_CONTRACT_FINGERPRINT_FIELDS, normalize_context_contract as _normalize_context_contract
 from .markdown_renderer import render_task_markdown
+from .operations import build_task_operations
 from .prompt_projection import project_prompt_asset
 from ..prompt_registry import resolve_prompt_asset
-TASK_CONTRACT_REVISION = "2026-09-05.35"
+TASK_CONTRACT_REVISION = "2026-09-05.36"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 RECHECK_REQUIRED_STATES = {
     "asset-review-pass",
@@ -85,6 +86,7 @@ def task_contract_fingerprint(task: dict[str, object]) -> str:
             "task_type",
             "prompt_asset_id",
             "command",
+            "operations",
             "required_reading",
             "source_paths",
             "agent_source_paths",
@@ -155,7 +157,7 @@ def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
         if str(enriched.get("execution_policy") or "") == "human-required":
             enriched["submission_command"] = ""
             enriched["completion_command"] = ""
-        return enriched
+        return _finalize_operations(enriched)
     if present_contract_fields:
         missing = ", ".join(sorted(EXPLICIT_TASK_CONTRACT_FIELDS - present_contract_fields))
         raise ValueError(f"formal task has a partial explicit execution contract; missing: {missing}")
@@ -211,6 +213,11 @@ def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
                 "Do not create an agent completion marker or a substitute approval file; use the Studio decision interface.",
             ]
         )
+    return _finalize_operations(enriched)
+
+
+def _finalize_operations(enriched: dict[str, object]) -> dict[str, object]:
+    enriched["operations"] = build_task_operations(enriched)
     return enriched
 
 

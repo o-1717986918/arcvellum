@@ -96,6 +96,7 @@ def build_task_context(
         ),
         "execution_profile": _profile_projection(execution_profile),
         "creative_plan": creative_plan_task_context(task.payload),
+        "prepare_operation": _prepare_operation_projection(task),
         "command": task.command,
         "word_count": {
             "target": int(task.payload.get("word_count_target") or 0),
@@ -134,6 +135,11 @@ def build_task_context(
         ),
         "prompt_access": dict(prompt_access),
     }
+
+
+def _prepare_operation_projection(task: TaskPackage) -> dict[str, object]:
+    operation = task.prepare_operation
+    return operation.as_dict() if operation is not None else {}
 
 
 def write_task_context(

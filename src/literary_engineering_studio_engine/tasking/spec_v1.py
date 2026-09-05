@@ -19,6 +19,7 @@ from .spec_models import (
     TaskResourceRef,
     TaskSpec,
 )
+from .operations import operation_from_payload
 
 
 HUMAN_GATE_TOKENS = (
@@ -64,6 +65,7 @@ CORE_FIELDS = frozenset(
         "source_paths",
         "expected_outputs",
         "command",
+        "operations",
         "submission_command",
         "completion_command",
         "execution_policy",
@@ -254,6 +256,25 @@ def _intent(payload: Mapping[str, object]) -> TaskIntent:
 
 
 def _operations(payload: Mapping[str, object]) -> TaskOperations:
+    explicit = payload.get("operations")
+    if isinstance(explicit, Mapping):
+        return TaskOperations(
+            prepare=(
+                operation_from_payload(explicit.get("prepare"))
+                if "prepare" in explicit
+                else _legacy_operation("prepare", payload.get("command"))
+            ),
+            submit=(
+                operation_from_payload(explicit.get("submit"))
+                if "submit" in explicit
+                else _legacy_operation("submit", payload.get("submission_command"))
+            ),
+            complete=(
+                operation_from_payload(explicit.get("complete"))
+                if "complete" in explicit
+                else _legacy_operation("complete", payload.get("completion_command"))
+            ),
+        )
     return TaskOperations(
         prepare=_legacy_operation("prepare", payload.get("command")),
         submit=_legacy_operation("submit", payload.get("submission_command")),

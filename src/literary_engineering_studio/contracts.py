@@ -15,6 +15,7 @@ from .protocols.review_context import (
 )
 from literary_engineering_studio_engine.public.tasking import (
     HumanGate,
+    EngineOperation,
     OutputContract,
     TaskDocument,
     TaskExecutionContract,
@@ -23,6 +24,7 @@ from literary_engineering_studio_engine.public.tasking import (
     derive_execution_policy,
     parse_output_contracts,
     parse_task_document,
+    operation_from_payload,
 )
 
 TASK_SCHEMA = "literary-engineering-workbench/agent-task/v1"
@@ -76,6 +78,18 @@ class TaskPackage:
     def command(self) -> str:
         operation = self.task_spec.operations.prepare
         return operation.display_command if operation else ""
+
+    @property
+    def prepare_operation(self) -> EngineOperation | None:
+        return self.task_spec.operations.prepare
+
+    @property
+    def submit_operation(self) -> EngineOperation | None:
+        return self.task_spec.operations.submit
+
+    @property
+    def complete_operation(self) -> EngineOperation | None:
+        return self.task_spec.operations.complete
 
     @property
     def source_paths(self) -> tuple[str, ...]:
@@ -237,6 +251,7 @@ def _validate_optional_execution_contract(payload: dict[str, Any]) -> None:
         raise ValueError(f"partial explicit execution contract; missing: {missing}")
     _validate_execution_policy_fields(payload)
     _validate_execution_output_fields(payload)
+    _validate_operations(payload)
     _validate_semantic_artifact(payload)
     _validate_prompt_asset(payload)
 
@@ -267,6 +282,23 @@ def _validate_execution_output_fields(payload: dict[str, Any]) -> None:
             payload["output_contracts"],
             normalize_path=normalize_relative_path,
         )
+
+
+def _validate_operations(payload: dict[str, Any]) -> None:
+    value = payload.get("operations")
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise ValueError("task package operations must be an object")
+    unknown = set(value) - {"prepare", "submit", "complete"}
+    if unknown:
+        raise ValueError(
+            "task package operations contain unknown phases: "
+            + ", ".join(sorted(unknown))
+        )
+    for phase in ("prepare", "submit", "complete"):
+        if phase in value:
+            operation_from_payload(value[phase])
 
 
 def _validate_semantic_artifact(payload: dict[str, Any]) -> None:

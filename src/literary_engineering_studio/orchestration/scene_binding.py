@@ -8,7 +8,10 @@ from literary_engineering_studio_engine.public.orchestration import (
     PlanNodeKind,
     scene_plan_node_kind,
 )
-from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
+from literary_engineering_studio_engine.public.tasking import (
+    SCENE_REVISION_STATES,
+    operation_from_legacy_command,
+)
 
 from ..contracts import TaskPackage
 from .chapter_binding import (
@@ -321,8 +324,29 @@ def _bind_payload(
         *_policy_constraints(task.current_state, policy),
     ]
     payload["hard_constraints"] = list(dict.fromkeys(item for item in constraints if item))
-    payload["command"] = _bound_command(str(payload.get("command") or ""), task.current_state, policy)
+    _bind_prepare_operation(payload, task.current_state, policy)
     return replace(task, payload=payload)
+
+
+def _bind_prepare_operation(
+    payload: dict[str, object],
+    current_state: str,
+    policy: SceneExecutionPolicy,
+) -> None:
+    command = _bound_command(
+        str(payload.get("command") or ""),
+        current_state,
+        policy,
+    )
+    payload["command"] = command
+    if not command:
+        return
+    operation = operation_from_legacy_command(command)
+    if operation is None:
+        return
+    operations = dict(payload.get("operations") or {})
+    operations["prepare"] = operation.as_dict()
+    payload["operations"] = operations
 
 
 def _policy_constraints(
