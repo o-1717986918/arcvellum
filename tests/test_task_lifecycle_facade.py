@@ -10,6 +10,7 @@ from pathlib import Path
 from literary_engineering_studio_engine.agent_task_status import build_agent_task_status
 from literary_engineering_studio_engine.task_paths import events_path, read_events
 from literary_engineering_studio_engine.task_registry import build_workflow_events, issue_next_task, open_task
+from literary_engineering_studio_engine.tasking.paths import load_task
 
 
 class TaskLifecycleFacadeTests(unittest.TestCase):
@@ -41,7 +42,7 @@ class TaskLifecycleFacadeTests(unittest.TestCase):
             root = Path(temporary)
             (root / "project.yaml").write_text("title: Lifecycle fixture\n", encoding="utf-8")
             current = issue_next_task(root, route="character-and-world-assets")
-            current_payload = json.loads(current.task_json_path.read_text(encoding="utf-8"))
+            current_payload = load_task(current.task_json_path)
             stale_id = "character-and-world-assets-project-assets-obsolete"
             stale_json = root / "workflow" / "tasks" / f"{stale_id}.task.json"
             stale_sidecar = root / "workflow" / "tasks" / f"{stale_id}.agent_tasks.md"

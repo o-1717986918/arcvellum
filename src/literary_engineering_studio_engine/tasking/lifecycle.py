@@ -30,7 +30,9 @@ from .paths import (
     submission_path,
     task_json_path,
     task_markdown_path,
+    write_task,
 )
+from .spec_models import TASK_SCHEMA_V2
 from .supersession import supersede_active_tasks
 
 
@@ -153,7 +155,7 @@ def issue_next_task(
 
     task_json.parent.mkdir(parents=True, exist_ok=True)
     task_markdown.parent.mkdir(parents=True, exist_ok=True)
-    task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_task(task_json, task, storage_schema=TASK_SCHEMA_V2)
     task_markdown.write_text(services.render_task_markdown(task, root), encoding="utf-8")
     append_event(root, "task_issued", identifier, {"route": normalized_route, "scene_id": scene_id, "current_state": current_state})
     return TaskRegistryResult(
@@ -205,7 +207,7 @@ def _existing_task_result(
 ) -> TaskRegistryResult | None:
     if force or not task_json.exists():
         return None
-    existing = read_json(task_json)
+    existing = load_task(task_json)
     status = str(existing.get("status") or "")
     if status not in {"issued", "opened", "submitted", "blocked"}:
         return None
@@ -247,7 +249,7 @@ def open_task(project_root: Path, task_id: str, *, services: LifecycleServices) 
     task = services.enrich_task_payload(stored)
     task["status"] = "opened"
     task["opened_at"] = now()
-    task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_task(task_json, task)
     task_markdown = task_markdown_path(root, task_id)
     task_markdown.write_text(services.render_task_markdown(task, root), encoding="utf-8")
     append_event(root, "task_opened", task_id, {"route": task.get("route", ""), "scene_id": task.get("scene_id", "")})
@@ -314,7 +316,7 @@ def submit_task(
     task["status"] = "submitted"
     task["submission"] = relative_path(target, root)
     task["submitted_artifacts"] = rel_artifacts
-    task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_task(task_json, task)
     append_event(root, "task_submitted", task_id, {"artifacts": rel_artifacts})
     return TaskSubmissionResult(
         project_root=root,
@@ -378,7 +380,7 @@ def complete_task(
     task["completed_at"] = now()
     task["completion"] = relative_path(completion_path, root)
     task["validation"] = {"status": "pass", "missing_expected_outputs": [], "notes": validation_notes}
-    task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_task(task_json, task)
     append_event(root, "task_completed", task_id, {"completion": relative_path(completion_path, root)})
     if route == "scene-development" and task.get("scene"):
         runtime_state = root / "workflow" / "runtime_choices"
@@ -436,7 +438,7 @@ def revert_task_submission(
         "archived_submission": archived,
         "recorded_at": now(),
     }
-    task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_task(task_json, task)
     append_event(root, "task_submission_reverted", task_id, {"reason": task["rollback"]["reason"], "archived": archived})
     return TaskRegistryResult(
         project_root=root,

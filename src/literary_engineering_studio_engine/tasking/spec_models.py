@@ -8,6 +8,7 @@ from typing import Any, Callable, Mapping
 
 
 TASK_SCHEMA_V1 = "literary-engineering-workbench/agent-task/v1"
+TASK_SCHEMA_V2 = "arcvellum/task/v2"
 EXECUTION_CONTRACT_SCHEMA = "literary-engineering-studio/task-execution/v0.3"
 LIFECYCLE_FIELDS = frozenset(
     {
@@ -23,6 +24,10 @@ LIFECYCLE_FIELDS = frozenset(
         "validation",
         "refreshed_at",
         "refreshed_from_status",
+        "rollback",
+        "superseded_at",
+        "superseded_by",
+        "supersession_reason",
     }
 )
 PathNormalizer = Callable[[str], object]
@@ -172,6 +177,13 @@ class TaskLifecycle:
     completion: str = ""
     submitted_artifacts: tuple[str, ...] = ()
     validation: Mapping[str, object] = field(default_factory=dict)
+    rollback: Mapping[str, object] = field(default_factory=dict)
+    superseded_at: str = ""
+    superseded_by: str = ""
+    supersession_reason: str = ""
+    refreshed_at: str = ""
+    refreshed_from_status: str = ""
+    extensions: Mapping[str, object] = field(default_factory=dict)
     _v1_fields: Mapping[str, object] = field(
         default_factory=dict,
         repr=False,
@@ -180,6 +192,8 @@ class TaskLifecycle:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "validation", freeze_mapping(self.validation))
+        object.__setattr__(self, "rollback", freeze_mapping(self.rollback))
+        object.__setattr__(self, "extensions", freeze_mapping(self.extensions))
         object.__setattr__(self, "_v1_fields", freeze_mapping(self._v1_fields))
 
     @classmethod
@@ -190,24 +204,95 @@ class TaskLifecycle:
             if key in payload
         }
         validation = payload.get("validation")
+        rollback = payload.get("rollback")
         return cls(
-            status=str(payload.get("status") or "issued"),
-            created_at=str(payload.get("created_at") or ""),
-            opened_at=str(payload.get("opened_at") or ""),
-            submitted_at=str(payload.get("submitted_at") or ""),
-            completed_at=str(payload.get("completed_at") or ""),
-            blocked_at=str(payload.get("blocked_at") or ""),
-            submission=str(payload.get("submission") or ""),
-            completion=str(payload.get("completion") or ""),
-            submitted_artifacts=tuple(
-                str(item) for item in payload.get("submitted_artifacts") or []
-            ),
+            status=_text_field(payload, "status", "issued"),
+            created_at=_text_field(payload, "created_at"),
+            opened_at=_text_field(payload, "opened_at"),
+            submitted_at=_text_field(payload, "submitted_at"),
+            completed_at=_text_field(payload, "completed_at"),
+            blocked_at=_text_field(payload, "blocked_at"),
+            submission=_text_field(payload, "submission"),
+            completion=_text_field(payload, "completion"),
+            submitted_artifacts=_text_items(payload, "submitted_artifacts"),
             validation=validation if isinstance(validation, Mapping) else {},
+            rollback=rollback if isinstance(rollback, Mapping) else {},
+            superseded_at=_text_field(payload, "superseded_at"),
+            superseded_by=_text_field(payload, "superseded_by"),
+            supersession_reason=_text_field(payload, "supersession_reason"),
+            refreshed_at=_text_field(payload, "refreshed_at"),
+            refreshed_from_status=_text_field(payload, "refreshed_from_status"),
             _v1_fields=fields,
         )
 
+    @classmethod
+    def from_v2_payload(cls, payload: Mapping[str, object]) -> "TaskLifecycle":
+        validation = payload.get("validation")
+        rollback = payload.get("rollback")
+        extensions = payload.get("extensions")
+        lifecycle = cls(
+            status=_text_field(payload, "status", "issued"),
+            created_at=_text_field(payload, "created_at"),
+            opened_at=_text_field(payload, "opened_at"),
+            submitted_at=_text_field(payload, "submitted_at"),
+            completed_at=_text_field(payload, "completed_at"),
+            blocked_at=_text_field(payload, "blocked_at"),
+            submission=_text_field(payload, "submission"),
+            completion=_text_field(payload, "completion"),
+            submitted_artifacts=_text_items(payload, "submitted_artifacts"),
+            validation=validation if isinstance(validation, Mapping) else {},
+            rollback=rollback if isinstance(rollback, Mapping) else {},
+            superseded_at=_text_field(payload, "superseded_at"),
+            superseded_by=_text_field(payload, "superseded_by"),
+            supersession_reason=_text_field(payload, "supersession_reason"),
+            refreshed_at=_text_field(payload, "refreshed_at"),
+            refreshed_from_status=_text_field(payload, "refreshed_from_status"),
+            extensions=extensions if isinstance(extensions, Mapping) else {},
+        )
+        object.__setattr__(lifecycle, "_v1_fields", freeze_mapping(lifecycle.as_v1_fields()))
+        return lifecycle
+
+    def as_v1_fields(self) -> dict[str, object]:
+        fields: dict[str, object] = {"status": self.status}
+        for name in (
+            "created_at",
+            "opened_at",
+            "submitted_at",
+            "completed_at",
+            "blocked_at",
+            "submission",
+            "completion",
+            "superseded_at",
+            "superseded_by",
+            "supersession_reason",
+            "refreshed_at",
+            "refreshed_from_status",
+        ):
+            value = getattr(self, name)
+            if value:
+                fields[name] = value
+        if self.submitted_artifacts:
+            fields["submitted_artifacts"] = list(self.submitted_artifacts)
+        if self.validation:
+            fields["validation"] = thaw_mapping(self.validation)
+        if self.rollback:
+            fields["rollback"] = thaw_mapping(self.rollback)
+        fields.update(thaw_mapping(self.extensions))
+        return fields
+
+    def as_v2_dict(self) -> dict[str, object]:
+        fields = self.as_v1_fields()
+        extensions = {
+            key: fields.pop(key)
+            for key in tuple(fields)
+            if key not in LIFECYCLE_FIELDS
+        }
+        if extensions:
+            fields["extensions"] = extensions
+        return fields
+
     def to_v1_fields(self) -> dict[str, object]:
-        return thaw_mapping(self._v1_fields)
+        return thaw_mapping(self._v1_fields) or self.as_v1_fields()
 
 
 @dataclass(frozen=True)
@@ -263,6 +348,16 @@ def freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
 
 def thaw_mapping(value: Mapping[str, object]) -> dict[str, object]:
     return {key: _thaw_value(item) for key, item in value.items()}
+
+
+def _text_field(value: Mapping[str, object], key: str, default: str = "") -> str:
+    item = value.get(key)
+    return default if item is None or item == "" else str(item)
+
+
+def _text_items(value: Mapping[str, object], key: str) -> tuple[str, ...]:
+    items = value.get(key)
+    return tuple(str(item) for item in items) if isinstance(items, (list, tuple)) else ()
 
 
 def _freeze_value(value: object) -> object:

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 
 from ..project_interaction import build_current_human_choices
+from ..tasking.storage import load_task_payload
 
 
 def load_tasks(root: Path) -> dict[str, dict[str, object]]:
@@ -16,7 +17,10 @@ def load_tasks(root: Path) -> dict[str, dict[str, object]]:
         return {}
     tasks: dict[str, dict[str, object]] = {}
     for path in sorted(task_dir.glob("*.task.json")):
-        payload = read_json(path)
+        try:
+            payload = load_task_payload(path)
+        except (OSError, ValueError):
+            payload = {}
         task_id = str(payload.get("task_id") or path.name.removesuffix(".task.json"))
         if not task_id:
             continue
@@ -44,6 +48,11 @@ def read_events(path: Path) -> list[dict[str, object]]:
 def read_json(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}
+    if path.name.endswith(".task.json"):
+        try:
+            return load_task_payload(path)
+        except (OSError, ValueError):
+            return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:

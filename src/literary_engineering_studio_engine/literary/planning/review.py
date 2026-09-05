@@ -11,6 +11,10 @@ from typing import Any
 
 from ...agent_tasks import agent_task_completion_status, write_agent_tasks
 from ...atomic_io import atomic_write_text
+from .writer_identity import (
+    candidate_writer_identity as _candidate_writer_identity,
+    candidate_writer_task_path as _candidate_writer_task_path,
+)
 
 
 REVIEW_SCHEMA = "literary-engineering-workbench/longform-planning-review/v1"
@@ -362,38 +366,12 @@ def review_machine_contract(project_root: Path, kind: str) -> dict[str, str]:
 
 
 def candidate_writer_identity(project_root: Path, kind: str) -> str:
-    task_path = candidate_writer_task_path(project_root, kind)
-    if task_path:
-        payload = _read_json(project_root.resolve() / task_path)
-        identifier = str(payload.get("task_id") or Path(task_path).stem)
-        return f"studio:writer:{identifier}"
-    root = project_root.resolve()
-    spec = review_spec(kind)
-    marker = agent_task_completion_status(root / spec.author_task, root=root)
-    if marker.get("complete") is True:
-        digest = str(marker.get("task_digest") or "")[:16]
-        return f"sidecar:writer:{spec.kind}:{digest}"
-    return ""
+    return _candidate_writer_identity(project_root, review_spec(kind))
 
 
 def candidate_writer_task_path(project_root: Path, kind: str) -> str:
     """Return the latest completed formal task that wrote the candidate."""
-
-    root = project_root.resolve()
-    spec = review_spec(kind)
-    completed: list[tuple[str, str]] = []
-    for path in (root / "workflow" / "tasks").glob("*.task.json"):
-        payload = _read_json(path)
-        if (
-            payload.get("status") == "complete"
-            and str(payload.get("current_state") or "") in spec.author_states
-            and spec.candidate in [str(item).replace("\\", "/") for item in payload.get("expected_outputs") or []]
-        ):
-            completed.append((str(payload.get("completed_at") or ""), path.relative_to(root).as_posix()))
-    if completed:
-        _completed_at, relative = max(completed)
-        return relative
-    return ""
+    return _candidate_writer_task_path(project_root, review_spec(kind))
 
 
 def _completion_marker_relative(task_relative: str) -> str:

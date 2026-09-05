@@ -21,13 +21,14 @@ from literary_engineering_studio_engine.public.tasking import (
     TaskExecutionContract,
     TaskLifecycle,
     TaskSpec,
+    TASK_SCHEMA_V1,
     derive_execution_policy,
     parse_output_contracts,
     parse_task_document,
     operation_from_payload,
 )
 
-TASK_SCHEMA = "literary-engineering-workbench/agent-task/v1"
+TASK_SCHEMA = TASK_SCHEMA_V1
 EXPLICIT_EXECUTION_FIELDS = {
     "execution_policy",
     "agent_role",
@@ -164,11 +165,15 @@ def load_task_package(project_root: Path, task_json_path: Path) -> TaskPackage:
     if not path.is_relative_to(root):
         raise ValueError(f"task JSON must be inside the work project: {path}")
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         raise ValueError(f"invalid task JSON: {path}: {exc}") from exc
-    if not isinstance(payload, dict):
+    if not isinstance(raw_payload, dict):
         raise ValueError(f"task JSON must be an object: {path}")
+    payload = parse_task_document(
+        raw_payload,
+        normalize_path=normalize_relative_path,
+    ).to_v1_payload()
     _validate_task_payload(payload)
     markdown_rel = str(payload.get("task_markdown") or "")
     if not markdown_rel:
@@ -190,11 +195,15 @@ def load_task_package_snapshot(
     json_path = task_json_path.resolve()
     markdown_path = task_markdown_path.resolve()
     try:
-        payload = json.loads(json_path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(json_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         raise ValueError(f"invalid task snapshot JSON: {json_path}: {exc}") from exc
-    if not isinstance(payload, dict):
+    if not isinstance(raw_payload, dict):
         raise ValueError(f"task snapshot JSON must be an object: {json_path}")
+    payload = parse_task_document(
+        raw_payload,
+        normalize_path=normalize_relative_path,
+    ).to_v1_payload()
     _validate_task_payload(payload)
     if not markdown_path.is_file():
         raise FileNotFoundError(f"task snapshot Markdown not found: {markdown_path}")

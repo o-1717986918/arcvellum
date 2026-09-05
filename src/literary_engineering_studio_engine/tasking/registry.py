@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import re
 
@@ -63,6 +62,8 @@ from ..tasking.paths import relative_path as _rel
 from ..tasking.paths import resolve_project_path as _resolve_project_path
 from ..tasking.paths import task_json_path as _task_json_path
 from ..tasking.paths import task_markdown_path as _task_markdown_path
+from ..tasking.paths import write_task as _write_task
+from ..tasking.spec_models import TASK_SCHEMA_V2
 from ..workflow_state import build_workflow_state, next_scene_workflow_state
 
 
@@ -153,10 +154,7 @@ def replay_task_contract(
     task_markdown = _task_markdown_path(root, task_id)
     rebuilt["task_json"] = _rel(task_json, root)
     rebuilt["task_markdown"] = _rel(task_markdown, root)
-    task_json.write_text(
-        json.dumps(rebuilt, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _write_task(task_json, rebuilt, storage_schema=TASK_SCHEMA_V2)
     task_markdown.write_text(
         _render_task_markdown(rebuilt, root),
         encoding="utf-8",
@@ -321,5 +319,5 @@ def _scene_id(scene_path: Path) -> str:
 def _block_task(root: Path, task_json: Path, task: dict[str, object], task_id: str, message: str) -> None:
     task["status"] = "blocked"
     task["validation"] = {"status": "fail", "message": message}
-    task_json.write_text(json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_task(task_json, task)
     _append_event(root, "task_blocked", task_id, {"message": message})

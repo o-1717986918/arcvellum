@@ -16,6 +16,7 @@ from literary_engineering_studio.observability.reasoning_benchmark_projection im
 )
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.runtime.engine_bridge import CoreBridge
+from literary_engineering_studio_engine.tasking.paths import load_task
 
 
 CATALOG = Path(__file__).parent / "fixtures" / "runtime_benchmarks" / "catalog.json"
@@ -97,10 +98,11 @@ class RuntimeBenchmarkTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as temporary:
             result = reconstruct_benchmark_case(case, Path(temporary) / case.case_id)
-            task = json.loads(
-                (result.project_root / "workflow" / "tasks" / f"{result.task_id}.task.json").read_text(
-                    encoding="utf-8"
-                )
+            task = load_task(
+                result.project_root
+                / "workflow"
+                / "tasks"
+                / f"{result.task_id}.task.json"
             )
             candidate = "drafts/candidates/scene_0001-platform-agent.md"
             evidence = task.get("context_evidence_contract")

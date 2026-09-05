@@ -346,3 +346,24 @@ Route Domain
 - 七条 Route 的 v1 golden 指纹已按 `2026-09-05.36` 执行契约升级显式更新；
 - scripts/architecture_audit.py：通过，未增加大文件、复杂函数、循环依赖或边界违规；
 - git diff --check：通过。
+
+### 2026-09-06：TD-3 完成
+
+- [x] 新增严格的 `arcvellum/task/v2` schema，并将规范主体、可变生命周期与 Route 扩展分区；
+- [x] 核心对象全面采用 `additionalProperties: false`，Route 私有字段只能进入 `spec.extensions`；
+- [x] 资源、操作、预期输出、验证规则与生命周期均由 typed IR 表达；
+- [x] 新建任务默认写入 v2，既有 v1 任务更新时保持原协议，不制造隐式迁移；
+- [x] 保留 v1 与缺失 schema 的历史读取路径，未知协议版本 fail closed；
+- [x] Studio、Engine、任务审计、活动观测与文学规划读取统一经过版本感知存储层；
+- [x] 建立 v1-to-v2 适配器与语义 fingerprint，七条正式 Route 迁移前后语义一致；
+- [x] 生命周期更新只改变 `lifecycle`，不改写不可变 `spec`。
+
+验证：
+
+- test_task_protocol_v2.py：5 项通过；
+- 七条 Route 的 v1 fixture 全部完成 v2 无损投影与 fingerprint 核对；
+- 全量 Python：1359 项通过，1 项跳过；
+- verify_compatibility_surface.py：通过；
+- agent_task.v2.json：JSON 解析通过；
+- scripts/architecture_audit.py：通过，未增加大文件、复杂函数、循环依赖或边界违规；
+- git diff --check：通过。

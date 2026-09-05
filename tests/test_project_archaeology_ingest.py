@@ -12,6 +12,7 @@ from literary_engineering_studio_engine.source_ingest_route import (
     manifest_gate_errors,
 )
 from literary_engineering_studio_engine.task_registry import issue_next_task
+from literary_engineering_studio_engine.tasking.paths import load_task
 
 
 class ProjectArchaeologyIngestTests(unittest.TestCase):
@@ -109,7 +110,7 @@ class ProjectArchaeologyIngestTests(unittest.TestCase):
                 ],
             )
             issued = issue_next_task(root, route="source-ingest")
-            issued_payload = _json(issued.task_json_path)
+            issued_payload = load_task(issued.task_json_path)
             self.assertEqual(
                 issued_payload["current_state"],
                 "chunk-extraction-agent-task",

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from ...cli_support import (
@@ -19,6 +18,7 @@ from ...task_registry import (
     revert_task_submission,
     submit_task,
 )
+from ...tasking.paths import load_task
 
 
 def handle_task_next(args, parser) -> int:
@@ -50,11 +50,7 @@ def handle_task_next(args, parser) -> int:
 
 def _print_task_notice(args, result) -> None:
     print(f"task: {result.task_markdown_path}")
-    payload = (
-        json.loads(result.task_json_path.read_text(encoding="utf-8"))
-        if result.task_json_path
-        else {}
-    )
+    payload = load_task(result.task_json_path) if result.task_json_path else {}
     project = Path(args.project).resolve()
     if str(payload.get("execution_policy") or "") == "human-required":
         print_human_decision_notice(result.task_markdown_path, project=project)

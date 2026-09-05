@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from .paths import append_event, now, read_json
+from .paths import append_event, load_task, now, write_task
 
 
 def supersede_active_tasks(
@@ -24,7 +23,7 @@ def supersede_active_tasks(
         return 0
     count = 0
     for path in sorted(task_dir.glob("*.task.json")):
-        payload = read_json(path)
+        payload = load_task(path)
         task_id = str(payload.get("task_id") or path.name.removesuffix(".task.json"))
         if not _eligible_task(payload, task_id, route, scope_id, exclude_task_id):
             continue
@@ -34,7 +33,7 @@ def supersede_active_tasks(
             superseded_by=superseded_by,
             supersession_reason=reason,
         )
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        write_task(path, payload)
         append_event(
             root,
             "task_superseded",

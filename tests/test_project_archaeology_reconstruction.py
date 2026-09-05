@@ -37,6 +37,7 @@ from literary_engineering_studio_engine.projects.init import InitOptions, init_w
 from literary_engineering_studio_engine.projects.source_ingest import ingest_existing_work
 from literary_engineering_studio_engine.source_ingest_route import build_task_payload
 from literary_engineering_studio_engine.task_registry import issue_next_task
+from literary_engineering_studio_engine.tasking.paths import load_task
 from literary_engineering_studio_engine.workflow.state_assets import asset_candidate_states
 from literary_engineering_studio_engine.workflow_state import build_workflow_state
 
@@ -95,7 +96,7 @@ class ProjectArchaeologyReconstructionTests(unittest.TestCase):
             self.assertEqual(next_task.route, "longform-planning")
             self.assertEqual(next_task.current_state, "story-architecture-prepare")
             self.assertIsNotNone(next_task.task_json_path)
-            task_payload = _json(next_task.task_json_path)
+            task_payload = load_task(next_task.task_json_path)
             self.assertIn(
                 "plot/story_architecture.agent_tasks.md",
                 task_payload["expected_outputs"],

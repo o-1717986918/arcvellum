@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arcvellum/task/v2",
+  "title": "ArcVellum formal task protocol v2",
+  "type": "object",
+  "required": ["schema", "spec", "lifecycle"],
+  "properties": {
+    "schema": {"const": "arcvellum/task/v2"},
+    "spec": {
+      "type": "object",
+      "required": ["identity", "intent", "execution", "resources", "outputs", "operations", "validation", "extensions"],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "required": ["task_id", "route", "scene_id", "contract_revision"],
+          "properties": {
+            "task_id": {"type": "string", "minLength": 1},
+            "route": {"type": "string", "minLength": 1},
+            "scene_id": {"type": "string"},
+            "contract_revision": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "intent": {
+          "type": "object",
+          "required": ["current_state", "task_type", "prompt_asset_id"],
+          "properties": {
+            "current_state": {"type": "string", "minLength": 1},
+            "task_type": {"type": "string", "minLength": 1},
+            "prompt_asset_id": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "execution": {
+          "type": "object",
+          "required": ["policy", "agent_role", "human_gate", "runtime_capabilities_required", "compatibility_derived"],
+          "properties": {
+            "policy": {"enum": ["deterministic", "agent-required", "human-required"]},
+            "agent_role": {"type": "string", "minLength": 1},
+            "human_gate": {
+              "type": "object",
+              "required": ["required", "reasons", "source"],
+              "properties": {
+                "required": {"type": "boolean"},
+                "reasons": {"type": "array", "items": {"type": "string"}},
+                "source": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": false
+            },
+            "runtime_capabilities_required": {"type": "array", "items": {"type": "string"}},
+            "compatibility_derived": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        },
+        "resources": {
+          "type": "object",
+          "required": ["required_reading", "source_paths"],
+          "properties": {
+            "required_reading": {"type": "array", "items": {"$ref": "#/$defs/resource"}},
+            "source_paths": {"type": "array", "items": {"$ref": "#/$defs/resource"}}
+          },
+          "additionalProperties": false
+        },
+        "outputs": {"type": "array", "items": {"$ref": "#/$defs/output"}},
+        "operations": {
+          "type": "object",
+          "properties": {
+            "prepare": {"$ref": "#/$defs/operation"},
+            "submit": {"$ref": "#/$defs/operation"},
+            "complete": {"$ref": "#/$defs/operation"}
+          },
+          "additionalProperties": false
+        },
+        "validation": {
+          "type": "object",
+          "required": ["gates", "forbidden_shortcuts"],
+          "properties": {
+            "gates": {"type": "array", "items": {"type": "string"}},
+            "forbidden_shortcuts": {"type": "array", "items": {"type": "string"}}
+          },
+          "additionalProperties": false
+        },
+        "extensions": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "lifecycle": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["issued", "opened", "submitted", "blocked", "complete", "superseded"]},
+        "created_at": {"type": "string"},
+        "opened_at": {"type": "string"},
+        "submitted_at": {"type": "string"},
+        "completed_at": {"type": "string"},
+        "blocked_at": {"type": "string"},
+        "submission": {"type": "string"},
+        "submitted_artifacts": {"type": "array", "items": {"type": "string"}},
+        "completion": {"type": "string"},
+        "validation": {"type": "object"},
+        "rollback": {"type": "object"},
+        "superseded_at": {"type": "string"},
+        "superseded_by": {"type": "string"},
+        "supersession_reason": {"type": "string"},
+        "refreshed_at": {"type": "string"},
+        "refreshed_from_status": {"type": "string"},
+        "extensions": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "resource": {
+      "type": "object",
+      "required": ["uri", "path", "purpose", "required"],
+      "properties": {
+        "uri": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "purpose": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "sha256": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "required": ["path", "kind", "writeback_policy"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "writeback_policy": {"enum": ["automatic", "preview-required", "approval-required", "none"]},
+        "schema_name": {"type": "string"},
+        "consumed_by": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "operation": {
+      "type": "object",
+      "required": ["schema", "operation_id", "arguments", "display_command"],
+      "properties": {
+        "schema": {"const": "arcvellum/engine-operation/v1"},
+        "operation_id": {"type": "string", "minLength": 1},
+        "arguments": {"type": "object"},
+        "display_command": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

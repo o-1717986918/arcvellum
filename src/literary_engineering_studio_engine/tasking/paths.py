@@ -12,8 +12,12 @@ import json
 from pathlib import Path
 import re
 
+from .spec_models import TASK_SCHEMA_V1, TASK_SCHEMA_V2
+from .storage import load_task_payload, write_task_payload
 
-TASK_SCHEMA = "literary-engineering-workbench/agent-task/v1"
+
+TASK_SCHEMA = TASK_SCHEMA_V1
+TASK_SCHEMAS = frozenset({TASK_SCHEMA_V1, TASK_SCHEMA_V2})
 SUBMISSION_SCHEMA = "literary-engineering-workbench/agent-submission/v1"
 EVENT_SCHEMA = "literary-engineering-workbench/workflow-event/v1"
 
@@ -74,12 +78,16 @@ def read_json(path: Path) -> dict[str, object]:
 
 
 def load_task(path: Path) -> dict[str, object]:
-    if not path.exists():
-        raise FileNotFoundError(f"task not found: {path}")
-    payload = read_json(path)
-    if payload.get("schema") != TASK_SCHEMA:
-        raise ValueError(f"not an agent task registry file: {path}")
-    return payload
+    return load_task_payload(path)
+
+
+def write_task(
+    path: Path,
+    payload: dict[str, object],
+    *,
+    storage_schema: str | None = None,
+) -> None:
+    write_task_payload(path, payload, storage_schema=storage_schema)
 
 
 def append_event(root: Path, event_type: str, task_id_value: str, data: dict[str, object]) -> None:

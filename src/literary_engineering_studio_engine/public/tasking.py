@@ -34,11 +34,15 @@ from ..tasking.spec import (
     TaskOperations,
     TaskResourceRef,
     TaskSpec,
+    TASK_SCHEMA_V1,
+    TASK_SCHEMA_V2,
     derive_execution_policy,
     infer_human_gate,
     parse_execution_contract,
     parse_output_contracts,
     parse_task_document,
+    task_document_to_v2,
+    task_semantic_fingerprint,
 )
 
 __all__ = [
@@ -73,6 +77,10 @@ __all__ = [
     "TaskOperations",
     "TaskResourceRef",
     "TaskSpec",
+    "TASK_SCHEMA_V1",
+    "TASK_SCHEMA_V2",
+    "task_document_to_v2",
+    "task_semantic_fingerprint",
     "validated_branch_proposal_ids",
     "write_agent_completion_marker",
 ]

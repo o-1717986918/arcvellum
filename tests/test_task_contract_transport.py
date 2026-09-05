@@ -19,6 +19,8 @@ import literary_engineering_studio_engine.task_registry as task_registry
 from literary_engineering_studio_engine.platform_agent_tasks import write_project_seed_asset_tasks
 from literary_engineering_studio_engine.routes.scene.definition import _agent_reading_paths
 from literary_engineering_studio_engine.task_registry import _enrich_task_payload, _render_task_markdown, complete_task, submit_task
+from literary_engineering_studio_engine.tasking.paths import load_task, write_task
+from literary_engineering_studio_engine.tasking.spec_models import TASK_SCHEMA_V1, TASK_SCHEMA_V2
 from tests.scene_lifecycle_support import prepare_promotable_candidate
 
 
@@ -1047,13 +1049,20 @@ class TaskContractTransportTests(unittest.TestCase):
             (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
             first = task_registry.issue_next_task(root, route="character-and-world-assets")
             self.assertEqual(first.status, "issued")
-            payload = json.loads(first.task_json_path.read_text(encoding="utf-8"))
+            payload = load_task(first.task_json_path)
             payload["status"] = "opened"
             payload["expected_outputs"] = ["obsolete/output.json"]
-            first.task_json_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            payload["output_contracts"] = [
+                {
+                    "path": "obsolete/output.json",
+                    "kind": "agent-authored",
+                    "writeback_policy": "preview-required",
+                }
+            ]
+            write_task(first.task_json_path, payload, storage_schema=TASK_SCHEMA_V2)
 
             refreshed = task_registry.issue_next_task(root, route="character-and-world-assets")
-            current = json.loads(refreshed.task_json_path.read_text(encoding="utf-8"))
+            current = load_task(refreshed.task_json_path)
             self.assertEqual(refreshed.status, "issued")
             self.assertEqual(current["refreshed_from_status"], "opened")
             self.assertNotIn("obsolete/output.json", current["expected_outputs"])
@@ -1063,14 +1072,14 @@ class TaskContractTransportTests(unittest.TestCase):
             root = Path(temporary)
             (root / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
             first = task_registry.issue_next_task(root, route="character-and-world-assets")
-            payload = json.loads(first.task_json_path.read_text(encoding="utf-8"))
+            payload = load_task(first.task_json_path)
             payload["status"] = "opened"
             payload.pop("task_contract_revision", None)
             payload["command"] = "python -m literary_engineering_studio_engine asset-create <project> --type <type>"
-            first.task_json_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            write_task(first.task_json_path, payload, storage_schema=TASK_SCHEMA_V1)
 
             opened = task_registry.open_task(root, first.task_id)
-            refreshed = json.loads(opened.task_json_path.read_text(encoding="utf-8"))
+            refreshed = load_task(opened.task_json_path)
             self.assertEqual(opened.status, "opened")
             self.assertEqual(refreshed["task_contract_revision"], task_registry.TASK_CONTRACT_REVISION)
             self.assertEqual(refreshed["command"], "python -m literary_engineering_studio_engine seed-project-assets <project>")

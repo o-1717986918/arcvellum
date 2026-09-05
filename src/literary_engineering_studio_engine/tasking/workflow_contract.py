@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..workflow_state import build_workflow_state
+from .storage import load_task_payload
 
 
 STATE_SCHEMA = "literary-engineering-workbench/formal-route-state/v1"
@@ -171,7 +172,10 @@ def _validate_tasks(root: Path, errors: list[dict[str, str]], warnings: list[dic
         warnings.append(_issue("workflow.tasks", "no task registry directory found; route may not have issued tasks yet", "missing"))
         return
     for task_path in sorted(task_dir.glob("*.task.json")):
-        payload = _read_json(task_path)
+        try:
+            payload = load_task_payload(task_path)
+        except (OSError, ValueError):
+            payload = {}
         label = f"task.{task_path.stem}"
         if payload.get("schema") != TASK_SCHEMA:
             errors.append(_issue(f"{label}.schema", f"expected {TASK_SCHEMA}", str(payload.get("schema") or "missing")))

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 
 from .writer import agent_task_completion_status, default_agent_completion_path
+from ..storage import load_task_payload
 from ...route_audit_common import _path_exists, _rel
 
 
@@ -107,8 +108,8 @@ def _registered_task_payload(path: Path) -> dict[str, object]:
     if not task_json.is_file():
         return {}
     try:
-        payload = json.loads(task_json.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        payload = load_task_payload(task_json)
+    except (OSError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else {}
 

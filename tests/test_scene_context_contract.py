@@ -15,6 +15,7 @@ from literary_engineering_studio_engine.tasking.package_contract import (
     _normalize_context_contract,
     task_contract_fingerprint,
 )
+from literary_engineering_studio_engine.tasking.paths import load_task
 import literary_engineering_studio_engine.task_registry as task_registry
 
 
@@ -529,7 +530,7 @@ class SceneContextContractTests(unittest.TestCase):
             self.root,
             task_id,
         )
-        replayed = json.loads(task_json.read_text(encoding="utf-8"))
+        replayed = load_task(task_json)
 
         self.assertEqual(result.status, "issued")
         self.assertEqual(replayed["candidate"], candidate)

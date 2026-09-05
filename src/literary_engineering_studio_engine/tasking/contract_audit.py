@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .semantic_contracts import semantic_artifact_contract, semantic_artifact_definition
+from .storage import load_task_payload
 
 
 AUDIT_SCHEMA = "literary-engineering-workbench/task-contract-audit/v0.1"
@@ -35,8 +36,8 @@ def build_task_contract_audit(
     tasks: list[dict[str, Any]] = []
     for path in task_paths:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            payload = load_task_payload(path)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             tasks.append({"task": _rel(path, root), "status": "fail", "errors": [f"invalid JSON: {exc}"], "warnings": []})
             continue
         tasks.append(_audit_task(payload if isinstance(payload, dict) else {}, path, root))

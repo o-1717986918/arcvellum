@@ -17,6 +17,7 @@ from ..scene_composer import composition_input_digest
 from ..literary.scene.promotion.historical_readiness import static_review_evidence
 from ..literary.scene.facts import load_scene_facts
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
+from ..tasking.storage import load_task_payload
 from ..word_budget import scene_word_budget_contract
 from .historical_truth import candidate_supersedes_promotion
 from .historical_truth import preserve_current_historical_style_steps
@@ -114,7 +115,10 @@ def _latest_scene_task_id(root: Path) -> str:
     if not tasks.is_dir():
         return ""
     for path in tasks.glob("*.task.json"):
-        payload = _read_json(path)
+        try:
+            payload = load_task_payload(path)
+        except (OSError, ValueError):
+            continue
         if payload.get("route") != "scene-development":
             continue
         scene_id = str(payload.get("scene_id") or "").strip()
