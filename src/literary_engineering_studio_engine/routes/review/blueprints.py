@@ -377,7 +377,7 @@ def _committee_revise(context: ReviewBlueprintContext) -> dict[str, object]:
 
 def _route_repair(next_action: str) -> dict[str, object]:
     return _blueprint(
-        "manual-route-repair",
+        "route-diagnostic-boundary",
         "route.review-audit.repair.v1",
         next_action,
         ["reviews", "canon", "characters", "plot", "scenes"],

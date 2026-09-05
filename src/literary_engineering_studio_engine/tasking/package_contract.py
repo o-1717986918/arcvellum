@@ -26,7 +26,7 @@ TASK_TYPE_EXECUTION = {
     "deterministic-review": ("deterministic", "deterministic-engine"),
     "deterministic-cli-plus-platform-review": ("agent-required", "main-agent"),
     "deterministic-cli-or-repair": ("agent-required", "main-agent"),
-    "manual-route-repair": ("agent-required", "main-agent"),
+    "route-diagnostic-boundary": ("human-required", "maintenance-decision"),
     "human-approval-boundary": ("human-required", "human-decision"),
     "main-platform-agent-prose": ("agent-required", "main-creative-agent"),
     "main-platform-agent-prose-revision": ("agent-required", "main-creative-agent"),

@@ -14,11 +14,16 @@ WRITEBACK_STATES = frozenset(
         "state-apply",
         "canon-patch-json",
         "canon-agent-task",
+        "canon-patch-revision",
+        "canon-patch-approval",
+        "canon-patch-deferred",
+        "canon-patch-apply",
         "continuity-ledger-prepare",
         "continuity-ledger-agent-task",
         "continuity-ledger-review-prepare",
         "continuity-ledger-review",
         "continuity-ledger-apply",
+        "scene-handoff",
     }
 )
 
@@ -58,7 +63,9 @@ def _writeback_table(ctx: SceneWritebackContext) -> dict[str, dict[str, object]]
         **_state_blueprints(ctx),
         "canon-patch-json": _canon_candidate_blueprint(ctx),
         "canon-agent-task": _canon_review_blueprint(ctx),
+        **_canon_decision_blueprints(ctx),
         **_continuity_blueprints(ctx),
+        "scene-handoff": _scene_handoff_blueprint(ctx),
     }
 
 
@@ -226,7 +233,88 @@ def _canon_review_blueprint(ctx: SceneWritebackContext) -> dict[str, object]:
         ],
         "style_constraints": [],
         "validation_gates": ["canon-evolve sidecar completion marker exists", "canon_patch_review.v1 semantic artifact passes"],
-        "next_allowed_states": ["continuity-ledger-prepare"],
+        "next_allowed_states": ["canon-patch-approval", "canon-patch-apply", "continuity-ledger-prepare"],
+    }
+
+
+def _canon_decision_blueprints(ctx: SceneWritebackContext) -> dict[str, dict[str, object]]:
+    patch = f"{ctx.canon_patch}.json"
+    patch_id = Path(ctx.canon_patch).name
+    common_sources = [
+        patch,
+        f"{ctx.canon_patch}.md",
+        f"{ctx.canon_patch}.agent_tasks.md",
+        f"{ctx.canon_patch}.agent_completion.json",
+        ctx.canon_review,
+        "workflow/approvals/index.jsonl",
+    ]
+    return {
+        "canon-patch-revision": {
+            "task_type": "platform-agent-revision",
+            "prompt_asset_id": "route.scene-development.canon-revision.v1",
+            "command": "",
+            "source_paths": [*common_sources, f"drafts/scenes/{ctx.scene_id}.md", *ctx.canon_formal_sources],
+            "context_trace": ctx.context_trace,
+            "expected_outputs": [patch, f"{ctx.canon_patch}.md", f"{ctx.canon_patch}.agent_completion.json"],
+            "repair_targets": [patch, f"{ctx.canon_patch}.md"],
+            "hard_constraints": [
+                "Revise only the Canon candidate and report against the content-bound decision; never edit durable Canon files.",
+                "A changed candidate invalidates its previous semantic review and approval and must return to canon-agent-task.",
+            ],
+            "style_constraints": [],
+            "validation_gates": ["Canon candidate changed", "candidate schema remains valid", "candidate remains unapplied"],
+            "next_allowed_states": ["canon-agent-task"],
+        },
+        "canon-patch-approval": {
+            "task_type": "human-approval-boundary",
+            "prompt_asset_id": "route.scene-development.canon-approval.v1",
+            "command": f"Ask for a decision on Canon patch `{patch_id}` and bind it to the current candidate SHA-256.",
+            "source_paths": common_sources,
+            "context_trace": ctx.context_trace,
+            "expected_outputs": ["workflow/approvals/index.jsonl"],
+            "hard_constraints": [
+                "The writing Worker must not self-approve its own Canon patch.",
+                f"Record approve, revise, reject, or defer with approval run_id `{patch_id}` against the exact digest.",
+            ],
+            "style_constraints": [],
+            "validation_gates": ["a current-content Canon patch decision is recorded"],
+            "next_allowed_states": ["canon-patch-apply", "canon-patch-revision", "canon-patch-deferred"],
+        },
+        "canon-patch-deferred": {
+            "task_type": "human-approval-boundary",
+            "prompt_asset_id": "route.scene-development.canon-approval.v1",
+            "command": f"Canon patch `{patch_id}` is deferred. Resume it from the decision panel before continuing.",
+            "source_paths": common_sources,
+            "context_trace": ctx.context_trace,
+            "expected_outputs": ["workflow/approvals/index.jsonl"],
+            "hard_constraints": ["Do not silently apply, discard, or route around a deferred Canon patch."],
+            "style_constraints": [],
+            "validation_gates": ["a fresh current-content Canon decision is recorded"],
+            "next_allowed_states": ["canon-patch-apply", "canon-patch-revision"],
+        },
+        "canon-patch-apply": {
+            "task_type": "deterministic-cli",
+            "prompt_asset_id": "route.scene-development.canon-apply.v1",
+            "command": (
+                "python -m literary_engineering_studio_engine canon-apply <project> "
+                f"--patch {patch} --approval-run-id {patch_id}"
+            ),
+            "source_paths": common_sources,
+            "context_trace": ctx.context_trace,
+            "expected_outputs": [
+                patch,
+                f"canon/applied/{patch_id}_apply.json",
+                f"canon/applied/{patch_id}_apply.md",
+                "canon/canon_change_log.md",
+            ],
+            "hard_constraints": [
+                "Apply only the exact reviewed candidate; never use --allow-unapproved in formal operation.",
+                "The apply manifest must preserve the pre-apply candidate digest and any required approval evidence.",
+            ],
+            "style_constraints": [],
+            "validation_gates": ["Canon apply manifest is current", "candidate points to its apply manifest"],
+            "next_allowed_states": ["continuity-ledger-prepare"],
+        },
     }
 
 
@@ -282,6 +370,36 @@ def _ledger_apply(ctx: SceneWritebackContext) -> dict[str, object]:
         "hard_constraints": ["Only deterministic apply writes formal ledgers after independent review."],
         "style_constraints": [],
         "validation_gates": ["continuity ledger apply receipt exists"],
+        "next_allowed_states": ["scene-handoff"],
+    }
+
+
+def _scene_handoff_blueprint(ctx: SceneWritebackContext) -> dict[str, object]:
+    scene_id = ctx.scene_id
+    return {
+        "task_type": "deterministic-cli",
+        "prompt_asset_id": "route.scene-development.handoff.v1",
+        "command": f"python -m literary_engineering_studio_engine scene-handoff <project> --scene {ctx.scene_rel}",
+        "source_paths": _unique([
+            ctx.scene_rel,
+            f"drafts/scenes/{scene_id}.md",
+            f"drafts/promotions/{scene_id}_promotion.json",
+            f"{ctx.state_patch}.json",
+            f"{ctx.state_apply}.json",
+            f"{ctx.canon_patch}.json",
+            f"canon/applied/{Path(ctx.canon_patch).name}_apply.json",
+            ctx.ledger_delta,
+            ctx.ledger_review,
+            f"plot/ledger_deltas/{scene_id}_apply.json",
+        ]),
+        "context_trace": ctx.context_trace,
+        "expected_outputs": [f"workflow/handoffs/{scene_id}.json"],
+        "hard_constraints": [
+            "Compose the handoff only from exact reviewed and applied artifacts; do not ask an Agent to summarize the scene again.",
+            "A stale State, Canon, continuity, promotion, or draft digest must block handoff creation.",
+        ],
+        "style_constraints": [],
+        "validation_gates": ["scene handoff v2 binds all current upstream evidence"],
         "next_allowed_states": ["ready"],
     }
 

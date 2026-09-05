@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import json
 import re
 from pathlib import Path
 
 
-INDEX_VERSION = "0.1"
+INDEX_VERSION = "0.2"
 TEXT_EXTENSIONS = {".md", ".txt", ".yaml", ".yml", ".json", ".csv"}
 ROOT_FILES = {"project.yaml", "AGENTS.md", "agentread.yaml"}
 INCLUDE_DIRS = {
@@ -134,6 +135,7 @@ def build_memory_index(project_root: Path) -> IndexResult:
 
     chunks = []
     source_files = _iter_source_files(root)
+    source_snapshot = _source_snapshot(root, source_files)
     for source in source_files:
         text = source.read_text(encoding="utf-8", errors="ignore")
         rel = source.relative_to(root).as_posix()
@@ -157,6 +159,7 @@ def build_memory_index(project_root: Path) -> IndexResult:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "project_root": str(root),
         "source_count": len(source_files),
+        "source_snapshot": source_snapshot,
         "chunk_count": len(chunks),
         "chunks": chunks,
     }
@@ -180,6 +183,27 @@ def load_index(project_root: Path) -> dict:
     return json.loads(index_path.read_text(encoding="utf-8"))
 
 
+def memory_index_is_fresh(project_root: Path) -> bool:
+    """Return whether the index is bound to every current retrievable source."""
+
+    root = project_root.resolve()
+    try:
+        payload = load_index(root)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    if payload.get("schema") != f"lew-memory-index/{INDEX_VERSION}":
+        return False
+    recorded = payload.get("source_snapshot")
+    return isinstance(recorded, dict) and recorded == _source_snapshot(root, _iter_source_files(root))
+
+
+def ensure_memory_index(project_root: Path) -> IndexResult | None:
+    """Rebuild stale retrieval evidence before it can enter a Context Packet."""
+
+    root = project_root.resolve()
+    return None if memory_index_is_fresh(root) else build_memory_index(root)
+
+
 def search_memory(
     project_root: Path,
     query: str,
@@ -187,6 +211,7 @@ def search_memory(
     *,
     allowed_tiers: set[str] | None = None,
 ) -> list[SearchHit]:
+    ensure_memory_index(project_root)
     index = load_index(project_root)
     query_terms = tokenize(query)
     if not query_terms:
@@ -221,3 +246,18 @@ def search_memory(
 
     hits.sort(key=lambda item: (-item.score, item.source, item.chunk_id))
     return hits[:top_k]
+
+
+def _source_snapshot(root: Path, files: list[Path]) -> dict[str, object]:
+    rows: list[dict[str, object]] = []
+    aggregate = hashlib.sha256()
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        row = {"path": relative, "sha256": digest, "size": path.stat().st_size}
+        rows.append(row)
+        aggregate.update(relative.encode("utf-8"))
+        aggregate.update(b"\0")
+        aggregate.update(digest.encode("ascii"))
+        aggregate.update(b"\0")
+    return {"digest": aggregate.hexdigest(), "files": rows}

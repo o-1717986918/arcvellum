@@ -22,7 +22,7 @@ _SCENE_GATE_PHASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("候选审查", ("agent-review-", "candidate-review-", "revision-evasion-", "style-adherence-review")),
     ("晋升", ("promotion-", "promoted-draft")),
     ("静态审查", ("static-review-",)),
-    ("状态写回", ("state-", "canon-writeback")),
+    ("状态写回", ("state-", "canon-writeback", "continuity-ledger-", "scene-handoff")),
 )
 
 

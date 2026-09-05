@@ -276,7 +276,7 @@ def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_s
     }
     _add_terminal_blueprints(table, root, profile_id, profile_dir)
     default = {
-        "task_type": "manual-route-repair",
+        "task_type": "route-diagnostic-boundary",
         "prompt_asset_id": "route.style-engineering.repair.v1",
         "command": next_action,
         "source_paths": [profile_dir],

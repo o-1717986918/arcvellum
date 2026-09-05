@@ -6,8 +6,10 @@ from pathlib import Path
 from ...agent_tasks import agent_task_completion_status
 from ...canon_evolver import canon_writeback_status
 from ...character_state_apply import state_patch_writeback_status
+from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
 from ...route_audit_common import _add_gate
 from ...route_audit_evidence import _mounted_style_exists, _style_adherence_status
+from ...scene_handoff import scene_handoff_source_status
 
 
 def add_scene_completion_gates(
@@ -65,6 +67,7 @@ def add_scene_completion_gates(
         f"{scene_id} canon writeback candidate/no-change gate passed",
         f"{scene_id} 的 canon 写回候选门禁未完成：{canon_status.get('message')}",
     )
+    _add_continuity_and_handoff_gates(gates, root, scene_id)
     if _mounted_style_exists(root):
         style_status = _style_adherence_status(review_payload)
         _add_gate(
@@ -74,4 +77,31 @@ def add_scene_completion_gates(
             "blocking",
             f"{scene_id} mounted style adherence reviewed",
             f"{scene_id} 已挂载文风，但 scene_review.v1 缺少 clean pass 的 style_adherence；当前状态：{style_status or 'missing'}。",
+        )
+
+
+def _add_continuity_and_handoff_gates(
+    gates: list[dict[str, str]],
+    root: Path,
+    scene_id: str,
+) -> None:
+    delta_task_ok, delta_task_message = continuity_ledger_task_status(root, scene_id, review=False)
+    review_task_ok, review_task_message = continuity_ledger_task_status(root, scene_id, review=True)
+    ledger_ok, ledger_message, _payload = continuity_ledger_status(root, scene_id, require_review=True)
+    apply_path = root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json"
+    handoff_ok, handoff_message, _handoff = scene_handoff_source_status(root, scene_id)
+    checks = (
+        ("continuity-ledger-agent-task", delta_task_ok, delta_task_message),
+        ("continuity-ledger-review", review_task_ok and ledger_ok, review_task_message if not review_task_ok else ledger_message),
+        ("continuity-ledger-apply", apply_path.is_file(), "continuity ledger apply receipt exists" if apply_path.is_file() else "continuity ledger apply receipt is missing"),
+        ("scene-handoff", handoff_ok, handoff_message),
+    )
+    for key, passed, message in checks:
+        _add_gate(
+            gates,
+            f"{scene_id}:{key}",
+            passed,
+            "blocking",
+            f"{scene_id} {message}",
+            f"{scene_id} {message}",
         )

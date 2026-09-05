@@ -14,6 +14,11 @@ from ....agent_tasks import agent_task_completion_status, write_agent_tasks
 from ....atomic_io import atomic_write_batch
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
 from ....semantic_task_contracts import semantic_artifact_errors
+from .paths import (
+    canon_apply_manifest_path,
+    canon_apply_report_path,
+    canon_patch_path,
+)
 from .contracts import (
     CANON_PATCH_SCHEMA,
     canon_patch_candidate_issues,
@@ -202,9 +207,8 @@ def apply_canon_patch(
     if required_approval and (str(approval.get("decision") or "") != "approve" or not approval_matches) and not allow_unapproved:
         raise RuntimeError(f"canon-apply requires approve record for run_id {approval_id}; got {approval.get('decision') or 'missing'}")
 
-    applied_dir = root / "canon" / "applied"
-    report = _resolve(root, output, applied_dir / f"{patch_id}_apply.md")
-    json_path = _resolve(root, json_output, applied_dir / f"{patch_id}_apply.json")
+    report = _resolve(root, output, canon_apply_report_path(root, patch_id))
+    json_path = _resolve(root, json_output, canon_apply_manifest_path(root, patch_id))
     changelog = root / "canon" / "canon_change_log.md"
     report.parent.mkdir(parents=True, exist_ok=True)
     changelog.parent.mkdir(parents=True, exist_ok=True)
@@ -234,13 +238,15 @@ def apply_canon_patch(
     applied_patch["approval_run_id"] = approval_id
     applied_patch["apply_manifest"] = _rel(json_path, root)
     applied_patch["canon_change_log"] = _rel(changelog, root)
+    applied_patch_text = json.dumps(applied_patch, ensure_ascii=False, indent=2) + "\n"
+    apply_payload["applied_patch_sha256"] = hashlib.sha256(applied_patch_text.encode("utf-8")).hexdigest()
     previous_changelog = changelog.read_text(encoding="utf-8") if changelog.exists() else "# Canon Change Log\n\n"
     atomic_write_batch(
         {
             json_path: json.dumps(apply_payload, ensure_ascii=False, indent=2) + "\n",
             report: _render_apply_report(apply_payload, root),
             changelog: previous_changelog.rstrip() + "\n\n" + _render_changelog_entry(patch_id, payload, apply_payload),
-            patch_path: json.dumps(applied_patch, ensure_ascii=False, indent=2) + "\n",
+            patch_path: applied_patch_text,
         }
     )
 
@@ -255,7 +261,7 @@ def canon_writeback_status(
 ) -> dict[str, Any]:
     """Inspect canon writeback state for route/status gates."""
 
-    json_path = root / "canon" / "patches" / f"{scene_id}_canon_patch.json"
+    json_path = canon_patch_path(root, scene_id)
     report_path = json_path.with_suffix(".md")
     task_path = json_path.with_suffix(".agent_tasks.md")
     candidate_manifest = _candidate_manifest(root, scene_id)
@@ -317,6 +323,8 @@ def canon_writeback_status(
             result["status"] = "invalid_patch"
             result["message"] = "canon patch items are incomplete: " + "; ".join(item_errors[:6])
             return result
+        if payload.get("applied") is True:
+            return _canon_apply_status(root, json_path, payload, result)
         if not require_review:
             result["status"] = "pass"
             result["message"] = "canon change candidate patch is ready for independent review"
@@ -330,16 +338,101 @@ def canon_writeback_status(
             result["status"] = "semantic_incomplete"
             result["message"] = "canon semantic review incomplete: " + "; ".join(review_errors[:4])
             return result
-        result["status"] = "pass"
-        result["message"] = "canon change candidate patch completed"
-        if payload.get("applied") is True:
-            result["message"] = "canon change candidate patch completed and applied to canon ledger"
-            result["applied"] = True
-            result["apply_manifest"] = str(payload.get("apply_manifest") or "")
-        return result
+        return _canon_apply_status(root, json_path, payload, result)
     result["status"] = "unknown"
     result["message"] = "unrecognized canon_change declaration"
     return result
+
+
+def _canon_apply_status(
+    root: Path,
+    patch_path: Path,
+    payload: dict[str, Any],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """Require a reviewed durable fact candidate to reach a terminal decision.
+
+    A scene cannot become ready while its accepted world facts are waiting in
+    the project-level backlog.  The next scene's Context must observe the same
+    Canon state that the handoff records.
+    """
+
+    patch_id = patch_path.stem
+    patch_sha256 = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+    apply_manifest = canon_apply_manifest_path(root, patch_id)
+    applied = _read_json(apply_manifest)
+    applied_patch_sha256 = str(applied.get("applied_patch_sha256") or "").strip().lower()
+    legacy_candidate_sha256 = _legacy_pre_apply_sha256(payload) if payload.get("applied") is True else ""
+    applied_current = (
+        payload.get("applied") is True
+        and str(payload.get("apply_manifest") or "") == _rel(apply_manifest, root)
+        and str(applied.get("status") or "") == "applied"
+        and str(applied.get("patch") or "") == _rel(patch_path, root)
+        and (
+            applied_patch_sha256 == patch_sha256
+            or (
+                not applied_patch_sha256
+                and legacy_candidate_sha256
+                and str(applied.get("candidate_sha256") or "").lower() == legacy_candidate_sha256
+            )
+        )
+    )
+    if applied_current:
+        result.update(
+            status="pass",
+            message="canon change candidate completed and applied to canon ledger",
+            patch_id=patch_id,
+            candidate_sha256=str(applied.get("candidate_sha256") or ""),
+            applied_patch_sha256=patch_sha256,
+            approval_run_id=str(applied.get("approval_run_id") or patch_id),
+            approval_decision=str(
+                (applied.get("approval") if isinstance(applied.get("approval"), dict) else {}).get("decision") or ""
+            ),
+            approval_current=True,
+            applied=True,
+            apply_manifest=_rel(apply_manifest, root),
+        )
+        return result
+
+    approval = _approval_record_for_run(root, patch_id)
+    approval_current = _approval_matches_patch(approval, patch_path)
+    decision = str(approval.get("decision") or "").strip().lower() if approval_current else ""
+    result.update(
+        {
+            "patch_id": patch_id,
+            "candidate_sha256": patch_sha256,
+            "approval_run_id": patch_id,
+            "approval_decision": decision,
+            "approval_current": approval_current,
+        }
+    )
+    if decision == "revise":
+        result.update(status="needs_revision", message="canon patch has a current revise decision")
+        return result
+    if decision == "reject":
+        result.update(status="rejected", message="canon patch was rejected and must be reconciled with the promoted scene")
+        return result
+    if decision == "defer":
+        result.update(status="deferred", message="canon patch is deferred; chronological scene work is paused")
+        return result
+
+    if _patch_requires_approval(payload) and not (decision == "approve" and approval_current):
+        result.update(status="needs_approval", message="canon patch needs an approve decision bound to its exact digest")
+        return result
+    result.update(status="pending_apply", message="reviewed canon patch is ready for deterministic canon-apply")
+    return result
+
+
+def _legacy_pre_apply_sha256(payload: dict[str, Any]) -> str:
+    """Rebuild the pre-apply candidate digest emitted by older apply manifests."""
+
+    candidate = dict(payload)
+    candidate["status"] = "candidate"
+    candidate["applied"] = False
+    for key in ("applied_at", "approval_run_id", "apply_manifest", "canon_change_log"):
+        candidate.pop(key, None)
+    text = json.dumps(candidate, ensure_ascii=False, indent=2) + "\n"
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _canon_patch_paths(root: Path) -> list[Path]:

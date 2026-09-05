@@ -681,6 +681,25 @@ class TaskContractTransportTests(unittest.TestCase):
         self.assertEqual(task["submission_command"], "")
         self.assertEqual(task["completion_command"], "")
 
+    def test_route_diagnostic_boundary_cannot_enter_agent_runtime(self):
+        task = _enrich_task_payload(
+            {
+                "task_id": "scene-development-scene_0001-route-diagnostic",
+                "route": "scene-development",
+                "scene_id": "scene_0001",
+                "current_state": "unsupported-state",
+                "task_type": "route-diagnostic-boundary",
+                "prompt_asset_id": "route.scene-development.repair.v1",
+                "expected_outputs": [],
+            }
+        )
+        self.assertEqual(task["execution_policy"], "human-required")
+        self.assertEqual(task["agent_role"], "maintenance-decision")
+        self.assertEqual(task["runtime_capabilities_required"], [])
+        self.assertEqual(task["submission_command"], "")
+        self.assertEqual(task["completion_command"], "")
+        self.assertNotIn("manual-route-repair", task_registry.TASK_TYPE_EXECUTION)
+
     def test_human_boundary_markdown_never_instructs_an_agent_to_submit_or_complete(self):
         task = _enrich_task_payload(
             {
@@ -962,9 +981,13 @@ class TaskContractTransportTests(unittest.TestCase):
                     "static-review-pass",
                     "state-patch-json",
                     "state-patch-report",
-                    "state-agent-task-complete",
-                    "canon-writeback",
-                ],
+                "state-agent-task-complete",
+                "canon-writeback",
+                "continuity-ledger-agent-task",
+                "continuity-ledger-review",
+                "continuity-ledger-apply",
+                "scene-handoff",
+            ],
             )
 
     def test_scene_route_audit_treats_candidate_only_scene_as_started(self):

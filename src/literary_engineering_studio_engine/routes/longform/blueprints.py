@@ -264,12 +264,15 @@ def _fallback_blueprint(
     next_action: str, target_words: int, common_sources: list[str]
 ) -> dict[str, object]:
     return {
-        "task_type": "manual-route-repair",
+        "task_type": "route-diagnostic-boundary",
         "prompt_asset_id": "route.longform-planning.repair.v1",
         "command": next_action,
         "source_paths": common_sources,
         "expected_outputs": [],
-        "hard_constraints": [next_action or "Inspect workflow-state and route-audit, then repair the missing longform-planning gate."],
+        "hard_constraints": [
+            next_action or "Inspect workflow-state and route-audit, then repair the missing longform-planning gate.",
+            "This unsupported state is a maintenance boundary. Do not invoke an Agent, invent outputs, or retry automatically.",
+        ],
         "style_constraints": [],
         "word_count_target": target_words,
         "validation_gates": ["longform-planning gate resolved"],

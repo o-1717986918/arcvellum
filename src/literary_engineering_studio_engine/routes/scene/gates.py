@@ -19,6 +19,7 @@ from ...reader_experience import ensure_reader_experience_ready, reader_experien
 from ...scene_character_assets import scene_character_asset_requirements
 from ...semantic_task_contracts import semantic_artifact_errors
 from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
+from ...scene_handoff import scene_handoff_source_status
 from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from ...tasking.state_contracts import SCENE_REVISION_STATES
 from ...word_budget import ensure_scene_word_budget_ready, word_budget_adherence_for_body
@@ -29,6 +30,12 @@ from ...scene_route_support import (
 from .branch_contract import branch_manifest_gate_errors as _branch_manifest_gate_errors
 from .branch_contract import branch_selection_gate as _branch_selection_gate
 from .length_repair import target_length_revision_gate_errors
+from ..review.canon_gates import (
+    canon_patch_apply_gate_errors,
+    canon_patch_candidate_gate_errors,
+    canon_patch_decision_gate_errors,
+)
+from ..review.evidence import declared_repair_targets_changed
 def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[str], list[str]]:
     """Run current-state-specific gates after expected outputs exist."""
 
@@ -102,6 +109,13 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
         errors.extend(_canon_writeback_gate_errors(root, scene_id, require_review=True))
     if current_state == "canon-agent-task":
         errors.extend(semantic_artifact_errors(root, current_state, scene_id))
+    if current_state == "canon-patch-revision":
+        errors.extend(declared_repair_targets_changed(root, task, "canon-patch revision"))
+        errors.extend(canon_patch_candidate_gate_errors(root, task))
+    if current_state in {"canon-patch-approval", "canon-patch-deferred"}:
+        errors.extend(canon_patch_decision_gate_errors(root, task, require_approve=False))
+    if current_state == "canon-patch-apply":
+        errors.extend(canon_patch_apply_gate_errors(root, task))
     if current_state in {"continuity-ledger-agent-task", "continuity-ledger-review", "continuity-ledger-apply"}:
         passed, message, _delta = continuity_ledger_status(root, scene_id, require_review=current_state != "continuity-ledger-agent-task")
         if not passed:
@@ -112,6 +126,10 @@ def _state_gate_validation(root: Path, task: dict[str, object]) -> tuple[list[st
             errors.append(message)
     if current_state == "continuity-ledger-apply" and not (root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json").is_file():
         errors.append("continuity ledger apply receipt is missing")
+    if current_state == "scene-handoff":
+        passed, message, _payload = scene_handoff_source_status(root, scene_id)
+        if not passed:
+            errors.append(message)
     return errors, notes
 
 

@@ -14,6 +14,7 @@ from ...task_paths import resolve_project_path as _resolve_project_path
 from .evidence import (
     approval_matches_file,
     approval_record_for_run,
+    file_sha256,
     read_optional_json,
     to_int,
 )
@@ -107,12 +108,14 @@ def canon_patch_apply_gate_errors(root: Path, task: dict[str, object]) -> list[s
     payload, error = read_optional_json(apply_manifest)
     if error:
         return [error]
-    errors = _canon_apply_manifest_errors(payload)
+    patch_payload, patch_error = read_optional_json(patch)
+    errors = [patch_error] if patch_error else []
+    errors.extend(_canon_apply_manifest_errors(payload, patch_payload))
     errors.extend(_canon_apply_patch_evidence_errors(root, patch, apply_manifest))
     return errors
 
 
-def _canon_apply_manifest_errors(payload: dict[str, object]) -> list[str]:
+def _canon_apply_manifest_errors(payload: dict[str, object], patch: dict[str, object]) -> list[str]:
     errors: list[str] = []
     if payload.get("schema") != "literary-engineering-workbench/canon-patch-apply/v0.1":
         errors.append("canon apply manifest has wrong or missing schema")
@@ -122,10 +125,17 @@ def _canon_apply_manifest_errors(payload: dict[str, object]) -> list[str]:
         errors.append("canon apply used allow_unapproved")
     approval = payload.get("approval") if isinstance(payload.get("approval"), dict) else {}
     candidate_sha256 = str(payload.get("candidate_sha256") or "").strip().lower()
-    if approval.get("decision") != "approve":
-        errors.append("canon apply manifest must carry an approve record")
-    if not candidate_sha256 or str(approval.get("subject_sha256") or "").strip().lower() != candidate_sha256:
-        errors.append("canon apply approval digest does not match the pre-apply patch candidate")
+    requires_approval = patch.get("requires_user_approval") is True or any(
+        isinstance(item, dict) and item.get("requires_user_approval") is True
+        for item in (patch.get("items") if isinstance(patch.get("items"), list) else [])
+    )
+    if requires_approval:
+        if approval.get("decision") != "approve":
+            errors.append("canon apply manifest must carry an approve record")
+        if not candidate_sha256 or str(approval.get("subject_sha256") or "").strip().lower() != candidate_sha256:
+            errors.append("canon apply approval digest does not match the pre-apply patch candidate")
+    elif approval.get("decision") not in {"approve", "not_required"}:
+        errors.append("canon apply manifest must record approve or not_required")
     return errors
 
 
@@ -136,6 +146,14 @@ def _canon_apply_patch_evidence_errors(root: Path, patch: Path, apply_manifest: 
         errors.append(patch_error)
     elif patch_payload.get("applied") is not True or patch_payload.get("apply_manifest") != _rel(apply_manifest, root):
         errors.append("canon patch does not point to its applied manifest")
+    else:
+        apply_payload, apply_error = read_optional_json(apply_manifest)
+        if apply_error:
+            errors.append(apply_error)
+        else:
+            expected = str(apply_payload.get("applied_patch_sha256") or "").strip().lower()
+            if expected and expected != file_sha256(patch):
+                errors.append("canon applied patch digest does not match its apply manifest")
     if not (root / "canon" / "canon_change_log.md").is_file():
         errors.append("canon change log is missing after apply")
     return errors

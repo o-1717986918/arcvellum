@@ -734,13 +734,16 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     }
     table.update(target_length_revision_entry(root, scene_id, scene_rel, revision_source, revision, scene_runtime_sources, table["static-revision"]))
     default = {
-        "task_type": "manual-route-repair",
+        "task_type": "route-diagnostic-boundary",
         "prompt_asset_id": "route.scene-development.repair.v1",
         "command": next_action,
         "source_paths": common_sources,
         "context_trace": context_trace,
         "expected_outputs": [],
-        "hard_constraints": [next_action or "Inspect workflow-state and route-audit, then repair the missing formal gate."],
+        "hard_constraints": [
+            next_action or "Inspect workflow-state and route-audit, then repair the missing formal gate.",
+            "This unsupported state is a maintenance boundary. Do not invoke an Agent, invent outputs, or retry automatically.",
+        ],
         "style_constraints": [],
         "validation_gates": ["route-specific gate resolved"],
         "next_allowed_states": [],

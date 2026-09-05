@@ -14,6 +14,7 @@ from ..context_broker import context_trace_status
 from ..flow_gates import branch_selection_status
 from ..narrative_rhythm import narrative_rhythm_contract
 from ..reader_experience import reader_experience_contract
+from ..scene_handoff import scene_handoff_source_status
 from ..scene_character_assets import scene_character_asset_requirements
 from ..scene_composer import composition_input_digest
 from ..literary.scene.promotion.historical_readiness import static_review_evidence
@@ -160,6 +161,7 @@ def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
         _file_step("continuity-ledger-review-prepare", root / "reviews" / "continuity" / f"{scene_id}_ledger_review.agent_tasks.md", "run prepare-continuity-ledger-review after the delta is complete"),
         _continuity_ledger_step(root, scene_id, review=True),
         _file_step("continuity-ledger-apply", root / "plot" / "ledger_deltas" / f"{scene_id}_apply.json", "run apply-continuity-ledger after independent review passes"),
+        _scene_handoff_step(root, scene_id),
     ]
     steps = preserve_current_historical_style_steps(root, scene_id, steps, candidate)
     first_open = next((step for step in steps if step["status"] != "pass"), None)
@@ -546,14 +548,42 @@ def _canon_writeback_step(root: Path, scene_id: str) -> dict[str, object]:
     status = canon_writeback_status(root, scene_id)
     state = str(status.get("status") or "")
     passed = state in {"pass", "not_required"}
-    key = "canon-agent-task" if state in {"task_incomplete", "semantic_incomplete"} else "canon-patch-json"
-    next_action = "run canon-evolve, have the platform agent write canon patch/no-change rationale, then complete the sidecar"
+    if passed:
+        key, next_action = "canon-writeback", ""
+    elif state in {"task_incomplete", "semantic_incomplete"}:
+        key, next_action = "canon-agent-task", "complete the exact-digest Canon semantic review"
+    elif state == "needs_approval":
+        key, next_action = "canon-patch-approval", "record a content-bound Canon patch decision"
+    elif state == "pending_apply":
+        key, next_action = "canon-patch-apply", "apply the exact approved Canon patch before continuing"
+    elif state in {"needs_revision", "rejected"}:
+        key, next_action = "canon-patch-revision", "reconcile the Canon candidate with the decision and request fresh review"
+    elif state == "deferred":
+        key, next_action = "canon-patch-deferred", "resume the deferred Canon decision before chronological scene work continues"
+    else:
+        key = "canon-patch-json"
+        next_action = "run canon-evolve, have the platform agent write canon patch/no-change rationale, then complete the sidecar"
     return {
         "key": key,
+        "display_key": "canon-writeback",
         "status": "pass" if passed else state or "unknown",
         "path": status.get("json", ""),
         "message": status.get("message", ""),
+        "patch_id": status.get("patch_id", ""),
+        "candidate_sha256": status.get("candidate_sha256", ""),
+        "approval_decision": status.get("approval_decision", ""),
         "next_action": "" if passed else next_action,
+    }
+
+
+def _scene_handoff_step(root: Path, scene_id: str) -> dict[str, object]:
+    passed, message, _payload = scene_handoff_source_status(root, scene_id)
+    return {
+        "key": "scene-handoff",
+        "status": "pass" if passed else "missing",
+        "path": f"workflow/handoffs/{scene_id}.json",
+        "message": message,
+        "next_action": "" if passed else f"run scene-handoff for scenes/{scene_id}.yaml",
     }
 
 

@@ -270,7 +270,7 @@ def _asset_promotion(context: AssetBlueprintContext) -> dict[str, object]:
 def _route_repair(context: AssetBlueprintContext, next_action: str) -> dict[str, object]:
     sources = [context.candidate] if context.candidate else ["project.yaml", "canon", "characters", "plot"]
     return _blueprint(
-        "manual-route-repair",
+        "route-diagnostic-boundary",
         "route.character-world-assets.repair.v1",
         next_action,
         sources,

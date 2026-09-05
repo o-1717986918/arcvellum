@@ -354,6 +354,8 @@ def _packet_sections(
                 "canon/timeline.yaml",
                 "canon/facts.json",
                 "canon/forbidden_changes.yaml",
+                "canon/locations.yaml",
+                "canon/organizations.yaml",
             ],
         ),
         characters=character_text,

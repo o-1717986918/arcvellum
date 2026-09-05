@@ -223,7 +223,7 @@ def _publish_release(root: Path, chapter_id: str) -> dict[str, object]:
 
 def _repair(chapter_id: str, next_action: str) -> dict[str, object]:
     return {
-        "task_type": "manual-route-repair",
+        "task_type": "route-diagnostic-boundary",
         "prompt_asset_id": "route.export-release.repair.v1",
         "command": next_action,
         "source_paths": [

@@ -460,7 +460,7 @@ def _repair_blueprint(
     next_action: str,
 ) -> dict[str, object]:
     return {
-        "task_type": "manual-route-repair",
+        "task_type": "route-diagnostic-boundary",
         "prompt_asset_id": "route.source-ingest.repair.v1",
         "command": next_action,
         "source_paths": [f"{import_dir}/source_manifest.json", str(report)],
