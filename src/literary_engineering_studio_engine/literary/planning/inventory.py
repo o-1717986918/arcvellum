@@ -10,7 +10,8 @@ from ...draft_text import (
     count_delivery_chinese_content_chars,
     final_body_from_draft_path,
 )
-from .common import _read, _rel, _scalar, _to_int
+from ..scene.facts import load_scene_facts
+from .common import _read, _rel, _to_int
 
 def _scene_inventory_binding(root: Path, chapter_budgets: list[dict[str, object]]) -> dict[str, object]:
     scenes = _scan_scene_files(root)
@@ -70,9 +71,9 @@ def _scan_scene_files(root: Path) -> list[dict[str, object]]:
     for path in sorted(scene_dir.glob("*.yaml")):
         if path.name.startswith("_"):
             continue
-        text = _read(path)
-        scene_id = _scalar(text, "scene_id") or path.stem
-        chapter_id = _scalar(text, "chapter_id") or "unassigned"
+        facts = load_scene_facts(path)
+        scene_id = facts.scene_id
+        chapter_id = facts.chapter_id or "unassigned"
         draft_path = root / "drafts" / "scenes" / f"{scene_id}.md"
         body = final_body_from_draft_path(draft_path) if draft_path.exists() else ""
         rows.append(
@@ -110,20 +111,11 @@ def _scene_ids_for_chapter(root: Path, chapter_id: str) -> list[str]:
     for path in sorted(scene_dir.glob("*.yaml")):
         if path.name.startswith("_"):
             continue
-        text = _read(path)
-        if (_scalar(text, "chapter_id") or "unassigned") != chapter_id:
+        facts = load_scene_facts(path)
+        if (facts.chapter_id or "unassigned") != chapter_id:
             continue
-        ids.append(_scalar(text, "scene_id") or path.stem)
+        ids.append(facts.scene_id)
     return ids
-
-def _scene_word_count_target(scene_text: str) -> int:
-    """Read explicit per-scene word target aliases from scene YAML."""
-
-    for key in ("word_count_target", "target_words", "word_target"):
-        value = _to_int(_scalar(scene_text, key))
-        if value > 0:
-            return value
-    return 0
 
 def _budget_issues(totals: dict[str, int], inventory: dict[str, int | str], scene_inventory_binding: dict[str, object]) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
@@ -185,9 +177,9 @@ def _outline_inventory(root: Path, outline_path: Path) -> dict[str, int | str]:
     text = _read(outline_path)
     scene_files = [path for path in (root / "scenes").glob("*.yaml") if not path.name.startswith("_")] if (root / "scenes").exists() else []
     scene_chapters = {
-        _scalar(_read(path), "chapter_id")
+        facts.chapter_id
         for path in scene_files
-        if _scalar(_read(path), "chapter_id")
+        if (facts := load_scene_facts(path)).chapter_id
     }
     volume_count = len(re.findall(r"(?im)^(?:#{1,6}\s*)?(?:第[一二三四五六七八九十百\d]+卷|volume\s+\d+|卷\s*[一二三四五六七八九十百\d]+)", text))
     chapter_count = len(re.findall(r"(?im)^(?:#{1,6}\s*)?(?:第[一二三四五六七八九十百\d]+章|chapter\s+\d+|chapter_\d+)", text))

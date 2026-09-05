@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-import re
 from typing import Any, Iterable
 
 from ..planning.rhythm_plan import load_rhythm_plan
+from ..scene.facts import parse_scene_mapping
 from .longform_contract import audit_continuity_ledgers, longform_issue_is_blocking
+from .longform_handoffs import audit_scene_handoffs
 
 
 def collect_expanded_evidence(
@@ -21,10 +22,16 @@ def collect_expanded_evidence(
         root,
         (scene.scene_id for scene in scenes if scene.status == "ready"),
     )
+    handoffs = audit_scene_handoffs(
+        root,
+        (scene.scene_id for scene in scenes if scene.status == "ready"),
+    )
+    continuity["scene_handoffs"] = handoffs
     findings = [
         *macro_rhythm_issues(rhythm_plan, scenes),
         *viewpoint_issues(scenes),
         *(item for item in continuity.get("issues", []) if isinstance(item, dict)),
+        *(item for item in handoffs.get("issues", []) if isinstance(item, dict)),
     ]
     return rhythm_plan, curves, continuity, findings
 
@@ -68,6 +75,7 @@ def extended_summary(
     blocking = sum(1 for item in rows if longform_issue_is_blocking(asdict(item)))
     distribution = _viewpoint_distribution(scenes)
     collections = continuity.get("collections") if isinstance(continuity.get("collections"), dict) else {}
+    handoffs = continuity.get("scene_handoffs") if isinstance(continuity.get("scene_handoffs"), dict) else {}
     return {
         "blocking_issue_count": blocking,
         "attention_issue_count": len(rows) - blocking,
@@ -81,6 +89,8 @@ def extended_summary(
         "open_promise_count": _ledger_count(collections, "promises", "open_count"),
         "overdue_continuity_count": _ledger_count(collections, "reader_questions", "overdue_count")
         + _ledger_count(collections, "promises", "overdue_count"),
+        "required_scene_handoff_count": int(handoffs.get("required_count") or 0),
+        "valid_scene_handoff_count": int(handoffs.get("pass_count") or 0),
     }
 
 
@@ -89,6 +99,7 @@ def summary_markdown_lines(summary: dict[str, Any]) -> list[str]:
         f"- 全书节奏状态：{summary.get('book_rhythm_status', 'missing')}",
         f"- 开放读者问题 / 承诺：{summary.get('open_reader_question_count', 0)} / {summary.get('open_promise_count', 0)}",
         f"- 逾期连续性债务：{summary.get('overdue_continuity_count', 0)}",
+        f"- 有效场景交接：{summary.get('valid_scene_handoff_count', 0)} / {summary.get('required_scene_handoff_count', 0)}",
         f"- 问题数：{summary['issue_count']}（确定性阻塞 {summary.get('blocking_issue_count', 0)}）",
     ]
 
@@ -161,21 +172,17 @@ def _ledger_count(collections: dict[str, Any], collection: str, key: str) -> int
 
 
 def scene_identity(text: str, path: Path) -> tuple[str, str, str, str]:
+    payload = parse_scene_mapping(text, source=path)
     return (
-        _scalar(text, "scene_id") or path.stem,
-        _scalar(text, "volume_id") or _scalar(text, "volume") or "unassigned",
-        _scalar(text, "chapter_id") or "unassigned",
-        _scalar(text, "viewpoint") or _scalar(text, "pov"),
+        str(payload.get("scene_id") or path.stem).strip(),
+        str(payload.get("volume_id") or payload.get("volume") or "unassigned").strip(),
+        str(payload.get("chapter_id") or "unassigned").strip(),
+        str(payload.get("viewpoint") or payload.get("pov") or "").strip(),
     )
 
 
 def viewpoint_label(scene: dict[str, object]) -> str:
     return str(scene.get("viewpoint") or "未声明")
-
-
-def _scalar(text: str, key: str) -> str:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    return match.group(1).strip().strip("\"'") if match else ""
 
 
 __all__ = [

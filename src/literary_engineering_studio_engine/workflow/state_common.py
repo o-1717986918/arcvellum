@@ -148,11 +148,6 @@ def _approval_record(root: Path, candidate_id: str) -> dict[str, object]:
     return latest
 
 
-def _scene_chapter_id(text: str) -> str:
-    match = re.search(r"(?m)^\s*chapter_id:\s*['\"]?([^'\"\n#]+)", text)
-    return match.group(1).strip().strip("\"'") if match else ""
-
-
 def _render_markdown(payload: dict[str, object]) -> str:
     summary = payload["summary"]
     lines = [

@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
 from literary_engineering_studio_engine.literary.planning.chapter_pipeline import build_chapter_workspace
@@ -24,6 +25,7 @@ from literary_engineering_studio_engine.literary.review.longform_contract import
     longform_audit_gate_errors,
     longform_input_snapshot,
 )
+from literary_engineering_studio_engine.literary.review.longform_handoffs import audit_scene_handoffs
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio_engine.routes.review.blueprints import review_audit_blueprint_for_state
@@ -38,6 +40,55 @@ from literary_engineering_studio_engine.literary.assets.canon.contracts import C
 
 
 class LongformQualityContractTests(unittest.TestCase):
+    def test_longform_handoff_audit_requires_an_explicit_successor_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write(root / "scenes" / "scene_0001.yaml", "scene_id: scene_0001\n")
+            self._write(
+                root / "scenes" / "scene_0002.yaml",
+                "scene_id: scene_0002\nscene_bridge:\n  incoming_pressure: 前场的警报仍在持续。\n",
+            )
+            handoff = {
+                "successor_scene_id": "scene_0002",
+                "outgoing_hooks": ["警报迫使众人撤离"],
+            }
+            with patch(
+                "literary_engineering_studio_engine.literary.review.longform_handoffs.scene_handoff_source_status",
+                return_value=(True, "ready", handoff),
+            ):
+                result = audit_scene_handoffs(root, ["scene_0001"])
+
+            self.assertEqual(result["required_count"], 1)
+            self.assertEqual(result["pass_count"], 1)
+            self.assertEqual(result["issues"], [])
+
+            self._write(root / "scenes" / "scene_0002.yaml", "scene_id: scene_0002\n")
+            with patch(
+                "literary_engineering_studio_engine.literary.review.longform_handoffs.scene_handoff_source_status",
+                return_value=(True, "ready", handoff),
+            ):
+                missing_bridge = audit_scene_handoffs(root, ["scene_0001"])
+
+            self.assertEqual(missing_bridge["issue_count"], 1)
+            self.assertIn("incoming_pressure", missing_bridge["issues"][0]["message"])
+
+    def test_longform_snapshot_tracks_formal_scene_handoffs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write(root / "project.yaml", "project:\n  target_length: 100000\n")
+            before = longform_input_snapshot(root)
+            self._write(
+                root / "workflow" / "handoffs" / "scene_0001.json",
+                '{"schema":"literary-engineering-workbench/scene-handoff/v2"}\n',
+            )
+            after = longform_input_snapshot(root)
+
+            self.assertNotEqual(before["digest"], after["digest"])
+            self.assertIn(
+                "workflow/handoffs/scene_0001.json",
+                {item["path"] for item in after["files"]},
+            )
+
     def test_publish_blueprint_stages_its_canon_and_export_read_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

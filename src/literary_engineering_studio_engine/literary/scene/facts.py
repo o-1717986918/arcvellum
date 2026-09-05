@@ -27,18 +27,24 @@ class SceneFacts:
     style_constraints: list[str]
     next_hooks: list[str]
     viewpoint: str = ""
+    incoming_pressure: str = ""
+    status: str = ""
+    volume_id: str = ""
+    chapter_obligation_id: str = ""
+    title: str = ""
+    word_count_target: int = 0
+    word_count_min: int = 0
+    word_count_max: int = 0
+    story_time: str = ""
+    timeline_order: int | None = None
+    spatial_time_gap_before: float = 0.0
 
 
 def load_scene_facts(scene_path: Path) -> SceneFacts:
-    """Load the shared literary facts from canonical or legacy scene YAML."""
+    """Load shared facts, preserving the legacy empty projection for absent files."""
 
     path = scene_path.resolve()
-    try:
-        payload = _YAML.load(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ValueError(f"invalid scene YAML: {path}") from exc
-    if not isinstance(payload, dict):
-        raise ValueError(f"scene YAML must be a mapping: {path}")
+    payload = load_scene_mapping(path) if path.is_file() else {}
 
     return SceneFacts(
         scene_id=_text(payload.get("scene_id")) or path.stem or "scene",
@@ -65,9 +71,59 @@ def load_scene_facts(scene_path: Path) -> SceneFacts:
         style_constraints=_text_list(payload.get("style_constraints")),
         next_hooks=_text_list(
             _canonical_or_legacy(payload, ("output_state", "next_hooks"), "next_hooks")
-        ),
+        ) or _text_list(_path_value(payload, ("scene_bridge", "outgoing_hook"))),
         viewpoint=_text(payload.get("viewpoint") or payload.get("pov")),
+        incoming_pressure=_text(
+            _canonical_or_legacy(
+                payload,
+                ("scene_bridge", "incoming_pressure"),
+                "incoming_pressure",
+            )
+        ),
+        status=_text(payload.get("status")),
+        volume_id=_text(payload.get("volume_id") or payload.get("volume")),
+        chapter_obligation_id=_text(payload.get("chapter_obligation_id")),
+        title=_text(payload.get("title")),
+        word_count_target=_non_negative_int(payload.get("word_count_target")),
+        word_count_min=_non_negative_int(payload.get("word_count_min")),
+        word_count_max=_non_negative_int(payload.get("word_count_max")),
+        story_time=_text(
+            _canonical_or_legacy(payload, ("time", "story_time"), "story_time")
+        ),
+        timeline_order=_optional_int(
+            _canonical_or_legacy(
+                payload,
+                ("time", "timeline_order"),
+                "timeline_order",
+            )
+        ),
+        spatial_time_gap_before=_non_negative_float(
+            payload.get("spatial_time_gap_before")
+        ),
     )
+
+
+def load_scene_mapping(scene_path: Path) -> dict[str, Any]:
+    """Decode one scene document through the canonical YAML implementation."""
+
+    path = scene_path.resolve()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"unable to read scene YAML: {path}") from exc
+    return parse_scene_mapping(text, source=path)
+
+
+def parse_scene_mapping(text: str, *, source: Path | str = "<scene>") -> dict[str, Any]:
+    """Decode in-memory scene YAML for callers that already own the source text."""
+
+    try:
+        payload = _YAML.load(text)
+    except Exception as exc:
+        raise ValueError(f"invalid scene YAML: {source}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"scene YAML must be a mapping: {source}")
+    return dict(payload)
 
 
 def _canonical_or_legacy(
@@ -101,4 +157,32 @@ def _text_list(value: Any) -> list[str]:
     return [text for item in values if (text := _text(item))]
 
 
-__all__ = ["SceneFacts", "load_scene_facts"]
+def _optional_int(value: Any) -> int | None:
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        return int(str(value).replace(",", "").replace("_", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _non_negative_int(value: Any) -> int:
+    parsed = _optional_int(value)
+    return max(0, parsed) if parsed is not None else 0
+
+
+def _non_negative_float(value: Any) -> float:
+    if value in (None, "") or isinstance(value, bool):
+        return 0.0
+    try:
+        return max(0.0, float(str(value).replace(",", "").replace("_", "").strip()))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+__all__ = [
+    "SceneFacts",
+    "load_scene_facts",
+    "load_scene_mapping",
+    "parse_scene_mapping",
+]

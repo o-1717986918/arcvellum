@@ -222,7 +222,7 @@ npm run client:dev
 ### 验证命令
 
 ```powershell
-python -m unittest discover -s tests -v
+./scripts/run_tests.ps1 -v
 python -m compileall -q src
 python -m literary_engineering_studio_engine prompt-registry-validate --json
 npm run client:test

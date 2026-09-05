@@ -11,6 +11,7 @@ from typing import Any
 
 from ...agent_tasks import agent_task_completion_status, write_agent_tasks
 from ...text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
+from ..scene.facts import SceneFacts, load_scene_facts, load_scene_mapping
 from .reader_contract_validation import (
     chapter_obligation_issues,
     reader_contract_issues,
@@ -108,8 +109,8 @@ def chapter_obligation_path(root: Path, obligation_id: str) -> Path:
 
 def scene_chapter_obligation_id(root: Path, scene_path: Path) -> str:
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
-    text = _read(scene_path)
-    return _scalar(text, "chapter_obligation_id") or _scalar(text, "chapter_id") or "unassigned"
+    facts = load_scene_facts(scene_path)
+    return facts.chapter_obligation_id or facts.chapter_id or "unassigned"
 
 
 def chapter_obligation_contract(root: Path, scene_path: Path) -> dict[str, Any]:
@@ -117,11 +118,11 @@ def chapter_obligation_contract(root: Path, scene_path: Path) -> dict[str, Any]:
 
     root = root.resolve()
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
-    scene_text = _read(scene_path)
-    scene_id = _scalar(scene_text, "scene_id") or scene_path.stem
-    chapter_id = _scalar(scene_text, "chapter_id") or "unassigned"
-    obligation_id = _scalar(scene_text, "chapter_obligation_id") or chapter_id
-    required = _reader_contract_required(root, scene_text)
+    scene_facts = load_scene_facts(scene_path)
+    scene_id = scene_facts.scene_id
+    chapter_id = scene_facts.chapter_id or "unassigned"
+    obligation_id = scene_facts.chapter_obligation_id or chapter_id
+    required = _reader_contract_required(root, scene_facts)
     path = chapter_obligation_path(root, obligation_id)
     base: dict[str, Any] = {
         "schema": CHAPTER_OBLIGATION_SCHEMA,
@@ -183,8 +184,8 @@ def reader_experience_contract(root: Path, scene_path: Path) -> dict[str, Any]:
 
     root = root.resolve()
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
-    scene_text = _read(scene_path)
-    scene_id = _scalar(scene_text, "scene_id") or scene_path.stem
+    scene_payload = load_scene_mapping(scene_path) if scene_path.is_file() else {}
+    scene_id = str(scene_payload.get("scene_id") or scene_path.stem).strip()
     chapter_contract = chapter_obligation_contract(root, scene_path)
     if chapter_contract["status"] == "not_required":
         return {
@@ -211,7 +212,7 @@ def reader_experience_contract(root: Path, scene_path: Path) -> dict[str, Any]:
     payload = chapter_contract.get("contract") if isinstance(chapter_contract.get("contract"), dict) else {}
     scene_contract = _scene_reader_contract(payload, scene_id)
     if not scene_contract:
-        scene_contract = _scene_yaml_reader_contract(scene_text)
+        scene_contract = _scene_yaml_reader_contract(scene_payload)
     issues = reader_contract_issues(scene_contract, REQUIRED_READER_FIELDS)
     return {
         "schema": READER_EXPERIENCE_SCHEMA,
@@ -351,7 +352,11 @@ def _write_chapter_obligation_agent_tasks(
     payload: dict[str, Any],
 ) -> None:
     source_paths = [root / "project.yaml", json_path, markdown_path, root / "plot" / "word_budget" / "word_budget.json", root / "plot" / "outline.md"]
-    source_paths.extend(path for path in sorted((root / "scenes").glob("*.yaml")) if _scalar(_read(path), "chapter_id") == chapter_id)
+    source_paths.extend(
+        path
+        for path in sorted((root / "scenes").glob("*.yaml"))
+        if load_scene_facts(path).chapter_id == chapter_id
+    )
     write_agent_tasks(
         task_path,
         title=f"chapter-obligation {chapter_id}",
@@ -414,13 +419,13 @@ def _render_obligation_markdown(root: Path, payload: dict[str, Any], json_path: 
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _reader_contract_required(root: Path, scene_text: str) -> bool:
+def _reader_contract_required(root: Path, scene_facts: SceneFacts) -> bool:
     project_text = _read(root / "project.yaml")
     project_target = _to_int(_scalar(project_text, "target_length") or _scalar(project_text, "target_words"))
     budget = _read_json(root / "plot" / "word_budget" / "word_budget.json")
     target = budget.get("target") if isinstance(budget.get("target"), dict) else {}
     budget_target = _to_int(target.get("target_chinese_chars") or target.get("target_words"))
-    return project_target >= 100000 or budget_target >= 100000 or bool(_scalar(scene_text, "chapter_obligation_id"))
+    return project_target >= 100000 or budget_target >= 100000 or bool(scene_facts.chapter_obligation_id)
 
 
 def chapter_obligation_contract_issues(
@@ -461,14 +466,17 @@ def _planned_scene_ids(root: Path, chapter_id: str) -> tuple[str, ...]:
     )
 
 
-def _scene_yaml_reader_contract(scene_text: str) -> dict[str, Any]:
-    block = _mapping_block(scene_text, "reader_experience")
-    if not block:
+def _scene_yaml_reader_contract(scene_payload: dict[str, Any]) -> dict[str, Any]:
+    block = scene_payload.get("reader_experience")
+    if not isinstance(block, dict):
         return {}
     data: dict[str, Any] = {}
     for field in REQUIRED_READER_FIELDS:
-        values = _nested_list(block, field)
-        data[field] = values if values else _nested_scalar(block, field)
+        value = block.get(field)
+        if isinstance(value, list):
+            data[field] = [str(item).strip() for item in value if str(item).strip()]
+        elif value is not None:
+            data[field] = str(value).strip()
     return data
 
 
@@ -480,15 +488,15 @@ def _scenes_for_chapter(root: Path, chapter_id: str) -> list[dict[str, Any]]:
     for path in sorted(scene_dir.glob("*.yaml")):
         if path.name.startswith("_"):
             continue
-        text = _read(path)
-        if (_scalar(text, "chapter_id") or "unassigned") != chapter_id:
+        facts = load_scene_facts(path)
+        if (facts.chapter_id or "unassigned") != chapter_id:
             continue
         rows.append(
             {
-                "scene_id": _scalar(text, "scene_id") or path.stem,
-                "word_count_target": _to_int(_scalar(text, "word_count_target")),
-                "word_count_min": _to_int(_scalar(text, "word_count_min")),
-                "word_count_max": _to_int(_scalar(text, "word_count_max")),
+                "scene_id": facts.scene_id,
+                "word_count_target": facts.word_count_target,
+                "word_count_min": facts.word_count_min,
+                "word_count_max": facts.word_count_max,
             }
         )
     return rows
@@ -498,8 +506,7 @@ def _first_chapter_id(root: Path) -> str:
     scene_dir = root / "scenes"
     if scene_dir.exists():
         for path in sorted(scene_dir.glob("*.yaml")):
-            text = _read(path)
-            chapter_id = _scalar(text, "chapter_id")
+            chapter_id = load_scene_facts(path).chapter_id
             if chapter_id:
                 return chapter_id
     return ""
@@ -519,47 +526,6 @@ def _chapter_budget_row(payload: dict[str, Any], chapter_id: str) -> dict[str, A
             if isinstance(row, dict) and str(row.get("chapter_id") or "") == chapter_id:
                 return row
     return {}
-
-
-def _mapping_block(text: str, key: str) -> str:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*\n", text)
-    if not match:
-        return ""
-    lines: list[str] = []
-    for raw in text[match.end() :].splitlines():
-        if raw and not raw.startswith((" ", "\t")):
-            break
-        lines.append(raw)
-    return "\n".join(lines)
-
-
-def _nested_scalar(block: str, key: str) -> str:
-    match = re.search(rf"(?m)^[ \t]+{re.escape(key)}:[ \t]*(.*?)[ \t]*$", block)
-    if not match:
-        return ""
-    value = match.group(1).strip().strip("\"'")
-    return "" if value in {"", "null", "[]", "{}"} else value
-
-
-def _nested_list(block: str, key: str) -> list[str]:
-    value = _nested_scalar(block, key)
-    if value.startswith("[") and value.endswith("]"):
-        return [item.strip().strip("\"'") for item in value.strip("[]").split(",") if item.strip()]
-    match = re.search(rf"(?m)^[ \t]+{re.escape(key)}:[ \t]*\n", block)
-    if not match:
-        return []
-    values: list[str] = []
-    for raw in block[match.end() :].splitlines():
-        stripped = raw.strip()
-        if not stripped:
-            continue
-        if re.match(r"^[A-Za-z_][\w-]*:", stripped):
-            break
-        if stripped.startswith("-"):
-            item = stripped[1:].strip().strip("\"'")
-            if item:
-                values.append(item)
-    return values
 
 
 def _resolve_output(root: Path, output: Path | None, *default_parts: str | Path) -> Path:

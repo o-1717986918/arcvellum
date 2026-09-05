@@ -13,6 +13,36 @@ from ...task_paths import resolve_project_path
 
 SOURCE_INGEST_SCHEMA_V1 = "literary-engineering-workbench/source-ingest/v1"
 SOURCE_INGEST_SCHEMAS = {SOURCE_INGEST_SCHEMA_V1, SOURCE_INGEST_SCHEMA_V2}
+SOURCE_INGEST_REQUIRED_READING = [
+    "SKILL.md",
+    "AGENTS.md",
+    "agentread.yaml",
+    "references/agent-run-protocol.md",
+    "references/cli-run-protocol.md",
+    "references/artifact-contracts.md",
+    "references/workflows.md",
+]
+SOURCE_INGEST_FORBIDDEN_SHORTCUTS = [
+    "Do not write source-derived material directly into canon, character, plot, draft, export, or release files.",
+    "Do not treat extracted claims as confirmed facts without evidence_refs, confidence, unknowns, contradiction notes, review, and approval.",
+    "Do not skip extract_project_files.agent_tasks.md after source-ingest creates it.",
+    "Do not copy long source passages into extraction reports.",
+    "Do not treat this task as complete until task-submit and task-complete have succeeded.",
+]
+
+
+def source_ingest_contract_language(schema: str) -> tuple[str, str, str]:
+    if schema == SOURCE_INGEST_SCHEMA_V1:
+        return (
+            "Read extract_project_files.agent_tasks.md, the legacy source chunks, and the evidence index before writing extracted candidates.",
+            "This source-ingest/v1 route is migration-only compatibility. Preserve the old project while producing reviewed candidate assets; do not use it for new imports.",
+            "This independent revision closes a migration-only source-ingest/v1 import; new imports must use archaeology v2.",
+        )
+    return (
+        "Read extract_project_files.agent_tasks.md and the ready archaeology aggregate before writing extracted candidates.",
+        "This archaeology v2 route is the required path for new source imports.",
+        "Review the archaeology v2 candidates against their current evidence contract.",
+    )
 
 
 def file_sha256(path: Path) -> str:

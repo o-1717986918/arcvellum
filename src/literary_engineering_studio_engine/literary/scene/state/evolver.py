@@ -13,6 +13,7 @@ from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
 from ....flow_gates import ensure_composition_ready_for_generation
 from ....roleplay_lab import CharacterCard, _list_after, _load_characters, _nested_list, _nested_scalar, _read, _scalar
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
+from ..facts import load_scene_facts
 from .contracts import CharacterStatePatchResult, StatePatchSources
 from .rendering import render_state_patch
 from .writeback_source import merge_writeback_candidates, structured_scene_writeback
@@ -92,7 +93,8 @@ def _load_state_patch_sources(
     if not scene_path.exists():
         raise FileNotFoundError(f"scene file not found: {scene_path}")
     scene_text = _read(scene_path)
-    scene_id = _scalar(scene_text, "scene_id") or scene_path.stem or "scene"
+    scene_facts = load_scene_facts(scene_path)
+    scene_id = scene_facts.scene_id
     source_path = _resolve_source(root, scene_id, source)
     if _is_composition_source(source_path):
         ensure_composition_ready_for_generation(root, source_path)
@@ -105,7 +107,7 @@ def _load_state_patch_sources(
         root=root,
         scene_path=scene_path,
         scene_id=scene_id,
-        participants=tuple(_list_value(scene_text, "participants")),
+        participants=tuple(scene_facts.participants),
         source_path=source_path,
         source_text=source_text,
     )

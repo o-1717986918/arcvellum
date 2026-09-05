@@ -15,6 +15,7 @@ from ...platform_agent_tasks import write_platform_scene_review_task
 from ...review_ci import review_scene_draft
 from ...narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract
 from ...scene_draft import build_scene_draft
+from ..scene.facts import load_scene_facts
 from .chapter_readiness import chapter_scene_readiness
 
 
@@ -148,7 +149,7 @@ def _select_scene_paths(root: Path, chapter_id: str, scenes: Iterable[Path] | No
         return []
 
     candidates = sorted(path.resolve() for path in scene_dir.glob("*.yaml") if not path.name.startswith("_"))
-    matching = [path for path in candidates if _scene_chapter_id(_read(path)) == chapter_id]
+    matching = [path for path in candidates if load_scene_facts(path).chapter_id == chapter_id]
     return matching or candidates
 
 
@@ -160,9 +161,9 @@ def _build_scene_record(
     review_drafts: bool,
     agent_review: bool,
 ) -> SceneChapterRecord:
-    scene_text = _read(scene_path)
-    scene_id = _scalar(scene_text, "scene_id") or scene_path.stem
-    chapter_id = _scene_chapter_id(scene_text) or requested_chapter_id
+    scene_facts = load_scene_facts(scene_path)
+    scene_id = scene_facts.scene_id
+    chapter_id = scene_facts.chapter_id or requested_chapter_id
 
     context_path = root / "memory" / "context_packets" / f"{scene_id}.md"
     context_trace_path = default_context_trace_path(context_path)
@@ -209,9 +210,9 @@ def _build_scene_record(
         scene_id=scene_id,
         scene_path=_rel_str(scene_path, root),
         chapter_id=chapter_id,
-        location=_scalar(scene_text, "location"),
-        participants=tuple(_list_after(scene_text, "participants")),
-        scene_goal=_scalar(scene_text, "scene_goal"),
+        location=scene_facts.location,
+        participants=tuple(scene_facts.participants),
+        scene_goal=scene_facts.scene_goal,
         context_path=_existing_rel(context_path, root),
         context_trace_path=_existing_rel(context_trace_path, root),
         simulation_path=_existing_rel(simulation_path, root),
@@ -518,40 +519,6 @@ def _section_after_heading(text: str, heading: str) -> str:
     if next_idx < 0:
         next_idx = text.find("\n## ", idx + 1)
     return text[idx: next_idx if next_idx >= 0 else len(text)]
-
-
-def _scene_chapter_id(scene_text: str) -> str:
-    return _scalar(scene_text, "chapter_id")
-
-
-def _scalar(text: str, key: str) -> str:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    if not match:
-        return ""
-    value = match.group(1).strip()
-    return value.strip("\"'")
-
-
-def _list_after(text: str, key: str) -> list[str]:
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    if not match:
-        return []
-    inline = match.group(1).strip()
-    if inline.startswith("[") and inline.endswith("]"):
-        return [item.strip().strip("\"'") for item in inline.strip("[]").split(",") if item.strip()]
-
-    lines = text[match.end() :].splitlines()
-    values = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("-"):
-            values.append(stripped.strip("- ").strip("\"'"))
-            continue
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*:", stripped):
-            break
-    return values
 
 
 def _read(path: Path) -> str:

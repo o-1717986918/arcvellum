@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-import re
 
 from ...scene_character_assets import scene_character_asset_requirements
 from ...semantic_task_contracts import semantic_artifact_relative_path
@@ -18,9 +17,10 @@ from ...literary.scene.promotion.historical_context import (
     historical_revision_candidate_source_paths,
 )
 from ...literary.planning.review import all_planning_review_evidence_paths
+from ...literary.scene.facts import load_scene_facts
 from ...scene_route_support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
-    _read_text, _unique,
+    _unique,
 )
 from .revision_blueprint_contract import revision_blueprint_contract
 from .revision_task_blueprint import candidate_revision_blueprint
@@ -103,11 +103,8 @@ def _reader_obligation_outputs(chapter_id: str) -> list[str]:
 
 def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_state: str, next_action: str) -> dict[str, object]:
     scene_path = _resolve_project_path(root, scene_rel)
-    scene_text = _read_text(scene_path)
-    chapter_match = re.search(r"(?m)^[ \t]*chapter_obligation_id:[ \t]*['\"]?([^'\"\n#]+)", scene_text) or re.search(
-        r"(?m)^[ \t]*chapter_id:[ \t]*['\"]?([^'\"\n#]+)", scene_text
-    )
-    chapter_id = chapter_match.group(1).strip().strip("\"'") if chapter_match else "chapter_0001"
+    facts = load_scene_facts(scene_path)
+    chapter_id = facts.chapter_obligation_id or facts.chapter_id or "chapter_0001"
     context = f"memory/context_packets/{scene_id}.md"
     context_trace = f"memory/context_packets/{scene_id}.trace.json"
     branch_dir = f"branches/{scene_id}"

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..narrative_rhythm import narrative_rhythm_contract
+from ..literary.scene.facts import load_scene_facts
 
 
 PRIORITY = ("hard_facts", "scene_causality", "mounted_style", "reader_rhythm_budget", "surface_quality", "revision")
@@ -23,7 +24,7 @@ def compile_active_constraints(root: Path, scene_path: Path, *, style_text: str 
     root = root.resolve()
     scene = scene_path if scene_path.is_absolute() else root / scene_path
     scene_text = _read(scene)
-    scene_id = _scalar(scene_text, "scene_id") or scene.stem
+    scene_id = load_scene_facts(scene).scene_id
     composition = root / "drafts" / "compositions" / f"{scene_id}_composition.json"
     rhythm = narrative_rhythm_contract(root, scene, composition if composition.exists() else None)
     entries: list[dict[str, str]] = []
@@ -109,12 +110,6 @@ def _detect_conflicts(entries: list[dict[str, str]]) -> list[dict[str, str]]:
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore") if path.is_file() else ""
-
-
-def _scalar(text: str, key: str) -> str:
-    import re
-    match = re.search(rf"(?m)^\s*{re.escape(key)}:\s*['\"]?([^'\"\n#]+)", text)
-    return match.group(1).strip().strip("'\"") if match else ""
 
 
 def _normalize(text: str) -> str:

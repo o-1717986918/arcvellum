@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ..scene.facts import parse_scene_mapping
 from .rhythm_sources import plan_payload_source, scene_text_source
 
 RHYTHM_SCHEMA = "literary-engineering-workbench/narrative-rhythm-contract/v0.1"
@@ -79,13 +80,11 @@ def narrative_rhythm_contract(
     root = root.resolve()
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
     scene_text = scene_text_source(scene_path, scene_text)
-    scene_id = _scene_id(scene_path, scene_text)
+    scene_id, scene_rhythm, scene_bridge = _scene_contract_values(scene_path, scene_text)
     composition_payload = _read_composition_payload(root, scene_id, composition_path)
     plan_payload = plan_payload_source(root / "plot" / "rhythm_plan.json", plan_payload)
     composition_rhythm = _dict_value(composition_payload.get("narrative_rhythm"))
     composition_bridge = _dict_value(composition_payload.get("scene_bridge"))
-    scene_rhythm = _block_mapping(scene_text, "narrative_rhythm")
-    scene_bridge = _block_mapping(scene_text, "scene_bridge")
     plan_scenes = plan_payload.get("scenes") if isinstance(plan_payload.get("scenes"), dict) else {}
     plan_rhythm = plan_scenes.get(scene_id) if isinstance(plan_scenes.get(scene_id), dict) else {}
     book_profile = _book_profile(plan_payload.get("book_profile"))
@@ -256,13 +255,30 @@ def _read_composition_payload(root: Path, scene_id: str, composition_path: Path 
     return _read_json(path)
 
 
-def _scene_id(scene_path: Path, text: str) -> str:
-    match = re.search(r"(?m)^\s*scene_id:\s*['\"]?([^'\"\n#]+)", text)
-    if match:
-        value = match.group(1).strip().strip("\"'")
-        if value:
-            return value
-    return scene_path.stem
+def _scene_contract_values(
+    scene_path: Path,
+    scene_text: str,
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    payload = parse_scene_mapping(scene_text, source=scene_path)
+    scene_id = str(payload.get("scene_id") or scene_path.stem).strip()
+    return (
+        scene_id,
+        _yaml_contract_mapping(payload.get("narrative_rhythm")),
+        _yaml_contract_mapping(payload.get("scene_bridge")),
+    )
+
+
+def _yaml_contract_mapping(value: object) -> dict[str, Any]:
+    mapping = _dict_value(value)
+    return {str(key): _yaml_contract_value(item) for key, item in mapping.items()}
+
+
+def _yaml_contract_value(value: object) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _yaml_contract_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_yaml_contract_value(item) for item in value]
+    return "" if value is None else str(value)
 
 
 def _missing_contract_fields(rhythm: dict[str, Any], bridge: dict[str, Any]) -> list[str]:
@@ -378,139 +394,6 @@ def _merge_dict(*items: dict[str, Any]) -> dict[str, Any]:
             elif key not in merged:
                 merged[key] = value
     return merged
-
-
-def _block_mapping(text: str, key: str) -> dict[str, Any]:
-    match = re.search(rf"(?m)^([ \t]*){re.escape(key)}:[ \t]*$", text)
-    if not match:
-        return {}
-    base_indent = len(match.group(1))
-    block: list[str] = []
-    for line in text[match.end() :].splitlines():
-        if not line.strip():
-            block.append(line)
-            continue
-        indent = len(line) - len(line.lstrip(" \t"))
-        if indent <= base_indent:
-            break
-        block.append(line)
-    return _parse_mapping(block, base_indent + 2)
-
-
-def _parse_mapping(lines: list[str], base_indent: int) -> dict[str, Any]:
-    parsed, _ = _parse_mapping_at(lines, 0, base_indent)
-    return parsed
-
-
-def _parse_mapping_at(lines: list[str], start: int, base_indent: int) -> tuple[dict[str, Any], int]:
-    result: dict[str, Any] = {}
-    index = start
-    while index < len(lines):
-        raw = lines[index]
-        if not raw.strip():
-            index += 1
-            continue
-        indent = _indent(raw)
-        stripped = raw.strip()
-        if indent < base_indent:
-            break
-        if indent > base_indent or stripped.startswith("-") or ":" not in stripped:
-            index += 1
-            continue
-        key, value = stripped.split(":", 1)
-        key = key.strip()
-        value = value.strip()
-        if value:
-            result[key] = _parse_scalar_or_inline(value)
-            index += 1
-            continue
-        child_index = _next_content_index(lines, index + 1)
-        if child_index is None or _indent(lines[child_index]) <= indent:
-            result[key] = ""
-            index += 1
-            continue
-        child_indent = _indent(lines[child_index])
-        if lines[child_index].strip().startswith("-"):
-            result[key], index = _parse_list_at(lines, child_index, child_indent)
-        else:
-            result[key], index = _parse_mapping_at(lines, child_index, child_indent)
-    return result, index
-
-
-def _parse_list_at(lines: list[str], start: int, list_indent: int) -> tuple[list[Any], int]:
-    result: list[Any] = []
-    index = start
-    while index < len(lines):
-        raw = lines[index]
-        if not raw.strip():
-            index += 1
-            continue
-        indent = _indent(raw)
-        stripped = raw.strip()
-        if indent < list_indent:
-            break
-        if indent > list_indent:
-            index += 1
-            continue
-        if not stripped.startswith("-"):
-            break
-        item_text = stripped[1:].strip()
-        child_index = _next_content_index(lines, index + 1)
-        has_child = child_index is not None and _indent(lines[child_index]) > indent
-        if not item_text and has_child:
-            child_indent = _indent(lines[child_index])
-            if lines[child_index].strip().startswith("-"):
-                item, index = _parse_list_at(lines, child_index, child_indent)
-            else:
-                item, index = _parse_mapping_at(lines, child_index, child_indent)
-            result.append(item)
-            continue
-        if ":" in item_text and not item_text.startswith(("'", '"')):
-            item = _parse_inline_pair(item_text)
-            index += 1
-            if has_child:
-                child, new_index = _parse_mapping_at(lines, child_index, _indent(lines[child_index]))
-                if isinstance(item, dict):
-                    item.update(child)
-                index = new_index
-            result.append(item)
-            continue
-        result.append(_parse_scalar_or_inline(item_text))
-        index += 1
-    return result, index
-
-
-def _parse_scalar_or_inline(value: str) -> object:
-    value = value.strip().strip("\"'")
-    if not value:
-        return ""
-    if value.startswith("[") and value.endswith("]"):
-        return [item.strip().strip("\"'") for item in value.strip("[]").split(",") if item.strip()]
-    if value.startswith("{") and value.endswith("}"):
-        result: dict[str, str] = {}
-        for part in value.strip("{}").split(","):
-            if ":" not in part:
-                continue
-            key, item = part.split(":", 1)
-            result[key.strip().strip("\"'")] = item.strip().strip("\"'")
-        return result
-    return value
-
-
-def _parse_inline_pair(value: str) -> dict[str, object]:
-    key, item = value.split(":", 1)
-    return {key.strip().strip("\"'"): _parse_scalar_or_inline(item.strip())}
-
-
-def _next_content_index(lines: list[str], start: int) -> int | None:
-    for index in range(start, len(lines)):
-        if lines[index].strip():
-            return index
-    return None
-
-
-def _indent(line: str) -> int:
-    return len(line) - len(line.lstrip(" \t"))
 
 
 def _source_label(

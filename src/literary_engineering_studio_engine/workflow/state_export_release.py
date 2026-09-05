@@ -121,21 +121,6 @@ def _chapter_workspace_step(root: Path, chapter_id: str, json_path: Path, markdo
     }
 
 
-def _export_route_audit_step(root: Path, json_path: Path) -> dict[str, object]:
-    payload = _read_json(json_path)
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    route = str(summary.get("route") or "").strip().lower()
-    blocking = int(summary.get("blocking_count", 0) or 0)
-    passed = json_path.exists() and route == "export-and-release" and blocking == 0
-    return {
-        "key": "export-route-audit",
-        "status": "pass" if passed else "missing" if not json_path.exists() else "blocked",
-        "path": _rel(json_path, root),
-        "message": f"route={route or 'missing'}; blocking={blocking}",
-        "next_action": "" if passed else "run route-audit --route export-and-release with dedicated output and resolve blocking gates",
-    }
-
-
 def _export_package_step(root: Path, chapter_id: str, manifest_path: Path) -> dict[str, object]:
     payload = _read_json(manifest_path)
     skipped = payload.get("skipped_scenes") if isinstance(payload.get("skipped_scenes"), list) else []

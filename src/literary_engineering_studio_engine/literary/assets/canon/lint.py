@@ -18,6 +18,7 @@ from .contracts import (
 from .lint_issues import CanonLintIssue, add_issue as _add, render_report as _render_report
 
 from ..character_identity import character_slug, formal_character_aliases
+from ...scene.facts import load_scene_facts, load_scene_mapping
 
 
 SEVERITIES = {"blocking": 3, "warning": 2, "info": 1}
@@ -176,11 +177,13 @@ def _check_scenes(
     for path in files:
         rel = _rel(path, root)
         text = _read(path)
-        scene_id = _scalar(text, "scene_id") or path.stem
-        chapter_id = _scalar(text, "chapter_id")
-        status = _scalar(text, "status")
-        location = _scalar(text, "location")
-        participants = _list_after(text, "participants")
+        payload = load_scene_mapping(path)
+        facts = load_scene_facts(path)
+        scene_id = facts.scene_id
+        chapter_id = facts.chapter_id
+        status = facts.status
+        location = facts.location
+        participants = facts.participants
         records[scene_id] = {
             "path": rel,
             "chapter_id": chapter_id,
@@ -190,7 +193,7 @@ def _check_scenes(
         if scene_id in seen:
             _add(issues, "scene-id-duplicate", "blocking", rel, "场景 scene_id 重复。", f"first={seen[scene_id]}")
         seen[scene_id] = rel
-        if not _scalar(text, "scene_id"):
+        if not str(payload.get("scene_id") or "").strip():
             _add(issues, "scene-id-missing", "warning", rel, "场景缺少 scene_id，当前将使用文件名推断。")
         if not chapter_id:
             _add(issues, "scene-chapter-missing", "warning", rel, "场景缺少 chapter_id。", scene_id)

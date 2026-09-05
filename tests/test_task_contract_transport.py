@@ -23,6 +23,22 @@ from tests.scene_lifecycle_support import prepare_promotable_candidate
 
 
 class TaskContractTransportTests(unittest.TestCase):
+    def test_task_package_omits_unconsumed_transition_hints(self):
+        task = _enrich_task_payload(
+            {
+                "task_id": "scene-development-scene_0001-context-packet",
+                "route": "scene-development",
+                "scene_id": "scene_0001",
+                "current_state": "context-packet",
+                "task_type": "deterministic-cli",
+                "prompt_asset_id": "route.scene-development.context-packet.v1",
+                "expected_outputs": [],
+                "next_allowed_states": ["roleplay-simulation"],
+            }
+        )
+
+        self.assertNotIn("next_allowed_states", task)
+
     def test_route_summary_counts_failed_gates_separately_from_gate_inventory(self):
         summary = _route_summary(
             "scene-development",

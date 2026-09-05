@@ -13,7 +13,7 @@ from .context_contract import CONTEXT_CONTRACT_FINGERPRINT_FIELDS, normalize_con
 from .markdown_renderer import render_task_markdown
 from .prompt_projection import project_prompt_asset
 from ..prompt_registry import resolve_prompt_asset
-TASK_CONTRACT_REVISION = "2026-08-20.34"
+TASK_CONTRACT_REVISION = "2026-09-05.35"
 COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 RECHECK_REQUIRED_STATES = {
     "asset-review-pass",
@@ -113,7 +113,7 @@ def task_contract_fingerprint(task: dict[str, object]) -> str:
 
 def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
     """Add the authoritative execution and prompt contracts to a task."""
-    enriched = dict(task)
+    enriched = _public_task_fields(task)
     enriched["task_contract_revision"] = TASK_CONTRACT_REVISION
     prompt_id = str(enriched.get("prompt_asset_id") or "").strip()
     if not prompt_id:
@@ -211,6 +211,12 @@ def enrich_task_payload(task: dict[str, object]) -> dict[str, object]:
                 "Do not create an agent completion marker or a substitute approval file; use the Studio decision interface.",
             ]
         )
+    return enriched
+
+
+def _public_task_fields(task: dict[str, object]) -> dict[str, object]:
+    enriched = dict(task)
+    enriched.pop("next_allowed_states", None)
     return enriched
 
 

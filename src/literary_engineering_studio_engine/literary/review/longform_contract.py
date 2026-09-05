@@ -36,6 +36,7 @@ LONGFORM_AUDIT_SOURCE_PATHS = (
     "plot/rhythm_plan.json",
     "plot/word_budget",
     "reviews",
+    "workflow/handoffs",
 )
 STRUCTURAL_BLOCKING_CATEGORIES = frozenset(
     {
@@ -47,6 +48,7 @@ STRUCTURAL_BLOCKING_CATEGORIES = frozenset(
         "narrative_rhythm",
         "narrative_rhythm_curve",
         "scene_inventory",
+        "scene_handoff",
         "scene_schema",
         "target_length_shortfall",
         "viewpoint_continuity",
@@ -94,6 +96,7 @@ _INPUT_GLOBS = (
     "reviews/agent/*_scene_review.json",
     "reviews/schema_validation/*.json",
     "reviews/assets/*.json",
+    "workflow/handoffs/scene_*.json",
 )
 _OPEN_STATUSES = frozenset({"active", "delayed", "open", "opened", "pending", "postponed"})
 _CLOSED_STATUSES = frozenset({"closed", "complete", "completed", "paid", "resolved"})

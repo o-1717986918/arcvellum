@@ -9,6 +9,7 @@ from ....context_broker import default_context_trace_path, write_context_trace
 from ....memory_index import SearchHit, build_memory_index, search_memory
 from ....scene_handoff import scene_handoff_status
 from ....word_budget import render_scene_word_budget_contract
+from ..facts import parse_scene_mapping
 from .rendering import (
     ContextPacketSections,
     render_context_packet,
@@ -40,64 +41,50 @@ def _first_existing(root: Path, candidates: list[str]) -> str:
     return "\n\n".join(parts) if parts else "无。"
 
 
-def _extract_scene_id(scene_path: Path) -> str:
-    stem = scene_path.stem
-    return stem or "scene"
+def _extract_scene_id(scene_path: Path, scene_payload: dict[str, object]) -> str:
+    return str(scene_payload.get("scene_id") or scene_path.stem or "scene").strip()
 
 
-def _query_from_scene(scene_text: str, extra_query: str) -> str:
-    keys = []
-    for key in [
-        "scene_goal",
-        "external",
-        "internal",
-        "location",
-        "participants",
-        "style_constraints",
-    ]:
-        pattern = rf"(?m)^\s*{re.escape(key)}:\s*(.+?)\s*$"
-        match = re.search(pattern, scene_text)
-        if match and match.group(1).strip() not in {"", "[]"}:
-            keys.append(match.group(1).strip())
+def _query_from_scene(
+    scene_text: str,
+    extra_query: str,
+    scene_payload: dict[str, object] | None = None,
+) -> str:
+    payload = scene_payload or parse_scene_mapping(scene_text, source="<scene-context-query>")
+    conflict = payload.get("conflict") if isinstance(payload.get("conflict"), dict) else {}
+    values = [
+        payload.get("scene_goal"),
+        conflict.get("external"),
+        conflict.get("internal"),
+        payload.get("location"),
+        payload.get("participants"),
+        payload.get("style_constraints"),
+    ]
+    keys = [text for value in values if (text := _query_value(value))]
     if extra_query:
         keys.append(extra_query)
     keys.append(scene_text[:1200])
     return "\n".join(keys)
 
 
-def _list_value(text: str, key: str) -> list[str]:
-    inline = re.search(rf"(?m)^\s*{re.escape(key)}:\s*\[(.*?)\]\s*$", text)
-    if inline:
-        return [item.strip().strip("'\"") for item in inline.group(1).split(",") if item.strip()]
-    lines = text.splitlines()
-    values: list[str] = []
-    in_block = False
-    base_indent = 0
-    for line in lines:
-        if re.match(rf"^\s*{re.escape(key)}:\s*$", line):
-            in_block = True
-            base_indent = len(line) - len(line.lstrip())
-            continue
-        if not in_block:
-            continue
-        stripped = line.strip()
-        indent = len(line) - len(line.lstrip())
-        if stripped and indent <= base_indent and not stripped.startswith("-"):
-            break
-        if stripped.startswith("-"):
-            value = stripped[1:].strip().strip("'\"")
-            if value:
-                values.append(value)
-    scalar = re.search(rf"(?m)^\s*{re.escape(key)}:\s*(.+?)\s*$", text)
-    if not values and scalar and scalar.group(1).strip() not in {"", "[]"}:
-        values.append(scalar.group(1).strip().strip("'\""))
-    return values
+def _query_value(value: object) -> str:
+    if isinstance(value, dict):
+        return " ".join(filter(None, (_query_value(item) for item in value.values())))
+    if isinstance(value, (list, tuple)):
+        return " ".join(filter(None, (_query_value(item) for item in value)))
+    return str(value or "").strip()
 
 
-def _scene_character_refs(scene_text: str) -> set[str]:
+def _scene_character_refs(
+    scene_text: str,
+    scene_payload: dict[str, object] | None = None,
+) -> set[str]:
+    payload = scene_payload or parse_scene_mapping(scene_text, source="<scene-character-refs>")
     refs: set[str] = set()
     for key in ("participants", "referenced_characters", "character_refs"):
-        refs.update(_list_value(scene_text, key))
+        value = payload.get(key)
+        values = value if isinstance(value, (list, tuple)) else [value]
+        refs.update(str(item).strip() for item in values if str(item or "").strip())
     return {item for item in refs if item}
 
 
@@ -145,7 +132,11 @@ def _filter_retrieval_hits(hits, allowed_character_ids: set[str], restrict_chara
     return filtered
 
 
-def _character_section(root: Path, scene_text: str) -> tuple[str, set[str], bool]:
+def _character_section(
+    root: Path,
+    scene_text: str,
+    scene_payload: dict[str, object] | None = None,
+) -> tuple[str, set[str], bool]:
     chars_dir = root / "characters"
     if not chars_dir.exists():
         return "无人物档案。", set(), False
@@ -154,7 +145,7 @@ def _character_section(root: Path, scene_text: str) -> tuple[str, set[str], bool
         template = _read(chars_dir / "_template.yaml")
         return "尚无正式人物档案。以下是人物模板，生成前应先补齐主要人物：\n\n```yaml\n" + template + "\n```", set(), False
 
-    scene_refs = _scene_character_refs(scene_text)
+    scene_refs = _scene_character_refs(scene_text, scene_payload)
     restrict_characters = bool(scene_refs)
     major_sections = []
     scene_sections = []
@@ -210,16 +201,18 @@ def _retrieval_section(hits) -> str:
     return "\n\n".join(sections)
 
 
-def _plot_context(root: Path, scene_text: str) -> str:
+def _plot_context(
+    root: Path,
+    scene_text: str,
+    scene_payload: dict[str, object] | None = None,
+) -> str:
     outline_path = root / "plot" / "outline.md"
     outline = _read(outline_path)
     supplemental = _first_existing(root, ["plot/foreshadowing.csv", "plot/conflict_matrix.md"])
     if not outline:
         return supplemental
 
-    chapter_value = _field_value(scene_text, "chapter_id") or _field_value(scene_text, "chapter_obligation_id")
-    chapter_match = re.search(r"(\d+)", chapter_value)
-    chapter_number = int(chapter_match.group(1)) if chapter_match else 1
+    chapter_number = _scene_chapter_number(scene_text, scene_payload)
     headings = list(re.finditer(r"(?m)^###\s+Ch\s*0*(\d+)\b.*$", outline, re.IGNORECASE))
     current_index = next(
         (index for index, match in enumerate(headings) if int(match.group(1)) == chapter_number),
@@ -249,6 +242,16 @@ def _plot_context(root: Path, scene_text: str) -> str:
     return selected + "\n\n" + supplemental
 
 
+def _scene_chapter_number(
+    scene_text: str,
+    scene_payload: dict[str, object] | None,
+) -> int:
+    payload = scene_payload or parse_scene_mapping(scene_text, source="<scene-plot-context>")
+    chapter_value = str(payload.get("chapter_id") or payload.get("chapter_obligation_id") or "")
+    chapter_match = re.search(r"(\d+)", chapter_value)
+    return int(chapter_match.group(1)) if chapter_match else 1
+
+
 def build_context_packet(
     project_root: Path,
     scene: Path | None = None,
@@ -271,6 +274,7 @@ def build_context_packet(
         build_memory_index(root)
 
     scene_text = _read(scene_path)
+    scene_payload = parse_scene_mapping(scene_text, source=scene_path)
     # This packet belongs to one active scene. Full-book inventory may still
     # report ``needs_expansion`` after that scene has been materialized; using
     # the full scope here injected a stale failure into a valid prose prompt.
@@ -279,12 +283,16 @@ def build_context_packet(
         scene_path,
         materialization_scope="scene",
     )
-    retrieval_query = _query_from_scene(scene_text, query)
+    retrieval_query = _query_from_scene(scene_text, query, scene_payload)
     raw_hits = search_memory(root, retrieval_query, top_k=top_k)
-    character_text, loaded_character_ids, restrict_character_hits = _character_section(root, scene_text)
+    character_text, loaded_character_ids, restrict_character_hits = _character_section(
+        root,
+        scene_text,
+        scene_payload,
+    )
     hits = _filter_retrieval_hits(raw_hits, loaded_character_ids, restrict_character_hits)
 
-    scene_id = _extract_scene_id(scene_path)
+    scene_id = _extract_scene_id(scene_path, scene_payload)
     handoff_ok, handoff_message, handoff_payload = scene_handoff_status(root, scene_id)
     output_path = output or root / "memory" / "context_packets" / f"{scene_id}.md"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -295,6 +303,7 @@ def build_context_packet(
             scene_path=scene_path,
             scene_id=scene_id,
             scene_text=scene_text,
+            scene_payload=scene_payload,
             word_budget=word_budget_contract,
             character_text=character_text,
             hits=hits,
@@ -318,7 +327,7 @@ def build_context_packet(
             content=content,
             hits=hits,
             loaded_character_ids=loaded_character_ids,
-            character_context_required=bool(_scene_character_refs(scene_text)),
+            character_context_required=bool(_scene_character_refs(scene_text, scene_payload)),
             handoff_ok=handoff_ok,
             handoff_message=handoff_message,
             handoff_payload=handoff_payload,
@@ -333,6 +342,7 @@ def _packet_sections(
     scene_path: Path,
     scene_id: str,
     scene_text: str,
+    scene_payload: dict[str, object],
     word_budget: str,
     character_text: str,
     hits: list[SearchHit],
@@ -359,7 +369,7 @@ def _packet_sections(
             ],
         ),
         characters=character_text,
-        plot=_plot_context(root, scene_text),
+        plot=_plot_context(root, scene_text, scene_payload),
         handoff=render_handoff(
             passed=handoff_ok,
             message=handoff_message,

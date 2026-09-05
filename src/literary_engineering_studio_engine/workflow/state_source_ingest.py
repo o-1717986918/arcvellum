@@ -75,6 +75,11 @@ def _source_ingest_state(root: Path, import_dir: Path) -> dict[str, object]:
         "current_step": first_open["key"] if first_open else "ready",
         "next_action": first_open["next_action"] if first_open else "",
         "steps": steps,
+        "compatibility_mode": (
+            "migration-only"
+            if manifest.get("schema") == SOURCE_INGEST_SCHEMA_V1
+            else "current"
+        ),
     }
     if first_open:
         for field in (

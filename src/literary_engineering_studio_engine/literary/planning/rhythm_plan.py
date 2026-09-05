@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from ..scene.facts import SceneFacts, load_scene_facts
 from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract, normalize_tension_curve
 
 
@@ -84,42 +85,42 @@ def _load_scene_entries(root: Path, stored: dict[str, Any]) -> list[dict[str, An
     entries: list[dict[str, Any]] = []
     for path in _rhythm_scene_paths(root):
         scene_text = path.read_text(encoding="utf-8", errors="ignore")
-        scene_id = _scalar(scene_text, "scene_id") or path.stem
+        facts = load_scene_facts(path)
+        scene_id = facts.scene_id
         contract = narrative_rhythm_contract(root, path, plan_payload=stored, scene_text=scene_text)
         rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
         curve = normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
         stored_entry = stored_scenes.get(scene_id) if isinstance(stored_scenes.get(scene_id), dict) else {}
         stored_gap = stored_entry.get("spatial_time_gap_before") if stored_entry else None
-        scene_gap = _scalar(scene_text, "spatial_time_gap_before")
-        entries.append(_scene_entry(scene_text, scene_id, rhythm, curve, stored_gap, scene_gap, stored_scenes, contract))
+        entries.append(_scene_entry(facts, rhythm, curve, stored_gap, stored_scenes, contract))
     return entries
 
 
 def _scene_entry(
-    scene_text: str,
-    scene_id: str,
+    facts: SceneFacts,
     rhythm: dict[str, Any],
     curve: dict[str, int],
     stored_gap: object,
-    scene_gap: str,
     stored_scenes: dict[str, Any],
     contract: dict[str, Any],
 ) -> dict[str, Any]:
     return {
-        "scene_id": scene_id,
-        "volume_id": _scalar(scene_text, "volume_id") or _scalar(scene_text, "volume") or "unassigned",
-        "chapter_id": _scalar(scene_text, "chapter_id") or "unassigned",
-        "title": _scalar(scene_text, "title") or scene_id,
+        "scene_id": facts.scene_id,
+        "volume_id": facts.volume_id or "unassigned",
+        "chapter_id": facts.chapter_id or "unassigned",
+        "title": facts.title or facts.scene_id,
         "pace": str(rhythm.get("pace") or "balanced"),
         "rhythm_role": str(rhythm.get("rhythm_role") or "mixed"),
         "scene_function": _strings(rhythm.get("scene_function")),
         "tension_curve": curve,
         "detail_level": str(rhythm.get("detail_level") or "standard"),
-        "word_count_target": _integer(_scalar(scene_text, "word_count_target")),
-        "timeline_order": _integer(_scalar(scene_text, "timeline_order")),
-        "story_time": _scalar(scene_text, "story_time"),
-        "spatial_time_gap_before": _positive_number(stored_gap if stored_gap not in (None, "") else scene_gap),
-        "source": "rhythm-plan" if scene_id in stored_scenes else str(contract.get("source") or "default"),
+        "word_count_target": facts.word_count_target,
+        "timeline_order": facts.timeline_order or 0,
+        "story_time": facts.story_time,
+        "spatial_time_gap_before": _positive_number(
+            stored_gap if stored_gap not in (None, "") else facts.spatial_time_gap_before
+        ),
+        "source": "rhythm-plan" if facts.scene_id in stored_scenes else str(contract.get("source") or "default"),
     }
 
 
@@ -164,7 +165,7 @@ def save_rhythm_plan(
 
 def _known_scene_ids(root: Path) -> set[str]:
     return {
-        _scalar(path.read_text(encoding="utf-8", errors="ignore"), "scene_id") or path.stem
+        load_scene_facts(path).scene_id
         for path in (root / "scenes").glob("*.yaml")
     }
 
@@ -395,19 +396,6 @@ def _strings(value: object) -> list[str]:
         return [str(item).strip() for item in value if str(item).strip()]
     text = str(value or "").strip()
     return [text] if text else []
-
-
-def _scalar(text: str, key: str) -> str:
-    import re
-    match = re.search(rf"(?m)^[ \t]*{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text)
-    return match.group(1).strip().strip("\"'") if match else ""
-
-
-def _integer(value: object) -> int:
-    try:
-        return max(0, int(str(value or "").replace(",", "")))
-    except (TypeError, ValueError):
-        return 0
 
 
 def _positive_number(value: object) -> float:

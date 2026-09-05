@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
-from ...route_audit_common import _read_json, _read_text
+from ...route_audit_common import _read_json
 from ...route_audit_evidence import _review_needs_revision
+from ...literary.scene.facts import load_scene_facts
 from ..historical_truth import preserve_current_historical_style_gates
 from ..scene_scope import started_scene_ids as _started_scene_ids
 from .scene_candidate import add_scene_candidate_gates
@@ -98,10 +98,7 @@ def _add_scene_development_gates(
 
 
 def _scene_id(scene_path: Path) -> str:
-    text = _read_text(scene_path)
-    match = re.search(r"(?m)^\s*scene_id:\s*['\"]?([^'\"\n#]+)", text)
-    scene_id = match.group(1).strip() if match else ""
-    return scene_id or scene_path.stem
+    return load_scene_facts(scene_path).scene_id
 
 
 def _unresolved_scene_review_count(root: Path) -> int:

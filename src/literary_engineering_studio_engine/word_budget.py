@@ -33,7 +33,6 @@ from .literary.planning.inventory import (
     _scan_scene_files,
     _scene_ids_for_chapter,
     _scene_inventory_binding,
-    _scene_word_count_target,
 )
 from .literary.planning.allocation import (
     _chapter_budgets,

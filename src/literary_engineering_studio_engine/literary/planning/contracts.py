@@ -13,15 +13,15 @@ from ...draft_text import (
 )
 from ...longform_materializer import longform_materialization_status
 from ...text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
+from ..scene.facts import load_scene_facts
 from .review import all_planning_reviews_pass
-from .common import _project_int, _read, _read_json, _rel, _scalar, _to_int
+from .common import _project_int, _read, _read_json, _rel, _to_int
 from .inventory import (
     _budget_issues,
     _chapter_budget_row,
     _outline_inventory,
     _scene_ids_for_chapter,
     _scene_inventory_binding,
-    _scene_word_count_target,
 )
 
 def load_word_budget_summary(root: Path, *, live: bool = False) -> dict[str, object]:
@@ -77,12 +77,12 @@ def scene_word_budget_contract(
         raise ValueError("materialization_scope must be 'full' or 'scene'")
     root = root.resolve()
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
-    scene_text = _read(scene_path)
-    scene_id = _scalar(scene_text, "scene_id") or scene_path.stem
-    chapter_id = _scalar(scene_text, "chapter_id") or "unassigned"
-    scene_yaml_target = _scene_word_count_target(scene_text)
-    scene_yaml_min = _to_int(_scalar(scene_text, "word_count_min"))
-    scene_yaml_max = _to_int(_scalar(scene_text, "word_count_max"))
+    scene_facts = load_scene_facts(scene_path)
+    scene_id = scene_facts.scene_id
+    chapter_id = scene_facts.chapter_id or "unassigned"
+    scene_yaml_target = scene_facts.word_count_target
+    scene_yaml_min = scene_facts.word_count_min
+    scene_yaml_max = scene_facts.word_count_max
     project_text = _read(root / "project.yaml")
     project_target = int(_project_int(project_text, "target_length") or _project_int(project_text, "target_words") or 0)
     required = project_target >= 100000

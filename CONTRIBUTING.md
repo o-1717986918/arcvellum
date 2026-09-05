@@ -15,7 +15,7 @@ ArcVellum is a local literary-engineering studio. Contributions should preserve 
 ## Required local checks
 
 ```powershell
-python -m unittest discover -s tests -v
+./scripts/run_tests.ps1 -v
 python -m compileall -q src
 python scripts/architecture_audit.py
 python scripts/generate_module_map.py --check

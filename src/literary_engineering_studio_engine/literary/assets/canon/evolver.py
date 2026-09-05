@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +13,7 @@ from ....agent_tasks import agent_task_completion_status, write_agent_tasks
 from ....atomic_io import atomic_write_batch
 from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
 from ....semantic_task_contracts import semantic_artifact_errors
+from ...scene.facts import load_scene_facts
 from .apply_status import canon_application_status
 from .approval import approval_matches_patch, approval_record_for_run, patch_requires_approval
 from .paths import (
@@ -689,25 +689,13 @@ def _canon_patch_item_errors(items: list[Any]) -> list[str]:
 
 
 def _scene_id(path: Path) -> str:
-    text = _read_text(path)
-    match = re.search(r"(?m)^\s*scene_id:\s*['\"]?([^'\"\n#]+)", text)
-    if match:
-        value = match.group(1).strip().strip("\"'")
-        if value:
-            return value
-    return path.stem
+    return load_scene_facts(path).scene_id
 
 
 def _resolve(root: Path, path: Path | None, default: Path) -> Path:
     if path is None:
         return default
     return path if path.is_absolute() else root / path
-
-
-def _read_text(path: Path) -> str:
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8", errors="ignore")
 
 
 def _read_json(path: Path) -> dict[str, Any]:

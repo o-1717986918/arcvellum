@@ -115,6 +115,7 @@ def _audit_payload(
             "book": rhythm_plan.get("book", {}),
         },
         "continuity_ledgers": continuity,
+        "scene_handoffs": continuity.get("scene_handoffs", {}),
         "scenes": [asdict(scene) for scene in scenes],
         "characters": characters,
         "foreshadowing": foreshadowing,

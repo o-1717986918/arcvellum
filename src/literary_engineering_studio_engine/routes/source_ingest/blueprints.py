@@ -13,11 +13,14 @@ from ...task_paths import (
     task_id,
 )
 from .support import (
+    SOURCE_INGEST_FORBIDDEN_SHORTCUTS,
+    SOURCE_INGEST_REQUIRED_READING,
     active_chunk_plan,
     candidate_outputs_from_manifest,
     evidence_path_from_manifest,
     extraction_source_paths,
     file_sha256,
+    source_ingest_contract_language,
     unique,
 )
 from .reconstruction_blueprints import (
@@ -89,7 +92,7 @@ def _task_envelope(
         "task_type": blueprint["task_type"],
         "prompt_asset_id": blueprint["prompt_asset_id"],
         "command": blueprint["command"],
-        "required_reading": blueprint.get("required_reading", _required_reading()),
+        "required_reading": blueprint.get("required_reading", SOURCE_INGEST_REQUIRED_READING),
         "source_paths": sources,
         "context_trace": blueprint.get("context_trace", ""),
         "hard_constraints": blueprint["hard_constraints"],
@@ -107,7 +110,7 @@ def _task_envelope(
             f"<project> --task-id {identifier}"
         ),
         "validation_gates": blueprint["validation_gates"],
-        "forbidden_shortcuts": _forbidden_shortcuts(),
+        "forbidden_shortcuts": SOURCE_INGEST_FORBIDDEN_SHORTCUTS,
         "next_allowed_states": blueprint["next_allowed_states"],
     }
 
@@ -211,6 +214,7 @@ def _blueprint_context(
         if isinstance(item, dict)
     ]
     return {
+        "schema": str(manifest.get("schema") or ""),
         "outputs": outputs,
         "values": list(outputs.values()),
         "review": outputs.get(
@@ -272,6 +276,9 @@ def _source_manifest_blueprint(
 def _whole_book_extraction_blueprint(
     context: dict[str, object],
 ) -> dict[str, object]:
+    source_instruction, compatibility_constraint, _ = source_ingest_contract_language(
+        str(context["schema"])
+    )
     return {
         "task_type": "platform-agent-extraction",
         "prompt_asset_id": "route.source-ingest.extract-project-files.v1",
@@ -279,7 +286,8 @@ def _whole_book_extraction_blueprint(
         "source_paths": context["sources"],
         "expected_outputs": [*context["values"], context["completion"]],
         "hard_constraints": [
-            "Read extract_project_files.agent_tasks.md and the ready archaeology aggregate before writing extracted candidates.",
+            source_instruction,
+            compatibility_constraint,
             "Preserve every unresolved alias, claim, and timeline alternative; do not silently choose a majority interpretation.",
             "Every extracted claim must include evidence_refs, confidence, unknowns, and contradiction notes when relevant.",
             "Write only candidate assets and source-ingest review; do not overwrite confirmed project files.",
@@ -301,6 +309,9 @@ def _extraction_review_blueprint(
     review = str(context["review"])
     candidate_values = [str(item) for item in context["values"]]
     candidates = [item for item in candidate_values if item != review]
+    _, _, compatibility_constraint = source_ingest_contract_language(
+        str(context["schema"])
+    )
     return {
         "task_type": "platform-agent-revision",
         "prompt_asset_id": "route.source-ingest.extraction-review.v1",
@@ -315,6 +326,7 @@ def _extraction_review_blueprint(
         "expected_outputs": [*candidates, review],
         "repair_targets": candidates,
         "hard_constraints": [
+            compatibility_constraint,
             "Revise the extracted candidate files against every review finding, then rewrite the review honestly.",
             "At least one declared extracted candidate must change; editing only the review conclusion is forbidden.",
             "The extraction review must be a clean pass before source-derived candidates are treated as route-ready.",
@@ -473,25 +485,3 @@ def _repair_blueprint(
         "validation_gates": ["source-ingest gate resolved"],
         "next_allowed_states": [],
     }
-
-
-def _required_reading() -> list[str]:
-    return [
-        "SKILL.md",
-        "AGENTS.md",
-        "agentread.yaml",
-        "references/agent-run-protocol.md",
-        "references/cli-run-protocol.md",
-        "references/artifact-contracts.md",
-        "references/workflows.md",
-    ]
-
-
-def _forbidden_shortcuts() -> list[str]:
-    return [
-        "Do not write source-derived material directly into canon, character, plot, draft, export, or release files.",
-        "Do not treat extracted claims as confirmed facts without evidence_refs, confidence, unknowns, contradiction notes, review, and approval.",
-        "Do not skip extract_project_files.agent_tasks.md after source-ingest creates it.",
-        "Do not copy long source passages into extraction reports.",
-        "Do not treat this task as complete until task-submit and task-complete have succeeded.",
-    ]

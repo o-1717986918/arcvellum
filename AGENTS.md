@@ -41,7 +41,7 @@ These Worker rules describe product execution. They do not authorize code Agents
 ## Verification
 
 ```powershell
-python -m unittest discover -s tests -v
+./scripts/run_tests.ps1 -v
 python -m literary_engineering_studio doctor
 python -m literary_engineering_studio --help
 python scripts/architecture_audit.py

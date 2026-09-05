@@ -45,6 +45,45 @@ class SourceIngestRouteTests(unittest.TestCase):
             self.assertEqual(payload["repair_targets"], ["plot/candidates/extracted/work-a_outline.md"])
             self.assertIn("plot/candidates/extracted/work-a_outline.md", payload["repair_target_sha256_before_revision"])
             self.assertNotIn("canon/world_rules.yaml", payload["expected_outputs"])
+            self.assertTrue(
+                any("migration-only" in item for item in payload["hard_constraints"])
+            )
+
+    def test_legacy_extraction_reads_chunks_without_claiming_an_archaeology_aggregate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            import_dir = root / "sources/imports/work-a"
+            import_dir.mkdir(parents=True)
+            (import_dir / "source_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/source-ingest/v1",
+                        "work_id": "work-a",
+                        "chunks": [
+                            {"path": "sources/imports/work-a/chunks/chunk_0001.md"}
+                        ],
+                        "candidate_outputs": {
+                            "review": "reviews/source_ingest/work-a_extraction_review.md"
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = build_task_payload(
+                root,
+                "source-ingest",
+                {
+                    "work_id": "work-a",
+                    "import_dir": "sources/imports/work-a",
+                    "current_step": "extraction-agent-task",
+                },
+            )
+
+            constraints = "\n".join(payload["hard_constraints"])
+            self.assertIn("legacy source chunks", constraints)
+            self.assertIn("migration-only", constraints)
+            self.assertNotIn("ready archaeology aggregate", constraints)
 
     def test_validation_requires_completion_and_clean_review_before_route_can_advance(self):
         with tempfile.TemporaryDirectory() as temporary:

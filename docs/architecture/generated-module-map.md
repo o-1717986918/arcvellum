@@ -7,13 +7,13 @@
 |---|---:|---|---|---|---|
 | `src/literary_engineering_studio_engine/foundation` | 11 | Engine foundation | `package exports` | standard library | Studio runtime or UI |
 | `src/literary_engineering_studio_engine/tasking` | 21 | Formal task contracts | `tasking/__init__.py` | Engine foundation | Agent execution |
-| `src/literary_engineering_studio_engine/routes` | 52 | Formal route catalog | `routes/catalog.py` | tasking and literary services | Studio lifecycle |
+| `src/literary_engineering_studio_engine/routes` | 53 | Formal route catalog | `routes/catalog.py` | tasking and literary services | Studio lifecycle |
 | `src/literary_engineering_studio_engine/workflow` | 36 | Workflow projections | `workflow_state facade` | tasking and routes | Runtime adapters |
-| `src/literary_engineering_studio_engine/literary` | 169 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
+| `src/literary_engineering_studio_engine/literary` | 173 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
 | `src/literary_engineering_studio_engine/prompting` | 11 | Prompt programs | `prompt registry/compiler` | literary contracts | Provider transport |
 | `src/literary_engineering_studio_engine/orchestration` | 6 | Read-only orchestration catalog | `orchestration/__init__.py` | task and Gate catalogs | Planner execution |
 | `src/literary_engineering_studio_engine/projections` | 17 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |
-| `src/literary_engineering_studio_engine/command_line` | 24 | Engine CLI adapter | `command_line/main.py` | Engine public services | literary business rules |
+| `src/literary_engineering_studio_engine/command_line` | 25 | Engine CLI adapter | `command_line/main.py` | Engine public services | literary business rules |
 | `src/literary_engineering_studio/application` | 51 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
 | `src/literary_engineering_studio/automation` | 13 | Campaign control | `automation/controller.py` | application/runtime ports | Engine route implementations |
 | `src/literary_engineering_studio/orchestration` | 51 | Adaptive plan domain | `orchestration services` | Engine catalog and ports | API or task lifecycle |

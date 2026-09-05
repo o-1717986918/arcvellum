@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
 from .context_contract import scene_context_contract
 from ...tasking.state_contracts import SCENE_REVISION_STATES
 from ...literary.review.chapter_obligation_machine import chapter_obligation_machine_contract
+from ...literary.scene.facts import load_scene_facts
 from ...literary.scene.promotion.historical_context import (
     historical_revision_reading_paths,
     historical_revision_source_paths,
@@ -141,20 +141,20 @@ def _scene_word_count_contract(root: Path, scene_rel: str, blueprint: dict[str, 
     while preserving any route-specific explicit override.
     """
 
-    text = _resolve_project_path(root, scene_rel).read_text(encoding="utf-8", errors="ignore")
+    scene_path = _resolve_project_path(root, scene_rel)
+    facts = load_scene_facts(scene_path) if scene_path.is_file() else None
 
-    def value(key: str, fallback: object) -> int:
-        match = re.search(rf"(?m)^\s*{re.escape(key)}:\s*['\"]?([0-9][0-9,_]*)", text)
-        raw = match.group(1) if match else fallback
+    def value(scene_value: int, fallback: object) -> int:
+        raw = scene_value or fallback
         try:
             return max(0, int(str(raw or 0).replace(",", "").replace("_", "")))
         except (TypeError, ValueError):
             return 0
 
     return (
-        value("word_count_target", blueprint.get("word_count_target", 0)),
-        value("word_count_min", blueprint.get("word_count_min", 0)),
-        value("word_count_max", blueprint.get("word_count_max", 0)),
+        value(facts.word_count_target if facts else 0, blueprint.get("word_count_target", 0)),
+        value(facts.word_count_min if facts else 0, blueprint.get("word_count_min", 0)),
+        value(facts.word_count_max if facts else 0, blueprint.get("word_count_max", 0)),
     )
 
 
@@ -202,10 +202,10 @@ def _agent_reading_paths(root: Path, source_paths: list[str], *, current_state: 
 
     if current_state in prose_states:
         scene_path = _resolve_project_path(root, f"scenes/{scene_id}.yaml")
-        scene_text = scene_path.read_text(encoding="utf-8", errors="ignore") if scene_path.is_file() else ""
-        chapter_match = re.search(r"(?m)^\s*(?:chapter_obligation_id|chapter_id):\s*['\"]?([^'\"\n#]+)", scene_text)
-        if chapter_match:
-            prose_minimum.add(f"plot/chapter_obligations/{chapter_match.group(1).strip().strip(chr(34)).strip(chr(39))}.json")
+        facts = load_scene_facts(scene_path) if scene_path.is_file() else None
+        chapter_id = (facts.chapter_obligation_id or facts.chapter_id) if facts else ""
+        if chapter_id:
+            prose_minimum.add(f"plot/chapter_obligations/{chapter_id}.json")
         return _unique([relative for relative in prose_minimum if (root / relative).is_file()])
 
     curated: list[str] = []
@@ -304,7 +304,7 @@ def _reader_experience_reading_paths(root: Path, scene_id: str) -> list[str]:
         *(
             _normalize_rel(path.relative_to(root))
             for path in sorted((root / "scenes").glob("*.yaml"))
-            if _yaml_scalar(path, "chapter_id") == chapter_id
+            if load_scene_facts(path).chapter_id == chapter_id
         ),
     ]
     return _unique(
@@ -317,13 +317,8 @@ def _reader_experience_reading_paths(root: Path, scene_id: str) -> list[str]:
 
 
 def _scene_chapter_id(root: Path, scene_id: str) -> str:
-    return _yaml_scalar(root / "scenes" / f"{scene_id}.yaml", "chapter_id") or "chapter_0001"
-
-
-def _yaml_scalar(path: Path, key: str) -> str:
-    text = path.read_text(encoding="utf-8", errors="ignore") if path.is_file() else ""
-    match = re.search(rf"(?m)^\s*{re.escape(key)}:\s*['\"]?([^'\"\n#]+)", text)
-    return match.group(1).strip().strip("\"'") if match else ""
+    path = root / "scenes" / f"{scene_id}.yaml"
+    return (load_scene_facts(path).chapter_id if path.is_file() else "") or "chapter_0001"
 
 
 def _is_revision_input(

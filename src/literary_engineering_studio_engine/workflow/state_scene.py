@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-import re
 
 from ..character_state_apply import state_patch_writeback_status
 from ..candidate_promotion import candidate_generation_gate, candidate_review_gate
@@ -16,6 +15,7 @@ from ..reader_experience import reader_experience_contract
 from ..scene_character_assets import scene_character_asset_requirements
 from ..scene_composer import composition_input_digest
 from ..literary.scene.promotion.historical_readiness import static_review_evidence
+from ..literary.scene.facts import load_scene_facts
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..word_budget import scene_word_budget_contract
 from .historical_truth import candidate_supersedes_promotion
@@ -575,10 +575,4 @@ def _latest_scene_candidate(root: Path, scene_id: str) -> Path | None:
 
 
 def _scene_id(path: Path) -> str:
-    text = _read(path)
-    match = re.search(r"(?m)^\s*scene_id:\s*['\"]?([^'\"\n#]+)", text)
-    if match:
-        scene_id = match.group(1).strip().strip("\"'")
-        if scene_id:
-            return scene_id
-    return path.stem
+    return load_scene_facts(path).scene_id

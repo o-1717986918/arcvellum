@@ -33,7 +33,17 @@
 - 本批同步拆分 CLI parser、Canon approval/apply status、Scene writeback gates、handoff 构造与长篇审查蓝图；架构审计重新达到零新增违规。
 - 最终验收：Prompt Registry 59 个资产覆盖 73 个任务提示词 ID；架构审计 `ok: true`；全量回归 `1332 tests passed, 1 skipped`。
 
-后续批次从本文 P2 项继续，不回退本批建立的审查权威和身份边界。
+第三批源码修复完成了 Batch 5 的权威收敛与兼容清理：
+
+- Longform Audit 已将 Scene Handoff 纳入正式快照、摘要和阻断项，并检查相邻场景之间的宏观因果桥；缺失、失效或未覆盖下一场的 handoff 会进入长篇审计结果。
+- 对外 Task Package 不再暴露 `next_allowed_states`。下一状态继续由 workflow artifact、Gate 和 route state 推导，Blueprint 内部的声明只作装配提示，不形成第二套状态机权威。
+- Scene YAML 统一由 `literary/scene/facts.py` 的 ruamel YAML 边界解析。Context、Scene Route、节奏、字数预算、读者体验、Prompt、人物状态、Canon 和长篇分析不再各自用正则解释同一份正式场景文件。
+- 统一解析器保留两项既有公开语义：精简沙箱没有 Scene YAML 时返回可诊断的空事实投影；叙事节奏契约中的 YAML 标量继续按历史字符串类型输出。
+- `source-ingest/v2` 仍是所有新导入的默认正式路线。v1 被显式标记为 `migration-only`，任务只读取旧 source chunks 与 evidence index，不再错误要求不存在的 archaeology aggregate；旧项目继续保留候选区、修订和 clean-pass 门禁。
+- 删除未接入的 Export audit helper；新增 checkout import 验证和 PowerShell/Bash 统一测试入口，文档不再建议直接调用可能命中其他 editable checkout 的全局 Python。
+- Architecture Audit 保持 `16` 个既有 file debts、`104` 个既有 function debts、`0` 新增循环和 `0` Studio-to-Engine 反向依赖；Prompt Registry 仍以 `59` 个资产覆盖 `73` 个任务提示词 ID。
+
+第三批最终验收：checkout 验证确认 Studio 与 Engine 均加载当前工作树；全量回归 `1339 tests passed, 1 skipped`。后续批次不得恢复手写 Scene YAML 解析器、公开下一状态提示或 Legacy v1 新建入口。
 
 ---
 

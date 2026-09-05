@@ -9,15 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-import re
 
 from ....platform_agent_tasks import write_platform_asset_creation_task
 from ...assets.character_identity import (
-    character_field_value,
     character_slug,
     formal_character_aliases,
-    read_character_text,
 )
+from ..facts import load_scene_facts
 
 
 @dataclass(frozen=True)
@@ -56,12 +54,12 @@ def scene_character_asset_requirements(project_root: Path, scene_path: Path) -> 
 
     root = project_root.resolve()
     resolved_scene = scene_path if scene_path.is_absolute() else root / scene_path
-    scene_text = read_character_text(resolved_scene)
+    scene_facts = load_scene_facts(resolved_scene)
     aliases = formal_character_aliases(root)
-    scene_id = _scene_id(resolved_scene, scene_text)
+    scene_id = scene_facts.scene_id
     requirements: list[SceneCharacterAssetRequirement] = []
     used_ids: set[str] = set()
-    for name in _list_value(scene_text, "participants"):
+    for name in scene_facts.participants:
         normalized = name.strip()
         if not normalized or normalized in aliases or character_slug(normalized) in aliases:
             continue
@@ -105,10 +103,6 @@ def ensure_scene_character_asset_tasks(project_root: Path, scene_path: Path) -> 
     return requirements
 
 
-def _scene_id(path: Path, text: str) -> str:
-    return character_field_value(text, "scene_id") or path.stem
-
-
 def _stable_candidate_id(scene_id: str, name: str, used_ids: set[str]) -> str:
     base = character_slug(f"{scene_id}-{name}")[:72] or "scene-character"
     candidate_id = base
@@ -118,31 +112,6 @@ def _stable_candidate_id(scene_id: str, name: str, used_ids: set[str]) -> str:
         index += 1
     used_ids.add(candidate_id)
     return candidate_id
-
-
-def _list_value(text: str, key: str) -> list[str]:
-    inline = re.search(rf"(?m)^\s*{re.escape(key)}:\s*\[(.*?)\]\s*$", text)
-    if inline:
-        return [item.strip().strip("'\"") for item in inline.group(1).split(",") if item.strip()]
-    values: list[str] = []
-    in_block = False
-    base_indent = 0
-    for line in text.splitlines():
-        if re.match(rf"^\s*{re.escape(key)}:\s*$", line):
-            in_block = True
-            base_indent = len(line) - len(line.lstrip())
-            continue
-        if not in_block:
-            continue
-        stripped = line.strip()
-        indent = len(line) - len(line.lstrip())
-        if stripped and indent <= base_indent and not stripped.startswith("-"):
-            break
-        if stripped.startswith("-"):
-            value = stripped[1:].strip().strip("'\"")
-            if value:
-                values.append(value)
-    return values
 
 
 def _rel(path: Path, root: Path) -> str:
