@@ -141,7 +141,7 @@ Route Domain
 任务：
 
 - 新增 `TaskIdentity`、`TaskIntent`、`TaskResourceRef`、`EngineOperation`、`OutputContract`、`TaskLifecycle`、`TaskSpec`；
-- 提供 `TaskSpec.from_v1_payload()` 与 `to_v1_payload()`；
+- 提供 `parse_task_document()` 与 `TaskSpec.to_v1_payload()`；
 - 让 Studio `TaskPackage` 从类型对象投影公开属性，同时保留兼容 raw payload；
 - 在 Route builder 边界逐步接入类型 IR；
 - 增加不可变性、规范化、round-trip 和错误定位测试。
@@ -289,7 +289,7 @@ Route Domain
 - [x] 确认任务协议已具有显式 execution/output contract，避免重复建设；
 - [x] 确定先做 TD-0、TD-1，再改程序执行协议；
 - [x] TD-0 兼容基线；
-- [ ] TD-1 内部强类型 Task IR；
+- [x] TD-1 内部强类型 Task IR；
 - [ ] TD-2 结构化 Engine Operation。
 
 ### 2026-09-05：TD-0 完成
@@ -308,3 +308,22 @@ Route Domain
 - task audit/completion/preflight/lifecycle 定向测试：46 项通过；
 - verify_compatibility_surface.py：通过；
 - verify_checkout_import.py：通过。
+
+### 2026-09-05：TD-1 完成
+
+- [x] 新增不可变 `TaskSpec`、`TaskLifecycle`、`TaskDocument`、`TaskIdentity`、`TaskIntent`、`TaskResourceRef` 与 `EngineOperation`；
+- [x] 将协议规范、可变生命周期、资源引用和执行操作在内存模型中分离；
+- [x] 通过 `parse_task_document()` 读取 v1 字典，并保留无损 `to_v1_payload()` 回写；
+- [x] Studio `TaskPackage` 通过 typed IR 投影正式属性，同时兼容现有测试中的 payload 生命周期更新；
+- [x] 将 Studio 与 Engine 共用的执行契约类型集中到 Engine 公共 tasking 接口，删除重复推导实现；
+- [x] 拆分模型、v1 适配和稳定导出面，避免引入新的大文件、复杂函数与循环依赖。
+
+验证：
+
+- test_task_spec.py：5 项通过；
+- test_contracts.py：13 项通过；
+- test_task_contract_transport.py：44 项通过；
+- test_task_preflight.py：37 项通过；
+- test_prompt_program_v3.py：37 项通过；
+- scripts/architecture_audit.py：通过，债务基线未增加；
+- git diff --check：通过。

@@ -13,40 +13,19 @@ from .protocols.task_context import (
 from .protocols.review_context import (
     validate_optional_review_context_declaration as _validate_optional_review_context_declaration,
 )
+from literary_engineering_studio_engine.public.tasking import (
+    HumanGate,
+    OutputContract,
+    TaskDocument,
+    TaskExecutionContract,
+    TaskLifecycle,
+    TaskSpec,
+    derive_execution_policy,
+    parse_output_contracts,
+    parse_task_document,
+)
 
 TASK_SCHEMA = "literary-engineering-workbench/agent-task/v1"
-EXECUTION_CONTRACT_SCHEMA = "literary-engineering-studio/task-execution/v0.3"
-HUMAN_GATE_TOKENS = (
-    "human-choice",
-    "human_approval",
-    "approval",
-    "canon-apply",
-    "state-apply",
-    "release-approval",
-    "publish-approval",
-)
-
-HIGH_IMPACT_PREFIXES = (
-    "canon/",
-    "characters/",
-    "drafts/scenes/",
-    "manuscript/",
-    "releases/",
-    "state/",
-)
-
-CREATIVE_TASK_TOKENS = (
-    "prose",
-    "compose",
-    "roleplay",
-    "branch",
-    "style",
-    "extract",
-    "review",
-    "canon",
-    "character",
-    "world",
-)
 EXPLICIT_EXECUTION_FIELDS = {
     "execution_policy",
     "agent_role",
@@ -67,70 +46,6 @@ PROMPT_ASSET_LIST_FIELDS = (
 
 
 @dataclass(frozen=True)
-class HumanGate:
-    required: bool
-    reasons: tuple[str, ...]
-    source: str
-
-    def as_dict(self) -> dict[str, Any]:
-        return {"required": self.required, "reasons": list(self.reasons), "source": self.source}
-
-
-@dataclass(frozen=True)
-class OutputContract:
-    path: str
-    kind: str
-    writeback_policy: str
-    schema_name: str = ""
-    consumed_by: str = ""
-
-    def as_dict(self) -> dict[str, str]:
-        result = {
-            "path": self.path,
-            "kind": self.kind,
-            "writeback_policy": self.writeback_policy,
-        }
-        if self.schema_name:
-            result["schema_name"] = self.schema_name
-        if self.consumed_by:
-            result["consumed_by"] = self.consumed_by
-        return result
-
-
-@dataclass(frozen=True)
-class TaskExecutionContract:
-    execution_policy: str
-    agent_role: str
-    human_gate: HumanGate
-    runtime_capabilities_required: tuple[str, ...]
-    outputs: tuple[OutputContract, ...]
-    compatibility_derived: bool
-
-    @property
-    def writeback_policy(self) -> str:
-        policies = {item.writeback_policy for item in self.outputs}
-        if "approval-required" in policies:
-            return "approval-required"
-        if "preview-required" in policies:
-            return "preview-required"
-        if "automatic" in policies:
-            return "automatic"
-        return "none"
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "schema": EXECUTION_CONTRACT_SCHEMA,
-            "execution_policy": self.execution_policy,
-            "agent_role": self.agent_role,
-            "human_gate": self.human_gate.as_dict(),
-            "runtime_capabilities_required": list(self.runtime_capabilities_required),
-            "outputs": [item.as_dict() for item in self.outputs],
-            "writeback_policy": self.writeback_policy,
-            "compatibility_derived": self.compatibility_derived,
-        }
-
-
-@dataclass(frozen=True)
 class TaskPackage:
     project_root: Path
     task_json_path: Path
@@ -139,35 +54,55 @@ class TaskPackage:
 
     @property
     def task_id(self) -> str:
-        return str(self.payload["task_id"])
+        return self.task_spec.identity.task_id
 
     @property
     def route(self) -> str:
-        return str(self.payload.get("route") or "")
+        return self.task_spec.identity.route
+
+    @property
+    def scene_id(self) -> str:
+        return self.task_spec.identity.scene_id
 
     @property
     def current_state(self) -> str:
-        return str(self.payload.get("current_state") or "")
+        return self.task_spec.intent.current_state
 
     @property
     def task_type(self) -> str:
-        return str(self.payload.get("task_type") or "").strip()
+        return self.task_spec.intent.task_type
 
     @property
     def command(self) -> str:
-        return str(self.payload.get("command") or "").strip()
+        operation = self.task_spec.operations.prepare
+        return operation.display_command if operation else ""
 
     @property
     def source_paths(self) -> tuple[str, ...]:
-        return tuple(str(item) for item in self.payload.get("source_paths") or [])
+        return tuple(item.path for item in self.task_spec.source_paths)
 
     @property
     def required_reading(self) -> tuple[str, ...]:
-        return tuple(str(item) for item in self.payload.get("required_reading") or [])
+        return tuple(item.path for item in self.task_spec.required_reading)
 
     @property
     def expected_outputs(self) -> tuple[str, ...]:
-        return tuple(str(item) for item in self.payload.get("expected_outputs") or [])
+        return tuple(item.path for item in self.task_spec.outputs)
+
+    @property
+    def task_document(self) -> TaskDocument:
+        return parse_task_document(
+            self.payload,
+            normalize_path=normalize_relative_path,
+        )
+
+    @property
+    def task_spec(self) -> TaskSpec:
+        return self.task_document.spec
+
+    @property
+    def lifecycle(self) -> TaskLifecycle:
+        return self.task_document.lifecycle
 
     @property
     def semantic_artifact(self) -> dict[str, str]:
@@ -191,20 +126,7 @@ class TaskPackage:
 
     @property
     def human_gate(self) -> HumanGate:
-        explicit = self.payload.get("human_gate")
-        if isinstance(explicit, dict) and isinstance(explicit.get("required"), bool):
-            reasons = tuple(str(item) for item in explicit.get("reasons") or [] if str(item).strip())
-            source = str(explicit.get("source") or "task-package")
-            return HumanGate(bool(explicit["required"]), reasons, source)
-        haystack = " ".join(
-            [
-                self.current_state,
-                str(self.payload.get("task_type") or ""),
-                str(self.payload.get("prompt_asset_id") or ""),
-            ]
-        ).lower()
-        reasons = tuple(token for token in HUMAN_GATE_TOKENS if token in haystack)
-        return HumanGate(bool(reasons), reasons, "compatibility-inference")
+        return self.task_spec.execution.human_gate
 
     @property
     def human_gate_reasons(self) -> tuple[str, ...]:
@@ -212,37 +134,7 @@ class TaskPackage:
 
     @property
     def execution_contract(self) -> TaskExecutionContract:
-        explicit_policy = str(self.payload.get("execution_policy") or "").strip()
-        explicit_role = str(self.payload.get("agent_role") or "").strip()
-        explicit_capabilities = self.payload.get("runtime_capabilities_required")
-        explicit_outputs = self.payload.get("output_contracts")
-        compatibility_derived = not (
-            explicit_policy
-            and explicit_role
-            and isinstance(explicit_capabilities, list)
-            and isinstance(explicit_outputs, list)
-            and isinstance(self.payload.get("human_gate"), dict)
-        )
-        policy = explicit_policy or _derive_execution_policy(self.payload, self.human_gate)
-        role = explicit_role or _derive_agent_role(self.payload, policy)
-        capabilities = (
-            tuple(str(item) for item in explicit_capabilities if str(item).strip())
-            if isinstance(explicit_capabilities, list)
-            else _derive_capabilities(policy, self.expected_outputs)
-        )
-        outputs = (
-            _parse_output_contracts(explicit_outputs)
-            if isinstance(explicit_outputs, list)
-            else tuple(_derive_output_contract(path, policy) for path in self.expected_outputs)
-        )
-        return TaskExecutionContract(
-            execution_policy=policy,
-            agent_role=role,
-            human_gate=self.human_gate,
-            runtime_capabilities_required=capabilities,
-            outputs=outputs,
-            compatibility_derived=compatibility_derived,
-        )
+        return self.task_spec.execution
 
     def resolve_project_path(self, relative: str) -> Path:
         normalized = normalize_relative_path(relative)
@@ -371,7 +263,10 @@ def _validate_execution_output_fields(payload: dict[str, Any]) -> None:
         if field in payload and not isinstance(payload[field], list):
             raise ValueError(f"task package field must be a list: {field}")
     if "output_contracts" in payload:
-        _parse_output_contracts(payload["output_contracts"])
+        parse_output_contracts(
+            payload["output_contracts"],
+            normalize_path=normalize_relative_path,
+        )
 
 
 def _validate_semantic_artifact(payload: dict[str, Any]) -> None:
@@ -405,85 +300,4 @@ def _validate_prompt_asset(payload: dict[str, Any]) -> None:
 
 
 def _derive_execution_policy(payload: dict[str, Any], human_gate: HumanGate) -> str:
-    if human_gate.required:
-        return "human-required"
-    task_type = str(payload.get("task_type") or "").lower()
-    prompt_id = str(payload.get("prompt_asset_id") or "").lower()
-    if task_type == "deterministic-cli":
-        return "deterministic"
-    if "deterministic-cli-plus-platform-review" in task_type:
-        return "agent-required"
-    if "platform-agent" in task_type or prompt_id:
-        return "agent-required"
-    if str(payload.get("command") or "").strip():
-        return "deterministic"
-    return "agent-required"
-
-
-def _derive_agent_role(payload: dict[str, Any], policy: str) -> str:
-    if policy == "human-required":
-        return "human-decision"
-    if policy == "deterministic":
-        return "deterministic-engine"
-    haystack = " ".join(
-        [
-            str(payload.get("task_type") or ""),
-            str(payload.get("prompt_asset_id") or ""),
-            str(payload.get("current_state") or ""),
-        ]
-    ).lower()
-    if "review" in haystack or "audit" in haystack:
-        return "main-review-agent"
-    if any(token in haystack for token in CREATIVE_TASK_TOKENS):
-        return "main-creative-agent"
-    return "main-agent"
-
-
-def _derive_capabilities(policy: str, outputs: tuple[str, ...]) -> tuple[str, ...]:
-    if policy == "human-required":
-        return ()
-    if policy == "deterministic":
-        return ("deterministic-command",)
-    values = ["read-task-sources"]
-    if outputs:
-        values.append("write-expected-outputs")
-    return tuple(values)
-
-
-def _derive_output_contract(path: str, execution_policy: str) -> OutputContract:
-    normalized = str(normalize_relative_path(path))
-    lower = normalized.lower()
-    if lower.endswith(".agent_tasks.md"):
-        kind = "deterministic"
-        policy = "automatic"
-    elif lower.endswith("agent_completion.json") or ".agent_completion." in lower:
-        kind = "completion-evidence"
-        policy = "automatic"
-    elif "approval" in lower or lower.startswith("decisions/"):
-        kind = "human-approval"
-        policy = "approval-required"
-    elif execution_policy == "deterministic":
-        kind = "deterministic"
-        policy = "automatic"
-    else:
-        kind = "agent-authored"
-        policy = "approval-required" if lower.startswith(HIGH_IMPACT_PREFIXES) else "preview-required"
-    return OutputContract(normalized, kind, policy)
-
-
-def _parse_output_contracts(values: list[Any]) -> tuple[OutputContract, ...]:
-    parsed: list[OutputContract] = []
-    for value in values:
-        if not isinstance(value, dict):
-            raise ValueError("task package output_contracts entries must be objects")
-        path = str(value.get("path") or "").strip()
-        kind = str(value.get("kind") or "").strip()
-        policy = str(value.get("writeback_policy") or "").strip()
-        if not path or not kind or policy not in {"automatic", "preview-required", "approval-required", "none"}:
-            raise ValueError("invalid task package output contract")
-        schema_name = str(value.get("schema_name") or "").strip()
-        consumed_by = str(value.get("consumed_by") or "").strip()
-        if bool(schema_name) != bool(consumed_by):
-            raise ValueError("semantic output contracts require both schema_name and consumed_by")
-        parsed.append(OutputContract(str(normalize_relative_path(path)), kind, policy, schema_name, consumed_by))
-    return tuple(parsed)
+    return derive_execution_policy(payload, human_gate)
