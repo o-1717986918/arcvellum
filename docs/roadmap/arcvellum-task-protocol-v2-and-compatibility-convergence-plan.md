@@ -288,7 +288,23 @@ Route Domain
 - [x] 盘点旧命名、兼容 facade、禁用命令和打包资源风险；
 - [x] 确认任务协议已具有显式 execution/output contract，避免重复建设；
 - [x] 确定先做 TD-0、TD-1，再改程序执行协议；
-- [ ] TD-0 兼容基线；
+- [x] TD-0 兼容基线；
 - [ ] TD-1 内部强类型 Task IR；
 - [ ] TD-2 结构化 Engine Operation。
 
+### 2026-09-05：TD-0 完成
+
+- [x] 为七条正式 Route 建立 v1 协议外壳 golden fixture；
+- [x] 冻结 execution policy、Agent role、capability、human gate、output policy、completion receipt 与 fingerprint；
+- [x] 验证可变 lifecycle 字段不会改变 TaskSpec fingerprint；
+- [x] 使用 scripts/run_tests.ps1 强制源码 checkout，排除同级旧 editable install 污染；
+- [x] 兼容面校验通过；
+- [x] 架构审计通过，冻结基线为 16 个超大 Python 文件、104 个复杂函数、0 循环依赖、0 反向依赖。
+
+验证：
+
+- test_task_protocol_v1_golden.py：3 项通过；
+- test_task_contract_transport.py：44 项通过；
+- task audit/completion/preflight/lifecycle 定向测试：46 项通过；
+- verify_compatibility_surface.py：通过；
+- verify_checkout_import.py：通过。

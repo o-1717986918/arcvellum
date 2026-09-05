@@ -1,0 +1,249 @@
+{
+  "schema": "arcvellum/test-fixture/task-protocol-v1-routes/v1",
+  "cases": [
+    {
+      "name": "scene-development",
+      "payload": {
+        "schema": "literary-engineering-workbench/agent-task/v1",
+        "task_id": "scene-development-scene-0001-prose-generation",
+        "status": "issued",
+        "route": "scene-development",
+        "scene_id": "scene_0001",
+        "current_state": "prose-generation",
+        "task_type": "main-platform-agent-prose",
+        "prompt_asset_id": "route.scene-development.prose.generate.v1",
+        "command": "",
+        "required_reading": [],
+        "source_paths": ["scenes/scene_0001.yaml"],
+        "expected_outputs": [
+          "drafts/candidates/scene_0001-platform-agent.md",
+          "drafts/candidates/scene_0001-platform-agent.agent_completion.json"
+        ],
+        "submission_command": "python -m literary_engineering_studio_engine task-submit <project> --task-id scene-development-scene-0001-prose-generation --from <artifact>",
+        "completion_command": "python -m literary_engineering_studio_engine task-complete <project> --task-id scene-development-scene-0001-prose-generation",
+        "validation_gates": ["candidate exists"],
+        "forbidden_shortcuts": ["do not bypass review"]
+      },
+      "expected": {
+        "execution_policy": "agent-required",
+        "agent_role": "main-creative-agent",
+        "runtime_capabilities_required": ["read-task-sources", "write-expected-outputs"],
+        "human_gate_required": false,
+        "output_policies": {
+          "drafts/candidates/scene_0001-platform-agent.md": "preview-required",
+          "drafts/candidates/scene_0001-platform-agent.agent_completion.json": "automatic"
+        },
+        "completion_receipts": 1,
+        "fingerprint": "6bae63879a1856af5acf8f8f3f7742318fd5d89e775c4909b12f6caacba27f15"
+      }
+    },
+    {
+      "name": "longform-planning",
+      "payload": {
+        "schema": "literary-engineering-workbench/agent-task/v1",
+        "task_id": "longform-planning-work-word-budget",
+        "status": "issued",
+        "route": "longform-planning",
+        "scene_id": "work",
+        "current_state": "word-budget",
+        "task_type": "deterministic-cli",
+        "prompt_asset_id": "route.longform-planning.word-budget.prepare.v1",
+        "command": "python -m literary_engineering_studio_engine word-budget <project>",
+        "required_reading": [],
+        "source_paths": ["project.yaml"],
+        "expected_outputs": ["plot/word_budget/word_budget.json"],
+        "submission_command": "python -m literary_engineering_studio_engine task-submit <project> --task-id longform-planning-work-word-budget --from <artifact>",
+        "completion_command": "python -m literary_engineering_studio_engine task-complete <project> --task-id longform-planning-work-word-budget",
+        "validation_gates": ["budget is valid"],
+        "forbidden_shortcuts": []
+      },
+      "expected": {
+        "execution_policy": "deterministic",
+        "agent_role": "deterministic-engine",
+        "runtime_capabilities_required": ["deterministic-command"],
+        "human_gate_required": false,
+        "output_policies": {
+          "plot/word_budget/word_budget.json": "automatic"
+        },
+        "completion_receipts": 0,
+        "fingerprint": "4fab94c18ac48c71548a6cb3d442bafb06e20f3be1abb31f434bdeae3647497f"
+      }
+    },
+    {
+      "name": "source-ingest",
+      "payload": {
+        "schema": "literary-engineering-workbench/agent-task/v1",
+        "task_id": "source-ingest-work-001-extract",
+        "status": "issued",
+        "route": "source-ingest",
+        "scene_id": "work-001",
+        "current_state": "extract-project-files",
+        "task_type": "platform-agent-extraction",
+        "prompt_asset_id": "route.source-ingest.extract-project-files.v1",
+        "command": "",
+        "required_reading": [],
+        "source_paths": ["sources/imports/work-001/manifest.json"],
+        "expected_outputs": [
+          "canon/candidates/source-work-001.json",
+          "sources/imports/work-001/extract_project_files.agent_completion.json"
+        ],
+        "submission_command": "python -m literary_engineering_studio_engine task-submit <project> --task-id source-ingest-work-001-extract --from <artifact>",
+        "completion_command": "python -m literary_engineering_studio_engine task-complete <project> --task-id source-ingest-work-001-extract",
+        "validation_gates": ["evidence is cited"],
+        "forbidden_shortcuts": ["do not promote extracted facts"]
+      },
+      "expected": {
+        "execution_policy": "agent-required",
+        "agent_role": "main-creative-agent",
+        "runtime_capabilities_required": ["read-task-sources", "write-expected-outputs"],
+        "human_gate_required": false,
+        "output_policies": {
+          "canon/candidates/source-work-001.json": "approval-required",
+          "sources/imports/work-001/extract_project_files.agent_completion.json": "automatic"
+        },
+        "completion_receipts": 1,
+        "fingerprint": "c62cb6a641eaef4768363e5f7371395d9bcb7d81ef544deb4ab7fd6d2c70c41f"
+      }
+    },
+    {
+      "name": "style-engineering",
+      "payload": {
+        "schema": "literary-engineering-workbench/agent-task/v1",
+        "task_id": "style-engineering-plain-style-prompt",
+        "status": "issued",
+        "route": "style-engineering",
+        "scene_id": "plain-style",
+        "current_state": "style-prompt-agent-task",
+        "task_type": "platform-agent-style-prompt",
+        "prompt_asset_id": "route.style-engineering.prompt.execute.v1",
+        "command": "",
+        "required_reading": [],
+        "source_paths": ["style/profiles/plain-style.json"],
+        "expected_outputs": [
+          "style/prompts/plain-style.md",
+          "style/prompts/plain-style.agent_completion.json"
+        ],
+        "submission_command": "python -m literary_engineering_studio_engine task-submit <project> --task-id style-engineering-plain-style-prompt --from <artifact>",
+        "completion_command": "python -m literary_engineering_studio_engine task-complete <project> --task-id style-engineering-plain-style-prompt",
+        "validation_gates": ["prompt length is valid"],
+        "forbidden_shortcuts": ["do not mount before review"]
+      },
+      "expected": {
+        "execution_policy": "agent-required",
+        "agent_role": "main-creative-agent",
+        "runtime_capabilities_required": ["read-task-sources", "write-expected-outputs"],
+        "human_gate_required": false,
+        "output_policies": {
+          "style/prompts/plain-style.md": "preview-required",
+          "style/prompts/plain-style.agent_completion.json": "automatic"
+        },
+        "completion_receipts": 1,
+        "fingerprint": "8b0c93934a3b3427728338f121ba95d53f103615b19b40b0557cbad71f3a7ce1"
+      }
+    },
+    {
+      "name": "character-and-world-assets",
+      "payload": {
+        "schema": "literary-engineering-workbench/agent-task/v1",
+        "task_id": "character-and-world-assets-protagonist-create",
+        "status": "issued",
+        "route": "character-and-world-assets",
+        "scene_id": "protagonist",
+        "current_state": "asset-creation",
+        "task_type": "platform-agent-asset-creation",
+        "prompt_asset_id": "route.character-world-assets.create.v1",
+        "command": "",
+        "required_reading": [],
+        "source_paths": ["project.yaml"],
+        "expected_outputs": [
+          "characters/candidates/protagonist.json",
+          "characters/candidates/protagonist.agent_completion.json"
+        ],
+        "submission_command": "python -m literary_engineering_studio_engine task-submit <project> --task-id character-and-world-assets-protagonist-create --from <artifact>",
+        "completion_command": "python -m literary_engineering_studio_engine task-complete <project> --task-id character-and-world-assets-protagonist-create",
+        "validation_gates": ["candidate schema passes"],
+        "forbidden_shortcuts": ["candidate first"]
+      },
+      "expected": {
+        "execution_policy": "agent-required",
+        "agent_role": "main-creative-agent",
+        "runtime_capabilities_required": ["read-task-sources", "write-expected-outputs"],
+        "human_gate_required": false,
+        "output_policies": {
+          "characters/candidates/protagonist.json": "approval-required",
+          "characters/candidates/protagonist.agent_completion.json": "automatic"
+        },
+        "completion_receipts": 1,
+        "fingerprint": "ef60cea2d4d3e9e79c4ce14114b05120ae8237530a85295ad9044b1e0c38468a"
+      }
+    },
+    {
+      "name": "review-and-audit",
+      "payload": {
+        "schema": "literary-engineering-workbench/agent-task/v1",
+        "task_id": "review-and-audit-canon-review",
+        "status": "issued",
+        "route": "review-and-audit",
+        "scene_id": "project",
+        "current_state": "canon-review-agent-task",
+        "task_type": "platform-agent-review",
+        "prompt_asset_id": "route.review-audit.canon-review.execute.v1",
+        "command": "",
+        "required_reading": [],
+        "source_paths": ["reviews/canon/canon_lint.json"],
+        "expected_outputs": [
+          "reviews/agent/canon_review.json",
+          "reviews/agent/canon_review.agent_completion.json"
+        ],
+        "submission_command": "python -m literary_engineering_studio_engine task-submit <project> --task-id review-and-audit-canon-review --from <artifact>",
+        "completion_command": "python -m literary_engineering_studio_engine task-complete <project> --task-id review-and-audit-canon-review",
+        "validation_gates": ["canon review passes"],
+        "forbidden_shortcuts": ["do not self-certify"]
+      },
+      "expected": {
+        "execution_policy": "agent-required",
+        "agent_role": "main-review-agent",
+        "runtime_capabilities_required": ["read-task-sources", "write-expected-outputs"],
+        "human_gate_required": false,
+        "output_policies": {
+          "reviews/agent/canon_review.json": "preview-required",
+          "reviews/agent/canon_review.agent_completion.json": "automatic"
+        },
+        "completion_receipts": 1,
+        "fingerprint": "e9f4c2bca5888bcc35b35704b26fd84302cf97b7beee23e4ec83a558a6d6ecd4"
+      }
+    },
+    {
+      "name": "export-and-release",
+      "payload": {
+        "schema": "literary-engineering-workbench/agent-task/v1",
+        "task_id": "export-and-release-chapter-0001-approval",
+        "status": "issued",
+        "route": "export-and-release",
+        "scene_id": "chapter_0001",
+        "current_state": "release-approval",
+        "task_type": "human-approval-boundary",
+        "prompt_asset_id": "route.export-release.approval.v1",
+        "command": "",
+        "required_reading": [],
+        "source_paths": ["exports/chapter_0001/manifest.json"],
+        "expected_outputs": ["decisions/release/chapter_0001.json"],
+        "submission_command": "python -m literary_engineering_studio_engine task-submit <project> --task-id export-and-release-chapter-0001-approval --from <artifact>",
+        "completion_command": "python -m literary_engineering_studio_engine task-complete <project> --task-id export-and-release-chapter-0001-approval",
+        "validation_gates": ["approval is current"],
+        "forbidden_shortcuts": ["human decision required"]
+      },
+      "expected": {
+        "execution_policy": "human-required",
+        "agent_role": "human-decision",
+        "runtime_capabilities_required": [],
+        "human_gate_required": true,
+        "output_policies": {
+          "decisions/release/chapter_0001.json": "approval-required"
+        },
+        "completion_receipts": 0,
+        "fingerprint": "62eb8d768963cf185b9841bfd91f6054c6a21511a63f8bda653e1e6812f55eec"
+      }
+    }
+  ]
+}
