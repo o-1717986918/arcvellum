@@ -227,6 +227,33 @@ class ConfigTests(unittest.TestCase):
 
             self.assertNotIn("opencode", loaded["agent_runners"])
 
+    def test_replaces_a_retired_opencode_model_connection_with_pi_worker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "config.json"
+            target.write_text(
+                json.dumps(
+                    {
+                        "model_connections": {
+                            "managed_by": "agent-runner",
+                            "connections": [
+                                {
+                                    "connection_id": "opencode-starter",
+                                    "provider_family": "deepseek",
+                                    "agent_runner": "opencode",
+                                }
+                            ],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = load_config(target)
+
+            connections = loaded["model_connections"]["connections"]
+            self.assertEqual([item["connection_id"] for item in connections], ["pi-worker-managed"])
+            self.assertEqual(connections[0]["agent_runner"], "pi-worker")
+
     def test_load_ignores_machine_local_engine_path_from_an_old_install(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "config.json"

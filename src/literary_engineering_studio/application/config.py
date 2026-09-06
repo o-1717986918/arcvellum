@@ -296,6 +296,7 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
         runners = dict(runners)
         runners.pop("opencode", None)
         migrated["agent_runners"] = runners
+    migrated = _drop_retired_model_connections(migrated)
     if source_schema != CONFIG_SCHEMA and isinstance(migrated.get("agent_runners"), dict):
         runners = dict(migrated["agent_runners"])
         pi_worker = runners.get("pi-worker")
@@ -318,6 +319,32 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
     if source_schema != CONFIG_SCHEMA:
         migrated = _migrate_pi_prompt_rollout(migrated)
         migrated = _migrate_pi_prose_execution_profile(migrated)
+    return migrated
+
+
+def _drop_retired_model_connections(payload: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(payload)
+    section = migrated.get("model_connections")
+    if not isinstance(section, dict):
+        return migrated
+    records = section.get("connections")
+    if not isinstance(records, list):
+        return migrated
+    retained = [
+        record
+        for record in records
+        if not (
+            isinstance(record, dict)
+            and (
+                str(record.get("agent_runner") or "").strip().lower() == "opencode"
+                or str(record.get("connection_id") or "").strip().lower() == "opencode-starter"
+            )
+        )
+    ]
+    if not retained:
+        migrated.pop("model_connections", None)
+        return migrated
+    migrated["model_connections"] = {**section, "connections": retained}
     return migrated
 
 
