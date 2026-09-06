@@ -25,7 +25,7 @@ class CompatibilityManifestTests(unittest.TestCase):
             "arcvellum/compatibility-manifest/v2",
         )
         current = manifest["current_release"]
-        self.assertEqual(current["version"], "0.99.4")
+        self.assertEqual(current["version"], "0.99.5")
         self.assertEqual(
             current["defaults"]["agent_runtime"],
             "pi-worker",
@@ -72,7 +72,7 @@ class CompatibilityManifestTests(unittest.TestCase):
     def test_summary_does_not_expose_a_second_runtime_default(self):
         summary = compatibility_summary()
 
-        self.assertEqual(summary["release_version"], "0.99.4")
+        self.assertEqual(summary["release_version"], "0.99.5")
         self.assertEqual(summary["default_agent_runtime"], "pi-worker")
         self.assertEqual(summary["model_invocation"], "runner-managed")
         self.assertGreater(summary["deprecated_alias_count"], 0)

@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "arcvellum-desktop"
-version = "0.99.4"
+version = "0.99.5"
 dependencies = [
  "serde_json",
  "tauri",
