@@ -6,7 +6,7 @@ from __future__ import annotations
 def render_status_markdown(payload: dict) -> str:
     summary = payload["summary"]
     lines = [
-        "# 平台 Agent 任务总控面板", "",
+        "# ArcVellum Worker 任务总控面板", "",
         f"- 生成时间：{payload['generated_at']}", f"- 任务数：{summary['task_count']}",
         f"- Pending：{summary['pending_count']}", f"- Partial：{summary['partial_count']}",
         f"- Complete：{summary['complete_count']}", f"- Unknown：{summary['unknown_count']}",

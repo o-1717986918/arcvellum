@@ -270,7 +270,7 @@ def asset_promotion_gate_errors(root: Path, candidate_id: str) -> list[str]:
     if payload.get("status") != "promoted":
         errors.append(f"asset promotion status must be promoted; got {payload.get('status') or 'missing'}")
     if payload.get("allow_unapproved"):
-        errors.append("asset promotion used allow_unapproved; formal Skill-host route must not use approval bypass")
+        errors.append("asset promotion used allow_unapproved; formal Studio route must not use approval bypass")
     if str(payload.get("candidate_id") or "") != candidate_id:
         errors.append(f"asset promotion candidate_id mismatch: {payload.get('candidate_id') or 'missing'}")
     outputs = payload.get("outputs") if isinstance(payload.get("outputs"), list) else []

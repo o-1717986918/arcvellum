@@ -1,4 +1,4 @@
-"""Route runbooks for platform-agent and CLI workflow discipline."""
+"""Route runbooks for ArcVellum Worker and CLI workflow discipline."""
 
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ COMMON_PREFLIGHT = (
 COMMON_FORBIDDEN = (
     "Do not accept CLI output as canon or final creative judgment.",
     "Do not accept generated JSON merely because it parses.",
-    "Do not skip .agent_tasks.md handling when a command writes sidecars; the current platform agent must read the task and fill expected artifacts.",
+    "Do not skip .agent_tasks.md handling when a command writes sidecars; the current ArcVellum Worker must read the task and fill expected artifacts.",
     "Do not declare a documented CLI/tool step impossible without probing it or recording a real command failure.",
     "Do not promote candidates without clean review and approval.",
-    "Do not use debug/bypass flags such as --allow-unreviewed, --allow-review-notes, --include-blocked, --allow-unapproved, --allow-unresolved, --allow-missing-composition, --allow-unselected-composition, --allow-recommended-branch, or --allow-missing-branch during formal Skill-host work.",
-    "Do not delegate creative body-text drafting, rewriting, polishing, expansion, or finalization to subagents; the main platform agent must write正文.",
+    "Do not use debug/bypass flags such as --allow-unreviewed, --allow-review-notes, --include-blocked, --allow-unapproved, --allow-unresolved, --allow-missing-composition, --allow-unselected-composition, --allow-recommended-branch, or --allow-missing-branch during formal Studio work.",
+    "Do not delegate creative body-text drafting, rewriting, polishing, expansion, or finalization to subagents; the main ArcVellum Worker must write正文.",
     "Do not bypass failed readiness/export gates with a custom script and present the result as final release output.",
     "Do not store API keys or provider secrets in work projects.",
 )
@@ -40,8 +40,6 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         purpose="Handle broad user direction, project management, next-step selection, and creative decision routing.",
         read=(
             "references/agent-run-protocol.md",
-            "references/project-director-playbook.md",
-            "references/artifact-contracts.md",
             "project.yaml",
         ),
         preflight=COMMON_PREFLIGHT
@@ -64,7 +62,7 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         ),
         forbidden_shortcuts=COMMON_FORBIDDEN
         + (
-            "Do not treat local director-chat output as the primary project director.",
+            "Do not replace the formal project-director task with an informal chat response.",
         ),
     ),
     "work-project-initialization": ProtocolRoute(
@@ -73,11 +71,8 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         purpose="Create a new novel, screenplay, pseudo-record, short-drama, or long-video prompt project.",
         read=(
             "references/agent-run-protocol.md",
-            "references/project-director-playbook.md",
-            "references/artifact-contracts.md",
             "templates/work-project/project.yaml",
             "docs/architecture/data-model.md",
-            "docs/implementation/phase1-initializer.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (
@@ -106,14 +101,7 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         read=(
             "references/agent-run-protocol.md",
             "references/cli-run-protocol.md",
-            "references/project-director-playbook.md",
-            "references/artifact-contracts.md",
-            "references/workflows.md",
             "docs/modules/style-compiler.md",
-            "docs/implementation/phase58-author-style-projects.md",
-            "docs/implementation/phase59-style-skill-package.md",
-            "docs/implementation/phase60-style-skill-mount.md",
-            "docs/implementation/phase61-style-priority-enforcement.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (
@@ -151,13 +139,6 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         purpose="Create or modify characters, hidden background stories, relationships, world rules, locations, organizations, and outlines.",
         read=(
             "references/agent-run-protocol.md",
-            "references/project-director-playbook.md",
-            "references/artifact-contracts.md",
-            "docs/implementation/phase37-asset-candidate-schemas.md",
-            "docs/implementation/phase38-agent-character-creation.md",
-            "docs/implementation/phase39-agent-worldbuilding.md",
-            "docs/implementation/phase40-agent-outline-creation.md",
-            "docs/implementation/phase41-candidate-review-promotion.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (
@@ -187,14 +168,11 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
     "source-ingest": ProtocolRoute(
         key="source-ingest",
         title="Source Ingest",
-        purpose="Import an existing text or complete work, then let the platform agent reverse-extract candidate project files for continuation, rewrite, adaptation, or analysis.",
+        purpose="Import an existing text or complete work, then let the ArcVellum Worker reverse-extract candidate project files for continuation, rewrite, adaptation, or analysis.",
         read=(
             "references/agent-run-protocol.md",
             "references/cli-run-protocol.md",
-            "references/artifact-contracts.md",
-            "references/workflows.md",
             "docs/modules/source-ingest-engine.md",
-            "docs/implementation/phase64-existing-work-ingest.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (
@@ -214,7 +192,7 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         ),
         completion_gates=(
             "Source manifest, chunk files, and extraction task sidecar exist.",
-            "Platform agent has written candidate outputs or they are explicitly listed as pending.",
+            "ArcVellum Worker has written candidate outputs or they are explicitly listed as pending.",
             "Each extracted claim carries evidence references, confidence, and unknowns.",
             "No extracted item is promoted to canon/characters/plot/style without review and approval.",
         ),
@@ -231,19 +209,14 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         read=(
             "references/agent-run-protocol.md",
             "references/cli-run-protocol.md",
-            "references/project-director-playbook.md",
-            "references/artifact-contracts.md",
-            "references/workflows.md",
             "docs/modules/longform-word-budget.md",
             "docs/modules/reader-experience-contract.md",
-            "docs/implementation/phase65-longform-word-budget.md",
-            "docs/implementation/phase88-reader-experience-contract.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (
             "Confirm target length, volume count, genre, time span, and whether the current outline is accepted or only a seed.",
             "Inspect plot/outline.md, plot/word_budget/, scenes/, chapters, and latest longform reviews.",
-            "Identify whether the task needs a new budget, a budget revision, or a platform-agent budgeted outline expansion.",
+            "Identify whether the task needs a new budget, a budget revision, or a Worker-authored budgeted outline expansion.",
         ),
         cli_chain=(
             "python -m literary_engineering_studio_engine protocol longform-planning",
@@ -263,8 +236,8 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         ),
         completion_gates=(
             "word_budget.md/json and word_budget.agent_tasks.md exist or the reason for skipping is recorded.",
-            "Platform agent has written or explicitly deferred the budgeted outline candidate and word-budget review.",
-            "Platform agent has handled scene inventory and chapter obligation sidecars with completion markers.",
+            "ArcVellum Worker has written or explicitly deferred the budgeted outline candidate and word-budget review.",
+            "ArcVellum Worker has handled scene inventory and chapter obligation sidecars with completion markers.",
             "Chapter-level and scene-level word targets, actual cleaned body counts, machine-count mappings, missing scenes, expansion tasks, and reader-experience obligations are reviewed.",
             "Scene/chapter inventory is sufficient for the target length before batch scene generation or the shortfall is listed as pending.",
             "Prompt manifest and generation flow will load the word-budget standard and reader-experience contract.",
@@ -283,15 +256,9 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         read=(
             "references/agent-run-protocol.md",
             "references/cli-run-protocol.md",
-            "references/artifact-contracts.md",
             "references/punctuation-standard.md",
             "docs/modules/plot-scene-engine.md",
             "docs/modules/character-engine.md",
-            "docs/implementation/phase20-branch-simulation.md",
-            "docs/implementation/phase22-scene-composer.md",
-            "docs/implementation/phase23-model-provider-prompt-pack.md",
-            "docs/implementation/phase24-character-state-evolution.md",
-            "docs/implementation/phase25-candidate-promotion-state-apply.md",
             "docs/modules/cli-mediated-agent-workflow.md",
         ),
         preflight=COMMON_PREFLIGHT
@@ -305,7 +272,7 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
             "python -m literary_engineering_studio_engine protocol scene-development",
             "python -m literary_engineering_studio_engine task-next <project> --route scene-development --scene scenes/scene_0001.yaml",
             "python -m literary_engineering_studio_engine task-open <project> --task-id <task-id>",
-            "Run the command named in workflow/tasks/<task-id>.agent_tasks.md, or perform the platform-agent judgment/body-writing task it specifies.",
+            "Run the command named in workflow/tasks/<task-id>.agent_tasks.md, or perform the Worker judgment/body-writing task it specifies.",
             "python -m literary_engineering_studio_engine task-submit <project> --task-id <task-id> --from <artifact>",
             "python -m literary_engineering_studio_engine task-complete <project> --task-id <task-id>",
             "python -m literary_engineering_studio_engine workflow-advance <project> --route scene-development",
@@ -317,9 +284,9 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
             "Fill branches/scene_0001/branch_selection.md with decision: selected and selected_branch.",
             "python -m literary_engineering_studio_engine compose-scene <project> --scene scenes/scene_0001.yaml --agent-tasks",
             "python -m literary_engineering_studio_engine generate-scene <project> --scene scenes/scene_0001.yaml",
-            "Read drafts/candidates/scene_0001-platform-agent.agent_tasks.md and prompt manifest, then write the expected candidate Markdown/JSON as the main platform agent.",
+            "Read drafts/candidates/scene_0001-platform-agent.agent_tasks.md and prompt manifest, then write the expected candidate Markdown/JSON as the main ArcVellum Worker.",
             "python -m literary_engineering_studio_engine agent-review-scene <project> --scene scenes/scene_0001.yaml --draft drafts/candidates/scene_0001-platform-agent.md",
-            "Read reviews/agent/scene_0001_scene_review.agent_tasks.md and write the expected scene_review.v1 JSON/Markdown as platform agent.",
+            "Read reviews/agent/scene_0001_scene_review.agent_tasks.md and write the expected scene_review.v1 JSON/Markdown as ArcVellum Worker.",
             "python -m literary_engineering_studio_engine promote-candidate <project> --scene scenes/scene_0001.yaml",
             "python -m literary_engineering_studio_engine review-scene <project> --scene scenes/scene_0001.yaml",
             "python -m literary_engineering_studio_engine revise-scene <project> --scene scenes/scene_0001.yaml",
@@ -328,19 +295,19 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         ),
         platform_agent_handoffs=(
             "Roleplay answers, branch selection, consequence reasoning, and scene composition judgment.",
-            "Main-agent prose drafting from generate-scene sidecar, AgentReview notes resolution, anti-evasion revision burden of proof, formal revision candidate generation, and scene review. agent-review-scene is a sidecar generator; the platform agent performs the review.",
+            "Main-agent prose drafting from generate-scene sidecar, AgentReview notes resolution, anti-evasion revision burden of proof, formal revision candidate generation, and scene review. agent-review-scene is a sidecar generator; the ArcVellum Worker performs the review.",
             "Subagents may provide retrieval summaries, issue lists, schema checks, continuity tables, and word-count inventories only; they must not draft or revise body text.",
             "Character state patch interpretation and promotion recommendation.",
         ),
         completion_gates=(
             "When task-next issues a workflow/tasks/ package for formal scene-development, that package must be task-submitted and task-completed before the next formal state.",
-            "task-submit records every platform-agent output used to satisfy the current task.",
-            "task-complete succeeds before the platform agent moves to the next formal state.",
+            "task-submit records every Worker output used to satisfy the current task.",
+            "task-complete succeeds before the ArcVellum Worker moves to the next formal state.",
             "CLI-generated context packet plus valid context trace, or a recorded CLI-equivalent workaround for both artifacts, exists.",
-            "simulate-scene --agent roleplay simulation exists, includes CLI provenance, includes a platform-agent reading receipt, and has no unresolved AGENT_TASK directives.",
+            "simulate-scene --agent roleplay simulation exists, includes CLI provenance, includes a Worker reading receipt, and has no unresolved AGENT_TASK directives.",
             "branch-simulate --agent branch manifest exists with CLI provenance, and branch_selection.md records decision: selected plus selected_branch before composition or generation.",
             "compose-scene --agent-tasks composition exists with selection_source=selection, ready_for_generation=true, and formal_cli_provenance.created_by=compose-scene before generate-scene or state writeback.",
-            "Prose candidate exists for each target scene, has generate-scene prompt/task/manifest provenance, and was written by the main platform agent, not a subagent.",
+            "Prose candidate exists for each target scene, has generate-scene prompt/task/manifest provenance, and was written by the main ArcVellum Worker, not a subagent.",
             "Prose candidate reviewed for canon, character, style, and punctuation.",
             "Any new character introduced by the scene is classified in new_character_register; persistent new characters have candidate asset review and approval/promotion before clean pass.",
             "agent-review-scene was run or an equivalent exact-candidate platform review was written with a concrete reason for any CLI skip.",
@@ -353,7 +320,7 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         ),
         forbidden_shortcuts=COMMON_FORBIDDEN
         + (
-            "Do not let branch scores become final plot decisions without platform-agent review.",
+            "Do not let branch scores become final plot decisions without Worker review.",
             "Do not process one representative scene and bulk-write the rest without their own RP/branch/composition/generation/review/promotion/state gates.",
             "Do not hand-write same-named formal files to satisfy route gates unless a documented CLI failure and CLI-equivalent workaround are recorded.",
             "Do not skip Chinese punctuation review for Chinese prose.",
@@ -365,13 +332,8 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         purpose="Review scene, canon, continuity, longform readiness, and release blockers.",
         read=(
             "references/agent-run-protocol.md",
-            "references/artifact-contracts.md",
             "references/punctuation-standard.md",
             "docs/modules/review-ci.md",
-            "docs/implementation/phase4-scene-review-loop.md",
-            "docs/implementation/phase19-canon-lint.md",
-            "docs/implementation/phase7-chapter-pipeline.md",
-            "docs/implementation/phase8-longform-audit.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (
@@ -408,12 +370,8 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
         read=(
             "references/agent-run-protocol.md",
             "references/cli-run-protocol.md",
-            "references/artifact-contracts.md",
             "references/file-format-export.md",
             "references/punctuation-standard.md",
-            "docs/implementation/phase9-export-package.md",
-            "docs/implementation/phase21-publish-chain.md",
-            "docs/implementation/phase15-approval-loop.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (
@@ -444,12 +402,10 @@ PROTOCOL_ROUTES: dict[str, ProtocolRoute] = {
     "optional-cli": ProtocolRoute(
         key="optional-cli",
         title="Formal Route CLI",
-        purpose="Use deterministic helper commands, formal sidecar/provenance generators, local regression tests, Dify/LangGraph adapters, or frontend/API utilities.",
+        purpose="Use deterministic helper commands, formal sidecar/provenance generators, local regression tests, and supported frontend/API utilities.",
         read=(
             "references/agent-run-protocol.md",
             "references/cli-run-protocol.md",
-            "references/workflows.md",
-            "references/orchestration.md",
         ),
         preflight=COMMON_PREFLIGHT
         + (

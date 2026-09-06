@@ -13,5 +13,5 @@ FORMAL_HELP_METAVAR = (
 
 STUDIO_DISABLED_COMMANDS = {
     "agent-run", "agent-repair", "config-init", "config-set-profile", "config-show",
-    "dify-dsl", "director-chat", "run-langgraph", "run-workflow", "serve-api",
+    "dify-dsl", "director-chat", "director-status", "run-langgraph", "run-workflow", "serve-api",
 }

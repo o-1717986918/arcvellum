@@ -18,16 +18,12 @@ DEFAULT_REQUIRED_READING = [
     "agentread.yaml",
     "references/agent-run-protocol.md",
     "references/cli-run-protocol.md",
-    "references/artifact-contracts.md",
-    "references/workflows.md",
-    "docs/implementation/phase38-agent-character-creation.md",
-    "docs/implementation/phase41-candidate-review-promotion.md",
 ]
 
 FORBIDDEN_SHORTCUTS = [
     "Do not write directly into canon/, characters/, plot/outline.md, scenes/, drafts/, exports/, or releases/ from a candidate task.",
-    "Do not promote any candidate asset without a clean platform-agent asset review and an approve record.",
-    "Do not use --allow-unapproved or any debug approval bypass in formal Skill-host work.",
+    "Do not promote any candidate asset without a clean Worker asset review and an approve record.",
+    "Do not use --allow-unapproved or any debug approval bypass in formal Studio work.",
     "Do not let extracted/source-derived claims become canon without evidence_refs, confidence, review, and approval.",
     "Do not treat this task as complete until task-submit and task-complete have succeeded.",
 ]

@@ -407,3 +407,23 @@ Route Domain
 - 全量 Python：1362 项通过，1 项跳过；
 - scripts/architecture_audit.py：通过，保持 16 个既有大文件、104 个既有复杂函数、0 新增违规；
 - git diff --check：通过。
+
+### 2026-09-07：TD-6 完成
+
+- [x] 正式 parser 不再注册 Dify、LangGraph、旧 Director、旧 Provider 与旧配置命令；
+- [x] Studio 的正式帮助、任务说明、协议渲染和当前运行文档统一使用 ArcVellum Worker 身份；
+- [x] `platform-agent` 仅保留为 TD-7 需要读取的历史枚举、文件名和 schema 兼容值；
+- [x] 当前 Route 的 required reading 去除 implementation、旧编排与旧 Director 文档；
+- [x] 新增 Engine 运行时资源 allowlist，wheel 与 PyInstaller sidecar 只携带当前规范、模块文档、schema 和模板；
+- [x] 历史设计文档继续留在源码仓库，但不会进入正式安装资源；
+- [x] 安装资源测试会拒绝重新暴露退役命令或无法随包读取的 Route 文档；
+- [x] 已授权《我胆小如鼠》演示包通过完整性验证，并确认 Tauri 资源、sidecar 环境和首次运行安装链路相连。
+
+验证：
+
+- CLI、运行时资源和任务协议定向测试：98 项通过；
+- 全量 Python：1368 项通过，1 项跳过；
+- verify_compatibility_surface.py：通过；
+- demo_project_bundle.py：通过，识别 `yu-hua-i-am-timid-as-a-mouse`；
+- scripts/architecture_audit.py：通过，未引入循环依赖或边界违规；
+- git diff --check：通过。

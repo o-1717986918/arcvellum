@@ -18,13 +18,13 @@ TASK_DIGEST_PREFIX = "<!-- agent-task-digest: "
 
 
 def default_agent_tasks_path(artifact_path: Path) -> Path:
-    """Return the sidecar path for platform-agent task instructions."""
+    """Return the sidecar path for Worker task instructions."""
 
     return artifact_path.with_suffix(".agent_tasks.md")
 
 
 def default_agent_completion_path(task_path: Path) -> Path:
-    """Return the completion-marker path for a platform-agent task sidecar."""
+    """Return the completion-marker path for a Worker task sidecar."""
 
     name = task_path.name
     suffix = ".agent_tasks.md"
@@ -47,7 +47,7 @@ def agent_task_digest(task_path: Path) -> str:
 
 
 def agent_task_completion_status(task_path: Path, *, root: Path | None = None) -> dict[str, object]:
-    """Inspect whether a platform-agent sidecar has been explicitly handled."""
+    """Inspect whether a Worker sidecar has been explicitly handled."""
 
     completion_path = default_agent_completion_path(task_path)
     rel_task = _rel(task_path, root or task_path.parent)
@@ -63,7 +63,7 @@ def agent_task_completion_status(task_path: Path, *, root: Path | None = None) -
         state["message"] = f"task sidecar missing: {rel_task}"
         return state
     if not completion_path.exists():
-        state["message"] = f"missing explicit platform-agent completion marker: {rel_completion}"
+        state["message"] = f"missing explicit Worker completion marker: {rel_completion}"
         return state
     try:
         payload = json.loads(completion_path.read_text(encoding="utf-8"))
@@ -109,7 +109,7 @@ def agent_task_completion_status(task_path: Path, *, root: Path | None = None) -
         {
             "status": "complete",
             "complete": True,
-            "message": f"platform-agent task completed: {rel_completion}",
+            "message": f"Worker task completed: {rel_completion}",
             "handled_by": str(payload.get("handled_by") or ""),
             "completed_at": str(payload.get("completed_at") or ""),
             "task_digest": current_digest,
@@ -125,7 +125,7 @@ def write_agent_completion_marker(
     handled_by: str = "platform-agent",
     notes: list[str] | None = None,
 ) -> Path:
-    """Write an explicit completion marker for tests or platform-agent handoff scripts."""
+    """Write an explicit completion marker for tests or Worker handoff scripts."""
 
     completion = default_agent_completion_path(task_path)
     completion.parent.mkdir(parents=True, exist_ok=True)
@@ -196,11 +196,11 @@ def render_agent_tasks_document(
     completion_rel = _rel(completion_path, root) if completion_path else "同名 `.agent_completion.json`"
     task_rel = _rel(task_path, root) if task_path else "当前 .agent_tasks.md"
     lines = [
-        f"# 平台 Agent 任务说明：{title}",
+        f"# ArcVellum Worker 任务说明：{title}",
         "",
-        "本文件给装载本 Skill 的 Codex / Claude / 工具层平台 agent 执行。",
+        "本文件由 ArcVellum Worker 执行。Worker 可能来自内置 Pi Runtime，也可能来自兼容的外部 Agent Runtime。",
         "它不是外部 LLM prompt，不是 canon，不是正式剧情内容；命令写出本文件只表示“任务已准备好”，不表示任务完成。",
-        "当前平台 agent 应读取本文件、执行判断或创作、写入下方要求的目标产物，并创建完成标记后，才能继续晋升、导出或回复用户。",
+        "当前 ArcVellum Worker 应读取本文件、执行判断或创作、写入下方要求的目标产物，并创建完成标记后，才能继续晋升、导出或回复用户。",
         f"完成标记：`{completion_rel}`。缺少该文件时，本 sidecar 视为未处理。",
         "",
         "## Source Artifacts",
@@ -220,9 +220,9 @@ def render_agent_tasks_document(
             "- 在最终报告或目标 Markdown 中写明 reading receipt：route、已读文档、已检查项目状态、仍缺失的上下文。",
             "- 先读取 Source Artifacts，再执行下列任务。",
             "- 不要因为任务名称包含 agent / review / style / JSON 就判断自己不能做；如需 CLI 辅助，先运行 `--help` 或 `protocol <route>`，失败后记录真实错误。",
-            "- 若本任务要求写 review JSON、候选正文、修订报告、分支选择或状态补丁，当前平台 agent 应直接完成这些产物；不要等待“外部 agent”。",
-            "- 若本任务要求写候选正文、修订正文、正文草稿或可交付正文，必须由当前主平台 agent 亲自完成；subagent 只能做资料整理、上下文摘录、schema/格式检查、连续性清单、风险标注等相对机械工作，不得代写正文。",
-            "- 正式 Skill 宿主不得使用 `--allow-unreviewed`、`--allow-review-notes`、`--include-blocked`、`--allow-unapproved` 等调试/跳审参数绕过 review；遇到阻塞门禁时补齐 review、revision、approval 或 route-audit。",
+            "- 若本任务要求写 review JSON、候选正文、修订报告、分支选择或状态补丁，当前 ArcVellum Worker 应直接完成这些产物；不要等待“外部 agent”。",
+            "- 若本任务要求写候选正文、修订正文、正文草稿或可交付正文，必须由当前主 ArcVellum Worker 亲自完成；subagent 只能做资料整理、上下文摘录、schema/格式检查、连续性清单、风险标注等相对机械工作，不得代写正文。",
+            "- 正式 Studio 运行不得使用 `--allow-unreviewed`、`--allow-review-notes`、`--include-blocked`、`--allow-unapproved` 等调试/跳审参数绕过 review；遇到阻塞门禁时补齐 review、revision、approval 或 route-audit。",
             "- 任何新增事实、人物状态变化、分支选择和发布判断都保持候选状态。",
             "- 不要把本文件中的任务标记写入 JSON、prompt manifest、正稿、canon 或发布包。",
             f"- 未创建 `{completion_rel}` 前，不得把本任务称为完成；后续正式命令会检查该完成标记。",

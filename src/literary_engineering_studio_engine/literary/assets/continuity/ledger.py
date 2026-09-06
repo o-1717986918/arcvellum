@@ -97,7 +97,7 @@ def prepare_continuity_ledger(project_root: Path, scene_id: str) -> tuple[Path, 
         source_paths=[draft, promotion, target, reader_ledger_path(root), promise_ledger_path(root)],
         tasks=[(
             "提取读者问题与承诺变化候选",
-            f"由当前主平台 Agent 读取已晋升正文、promotion manifest 和现有账本，填写 `{target.relative_to(root).as_posix()}`。\n\n"
+            f"由当前主 ArcVellum Worker 读取已晋升正文、promotion manifest 和现有账本，填写 `{target.relative_to(root).as_posix()}`。\n\n"
             "只记录正文有证据的变化：提出、推进、延迟、兑现、反转、关闭。顶层 evidence_paths 填已晋升正文路径；"
             "每条变化必须另有稳定 ID、type/content/status、非空字符串 evidence 和目标窗口。evidence 要写正文中的具体事实、"
             "原句或可核验概述，不能用条目内的 evidence_paths 代替。"

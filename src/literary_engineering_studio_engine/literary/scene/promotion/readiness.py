@@ -39,7 +39,7 @@ def scene_flow_gate_issues(root: Path, scene_id: str) -> tuple[str, ...]:
         issues.append(f"missing roleplay simulation: branches/{scene_id}/roleplay_simulation.md")
     else:
         if "读取回执" not in roleplay_text:
-            issues.append("roleplay simulation missing platform-agent reading receipt")
+            issues.append("roleplay simulation missing Worker reading receipt")
         if "[AGENT_TASK:" in roleplay_text:
             issues.append("roleplay simulation still contains unresolved AGENT_TASK directives")
 
@@ -193,7 +193,7 @@ def scene_readiness_status(
         return "needs_revision", (f"reader experience gate failed: {reader_experience.get('message')}",)
 
     if not agent_review_json_path.exists() or not agent_conclusion or not schema_status:
-        return "needs_agent_review", ("missing platform Agent scene_review.v1 JSON",)
+        return "needs_agent_review", ("missing ArcVellum Worker scene_review.v1 JSON",)
     if schema_status != "pass":
         return "blocked", (f"AgentReview schema status is {schema_status}",)
     if not source_match:

@@ -7,7 +7,7 @@
 - CharacterProfile：目标、信念、情绪、秘密、关系、语言习惯。
 - Scene：场景目标、冲突、出场人物、输入事实、输出变化。
 - Draft：草稿文本和上下文来源。
-- SourceImport：已有文本的 raw、chunks、manifest、平台 Agent 反推任务和候选输出清单。
+- SourceImport：已有文本的 raw、chunks、manifest、ArcVellum Worker 反推任务和候选输出清单。
 - WordBudget：目标中文内容字符、卷章场景预算、叙事负载、现有库存扫描、扩纲任务、机器字符诊断映射和预算审查状态。
 - ChapterObligation：章节功能、承诺兑现、设置、变化、暂不解决项、章末钩子和库存充分性。
 - ReaderExperience：逐场读者问题、承诺回报、暂扣信息、兑现/延迟、张力来源、反摘要要求和读后余味。

@@ -359,7 +359,7 @@ def _warnings(exportable: list[dict], skipped: list[dict], include_blocked: bool
     if include_blocked:
         warnings.append("本次导出包含未通过审查或未完成的场景，仅可内部预览。")
     if skipped:
-        warnings.append("存在未导出的场景，请回到 chapter-workspace、review-scene 或平台 Agent 场景审查修订。")
+        warnings.append("存在未导出的场景，请回到 chapter-workspace、review-scene 或 ArcVellum Worker 场景审查修订。")
     if not exportable:
         warnings.append("没有可导出的 ready 场景。")
     return warnings

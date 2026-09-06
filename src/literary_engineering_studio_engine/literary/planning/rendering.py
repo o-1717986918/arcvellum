@@ -1,4 +1,4 @@
-"""Human-readable budget reports and platform-agent sidecar task rendering."""
+"""Human-readable budget reports and Worker sidecar task rendering."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ def _write_scene_inventory_agent_tasks(root: Path, markdown_path: Path, json_pat
         notes=[
             "这是字数预算到场景库存的绑定任务。",
             "CLI 已计算每章目标中文内容字符、目标场景数、实际 scene 文件数、已写正文中文内容字符、机器非空白字符诊断、缺失场景数和正文缺口。",
-            "平台 agent 必须把缺口转化为新场景候选、关系转折、信息释放、行动后果和伏笔链，不得用灌水描写填字数。",
+            "ArcVellum Worker 必须把缺口转化为新场景候选、关系转折、信息释放、行动后果和伏笔链，不得用灌水描写填字数。",
             f"本次精确库存合同：全书必须恰好 {totals['scene_count']} 场、目标合计恰好 {totals['target_chinese_chars']} 中文内容字符；{chapter_contract}。",
             "用户显式 target_scenes 与当前 word_budget.json 是硬约束。若创作判断确需改变场景数，先请求重做预算或记录获批的重新规划，不得在本任务擅自增减。",
             "候选场景列表未经审查和用户批准，不得直接写入 scenes/ 或覆盖 plot/outline.md。",
@@ -147,7 +147,7 @@ def _write_chapter_obligation_plan_tasks(root: Path, markdown_path: Path, json_p
         source_paths=source_paths,
         notes=[
             "这是从字数预算进入正文生成前的章节义务总规划任务。",
-            "CLI 已给出 chapter_budgets 和 scene_inventory_binding，但读者问题、章节承诺、悬念兑现和反摘要要求必须由平台 Agent 判断。",
+            "CLI 已给出 chapter_budgets 和 scene_inventory_binding，但读者问题、章节承诺、悬念兑现和反摘要要求必须由 ArcVellum Worker 判断。",
             "每个长篇章节正式生成前，还应运行 chapter-obligation --chapter-id <chapter_id> 生成单章契约侧车并完成 marker。",
         ],
         tasks=[
@@ -248,8 +248,8 @@ def _render_markdown(root: Path, payload: dict, json_path: Path) -> str:
             "## 标准链路",
             "",
             "1. 先用本预算确认卷、章、场景和叙事负载。",
-            "2. 平台 Agent 根据 `word_budget.agent_tasks.md` 生成预算化大纲候选。",
-            "3. 平台 Agent 根据 `scene_inventory_expansion.agent_tasks.md` 补足欠账章节的场景候选。",
+            "2. ArcVellum Worker 根据 `word_budget.agent_tasks.md` 生成预算化大纲候选。",
+            "3. ArcVellum Worker 根据 `scene_inventory_expansion.agent_tasks.md` 补足欠账章节的场景候选。",
             "4. 预算化大纲和扩场景候选通过审查和用户批准前，不得覆盖正式 `plot/outline.md` 或 `scenes/`。",
             "5. 场景生成必须读取预算标准，避免把长篇目标压缩成短篇摘要。",
         ]

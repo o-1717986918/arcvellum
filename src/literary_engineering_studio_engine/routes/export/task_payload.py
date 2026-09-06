@@ -14,12 +14,7 @@ DEFAULT_REQUIRED_READING = [
     "agentread.yaml",
     "references/agent-run-protocol.md",
     "references/cli-run-protocol.md",
-    "references/artifact-contracts.md",
-    "references/workflows.md",
     "references/file-format-export.md",
-    "docs/implementation/phase7-chapter-pipeline.md",
-    "docs/implementation/phase9-export-package.md",
-    "docs/implementation/phase21-publish-chain.md",
 ]
 
 FORBIDDEN_SHORTCUTS = [

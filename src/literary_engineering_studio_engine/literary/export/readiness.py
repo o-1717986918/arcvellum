@@ -38,7 +38,7 @@ def export_scene_readiness_errors(
         scene.get("agent_review_conclusion") != "pass"
         or scene.get("agent_review_schema_status") != "pass"
     ):
-        errors.append(f"chapter scene lacks clean platform AgentReview: {scene_id}")
+        errors.append(f"chapter scene lacks clean ArcVellum Worker review: {scene_id}")
     if scene.get("agent_review_source_match") is not True:
         errors.append(
             f"chapter scene AgentReview does not cite exact draft/candidate: {scene_id}"

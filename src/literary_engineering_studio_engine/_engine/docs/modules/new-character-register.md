@@ -21,8 +21,8 @@
 持久新角色必须进入正式资产链路：
 
 1. 运行 `agent-create-character` 或 `asset-create --asset-type character`。
-2. 平台 Agent 写 `characters/candidates/<id>.json` 与候选报告。
-3. 运行 `review-candidate-asset` 并由平台 Agent 写 clean review。
+2. ArcVellum Worker 写 `characters/candidates/<id>.json` 与候选报告。
+3. 运行 `review-candidate-asset` 并由 ArcVellum Worker 写 clean review。
 4. 取得用户 approval。
 5. 运行 `promote-candidate-asset` 晋升到 `characters/*.yaml`。
 
@@ -89,4 +89,4 @@ Blocking statuses:
 
 不要把新角色直接追加到 `characters/*.yaml`。先进入 `characters/candidates/`，再 review、approval、promotion。
 
-不要让 subagent 创作正式正文里的新角色。subagent 可以整理候选档案、证据和审查意见；正文中的角色引入仍由主平台 Agent 负责。
+不要让 subagent 创作正式正文里的新角色。subagent 可以整理候选档案、证据和审查意见；正文中的角色引入仍由主 ArcVellum Worker 负责。

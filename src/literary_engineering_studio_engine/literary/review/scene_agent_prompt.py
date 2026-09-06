@@ -38,7 +38,7 @@ The JSON field `candidate_sha256` must equal this value exactly.
 
 ## Reader Experience Gate
 
-以下是章节义务与读者体验契约的确定性结构门禁。语义判断由平台 Agent 完成，但若 status 不是 pass 或 not_required，`conclusion` 不得为 pass。即使结构通过，也必须判断正文是否推进了读者问题、承诺回报、暂扣信息、兑现/延迟、情绪曲线、张力来源、新鲜度、反摘要要求和读后余味；不能只复述事件梗概：
+以下是章节义务与读者体验契约的确定性结构门禁。语义判断由 ArcVellum Worker 完成，但若 status 不是 pass 或 not_required，`conclusion` 不得为 pass。即使结构通过，也必须判断正文是否推进了读者问题、承诺回报、暂扣信息、兑现/延迟、情绪曲线、张力来源、新鲜度、反摘要要求和读后余味；不能只复述事件梗概：
 
 ```json
 {reader_adherence}

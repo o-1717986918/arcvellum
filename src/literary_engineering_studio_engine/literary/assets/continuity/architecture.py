@@ -68,7 +68,7 @@ def prepare_story_architecture(project_root: Path) -> tuple[Path, Path]:
         source_paths=[root / "project.yaml", root / "plot" / "outline.md", candidate],
         tasks=[(
             "建立不可替代的全书脊柱",
-            f"读取 `project.yaml`、已有 outline 和 `{candidate.relative_to(root).as_posix()}`。由当前主平台 Agent 填写创作字段；Studio Worker 会写入 status 与 writer_session_id。\n\n"
+            f"读取 `project.yaml`、已有 outline 和 `{candidate.relative_to(root).as_posix()}`。由当前主 ArcVellum Worker 填写创作字段；Studio Worker 会写入 status 与 writer_session_id。\n\n"
             "不要把字数、事件数量或人物小传当成故事架构。必须明确中心戏剧问题、主角从误信到改变的向量、中点不可逆、终局选择、结局状态、每卷义务和不可谈判的兑现。"
             "若无法支持目标篇幅，明确写入问题而不是用空泛节点掩盖。只写声明的候选文件，不修改正式 outline 或 scenes。"
         )],

@@ -47,10 +47,13 @@ literary_engineering_studio = [
     "vendor/*.txt",
 ]
 literary_engineering_studio_engine = [
-    "_engine/*.md",
-    "_engine/*.yaml",
-    "_engine/docs/**/*.md",
-    "_engine/references/*.md",
+    "_engine/docs/architecture/data-model.md",
+    "_engine/docs/modules/*.md",
+    "_engine/references/agent-run-protocol.md",
+    "_engine/references/cli-run-protocol.md",
+    "_engine/references/file-format-export.md",
+    "_engine/references/formal-host-operating-constitution.md",
+    "_engine/references/punctuation-standard.md",
     "_engine/schemas/**/*.json",
     "_engine/templates/**/*.md",
     "_engine/templates/**/*.yaml",

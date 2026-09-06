@@ -294,7 +294,7 @@ def _write_branch_agent_tasks(
         notes=[
             "branch_manifest.json 是机器契约，不能写入 AGENT_TASK 标记。",
             "固定五类候选只是确定性回退；正式创意判断必须写入 branch_proposals.json。",
-            "推荐分支只是启发式建议，平台 agent 必须独立审查后再决定是否询问用户。",
+            "推荐分支只是启发式建议，ArcVellum Worker 必须独立审查后再决定是否询问用户。",
         ],
         tasks=[
             (

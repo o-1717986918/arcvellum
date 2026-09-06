@@ -2,7 +2,7 @@
 
 Prompt Registry turns `prompt_asset_id` from a label into a file-backed execution asset.
 
-The registry does not call an LLM and does not replace the platform Agent. It tells the platform Agent which prompt family, context groups, hard constraints, output contract, review requirements, and forbidden shortcuts apply to the current CLI-mediated task.
+The registry does not call an LLM and does not replace the ArcVellum Worker. It tells the ArcVellum Worker which prompt family, context groups, hard constraints, output contract, review requirements, and forbidden shortcuts apply to the current CLI-mediated task.
 
 ## Why It Exists
 

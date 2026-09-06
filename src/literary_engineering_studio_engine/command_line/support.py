@@ -63,7 +63,7 @@ You are operating a work project through the CLI state machine, not freehand edi
 
 - Do not handwrite CLI-generated flow artifacts as formal work.
 - Do not skip `.agent_tasks.md` sidecars or completion markers.
-- Do not use debug/bypass flags during formal Skill-host work.
+- Do not use debug/bypass flags during formal Studio work.
 - Do not set `LEW_MAINTAINER_MODE=1` unless you are explicitly maintaining the repository or running regression tests.
 - Do not let subagents write body prose.
 - Do not promote, export, release, state-apply, or canon-apply without a clean route audit and the required approvals.

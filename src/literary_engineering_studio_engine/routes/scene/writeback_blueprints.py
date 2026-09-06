@@ -205,7 +205,7 @@ def _canon_candidate_blueprint(ctx: SceneWritebackContext) -> dict[str, object]:
         "core_managed_outputs": [f"{patch}.agent_tasks.md", ctx.canon_review],
         "hard_constraints": [
             "Canon writeback is a candidate-only judgment after state-evolve; it must not directly modify canon files.",
-            "If no durable world fact changed, the platform agent must write no_canon_change_reason instead of silently skipping.",
+            "If no durable world fact changed, the ArcVellum Worker must write no_canon_change_reason instead of silently skipping.",
         ],
         "style_constraints": [],
         "validation_gates": ["canon patch/no-change JSON exists", "canon-evolve sidecar exists when required"],

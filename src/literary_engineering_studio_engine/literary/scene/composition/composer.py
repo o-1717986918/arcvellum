@@ -413,7 +413,7 @@ def _write_composition_agent_tasks(
             ),
             (
                 "检查读者体验与章节义务",
-                """读取 reader_experience_contract 与 chapter_obligation。确认本场不是只有事件摘要，而是有明确读者问题、期待回报、张力来源、信息暂扣、兑现或延迟、情绪曲线和读后余味。若契约缺失或 incomplete，停止进入正文生成，先运行 chapter-obligation 并完成平台 Agent 侧车。""",
+                """读取 reader_experience_contract 与 chapter_obligation。确认本场不是只有事件摘要，而是有明确读者问题、期待回报、张力来源、信息暂扣、兑现或延迟、情绪曲线和读后余味。若契约缺失或 incomplete，停止进入正文生成，先运行 chapter-obligation 并完成 ArcVellum Worker 侧车。""",
             ),
             (
                 "检查叙事节奏与场景桥接",

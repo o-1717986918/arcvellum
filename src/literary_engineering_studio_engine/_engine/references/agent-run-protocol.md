@@ -15,8 +15,8 @@ Use this protocol whenever a tool-layer agent runs a literary engineering task t
 6. State a short plan to yourself or in the working trace: objective, route, artifacts to inspect, artifacts to create, review gates, and user approval boundary.
 7. Probe documented tools before declaring them unavailable. Use `--help`, `protocol <route>`, or the smallest safe command attempt; if a command fails, record the exact command, error, and next workaround instead of guessing.
 8. For formal `scene-development`, ask the CLI for the next formal operation with `task-next`, open the package with `task-open`, complete the work, submit artifacts with `task-submit`, then finalize with `task-complete`. Do not decide the next formal scene step from memory when the task registry is available.
-9. Execute deterministic preparation with CLI whenever the selected formal route declares sidecars, manifests, or provenance gates: initialize, import/chunk sources, index, search, build context, lint, compose, export, or generate platform-agent task sidecars. Exploratory notes may skip CLI, but formal artifacts may not silently replace CLI outputs with hand-written files.
-10. Perform every non-deterministic creative or judgment step as the supervising platform agent. This includes prose, JSON drafting, schema repair, roleplay, branch choice, review findings, style prompts, and promotion recommendations.
+9. Execute deterministic preparation with CLI whenever the selected formal route declares sidecars, manifests, or provenance gates: initialize, import/chunk sources, index, search, build context, lint, compose, export, or generate Worker task sidecars. Exploratory notes may skip CLI, but formal artifacts may not silently replace CLI outputs with hand-written files.
+10. Perform every non-deterministic creative or judgment step as the supervising ArcVellum Worker. This includes prose, JSON drafting, schema repair, roleplay, branch choice, review findings, style prompts, and promotion recommendations.
 11. When a command writes `.agent_tasks.md`, read it, fill the expected Markdown/JSON/prose artifact yourself, inspect the produced artifact, then create the adjacent `.agent_completion.json` marker. Do not report the task file as completed work by itself.
 12. For scene batches, maintain per-scene coverage. Each scene needs its own context, RP, branch selection, composition, prose candidate, exact-candidate review, promotion, promoted draft, and state patch; one completed scene does not cover the rest.
 13. If sidecar completion, expected outputs, or route gates are unclear, run or emulate `agent-task-status` and route-specific `route-audit`; resolve the missing items or list them as pending.
@@ -37,7 +37,7 @@ Use this protocol whenever a tool-layer agent runs a literary engineering task t
 - Choose the route and avoid operational questions when the next action is clear.
 - Keep generated work separate from canon until reviewed and approved.
 - Use subagents only for bounded support passes when useful: character logic checks, world constraints, plot alternatives, style-risk lists, canon audit, retrieval summaries, schema checks, word-count inventories, or issue tables.
-- The main platform agent must personally write creative body text. Subagents must not draft, rewrite, polish, expand, or finalize prose, screenplay, pseudo-record entries, or final deliverable text.
+- The main ArcVellum Worker must personally write creative body text. Subagents must not draft, rewrite, polish, expand, or finalize prose, screenplay, pseudo-record entries, or final deliverable text.
 - Resolve disagreements between CLI reports, simulations, and generated candidates through project constraints and user intent.
 
 ## Non-Deterministic Work Gate
@@ -53,7 +53,7 @@ The following must never be delegated to local dry-run, HTTP helper, or CLI outp
 - Roleplay, branch simulation, consequence simulation, character-state evolution, and scene composition decisions.
 - Scene review, canon review, committee review, candidate promotion recommendation, chapter readiness, and release choice.
 
-Local tools may prepare inputs and task files for those actions, but the supervising platform agent must make the judgment and write or approve the artifact.
+Local tools may prepare inputs and task files for those actions, but the supervising ArcVellum Worker must make the judgment and write or approve the artifact.
 
 ## Formal Vs Exploratory Outputs
 
@@ -63,11 +63,11 @@ Formal artifacts are different. If an artifact may be promoted, counted toward w
 
 For `scene-development`, formal prose generation requires CLI-generated context, `simulate-scene --agent` roleplay, `branch-simulate --agent` branch manifest, formal `branch_selection.md`, `compose-scene --agent-tasks` composition, `generate-scene` prompt/task provenance, and exact-candidate review before promotion.
 
-When `task-next` is available, the platform Agent should let the CLI-mediated task registry choose the next formal scene step. The correct loop is: `task-next`, `task-open`, perform the named command or platform-agent judgment, `task-submit`, `task-complete`, then `workflow-advance` or `route-audit`. The user can still discuss creative direction naturally; the task registry only controls formal artifacts.
+When `task-next` is available, the ArcVellum Worker should let the CLI-mediated task registry choose the next formal scene step. The correct loop is: `task-next`, `task-open`, perform the named command or Worker judgment, `task-submit`, `task-complete`, then `workflow-advance` or `route-audit`. The user can still discuss creative direction naturally; the task registry only controls formal artifacts.
 
 ## Command Attempt Rule
 
-If a route names a command, the supervising agent should assume it can try that command with the local shell/tooling unless a real error proves otherwise. In particular, do not skip `agent-review-scene`, `agent-canon-review`, `agent-task-status`, `route-audit`, `promote-candidate`, `chapter-workspace`, or `export-package` because they sound model-backed or environment-dependent. Run `--help` first if uncertain. Many `agent-*` commands only generate sidecars, deterministic evidence such as `Style Lint (auto-detected)`, and expected output paths; the platform agent then performs the judgment and writes the artifacts.
+If a route names a command, the supervising agent should assume it can try that command with the local shell/tooling unless a real error proves otherwise. In particular, do not skip `agent-review-scene`, `agent-canon-review`, `agent-task-status`, `route-audit`, `promote-candidate`, `chapter-workspace`, or `export-package` because they sound model-backed or environment-dependent. Run `--help` first if uncertain. Many `agent-*` commands only generate sidecars, deterministic evidence such as `Style Lint (auto-detected)`, and expected output paths; the ArcVellum Worker then performs the judgment and writes the artifacts.
 
 If the command errors, the correct response is not “the skill cannot do it”; the correct response is: record the command, stderr/exception, whether `PYTHONPATH` or path arguments were wrong, and the next safe workaround. Only after an actual failure should the agent choose an emulation path.
 
@@ -94,7 +94,7 @@ Before final response, check:
 - Do not accept generated JSON because it parses.
 - Do not accept branch scores, simulation scores, local director choices, or model ratings as final decisions.
 - Do not promote candidates without clean review and approval.
-- Do not use debug/bypass flags such as `--allow-unreviewed`, `--allow-review-notes`, `--include-blocked`, `--allow-unapproved`, `--allow-unresolved`, `--allow-missing-composition`, `--allow-unselected-composition`, `--allow-recommended-branch`, or `--allow-missing-branch` during formal Skill-host work.
+- Do not use debug/bypass flags such as `--allow-unreviewed`, `--allow-review-notes`, `--include-blocked`, `--allow-unapproved`, `--allow-unresolved`, `--allow-missing-composition`, `--allow-unselected-composition`, `--allow-recommended-branch`, or `--allow-missing-branch` during formal Studio work.
 - Do not batch-write scenes while skipping RP, branch simulation, composition, exact-candidate review, promotion, or state patch for most scenes.
 - Do not satisfy formal route gates by hand-writing files that merely imitate CLI outputs. Manual equivalents require a real attempted-command failure, recorded workaround provenance, and route-audit visibility.
 - Do not declare a documented CLI/tool step impossible without probing it or recording a real command failure.

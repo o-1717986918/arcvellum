@@ -1,4 +1,4 @@
-"""Platform-Agent task sidecar construction for roleplay simulation."""
+"""ArcVellum Worker task sidecar construction for roleplay simulation."""
 
 from __future__ import annotations
 

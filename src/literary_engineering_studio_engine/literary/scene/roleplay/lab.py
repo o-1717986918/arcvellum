@@ -127,7 +127,7 @@ def _character_prompt(card: CharacterCard, root: Path, *, agent_mode: bool = Fal
     rel = card.file.relative_to(root).as_posix()
     action_task = ""
     if agent_mode:
-        action_task = "平台 Agent 待办见同名 `.agent_tasks.md`；补全后保留证据，不要把任务标记写回本文件。\n\n"
+        action_task = "ArcVellum Worker 待办见同名 `.agent_tasks.md`；补全后保留证据，不要把任务标记写回本文件。\n\n"
     return f"""## Character Agent：{card.name}
 
 来源：`{rel}`
@@ -191,7 +191,7 @@ Secret:
 def _agent_task_if(enabled: bool, instruction: str) -> str:
     if not enabled:
         return ""
-    return "平台 Agent 待办见同名 `.agent_tasks.md`；补全后删除空占位或改写为正式推演记录。\n\n"
+    return "ArcVellum Worker 待办见同名 `.agent_tasks.md`；补全后删除空占位或改写为正式推演记录。\n\n"
 
 
 def _agent_mode_execution_gate(
@@ -206,9 +206,9 @@ def _agent_mode_execution_gate(
     if not enabled:
         return ""
     character_files = "\n".join(f"- `{card.file.relative_to(root).as_posix()}`" for card in cards) or "- 未发现正式人物档案。"
-    return f"""## 平台 Agent 执行门禁
+    return f"""## ArcVellum Worker 执行门禁
 
-执行任务已写入同名 `.agent_tasks.md`。在补全任何 RP 推演内容前，平台 Agent 必须先完成读取回执：
+执行任务已写入同名 `.agent_tasks.md`。在补全任何 RP 推演内容前，ArcVellum Worker 必须先完成读取回执：
 
 1. 读取场景文件 `{scene_rel}`。
 2. 读取上下文包 `{context_rel}`。
@@ -233,8 +233,8 @@ def _agent_mode_usage_rule(enabled: bool) -> str:
     if not enabled:
         return ""
     return (
-        "- 本工作台不内嵌任务指令块；平台 Agent 必须读取同名 `.agent_tasks.md`，完成后写入 `.agent_completion.json`。\n"
-        f"- 平台 agent 补全文档时必须执行标点规范：{PUNCTUATION_STANDARD_SHORT_RULE}\n"
+        "- 本工作台不内嵌任务指令块；ArcVellum Worker 必须读取同名 `.agent_tasks.md`，完成后写入 `.agent_completion.json`。\n"
+        f"- ArcVellum Worker 补全文档时必须执行标点规范：{PUNCTUATION_STANDARD_SHORT_RULE}\n"
     )
 
 

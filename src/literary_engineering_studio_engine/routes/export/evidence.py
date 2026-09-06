@@ -13,7 +13,7 @@ DELIVERY_TRACE_PATTERNS = {
     "scene-id": r"\bscene_\d{4}\b",
     "agent-task": r"\[AGENT_TASK:",
     "canon-note-heading": r"(?m)^#{1,4}\s*(新增事实候选|人物状态变化|关系变化|伏笔变化|需要人工确认|世界状态变化|状态变化候选)\s*$",
-    "review-heading": r"(?m)^#{1,4}\s*(审查|AgentReview|Route Audit|平台 Agent 任务|门禁问题汇总)\b",
+    "review-heading": r"(?m)^#{1,4}\s*(审查|AgentReview|Route Audit|ArcVellum Worker 任务|门禁问题汇总)\b",
     "workflow-path": r"\b(workflow/tasks|reviews/agent|characters/state_patches|drafts/promotions|branch_manifest|roleplay_simulation)\b",
 }
 

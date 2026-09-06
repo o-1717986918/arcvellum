@@ -225,7 +225,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "source_paths": scene_runtime_sources,
             "context_trace": context_trace,
             "expected_outputs": [f"{branch_dir}/roleplay_simulation.md", f"{branch_dir}/roleplay_simulation.agent_tasks.md", roleplay_result],
-            "hard_constraints": ["Use --agent so the platform-agent RP task is emitted as a sidecar."],
+            "hard_constraints": ["Use --agent so the Worker RP task is emitted as a sidecar."],
             "style_constraints": [],
             "validation_gates": ["roleplay simulation exists", "roleplay sidecar exists"],
             "next_allowed_states": ["roleplay-agent-task"],
@@ -370,7 +370,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "core_managed_outputs": [f"plot/chapter_obligations/{chapter_id}.md", f"plot/chapter_obligations/{chapter_id}.agent_tasks.md"],
             "hard_constraints": [
                 "Longform scenes must have a ready chapter obligation and reader-experience contract before prose generation.",
-                "The platform agent must fill reader_question, promised_reward, withheld_information, payoff_or_delay, emotional_curve, tension_source, curiosity_hook, freshness_requirement, anti_summary_requirement, and reader_aftertaste for this scene.",
+                "The ArcVellum Worker must fill reader_question, promised_reward, withheld_information, payoff_or_delay, emotional_curve, tension_source, curiosity_hook, freshness_requirement, anti_summary_requirement, and reader_aftertaste for this scene.",
                 "Write only the authoritative chapter obligation JSON; Studio renders the Markdown mirror and lifecycle evidence.",
             ],
             "style_constraints": ["Do not turn reader-experience notes into visible workflow text inside prose."],
@@ -433,7 +433,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
                 f"{candidate}.agent_completion.json",
             ],
             "hard_constraints": [
-                "Studio has already run generate-scene in the isolated workspace. Read its prompt manifest and sidecar; then the main platform agent personally writes the candidate body. Do not run CLI commands in this task.",
+                "Studio has already run generate-scene in the isolated workspace. Read its prompt manifest and sidecar; then the main ArcVellum Worker personally writes the candidate body. Do not run CLI commands in this task.",
                 "The candidate must not be drafted by a subagent and must not include workflow traces.",
                 "All declared durable participants must already resolve to formal character assets. Do not create planned character candidates from this prose task; record only genuinely prose-introduced characters through new_character_register.",
             ],

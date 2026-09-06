@@ -1,26 +1,26 @@
 # Formal Host Operating Constitution
 
-This document is the authority layer for platform agents that use this Skill as a project operating system.
+This document is the authority layer for ArcVellum Workers that use this Skill as a project operating system.
 
 ## Authority Order
 
 1. `task-next` chooses the next formal task for a registered route. Do not choose a lower-level command from memory when this loop is available.
 2. `task-open` is the executable task package. Read its prompt asset, source artifacts, expected outputs, validation gates, and forbidden shortcuts before acting.
-3. `.agent_tasks.md` files are live work for the current platform agent. They are not completed just because a CLI command wrote them.
-4. `task-submit` records the artifact the platform agent produced.
+3. `.agent_tasks.md` files are live work for the current ArcVellum Worker. They are not completed just because a CLI command wrote them.
+4. `task-submit` records the artifact the ArcVellum Worker produced.
 5. `task-complete` validates expected outputs and writes the route event. A task is not complete before this succeeds or an exact failure is recorded.
 6. `route-audit` is the formal pass/fail ledger for route readiness.
 7. `workflow-dashboard` is a read-only cockpit. It summarizes state; it does not advance work.
 8. `workflow-state` is a navigation summary. It helps find the next open step but does not replace `route-audit`.
-9. Low-level commands such as `context`, `simulate-scene`, `compose-scene`, `generate-scene`, `agent-review-scene`, `state-evolve`, `canon-evolve`, `chapter-workspace`, and `export-package` are route internals unless the current task package explicitly tells the platform agent to run them.
+9. Low-level commands such as `context`, `simulate-scene`, `compose-scene`, `generate-scene`, `agent-review-scene`, `state-evolve`, `canon-evolve`, `chapter-workspace`, and `export-package` are route internals unless the current task package explicitly tells the ArcVellum Worker to run them.
 
 Bare `lew --help` is intentionally small and state-machine-first. `help-all` is a maintainer/debug map, not the ordinary operating menu for formal project work.
 
 ## Formal Host Duties
 
-- The platform agent must probe documented commands before declaring them unavailable.
-- The platform agent must read sidecars and create completion markers after expected artifacts are checked.
-- Creative body prose, revisions, final text, branch decisions, semantic reviews, style prompts, and LLM-authored JSON belong to the main platform agent. Subagents may gather evidence, summarize, count, lint, or check schema, but they must not ghostwrite final body text.
+- The ArcVellum Worker must probe documented commands before declaring them unavailable.
+- The ArcVellum Worker must read sidecars and create completion markers after expected artifacts are checked.
+- Creative body prose, revisions, final text, branch decisions, semantic reviews, style prompts, and LLM-authored JSON belong to the main ArcVellum Worker. Subagents may gather evidence, summarize, count, lint, or check schema, but they must not ghostwrite final body text.
 - Debug flags are not operating instructions. Formal hosts must not use bypass flags to skip review, approval, composition, branch selection, or export readiness.
 - Formal hosts must not set `LEW_MAINTAINER_MODE=1`; that switch is reserved for explicit repository maintenance and regression tests.
 - Every persistent fact remains candidate-only until the relevant review/approval/promotion route accepts it.

@@ -49,6 +49,6 @@ def formal_bypass_message(hits: list[str], *, surface: str = "formal host") -> s
     flags = ", ".join(hits)
     return (
         f"{surface} blocked maintainer/debug bypass flag(s): {flags}. "
-        "Formal Skill-host work must complete the review/approval/task gates instead. "
+        "Formal Studio work must complete the review, approval, and task gates instead. "
         "Set LEW_MAINTAINER_MODE=1 only for explicit internal maintenance or regression tests."
     )

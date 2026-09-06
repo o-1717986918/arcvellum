@@ -1,4 +1,4 @@
-"""CLI-mediated task registry for formal platform-agent work."""
+"""CLI-mediated task registry for formal Worker work."""
 
 from __future__ import annotations
 

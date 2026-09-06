@@ -1,1 +1,1 @@
-"""Platform-agent task sidecar generation, inventory, and rendering."""
+"""ArcVellum Worker task sidecar generation, inventory, and rendering."""

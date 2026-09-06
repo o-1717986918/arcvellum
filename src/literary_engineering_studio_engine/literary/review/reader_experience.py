@@ -73,7 +73,7 @@ def build_chapter_obligation_tasks(
     json_output: Path | None = None,
     agent_tasks_output: Path | None = None,
 ) -> ChapterObligationResult:
-    """Create a platform-agent task sidecar for a chapter-level reader contract."""
+    """Create a Worker task sidecar for a chapter-level reader contract."""
 
     root = project_root.resolve()
     if not (root / "project.yaml").exists():
@@ -232,7 +232,7 @@ def ensure_reader_experience_ready(root: Path, scene_path: Path) -> dict[str, An
         return contract
     raise ValueError(
         "formal scene generation requires a ready reader-experience contract: "
-        f"{contract.get('message')}. Run chapter-obligation, let the platform agent fill the chapter/scene promise-payoff contract, "
+        f"{contract.get('message')}. Run chapter-obligation, let the ArcVellum Worker fill the chapter/scene promise-payoff contract, "
         "create its completion marker, then retry."
     )
 
@@ -267,7 +267,7 @@ def render_reader_experience_contract(root: Path, scene_path: Path) -> str:
 
 
 def reader_experience_adherence_for_body(root: Path, scene_path: Path, body: str) -> dict[str, Any]:
-    """Return deterministic evidence for agent review; semantics remain platform-agent work."""
+    """Return deterministic evidence for agent review; semantics remain Worker work."""
 
     contract = reader_experience_contract(root, scene_path)
     status = str(contract.get("status") or "")
@@ -364,7 +364,7 @@ def _write_chapter_obligation_agent_tasks(
         source_paths=[path for path in source_paths if path.exists()],
         notes=[
             "这是章节义务与读者体验门禁任务。",
-            "CLI 只写脚手架和校验字段；章节功能、悬念承诺、兑现/延迟和读者余味必须由平台 agent 判断。",
+            "CLI 只写脚手架和校验字段；章节功能、悬念承诺、兑现/延迟和读者余味必须由 ArcVellum Worker 判断。",
             "本契约用于 compose-scene、generate-scene、AgentReview、route-audit 和 longform-audit，不是可选说明。",
         ],
         tasks=[
@@ -394,7 +394,7 @@ def _render_obligation_markdown(root: Path, payload: dict[str, Any], json_path: 
         f"- 目标场景数：{payload.get('scene_count_target', 0)}",
         "- 计数口径：中文内容字符，计入汉字和中文标点；机器非空白字符仅作诊断。",
         "",
-        "## 平台 Agent 待完成",
+        "## ArcVellum Worker 待完成",
         "",
         "- 填写章节功能、必须兑现、必须设置、必须变化、暂不解决、继承钩子和章末钩子。",
         "- 为每个场景写清读者问题、承诺回报、暂扣信息、兑现或延迟、情绪曲线、张力来源、新鲜度、反摘要要求和读后余味。",
@@ -412,8 +412,8 @@ def _render_obligation_markdown(root: Path, payload: dict[str, Any], json_path: 
             "| {scene} | {target} | {question} | {payoff} |".format(
                 scene=scene.get("scene_id", ""),
                 target=scene.get("word_count_target", 0),
-                question=scene.get("reader_question", "") or "待平台 Agent 填写",
-                payoff=scene.get("payoff_or_delay", "") or "待平台 Agent 填写",
+                question=scene.get("reader_question", "") or "待 ArcVellum Worker 填写",
+                payoff=scene.get("payoff_or_delay", "") or "待 ArcVellum Worker 填写",
             )
         )
     return "\n".join(lines).rstrip() + "\n"

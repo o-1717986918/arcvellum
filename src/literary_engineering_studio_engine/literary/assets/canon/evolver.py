@@ -69,9 +69,9 @@ def build_canon_patch_task(
     output: Path | None = None,
     json_output: Path | None = None,
 ) -> CanonPatchTaskResult:
-    """Create a platform-agent sidecar for canon writeback candidates.
+    """Create a Worker sidecar for canon writeback candidates.
 
-    This command never applies canon. It only asks the platform agent to decide
+    This command never applies canon. It only asks the ArcVellum Worker to decide
     whether the promoted scene introduced durable world facts, then to write a
     candidate patch or an explicit no-change rationale.
     """
@@ -566,9 +566,9 @@ def _initial_report(root: Path, scene_id: str, scene_path: Path, source_path: Pa
 
 - 场景：`{_rel(scene_path, root)}`
 - 正文来源：`{_rel(source_path, root)}`
-- 状态：等待平台 Agent 判断
+- 状态：等待 ArcVellum Worker 判断
 
-本文件不是正式 canon。平台 Agent 需要读取同名 `.agent_tasks.md`，判断本场是否产生持续世界事实；若没有，写明 no_canon_change_reason；若有，写入候选 patch 并等待审查/审批。
+本文件不是正式 canon。ArcVellum Worker 需要读取同名 `.agent_tasks.md`，判断本场是否产生持续世界事实；若没有，写明 no_canon_change_reason；若有，写入候选 patch 并等待审查/审批。
 """
 
 

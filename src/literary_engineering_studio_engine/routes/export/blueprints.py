@@ -115,7 +115,7 @@ def _export_package(root: Path, chapter_id: str) -> dict[str, object]:
         "source_paths": list(export_package_source_paths(root, chapter_id)),
         "expected_outputs": expected_outputs,
         "hard_constraints": [
-            "Do not use --include-blocked in formal Skill-host work.",
+            "Do not use --include-blocked in formal Studio work.",
             "Export manifest must have zero skipped scenes and include_blocked=false.",
             "Final outputs must filter scene ids, canon notes, review notes, state patches, AGENT_TASK markers, and writeback candidates.",
         ],
@@ -206,7 +206,7 @@ def _publish_release(root: Path, chapter_id: str) -> dict[str, object]:
             "reviews/canon_lint.json",
         ],
         "hard_constraints": [
-            "Do not use --allow-unapproved in formal Skill-host work.",
+            "Do not use --allow-unapproved in formal Studio work.",
             "Published manifest must have status=published and copied delivery outputs.",
             "Overwrite formal-release only inside the isolated task sandbox and only after the current content-and-context approval Gate has passed.",
         ],

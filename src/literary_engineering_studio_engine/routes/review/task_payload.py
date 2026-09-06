@@ -16,11 +16,6 @@ DEFAULT_REQUIRED_READING = [
     "agentread.yaml",
     "references/agent-run-protocol.md",
     "references/cli-run-protocol.md",
-    "references/artifact-contracts.md",
-    "references/workflows.md",
-    "docs/implementation/phase30-agent-canon-review.md",
-    "docs/implementation/phase33-agent-review-committee.md",
-    "docs/implementation/phase8-longform-audit.md",
 ]
 
 FORBIDDEN_SHORTCUTS = [

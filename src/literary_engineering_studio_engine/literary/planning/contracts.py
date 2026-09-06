@@ -265,7 +265,7 @@ def ensure_scene_word_budget_ready(
         completion = agent_task_completion_status(budget_task, root=root)
         if completion.get("complete") is not True:
             raise ValueError(
-                "formal scene generation requires the word-budget platform-agent task to be completed before prose: "
+                "formal scene generation requires the word-budget Worker task to be completed before prose: "
                 f"{completion.get('message')}"
             )
         reviews_pass, review_message = all_planning_reviews_pass(root)

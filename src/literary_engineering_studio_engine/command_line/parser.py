@@ -2,14 +2,11 @@
 from __future__ import annotations
 
 import argparse
-from literary_engineering_studio_engine.prompting.agents.provider import AGENT_PROVIDERS
 from literary_engineering_studio_engine.literary.assets.workshop import ASSET_TYPES
 from .policy import FORMAL_HELP_COMMANDS, FORMAL_HELP_METAVAR
-from literary_engineering_studio_engine.foundation.dify_dsl import DEFAULT_DIFY_DSL_PATH
 from literary_engineering_studio_engine.literary.export.docx import DOCX_KINDS
 from literary_engineering_studio_engine.foundation.knowledge_store import KNOWLEDGE_BACKENDS
 from literary_engineering_studio_engine.projects.source_ingest import INGEST_MODES
-from literary_engineering_studio_engine.workflow.runner import WORKFLOW_MODES
 from .length_repair_parser import add_length_repair_parser
 from .parser_handoffs import register_handoff_commands
 from .parser_style import register_style_commands
@@ -21,7 +18,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True, metavar=None if full_help else FORMAL_HELP_METAVAR)
 
-    formal_help = sub.add_parser("formal-help", help="Show the state-machine-first host loop for formal Skill work.")
+    formal_help = sub.add_parser("formal-help", help="Show the state-machine-first loop for formal Studio work.")
     formal_help.add_argument("project", nargs="?", default="", help="Optional work project directory for copyable commands.")
     formal_help.add_argument("--route", default="scene-development", help="Route to demonstrate, such as scene-development or longform-planning.")
 
@@ -82,7 +79,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     context.add_argument("--trace-out", default="", help="Output context trace JSON path. Defaults to the context packet sidecar.")
 
     for command, help_text in (
-        ("source-ingest", "Import an existing work and write a platform-agent reverse extraction task."),
+        ("source-ingest", "Import an existing work and write a Worker reverse-extraction task."),
         ("extract-existing-work", "Alias for source-ingest."),
     ):
         source_ingest = sub.add_parser(command, help=help_text)
@@ -121,31 +118,13 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
 
     register_style_commands(sub)
 
-    agent_run = sub.add_parser("agent-run", help="Run a generic auditable agent task.")
-    agent_run.add_argument("project", help="Work project directory.")
-    agent_run.add_argument("--agent-id", required=True, help="Stable agent id, such as scene-reviewer.")
-    agent_run.add_argument("--task", required=True, help="Short task name or review objective.")
-    agent_run.add_argument("--system", default="", help="System prompt file. Relative paths resolve from project root.")
-    agent_run.add_argument("--user", default="", help="User prompt file. Relative paths resolve from project root.")
-    agent_run.add_argument("--system-text", default="", help="Inline system prompt text.")
-    agent_run.add_argument("--user-text", default="", help="Inline user prompt text.")
-    agent_run.add_argument("--provider", default="auto", choices=sorted(AGENT_PROVIDERS))
-    agent_run.add_argument("--out-dir", default="", help="Output directory. Defaults to agents/runs/{run_id}.")
-
     agent_validate = sub.add_parser("agent-validate", help="Validate a parsed agent output against a workbench schema.")
     agent_validate.add_argument("project", help="Work project directory.")
     agent_validate.add_argument("--schema", required=True, help="Schema name, such as scene_review.v1.")
     agent_validate.add_argument("--run-id", default="", help="Agent run id under agents/runs/.")
     agent_validate.add_argument("--run-dir", default="", help="Agent run directory. Relative paths resolve from project root.")
 
-    agent_repair = sub.add_parser("agent-repair", help="Repair an agent JSON output through provider and validate it.")
-    agent_repair.add_argument("project", help="Work project directory.")
-    agent_repair.add_argument("--schema", required=True, help="Schema name, such as scene_review.v1.")
-    agent_repair.add_argument("--run-id", default="", help="Agent run id under agents/runs/.")
-    agent_repair.add_argument("--run-dir", default="", help="Agent run directory. Relative paths resolve from project root.")
-    agent_repair.add_argument("--provider", default="auto", choices=sorted(AGENT_PROVIDERS))
-
-    agent_review_scene = sub.add_parser("agent-review-scene", help="Write a formal platform-agent scene review task.")
+    agent_review_scene = sub.add_parser("agent-review-scene", help="Write a formal Worker scene-review task.")
     agent_review_scene.add_argument("project", help="Work project directory.")
     agent_review_scene.add_argument("--scene", default="scenes/scene_0001.yaml")
     agent_review_scene.add_argument("--draft", default="", help="Draft path. Defaults to drafts/scenes/{scene_id}.md.")
@@ -158,44 +137,44 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
         help="Validate the full inventory or only the staged active scene.",
     )
 
-    agent_canon_review = sub.add_parser("agent-canon-review", help="Write a formal platform-agent canon and continuity review task.")
+    agent_canon_review = sub.add_parser("agent-canon-review", help="Write a formal Worker canon and continuity review task.")
     agent_canon_review.add_argument("project", help="Work project directory.")
 
-    agent_build_json = sub.add_parser("agent-build-json", help="Write a platform-agent task to draft JSON for a named schema.")
+    agent_build_json = sub.add_parser("agent-build-json", help="Write a Worker task to draft JSON for a named schema.")
     agent_build_json.add_argument("project", help="Work project directory.")
     agent_build_json.add_argument("--schema", required=True, help="Schema name, such as json_patch_plan.v1.")
     agent_build_json.add_argument("--agent-id", default="json-builder")
     agent_build_json.add_argument("--task", default="build-json")
     agent_build_json.add_argument("--source", default="", help="Optional source file.")
     agent_build_json.add_argument("--target", default="", help="Optional target path or object.")
-    agent_build_json.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    agent_build_json.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     agent_build_json.add_argument("--out-dir", default="", help="Output run directory.")
 
-    agent_plan_patch = sub.add_parser("agent-plan-patch", help="Write a platform-agent task for a controlled writeback patch plan.")
+    agent_plan_patch = sub.add_parser("agent-plan-patch", help="Write a Worker task for a controlled writeback patch plan.")
     agent_plan_patch.add_argument("project", help="Work project directory.")
     agent_plan_patch.add_argument("--target", required=True, help="Safe relative target path.")
     agent_plan_patch.add_argument("--source", default="", help="Optional source file.")
-    agent_plan_patch.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    agent_plan_patch.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     agent_plan_patch.add_argument("--out", default="", help="Output markdown path.")
     agent_plan_patch.add_argument("--json-out", default="", help="Output JSON path.")
 
-    agent_style_prompt = sub.add_parser("agent-style-prompt", help="Write a platform-agent task for style_prompt.md and schema JSON.")
+    agent_style_prompt = sub.add_parser("agent-style-prompt", help="Write a Worker task for style_prompt.md and schema JSON.")
     agent_style_prompt.add_argument("profile_dir", help="Directory containing style-profile.md and style_metrics.json.")
-    agent_style_prompt.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    agent_style_prompt.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     agent_style_prompt.add_argument("--out", default="", help="Output style prompt path. Defaults to profile_dir/style_prompt.md.")
     agent_style_prompt.add_argument("--json-out", default="", help="Output agent JSON path. Defaults to profile_dir/style_prompt.agent.json.")
 
-    agent_committee = sub.add_parser("agent-committee", help="Write a formal platform-agent review committee task.")
+    agent_committee = sub.add_parser("agent-committee", help="Write a formal Worker review committee task.")
     agent_committee.add_argument("project", help="Work project directory.")
     agent_committee.add_argument("--subject", required=True, help="Review subject label.")
     agent_committee.add_argument("--source", default="", help="Optional source file.")
 
-    agent_task_status = sub.add_parser("agent-task-status", help="Scan platform-agent sidecars and expected artifacts.")
+    agent_task_status = sub.add_parser("agent-task-status", help="Scan Worker sidecars and expected artifacts.")
     agent_task_status.add_argument("project", help="Work project directory.")
     agent_task_status.add_argument("--out", default="", help="Output markdown path. Defaults to workflow/agent_task_status.md.")
     agent_task_status.add_argument("--json-out", default="", help="Output JSON path. Defaults to workflow/agent_task_status.json.")
 
-    route_audit = sub.add_parser("route-audit", help="Audit route gates and pending platform-agent tasks.")
+    route_audit = sub.add_parser("route-audit", help="Audit route gates and pending Worker tasks.")
     route_audit.add_argument("project", help="Work project directory.")
     route_audit.add_argument("--route", default="", help="Route key such as scene-development, longform-planning, or export-and-release.")
     route_audit.add_argument("--out", default="", help="Output markdown path. Defaults to workflow/route_audit.md.")
@@ -208,13 +187,13 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     workflow_state.add_argument("--out", default="", help="Output markdown path. Defaults to workflow/route_state.md.")
     workflow_state.add_argument("--json-out", default="", help="Output JSON path. Defaults to workflow/route_state.json.")
 
-    task_next = sub.add_parser("task-next", help="Issue the next CLI-mediated platform-agent task for a formal route.")
+    task_next = sub.add_parser("task-next", help="Issue the next CLI-mediated Worker task for a formal route.")
     task_next.add_argument("project", help="Work project directory.")
     task_next.add_argument("--route", default="scene-development", help="Route key. Supports scene-development, longform-planning, source-ingest, style-engineering, character-and-world-assets, review-and-audit, and export-and-release.")
     task_next.add_argument("--scene", default="", help="Optional scene yaml path. Defaults to the first blocked scene.")
     task_next.add_argument("--force", action="store_true", help="Refresh an existing active task for the current state.")
 
-    task_open = sub.add_parser("task-open", help="Open a CLI-mediated platform-agent task package.")
+    task_open = sub.add_parser("task-open", help="Open a CLI-mediated Worker task package.")
     task_open.add_argument("project", help="Work project directory.")
     task_open.add_argument("--task-id", required=True)
 
@@ -228,7 +207,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     task_replay.add_argument("project", help="Work project directory.")
     task_replay.add_argument("--task-id", required=True)
 
-    task_submit = sub.add_parser("task-submit", help="Record platform-agent outputs for a CLI-mediated task.")
+    task_submit = sub.add_parser("task-submit", help="Record Worker outputs for a CLI-mediated task.")
     task_submit.add_argument("project", help="Work project directory.")
     task_submit.add_argument("--task-id", required=True)
     task_submit.add_argument("--from", dest="artifacts", action="append", default=[], help="Artifact path to submit. May be repeated.")
@@ -285,27 +264,16 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     prompt_preview.add_argument("--skill-root", default="", help="Skill root containing templates/prompt_assets. Defaults to auto-detect.")
     prompt_preview.add_argument("--json", action="store_true", help="Print JSON instead of Markdown.")
 
-    director_chat = sub.add_parser("director-chat", help="Run the top-level creative director agent for one user direction.")
-    director_chat.add_argument("project", help="Work project directory.")
-    director_chat.add_argument("--message", required=True, help="High-level creative direction from the user.")
-    director_chat.add_argument("--provider", default="auto", choices=sorted(AGENT_PROVIDERS))
-    director_chat.add_argument("--no-execute", action="store_true", help="Plan and record the director decision without running the delegated workflow.")
-    director_chat.add_argument("--agent-tasks", action="store_true", help="Ask delegated workflows to emit platform-agent task sidecars.")
-
-    director_status = sub.add_parser("director-status", help="Show project status as seen by the creative director.")
-    director_status.add_argument("project", help="Work project directory.")
-    director_status.add_argument("--limit", type=int, default=8)
-
     for command, asset_type, help_text in [
-        ("agent-create-character", "character", "Write a platform-agent task for a character profile candidate."),
-        ("agent-create-background-story", "background-story", "Write a platform-agent task for a hidden background-story candidate."),
-        ("agent-create-relationship", "relationship", "Write a platform-agent task for a relationship graph candidate."),
-        ("agent-create-world", "world", "Write a platform-agent task for a world-rules candidate."),
-        ("agent-create-location", "location", "Write a platform-agent task for a location candidate."),
-        ("agent-create-organization", "organization", "Write a platform-agent task for an organization candidate."),
-        ("agent-create-outline", "outline", "Write a platform-agent task for a plot outline candidate."),
-        ("agent-create-chapter-plan", "chapter-plan", "Write a platform-agent task for a chapter-plan candidate."),
-        ("agent-create-scene-list", "scene-list", "Write a platform-agent task for a scene-list candidate."),
+        ("agent-create-character", "character", "Write a Worker task for a character profile candidate."),
+        ("agent-create-background-story", "background-story", "Write a Worker task for a hidden background-story candidate."),
+        ("agent-create-relationship", "relationship", "Write a Worker task for a relationship graph candidate."),
+        ("agent-create-world", "world", "Write a Worker task for a world-rules candidate."),
+        ("agent-create-location", "location", "Write a Worker task for a location candidate."),
+        ("agent-create-organization", "organization", "Write a Worker task for an organization candidate."),
+        ("agent-create-outline", "outline", "Write a Worker task for a plot outline candidate."),
+        ("agent-create-chapter-plan", "chapter-plan", "Write a Worker task for a chapter-plan candidate."),
+        ("agent-create-scene-list", "scene-list", "Write a Worker task for a scene-list candidate."),
     ]:
         create = sub.add_parser(command, help=help_text)
         create.set_defaults(asset_type=asset_type)
@@ -313,36 +281,36 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
         create.add_argument("--brief", default="", help="Creative brief or constraints for the candidate.")
         create.add_argument("--target-id", default="", help="Stable id for the target character/location/organization when useful.")
         create.add_argument("--source", default="", help="Optional source file. Relative paths resolve from project root.")
-        create.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+        create.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
         create.add_argument("--out-dir", default="", help="Legacy compatibility only; formal command writes task sidecars next to expected outputs.")
 
-    create_asset = sub.add_parser("asset-create", help="Write a platform-agent task for any supported candidate asset by type.")
+    create_asset = sub.add_parser("asset-create", help="Write a Worker task for any supported candidate asset by type.")
     create_asset.add_argument("project", help="Work project directory.")
     create_asset.add_argument("--type", required=True, choices=ASSET_TYPES)
     create_asset.add_argument("--brief", default="")
     create_asset.add_argument("--target-id", default="")
     create_asset.add_argument("--source", default="")
-    create_asset.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    create_asset.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     create_asset.add_argument("--out-dir", default="", help="Legacy compatibility only; formal command writes task sidecars next to expected outputs.")
 
-    seed_assets = sub.add_parser("seed-project-assets", help="Create stable platform-agent sidecars for a project's foundational world and protagonist assets.")
+    seed_assets = sub.add_parser("seed-project-assets", help="Create stable Worker sidecars for a project's foundational world and protagonist assets.")
     seed_assets.add_argument("project", help="Work project directory.")
 
     list_assets = sub.add_parser("list-candidate-assets", help="List candidate assets created by agent asset commands.")
     list_assets.add_argument("project", help="Work project directory.")
     list_assets.add_argument("--type", default="", choices=("", *ASSET_TYPES))
 
-    review_asset = sub.add_parser("review-candidate-asset", help="Write a platform-agent task to review a candidate asset before promotion.")
+    review_asset = sub.add_parser("review-candidate-asset", help="Write a Worker task to review a candidate asset before promotion.")
     review_asset.add_argument("project", help="Work project directory.")
     review_asset.add_argument("candidate", help="Candidate path or candidate id.")
-    review_asset.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    review_asset.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
 
     promote_asset = sub.add_parser("promote-candidate-asset", help="Promote any reviewed and approved candidate asset.")
     promote_asset.add_argument("project", help="Work project directory.")
     promote_asset.add_argument("candidate", help="Candidate path or candidate id.")
     promote_asset.add_argument("--group", default="", choices=("", "character", "world", "outline"))
     promote_asset.add_argument("--approval-run-id", default="")
-    promote_asset.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass approval gates.")
+    promote_asset.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass approval gates.")
 
     for command, group, help_text in [
         ("promote-character-candidate", "character", "Promote a character/background/relationship candidate."),
@@ -354,7 +322,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
         promote.add_argument("project", help="Work project directory.")
         promote.add_argument("candidate", help="Candidate path or candidate id.")
         promote.add_argument("--approval-run-id", default="")
-        promote.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass approval gates.")
+        promote.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass approval gates.")
 
     draft = sub.add_parser("draft-scene", help="Create a scene draft workspace from a context packet.")
     draft.add_argument("project", help="Work project directory.")
@@ -376,25 +344,25 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     prepare_characters.add_argument("project", help="Work project directory.")
     prepare_characters.add_argument("--scene", default="scenes/scene_0001.yaml")
 
-    generate = sub.add_parser("generate-scene", help="Write a formal platform-agent scene generation task.")
+    generate = sub.add_parser("generate-scene", help="Write a formal Worker scene-generation task.")
     generate.add_argument("project", help="Work project directory.")
     generate.add_argument("--scene", default="scenes/scene_0001.yaml")
     generate.add_argument("--context", default="", help="Existing context packet path.")
     generate.add_argument("--composition", default="", help="Existing scene composition path. Defaults to drafts/compositions/{scene_id}_composition.md.")
     generate.add_argument("--query", default="", help="Extra retrieval query when context needs rebuilding.")
     generate.add_argument("--rebuild-context", action="store_true")
-    generate.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    generate.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     generate.add_argument("--out", default="", help="Output candidate markdown path.")
-    generate.add_argument("--agent-tasks", action="store_true", help="Legacy compatibility only; formal command always writes a platform-agent task.")
+    generate.add_argument("--agent-tasks", action="store_true", help="Legacy compatibility only; formal command always writes a Worker task.")
     generate.add_argument("--materialization-scope", choices=("full", "scene"), default="full", help="Validate the full inventory or only the staged active scene.")
-    generate.add_argument("--allow-unselected-composition", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass branch-selection gates.")
-    generate.add_argument("--allow-missing-composition", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass scene-composition gates.")
+    generate.add_argument("--allow-unselected-composition", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass branch-selection gates.")
+    generate.add_argument("--allow-missing-composition", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass scene-composition gates.")
 
-    revise = sub.add_parser("revise-scene", help="Write a formal platform-agent scene revision task.")
+    revise = sub.add_parser("revise-scene", help="Write a formal Worker scene-revision task.")
     revise.add_argument("project", help="Work project directory.")
     revise.add_argument("--scene", default="scenes/scene_0001.yaml")
     revise.add_argument("--draft", default="", help="Draft path. Defaults to drafts/scenes/{scene_id}.md.")
-    revise.add_argument("--review", default="", help="Review JSON/Markdown path. Defaults to platform Agent review JSON or static review.")
+    revise.add_argument("--review", default="", help="Review JSON/Markdown path. Defaults to ArcVellum Worker review JSON or static review.")
     revise.add_argument("--query", default="", help="Extra retrieval query when context needs rebuilding.")
     revise.add_argument("--rebuild-context", action="store_true")
     revise.add_argument("--out", default="", help="Expected revision candidate path. Defaults to drafts/revisions/{scene_id}_revision.md.")
@@ -411,8 +379,8 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     promote.add_argument("--overwrite", action="store_true", help="Replace an existing scene draft.")
     promote.add_argument("--approval-run-id", default="", help="Optional workflow approve run id used as selection evidence.")
     promote.add_argument("--selection-note", default="", help="Human note explaining why this candidate was selected.")
-    promote.add_argument("--allow-unreviewed", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass candidate-specific platform review.")
-    promote.add_argument("--allow-review-notes", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass unresolved review notes.")
+    promote.add_argument("--allow-unreviewed", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass candidate-specific platform review.")
+    promote.add_argument("--allow-review-notes", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass unresolved review notes.")
 
     state_evolve = sub.add_parser("state-evolve", help="Create a reviewable character state evolution patch from a scene artifact.")
     state_evolve.add_argument("project", help="Work project directory.")
@@ -420,9 +388,9 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     state_evolve.add_argument("--source", default="", help="Draft, candidate, composition markdown, or composition JSON path. Defaults to the scene draft when present.")
     state_evolve.add_argument("--out", default="", help="Output patch markdown path.")
     state_evolve.add_argument("--json-out", default="", help="Output patch JSON path.")
-    state_evolve.add_argument("--agent-tasks", action="store_true", help="Write a platform-agent task sidecar for reviewing the state patch.")
+    state_evolve.add_argument("--agent-tasks", action="store_true", help="Write a Worker task sidecar for reviewing the state patch.")
 
-    canon_evolve = sub.add_parser("canon-evolve", help="Create a platform-agent canon writeback candidate task for a promoted scene.")
+    canon_evolve = sub.add_parser("canon-evolve", help="Create a Worker canon-writeback candidate task for a promoted scene.")
     canon_evolve.add_argument("project", help="Work project directory.")
     canon_evolve.add_argument("--scene", default="scenes/scene_0001.yaml")
     canon_evolve.add_argument("--source", default="", help="Promoted draft or candidate path. Defaults to promoted scene draft.")
@@ -438,7 +406,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     canon_apply.add_argument("project", help="Work project directory.")
     canon_apply.add_argument("--patch", default="", help="Canon patch JSON path. Defaults to latest unapplied patch.")
     canon_apply.add_argument("--approval-run-id", default="", help="Workflow approval run id. Defaults to patch id.")
-    canon_apply.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass approval gates.")
+    canon_apply.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass approval gates.")
     canon_apply.add_argument("--out", default="", help="Output apply markdown report path.")
     canon_apply.add_argument("--json-out", default="", help="Output apply JSON manifest path.")
 
@@ -446,8 +414,8 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     state_apply.add_argument("project", help="Work project directory.")
     state_apply.add_argument("--patch", default="", help="State patch JSON path. Defaults to latest *_state_patch.json.")
     state_apply.add_argument("--approval-run-id", default="", help="Workflow run id with an approve record.")
-    state_apply.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass approval gates.")
-    state_apply.add_argument("--allow-unresolved", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass unresolved patch gates.")
+    state_apply.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass approval gates.")
+    state_apply.add_argument("--allow-unresolved", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass unresolved patch gates.")
     state_apply.add_argument("--out", default="", help="Output apply markdown report path.")
     state_apply.add_argument("--json-out", default="", help="Output apply JSON manifest path.")
 
@@ -458,7 +426,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     simulate.add_argument("--query", default="", help="Extra retrieval query when context needs rebuilding.")
     simulate.add_argument("--rebuild-context", action="store_true")
     simulate.add_argument("--out", default="", help="Output simulation path.")
-    simulate.add_argument("--agent", "--agent-tasks", dest="agent_tasks", action="store_true", help="Generate platform-agent executable task directives instead of empty placeholders.")
+    simulate.add_argument("--agent", "--agent-tasks", dest="agent_tasks", action="store_true", help="Generate executable Worker task directives instead of empty placeholders.")
     simulate.add_argument(
         "--roleplay-depth",
         choices=("light", "targeted", "full"),
@@ -476,7 +444,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     branch.add_argument("--out", default="", help="Output markdown path.")
     branch.add_argument("--json-out", default="", help="Output JSON manifest path.")
     branch.add_argument("--selection-out", default="", help="Output human selection record path.")
-    branch.add_argument("--agent", "--agent-tasks", dest="agent_tasks", action="store_true", help="Write a platform-agent task sidecar for reviewing branch decisions.")
+    branch.add_argument("--agent", "--agent-tasks", dest="agent_tasks", action="store_true", help="Write a Worker task sidecar for reviewing branch decisions.")
 
     compose = sub.add_parser("compose-scene", help="Create a scene composition packet from context, characters, and branch artifacts.")
     compose.add_argument("project", help="Work project directory.")
@@ -488,9 +456,9 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     compose.add_argument("--branch-selection", default="", help="Existing branch selection path. Defaults to branches/{scene_id}/branch_selection.md.")
     compose.add_argument("--out", default="", help="Output composition markdown path.")
     compose.add_argument("--json-out", default="", help="Output composition JSON path.")
-    compose.add_argument("--agent-tasks", action="store_true", help="Write a platform-agent task sidecar without polluting composition artifacts.")
-    compose.add_argument("--allow-recommended-branch", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass branch-selection gates.")
-    compose.add_argument("--allow-missing-branch", action="store_true", help="Maintainer/debug only; formal Skill hosts must not bypass branch-simulation gates.")
+    compose.add_argument("--agent-tasks", action="store_true", help="Write a Worker task sidecar without polluting composition artifacts.")
+    compose.add_argument("--allow-recommended-branch", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass branch-selection gates.")
+    compose.add_argument("--allow-missing-branch", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not bypass branch-simulation gates.")
 
     orchestration = sub.add_parser("orchestration-plan", help="Create an agent workflow platform blueprint.")
     orchestration.add_argument("project", help="Work project directory.")
@@ -508,12 +476,12 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     chapter.add_argument("--scenes", default="", help="Comma-separated scene yaml paths. Defaults to chapter scenes.")
     chapter.add_argument("--build-missing", action="store_true", help="Create missing scene draft workspaces.")
     chapter.add_argument("--review-drafts", action="store_true", help="Run review on available scene drafts.")
-    chapter.add_argument("--agent-review", action="store_true", help="Write platform-agent review tasks and require completed platform review JSON for ready scenes.")
+    chapter.add_argument("--agent-review", action="store_true", help="Write Worker review tasks and require completed platform review JSON for ready scenes.")
     chapter.add_argument("--out", default="", help="Output chapter markdown path.")
     chapter.add_argument("--json-out", default="", help="Output chapter JSON path.")
 
     for command, help_text in (
-        ("word-budget", "Build a long-form word budget and platform-agent expansion task."),
+        ("word-budget", "Build a long-form word budget and Worker expansion task."),
         ("longform-budget", "Alias for word-budget."),
     ):
         word_budget = sub.add_parser(command, help=help_text)
@@ -523,13 +491,13 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
         word_budget.add_argument("--target-chapters", type=int, default=0, help="Hard total chapter count. Defaults to project.yaml target_chapters; zero keeps literary inference.")
         word_budget.add_argument("--target-scenes", type=int, default=0, help="Hard total scene count. Defaults to project.yaml target_scenes; zero keeps literary inference.")
         word_budget.add_argument("--genre", default="", help="Genre preset, such as general, mystery, speculative, urban, or literary.")
-        word_budget.add_argument("--time-span", default="", help="Story time-span note for platform-agent planning.")
+        word_budget.add_argument("--time-span", default="", help="Story time-span note for Worker planning.")
         word_budget.add_argument("--outline", default="", help="Existing outline path. Defaults to plot/outline.md.")
         word_budget.add_argument("--out", default="", help="Output markdown path. Defaults to plot/word_budget/word_budget.md.")
         word_budget.add_argument("--json-out", default="", help="Output JSON path. Defaults to plot/word_budget/word_budget.json.")
         word_budget.add_argument("--agent-tasks-out", default="", help="Output agent task sidecar. Defaults to plot/word_budget/word_budget.agent_tasks.md.")
 
-    obligation = sub.add_parser("chapter-obligation", help="Create a chapter obligation and reader-experience platform-agent task.")
+    obligation = sub.add_parser("chapter-obligation", help="Create a chapter obligation and reader-experience Worker task.")
     obligation.add_argument("project", help="Work project directory.")
     obligation.add_argument("--chapter-id", default="", help="Chapter id. Defaults to the first scene chapter or chapter_0001.")
     obligation.add_argument("--out", default="", help="Output markdown path. Defaults to plot/chapter_obligations/{chapter_id}.md.")
@@ -571,7 +539,7 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     export = sub.add_parser("export-package", help="Export a chapter as Markdown and optional DOCX artifacts.")
     export.add_argument("project", help="Work project directory.")
     export.add_argument("--chapter-id", default="chapter_0001")
-    export.add_argument("--include-blocked", action="store_true", help="Maintainer/debug only; formal Skill hosts must not export non-ready scenes.")
+    export.add_argument("--include-blocked", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not export non-ready scenes.")
     export.add_argument("--rebuild-chapter", action="store_true", help="Rebuild chapter workspace before export.")
     export.add_argument("--out-dir", default="", help="Output directory. Defaults to exports/{chapter_id}.")
     export.add_argument("--formats", default="md", help="Comma-separated output formats: md,docx. Defaults to md.")
@@ -588,89 +556,17 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     publish.add_argument("--chapter-id", default="chapter_0001")
     publish.add_argument("--release-id", default="", help="Release id. Defaults to a UTC timestamp.")
     publish.add_argument("--approval-run-id", default="", help="Require a matching approve record for this workflow run id.")
-    publish.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Skill hosts must not publish without approval.")
+    publish.add_argument("--allow-unapproved", action="store_true", help="Maintainer/debug only; formal Studio runtimes must not publish without approval.")
     publish.add_argument("--rebuild-chapter", action="store_true", help="Rebuild chapter workspace and reviews before publishing.")
     publish.add_argument("--rebuild-export", action="store_true", help="Rebuild export package before publishing.")
     publish.add_argument("--out-dir", default="", help="Output release directory. Defaults to releases/{chapter_id}/{release_id}.")
     publish.add_argument("--overwrite", action="store_true", help="Allow replacing an existing release directory.")
     publish.add_argument("--export-formats", default="md", help="Comma-separated export formats for release: md,docx.")
 
-    workflow = sub.add_parser("run-workflow", help="Run a file-backed agent workflow and write state/log artifacts.")
-    workflow.add_argument("project", help="Work project directory.")
-    workflow.add_argument("--mode", default="full-cycle", choices=sorted(WORKFLOW_MODES))
-    workflow.add_argument("--scene", default="scenes/scene_0001.yaml")
-    workflow.add_argument("--chapter-id", default="chapter_0001")
-    workflow.add_argument("--target-length", type=int, default=100000)
-    workflow.add_argument("--include-blocked", action="store_true", help="Maintainer/debug only; formal Skill hosts must not export non-ready scenes.")
-    workflow.add_argument("--overwrite-draft", action="store_true", help="Regenerate draft workspace even when one exists.")
-    workflow.add_argument("--generate-candidate", action="store_true", help="Generate a scene candidate after scene composition.")
-    workflow.add_argument("--promote-candidate", action="store_true", help="Promote the generated or latest candidate only after the formal candidate review gate passes.")
-    workflow.add_argument("--agent-review", action="store_true", help="Run schema-gated agent scene/canon review nodes.")
-    workflow.add_argument("--agent-tasks", action="store_true", help="Generate platform-agent task sidecars for creative workflow artifacts.")
-    workflow.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal workflow writes platform-agent tasks.")
-    workflow.add_argument("--run-id", default="", help="Use a stable workflow run id instead of an auto-generated one.")
-    workflow.add_argument("--resume-run-id", default="", help="Create a new linked run that resumes/retries from a previous run id.")
-    workflow.add_argument("--overwrite-run", action="store_true", help="Allow replacing an existing run directory with the same run id.")
-    workflow.add_argument("--out-dir", default="", help="Workflow run directory. Defaults to workflow/runs/{run_id}.")
-
     approval = sub.add_parser("approval-summary", help="Summarize workflow approval records and follow-up tasks.")
     approval.add_argument("project", help="Work project directory.")
     approval.add_argument("--run-id", default="", help="Filter summary to one workflow run id.")
     approval.add_argument("--out", default="", help="Output markdown path. Defaults to workflow/approvals/approval_summary.md.")
-
-    langgraph = sub.add_parser("run-langgraph", help="Run the literary workflow through a LangGraph StateGraph.")
-    langgraph.add_argument("project", help="Work project directory.")
-    langgraph.add_argument("--scene", default="scenes/scene_0001.yaml")
-    langgraph.add_argument("--chapter-id", default="chapter_0001")
-    langgraph.add_argument("--target-length", type=int, default=100000)
-    langgraph.add_argument("--include-blocked", action="store_true", help="Maintainer/debug only; formal Skill hosts must not export non-ready scenes.")
-    langgraph.add_argument("--overwrite-draft", action="store_true", help="Regenerate draft workspace even when one exists.")
-    langgraph.add_argument("--generate-candidate", action="store_true", help="Generate a scene candidate after scene composition.")
-    langgraph.add_argument("--promote-candidate", action="store_true", help="Promote the generated or latest candidate only after the formal candidate review gate passes.")
-    langgraph.add_argument("--agent-review", action="store_true", help="Run schema-gated agent scene/canon review nodes.")
-    langgraph.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal workflow writes platform-agent tasks.")
-    langgraph.add_argument("--thread-id", default="", help="External orchestration thread id for LangGraph config.")
-
-    serve = sub.add_parser("serve-api", help="Start a FastAPI backend for Dify and workflow clients.")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8765)
-    serve.add_argument(
-        "--allowed-root",
-        action="append",
-        default=[],
-        help="Allowed project root or parent directory. Can be passed more than once.",
-    )
-    serve.add_argument(
-        "--api-token",
-        default="",
-        help="Require this API token for workflow endpoints. If omitted, LEW_API_TOKEN is used when set.",
-    )
-
-    dify = sub.add_parser("dify-dsl", help="Generate a Dify Workflow DSL starter for the workbench API.")
-    dify.add_argument("--out", default=str(DEFAULT_DIFY_DSL_PATH), help="Output YAML path.")
-    dify.add_argument("--app-name", default="文学工程审稿台", help="Dify app name.")
-    dify.add_argument("--api-base", default="http://127.0.0.1:8765", help="Workbench API base URL.")
-    dify.add_argument("--dsl-version", default="0.6.0", help="Dify DSL version to declare. Defaults to 0.6.0.")
-    dify.add_argument("--default-mode", default="full-cycle", choices=sorted(WORKFLOW_MODES))
-    dify.add_argument("--default-scene", default="scenes/scene_0001.yaml")
-    dify.add_argument("--default-chapter-id", default="chapter_0001")
-
-    config_show = sub.add_parser("config-show", help="Show the global workbench configuration with secrets redacted.")
-    config_show.add_argument("--raw", action="store_true", help="Show the normalized raw config instead of the effective view.")
-
-    config_init = sub.add_parser("config-init", help="Create or reset the global workbench configuration.")
-    config_init.add_argument("--overwrite", action="store_true", help="Overwrite an existing config with defaults.")
-
-    config_set = sub.add_parser("config-set-profile", help="Create or update one global model provider profile.")
-    config_set.add_argument("--name", default="deepseek", help="Profile name.")
-    config_set.add_argument("--api-base", default="", help="HTTP chat API base URL.")
-    config_set.add_argument("--model", default="", help="Model name.")
-    config_set.add_argument("--api-key-env", default="", help="Environment variable that contains the API key.")
-    config_set.add_argument("--temperature", type=float, default=None)
-    config_set.add_argument("--max-tokens", type=int, default=None)
-    config_set.add_argument("--timeout", type=float, default=None)
-    config_set.add_argument("--project-root", default="", help="Default work project root for API/front-end workflows.")
-    config_set.add_argument("--activate", action="store_true", help="Make this profile active.")
 
     if not full_help:
         _harden_top_level_help(parser)

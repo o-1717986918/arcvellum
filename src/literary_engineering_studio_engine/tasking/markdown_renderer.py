@@ -13,8 +13,6 @@ OPERATING_REFERENCE_PATHS = {
     "agentread.yaml",
     "references/agent-run-protocol.md",
     "references/cli-run-protocol.md",
-    "references/artifact-contracts.md",
-    "references/workflows.md",
 }
 AGENT_OUTPUT_CONTRACT = (
     "Only create the files listed under Allowed Outputs / Expected Outputs for this task. "
@@ -55,7 +53,7 @@ def _header(
 ) -> list[str]:
     task_id = str(task.get("task_id") or "")
     lines = [
-        f"# CLI 中介平台 Agent 任务：{task_id}",
+        f"# ArcVellum 受控任务：{task_id}",
         "",
         (
             "本文件由 `task-next` / `task-open` 生成，代表一个需要明确记录的用户决策边界。"
@@ -65,7 +63,7 @@ def _header(
         (
             "请在 Studio 决策界面记录选择；此任务不要求 Agent 创建文件，也不允许 Agent 替用户做出选择。"
             if human_required
-            else "用户可以继续与平台 Agent 自然对话；但本任务涉及的正式产物必须通过 CLI 提交和完成。"
+            else "用户可以继续与 ArcVellum Worker 自然对话；但本任务涉及的正式产物必须通过 CLI 提交和完成。"
         ),
         "",
         "## Task Metadata",
@@ -111,7 +109,7 @@ def _sources(task: dict[str, object], agent_sources: list[str]) -> list[str]:
                 "",
                 "## Source Boundary",
                 "",
-                "上列是平台 Agent 唯一需要阅读的项目资料。`source_paths` 中其余项目仅供 CLI/Studio Worker 复现确定性门禁；不得遍历目录、搜索项目或读取未列路径。",
+                "上列是 ArcVellum Worker 唯一需要阅读的项目资料。`source_paths` 中其余项目仅供 Studio 复现确定性门禁；不得遍历目录、搜索项目或读取未列路径。",
             ]
         )
     return lines
@@ -125,7 +123,7 @@ def _command(task: dict[str, object], human_required: bool) -> list[str]:
     elif command:
         lines.extend(["```powershell", command, "```"])
     else:
-        lines.append("- 本任务主要由平台 Agent 读取 source artifacts 后写出判断或创作产物。")
+        lines.append("- 本任务主要由 ArcVellum Worker 读取 source artifacts 后写出判断或创作产物。")
     return lines
 
 
@@ -211,7 +209,7 @@ def _protected_output_section(task: dict[str, object]) -> list[str]:
         "",
         "## CLI Protected Outputs",
         "",
-        "以下文件由 Studio Worker 或本任务的 CLI Command 维护。平台 Agent 必须读取它们，但不得创建、覆盖、删除或用手写版本替代它们。",
+        "以下文件由 Studio Worker 或本任务的 CLI Command 维护。ArcVellum Worker 必须读取它们，但不得创建、覆盖、删除或用手写版本替代它们。",
         *(f"- 只读 `{item}`" for item in outputs),
     ]
 

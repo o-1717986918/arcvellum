@@ -1,4 +1,4 @@
-"""Platform-Agent sidecars for whole-work archaeology reconstruction."""
+"""ArcVellum Worker sidecars for whole-work archaeology reconstruction."""
 
 from __future__ import annotations
 

@@ -7,9 +7,9 @@ Its purpose is not to let the local CLI “understand” literature. The CLI per
 1. store source text under `sources/imports/{work_id}/raw/`;
 2. normalize and split it into chunk files;
 3. write `source_manifest.json` and `source_ingest.md`;
-4. write `extract_project_files.agent_tasks.md` for the platform agent.
+4. write `extract_project_files.agent_tasks.md` for the ArcVellum Worker.
 
-The platform agent then performs the creative and analytical work.
+The ArcVellum Worker then performs the creative and analytical work.
 
 ## Use Cases
 
@@ -45,7 +45,7 @@ sources/imports/{work_id}/source_ingest.md
 sources/imports/{work_id}/extract_project_files.agent_tasks.md
 ```
 
-Expected platform-agent candidate outputs:
+Expected Worker candidate outputs:
 
 ```text
 sources/imports/{work_id}/extracted/project_brief.md
@@ -60,7 +60,7 @@ reviews/source_ingest/{work_id}_extraction_review.md
 
 ## Platform Agent Duties
 
-When executing the sidecar, the platform agent should:
+When executing the sidecar, the ArcVellum Worker should:
 
 - separate confirmed source evidence from inference;
 - attach `evidence_refs`, confidence, unknowns, and contradiction notes to important claims;

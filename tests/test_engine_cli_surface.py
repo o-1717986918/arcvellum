@@ -10,6 +10,7 @@ import argparse
 import unittest
 
 from literary_engineering_studio_engine.cli import FORMAL_HELP_COMMANDS, build_parser
+from literary_engineering_studio_engine.command_line.policy import STUDIO_DISABLED_COMMANDS
 from literary_engineering_studio_engine.command_line.commands.formal import FORMAL_HANDLERS
 from literary_engineering_studio_engine.command_line.commands.scene import SCENE_HANDLERS
 
@@ -42,6 +43,16 @@ class EngineCliSurfaceTests(unittest.TestCase):
             self.assertIn(command, compact_help)
         self.assertNotIn("compose-scene", compact_help)
         self.assertNotIn("agent-run", compact_help)
+
+    def test_retired_product_commands_are_not_registered(self):
+        parser = build_parser(full_help=True)
+        choices = set(_subparser_action(parser).choices)
+        self.assertFalse(STUDIO_DISABLED_COMMANDS & choices)
+        self.assertNotIn("director-status", choices)
+
+        full_help = parser.format_help()
+        for command in (*sorted(STUDIO_DISABLED_COMMANDS), "director-status"):
+            self.assertNotIn(command, full_help)
 
     def test_formal_and_scene_dispatch_tables_cover_their_owned_commands(self):
         self.assertEqual(

@@ -4,7 +4,7 @@
 
 ## 解决的问题
 
-长篇项目常见失败不是模型不会写句子，而是大纲和场景只记录“发生了什么”。当正文生成时，平台 Agent 容易把每场写成剧情摘要：事件推进了，但没有读者问题、承诺回报、信息暂扣、兑现或延迟，也没有章节级的功能义务。最后看起来字数不足、节奏发虚、每章没有继续读的理由。
+长篇项目常见失败不是模型不会写句子，而是大纲和场景只记录“发生了什么”。当正文生成时，ArcVellum Worker 容易把每场写成剧情摘要：事件推进了，但没有读者问题、承诺回报、信息暂扣、兑现或延迟，也没有章节级的功能义务。最后看起来字数不足、节奏发虚、每章没有继续读的理由。
 
 `reader_experience.py` 将这个问题拆成两层：
 
@@ -29,7 +29,7 @@ python -m literary_engineering_workbench task-submit "<work-dir>" --task-id <tas
 python -m literary_engineering_workbench task-complete "<work-dir>" --task-id <task-id>
 ```
 
-`word-budget` 会额外创建 `plot/chapter_obligations/chapter_obligations.agent_tasks.md`。平台 Agent 必须处理这份通用章节义务规划侧车，写出 `reviews/word_budget/chapter_obligation_review.md`，并创建 completion marker。单章进入正文前，再运行 `chapter-obligation --chapter-id <chapter_id>`，由平台 Agent 填写对应的 `chapter_*.json` 和 `chapter_*.md`，完成相邻 `.agent_completion.json`。
+`word-budget` 会额外创建 `plot/chapter_obligations/chapter_obligations.agent_tasks.md`。ArcVellum Worker 必须处理这份通用章节义务规划侧车，写出 `reviews/word_budget/chapter_obligation_review.md`，并创建 completion marker。单章进入正文前，再运行 `chapter-obligation --chapter-id <chapter_id>`，由 ArcVellum Worker 填写对应的 `chapter_*.json` 和 `chapter_*.md`，完成相邻 `.agent_completion.json`。
 
 ## 必填字段
 
@@ -70,9 +70,9 @@ python -m literary_engineering_workbench task-complete "<work-dir>" --task-id <t
 
 计数口径仍以清洗后的中文内容字符为准，计入汉字和中文标点。机器非空白字符只作诊断映射，用来发现正文中是否混入英文路径、JSON key、workflow 痕迹或 Markdown 标记。
 
-## 平台 Agent 责任
+## ArcVellum Worker 责任
 
-CLI 只生成脚手架和确定性门禁。平台 Agent 必须完成真正的文学判断：
+CLI 只生成脚手架和确定性门禁。ArcVellum Worker 必须完成真正的文学判断：
 
 - 判断章节义务是否足以支撑目标中文内容字符。
 - 把读者问题和承诺回报写成可执行的场景策略。
@@ -92,4 +92,4 @@ CLI 只生成脚手架和确定性门禁。平台 Agent 必须完成真正的文
 - prompt manifest 中的 `generation_standards.reader_experience_contract`
 - AgentReview 中的 `reader_experience_adherence`
 
-缺任一关键项时，状态机应把下一步指向补契约或补审查，而不是让平台 Agent 直接写正文。
+缺任一关键项时，状态机应把下一步指向补契约或补审查，而不是让 ArcVellum Worker 直接写正文。

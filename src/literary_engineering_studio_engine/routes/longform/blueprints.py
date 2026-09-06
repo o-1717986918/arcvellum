@@ -127,7 +127,7 @@ def _budget_blueprints(
             ],
             "hard_constraints": [
                 "Run word-budget / longform-budget before bulk outline or scene generation.",
-                "Inspect both emitted platform-agent sidecars; this task is only the deterministic budget scaffold.",
+                "Inspect both emitted Worker sidecars; this task is only the deterministic budget scaffold.",
             ],
             "style_constraints": [],
             "word_count_target": target_words,
@@ -191,7 +191,7 @@ def _chapter_blueprints(root: Path, target_words: int) -> dict[str, dict[str, ob
             "hard_constraints": [
                 "Follow the exact chapter-obligation prompt contract and build a chapter-level promise/payoff plan; Studio owns the lifecycle sidecar and receipt.",
                 "Each chapter must map target Chinese-content characters to reader questions, promised rewards, withheld information, payoff/delay, and anti-summary requirements.",
-                "Per-scene chapter-obligation JSON files remain platform-agent contracts; create them with chapter-obligation before scene prose generation.",
+                "Per-scene chapter-obligation JSON files remain Worker contracts; create them with chapter-obligation before scene prose generation.",
             ],
             "style_constraints": [],
             "word_count_target": target_words,

@@ -108,9 +108,9 @@ def _asset_intake(context: AssetBlueprintContext) -> dict[str, object]:
             "characters/candidates/protagonist-foundation.agent_tasks.md",
         ],
         [
-            "Run seed-project-assets to create stable world-foundation and protagonist-foundation platform-agent sidecars.",
+            "Run seed-project-assets to create stable world-foundation and protagonist-foundation Worker sidecars.",
             "This deterministic step creates task contracts only; it does not invent or promote canon and character facts.",
-            "The platform agent must not write directly to confirmed canon, character files, outline, scenes, drafts, exports, or releases.",
+            "The ArcVellum Worker must not write directly to confirmed canon, character files, outline, scenes, drafts, exports, or releases.",
         ],
         ["world and protagonist asset creation sidecars exist"],
         ["asset-creation-agent-task"],
@@ -143,8 +143,8 @@ def _asset_review_prepare(context: AssetBlueprintContext) -> dict[str, object]:
         [context.candidate, context.candidate_report, *context.compact_context],
         [context.review_task],
         [
-            "Run review-candidate-asset to create a formal platform-agent asset review sidecar.",
-            "The command prepares the review task; the platform agent still performs the semantic review.",
+            "Run review-candidate-asset to create a formal Worker asset-review sidecar.",
+            "The command prepares the review task; the ArcVellum Worker still performs the semantic review.",
         ],
         ["asset review sidecar exists"],
         ["asset-review-agent-task"],
@@ -259,7 +259,7 @@ def _asset_promotion(context: AssetBlueprintContext) -> dict[str, object]:
         [context.promotion, context.promotion_report, *context.promoted_outputs],
         [
             "Promote only after clean review and matching approve record.",
-            "Do not use --allow-unapproved in formal Skill-host work.",
+            "Do not use --allow-unapproved in formal Studio work.",
             "After promotion, run canon-lint or the relevant downstream route before relying on the new project facts.",
         ],
         ["promotion manifest exists", "allow_unapproved is false", "promotion outputs exist"],

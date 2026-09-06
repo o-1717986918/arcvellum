@@ -1,13 +1,29 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import runpy
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 ROOT = Path(SPECPATH).parent
 datas = collect_data_files("literary_engineering_studio")
-datas += collect_data_files("literary_engineering_studio_engine")
+engine_data_root = ROOT / "src" / "literary_engineering_studio_engine" / "_engine"
+resource_policy = runpy.run_path(
+    str(ROOT / "src" / "literary_engineering_studio_engine" / "foundation" / "runtime_resources.py")
+)
+is_installable_engine_resource = resource_policy["is_installable_engine_resource"]
+engine_data = []
+for item in collect_data_files("literary_engineering_studio_engine"):
+    source = Path(item[0]).resolve()
+    try:
+        relative = source.relative_to(engine_data_root.resolve()).as_posix()
+    except ValueError:
+        engine_data.append(item)
+        continue
+    if is_installable_engine_resource(relative):
+        engine_data.append(item)
+datas += engine_data
 hiddenimports = collect_submodules("uvicorn")
 hiddenimports += collect_submodules("fastapi")
 hiddenimports += collect_submodules("literary_engineering_studio")

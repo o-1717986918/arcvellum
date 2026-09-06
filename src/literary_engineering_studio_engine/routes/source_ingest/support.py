@@ -19,8 +19,6 @@ SOURCE_INGEST_REQUIRED_READING = [
     "agentread.yaml",
     "references/agent-run-protocol.md",
     "references/cli-run-protocol.md",
-    "references/artifact-contracts.md",
-    "references/workflows.md",
 ]
 SOURCE_INGEST_FORBIDDEN_SHORTCUTS = [
     "Do not write source-derived material directly into canon, character, plot, draft, export, or release files.",

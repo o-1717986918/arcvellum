@@ -21,18 +21,18 @@ def register_style_commands(sub) -> None:
     style_eval.add_argument("--mode", default="back-translation", choices=sorted(STYLE_EVAL_MODES))
     style_eval.add_argument("--out-dir", default="", help="Output directory. Defaults to profile_dir/evaluation_results/{mode}.")
 
-    style_prompt = sub.add_parser("style-prompt", help="Write a platform-agent task for an LLM-facing style constraint prompt.")
+    style_prompt = sub.add_parser("style-prompt", help="Write an ArcVellum Worker task for a style constraint prompt.")
     style_prompt.add_argument("profile_dir", help="Directory containing style-profile.md and style_metrics.json.")
-    style_prompt.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    style_prompt.add_argument("--provider", default="platform-agent", help="Legacy compatibility field; formal execution always targets ArcVellum Worker.")
     style_prompt.add_argument("--out", default="", help="Output style prompt path. Defaults to profile_dir/style_prompt.md.")
     style_prompt.add_argument("--manifest-out", default="", help="Output prompt manifest path. Defaults to profile_dir/style_prompt.prompt.json.")
 
-    style_prompt_eval = sub.add_parser("style-prompt-eval", help="Write a platform-agent task for a style-prompt evaluation candidate.")
+    style_prompt_eval = sub.add_parser("style-prompt-eval", help="Write an ArcVellum Worker task for a style-prompt evaluation candidate.")
     style_prompt_eval.add_argument("profile_dir", help="Directory containing style_prompt.md and style_metrics.json.")
     style_prompt_eval.add_argument("--reference", required=True, help="Original/reference Chinese text file.")
     style_prompt_eval.add_argument("--input", required=True, help="Back-translation English text, outline, or blind-review task input.")
     style_prompt_eval.add_argument("--mode", default="back-translation", choices=sorted(STYLE_EVAL_MODES))
-    style_prompt_eval.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    style_prompt_eval.add_argument("--provider", default="platform-agent", help="Legacy compatibility field; formal execution always targets ArcVellum Worker.")
     style_prompt_eval.add_argument("--style-prompt", default="", help="Style prompt path. Defaults to profile_dir/style_prompt.md.")
     style_prompt_eval.add_argument("--out-dir", default="", help="Output directory. Defaults to profile_dir/evaluation_results/{mode}.")
 
@@ -83,11 +83,11 @@ def _register_style_library_commands(sub) -> None:
     style_lab_import.add_argument("--filename", default="")
     style_lab_import.add_argument("--chunk-chars", type=int, default=4000)
 
-    style_lab_compile = sub.add_parser("style-lab-compile", help="Compile an author profile and write a platform-agent style prompt task.")
+    style_lab_compile = sub.add_parser("style-lab-compile", help="Compile an author profile and write an ArcVellum Worker style-prompt task.")
     style_lab_compile.add_argument("--library", default="", help="Style library root. Defaults to global config.")
     style_lab_compile.add_argument("--author-id", required=True)
     style_lab_compile.add_argument("--profile-id", default="default")
-    style_lab_compile.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the platform agent.")
+    style_lab_compile.add_argument("--provider", default="platform-agent", help="Legacy compatibility field; formal execution always targets ArcVellum Worker.")
 
     style_lab_skill = sub.add_parser("style-lab-build-skill", help="Build a mountable style skill from an author profile.")
     style_lab_skill.add_argument("--library", default="", help="Style library root. Defaults to global config.")

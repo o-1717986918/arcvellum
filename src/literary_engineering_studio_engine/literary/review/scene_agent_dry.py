@@ -143,7 +143,7 @@ def _style_adherence(style_source: str, has_body: bool) -> dict[str, object]:
     return {
         "status": status,
         "style_profile": style_source or "n/a",
-        "evidence": ["dry-run 仅保持审查契约；真实平台 agent 需要引用正文证据。"] if style_source else [],
+        "evidence": ["dry-run 仅保持审查契约；真实 ArcVellum Worker 需要引用正文证据。"] if style_source else [],
         "deviations": [],
         "revision_actions": actions,
     }
@@ -154,7 +154,7 @@ def _rhythm_adherence(has_body: bool) -> dict[str, object]:
         "status": "pass_with_notes" if has_body else "revise_required",
         "rhythm_executed": has_body,
         "bridge_executed": has_body,
-        "flatness_risks": ["dry-run cannot semantically judge rhythm; platform agent must verify scene turn and bridge."],
+        "flatness_risks": ["dry-run cannot semantically judge rhythm; ArcVellum Worker must verify scene turn and bridge."],
         "revision_actions": [],
     }
 
@@ -176,7 +176,7 @@ def _revision_integrity(issues: list[Any]) -> dict[str, object]:
         "evasion_risks_unresolved": evasion.copy(),
         "retained_transitions": [],
         "burden_of_proof": [],
-        "message": "dry-run deterministic review; platform agent must perform semantic revision-integrity review.",
+        "message": "dry-run deterministic review; ArcVellum Worker must perform semantic revision-integrity review.",
     }
 
 

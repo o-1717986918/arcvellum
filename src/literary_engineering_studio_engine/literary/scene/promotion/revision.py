@@ -261,7 +261,7 @@ def _write_revision_task(
         root=root,
         source_paths=source_paths,
         notes=[
-            "这是正式场景修订闭环任务，由平台 agent 执行，不调用本地 dry-run、http-chat 或外部 agent。",
+            "这是正式场景修订闭环任务，由 ArcVellum Worker 执行，不调用本地 dry-run、http-chat 或外部 agent。",
             "修订候选仍是 candidate，不得直接覆盖 drafts/scenes、canon、characters 或 plot。",
             f"完成后写入修订候选：{_rel(candidate, root)}",
             f"完成后写入修订报告：{_rel(report, root)}",

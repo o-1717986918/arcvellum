@@ -17,7 +17,6 @@ from literary_engineering_studio_engine.literary.export.publish import publish_c
 from literary_engineering_studio_engine.literary.review.reader_experience import build_chapter_obligation_tasks
 from literary_engineering_studio_engine.literary.scene.context.handoff import build_scene_handoff
 from literary_engineering_studio_engine.literary.assets.continuity.architecture import prepare_story_architecture, prepare_story_architecture_review, story_architecture_status
-from literary_engineering_studio_engine.workflow.runner import run_workflow
 from ...literary.planning.service import build_word_budget
 from .length_repair import handle as handle_length_repair
 def handle(args, parser) -> int | None:
@@ -271,34 +270,6 @@ def handle(args, parser) -> int | None:
         print(f"release_id: {result.release_id}")
         print(f"published_scenes: {result.published_scene_count}")
         print(f"approval_run_id: {result.approval_run_id or 'n/a'}")
-        return 0
-
-    if args.command == "run-workflow":
-        out_dir = Path(args.out_dir) if args.out_dir else None
-        result = run_workflow(
-            Path(args.project),
-            mode=args.mode,
-            scene=Path(args.scene),
-            chapter_id=args.chapter_id,
-            target_length=args.target_length,
-            include_blocked=args.include_blocked,
-            overwrite_draft=args.overwrite_draft,
-            generate_candidate=args.generate_candidate,
-            promote_candidate=args.promote_candidate,
-            agent_review=args.agent_review,
-            agent_tasks=args.agent_tasks,
-            provider=args.provider,
-            output_dir=out_dir,
-            run_id=args.run_id or None,
-            resumed_from=args.resume_run_id,
-            overwrite_run=args.overwrite_run,
-        )
-        print(f"run_id: {result.run_id}")
-        print(f"status: {result.status}")
-        print(f"state: {result.state_path}")
-        print(f"log: {result.log_path}")
-        print(f"nodes: {result.node_count}")
-        print(f"blocked: {str(result.blocked).lower()}")
         return 0
 
     if args.command == "approval-summary":

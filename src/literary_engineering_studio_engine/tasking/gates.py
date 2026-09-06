@@ -97,14 +97,14 @@ def fallback_selection_reason_error(
 
 
 def ensure_agent_task_completed(root: Path, task_path: Path, *, label: str) -> dict[str, object]:
-    """Reject forward progress when a formal platform-agent sidecar is still pending."""
+    """Reject forward progress when a formal Worker sidecar is still pending."""
 
     state = agent_task_completion_status(task_path, root=root)
     if state.get("complete") is True:
         return state
     raise FlowGateError(
-        f"formal platform-agent task must be completed before {label}: {state.get('message')}. "
-        "Read the .agent_tasks.md file, perform the platform-agent work, write expected artifacts, "
+        f"formal Worker task must be completed before {label}: {state.get('message')}. "
+        "Read the .agent_tasks.md file, perform the Worker work, write expected artifacts, "
         "then create the matching .agent_completion.json marker. Do not skip it by reading only the JSON/report artifact."
     )
 

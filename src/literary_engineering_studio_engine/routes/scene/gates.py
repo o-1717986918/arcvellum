@@ -372,7 +372,7 @@ def _promotion_gate_errors(root: Path, task: dict[str, object]) -> list[str]:
         return [f"promotion manifest is missing or empty: {_rel(manifest_path, root)}"]
     errors: list[str] = []
     if payload.get("allow_unreviewed") is True:
-        errors.append("promotion manifest uses allow_unreviewed=true; debug review bypass is forbidden for formal Skill hosts")
+        errors.append("promotion manifest uses allow_unreviewed=true; debug review bypass is forbidden for formal Studio runtimes")
     if payload.get("allow_review_notes") is True:
         errors.append("promotion manifest uses allow_review_notes=true; pass_with_notes must be revised and re-reviewed")
     candidate_value = str(payload.get("candidate") or "")

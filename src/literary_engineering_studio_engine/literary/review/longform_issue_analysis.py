@@ -129,7 +129,7 @@ def _readiness_issue(scene: LongformSceneRecord) -> LongformIssue | None:
         "needs_draft": ("draft_readiness", "场景缺少可审计正文草稿。", "运行 draft-scene 并补全正文草稿。"),
         "needs_flow_gates": ("flow_readiness", "场景缺少正式场景链路门禁，不能进入章节或长篇 ready。", "补齐 context、simulate-scene --agent、branch-simulate --agent、branch_selection.md 和 ready composition。"),
         "needs_review": ("review_readiness", "场景有正文但缺少审查报告。", "运行 review-scene。"),
-        "needs_agent_review": ("review_readiness", "场景缺少平台 Agent 正式审查 JSON，不能进入 ready。", "运行 agent-review-scene 生成任务，由平台 agent 填写 scene_review.v1 JSON 和 Markdown 报告。"),
+        "needs_agent_review": ("review_readiness", "场景缺少 ArcVellum Worker 正式审查 JSON，不能进入 ready。", "运行 agent-review-scene 生成任务，由 ArcVellum Worker 填写 scene_review.v1 JSON 和 Markdown 报告。"),
         "needs_revision": ("review_readiness", "场景存在 pass_with_notes、warnings、revision_actions、style_notes 或未解决文风偏差。", "运行 revise-scene 或记录正式 waiver 后重新进行静态/AgentReview。"),
         "blocked": ("review_readiness", f"场景审查未通过：{scene.review_conclusion or 'unknown'}。", "根据审查报告修订后重新 review-scene。"),
     }
@@ -176,7 +176,7 @@ def _word_budget_issues(
         issues.append(LongformIssue(
             "medium", "word_budget", subject,
             "目标中文内容字符达到中长篇规模，但缺少长篇字数预算与剧情库存门禁。",
-            "先运行 word-budget / longform-budget，并由平台 agent 根据任务侧车扩充预算化大纲候选。",
+            "先运行 word-budget / longform-budget，并由 ArcVellum Worker 根据任务侧车扩充预算化大纲候选。",
         ))
         return issues
     if not word_budget:
@@ -188,7 +188,7 @@ def _word_budget_issues(
         issues.append(LongformIssue(
             "medium", "word_budget", subject,
             "预算报告显示现有大纲或场景库存不足，直接生成正文容易把长篇压缩成短篇摘要。",
-            "让平台 agent 处理 word_budget.agent_tasks.md，写出预算化大纲候选并通过 word-budget review。",
+            "让 ArcVellum Worker 处理 word_budget.agent_tasks.md，写出预算化大纲候选并通过 word-budget review。",
         ))
     if planned_scenes and scenes and len(scenes) < planned_scenes * 0.5:
         issues.append(LongformIssue(

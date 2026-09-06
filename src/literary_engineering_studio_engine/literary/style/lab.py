@@ -622,10 +622,10 @@ def _style_skill_readiness(skill_dir: Path) -> dict[str, Any]:
         "missing": missing,
         "blocking_risks": blocking_risks,
         "rules": [
-            "style prompt must be written by the platform agent into style_prompt.md",
+            "style prompt must be written by the ArcVellum Worker into style_prompt.md",
             f"style prompt detail must be {STYLE_PROMPT_MIN_DETAIL_CHARS}-{STYLE_PROMPT_MAX_DETAIL_CHARS} Chinese-content characters, counting Han characters and Chinese punctuation",
             "style prompt must include identity/boundary, mechanism, narrative distance, syntax/rhythm, punctuation, imagery/sensory, psychology/behavior, dialogue, avoid rules, and self-check blocks",
-            "style_prompt.agent.json must record the platform-agent prompt contract",
+            "style_prompt.agent.json must record the Worker prompt contract",
             "at least one deterministic style_eval JSON must pass copy-risk and similarity gates",
         ],
     }

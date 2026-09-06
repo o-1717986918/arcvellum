@@ -1,11 +1,9 @@
-"""Low-level Agent task construction and maintainer runtime commands."""
+"""Agent task construction and deterministic output validation commands."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
-from literary_engineering_studio_engine.prompting.agents.schema import repair_agent_run, validate_agent_run
-from literary_engineering_studio_engine.command_line.support import read_prompt_arg as _read_prompt_arg
+from literary_engineering_studio_engine.prompting.agents.schema import validate_agent_run
 from literary_engineering_studio_engine.command_line.support import print_agent_task_notice as _print_agent_task_notice
 from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_canon_review_task, write_platform_committee_task, write_platform_json_task,
@@ -13,32 +11,6 @@ from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_style_prompt_task,
 )
 def handle(args, parser) -> int | None:
-    if args.command == "agent-run":
-        project = Path(args.project)
-        try:
-            system_prompt = _read_prompt_arg(project, args.system, args.system_text, "system")
-            user_prompt = _read_prompt_arg(project, args.user, args.user_text, "user")
-            result = run_agent_task(
-                project,
-                agent_id=args.agent_id,
-                task=args.task,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                provider=args.provider,
-                output_dir=Path(args.out_dir) if args.out_dir else None,
-            )
-        except (FileExistsError, FileNotFoundError, RuntimeError, ValueError) as exc:
-            parser.error(str(exc))
-        print(f"run_id: {result.run_id}")
-        print(f"status: {result.status}")
-        print(f"provider: {result.provider}")
-        print(f"parse_status: {result.parse_status}")
-        print(f"input: {result.input_path}")
-        print(f"raw_output: {result.raw_output_path}")
-        print(f"parsed_output: {result.parsed_output_path}")
-        print(f"validation: {result.validation_path}")
-        return 0
-
     if args.command == "agent-validate":
         try:
             result = validate_agent_run(
@@ -53,23 +25,6 @@ def handle(args, parser) -> int | None:
         print(f"status: {result.status}")
         print(f"errors: {result.error_count}")
         print(f"warnings: {result.warning_count}")
-        print(f"validation: {result.validation_path}")
-        return 0
-
-    if args.command == "agent-repair":
-        try:
-            result = repair_agent_run(
-                Path(args.project),
-                run_id=args.run_id,
-                run_dir=Path(args.run_dir) if args.run_dir else None,
-                schema_name=args.schema,
-                provider=args.provider,
-            )
-        except (FileExistsError, FileNotFoundError, RuntimeError, ValueError) as exc:
-            parser.error(str(exc))
-        print(f"schema: {result.schema_name}")
-        print(f"status: {result.status}")
-        print(f"repair_run: {result.repair_run_dir}")
         print(f"validation: {result.validation_path}")
         return 0
 

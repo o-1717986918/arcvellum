@@ -1,7 +1,7 @@
 """Formal task blueprint and Gate logic for the style-engineering route.
 
 The route produces a mountable style prompt only after a profile, a concrete
-platform-agent task, deterministic evaluation, and a fresh accepted score all
+Worker task, deterministic evaluation, and a fresh accepted score all
 agree.  Keeping those rules here prevents the task registry from becoming the
 implementation home for every route.
 """
@@ -39,14 +39,12 @@ DEFAULT_REQUIRED_READING = [
     "agentread.yaml",
     "references/agent-run-protocol.md",
     "references/cli-run-protocol.md",
-    "references/workflows.md",
     "docs/modules/style-compiler.md",
-    "docs/implementation/phase26-style-prompt-effectiveness.md",
 ]
 
 FORBIDDEN_SHORTCUTS = [
     "Do not mount a Style Skill from an under-specified prompt.",
-    "Do not use --allow-unreviewed for formal Skill-host work.",
+    "Do not use --allow-unreviewed for formal Studio work.",
     "Do not treat style metrics or a dry profile report as an LLM-facing prompt.",
     "Do not pursue exact author imitation unless the corpus is public-domain, authorized, or user-owned.",
     "Do not treat this task as complete until task-submit and task-complete have succeeded.",
@@ -119,8 +117,8 @@ def blueprint_for_state(root: Path, profile_id: str, profile_dir: str, current_s
             "source_paths": [profile, metrics, corpus_manifest],
             "expected_outputs": [task],
             "hard_constraints": [
-                "Run style-prompt to create a platform-agent style prompt task sidecar.",
-                "The command prepares the task; the platform agent still writes style_prompt.md and style_prompt.agent.json.",
+                "Run style-prompt to create a Worker style-prompt sidecar.",
+                "The command prepares the task; the ArcVellum Worker still writes style_prompt.md and style_prompt.agent.json.",
             ],
             "style_constraints": [],
             "validation_gates": ["style_prompt.agent_tasks.md exists"],

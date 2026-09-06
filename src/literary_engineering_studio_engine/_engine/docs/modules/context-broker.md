@@ -1,6 +1,6 @@
 # Context Broker / Context Trace
 
-Context Broker 是 `v0.86.0` 引入的上下文证明层。它不替平台 Agent 做创作判断，也不替代 Prompt Registry；它只负责把正式场景创作需要的上下文打包，并留下机器可审计的来源 trace。
+Context Broker 是 `v0.86.0` 引入的上下文证明层。它不替 ArcVellum Worker 做创作判断，也不替代 Prompt Registry；它只负责把正式场景创作需要的上下文打包，并留下机器可审计的来源 trace。
 
 一句话原则：
 
@@ -17,7 +17,7 @@ Context Broker 是 `v0.86.0` 引入的上下文证明层。它不替平台 Agent
 5. 是否为了上下文长度故意排除了某些角色或素材？
 6. 后续 RP、branch、composition、generation、review 是否引用了同一份上下文？
 
-Context Trace 把这些问题变成可检查的 JSON，而不是依赖平台 Agent 的自觉。
+Context Trace 把这些问题变成可检查的 JSON，而不是依赖 ArcVellum Worker 的自觉。
 
 ## 2. 产物
 
@@ -28,7 +28,7 @@ memory/context_packets/{scene_id}.md
 memory/context_packets/{scene_id}.trace.json
 ```
 
-Markdown packet 是平台 Agent 写作时阅读的紧凑上下文。Trace JSON 是 provenance artifact，用来证明本次 packet 的来源、范围和缺失项。
+Markdown packet 是 ArcVellum Worker 写作时阅读的紧凑上下文。Trace JSON 是 provenance artifact，用来证明本次 packet 的来源、范围和缺失项。
 
 CLI 输出中也会打印：
 
@@ -60,7 +60,7 @@ context_trace: memory/context_packets/scene_0001.trace.json
 15. `token_or_length_budget`
 16. `missing_required_context`
 
-`missing_required_context` 非空时，正式路线不得继续。平台 Agent 应先补项目文件或重跑 `context`，再进入 RP、branch、composition、generation、review、revision、promotion、chapter workspace 或 export。
+`missing_required_context` 非空时，正式路线不得继续。ArcVellum Worker 应先补项目文件或重跑 `context`，再进入 RP、branch、composition、generation、review、revision、promotion、chapter workspace 或 export。
 
 ## 4. 正式链路接入点
 
@@ -69,17 +69,17 @@ context_trace: memory/context_packets/scene_0001.trace.json
 1. `context`：生成 Markdown packet 与 trace。
 2. `workflow-state` / `task-next`：如果 packet 存在但 trace 缺失，派发 `context-trace` 修复任务。
 3. `agent-task-status` / `route-audit`：把无效 trace 作为 blocking gate。
-4. `simulate-scene --agent`：RP sidecar 要求平台 Agent 先读 trace。
-5. `branch-simulate --agent`：branch sidecar 要求平台 Agent 读 trace 后再做分支判断。
+4. `simulate-scene --agent`：RP sidecar 要求 ArcVellum Worker 先读 trace。
+5. `branch-simulate --agent`：branch sidecar 要求 ArcVellum Worker 读 trace 后再做分支判断。
 6. `compose-scene --agent-tasks`：composition manifest 写入 `context_trace`。
 7. `generate-scene`：缺 trace 时重建 context；prompt pack 和 `.agent_tasks.md` 都引用 trace。
 8. `agent-review-scene`：review prompt 和 sidecar 都引用 trace；缺 trace 时不能 clean pass。
 9. `revise-scene`：修订 prompt manifest 与任务包引用 trace；trace 缺失时先修复 context。
 10. `chapter-workspace` / `export-package`：从 scene readiness 继承 trace gate。
 
-## 5. 平台 Agent 执行纪律
+## 5. ArcVellum Worker 执行纪律
 
-正式场景开发时，平台 Agent 必须：
+正式场景开发时，ArcVellum Worker 必须：
 
 1. 先通过 `task-next` / `task-open` 获取当前任务。
 2. 对 context 类任务运行 `context`，确认 CLI 输出同时包含 packet 与 trace。
@@ -89,7 +89,7 @@ context_trace: memory/context_packets/scene_0001.trace.json
 
 ## 6. 与 Prompt Registry 的关系
 
-Prompt Registry 决定“这个任务该怎么要求平台 Agent 输出”。Context Broker 决定“这个任务依赖的上下文是否真实、可追踪、可复盘”。
+Prompt Registry 决定“这个任务该怎么要求 ArcVellum Worker 输出”。Context Broker 决定“这个任务依赖的上下文是否真实、可追踪、可复盘”。
 
 二者必须同时存在：
 

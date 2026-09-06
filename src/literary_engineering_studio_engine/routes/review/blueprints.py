@@ -220,7 +220,7 @@ def _canon_lint(_context: ReviewBlueprintContext) -> dict[str, object]:
         list(CANON_LINT_SOURCE_PATHS),
         ["reviews/canon_lint.md", "reviews/canon_lint.json"],
         [
-            "Run canon-lint before any platform-agent project-level semantic review.",
+            "Run canon-lint before any Worker project-level semantic review.",
             "Blocking canon-lint issues must be fixed or explicitly captured as candidate repair tasks before export.",
         ],
         ["canon-lint report exists", "canon-lint JSON schema/status is usable", "blocking_count is 0"],
@@ -236,8 +236,8 @@ def _canon_review_prepare(context: ReviewBlueprintContext) -> dict[str, object]:
         ["reviews/canon_lint.md", "reviews/canon_lint.json", "canon", "characters", "plot", "scenes"],
         [f"{context.canon_review}.agent_tasks.md"],
         [
-            "Run agent-canon-review only to create a platform-agent sidecar.",
-            "The command prepares the task; the platform agent writes canon_review.v1 JSON/Markdown.",
+            "Run agent-canon-review only to create a Worker sidecar.",
+            "The command prepares the task; the ArcVellum Worker writes canon_review.v1 JSON/Markdown.",
         ],
         ["canon review sidecar exists"],
         ["canon-review-agent-task"],
@@ -257,7 +257,7 @@ def _canon_review_execute(context: ReviewBlueprintContext) -> dict[str, object]:
             "pass_with_notes is not a clean release gate; unresolved facts and timeline risks must become repair tasks or be resolved.",
             "Treat lint severity=info as context only; do not promote it to warnings, unresolved_facts, or repair recommendations without independent contradictory evidence.",
             "A non-pass conclusion is a valid completed review. Every actionable finding must name one exact target_path under canon/, characters/, plot/, scenes/, or drafts/candidates/.",
-            "Do not call local providers. The host platform agent is the reviewer.",
+            "Do not call local providers. The ArcVellum Worker is the reviewer.",
         ],
         ["canon review sidecar completed", "canon_review.v1 validates", "canon review conclusion is recorded"],
         ["canon-review-pass", "longform-audit-file"],
@@ -314,7 +314,7 @@ def _committee_prepare(context: ReviewBlueprintContext) -> dict[str, object]:
         [f"{review}.md", f"{review}.json", "reviews/longform/longform_audit.md", "reviews/longform/longform_audit.json"],
         [f"{context.committee}.agent_tasks.md"],
         [
-            "Run agent-committee only to create a platform-agent sidecar.",
+            "Run agent-committee only to create a Worker sidecar.",
             "Committee review must inspect canon review and longform audit; it cannot approve by vibe.",
         ],
         ["committee sidecar exists"],

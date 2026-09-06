@@ -156,7 +156,7 @@ def render_new_character_register_contract() -> str:
 
     return """# 新角色登记契约
 
-正式场景不得让新角色从正文旁路进入项目。平台 Agent 必须在候选 manifest 和 AgentReview 中写入 `new_character_register`：
+正式场景不得让新角色从正文旁路进入项目。ArcVellum Worker 必须在候选 manifest 和 AgentReview 中写入 `new_character_register`：
 
 ```json
 {

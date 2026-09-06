@@ -1,4 +1,4 @@
-"""Semantic evidence contracts for platform-agent workflow tasks.
+"""Semantic evidence contracts for Worker workflow tasks.
 
 Completion markers answer only whether an Agent declared a task finished.  The
 formal writing route also needs a small, machine-checkable record of what the

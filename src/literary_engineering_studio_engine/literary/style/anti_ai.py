@@ -10,7 +10,7 @@ from literary_engineering_studio_engine.literary.review.creative_quality import 
 
 ANTI_EVASION_REVISION_PROTOCOL = """## 修订反规避协议
 
-修订不是把一种 AI 腔换成另一种 AI 腔。平台 agent 处理 review notes、Style Lint 或人工批注时，必须按以下程序执行：
+修订不是把一种 AI 腔换成另一种 AI 腔。ArcVellum Worker 处理 review notes、Style Lint 或人工批注时，必须按以下程序执行：
 
 1. 先摘出原句、风险类型和它原本想承担的叙事功能：信息反转、人物误判、因果揭示、视角校正、讽刺顿挫或行动后果。
 2. 默认从“不合理”开始挑刺。不要轻易把转折解释为合理修辞；“增强节奏”“体现复杂心理”“更有文学感”不是充分理由。
@@ -37,7 +37,7 @@ ANTI_AI_STYLE_PROMPT = """## 降低 AI 腔与朴素叙述约束
 - 一句话尽量少用逗号；若一句话超过三个逗号，通常应拆句或重写。一个意思说完就换行，不要用长逗号链拖成满分作文腔。
 - 不做景物强制同步：人物情绪变化时，风、雨、灯、夜色不要恰好配合情绪变化。
 - 不要重复渲染同一情绪。同一件事说一遍即可，保留人味和准确细节，不用三个形容词或三个比喻撑篇幅。
-- 禁止用正则或批量脚本对正文做语义级“去 AI 腔”改写。脚本只能提示风险或做安全排版规范化；删除“不是”、改写“不是 A——是 B”、替换心理判断等操作必须由平台 agent 逐句语义复核。"""
+- 禁止用正则或批量脚本对正文做语义级“去 AI 腔”改写。脚本只能提示风险或做安全排版规范化；删除“不是”、改写“不是 A——是 B”、替换心理判断等操作必须由 ArcVellum Worker 逐句语义复核。"""
 
 ANTI_AI_STYLE_SHORT_RULE = (
     "降低 AI 腔：禁用“不是……而是……”及“不是……——是”等生硬对照，不判断为合理修辞；"
@@ -245,7 +245,7 @@ def render_ai_style_lint_block(
     max_issues: int = 12,
     max_sample_chars: int = 120,
 ) -> str:
-    """Render deterministic AI-style lint evidence for platform-agent review prompts."""
+    """Render deterministic AI-style lint evidence for Worker review prompts."""
 
     issues = lint_ai_style(text, profile=profile, scope=scope)
     lines = [
@@ -263,7 +263,7 @@ def render_ai_style_lint_block(
         lines.append("- [medium] draft-missing: 未读取到可审查正文，必须先补齐 draft 后再做正式审查。")
         return "\n".join(lines).rstrip() + "\n"
     if not issues:
-        lines.append("- 未检出确定性 AI 腔 / 生硬对照 / 标点节奏风险；仍需平台 agent 做语义审查。")
+        lines.append("- 未检出确定性 AI 腔 / 生硬对照 / 标点节奏风险；仍需 ArcVellum Worker 做语义审查。")
         return "\n".join(lines).rstrip() + "\n"
     for issue in issues[:max_issues]:
         lines.append(f"- [{issue.severity}] {issue.rule}: {issue.message}")

@@ -19,7 +19,7 @@ def render_protocol(route: ProtocolRoute) -> str:
         _render_list("Read First", route.read),
         _render_list("Preflight", route.preflight),
         _render_list("Suggested CLI Chain", route.cli_chain),
-        _render_list("Platform Agent Handoffs", route.platform_agent_handoffs),
+        _render_list("ArcVellum Worker Handoffs", route.platform_agent_handoffs),
         _render_list("Completion Gates", route.completion_gates),
         _render_list("Forbidden Shortcuts", route.forbidden_shortcuts),
     ]

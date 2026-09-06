@@ -274,7 +274,7 @@ def submit_task(
     *,
     note: str = "",
 ) -> TaskSubmissionResult:
-    """Record exact platform-agent outputs for one formal task."""
+    """Record exact Worker outputs for one formal task."""
 
     root = project_root.resolve()
     task_json = task_json_path(root, task_id)

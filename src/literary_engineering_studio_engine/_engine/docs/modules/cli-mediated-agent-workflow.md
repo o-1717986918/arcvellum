@@ -1,6 +1,6 @@
 # CLI 中介 Agent 工作流
 
-本模块是 Phase 84 的核心目标：让平台 Agent 保持自由创作能力，但让正式项目产物统一经过 CLI 持续状态机中介。
+本模块是 Phase 84 的核心目标：让 ArcVellum Worker 保持自由创作能力，但让正式项目产物统一经过 CLI 持续状态机中介。
 
 一句话原则：
 
@@ -8,7 +8,7 @@
 
 ## 1. 为什么需要它
 
-过去的正式场景链路依赖平台 Agent 自觉读取文档、运行命令、处理 sidecar、写 completion marker。实践中容易出现以下问题：
+过去的正式场景链路依赖 ArcVellum Worker 自觉读取文档、运行命令、处理 sidecar、写 completion marker。实践中容易出现以下问题：
 
 1. Agent 认为 CLI 是可选步骤，直接手写同名文件。
 2. `.agent_tasks.md` 被当成“过程文件”跳过。
@@ -20,7 +20,7 @@ CLI 中介工作流的目标不是让 CLI 写小说，而是让 CLI 负责发任
 
 ## 2. 职责边界
 
-平台 Agent 负责：
+ArcVellum Worker 负责：
 
 1. 与用户自然沟通创作方向、审美判断和重大取舍。
 2. 阅读 CLI 输出的任务包。
@@ -30,15 +30,15 @@ CLI 中介工作流的目标不是让 CLI 写小说，而是让 CLI 负责发任
 CLI 负责：
 
 1. 根据 `workflow-state` 派发下一项正式任务。
-2. 输出给平台 Agent 的提示词包、必读文件、硬约束、预期产物和禁止捷径。
-3. 接收平台 Agent 产物提交记录。
+2. 输出给 ArcVellum Worker 的提示词包、必读文件、硬约束、预期产物和禁止捷径。
+3. 接收 ArcVellum Worker 产物提交记录。
 4. 检查 expected outputs、schema、provenance、Style Lint、word target、review gate 等确定性条件。
 5. 写 completion marker、event log 和状态账本。
 
 CLI 不负责：
 
-1. 不替平台 Agent 写正文。
-2. 不替平台 Agent 判断人物、剧情、文风和审稿结论。
+1. 不替 ArcVellum Worker 写正文。
+2. 不替 ArcVellum Worker 判断人物、剧情、文风和审稿结论。
 3. 不把本地模型、dry-run 或 HTTP provider 输出作为正式创作权威。
 4. 不允许手动推进状态绕过真实产物。
 
@@ -50,7 +50,7 @@ CLI 不负责：
 $env:PYTHONPATH = "src"
 python -m literary_engineering_workbench task-next <project> --route scene-development
 python -m literary_engineering_workbench task-open <project> --task-id <task-id>
-# 平台 Agent 按 task 中的 Command / Hard Constraints 完成产物
+# ArcVellum Worker 按 task 中的 Command / Hard Constraints 完成产物
 python -m literary_engineering_workbench task-submit <project> --task-id <task-id> --from <artifact>
 python -m literary_engineering_workbench task-complete <project> --task-id <task-id>
 python -m literary_engineering_workbench workflow-advance <project> --route scene-development
@@ -64,7 +64,7 @@ python -m literary_engineering_workbench workflow-dashboard <project>
 $env:PYTHONPATH = "src"
 python -m literary_engineering_workbench task-next <project> --route longform-planning
 python -m literary_engineering_workbench task-open <project> --task-id <task-id>
-# 平台 Agent 按 task 执行三个 Writer 候选和三个独立、摘要绑定的 Reviewer 任务
+# ArcVellum Worker 按 task 执行三个 Writer 候选和三个独立、摘要绑定的 Reviewer 任务
 python -m literary_engineering_workbench task-submit <project> --task-id <task-id> --from <artifact>
 python -m literary_engineering_workbench task-complete <project> --task-id <task-id>
 python -m literary_engineering_workbench workflow-advance <project> --route longform-planning
@@ -77,7 +77,7 @@ $env:PYTHONPATH = "src"
 python -m literary_engineering_workbench source-ingest <project> --source <source> --title <title> --work-id <work-id>
 python -m literary_engineering_workbench task-next <project> --route source-ingest
 python -m literary_engineering_workbench task-open <project> --task-id <task-id>
-# 平台 Agent 读取 source chunks 和 extract_project_files.agent_tasks.md，写候选项目文件与 review
+# ArcVellum Worker 读取 source chunks 和 extract_project_files.agent_tasks.md，写候选项目文件与 review
 python -m literary_engineering_workbench task-submit <project> --task-id <task-id> --from <artifact>
 python -m literary_engineering_workbench task-complete <project> --task-id <task-id>
 ```
@@ -88,7 +88,7 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 $env:PYTHONPATH = "src"
 python -m literary_engineering_workbench task-next <project> --route style-engineering
 python -m literary_engineering_workbench task-open <project> --task-id <task-id>
-# 平台 Agent 写 style_prompt.md / style_prompt.agent.json，并完成 style eval
+# ArcVellum Worker 写 style_prompt.md / style_prompt.agent.json，并完成 style eval
 python -m literary_engineering_workbench task-submit <project> --task-id <task-id> --from <artifact>
 python -m literary_engineering_workbench task-complete <project> --task-id <task-id>
 ```
@@ -119,21 +119,21 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 
 从 `v0.89.0` 起，`workflow-dashboard` 提供跨路线只读 cockpit。它会把 `workflow-state --route overall`、`agent-task-status`、七条正式 route audit 和最近 event log 汇总到 `workflow/dashboard/workflow_dashboard.json`、`.md`、`.html`。这个 dashboard 只展示状态，不完成任务、不创建创作产物、不允许跳过 `task-next/task-open/task-submit/task-complete`。
 
-从 `v0.84.3` 起，`source-ingest` 已接入同一生命周期：`source-manifest`、`extraction-agent-task`、`extraction-review`。已有作品导入只负责源文本、chunk 和 extraction sidecar；反推出的项目简报、人物/背景、世界观、大纲、时间线、伏笔、文风 notes 和 extraction review 必须由平台 Agent 写入候选区。completion marker、候选文件和 clean `pass` review 缺一项都不能 ready。
+从 `v0.84.3` 起，`source-ingest` 已接入同一生命周期：`source-manifest`、`extraction-agent-task`、`extraction-review`。已有作品导入只负责源文本、chunk 和 extraction sidecar；反推出的项目简报、人物/背景、世界观、大纲、时间线、伏笔、文风 notes 和 extraction review 必须由 ArcVellum Worker 写入候选区。completion marker、候选文件和 clean `pass` review 缺一项都不能 ready。
 
 从 `v0.84.4` 起，`style-engineering` 已接入同一生命周期：`style-profile`、`style-prompt-task-file`、`style-prompt-agent-task`、`style-prompt-quality`、`style-eval-readiness`。项目根 `style/style-profile.md` 占位文件不会被误当成 profile；真正的 profile 目录必须完成 sidecar、prompt、agent JSON、质量检查和 accepted style eval 后才 ready。
 
-从 `v0.84.5` 起，`character-and-world-assets` 已接入同一生命周期：`asset-intake`、`asset-creation-agent-task`、`asset-review-task-file`、`asset-review-agent-task`、`asset-review-pass`、`asset-approval`、`asset-promotion`。`asset-create` / `agent-create-*` 只准备平台 Agent 创建任务；review 只证明候选可请求审批，不等于用户 approval；`promote-candidate-asset` 必须使用 approve record，不能用 `--allow-unapproved`。
+从 `v0.84.5` 起，`character-and-world-assets` 已接入同一生命周期：`asset-intake`、`asset-creation-agent-task`、`asset-review-task-file`、`asset-review-agent-task`、`asset-review-pass`、`asset-approval`、`asset-promotion`。`asset-create` / `agent-create-*` 只准备 ArcVellum Worker 创建任务；review 只证明候选可请求审批，不等于用户 approval；`promote-candidate-asset` 必须使用 approve record，不能用 `--allow-unapproved`。
 
-从 `v0.84.6` 起，`review-and-audit` 已接入同一生命周期：`canon-lint-file`、`canon-review-task-file`、`canon-review-agent-task`、`canon-review-pass`、`longform-audit-file`、`committee-task-file`、`committee-agent-task`、`committee-pass`。确定性 canon lint 和 longform audit 只是证据；平台 Agent 必须写 canon review 与 committee review。带 warnings、unresolved facts、timeline risks、committee action items 或 disagreements 的项目不能 ready。
+从 `v0.84.6` 起，`review-and-audit` 已接入同一生命周期：`canon-lint-file`、`canon-review-task-file`、`canon-review-agent-task`、`canon-review-pass`、`longform-audit-file`、`committee-task-file`、`committee-agent-task`、`committee-pass`。确定性 canon lint 和 longform audit 只是证据；ArcVellum Worker 必须写 canon review 与 committee review。带 warnings、unresolved facts、timeline risks、committee action items 或 disagreements 的项目不能 ready。
 
 从 `v0.84.6` 起，`export-and-release` 已接入同一生命周期：`chapter-workspace`、`export-package`、`release-approval`、`publish-release`。正式交付必须先得到 ready chapter workspace 和 clean export manifest，再取得人类 approve 记录，最后由 `publish-chapter` 写 release manifest、notes、rollback 和 latest 指针。`--include-blocked`、`--allow-unapproved`、自写导出脚本和读者正文泄漏工程痕迹都会阻塞路线。
 
-从 `v0.85.0` 起，`task-open` 会解析 `prompt_asset_id` 并把 Prompt Registry 中的资产正文写进任务包。`templates/prompt_assets/*.md` 现在覆盖七条正式路线，`prompt-registry-validate` 会检查所有 task registry prompt id 是否有 exact 或 wildcard asset 可用。这样 prompt id 不再只是占位符，而是 CLI 输出给平台 Agent 的实际提示词资产。
+从 `v0.85.0` 起，`task-open` 会解析 `prompt_asset_id` 并把 Prompt Registry 中的资产正文写进任务包。`templates/prompt_assets/*.md` 现在覆盖七条正式路线，`prompt-registry-validate` 会检查所有 task registry prompt id 是否有 exact 或 wildcard asset 可用。这样 prompt id 不再只是占位符，而是 CLI 输出给 ArcVellum Worker 的实际提示词资产。
 
-从 `v0.86.0` 起，`context` 会同时写出 Markdown context packet 和相邻的 `*.trace.json`。`task-next`、`workflow-state`、`route-audit`、`compose-scene`、`generate-scene`、`agent-review-scene`、`revise-scene`、chapter readiness 和 export readiness 都把缺失或无效 context trace 视为 blocking。平台 Agent 不能只凭一份看似完整的 context packet 继续写作；必须先确认 trace 证明本场景实际加载了 scene、canon、character、style、word-budget 和检索来源。
+从 `v0.86.0` 起，`context` 会同时写出 Markdown context packet 和相邻的 `*.trace.json`。`task-next`、`workflow-state`、`route-audit`、`compose-scene`、`generate-scene`、`agent-review-scene`、`revise-scene`、chapter readiness 和 export readiness 都把缺失或无效 context trace 视为 blocking。ArcVellum Worker 不能只凭一份看似完整的 context packet 继续写作；必须先确认 trace 证明本场景实际加载了 scene、canon、character、style、word-budget 和检索来源。
 
-从 `v0.86.1` 起，场景生成和审查任务会携带 New Character Register。平台 Agent 写候选正文或修订候选时，必须在 candidate manifest 中声明是否引入新角色；AgentReview 必须审查该 register。一次性路人可通过 waiver 保持本场景局部存在；持久新角色必须走 `characters/candidates/`、asset review、用户 approval 或 promotion。`route-audit` 会输出单独的新角色登记 gate。
+从 `v0.86.1` 起，场景生成和审查任务会携带 New Character Register。ArcVellum Worker 写候选正文或修订候选时，必须在 candidate manifest 中声明是否引入新角色；AgentReview 必须审查该 register。一次性路人可通过 waiver 保持本场景局部存在；持久新角色必须走 `characters/candidates/`、asset review、用户 approval 或 promotion。`route-audit` 会输出单独的新角色登记 gate。
 
 ## 4. Scene-development 样板状态
 
@@ -200,7 +200,7 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 
 每项 JSON 均配有 `.md` 可读报告与 Reviewer sidecar/completion。Markdown 中写出 `pass`、沿用旧摘要或让 Writer 自审都不能推进状态。
 
-这条路线专门堵住“预算文件生成了但没人读”的漏洞。正式批量场景生成前，平台 Agent 必须完成预算化大纲、场景库存和章节义务三类判断，不能只靠拉长每个场景满足目标字数，也不能把章节写成缺乏读者承诺的事件摘要。
+这条路线专门堵住“预算文件生成了但没人读”的漏洞。正式批量场景生成前，ArcVellum Worker 必须完成预算化大纲、场景库存和章节义务三类判断，不能只靠拉长每个场景满足目标字数，也不能把章节写成缺乏读者承诺的事件摘要。
 
 ## 4.2 Source-ingest 状态
 
@@ -283,7 +283,7 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 
 1. 候选 JSON 必须通过资产类型对应 schema，并保留 `candidate_id`、`risks`、`source_paths`、`promotion_notes`。
 2. 角色与背景故事候选必须把 `background_story` 作为隐性行为因果，不得默认写成正文 exposition。
-3. 平台 Agent 资产审查必须 `status=pass`，且没有 blocking issues 或 unresolved revision actions。
+3. ArcVellum Worker 资产审查必须 `status=pass`，且没有 blocking issues 或 unresolved revision actions。
 4. Review 不是 approval。用户 approve 记录缺失时不能晋升。
 5. `allow_unapproved=true` 的 promotion manifest 在正式路线中 blocking。
 
@@ -319,7 +319,7 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 质量门禁：
 
 1. `canon_lint.json` 可以有 warning，但 blocking_count 必须为 0。
-2. 平台 Agent canon review 必须是 clean `conclusion=pass`，不能带 blocking issues、warnings、unresolved facts 或 timeline risks。
+2. ArcVellum Worker canon review 必须是 clean `conclusion=pass`，不能带 blocking issues、warnings、unresolved facts 或 timeline risks。
 3. `longform-audit` 必须存在并通过 schema。
 4. committee review 必须 `final_recommendation=approve`，且没有 action_items 或 disagreements。
 5. Review route 不能直接写 canon/character/plot/draft/export；只能输出修复任务、候选修改和审批边界。
@@ -377,7 +377,7 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 16. `forbidden_shortcuts`
 17. `next_allowed_states`
 
-这些字段是给平台 Agent 的执行边界，不是外部 LLM prompt，也不是 canon。
+这些字段是给 ArcVellum Worker 的执行边界，不是外部 LLM prompt，也不是 canon。
 
 ## 6. 使用纪律
 
@@ -395,7 +395,7 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 
 1. `workflow/tasks/*.agent_tasks.md` 是上层“统一任务包”。
 2. 原命令生成的 sidecar 仍在原位置，例如 `branches/{scene_id}/roleplay_simulation.agent_tasks.md`。
-3. 上层 task 会要求平台 Agent 处理原 sidecar，并把原 sidecar 的 `.agent_completion.json` 作为 expected output。
+3. 上层 task 会要求 ArcVellum Worker 处理原 sidecar，并把原 sidecar 的 `.agent_completion.json` 作为 expected output。
 4. 后续阶段可以逐步把旧 sidecar 注册进 task registry，减少双层任务感。
 
 ## 8. 验收口径

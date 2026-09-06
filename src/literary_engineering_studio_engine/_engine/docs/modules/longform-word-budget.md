@@ -12,7 +12,7 @@
 ## 标准链路
 
 1. 选择 `longform-planning` route。
-2. 读取 `references/agent-run-protocol.md`、`references/cli-run-protocol.md`、`references/artifact-contracts.md` 和 `references/workflows.md`。
+2. 读取 `references/formal-host-operating-constitution.md`、`references/agent-run-protocol.md` 与 `references/cli-run-protocol.md`。
 3. 运行或等价执行预算拆分：
 
 ```powershell
@@ -27,7 +27,7 @@ python -m literary_engineering_studio_engine word-budget "<work-dir>" --target-w
 8. 每个候选随后执行 `prepare-longform-review --kind <kind>`，由身份独立的 Reviewer 写摘要绑定的 JSON 裁决和 Markdown 说明；`revise` 后必须重新准备并重新审查，`block` 进入人工边界。
 9. 三项结构化审查通过且用户批准前，不得覆盖正式 `plot/outline.md` 或 `scenes/*.yaml`。
 10. 将预算落到正式 scene 库存：每个正式 `scenes/*.yaml` 必须有能映射预算行的 `chapter_id`；需要时写入 `word_count_target`、`word_count_min`、`word_count_max`。
-11. 单章正文生成前运行 `chapter-obligation --chapter-id <chapter_id>`，让平台 agent 填写本章承诺、设置、变化、暂不解决项、章末钩子和逐场读者体验契约。
+11. 单章正文生成前运行 `chapter-obligation --chapter-id <chapter_id>`，让 ArcVellum Worker 填写本章承诺、设置、变化、暂不解决项、章末钩子和逐场读者体验契约。
 12. 后续 context packet、`compose-scene`、`generate-scene` 的 prompt manifest 和 `.agent_tasks.md` 自动加载本场景预算契约和读者体验契约。
 13. AgentReview、`promote-candidate`、`route-audit`、`chapter-workspace`、`longform-audit` 和正式导出都会用清洗后的可交付正文复核字数、叙事负载和 reader promise/payoff。
 
@@ -64,15 +64,15 @@ CLI 只做可重复计算：
 - 扫描 `plot/outline.md` 和 `scenes/*.yaml` 的现有库存。
 - 读取已写草稿的清洗后正文字数，排除流程说明、canon 注释、编号、路径和 `[AGENT_TASK: ...]`。
 - 把每章目标中文内容字符、实际正文中文内容字符、机器字符诊断、已有场景数、推荐场景数和缺失场景数写入 `scene_inventory_binding`。
-- 输出预算报告、JSON 和平台 agent 任务侧车。
+- 输出预算报告、JSON 和 ArcVellum Worker 任务侧车。
 - 生成每个场景的字数预算契约，并把它注入 context packet、composition、prompt manifest、AgentReview 和 route gate。
 - 输出章节义务规划侧车，并为单章 `chapter-obligation` 提供可校验脚手架。
 
 CLI 不负责判断“这个故事怎样才好看”，也不自动改写正式大纲。
 
-## 平台 Agent 负责什么
+## ArcVellum Worker 负责什么
 
-平台 agent 必须完成主观和创造性判断：
+ArcVellum Worker 必须完成主观和创造性判断：
 
 - 判断类型、时间跨度与目标中文内容字符是否匹配。
 - 将预算转化为可写的大纲候选和分场景库存。
@@ -102,7 +102,7 @@ CLI 不负责判断“这个故事怎样才好看”，也不自动改写正式�
 
 ## 生成前门禁
 
-正式场景生成前，平台 agent 应检查：
+正式场景生成前，ArcVellum Worker 应检查：
 
 - 当前目标中文内容字符是否超过 100000。
 - 是否存在 `plot/word_budget/word_budget.json`。
@@ -112,7 +112,7 @@ CLI 不负责判断“这个故事怎样才好看”，也不自动改写正式�
 - 预算状态是否为 `pass`，且不是 `needs_expansion`。
 - 当前 `scene.yaml` 是否有能映射预算行的 `chapter_id`。
 - 当前 `scene.yaml` 的 `word_count_target/min/max` 是否与章节预算一致，或已有人工说明的合理 override。
-- 当前章节的 `plot/chapter_obligations/{chapter_id}.json` 是否由平台 agent 填写并完成 sidecar marker。
+- 当前章节的 `plot/chapter_obligations/{chapter_id}.json` 是否由 ArcVellum Worker 填写并完成 sidecar marker。
 - 该 JSON 是否完整填写逐场 `reader_experience_by_scene`，并能映射当前 `scene_id`。
 - prompt manifest 是否包含“长篇字数预算标准”和“本场景字数预算硬属性”。
 - prompt manifest 是否包含 `generation_standards.reader_experience_contract`。

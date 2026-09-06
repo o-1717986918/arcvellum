@@ -216,10 +216,10 @@ def _promotion_manifest(
         "canon_writeback": canon_writeback,
         "guardrails": [
             "本命令只把候选稿转入草稿审查通道，不确认 canon。",
-            "默认必须先完成针对该候选稿的正式平台 Agent 场景审查。",
-            "默认必须先完成正式生成 provenance：CLI prompt manifest、.agent_tasks.md 和平台 Agent candidate manifest。",
+            "默认必须先完成针对该候选稿的正式 ArcVellum Worker 场景审查。",
+            "默认必须先完成正式生成 provenance：CLI prompt manifest、.agent_tasks.md 和 ArcVellum Worker candidate manifest。",
             "候选正文必须通过 Style Lint Gate：机械对照句式和 medium+ AI 腔风险阻塞 promotion，low 风险进入审查 notes。",
-            "转正后的草稿仍必须运行 review-scene 和后续平台 Agent 场景审查。",
+            "转正后的草稿仍必须运行 review-scene 和后续 ArcVellum Worker 场景审查。",
             "人物、关系和 canon 写回仍必须走单独审批链路。",
         ],
     }
@@ -252,8 +252,8 @@ def _ensure_candidate_generation_provenance(gate: dict[str, object]) -> None:
     suffix = (" " + "; ".join(details) + ".") if details else ""
     raise FlowGateError(
         "formal CLI generation provenance required before promote-candidate: "
-        f"{candidate} is not a formal platform-agent candidate.{suffix} "
-        "Run generate-scene to create the prompt manifest and .agent_tasks.md, have the main platform agent write the candidate Markdown and manifest JSON with constraint flags, "
+        f"{candidate} is not a formal Worker candidate.{suffix} "
+        "Run generate-scene to create the prompt manifest and .agent_tasks.md, have the main ArcVellum Worker write the candidate Markdown and manifest JSON with constraint flags, "
         "then run agent-review-scene on that exact candidate. Manual files are exploratory/debug-only; --allow-unreviewed is maintainer/debug-only."
     )
 
@@ -272,9 +272,9 @@ def _ensure_candidate_reviewed(gate: dict[str, object], *, allow_review_notes: b
         lint_hint = f" Style Lint Gate: {style_lint_gate_message(lint_gate)}."
     raise FlowGateError(
         "formal candidate review required before promote-candidate: "
-        f"{message}.{lint_hint} Run agent-review-scene with --draft {candidate}, have the platform agent write {review}, "
+        f"{message}.{lint_hint} Run agent-review-scene with --draft {candidate}, have the ArcVellum Worker write {review}, "
         "and promote only after conclusion=pass with this candidate listed in source_paths. "
-        "Formal Skill hosts must not use --allow-unreviewed to bypass this gate; that flag is maintainer/debug-only."
+        "Formal Studio runtimes must not use --allow-unreviewed to bypass this gate; that flag is maintainer/debug-only."
     )
 
 

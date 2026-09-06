@@ -23,6 +23,6 @@ python -m literary_engineering_workbench task-complete <project> --task-id <task
 
 1. `style-profile.md` 与 `style_metrics.json` 存在。
 2. `style_prompt.agent_tasks.md` 已处理，并有 `style_prompt.agent_completion.json`。
-3. 平台 Agent 写出 `style_prompt.md` 与 `style_prompt.agent.json`。
+3. ArcVellum Worker 写出 `style_prompt.md` 与 `style_prompt.agent.json`。
 4. `style_prompt.md` 为 500-2500 中文内容 detail chars，计入汉字和中文标点，不计入 Markdown 标记、英文路径、代码围栏或空白，并包含身份/边界、核心机制、叙述距离、句法节奏、标点、意象感官、心理/行为、对白、AI 腔控制、禁止倾向和输出自检。
 5. 至少一个 `evaluation_results/*/style_eval_*.json` 被接受，不能是高复制风险或低相似度。

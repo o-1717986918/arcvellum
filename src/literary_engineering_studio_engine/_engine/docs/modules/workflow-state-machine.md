@@ -1,15 +1,15 @@
 # Workflow State Machine
 
-This module defines the formal route state machine used by the project-type Skill. It exists to keep platform agents from treating CLI outputs, hand-written files, or partial sidecars as completed creative work.
+This module defines the formal route state machine used by the ArcVellum Studio. It exists to keep ArcVellum Workers from treating CLI outputs, hand-written files, or partial sidecars as completed creative work.
 
 ## Core Principle
 
-The CLI does not replace the platform agent. It chooses the next formal step, emits the task package, records the submitted artifacts, and validates deterministic gates. The platform agent still performs creative judgment, prose writing, review, branch decisions, style prompt writing, source extraction, and candidate acceptance.
+The CLI does not replace the ArcVellum Worker. It chooses the next formal step, emits the task package, records the submitted artifacts, and validates deterministic gates. The ArcVellum Worker still performs creative judgment, prose writing, review, branch decisions, style prompt writing, source extraction, and candidate acceptance.
 
 For registered routes, use this loop:
 
 ```text
-task-next -> task-open -> platform agent writes expected artifacts
+task-next -> task-open -> ArcVellum Worker writes expected artifacts
 -> task-submit -> task-complete -> workflow-state / workflow-validate
 ```
 
@@ -19,8 +19,8 @@ Do not skip from a produced filename to the next route step. A file can exist wh
 
 - `workflow/route_state.json`: derived current state for routes and scenes.
 - `workflow/tasks/*.task.json`: issued task records.
-- `workflow/tasks/*.submission.json`: artifacts submitted by the platform agent.
-- `*.agent_tasks.md`: executable task sidecars for the platform agent.
+- `workflow/tasks/*.submission.json`: artifacts submitted by the ArcVellum Worker.
+- `*.agent_tasks.md`: executable task sidecars for the ArcVellum Worker.
 - `*.agent_completion.json`: completion markers created only after expected artifacts are inspected.
 - `workflow/events/task_events.jsonl`: append-only event stream for issued, opened, submitted, blocked, and completed tasks.
 - `workflow/workflow_contract.json` and `.md`: validation report produced by `workflow-validate`.
@@ -80,6 +80,6 @@ Run `workflow-validate` when:
 
 Run `workflow-dashboard` when:
 
-- the platform Agent needs one page showing which formal route is blocked next;
+- the ArcVellum Worker needs one page showing which formal route is blocked next;
 - the user wants to watch project maintenance progress without reading raw task files;
 - a local frontend or external orchestrator needs a stable JSON source for route state, sidecar status, route audit summaries, and next actions.

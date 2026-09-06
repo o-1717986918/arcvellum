@@ -1,4 +1,4 @@
-"""Inventory scanning for platform-agent task sidecars."""
+"""Inventory scanning for Worker task sidecars."""
 
 from __future__ import annotations
 
