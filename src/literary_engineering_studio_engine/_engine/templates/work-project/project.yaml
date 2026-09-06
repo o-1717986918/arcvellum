@@ -1,3 +1,4 @@
+schema: arcvellum/project/v2
 project:
   title: ""
   type: novel
@@ -17,7 +18,7 @@ longform_budget:
   target_words: 30000
   volumes: 0
   status: pending_word_budget
-  note: "正式长篇生成前运行 word-budget / longform-budget，并由平台 Agent 处理预算化大纲任务。"
+  note: "正式长篇生成前运行 word-budget / longform-budget，并由 ArcVellum Worker 处理预算化大纲任务。"
 
 style:
   mode: public_domain_or_authorized
@@ -30,6 +31,7 @@ generation:
     system: prompts/scene_generation_system.md
     user: prompts/scene_generation_user.md
   model_env:
+    ownership: studio-managed
     api_base: LEW_MODEL_API_BASE
     api_key: LEW_MODEL_API_KEY
     model_name: LEW_MODEL_NAME

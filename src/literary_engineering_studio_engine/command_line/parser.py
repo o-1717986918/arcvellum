@@ -38,6 +38,20 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     init.add_argument("--genre", default="")
     init.add_argument("--style-mode", default="public_domain_or_authorized")
 
+    migrate_project = sub.add_parser(
+        "project-migrate-schema",
+        help="Preview, back up, or apply the bounded ArcVellum project-schema migration.",
+    )
+    migrate_project.add_argument("project", help="Work project directory.")
+    migrate_project.add_argument(
+        "--action",
+        default="preview",
+        choices=["preview", "backup", "apply"],
+        help="Preview changes by default; backup copies sources; apply always backs up before writing.",
+    )
+    migrate_project.add_argument("--backup-dir", default="", help="Optional empty backup directory.")
+    migrate_project.add_argument("--json", action="store_true", help="Print the machine-readable migration report.")
+
     demo = sub.add_parser("demo-project", help="Build a deterministic demo project with agent review artifacts.")
     demo.add_argument("target", help="Target demo project directory.")
     demo.add_argument("--title", default="文学工程 Demo")

@@ -50,8 +50,8 @@ def audit(root: Path) -> list[str]:
         errors.append("agent runtime default is not pi-worker")
     if defaults.get("model_invocation") != "runner-managed":
         errors.append("model invocation default is not runner-managed")
-    if defaults.get("scene_generation") != "platform-agent-task":
-        errors.append("scene generation default is not platform-agent-task")
+    if defaults.get("scene_generation") != "arcvellum-worker-task":
+        errors.append("scene generation default is not arcvellum-worker-task")
     errors.extend(_runtime_default_errors(root))
     errors.extend(_history_errors(manifest))
 

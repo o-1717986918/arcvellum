@@ -32,7 +32,7 @@ class CompatibilityManifestTests(unittest.TestCase):
         )
         self.assertEqual(
             current["defaults"]["scene_generation"],
-            "platform-agent-task",
+            "arcvellum-worker-task",
         )
         self.assertEqual(
             current["defaults"]["model_invocation"],
@@ -59,6 +59,10 @@ class CompatibilityManifestTests(unittest.TestCase):
                 for module in public_api["modules"]
             )
         )
+        migration = compatibility["schema_migration"]
+        self.assertEqual(migration["native_project_schema"], "arcvellum/project/v2")
+        self.assertEqual(migration["native_task_schema"], "arcvellum/task/v2")
+        self.assertEqual(migration["unknown_schema_policy"], "retain-and-report")
         history = manifest["history"]["runtime_defaults"]
         self.assertIn(
             {"release_line": "0.97", "agent_runtime": "opencode", "status": "retired-default"},

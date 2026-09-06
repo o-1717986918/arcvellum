@@ -427,3 +427,23 @@ Route Domain
 - demo_project_bundle.py：通过，识别 `yu-hua-i-am-timid-as-a-mouse`；
 - scripts/architecture_audit.py：通过，未引入循环依赖或边界违规；
 - git diff --check：通过。
+
+### 2026-09-07：TD-7 完成
+
+- [x] 新增集中式 `SchemaAliasRegistry`，把 ArcVellum 原生项目、项目读取、任务完成证据和文风 schema 与已登记历史别名分开管理；
+- [x] 新项目写入 `arcvellum/project/v2` 与 `arcvellum/project-reading/v2`，新 v2 TaskPackage 的嵌套完成证据和文风产物不再写旧品牌身份；
+- [x] v1 冻结任务协议继续保留原始 schema 和语义 fingerprint，v1-to-v2 直接投影仍可无损往返；只有新存储和显式迁移边界执行原生身份规范化；
+- [x] 新增 `project-migrate-schema`，支持 preview、backup、apply，所有应用操作先备份并写迁移回执；重复 apply 零变更；
+- [x] 未登记的历史 schema 不猜测、不覆写，迁移报告会显式列入 `retained_legacy`；
+- [x] Studio completion preflight 改用 Engine `public.tasking`，未跨越公共 API 边界；
+- [x] v2 协议字段声明拆至 `spec_v2_fields.py`，`spec_v2.py` 从 506 行降至 440 行；项目 CLI 主处理器从 194 行/复杂度 39 收敛到 146 行/复杂度 31；
+- [x] 新项目模板移除 `~/.lew/config.json` 路径和当前平台 Agent 文案，模型配置所有权明确为 `studio-managed`；
+- [x] 真实 CLI 旧项目迁移完成 preview -> apply -> 二次 apply -> workflow-dashboard 闭环，备份、幂等性和七条 Route 读取均成立。
+
+验证：
+
+- schema、文风、任务 v1/v2、预检、生命周期、公共 API 与历史正文定向测试：140 项通过；
+- 全量 Python：1373 项通过，1 项跳过；
+- verify_compatibility_surface.py：通过；
+- scripts/architecture_audit.py：通过，无新增大文件、复杂函数、循环依赖或边界违规；
+- git diff --check：通过。

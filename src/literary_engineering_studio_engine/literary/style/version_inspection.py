@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+from literary_engineering_studio_engine.foundation.schema_aliases import schema_matches
 
 from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
 from .version_contracts import (
@@ -186,17 +187,22 @@ def _compatibility_errors(
     manifest: dict[str, Any],
 ) -> list[str]:
     payload = _read_object(paths.compatibility)
-    errors = [
-        f"compatible style skill has invalid {field}"
-        for field, expected in {
+    expected_fields = {
             "schema": COMPATIBLE_STYLE_SKILL_SCHEMA,
             "style_id": str(manifest.get("style_id") or ""),
             "version_id": str(manifest.get("version_id") or ""),
             "content_hash": str(manifest.get("content_hash") or ""),
             "review_status": "pass",
-        }.items()
-        if payload.get(field) != expected
-    ]
+    }
+    errors = []
+    for field, expected in expected_fields.items():
+        matches = (
+            schema_matches(payload.get(field), expected)
+            if field == "schema"
+            else payload.get(field) == expected
+        )
+        if not matches:
+            errors.append(f"compatible style skill has invalid {field}")
     quality = _prompt_quality(paths.prompt)
     if not quality.get("length_ok") or not quality.get("structure_ok"):
         errors.append("compatible style skill prompt fails quality gates")

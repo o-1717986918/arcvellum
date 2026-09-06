@@ -10,9 +10,9 @@ from typing import Any
 
 from ..contracts import TaskPackage
 from ..sandbox import SandboxManifest
+from literary_engineering_studio_engine.public.tasking import COMPLETION_SCHEMA, schema_matches
 
 
-COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 REVIEW_CONCLUSION = re.compile(
     r"(?m)^-\s*(?:\u5ba1\u67e5)?\u7ed3\u8bba\uff1a\s*(?:\*\*)?`?([a-z_]+)`?(?:\*\*)?\s*$",
     re.IGNORECASE,
@@ -89,7 +89,7 @@ def _validate_completion_markers(
         if not isinstance(payload, dict):
             errors.append("根节点不是对象")
         else:
-            if payload.get("schema") != COMPLETION_SCHEMA:
+            if not schema_matches(payload.get("schema"), COMPLETION_SCHEMA):
                 errors.append(f"schema 必须是 {COMPLETION_SCHEMA}")
             status = str(payload.get("status") or "").lower()
             if revision_reset:

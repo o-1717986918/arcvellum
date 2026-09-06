@@ -9,10 +9,10 @@ from pathlib import Path
 
 from literary_engineering_studio_engine.literary.style.punctuation import PUNCTUATION_STANDARD_SHORT_RULE
 from literary_engineering_studio_engine.foundation.resources import engine_path
+from literary_engineering_studio_engine.foundation.schema_aliases import COMPLETION_SCHEMA
 
 
 AGENT_TASK_MARKER = "[AGENT_TASK:"
-COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 COMPLETE_STATUSES = {"complete", "completed", "done", "handled", "pass"}
 TASK_DIGEST_PREFIX = "<!-- agent-task-digest: "
 

@@ -7,7 +7,7 @@
     "defaults": {
       "agent_runtime": "pi-worker",
       "model_invocation": "runner-managed",
-      "scene_generation": "platform-agent-task"
+      "scene_generation": "arcvellum-worker-task"
     }
   },
   "compatibility": {
@@ -21,6 +21,13 @@
       "internal_imports_allowed": false,
       "external_imports_supported": true,
       "removal_requires": "the declared remove_not_before release and a fresh external-consumer audit"
+    },
+    "schema_migration": {
+      "native_project_schema": "arcvellum/project/v2",
+      "native_task_schema": "arcvellum/task/v2",
+      "command": "project-migrate-schema",
+      "modes": ["preview", "backup", "apply"],
+      "unknown_schema_policy": "retain-and-report"
     },
     "engine_public_api": {
       "status": "stable-cross-package-surface",
@@ -104,6 +111,13 @@
     ]
   },
   "history": {
+    "scene_generation_defaults": [
+      {
+        "release_line": "0.99.4",
+        "value": "platform-agent-task",
+        "status": "retired-identity"
+      }
+    ],
     "runtime_defaults": [
       {
         "release_line": "0.97",

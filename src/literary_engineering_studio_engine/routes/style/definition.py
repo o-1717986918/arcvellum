@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from literary_engineering_studio_engine.foundation.schema_aliases import STYLE_EVAL_SCHEMA, schema_matches
+
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ...literary.style.session import (
     load_style_session,
@@ -430,7 +432,7 @@ def eval_current_score_errors(root: Path, profile_dir: Path, *, require_accepted
         return [error]
     if not report.is_file():
         errors.append(f"current style evaluation report missing: {relative_path(report, root)}")
-    if payload.get("schema") != "literary-engineering-workbench/style-eval/v0.1":
+    if not schema_matches(payload.get("schema"), STYLE_EVAL_SCHEMA):
         errors.append("current style evaluation JSON has wrong or missing schema")
     candidate_sha = _file_sha256(candidate) if candidate.is_file() else ""
     if not candidate_sha or str(payload.get("candidate_sha256") or "").strip().lower() != candidate_sha:

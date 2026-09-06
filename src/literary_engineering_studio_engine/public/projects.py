@@ -4,6 +4,13 @@ from ..foundation.atomic_io import atomic_write_batch, atomic_write_text
 from ..foundation.resources import engine_root
 from ..literary.ingest.authorized import DistributionScope
 from ..projects.init import InitOptions, init_work_project
+from ..projects.migration import (
+    MIGRATION_ACTIONS,
+    MIGRATION_SCHEMA,
+    MigrationChange,
+    MigrationResult,
+    migrate_project_schemas,
+)
 from ..projects.source_ingest import (
     INGEST_MODES,
     TEXT_EXTENSIONS,
@@ -25,6 +32,10 @@ __all__ = [
     "AuthorizedDemoProjectResult",
     "DistributionScope",
     "InitOptions",
+    "MIGRATION_ACTIONS",
+    "MIGRATION_SCHEMA",
+    "MigrationChange",
+    "MigrationResult",
     "atomic_write_batch",
     "atomic_write_text",
     "build_authorized_demo_project",
@@ -33,5 +44,6 @@ __all__ = [
     "init_work_project",
     "is_authorized_demo_reference",
     "load_authorized_work_manifest",
+    "migrate_project_schemas",
     "seal_authorized_demo_project",
 ]

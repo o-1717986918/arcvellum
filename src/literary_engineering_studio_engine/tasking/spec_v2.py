@@ -11,6 +11,8 @@ import hashlib
 import json
 from typing import Mapping
 
+from literary_engineering_studio_engine.foundation.schema_aliases import canonicalize_schema_fields
+
 from .operations import operation_from_payload
 from .spec_models import (
     TASK_SCHEMA_V1,
@@ -29,86 +31,20 @@ from .spec_models import (
     TaskSpec,
     thaw_mapping,
 )
-
-
-ROOT_KEYS = frozenset({"schema", "spec", "lifecycle"})
-SPEC_KEYS = frozenset(
-    {
-        "identity",
-        "intent",
-        "execution",
-        "resources",
-        "outputs",
-        "operations",
-        "validation",
-        "extensions",
-    }
-)
-IDENTITY_KEYS = frozenset({"task_id", "route", "scene_id", "contract_revision"})
-INTENT_KEYS = frozenset({"current_state", "task_type", "prompt_asset_id"})
-EXECUTION_KEYS = frozenset(
-    {
-        "policy",
-        "agent_role",
-        "human_gate",
-        "runtime_capabilities_required",
-        "compatibility_derived",
-    }
-)
-HUMAN_GATE_KEYS = frozenset({"required", "reasons", "source"})
-RESOURCES_KEYS = frozenset({"required_reading", "source_paths"})
-RESOURCE_KEYS = frozenset({"uri", "path", "purpose", "required", "sha256"})
-OUTPUT_KEYS = frozenset(
-    {"path", "kind", "writeback_policy", "schema_name", "consumed_by"}
-)
-OPERATIONS_KEYS = frozenset({"prepare", "submit", "complete"})
-VALIDATION_KEYS = frozenset({"gates", "forbidden_shortcuts"})
-LIFECYCLE_KEYS = frozenset(
-    {
-        "status",
-        "created_at",
-        "opened_at",
-        "submitted_at",
-        "completed_at",
-        "blocked_at",
-        "submission",
-        "submitted_artifacts",
-        "completion",
-        "validation",
-        "rollback",
-        "superseded_at",
-        "superseded_by",
-        "supersession_reason",
-        "refreshed_at",
-        "refreshed_from_status",
-        "extensions",
-    }
-)
-RESERVED_V1_EXTENSION_KEYS = frozenset(
-    {
-        "schema",
-        "task_contract_revision",
-        "task_id",
-        "route",
-        "scene_id",
-        "current_state",
-        "task_type",
-        "prompt_asset_id",
-        "required_reading",
-        "source_paths",
-        "expected_outputs",
-        "operations",
-        "command",
-        "submission_command",
-        "completion_command",
-        "execution_policy",
-        "agent_role",
-        "human_gate",
-        "runtime_capabilities_required",
-        "output_contracts",
-        "validation_gates",
-        "forbidden_shortcuts",
-    }
+from .spec_v2_fields import (
+    EXECUTION_KEYS,
+    HUMAN_GATE_KEYS,
+    IDENTITY_KEYS,
+    INTENT_KEYS,
+    LIFECYCLE_KEYS,
+    OPERATIONS_KEYS,
+    OUTPUT_KEYS,
+    RESERVED_V1_EXTENSION_KEYS,
+    RESOURCE_KEYS,
+    RESOURCES_KEYS,
+    ROOT_KEYS,
+    SPEC_KEYS,
+    VALIDATION_KEYS,
 )
 
 
@@ -226,9 +162,13 @@ def _intent(payload: Mapping[str, object]) -> TaskIntent:
     )
 
 
-def task_document_to_v2(document: TaskDocument) -> dict[str, object]:
+def task_document_to_v2(
+    document: TaskDocument,
+    *,
+    canonicalize_aliases: bool = False,
+) -> dict[str, object]:
     spec = document.spec
-    return {
+    payload = {
         "schema": TASK_SCHEMA_V2,
         "spec": {
             "identity": {
@@ -265,6 +205,12 @@ def task_document_to_v2(document: TaskDocument) -> dict[str, object]:
         },
         "lifecycle": document.lifecycle.as_v2_dict(),
     }
+    if not canonicalize_aliases:
+        return payload
+    canonical = canonicalize_schema_fields(payload)
+    if not isinstance(canonical, dict):
+        raise TypeError("canonical task payload must remain an object")
+    return canonical
 
 
 def task_semantic_fingerprint(

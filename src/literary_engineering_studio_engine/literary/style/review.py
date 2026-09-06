@@ -11,6 +11,7 @@ from typing import Any
 
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, write_agent_tasks
 from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
+from literary_engineering_studio_engine.foundation.schema_aliases import STYLE_EVAL_SCHEMA, schema_matches
 from literary_engineering_studio_engine.tasking.paths import relative_path, task_id
 from .session import load_style_session, style_session_holdout_reference
 
@@ -387,7 +388,7 @@ def _score_binding_errors(profile_dir: Path) -> list[str]:
     score = _read_object(evaluation / "style_eval_current.json")
     candidate = evaluation / "platform_agent_candidate.md"
     errors: list[str] = []
-    if score.get("schema") != "literary-engineering-workbench/style-eval/v0.1":
+    if not schema_matches(score.get("schema"), STYLE_EVAL_SCHEMA):
         errors.append("style review requires a valid deterministic score")
     if not candidate.is_file() or str(score.get("candidate_sha256") or "") != _sha256(candidate):
         errors.append("style deterministic score is stale for the evaluation candidate")

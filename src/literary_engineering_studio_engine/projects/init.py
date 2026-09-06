@@ -8,6 +8,10 @@ from shutil import copyfile
 
 from literary_engineering_studio_engine.literary.review.creative_quality import default_creative_quality_profile
 from literary_engineering_studio_engine.foundation.resources import engine_root
+from literary_engineering_studio_engine.foundation.schema_aliases import (
+    PROJECT_READING_SCHEMA,
+    PROJECT_SCHEMA,
+)
 
 
 @dataclass(frozen=True)
@@ -52,7 +56,8 @@ def _copy_template(template_name: str, target: Path, files: list[Path]) -> None:
 
 
 def _project_yaml(options: InitOptions) -> str:
-    return f"""project:
+    return f"""schema: {PROJECT_SCHEMA}
+project:
   title: {_quote(options.title)}
   type: {options.work_type}
   target_length: {options.target_length}
@@ -74,7 +79,7 @@ longform_budget:
   target_scenes: {max(0, int(options.target_scenes))}
   volumes: 0
   status: pending_word_budget
-  note: "正式长篇生成前运行 word-budget / longform-budget，并由平台 Agent 处理预算化大纲任务。"
+  note: "正式长篇生成前运行 word-budget / longform-budget，并由 ArcVellum Worker 处理预算化大纲任务。"
 
 style:
   mode: {options.style_mode}
@@ -87,7 +92,7 @@ generation:
     system: prompts/scene_generation_system.md
     user: prompts/scene_generation_user.md
   model_env:
-    global_config: ~/.lew/config.json
+    ownership: studio-managed
     api_base: LEW_MODEL_API_BASE
     api_key: LEW_MODEL_API_KEY
     model_name: LEW_MODEL_NAME
@@ -111,7 +116,7 @@ quality_gates:
 def _agents_md(title: str) -> str:
     return f"""# Agent 入口：{title}
 
-本目录是一部具体作品的文学工程项目。Agent 接手时必须先读：
+本目录是一部具体作品的文学工程项目。ArcVellum Worker 接手时必须先读：
 
 1. `project.yaml`
 2. `agentread.yaml`
@@ -131,10 +136,10 @@ def _agents_md(title: str) -> str:
 - 角色推演必须基于人物 BDI。
 - 每个角色单独维护在 `characters/{{character_id}}.yaml`；`importance: major` 的主要角色常驻上下文，次要角色只在场景 `participants`、`referenced_characters` 或 `character_refs` 命中时完整载入。
 - 可挂载文风 `prompt.md` 必须是 500-2500 中文内容字符的高质量 LLM 提示词，计入汉字和中文标点，不计入 Markdown 标记、英文路径、代码围栏或空白，并包含身份/边界、优先级、核心机制、叙述距离、句法节奏、标点、意象感官、心理行为、对白语气、禁止倾向和自检。
-- 中长篇或百万字级目标必须先运行 `word-budget` / `longform-budget`，把目标中文内容字符拆成卷、章、场景和叙事负载；预算化大纲候选通过平台 Agent 审查前，不得批量生成正文。
+- 中长篇或百万字级目标必须先运行 `word-budget` / `longform-budget`，把目标中文内容字符拆成卷、章、场景和叙事负载；预算化大纲候选通过 ArcVellum Worker 审查前，不得批量生成正文。
 - 中长篇 scene-development 正文生成前必须完成 `chapter-obligation`：每章建立章节义务、读者问题、承诺回报、暂扣信息、兑现/延迟、反摘要要求和读后余味契约。
 - 正文生成和审查要降低 AI 腔：机械“不是……而是……”及“不是……——是……”等变体是核心禁区，不判断为合理修辞；器官轮岗、万能占位、比喻依赖、抽象总结、解释性心理标签、模板化转折、对称排比、景物强制同步和金句化结尾按约 2% 叙事单元密度门禁控制。
-- 从已有文本反推设定时，必须先写入 `sources/imports/` 和候选区，由平台 Agent 提取并审查，不得直接写入正式 canon、characters 或 plot。
+- 从已有文本反推设定时，必须先写入 `sources/imports/` 和候选区，由 ArcVellum Worker 提取并审查，不得直接写入正式 canon、characters 或 plot。
 - 审查未通过的草稿不能进入正稿。
 
 ## 默认流程
@@ -146,7 +151,7 @@ def _agents_md(title: str) -> str:
 
 
 def _agentread_yaml() -> str:
-    return """schema: literary-work-project/v0.1
+    return f"""schema: {PROJECT_READING_SCHEMA}
 read_first:
   - AGENTS.md
   - project.yaml
@@ -237,7 +242,7 @@ def init_work_project(options: InitOptions) -> InitResult:
     _write(root / "reviews" / "word_budget" / "README.md", "# word_budget\n\n长篇字数预算、剧情库存和预算化大纲审查报告放在这里。\n", files)
 
     _write(root / "plot" / "outline.md", f"# {options.title} 大纲\n\n## Premise\n\n{options.premise or '尚未填写。'}\n", files)
-    _write(root / "plot" / "word_budget" / "README.md", "# word_budget\n\n运行 `word-budget` / `longform-budget` 后，预算报告、JSON 和平台 Agent 任务侧车放在这里。\n", files)
+    _write(root / "plot" / "word_budget" / "README.md", "# word_budget\n\n运行 `word-budget` / `longform-budget` 后，预算报告、JSON 和 ArcVellum Worker 任务侧车放在这里。\n", files)
     _write(root / "plot" / "chapter_obligations" / "README.md", "# chapter_obligations\n\n运行 `chapter-obligation` 后，每章的承诺、兑现/延迟和逐场读者体验契约放在这里。\n", files)
     _write(root / "plot" / "candidates" / "outlines" / "README.md", "# outline candidates\n\nAgent 生成的大纲、章节计划和场景列表候选放在这里。\n", files)
     _write(root / "plot" / "candidates" / "relationships" / "README.md", "# relationship candidates\n\nAgent 生成的人物关系网候选放在这里。\n", files)
@@ -253,8 +258,8 @@ def init_work_project(options: InitOptions) -> InitResult:
     _write(root / "memory" / "README.md", "# memory\n\n向量索引、摘要和检索日志放在这里。\n", files)
     _write(root / "memory" / "retrieval_logs" / "README.md", "# retrieval_logs\n\n每次生成前的检索记录放在这里。\n", files)
     _write(root / "memory" / "context_packets" / "README.md", "# context_packets\n\n场景上下文包和 `.trace.json` 来源证明放在这里。正式 scene-development 必须同时具备 context packet 与 context trace。\n", files)
-    _write(root / "sources" / "README.md", "# sources\n\n已有文本、完整作品、改写/续写源材料的导入清单放在这里。使用 `source-ingest` 生成 `imports/{work_id}/` 后，由平台 Agent 反推候选设定。\n", files)
-    _write(root / "sources" / "imports" / "README.md", "# imports\n\n每次导入一个已有作品或源文本，生成 raw、chunks、manifest、report 和平台 Agent 提取任务。\n", files)
+    _write(root / "sources" / "README.md", "# sources\n\n已有文本、完整作品、改写/续写源材料的导入清单放在这里。使用 `source-ingest` 生成 `imports/{work_id}/` 后，由 ArcVellum Worker 反推候选设定。\n", files)
+    _write(root / "sources" / "imports" / "README.md", "# imports\n\n每次导入一个已有作品或源文本，生成 raw、chunks、manifest、report 和 ArcVellum Worker 提取任务。\n", files)
     _write(root / "style" / "candidates" / "README.md", "# style candidates\n\n从已有文本或作品反推的可生成文风说明候选放在这里。正式挂载前应转化为合格 Style Skill。\n", files)
     _write(root / "reviews" / "source_ingest" / "README.md", "# source_ingest reviews\n\n已有作品反推设定的证据强度、矛盾、缺漏和晋升建议审查放在这里。\n", files)
     _write(root / "branches" / "README.md", "# branches\n\n剧情分支实验放在这里。\n", files)

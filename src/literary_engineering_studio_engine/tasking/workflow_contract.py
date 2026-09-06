@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from literary_engineering_studio_engine.foundation.schema_aliases import COMPLETION_SCHEMA, schema_matches
 from literary_engineering_studio_engine.workflow.state import build_workflow_state
 from .storage import load_task_payload
 
@@ -16,7 +17,6 @@ STATE_SCHEMA = "literary-engineering-workbench/formal-route-state/v1"
 EVENT_SCHEMA = "literary-engineering-workbench/workflow-event/v1"
 TASK_SCHEMA = "literary-engineering-workbench/agent-task/v1"
 SUBMISSION_SCHEMA = "literary-engineering-workbench/agent-submission/v1"
-COMPLETION_SCHEMA = "literary-engineering-workbench/agent-task-completion/v1"
 ORDER_NEUTRAL_PASS_STEPS = {"scene-word-budget-contract", "reader-experience-contract"}
 
 
@@ -254,7 +254,7 @@ def _validate_submission(root: Path, rel: str, task_id: str, errors: list[dict[s
 def _validate_completion(root: Path, rel: str, task_id: str, errors: list[dict[str, str]]) -> None:
     path = root / rel
     payload = _read_json(path)
-    if payload.get("schema") != COMPLETION_SCHEMA:
+    if not schema_matches(payload.get("schema"), COMPLETION_SCHEMA):
         errors.append(_issue(f"completion.{task_id}.schema", f"expected {COMPLETION_SCHEMA}", str(payload.get("schema") or "missing")))
     if payload.get("status") not in {"complete", "completed", "done", "handled", "pass"}:
         errors.append(_issue(f"completion.{task_id}.status", "completion marker status is not complete", str(payload.get("status") or "")))

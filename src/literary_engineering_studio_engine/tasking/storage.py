@@ -67,7 +67,7 @@ def write_task_payload(
             compatible,
             normalize_path=_normalize_relative,
         )
-        serialized = task_document_to_v2(document)
+        serialized = task_document_to_v2(document, canonicalize_aliases=True)
     else:
         raise ValueError(f"unsupported task storage schema: {schema}")
     path.parent.mkdir(parents=True, exist_ok=True)

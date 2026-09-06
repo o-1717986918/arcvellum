@@ -11,6 +11,7 @@ from typing import Any
 
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker, write_agent_tasks
 from literary_engineering_studio_engine.foundation.resources import engine_root
+from literary_engineering_studio_engine.foundation.schema_aliases import STYLE_EVAL_SCHEMA
 from .lab import active_project_style
 from .mount import mount_style_profile_version
 from .review import (
@@ -241,7 +242,7 @@ def _materialize_evaluation(
         encoding="utf-8",
     )
     score = {
-        "schema": "literary-engineering-workbench/style-eval/v0.1",
+        "schema": STYLE_EVAL_SCHEMA,
         "mode": "blind-review",
         "overall_score": 88,
         "risk_level": "acceptable",

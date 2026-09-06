@@ -8,6 +8,7 @@ from literary_engineering_studio_engine.literary.scene.context.broker import def
 from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
 from literary_engineering_studio_engine.projects.demo import build_demo_project
 from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.projects.migration import migrate_project_schemas
 from literary_engineering_studio_engine.foundation.knowledge_store import build_knowledge_store, search_knowledge_store
 from literary_engineering_studio_engine.foundation.memory_index import build_memory_index, search_memory
 from literary_engineering_studio_engine.projects.source_ingest import ingest_existing_work
@@ -21,38 +22,13 @@ def handle(args, parser) -> int | None:
     if style_result is not None:
         return style_result
     if args.command == "init":
-        result = init_work_project(
-            InitOptions(
-                target=Path(args.target),
-                title=args.title,
-                work_type=args.type,
-                target_length=args.target_length,
-                language=args.language,
-                premise=args.premise,
-                genre=args.genre,
-                style_mode=args.style_mode,
-            )
-        )
-        print(f"created: {result.root}")
-        print(f"files: {len(result.files)}")
-        for file in result.files:
-            print(f"- {file.relative_to(result.root).as_posix()}")
-        return 0
+        return _handle_init(args)
+
+    if args.command == "project-migrate-schema":
+        return _handle_project_migration(args, parser)
 
     if args.command == "demo-project":
-        try:
-            result = build_demo_project(Path(args.target), title=args.title, run_agent_workflow=not args.skip_workflow)
-        except (FileExistsError, FileNotFoundError, RuntimeError, ValueError) as exc:
-            parser.error(str(exc))
-        print(f"demo: {result.root}")
-        print(f"draft: {result.draft_path}")
-        print(f"review: {result.review_path}")
-        print(f"agent_scene_review: {result.agent_scene_review}")
-        print(f"agent_canon_review: {result.agent_canon_review}")
-        print(f"committee: {result.committee_review}")
-        print(f"workflow_state: {result.workflow_state or 'n/a'}")
-        print(f"report: {result.report_path}")
-        return 0
+        return _handle_demo(args, parser)
 
     if args.command == "index":
         result = build_memory_index(Path(args.project))
@@ -187,3 +163,67 @@ def handle(args, parser) -> int | None:
         return 0
 
     return None
+
+
+def _handle_init(args) -> int:
+    result = init_work_project(
+        InitOptions(
+            target=Path(args.target),
+            title=args.title,
+            work_type=args.type,
+            target_length=args.target_length,
+            language=args.language,
+            premise=args.premise,
+            genre=args.genre,
+            style_mode=args.style_mode,
+        )
+    )
+    print(f"created: {result.root}")
+    print(f"files: {len(result.files)}")
+    for file in result.files:
+        print(f"- {file.relative_to(result.root).as_posix()}")
+    return 0
+
+
+def _handle_project_migration(args, parser) -> int:
+    import json
+
+    try:
+        result = migrate_project_schemas(
+            Path(args.project),
+            action=args.action,
+            backup_root=Path(args.backup_dir) if args.backup_dir else None,
+        )
+    except (FileExistsError, FileNotFoundError, OSError, ValueError) as exc:
+        parser.error(str(exc))
+    if args.json:
+        print(json.dumps(result.to_record(), ensure_ascii=False, indent=2))
+    else:
+        print(f"action: {result.action}")
+        print(f"changes: {len(result.changes)}")
+        print(f"retained_legacy: {len(result.retained_legacy)}")
+        print(f"backup: {result.backup_root or 'n/a'}")
+        print(f"applied: {str(result.applied).lower()}")
+        for change in result.changes:
+            print(f"- {change.kind}: {change.path}")
+    return 0
+
+
+def _handle_demo(args, parser) -> int:
+    try:
+        result = build_demo_project(
+            Path(args.target),
+            title=args.title,
+            run_agent_workflow=not args.skip_workflow,
+        )
+    except (FileExistsError, FileNotFoundError, RuntimeError, ValueError) as exc:
+        parser.error(str(exc))
+    print(f"demo: {result.root}")
+    print(f"draft: {result.draft_path}")
+    print(f"review: {result.review_path}")
+    print(f"agent_scene_review: {result.agent_scene_review}")
+    print(f"agent_canon_review: {result.agent_canon_review}")
+    print(f"committee: {result.committee_review}")
+    print(f"workflow_state: {result.workflow_state or 'n/a'}")
+    print(f"report: {result.report_path}")
+    return 0

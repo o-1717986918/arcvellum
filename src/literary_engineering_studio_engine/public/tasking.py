@@ -1,5 +1,6 @@
 """Stable task-package, completion, and semantic-contract API."""
 
+from ..foundation.schema_aliases import COMPLETION_SCHEMA, schema_matches
 from ..tasking.agent_tasks.writer import (
     agent_task_completion_status,
     write_agent_completion_marker,
@@ -48,6 +49,7 @@ from ..tasking.spec import (
 __all__ = [
     "agent_task_completion_status",
     "branch_selection_status",
+    "COMPLETION_SCHEMA",
     "derive_execution_policy",
     "ENGINE_OPERATION_SCHEMA",
     "EngineOperation",
@@ -69,6 +71,7 @@ __all__ = [
     "semantic_artifact_template",
     "SCENE_CANDIDATE_STATES",
     "SCENE_REVISION_STATES",
+    "schema_matches",
     "TaskDocument",
     "TaskExecutionContract",
     "TaskIdentity",

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import math
 import re
 from collections import Counter
@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from literary_engineering_studio_engine.foundation.schema_aliases import STYLE_EVAL_SCHEMA
 from literary_engineering_studio_engine.literary.style.compiler import analyze_style
 
 
@@ -66,7 +67,7 @@ def evaluate_style(options: StyleEvalOptions) -> StyleEvalResult:
     report_path = out_dir / f"style_eval_{stamp}.md"
 
     payload = {
-        "schema": "literary-engineering-workbench/style-eval/v0.1",
+        "schema": STYLE_EVAL_SCHEMA,
         "mode": options.mode,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "profile_dir": str(profile_dir),
