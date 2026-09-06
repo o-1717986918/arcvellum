@@ -9,6 +9,7 @@ from literary_engineering_studio.application_info import (
     build_diagnostic_report,
     export_diagnostic_report,
 )
+from literary_engineering_studio.integrations.pi_worker.installation import PiWorkerInstallation
 
 
 class _Lifecycle:
@@ -26,10 +27,13 @@ class ApplicationInfoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             config = {
                 "application": {"data_root": temporary},
-                "agent_runners": {"opencode": {"model": "deepseek/chat"}},
+                "agent_runners": {"pi-worker": {"model": "deepseek/chat"}},
                 "updates": {"channel": "stable"},
             }
-            with patch("literary_engineering_studio.application_info.locate_opencode", return_value=None):
+            with patch(
+                "literary_engineering_studio.application_info.locate_pi_worker",
+                return_value=PiWorkerInstallation("node", None, "missing"),
+            ):
                 payload = build_application_info(config)
         self.assertEqual(payload["product_name"], "ArcVellum")
         self.assertEqual(payload["current_model"], "deepseek/chat")
@@ -39,12 +43,15 @@ class ApplicationInfoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             config = {
                 "application": {"data_root": temporary, "password": "should-never-appear"},
-                "agent_runners": {"opencode": {"model": "provider/model", "token": "sk-example-secret-value"}},
+                "agent_runners": {"pi-worker": {"model": "provider/model", "token": "sk-example-secret-value"}},
                 "model_connections": {"connections": []},
                 "server": {"host": "127.0.0.1"},
             }
             with (
-                patch("literary_engineering_studio.application_info.locate_opencode", return_value=None),
+                patch(
+                    "literary_engineering_studio.application_info.locate_pi_worker",
+                    return_value=PiWorkerInstallation("node", None, "missing"),
+                ),
                 patch("literary_engineering_studio.application_info.list_projects", return_value={"projects": [], "current_project": "C:/private/work"}),
                 patch("literary_engineering_studio.application_info.agent_runner_status", return_value=[]),
             ):

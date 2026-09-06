@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--task-id", required=True)
-    parser.add_argument("--runtime", default="opencode")
+    parser.add_argument("--runtime", default="pi-worker")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)

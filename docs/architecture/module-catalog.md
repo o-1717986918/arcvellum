@@ -87,7 +87,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `runtime/` | Worker 执行、bundle、沙箱、上下文、写回、修复、恢复 | `runtime/worker.py` 与显式子模块 | Runtime port、ports、Engine public API | Provider-specific 分支散入 Worker、绕过 preflight | `test_worker_integration.py`、`tests/runtime/*` |
 | `runtime/capabilities/` | 明确 allowlist 的受控工具能力 | manifest/policy/registry/broker | 当前 TaskPackage、显式 handlers | 通用 Shell、任意读写、动态 import | runtime capability contract tests |
 | `runtime/resources/` | ResourceClaim 与读写/Barrier 冲突判断 | resource contracts/conflict functions | immutable DTO | task ordering、数据库 lease 实现 | `test_runtime_resources.py`、orchestration resource tests |
-| `integrations/opencode/` | OpenCode 客户端、事件、池和会话 adapter | integration facade；由 Runtime descriptor 使用 | OpenCode protocol | 文学规则、直接项目写回 | OpenCode execution/pool/event tests |
+| `integrations/runner_probe.py` | 对已注册 Runtime 执行隔离连通性探测 | `probe_agent_runner()` | Runtime registry、临时任务目录 | Provider 特判、文学规则、正式项目写回 | `test_runner_probe.py` |
 | `integrations/pi_rpc/` | Studio 与内置 Pi Worker 的 JSON-RPC/framing | Pi RPC facade | framed transport、typed payload | 项目路径自由访问、Gate 判断 | `test_pi_rpc.py`、`test_pi_continuous_e2e.py` |
 | `workers/pi-worker/` | 有界 Pi Agent Core 执行器，只消费任务包并产出 expected outputs | `src/main.ts`、`src/worker.ts` | Pi SDK、task contract | 正式项目访问、task lifecycle、subagent 写正文 | `npm run pi-worker:check`、Pi Worker Python integration tests |
 

@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from ..core_bridge import CoreBridge
 from ..model_connections import model_connection_status
-from ..opencode_control import provider_catalog
+from ..integrations.pi_worker import pi_worker_catalog
 from .project_manager import list_projects
 
 
@@ -24,7 +24,7 @@ class ApplicationBootstrapService:
         config: dict[str, Any],
         lifecycle,
         *,
-        catalog_loader: Callable[[dict[str, Any]], dict[str, Any]] = provider_catalog,
+        catalog_loader: Callable[[dict[str, Any]], dict[str, Any]] = pi_worker_catalog,
         project_loader: Callable[[], dict[str, Any]] = list_projects,
         engine_probe: Callable[[], Any] | None = None,
     ):

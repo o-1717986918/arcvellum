@@ -60,15 +60,7 @@ from .projections.narrative_projection_v4 import (
     build_narrative_projection_v4,
 )
 from .orchestration import orchestration_settings as _orchestration_settings
-from .opencode_binary import install_pinned_opencode, locate_opencode, verify_opencode
-from .opencode_control import (
-    connect_custom_provider,
-    disconnect_provider,
-    provider_catalog,
-    select_model,
-    set_api_credential,
-)
-from .runner_probe import probe_agent_runner
+from .integrations.runner_probe import probe_agent_runner
 from .project_manager import (
     clone_bundled_demo,
     create_project,
@@ -294,17 +286,8 @@ def create_app(
             RunnerRouterDependencies(
                 config=config,
                 lifecycle=lifecycle,
-                locate_opencode=lambda settings: locate_opencode(settings),
-                verify_opencode=lambda executable: verify_opencode(executable),
-                install_pinned_opencode=lambda: install_pinned_opencode(),
                 probe_agent_runner=lambda *args, **kwargs: probe_agent_runner(*args, **kwargs),
-                provider_catalog=lambda *args, **kwargs: provider_catalog(*args, **kwargs),
-                set_api_credential=lambda *args, **kwargs: set_api_credential(*args, **kwargs),
-                connect_custom_provider=lambda *args, **kwargs: connect_custom_provider(*args, **kwargs),
-                disconnect_provider=lambda *args, **kwargs: disconnect_provider(*args, **kwargs),
-                select_model=lambda *args, **kwargs: select_model(*args, **kwargs),
                 model_connection_status=lambda settings: model_connection_status(settings),
-                cache_model_catalog=bootstrap.record_model_catalog,
             )
         )
     )

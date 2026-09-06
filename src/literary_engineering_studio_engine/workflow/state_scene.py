@@ -475,15 +475,21 @@ def _candidate_revision_direction(root: Path, scene_id: str, gate: dict[str, obj
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if not isinstance(record, dict) or str(record.get("decision_type") or "") != "cross_asset_alignment":
-            continue
-        target = record.get("target") if isinstance(record.get("target"), dict) else {}
-        if str(target.get("scene_id") or target.get("target_id") or "") != scene_id:
-            continue
-        if str(target.get("candidate_sha256") or "").strip().lower() != expected_sha:
-            continue
-        return str(record.get("selected") or "") == "align_prose_to_formal_asset"
+        decision = _matching_revision_decision(record, scene_id, expected_sha)
+        if decision is not None:
+            return decision
     return False
+
+
+def _matching_revision_decision(record: object, scene_id: str, expected_sha: str) -> bool | None:
+    if not isinstance(record, dict) or str(record.get("decision_type") or "") != "cross_asset_alignment":
+        return None
+    target = record.get("target") if isinstance(record.get("target"), dict) else {}
+    if str(target.get("scene_id") or target.get("target_id") or "") != scene_id:
+        return None
+    if str(target.get("candidate_sha256") or "").strip().lower() != expected_sha:
+        return None
+    return str(record.get("selected") or "") == "align_prose_to_formal_asset"
 
 
 def _static_review_step(root: Path, scene_id: str) -> dict[str, object]:

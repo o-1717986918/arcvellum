@@ -358,7 +358,7 @@ W6-4G 上下文与 Token 效率边界进一步固定：
 - `runtime/sandbox_hygiene.py` 只恢复可由 staged baseline 与 control workspace
   digest 证明的非输出改动。无法证明可恢复的路径必须继续由 sandbox preflight
   fail closed，不能把“自动清理”变成权限豁免；
-- `runtimes/opencode_repair.py` 只拥有 transport-level 同 session repair loop。
+- Runtime adapter 只拥有 transport-level 的同会话有限修复循环；文学判定与写回仍由 Worker 和 Engine Gate 负责。
   TaskPackage、Sandbox、preflight、Gate 和 writeback 所有权继续留在 Worker；
 - `runtime/context_rollout.py` 只消费请求模式、Engine contract status 和配置白名单，
   输出带稳定 policy digest 的灰度决策；它不选择资料、修改 task 或拥有 writeback。
@@ -576,7 +576,7 @@ Studio Advisor 分为：
 - `advisor/answer_parser.py`：纯答案兼容解析和白名单投影；
 - `advisor/streaming.py`：只输出用户正文、隐藏 metadata；
 - `advisor/prompt.py`：只读宪法、人格、历史和动作协议；
-- `advisor/runtime.py`：OpenCode 远程会话、事件、超时与资源生命周期；
+- `advisor/runtime.py`：Pi Worker 顾问会话、流式事件、超时与资源生命周期；
 - `advisor/service.py`：snapshot/hash、persona、memory 与 repository 用例。
 
 `advisor/advisor_inbox.py` 只把 human choice、route blocker、autopilot stop 和 promoted prose 投影为去重通知，不执行选择或推进；

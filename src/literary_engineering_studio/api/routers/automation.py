@@ -37,7 +37,7 @@ def _observability_payload(deps: AutomationRouterDependencies, root: Path) -> tu
         events,
         deps.dashboard_snapshot(root),
         deps.jobs.list_agent_sessions(str(root), limit=30),
-        deps.lifecycle.opencode_pool.status(),
+        deps.lifecycle.runtime_pool.status(),
     )
     return payload, run
 

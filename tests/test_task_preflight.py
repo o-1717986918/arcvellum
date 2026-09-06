@@ -132,7 +132,7 @@ class TaskPreflightTests(unittest.TestCase):
                     {
                         "schema": "invented/legacy-schema/v1",
                         "chapter_id": "wrong-chapter",
-                        "status": "pass",
+                        "review_status": "pass",
                         "chapter_function": "建立开场冲突",
                         "must_payoff": [],
                         "must_setup": ["异常信号"],
@@ -1577,6 +1577,8 @@ class TaskPreflightTests(unittest.TestCase):
             self.assertEqual(normalized["candidate"], "characters/candidates/protagonist-foundation.json")
             self.assertEqual(normalized["candidate_id"], "protagonist-foundation")
             self.assertEqual(normalized["asset_type"], "character")
+            self.assertEqual(normalized["status"], "pass")
+            self.assertNotIn("review_status", normalized)
             self.assertTrue(completion["expected_artifacts_checked"])
 
     def test_candidate_provenance_gate_reaches_runner_repair_loop(self):

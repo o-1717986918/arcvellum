@@ -251,25 +251,7 @@ def _system_owned_fields(
     route = str(task.get("route") or "")
     state = str(task.get("current_state") or "")
     policy = TASK_TYPE_EXECUTION.get(str(task.get("task_type") or ""), ("", ""))[0]
-    receipts: list[dict[str, object]] = []
-    if policy == "agent-required":
-        status = "recheck_required" if state in RECHECK_REQUIRED_STATES else "complete"
-        checked = status == "complete"
-        for item in expected_outputs:
-            normalized = normalize_relative(item)
-            if not normalized.endswith(".agent_completion.json"):
-                continue
-            base = normalized[: -len(".agent_completion.json")]
-            source_task = base + (".md" if base.endswith(".agent_tasks") else ".agent_tasks.md")
-            receipts.append(
-                {
-                    "path": normalized,
-                    "schema": COMPLETION_SCHEMA,
-                    "source_task": source_task,
-                    "status": status,
-                    "expected_artifacts_checked": checked,
-                }
-            )
+    receipts = _completion_receipts(expected_outputs, state) if policy == "agent-required" else []
     lifecycle: dict[str, object] = {
         "task_identity": {"task_id": task_id, "route": route, "current_state": state},
         "completion_receipts": receipts,
@@ -286,6 +268,26 @@ def _system_owned_fields(
             "status_values": ["complete"],
         }
     return result
+
+
+def _completion_receipts(expected_outputs: list[str], state: str) -> list[dict[str, object]]:
+    status = "recheck_required" if state in RECHECK_REQUIRED_STATES else "complete"
+    receipts: list[dict[str, object]] = []
+    for item in expected_outputs:
+        normalized = normalize_relative(item)
+        if not normalized.endswith(".agent_completion.json"):
+            continue
+        base = normalized[: -len(".agent_completion.json")]
+        receipts.append(
+            {
+                "path": normalized,
+                "schema": COMPLETION_SCHEMA,
+                "source_task": base + (".md" if base.endswith(".agent_tasks") else ".agent_tasks.md"),
+                "status": status,
+                "expected_artifacts_checked": status == "complete",
+            }
+        )
+    return receipts
 
 
 def _merge_system_owned_fields(existing: object, generated: dict[str, object]) -> dict[str, object]:

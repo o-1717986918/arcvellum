@@ -29,7 +29,7 @@ class ArchiveApiTests(unittest.TestCase):
         config["application"]["database_path"] = str(data / "data" / "studio.sqlite3")
         config["application"]["projects_root"] = str(data)
         config["worker"]["runs_root"] = str(data / "runs")
-        config["agent_runners"]["opencode"]["data_root"] = str(data / "data")
+        config["agent_runners"]["pi-worker"]["data_root"] = str(data / "data")
         self.client = TestClient(create_app(config))
 
     def tearDown(self):

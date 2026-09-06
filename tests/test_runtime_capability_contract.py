@@ -89,15 +89,6 @@ class RuntimeCapabilityContractTests(unittest.TestCase):
                 self.assertIn("local_execution", payload)
                 self.assertIn("read_control", payload)
 
-    def test_opencode_declares_only_the_execution_controls_it_can_enforce(self):
-        runtime_type = RUNTIME_TYPES["opencode"]
-        runtime = runtime_type({})
-        capabilities = set(runtime.execution_control_capabilities())
-        self.assertEqual(capabilities, {"bounded-repair", "silence-timeout-control"})
-        self.assertNotIn("reasoning-policy-control", capabilities)
-        self.assertNotIn("turn-limit-control", capabilities)
-        self.assertNotIn("tool-limit-control", capabilities)
-
     def test_pi_worker_declares_bounded_agent_controls_without_general_shell(self):
         runtime = RUNTIME_TYPES["pi-worker"]({"model": "fixture/model"})
         capabilities = set(runtime.execution_control_capabilities())

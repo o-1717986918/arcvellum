@@ -80,13 +80,14 @@ def _canonicalize_evaluation(
     if payload is None:
         return []
     candidate = f"{profile_dir}/evaluation_results/formal/platform_agent_candidate.md"
+    normalized_sources = [str(item).replace("\\", "/") for item in task.source_paths]
     reference = next(
         (
-            str(item).replace("\\", "/")
-            for item in task.source_paths
-            if str(item).lower().endswith(".txt")
+            item
+            for item in normalized_sources
+            if "/evaluation_inputs/holdout/" in f"/{item.lower()}"
         ),
-        "",
+        next((item for item in normalized_sources if item.lower().endswith(".txt")), ""),
     )
     expected = {
         "mode": "blind-review",

@@ -11,14 +11,6 @@ import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
-const customProvider = reactive({
-  provider_id: "my-compatible-api",
-  display_name: "我的兼容模型服务",
-  base_url: "",
-  models_text: "",
-  context: "",
-  output: "",
-});
 const selectedModels = reactive({ worker: "", advisor: "", steward: "" });
 const roleSaving = reactive({ worker: false, advisor: false, steward: false });
 const roleSaved = reactive({ worker: false, advisor: false, steward: false });
@@ -50,7 +42,6 @@ const connectionPresets = computed(() => store.modelCatalog?.connection_presets 
   { id: "google", label: "Google Gemini", group: "国际服务" },
   { id: "openrouter", label: "OpenRouter", group: "国际服务" },
 ]);
-const isCustomProvider = computed(() => credential.provider_id === "__custom__");
 const presetGroups = computed(() => {
   const groups = new Map<string, typeof connectionPresets.value>();
   for (const preset of connectionPresets.value) {
@@ -93,15 +84,7 @@ async function connectProvider(): Promise<void> {
   busy.value = true;
   feedback.value = "";
   try {
-    const result = isCustomProvider.value
-      ? await settingsClient.saveCustomProvider({
-            provider_id: customProvider.provider_id,
-            display_name: customProvider.display_name,
-            base_url: customProvider.base_url,
-            models: parseCustomModels(),
-            credential: credential.credential,
-          })
-      : await settingsClient.saveProviderCredential(credential);
+    const result = await settingsClient.saveProviderCredential(credential);
     credential.credential = "";
     store.applyModelCatalog(result);
     await store.loadModelCatalog();
@@ -140,19 +123,6 @@ async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> 
   } finally {
     roleSaving[role] = false;
   }
-}
-
-function parseCustomModels(): Array<{ id: string; name: string; context: number; output: number }> {
-  const context = Number(customProvider.context) || 0;
-  const output = Number(customProvider.output) || 0;
-  return customProvider.models_text
-    .split(/[\n,]/)
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) => {
-      const [id, rawName] = value.split("|").map((item) => item.trim());
-      return { id, name: rawName || id, context, output };
-    });
 }
 
 function syncSelectedModels(): void {
@@ -306,17 +276,9 @@ function pathValue(key: string): string {
       <section class="settings-section connection-form-section">
         <header><span class="section-icon iris"><KeyRound :size="18" /></span><div><h2>连接模型服务</h2><p>常用服务直接连接；密钥只写入本机 Pi Worker 凭证库，不进入作品与普通配置。</p></div></header>
         <form @submit.prevent="connectProvider">
-          <label class="field"><span>服务</span><select v-model="credential.provider_id"><optgroup v-for="group in presetGroups" :key="group.label" :label="group.label"><option v-for="preset in group.items" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup><option value="__custom__">自定义兼容接口（外部 OpenCode）</option></select></label>
-          <template v-if="isCustomProvider">
-            <label class="field"><span>服务标识</span><input v-model.trim="customProvider.provider_id" required placeholder="例如 my-company-gateway" /></label>
-            <label class="field"><span>显示名称</span><input v-model.trim="customProvider.display_name" required placeholder="例如 我的团队模型网关" /></label>
-            <label class="field"><span>接口地址</span><input v-model.trim="customProvider.base_url" required type="url" placeholder="https://example.com/v1" /></label>
-            <label class="field"><span>模型 ID</span><textarea v-model="customProvider.models_text" required rows="3" placeholder="一行一个；可写“模型ID | 显示名称”&#10;例如 qwen-plus | Qwen Plus"></textarea></label>
-            <div class="connection-limits"><label class="field"><span>上下文长度（可选）</span><input v-model="customProvider.context" inputmode="numeric" placeholder="例如 128000" /></label><label class="field"><span>最大输出（可选）</span><input v-model="customProvider.output" inputmode="numeric" placeholder="例如 8192" /></label></div>
-          </template>
-          <p v-if="isCustomProvider" class="privacy-note">自定义兼容接口暂由可选的外部 OpenCode 适配器承载；内置 Pi Worker 的常用服务无需安装其他 Agent。</p>
+          <label class="field"><span>服务</span><select v-model="credential.provider_id"><optgroup v-for="group in presetGroups" :key="group.label" :label="group.label"><option v-for="preset in group.items" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup></select></label>
           <label class="field"><span>API 密钥</span><input v-model="credential.credential" required type="password" autocomplete="new-password" placeholder="输入后不会再次显示" /></label>
-          <button class="primary-button wide" :disabled="busy || !credential.credential || (isCustomProvider && (!customProvider.provider_id || !customProvider.base_url || !customProvider.models_text))"><KeyRound :size="16" />建立连接</button>
+          <button class="primary-button wide" :disabled="busy || !credential.credential"><KeyRound :size="16" />建立连接</button>
         </form>
         <p class="privacy-note"><Settings :size="15" />接口地址与模型名称会保存在本机，以便重启后保持选择；界面、普通日志和作品文件都不会回显密钥原文。</p>
       </section>
@@ -396,7 +358,6 @@ function pathValue(key: string): string {
           <dl>
             <div><dt>文学工程内核</dt><dd>{{ appInfo?.engine?.protocol_version || '未知' }}</dd></div>
             <div><dt>内置 Pi Worker</dt><dd>{{ appInfo?.pi_worker?.installed ? '已就绪' : '不可用' }}</dd></div>
-            <div><dt>外部 OpenCode</dt><dd>{{ appInfo?.opencode?.version || (appInfo?.opencode?.installed ? '已连接' : '未配置') }}</dd></div>
             <div><dt>默认模型</dt><dd>{{ appInfo?.current_model || '尚未选择' }}</dd></div>
             <div><dt>许可证</dt><dd>{{ appInfo?.license || 'MIT' }}</dd></div>
           </dl>

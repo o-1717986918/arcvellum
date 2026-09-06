@@ -13,6 +13,7 @@ from ..sandbox import SandboxManifest
 from .asset_evidence import review_machine_fields
 from .asset_review_metadata import (
     canonicalize_asset_review_action_targets,
+    canonicalize_asset_review_status_alias,
     flatten_asset_review_envelope,
 )
 from .canonicalization_common import read_object, write_machine_fields
@@ -146,6 +147,7 @@ def _canonicalize_asset_review(
     if payload is None:
         return []
     changes = flatten_asset_review_envelope(path, review_rel, payload)
+    changes.extend(canonicalize_asset_review_status_alias(path, review_rel, payload))
     expected = review_machine_fields(
         task,
         sandbox,

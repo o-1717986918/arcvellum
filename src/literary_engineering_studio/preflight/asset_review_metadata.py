@@ -18,6 +18,38 @@ ASSET_REVIEW_AGENT_FIELDS = (
     "reviewed_at",
 )
 
+ASSET_REVIEW_STATUSES = {
+    "pass",
+    "failed",
+    "revise_required",
+    "recheck_required",
+}
+
+
+def canonicalize_asset_review_status_alias(
+    path: Path,
+    relative: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Normalize the common review_status alias without guessing a verdict."""
+
+    alias = str(payload.get("review_status") or "").strip().lower()
+    status = str(payload.get("status") or "").strip().lower()
+    if not alias or alias not in ASSET_REVIEW_STATUSES:
+        return []
+    if status and status != alias:
+        return []
+    payload["status"] = alias
+    payload.pop("review_status", None)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return [
+        {
+            "path": relative,
+            "field": "status",
+            "reason": "normalized unambiguous asset-review status alias",
+        }
+    ]
+
 
 def flatten_asset_review_envelope(
     path: Path,

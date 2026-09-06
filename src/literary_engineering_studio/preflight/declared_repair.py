@@ -12,9 +12,9 @@ from .common import PreflightIssue
 
 SUPPORTED_REPAIR_STATES = {
     ("source-ingest", "extraction-review"),
-    ("longform-planning", "budget-review"),
-    ("longform-planning", "scene-inventory-review"),
-    ("longform-planning", "chapter-obligation-review"),
+    ("longform-planning", "budget-revision"),
+    ("longform-planning", "scene-inventory-revision"),
+    ("longform-planning", "chapter-obligation-revision"),
     ("review-and-audit", "canon-patch-revision"),
     ("style-engineering", "style-eval-revision"),
 }
@@ -25,6 +25,8 @@ def validate_source_extraction_revision(
     sandbox: SandboxManifest,
     issues: list[PreflightIssue],
 ) -> None:
+    if task.task_type != "platform-agent-revision":
+        return
     if (task.route, task.current_state) not in SUPPORTED_REPAIR_STATES:
         return
     targets = [str(item) for item in task.payload.get("repair_targets") or [] if str(item).strip()]

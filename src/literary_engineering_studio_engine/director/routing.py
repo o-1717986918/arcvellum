@@ -166,26 +166,21 @@ def _delegated_value(payload: dict[str, Any]) -> list[str]:
     for key in ["delegated_to", "delegated_specialist_agents", "delegated_agents", "specialist_agents"]:
         value = payload.get(key)
         if isinstance(value, list):
-            items: list[str] = []
-            for item in value:
-                if isinstance(item, dict):
-                    agent = str(item.get("agent") or item.get("agent_id") or item.get("name") or "").strip()
-                    task = str(item.get("task") or item.get("role") or "").strip()
-                    if agent and task:
-                        items.append(f"{agent}: {task}")
-                    elif agent:
-                        items.append(agent)
-                    elif task:
-                        items.append(task)
-                else:
-                    text = _stringify_list_item(item)
-                    if text:
-                        items.append(text)
-            return items
+            return [text for item in value if (text := _delegated_item(item))]
         normalized = _list_value(value)
         if normalized:
             return normalized
     return []
+
+
+def _delegated_item(item: Any) -> str:
+    if not isinstance(item, dict):
+        return _stringify_list_item(item)
+    agent = str(item.get("agent") or item.get("agent_id") or item.get("name") or "").strip()
+    task = str(item.get("task") or item.get("role") or "").strip()
+    if agent and task:
+        return f"{agent}: {task}"
+    return agent or task
 
 
 def _tool_value(value: Any) -> list[dict[str, Any]]:

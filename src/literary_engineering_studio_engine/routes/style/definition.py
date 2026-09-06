@@ -271,8 +271,23 @@ def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[
 
     current_state = str(task.get("current_state") or "")
     profile_dir = profile_dir_for_task(root, task)
-    errors: list[str] = []
+    errors = _prompt_state_errors(root, profile_dir, current_state)
+    errors.extend(_evaluation_state_errors(root, task, profile_dir, current_state))
     notes: list[str] = []
+
+    review_errors, review_notes = validate_style_review_task(root, task, profile_dir)
+    errors.extend(review_errors)
+    notes.extend(review_notes)
+    version_errors, version_notes = validate_style_version_task(root, task, profile_dir)
+    errors.extend(version_errors)
+    notes.extend(version_notes)
+    if not errors:
+        notes.extend(_style_validation_notes(current_state))
+    return errors, notes
+
+
+def _prompt_state_errors(root: Path, profile_dir: Path, current_state: str) -> list[str]:
+    errors: list[str] = []
     if current_state == "style-profile":
         errors.extend(profile_gate_errors(root, profile_dir))
     if current_state == "style-prompt-task-file":
@@ -285,6 +300,16 @@ def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[
     if current_state == "style-prompt-quality":
         errors.extend(profile_gate_errors(root, profile_dir))
         errors.extend(prompt_gate_errors(root, profile_dir, require_quality=True))
+    return errors
+
+
+def _evaluation_state_errors(
+    root: Path,
+    task: dict[str, object],
+    profile_dir: Path,
+    current_state: str,
+) -> list[str]:
+    errors: list[str] = []
     if current_state == "style-eval-setup":
         errors.extend(eval_reference_gate_errors(root, profile_dir))
     if current_state == "style-eval-task-file":
@@ -308,15 +333,7 @@ def validate_task(root: Path, task: dict[str, object]) -> tuple[list[str], list[
             errors.append("style evaluation revision must make the previous deterministic score stale")
     if current_state == "style-eval-readiness":
         errors.extend(eval_current_score_errors(root, profile_dir, require_accepted=True))
-    review_errors, review_notes = validate_style_review_task(root, task, profile_dir)
-    errors.extend(review_errors)
-    notes.extend(review_notes)
-    version_errors, version_notes = validate_style_version_task(root, task, profile_dir)
-    errors.extend(version_errors)
-    notes.extend(version_notes)
-    if not errors:
-        notes.extend(_style_validation_notes(current_state))
-    return errors, notes
+    return errors
 
 
 def _style_validation_notes(current_state: str) -> list[str]:

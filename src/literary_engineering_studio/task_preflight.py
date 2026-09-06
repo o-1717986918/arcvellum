@@ -31,6 +31,7 @@ from .preflight.scene import (
     _validate_scene_review_contract,
     _validate_scene_revision_contract,
 )
+from .preflight.style import validate_style_prompt_contract
 from .sandbox import SandboxManifest, sandbox_change_issues
 from literary_engineering_studio_engine.public.tasking import (
     semantic_artifact_definition,
@@ -90,6 +91,7 @@ def validate_task_outputs(task: TaskPackage, sandbox: SandboxManifest) -> Prefli
     _validate_semantic_task_contract(task, sandbox, issues)
     _validate_continuity_ledger_contract(task, sandbox, issues)
     _validate_branch_selection_contract(task, sandbox, issues)
+    validate_style_prompt_contract(task, sandbox, issues)
     return PreflightResult(not issues, tuple(issues))
 
 

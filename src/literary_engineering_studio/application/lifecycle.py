@@ -35,7 +35,7 @@ class ApplicationLifecycleManager:
         self.read_models = ports.read_models
         self.prepared_context_cache = ports.prepared_context_cache
         self.process_manager = ports.process_manager
-        self.opencode_pool = ports.runtime_pool
+        self.runtime_pool = ports.runtime_pool
         self.execution_coordinator = ports.execution_coordinator
         self.supervisor = ports.supervisor
         self._processes: dict[str, ManagedProcessState] = {}
@@ -105,7 +105,7 @@ class ApplicationLifecycleManager:
             "agent_runner_refreshing": runner_refreshing,
             "agent_runner_error": runner_error,
             "model_connections": self.ports.model_connection_status_loader(self.config),
-            "opencode_runtime_pool": self.opencode_pool.status(),
+            "runtime_pool": self.runtime_pool.status(),
             "prepared_context_cache": self.prepared_context_cache.status(),
             "managed_processes": processes,
         }
@@ -151,7 +151,7 @@ class ApplicationLifecycleManager:
                 return
             self._closed = True
         self.supervisor.shutdown(wait=wait)
-        self.opencode_pool.shutdown()
+        self.runtime_pool.shutdown()
         self.live_events.close()
         self.read_models.clear()
         self.prepared_context_cache.clear()

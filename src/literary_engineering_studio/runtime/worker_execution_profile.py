@@ -148,13 +148,13 @@ def build_runtime_kwargs(
         "event_sink": observer.emit,
         "cancel_event": cancel_event,
     }
-    if runtime_id not in {"opencode", "pi-worker"}:
+    if runtime_id != "pi-worker":
         return kwargs
     repair_context = RepairContextCoordinator(
         task,
         sandbox,
         reasoning_budget=profile.reasoning_budget,
-        same_session_required=runtime_id == "opencode",
+        same_session_required=False,
     )
     kwargs.update(
         {

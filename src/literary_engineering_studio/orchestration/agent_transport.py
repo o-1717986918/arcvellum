@@ -42,16 +42,12 @@ class RuntimeOrchestrationAgentTransport:
         self,
         config: dict[str, Any],
         *,
-        runtime_id: str = "opencode",
+        runtime_id: str = "pi-worker",
         runtime_pool=None,
         timeout_seconds: int = 300,
     ):
         self.config = config
-        self.runtime_id = str(runtime_id or "opencode").strip().lower()
-        if self.runtime_id != "opencode":
-            raise ValueError(
-                "AO-3 orchestration sessions currently require the role-isolated OpenCode runtime"
-            )
+        self.runtime_id = str(runtime_id or "pi-worker").strip().lower()
         self.runtime_pool = runtime_pool
         self.timeout_seconds = max(30, int(timeout_seconds))
 

@@ -6,7 +6,7 @@ from typing import Any
 from collections.abc import Mapping
 
 from .base import RuntimeFailureKind
-from .opencode_failures import classify_model_error
+from .model_failures import classify_model_error
 
 
 def worker_failure_result(

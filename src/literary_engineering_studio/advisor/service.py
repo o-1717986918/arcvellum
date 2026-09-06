@@ -17,7 +17,6 @@ from .prompt import advisor_prompt as _advisor_prompt
 from .prompt import conversation_history as _conversation_history
 from .prompt import public_context as _public_context
 from .runtime import AdvisorRuntimeExecutor
-from .runtime import _last_assistant_text
 from .streaming import PublicAnswerStream as _PublicAnswerStream
 from .streaming import marker_prefix_length as _marker_prefix_length
 

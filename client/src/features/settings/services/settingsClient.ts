@@ -38,10 +38,6 @@ export function createSettingsClient(
       "/model-connections/pi-worker/credential",
       { method: "PUT", body: JSON.stringify(payload) },
     ),
-    saveCustomProvider: (payload: Record<string, unknown>) => transport.request<any>(
-      "/model-connections/opencode/custom",
-      { method: "PUT", body: JSON.stringify(payload) },
-    ),
     selectModel: (model: string, role: string) => transport.request<any>(
       "/model-connections/pi-worker/model",
       { method: "PUT", body: JSON.stringify({ model, role }) },

@@ -290,29 +290,27 @@ def lint_ai_style(text: str, profile: dict[str, object] | None = None, *, scope:
 
 
 def _banned_phrase_issues(text: str, profile: dict[str, object] | None = None) -> list[AIStyleIssue]:
-    hits = [phrase for phrase in BANNED_AI_PHRASES for _ in range(text.count(phrase))]
     custom_phrases = profile.get("custom_banned_phrases") if isinstance(profile, dict) else []
-    if isinstance(custom_phrases, list):
-        hits.extend(str(phrase) for phrase in custom_phrases for _ in range(text.count(str(phrase))) if str(phrase))
-    intent_hits = [term for term in BANNED_INTENT_TERMS for _ in range(text.count(term))]
-    if intent_hits and len(intent_hits) >= 3:
-        hits.append("X意泛滥：" + "、".join(sorted(set(intent_hits))[:5]))
+    custom_phrases = custom_phrases if isinstance(custom_phrases, list) else []
+    hits = _phrase_hits(text, custom_phrases)
     if not hits:
         return []
     sample = _first_present_sample(text, [hit for hit in hits if not hit.startswith("X意泛滥")] or [hits[0]])
     severity, density_note = _soft_density_verdict(len(hits), text, profile)
     rule = "custom-banned-phrase" if any(str(item) in sample for item in custom_phrases or []) else "plain-narration-banned-expression"
-    return [
-        AIStyleIssue(
-            rule,
-            severity,
+    return [AIStyleIssue(
+            rule, severity,
             "出现朴素叙述风险词/风险句式，容易显得像 AI 在演小说。"
             f"此类词组按约 2% 密度门禁处理，{density_note}；请改为普通人会说、日记里会写的准确动作或事实细节。",
             sample or hits[0],
-        )
-    ]
-
-
+        )]
+def _phrase_hits(text: str, custom_phrases: list[object]) -> list[str]:
+    hits = [phrase for phrase in BANNED_AI_PHRASES for _ in range(text.count(phrase))]
+    hits.extend(str(phrase) for phrase in custom_phrases for _ in range(text.count(str(phrase))) if str(phrase))
+    intent_hits = [term for term in BANNED_INTENT_TERMS for _ in range(text.count(term))]
+    if len(intent_hits) >= 3:
+        hits.append("X意泛滥：" + "、".join(sorted(set(intent_hits))[:5]))
+    return hits
 def _contrast_frame_issues(text: str) -> list[AIStyleIssue]:
     patterns = [
         r"不是[^。！？!?；;\n]{1,50}?而是",

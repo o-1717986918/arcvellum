@@ -72,6 +72,16 @@ def _validate_review_header(
     review_rel: str,
     issues: list[PreflightIssue],
 ) -> None:
+    status = str(payload.get("status") or "").strip().lower()
+    status_alias = str(payload.get("review_status") or "").strip().lower()
+    if status and status_alias and status != status_alias:
+        _add_issue(
+            issues,
+            review_rel,
+            "review_status",
+            "status 与 review_status 给出了相互冲突的审查结论。",
+            "保留唯一的 status 字段，并按真实审查结论填写合法枚举值。",
+        )
     expected_schema = "literary-engineering-workbench/candidate-asset-review/v0.1"
     if payload.get("schema") != expected_schema:
         _add_issue(issues, review_rel, "schema", f"schema 必须精确为 `{expected_schema}`。", "改正 schema 固定值，不要自造版本。")

@@ -11,10 +11,9 @@ from .. import __version__
 from .config import default_config_path, load_config, save_config
 from ..runtime.engine_bridge import CoreBridge
 from ..integrations.model_connections import model_connection_status
-from ..integrations.opencode.opencode_binary import install_pinned_opencode
 from .project_manager import create_project, list_projects, record_direction, register_project
 from ..automation.prompt_evaluation import evaluate_prompt_assets, write_prompt_evaluation
-from ..integrations.opencode.runner_probe import probe_agent_runner
+from ..integrations.runner_probe import probe_agent_runner
 from ..runtimes import agent_runner_status
 from ..runtime.sidecar_protocol import (
     bound_port as _bound_port,
@@ -38,15 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("config-init", help="Write a credential-free Studio configuration.")
     sub.add_parser("doctor", help="Check the embedded engine, Agent Runners, and Model Connections.")
     runner_probe = sub.add_parser("runner-probe", help="Run an isolated real inference probe for an Agent Runner.")
-    runner_probe.add_argument("--runner", choices=["opencode", "claude-code", "codex-cli"], required=True)
+    runner_probe.add_argument("--runner", choices=["pi-worker", "claude-code", "codex-cli"], required=True)
     runner_probe.add_argument("--model", default="")
     runner_probe.add_argument("--timeout", type=int, default=90)
-    opencode_install = sub.add_parser("opencode-install", help="Install the optional external OpenCode compatibility adapter.")
-    opencode_install.add_argument("--destination", default="")
     prompt_eval = sub.add_parser("prompt-eval", help="Run deterministic and optional live semantic prompt regressions.")
     prompt_eval.add_argument("--output", default="")
     prompt_eval.add_argument("--live", action="store_true")
-    prompt_eval.add_argument("--runner", choices=["opencode", "claude-code", "codex-cli"], default="opencode")
+    prompt_eval.add_argument("--runner", choices=["pi-worker", "claude-code", "codex-cli"], default="pi-worker")
     prompt_eval.add_argument("--model", default="")
     prompt_eval.add_argument("--timeout", type=int, default=240)
 
@@ -124,12 +121,6 @@ def main(argv: list[str] | None = None) -> int:
         result = probe_agent_runner(config, args.runner, model=args.model, timeout=args.timeout)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["status"] == "ready" else 1
-
-    if args.command == "opencode-install":
-        destination = Path(args.destination).expanduser() if args.destination else None
-        result = install_pinned_opencode(destination)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0
 
     if args.command == "prompt-eval":
         options = {
@@ -257,7 +248,7 @@ def _task_arguments(parser: argparse.ArgumentParser, *, include_task_id: bool = 
     parser.add_argument("--route", default="scene-development")
     parser.add_argument(
         "--runtime",
-        choices=["opencode", "host-agent", "claude-code", "codex-cli", "pi-worker"],
+        choices=["host-agent", "claude-code", "codex-cli", "pi-worker"],
         default=DEFAULT_CREATIVE_RUNTIME,
     )
     parser.add_argument("--scene", default="")

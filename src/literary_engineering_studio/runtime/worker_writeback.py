@@ -154,7 +154,7 @@ class WritebackCoordinator:
         *,
         approved_by: str,
     ) -> WorkerRunResult:
-        runtime_id = str(load_run(sandbox.run_root).get("runtime") or "opencode")
+        runtime_id = str(load_run(sandbox.run_root).get("runtime") or "pi-worker")
         mutations = self._mutation_tracker(task, sandbox, runtime_id)
         imported = apply_expected_outputs(task, sandbox, preview)
         mutations.applied(preview)

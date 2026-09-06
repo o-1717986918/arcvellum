@@ -14,7 +14,6 @@ from .. import __version__
 from .config import default_config_path, default_data_root
 from .compatibility import compatibility_summary
 from ..model_connections import model_connection_status
-from ..opencode_binary import locate_opencode, verify_opencode
 from ..integrations.pi_worker import locate_pi_worker
 from .project_manager import list_projects
 from ..runtimes import agent_runner_status
@@ -28,9 +27,6 @@ LEGAL_SCHEMA = "arcvellum/legal-documents/v1"
 def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
     data_root = _configured_data_root(config)
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
-    opencode_settings = _opencode_settings(config)
-    executable = locate_opencode(opencode_settings)
-    verification = verify_opencode(executable) if executable else {}
     pi_settings = config.get("agent_runners", {}).get("pi-worker", {})
     pi_installation = locate_pi_worker(pi_settings if isinstance(pi_settings, dict) else {})
     updates = config.get("updates") if isinstance(config.get("updates"), dict) else {}
@@ -53,11 +49,6 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
             "name": "Literary Engineering Core",
             "protocol_version": "v0.3",
         },
-        "opencode": {
-            "installed": executable is not None,
-            "version": str(verification.get("version") or ""),
-            "verified": bool(verification.get("verified")),
-        },
         "pi_worker": {
             "installed": pi_installation.available,
             "source": pi_installation.source,
@@ -74,7 +65,7 @@ def build_application_info(config: dict[str, Any]) -> dict[str, Any]:
         "license": "MIT",
         "third_party_notices": [
             "The embedded Pi Worker includes Pi Agent components under their respective licenses.",
-            "OpenCode remains available as an optional external adapter under its own license.",
+            "External CLI Agent adapters are optional and retain their respective licenses.",
             "Tauri, Vue, FastAPI and other dependencies retain their respective licenses.",
         ],
         "privacy": "作品与流程数据保存在本机；模型请求由用户选择的 Agent Runner 和模型服务处理。",
@@ -114,7 +105,7 @@ def build_legal_documents() -> dict[str, Any]:
                 "summary": "ArcVellum 使用 Tauri、Vue、FastAPI 与 Pi Agent 等组件；各组件与模型服务保留各自许可和服务条款。",
                 "sections": [
                     {"title": "Pi Worker", "body": "内置 Pi Worker 及其 Pi Agent 依赖按各自开源许可分发，并受 ArcVellum 的任务沙箱与写回门禁约束。"},
-                    {"title": "外部 Agent 适配器", "body": "OpenCode 等外部适配器不再随安装包捆绑；用户显式配置后，其许可和服务条款独立适用。"},
+                    {"title": "外部 Agent 适配器", "body": "外部命令行 Agent 不随安装包捆绑；用户显式配置后，其许可和服务条款独立适用。"},
                     {"title": "模型提供商", "body": "模型可用性、拒答、限额、价格和内容政策由提供商决定，并可能在 ArcVellum 版本之外变化。"},
                 ],
             },
@@ -188,14 +179,10 @@ def _configured_data_root(config: dict[str, Any]) -> Path:
     return Path(str(application.get("data_root") or default_data_root())).expanduser().resolve()
 
 
-def _opencode_settings(config: dict[str, Any]) -> dict[str, object]:
-    runners = config.get("agent_runners") if isinstance(config.get("agent_runners"), dict) else {}
-    values = runners.get("opencode") if isinstance(runners.get("opencode"), dict) else {}
-    return values
-
-
 def _selected_model(config: dict[str, Any]) -> str:
-    return str(_opencode_settings(config).get("model") or "")
+    runners = config.get("agent_runners") if isinstance(config.get("agent_runners"), dict) else {}
+    settings = runners.get("pi-worker") if isinstance(runners.get("pi-worker"), dict) else {}
+    return str(settings.get("model") or "")
 
 
 def _diagnostic_config(config: dict[str, Any]) -> dict[str, Any]:

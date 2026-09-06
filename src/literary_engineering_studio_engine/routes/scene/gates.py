@@ -298,18 +298,10 @@ def _candidate_review_gate_errors(
 
 
 def _scene_revision_gate_errors(root: Path, task: dict[str, object], candidate: Path) -> list[str]:
-    errors: list[str] = []
     source_rel = str(task.get("revision_source") or "").strip()
     previous_hash = str(task.get("candidate_sha256_before_revision") or "").strip().lower()
-    if not source_rel or not previous_hash:
-        errors.append("scene revision task is missing exact source candidate hash provenance")
     source = _resolve_project_path(root, source_rel) if source_rel else root / "__missing_revision_source__"
-    if source_rel and source.is_file() and previous_hash and _file_sha256(source) != previous_hash:
-        errors.append("scene revision source changed after task issuance; acquire a fresh revision task")
-    elif not candidate.is_file():
-        errors.append(f"scene revision candidate is missing: {_rel(candidate, root)}")
-    elif _file_sha256(candidate) == previous_hash:
-        errors.append("scene revision candidate is unchanged from the exact reviewed source")
+    errors = _revision_source_errors(root, candidate, source_rel, previous_hash, source)
 
     scene_id = str(task.get("scene_id") or candidate.stem.split("_revision", 1)[0])
     base = candidate.with_suffix("")
@@ -318,9 +310,7 @@ def _scene_revision_gate_errors(root: Path, task: dict[str, object], candidate: 
     prompt = base.with_suffix(".prompt.json")
     sidecar = base.with_suffix(".agent_tasks.md")
     completion = default_agent_completion_path(sidecar)
-    for path, label in ((report, "revision report"), (prompt, "revision prompt manifest"), (sidecar, "revision sidecar")):
-        if not path.is_file():
-            errors.append(f"{label} missing: {_rel(path, root)}")
+    errors.extend(_revision_artifact_errors(root, report, prompt, sidecar))
     payload, error = _read_optional_json(manifest_path)
     if error:
         errors.append(error)
@@ -330,6 +320,25 @@ def _scene_revision_gate_errors(root: Path, task: dict[str, object], candidate: 
     if completion_state.get("complete") is not True:
         errors.append(f"scene revision sidecar is incomplete: {completion_state.get('message')}")
     return errors
+
+
+def _revision_source_errors(
+    root: Path, candidate: Path, source_rel: str, previous_hash: str, source: Path
+) -> list[str]:
+    if not source_rel or not previous_hash:
+        return ["scene revision task is missing exact source candidate hash provenance"]
+    if source.is_file() and _file_sha256(source) != previous_hash:
+        return ["scene revision source changed after task issuance; acquire a fresh revision task"]
+    if not candidate.is_file():
+        return [f"scene revision candidate is missing: {_rel(candidate, root)}"]
+    if _file_sha256(candidate) == previous_hash:
+        return ["scene revision candidate is unchanged from the exact reviewed source"]
+    return []
+
+
+def _revision_artifact_errors(root: Path, report: Path, prompt: Path, sidecar: Path) -> list[str]:
+    artifacts = ((report, "revision report"), (prompt, "revision prompt manifest"), (sidecar, "revision sidecar"))
+    return [f"{label} missing: {_rel(path, root)}" for path, label in artifacts if not path.is_file()]
 
 
 def _revision_manifest_gate_errors(

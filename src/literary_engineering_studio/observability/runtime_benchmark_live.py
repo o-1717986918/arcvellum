@@ -24,7 +24,7 @@ def run_live_benchmark(
     case: BenchmarkCase,
     destination: Path,
     *,
-    runtime_id: str = "opencode",
+    runtime_id: str = "pi-worker",
     timeout_seconds: int = 300,
     config: dict[str, Any] | None = None,
     prompt_version: str = "configured",

@@ -147,11 +147,6 @@ class RunnerProbeRequest(BaseModel):
     timeout: int = 120
 
 
-class OpenCodeCredentialRequest(BaseModel):
-    provider_id: str
-    credential: str
-
-
 class PiWorkerCredentialRequest(BaseModel):
     provider_id: str
     credential: str
@@ -365,7 +360,6 @@ __all__ = [
     "CreativeQualityRequest",
     "DirectionRequest",
     "ModelSelectionRequest",
-    "OpenCodeCredentialRequest",
     "PiWorkerCredentialRequest",
     "ProjectCreateRequest",
     "DemoCloneRequest",

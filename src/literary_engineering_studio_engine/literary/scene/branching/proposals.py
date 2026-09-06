@@ -162,21 +162,31 @@ def _proposal_errors(proposal: dict[str, Any], index: int, relative: str) -> lis
         errors.append(f"branch proposal id must use agent_branch_<slug>: {relative}")
     if branch_id.startswith("agent_branch_replace_"):
         errors.append(f"branch proposal `{label}` still contains scaffold identity: {relative}")
-    for field in ("title", "strategy", "causal_premise", "cost", "reader_effect"):
-        if not str(proposal.get(field) or "").strip():
-            errors.append(f"branch proposal `{label}` requires non-empty {field}: {relative}")
-        elif _contains_placeholder(proposal.get(field)):
-            errors.append(f"branch proposal `{label}` must replace placeholder {field}: {relative}")
-    actions = proposal.get("action_chain")
-    if not isinstance(actions, list) or len(_nonempty_values(actions)) < 2:
-        errors.append(f"branch proposal `{label}` requires at least two concrete actions: {relative}")
-    elif any(_contains_placeholder(item) for item in actions):
-        errors.append(f"branch proposal `{label}` must replace action_chain placeholders: {relative}")
+    errors.extend(_proposal_text_errors(proposal, label, relative))
+    errors.extend(_action_chain_errors(proposal.get("action_chain"), label, relative))
     writeback = proposal.get("state_writeback")
     if not isinstance(writeback, dict) or not _has_writeback_change(writeback):
         errors.append(f"branch proposal `{label}` requires a concrete state writeback: {relative}")
     errors.extend(_beat_plan_errors(proposal.get("beat_plan"), label, relative))
     return errors
+
+
+def _proposal_text_errors(proposal: dict[str, Any], label: str, relative: str) -> list[str]:
+    errors: list[str] = []
+    for field in ("title", "strategy", "causal_premise", "cost", "reader_effect"):
+        if not str(proposal.get(field) or "").strip():
+            errors.append(f"branch proposal `{label}` requires non-empty {field}: {relative}")
+        elif _contains_placeholder(proposal.get(field)):
+            errors.append(f"branch proposal `{label}` must replace placeholder {field}: {relative}")
+    return errors
+
+
+def _action_chain_errors(value: Any, label: str, relative: str) -> list[str]:
+    if not isinstance(value, list) or len(_nonempty_values(value)) < 2:
+        return [f"branch proposal `{label}` requires at least two concrete actions: {relative}"]
+    if any(_contains_placeholder(item) for item in value):
+        return [f"branch proposal `{label}` must replace action_chain placeholders: {relative}"]
+    return []
 
 
 def _beat_plan_errors(value: Any, label: str, relative: str) -> list[str]:

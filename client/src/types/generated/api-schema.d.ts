@@ -260,40 +260,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent-runners/opencode/bundle": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Opencode Bundle Status */
-        get: operations["opencode_bundle_status_agent_runners_opencode_bundle_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent-runners/opencode/install": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Opencode Bundle Install */
-        post: operations["opencode_bundle_install_agent_runners_opencode_install_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/agent-runners/{runner_id}/probe": {
         parameters: {
             query?: never;
@@ -1104,91 +1070,6 @@ export interface paths {
         /** Model Connections */
         get: operations["model_connections_model_connections_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/model-connections/opencode/catalog": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Opencode Model Catalog */
-        get: operations["opencode_model_catalog_model_connections_opencode_catalog_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/model-connections/opencode/credential": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Opencode Model Credential */
-        put: operations["opencode_model_credential_model_connections_opencode_credential_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/model-connections/opencode/credential/{provider_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Opencode Model Disconnect */
-        delete: operations["opencode_model_disconnect_model_connections_opencode_credential__provider_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/model-connections/opencode/custom": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Opencode Custom Provider */
-        put: operations["opencode_custom_provider_model_connections_opencode_custom_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/model-connections/opencode/model": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Opencode Model Select */
-        put: operations["opencode_model_select_model_connections_opencode_model_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2815,39 +2696,6 @@ export interface components {
             /** Project Root */
             project_root: string;
         };
-        /** CustomProviderConnectionRequest */
-        CustomProviderConnectionRequest: {
-            /** Base Url */
-            base_url: string;
-            /** Credential */
-            credential: string;
-            /** Display Name */
-            display_name: string;
-            /** Models */
-            models: components["schemas"]["CustomProviderModelRequest"][];
-            /** Provider Id */
-            provider_id: string;
-        };
-        /** CustomProviderModelRequest */
-        CustomProviderModelRequest: {
-            /**
-             * Context
-             * @default 0
-             */
-            context: number;
-            /** Id */
-            id: string;
-            /**
-             * Name
-             * @default
-             */
-            name: string;
-            /**
-             * Output
-             * @default 0
-             */
-            output: number;
-        };
         /** DemoCloneRequest */
         DemoCloneRequest: {
             /**
@@ -2899,13 +2747,6 @@ export interface components {
              * @default all
              */
             role: string;
-        };
-        /** OpenCodeCredentialRequest */
-        OpenCodeCredentialRequest: {
-            /** Credential */
-            credential: string;
-            /** Provider Id */
-            provider_id: string;
         };
         /** PiWorkerCredentialRequest */
         PiWorkerCredentialRequest: {
@@ -3755,46 +3596,6 @@ export interface operations {
         };
     };
     agent_runners_agent_runners_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    opencode_bundle_status_agent_runners_opencode_bundle_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    opencode_bundle_install_agent_runners_opencode_install_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5270,156 +5071,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    opencode_model_catalog_model_connections_opencode_catalog_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    opencode_model_credential_model_connections_opencode_credential_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpenCodeCredentialRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    opencode_model_disconnect_model_connections_opencode_credential__provider_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    opencode_custom_provider_model_connections_opencode_custom_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CustomProviderConnectionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    opencode_model_select_model_connections_opencode_model_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ModelSelectionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

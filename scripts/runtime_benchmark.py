@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     live = subparsers.add_parser("live", help="Run one explicit live-model smoke benchmark.")
     live.add_argument("case_id")
     live.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
-    live.add_argument("--runtime", default="opencode")
+    live.add_argument("--runtime", default="pi-worker")
     live.add_argument("--runner-executable", default="")
     live.add_argument("--runner-entrypoint", default="")
     live.add_argument("--runner-model", default="")

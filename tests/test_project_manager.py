@@ -3,10 +3,38 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.project_manager import create_project, validate_project_location
+from literary_engineering_studio.project_manager import (
+    create_project,
+    list_projects,
+    validate_project_location,
+)
 
 
 class ProjectLocationTests(unittest.TestCase):
+    def test_first_project_list_installs_and_opens_the_bundled_demo(self):
+        repository = Path(__file__).resolve().parents[1]
+        demo_directory = repository / "desktop" / "src-tauri" / "resources" / "demo-projects"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            projects_root = root / "Works"
+            with patch.dict(
+                "os.environ",
+                {
+                    "LES_CONFIG_PATH": str(root / "config.json"),
+                    "LES_PROJECTS_ROOT": str(projects_root),
+                    "LES_DEMO_BUNDLES_DIR": str(demo_directory),
+                },
+            ):
+                result = list_projects()
+
+            self.assertEqual(len(result["projects"]), 1)
+            demo = result["projects"][0]
+            self.assertTrue(demo["is_demo"])
+            self.assertTrue(demo["read_only"])
+            self.assertEqual(demo["demo_work_id"], "yu-hua-i-am-timid-as-a-mouse")
+            self.assertEqual(result["current_project"], demo["path"])
+            self.assertTrue(Path(demo["path"]).is_relative_to(projects_root))
+
     def test_create_uses_default_projects_root_when_parent_is_empty(self):
         with tempfile.TemporaryDirectory() as temporary:
             with patch.dict("os.environ", {"LES_PROJECTS_ROOT": temporary, "LES_CONFIG_PATH": str(Path(temporary) / "config.json")}):

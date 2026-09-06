@@ -131,7 +131,7 @@ class WorkerExecutionProfileTests(unittest.TestCase):
                 _task(root),
                 sandbox,
                 {"timeout_seconds": 1800},
-                "opencode",
+                "pi-worker",
             )
             profile = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))["execution_profile"]
         self.assertEqual(profile["mode"], "shadow")
@@ -154,14 +154,14 @@ class WorkerExecutionProfileTests(unittest.TestCase):
                 task,
                 sandbox,
                 worker_config=settings,
-                runtime_id="opencode",
+                runtime_id="pi-worker",
                 runtime=_Runtime(),
                 observer=observer,
             )
             kwargs = build_runtime_kwargs(
                 task,
                 sandbox,
-                runtime_id="opencode",
+                runtime_id="pi-worker",
                 timeout=timeout,
                 profile=profile,
                 worker_config=settings,
@@ -176,7 +176,7 @@ class WorkerExecutionProfileTests(unittest.TestCase):
         self.assertNotIn("reasoning_policy", kwargs)
         self.assertEqual(observer.events[0][0], "runner.profile.resolved")
 
-    def test_non_opencode_runtime_keeps_generic_execution_arguments(self):
+    def test_external_runtime_keeps_generic_execution_arguments(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             task = _task(root)

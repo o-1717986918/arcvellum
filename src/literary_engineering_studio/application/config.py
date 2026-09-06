@@ -112,40 +112,18 @@ def _default_worker_config() -> dict[str, Any]:
     }
 
 
-def _default_opencode_config() -> dict[str, Any]:
-    return {
-        "enabled": False,
-        "executable": "",
-        "model": "",
-        "models": {
-            "worker": "",
-            "advisor": "",
-            "steward": "",
-        },
-        # Public endpoint/model definitions only. API keys remain in
-        # OpenCode's credential store, never in this file.
-        "custom_providers": [],
-        "data_root": str(default_data_root()),
-        "idle_timeout_seconds": 900,
-        # Legacy reader compatibility. New runtimes use role-aware profiles.
-        "session_idle_timeout_seconds": 120,
-        "session_timeout_profiles": {
-            "default": {"first_event_seconds": 180, "inter_event_seconds": 300},
-            "worker": {"first_event_seconds": 180, "inter_event_seconds": 360},
-            "reviewer": {"first_event_seconds": 240, "inter_event_seconds": 360},
-            "planner": {"first_event_seconds": 240, "inter_event_seconds": 360},
-            "advisor": {"first_event_seconds": 120, "inter_event_seconds": 180},
-            "steward": {"first_event_seconds": 120, "inter_event_seconds": 180},
-        },
-        # Repair turns are concise file fixes rather than long-form generation.
-        "repair_idle_timeout_seconds": 75,
-    }
-
-
 def _default_agent_runtime_roles() -> dict[str, str]:
     return {
         role: "pi-worker"
-        for role in ("worker", "advisor", "steward", "style", "archaeology")
+        for role in (
+            "worker",
+            "reviewer",
+            "planner",
+            "advisor",
+            "steward",
+            "style",
+            "archaeology",
+        )
     }
 
 
@@ -189,7 +167,6 @@ def default_config() -> dict[str, Any]:
         "orchestration": _default_orchestration_config(),
         "agent_runtime_roles": _default_agent_runtime_roles(),
         "agent_runners": {
-            "opencode": _default_opencode_config(),
             "host-agent": {"enabled": True},
             "claude-code": {
                 "enabled": True,
@@ -313,18 +290,12 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(legacy_runtimes, dict) and not isinstance(migrated.get("agent_runners"), dict):
         migrated["agent_runners"] = legacy_runtimes
     runners = migrated.get("agent_runners")
-    if isinstance(runners, dict) and isinstance(runners.get("opencode"), dict):
-        opencode = dict(runners["opencode"])
-        unified_model = str(opencode.get("model") or "").strip()
-        if unified_model and not isinstance(opencode.get("models"), dict):
-            opencode["models"] = {
-                "worker": unified_model,
-                "advisor": unified_model,
-                "steward": unified_model,
-            }
-            runners = dict(runners)
-            runners["opencode"] = opencode
-            migrated["agent_runners"] = runners
+    if isinstance(runners, dict):
+        # OpenCode was retired as a product runtime in v0.99.5. Ignore its
+        # historical machine-local settings instead of carrying dead config.
+        runners = dict(runners)
+        runners.pop("opencode", None)
+        migrated["agent_runners"] = runners
     if source_schema != CONFIG_SCHEMA and isinstance(migrated.get("agent_runners"), dict):
         runners = dict(migrated["agent_runners"])
         pi_worker = runners.get("pi-worker")

@@ -315,12 +315,27 @@ def _oversized_functions(
     result: dict[str, dict[str, int]] = {}
     for path, tree in parsed.items():
         for qualname, node in _function_nodes(tree):
-            lines = max(1, int(getattr(node, "end_lineno", node.lineno)) - node.lineno + 1)
+            lines = _function_line_count(node)
             complexity = _function_complexity(node)
             if lines > FUNCTION_LINE_BUDGET or complexity > FUNCTION_COMPLEXITY_BUDGET:
                 key = f"{path.relative_to(root).as_posix()}::{qualname}"
                 result[key] = {"lines": lines, "complexity": complexity}
     return result
+
+
+def _function_line_count(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+    """Count a function's own lines without charging nested functions twice."""
+
+    end = int(getattr(node, "end_lineno", node.lineno))
+    nested_lines: set[int] = set()
+    nested_count = 0
+    for child in ast.walk(node):
+        if child is node or not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        nested_count += 1
+        child_end = int(getattr(child, "end_lineno", child.lineno))
+        nested_lines.update(range(child.lineno, child_end + 1))
+    return max(1, end - node.lineno + 1 - len(nested_lines) + nested_count)
 
 
 def _function_nodes(tree: ast.AST) -> list[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]]:

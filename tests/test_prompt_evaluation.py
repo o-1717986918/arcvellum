@@ -4,7 +4,7 @@ import unittest
 
 from literary_engineering_studio.prompt_evaluation import HIGH_RISK_CASES, evaluate_prompt_assets, write_prompt_evaluation
 from literary_engineering_studio.runtimes.claude_code import ClaudeCodeRuntime
-from literary_engineering_studio.runtimes.opencode import OpenCodeRuntime
+from literary_engineering_studio.runtimes.pi_worker import PiWorkerRuntime
 from literary_engineering_studio_engine.prompting.registry import list_prompt_assets
 
 
@@ -27,13 +27,13 @@ class PromptEvaluationTests(unittest.TestCase):
             self.assertTrue(target.is_file())
             self.assertEqual(report["failure_count"], 0)
 
-    def test_claude_and_opencode_transport_identical_prompt(self):
+    def test_claude_and_pi_worker_transport_identical_prompt(self):
         with tempfile.TemporaryDirectory() as temporary:
             prompt = Path(temporary) / "AGENT_TASK.md"
             prompt.write_text("精确任务提示：只写 expected outputs。", encoding="utf-8")
             claude = ClaudeCodeRuntime({})
-            opencode = OpenCodeRuntime({})
-            self.assertEqual(claude.load_execution_prompt(prompt), opencode.load_execution_prompt(prompt))
+            pi_worker = PiWorkerRuntime({})
+            self.assertEqual(claude.load_execution_prompt(prompt), pi_worker.load_execution_prompt(prompt))
 
 
 if __name__ == "__main__":

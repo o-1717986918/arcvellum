@@ -83,7 +83,7 @@ async function load(): Promise<void> {
   try {
     snapshot.value = await workflowClient.autopilotStatus(store.currentProjectPath);
     selectedMode.value = snapshot.value.policy.mode || "collaborative";
-    if (snapshot.value.run?.runtime === "pi-worker" || snapshot.value.run?.runtime === "opencode") {
+    if (snapshot.value.run?.runtime === "pi-worker") {
       selectedRuntime.value = snapshot.value.run.runtime;
     }
     authorizationConfirmationRequired.value = false;
@@ -293,7 +293,6 @@ function routeText(route: string): string {
     <div class="creative-runtime-selector" aria-label="创作执行器">
       <span><Bot :size="15" /><strong>创作执行器</strong><small>决定由哪种 Agent 完成正式任务</small></span>
       <button :class="{ active: selectedRuntime === 'pi-worker' }" :disabled="running || busy" @click="chooseRuntime('pi-worker')"><i></i>内置 Pi 主创</button>
-      <button :class="{ active: selectedRuntime === 'opencode' }" :disabled="running || busy" @click="chooseRuntime('opencode')"><i></i>OpenCode</button>
     </div>
 
     <section v-if="modeChangeNotice" class="autopilot-mode-notice" aria-live="polite">

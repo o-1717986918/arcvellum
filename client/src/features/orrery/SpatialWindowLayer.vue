@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
                 <span>{{ service.active_leases ? `${service.active_leases} 个活动租约` : '温驻待命' }}</span>
               </article>
             </div>
-            <p v-else>OpenCode 服务会在主创、顾问或受托决策实际开始时按角色启动。</p>
+            <p v-else>创作执行器会在主创、顾问或受托决策开始时按角色启动。</p>
           </section>
           <section class="agent-session-deck">
             <header><span>真实会话</span><small>{{ observedSessions.length ? `${observedSessions.length} 条最近记录` : '等待第一条会话' }}</small></header>

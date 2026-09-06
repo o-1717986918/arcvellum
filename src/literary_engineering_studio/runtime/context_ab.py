@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -11,16 +10,12 @@ from pathlib import Path
 import shutil
 import tempfile
 import time
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Callable, Mapping
 
 from ..contracts import load_task_package
-from ..integrations.opencode.opencode_runtime_pool import (
-    OpenCodeRuntimePool,
-)
 from ..observability.throughput_metrics import (
     build_throughput_projection,
 )
-from ..process_manager import ProcessManager
 from .engine_bridge import CoreBridge
 from .context_ab_reporting import (
     CONTEXT_AB_SCHEMA,
@@ -192,22 +187,14 @@ def _run_arm(
 
     arm_config = _arm_config(config, mode, runs)
     started = time.monotonic()
-    with _owned_runtime_pool(
-        runtime_id,
-        arm_config,
-        arm_root,
-    ) as runtime_pool:
-        worker_kwargs: dict[str, object] = {"event_sink": emit}
-        if runtime_pool is not None:
-            worker_kwargs["runtime_pool"] = runtime_pool
-        worker = worker_factory(arm_config, **worker_kwargs)
-        result = worker.run_once(
-            project,
-            route=route,
-            runtime_id=runtime_id,
-            task_id=task_id,
-        )
-        result = _finish_isolated_writeback(worker, result)
+    worker = worker_factory(arm_config, event_sink=emit)
+    result = worker.run_once(
+        project,
+        route=route,
+        runtime_id=runtime_id,
+        task_id=task_id,
+    )
+    result = _finish_isolated_writeback(worker, result)
     elapsed = time.monotonic() - started
     projection = build_throughput_projection(events)
     current_task = load_task_package(project, _task_path(project, task_id))
@@ -289,28 +276,6 @@ def _refresh_task_contract(
             "context A/B source task is no longer the current route task: "
             f"expected {task_id}, received {current or 'route-ready'}"
         )
-
-
-@contextmanager
-def _owned_runtime_pool(
-    runtime_id: str,
-    config: dict[str, Any],
-    arm_root: Path,
-) -> Iterator[OpenCodeRuntimePool | None]:
-    if runtime_id != "opencode":
-        yield None
-        return
-    manager = ProcessManager(arm_root / "runtime-sidecars")
-    pool = OpenCodeRuntimePool(
-        config,
-        manager,
-        idle_timeout_seconds=60,
-    )
-    try:
-        yield pool
-    finally:
-        pool.shutdown()
-        manager.shutdown()
 
 
 def _run_manifest(result: WorkerRunResult) -> Mapping[str, Any]:

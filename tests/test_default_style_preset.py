@@ -18,6 +18,9 @@ from literary_engineering_studio_engine.literary.style.prompt import (
 from literary_engineering_studio_engine.prompting.style_context import (
     resolve_style_prompt_context,
 )
+from literary_engineering_studio_engine.workflow.state import (
+    _style_engineering_states,
+)
 
 
 class DefaultStylePresetTests(unittest.TestCase):
@@ -70,6 +73,15 @@ class DefaultStylePresetTests(unittest.TestCase):
             self.assertEqual(config["style_id"], DEFAULT_STYLE_ID)
             self.assertEqual(config["version_id"], active["version_id"])
             self.assertTrue(config["replaceable"])
+
+            self.assertEqual(_style_engineering_states(root), [])
+            project_yaml = root / "project.yaml"
+            project_yaml.write_text(
+                project_yaml.read_text(encoding="utf-8")
+                + "\npremise: 项目方向可演化而不重开已发布默认文风。\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(_style_engineering_states(root), [])
 
     def test_default_mount_is_idempotent_and_does_not_replace_an_active_style(self):
         with tempfile.TemporaryDirectory() as temporary:

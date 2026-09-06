@@ -89,7 +89,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config["agent_runners"]["pi-rpc"]["experiment_only"])
         self.assertTrue(config["agent_runners"]["pi-worker"]["enabled"])
         self.assertFalse(config["agent_runners"]["pi-worker"]["experiment_only"])
-        self.assertFalse(config["agent_runners"]["opencode"]["enabled"])
+        self.assertNotIn("opencode", config["agent_runners"])
         self.assertEqual(config["agent_runtime_roles"]["worker"], "pi-worker")
         self.assertEqual(config["agent_runtime_roles"]["advisor"], "pi-worker")
         self.assertIn("model_connections", config)
@@ -215,7 +215,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(pi_worker["auth_path"], "D:/private/auth.json")
             self.assertNotIn("experiment_authorized", pi_worker)
 
-    def test_migrates_unified_opencode_model_to_all_agent_roles(self):
+    def test_drops_retired_opencode_settings_from_legacy_config(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "config.json"
             target.write_text(
@@ -225,14 +225,7 @@ class ConfigTests(unittest.TestCase):
 
             loaded = load_config(target)
 
-            self.assertEqual(
-                loaded["agent_runners"]["opencode"]["models"],
-                {
-                    "worker": "deepseek/deepseek-chat",
-                    "advisor": "deepseek/deepseek-chat",
-                    "steward": "deepseek/deepseek-chat",
-                },
-            )
+            self.assertNotIn("opencode", loaded["agent_runners"])
 
     def test_load_ignores_machine_local_engine_path_from_an_old_install(self):
         with tempfile.TemporaryDirectory() as temporary:

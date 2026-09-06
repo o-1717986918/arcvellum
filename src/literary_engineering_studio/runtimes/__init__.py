@@ -18,7 +18,6 @@ from .base import (
 from .claude_code import ClaudeCodeRuntime
 from .codex_cli import CodexCliRuntime
 from .host_agent import HostAgentRuntime
-from .opencode import OpenCodeRuntime
 from .pi_rpc import PiRpcRuntime
 from .pi_worker import PiWorkerRuntime
 from .registry import (
@@ -29,18 +28,8 @@ from .registry import (
 )
 
 
-def _opencode_factory(
-    settings: dict[str, object],
-    context: RuntimeFactoryContext,
-) -> AgentRuntimePort:
-    runtime = OpenCodeRuntime(settings)
-    runtime.runtime_pool = context.runtime_pool
-    return runtime
-
-
 DEFAULT_RUNTIME_REGISTRY = RuntimeRegistry(
     (
-        runtime_descriptor(OpenCodeRuntime, _opencode_factory),
         runtime_descriptor(HostAgentRuntime),
         runtime_descriptor(ClaudeCodeRuntime),
         runtime_descriptor(CodexCliRuntime),

@@ -212,7 +212,8 @@ def _asset_promotion_step(root: Path, manifest_path: Path) -> dict[str, object]:
     payload = _read_json(manifest_path)
     outputs = [root / str(item) for item in payload.get("outputs", [])] if isinstance(payload.get("outputs"), list) else []
     missing_outputs = [_rel(path, root) for path in outputs if not path.exists()]
-    blocked = bool(payload.get("allow_unapproved")) or missing_outputs or str(payload.get("status") or "") != "promoted"
+    blocked = bool(payload.get("allow_unapproved")) or bool(missing_outputs) or str(payload.get("status") or "") != "promoted"
+    exists = manifest_path.exists()
     message = f"status={payload.get('status') or 'missing'}"
     if payload.get("allow_unapproved"):
         message += "; allow_unapproved=true"
@@ -220,8 +221,14 @@ def _asset_promotion_step(root: Path, manifest_path: Path) -> dict[str, object]:
         message += "; missing outputs=" + ", ".join(missing_outputs)
     return {
         "key": "asset-promotion",
-        "status": "pass" if manifest_path.exists() and not blocked else "missing" if not manifest_path.exists() else "blocked",
+        "status": _promotion_status(exists, blocked),
         "path": _rel(manifest_path, root),
         "message": message,
-        "next_action": "" if manifest_path.exists() and not blocked else "run promote-candidate-asset with an approval run id; do not use --allow-unapproved",
+        "next_action": "" if exists and not blocked else "run promote-candidate-asset with an approval run id; do not use --allow-unapproved",
     }
+
+
+def _promotion_status(exists: bool, blocked: bool) -> str:
+    if not exists:
+        return "missing"
+    return "blocked" if blocked else "pass"

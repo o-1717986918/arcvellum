@@ -11,6 +11,7 @@ import { previewOutputContracts } from "./artifact-preview.ts";
 
 const EMPTY_PARAMETERS = Type.Object({});
 export const MAX_WRITE_CHUNK_CHARACTERS = 4_800;
+export const MAX_STRUCTURED_JSON_CHARACTERS = 48_000;
 
 export function createWorkerTools(
 	context: TaskContext,
@@ -66,7 +67,7 @@ export function createWorkerTools(
 		{
 			name: "write_expected_output",
 			label: "Write Expected Output",
-			description: "Atomically write Agent-owned expected outputs. Each text content argument is limited to 4800 characters. For a longer text artifact, start with operation=replace and final=false, continue with operation=append and final=false, then send the last chunk with operation=append and final=true. Only a final chunk counts as submitted. For JSON artifacts, pass a structured json object. Batch only compact final artifacts. Completion receipts are never writable by the Agent.",
+			description: "Atomically write Agent-owned expected outputs. Each text content argument is limited to 4800 characters. For a longer text artifact, start with operation=replace and final=false, continue with operation=append and final=false, then send the last chunk with operation=append and final=true. Only a final chunk counts as submitted. For JSON artifacts, pass one structured json object up to 48000 serialized characters; JSON does not use text chunking. Batch only compact final artifacts. Completion receipts are never writable by the Agent.",
 			parameters: Type.Object({
 				path: Type.Optional(Type.String()),
 				operation: Type.Optional(Type.Union([Type.Literal("replace"), Type.Literal("append")])),
@@ -100,6 +101,7 @@ export function createWorkerTools(
 				const normalized = values.map((item) => ({
 					path: normalizeRelativePath(item.path),
 					content: normalizeText(item.content),
+					format: item.format,
 					operation: item.operation,
 					final: item.final,
 				}));
@@ -110,8 +112,11 @@ export function createWorkerTools(
 					throw new Error("path is not an Agent-owned expected output");
 				}
 				for (const item of normalized) {
-					if (item.content.length > MAX_WRITE_CHUNK_CHARACTERS) {
-						throw new Error(`text chunks must not exceed ${MAX_WRITE_CHUNK_CHARACTERS} characters`);
+					if (item.format === "text" && item.content.length > MAX_WRITE_CHUNK_CHARACTERS) {
+						throw new Error(`text chunks must not exceed ${MAX_WRITE_CHUNK_CHARACTERS} characters; use replace/append/final chunking`);
+					}
+					if (item.format === "json" && item.content.length > MAX_STRUCTURED_JSON_CHARACTERS) {
+						throw new Error(`structured JSON must not exceed ${MAX_STRUCTURED_JSON_CHARACTERS} serialized characters`);
 					}
 					let committedContent = item.content;
 					if (item.operation === "append") {
@@ -422,7 +427,7 @@ function outputWrites(input: {
 		content?: string | null;
 		json?: Record<string, unknown> | null;
 	}>;
-}, contracts: readonly { path: string; format: string }[], writtenPaths: ReadonlySet<string>): Array<{ path: string; content: string; operation: "replace" | "append"; final: boolean }> {
+}, contracts: readonly { path: string; format: string }[], writtenPaths: ReadonlySet<string>): Array<{ path: string; content: string; format: "json" | "text"; operation: "replace" | "append"; final: boolean }> {
 	const hasBatch = Array.isArray(input.outputs);
 	const hasSingleFields = (
 		(typeof input.path === "string" && input.path.trim().length > 0)
@@ -445,6 +450,7 @@ function outputWrites(input: {
 		return {
 			path,
 			content,
+			format: payloadFormat,
 			operation: hasBatch ? "replace" : input.operation ?? "replace",
 			final: hasBatch ? true : input.final ?? true,
 		};
@@ -456,7 +462,13 @@ function serializedOutput(
 	json: Record<string, unknown> | null | undefined,
 ): string {
 	const normalizedContent = typeof content === "string" && content.length > 0 ? content : undefined;
-	const normalizedJson = structuredJson(json) ? json : undefined;
+	// Several OpenAI-compatible gateways populate every optional object field
+	// with `{}`.  When real text content is present, that empty object carries no
+	// semantic payload and is safe to treat as an unused provider placeholder.
+	const normalizedJson = structuredJson(json)
+		&& (Object.keys(json).length > 0 || normalizedContent === undefined)
+		? json
+		: undefined;
 	if ((normalizedContent !== undefined) === (normalizedJson !== undefined)) {
 		throw new Error("each output requires exactly one of content or json");
 	}

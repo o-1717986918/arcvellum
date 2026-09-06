@@ -306,11 +306,21 @@ def _aggregate_rhythm_hints(items: list[dict[str, Any]]) -> dict[str, Any]:
         "role": str(lead.get("role") or "mixed"),
         "detail_level": _highest_detail_level(items),
         "weight": weight,
-        "timeline_start": min((int(item.get("timeline_start") or 0) for item in items if int(item.get("timeline_start") or 0) > 0), default=0),
-        "timeline_end": max((int(item.get("timeline_end") or 0) for item in items), default=0),
-        "spatial_time_gap_before": next((float(item.get("spatial_time_gap_before") or 0) for item in items if float(item.get("spatial_time_gap_before") or 0) > 0), 0.0),
+        "timeline_start": _first_positive(items, "timeline_start", minimum=True),
+        "timeline_end": _first_positive(items, "timeline_end", minimum=False),
+        "spatial_time_gap_before": _first_positive_float(items, "spatial_time_gap_before"),
         "source": "chapter-rhythm-aggregate",
     }
+
+
+def _first_positive(items: list[dict[str, Any]], field: str, *, minimum: bool) -> int:
+    values = [int(item.get(field) or 0) for item in items]
+    positive = [value for value in values if value > 0]
+    return (min(positive) if minimum else max(positive)) if positive else 0
+
+
+def _first_positive_float(items: list[dict[str, Any]], field: str) -> float:
+    return next((value for item in items if (value := float(item.get(field) or 0)) > 0), 0.0)
 
 
 def _highest_detail_level(items: list[dict[str, Any]]) -> str:

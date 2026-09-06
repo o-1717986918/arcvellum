@@ -25,7 +25,7 @@ def _app(root: Path):
     config["application"]["database_path"] = str(root / "studio.sqlite3")
     config["application"]["projects_root"] = str(root / "projects")
     config["worker"]["runs_root"] = str(root / "runs")
-    config["agent_runners"]["opencode"]["data_root"] = str(root)
+    config["agent_runners"]["pi-worker"]["data_root"] = str(root)
     return create_app(config)
 
 

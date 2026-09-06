@@ -108,8 +108,8 @@ class ShadowAgentServiceTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "one JSON object"):
             parse_structured_agent_response('Result: {"status": "ok"}')
-        with self.assertRaisesRegex(ValueError, "role-isolated OpenCode"):
-            RuntimeOrchestrationAgentTransport({}, runtime_id="host-agent")
+        transport = RuntimeOrchestrationAgentTransport({}, runtime_id="host-agent")
+        self.assertEqual(transport.runtime_id, "host-agent")
 
     def test_shadow_run_uses_independent_sessions_and_never_activates(self):
         with tempfile.TemporaryDirectory() as temporary:

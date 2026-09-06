@@ -49,7 +49,7 @@ class NarrativeEvidenceProjectionTests(unittest.TestCase):
             config["application"]["database_path"] = str(data_root / "studio.sqlite3")
             config["application"]["projects_root"] = str(data_root / "projects")
             config["worker"]["runs_root"] = str(data_root / "runs")
-            config["agent_runners"]["opencode"]["data_root"] = str(data_root)
+            config["agent_runners"]["pi-worker"]["data_root"] = str(data_root)
             with patch(
                 "literary_engineering_studio.projections.api_read_models.build_narrative_evidence",
                 side_effect=lambda _config, root: {"ok": True, **build_narrative_evidence(root)},

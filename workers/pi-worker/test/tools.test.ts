@@ -228,6 +228,24 @@ describe("local output validation", () => {
 		expect(workerState.lastValidation.passed).toBe(true);
 	});
 
+	it("accepts a large structured JSON asset without applying the text chunk limit", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-large-json-"));
+		roots.push(root);
+		const workerState = state();
+		const write = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+		const longField = "角色背景与行为证据。".repeat(600);
+
+		await write?.execute("call", {
+			path: "out/review.json",
+			json: { verdict: "pass", longField },
+		});
+
+		const payload = JSON.parse(await readFile(join(root, "out", "review.json"), "utf8"));
+		expect(payload.longField).toBe(longField);
+		expect(workerState.writtenPaths.has("out/review.json")).toBe(true);
+	});
+
 	it("normalizes provider null placeholders and uniquely infers omitted paths", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-args-"));
 		roots.push(root);
@@ -244,6 +262,23 @@ describe("local output validation", () => {
 
 		expect((await validateOutputs(context(), root)).passed).toBe(true);
 		expect([...workerState.writtenPaths].sort()).toEqual(["out/review.json", "out/review.md"]);
+	});
+
+	it("ignores an empty JSON object placeholder beside real text content", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-empty-object-"));
+		roots.push(root);
+		const workerState = state();
+		const write = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call", {
+			path: "out/review.md",
+			content: "# Review\n",
+			json: {},
+		});
+
+		expect(await readFile(join(root, "out", "review.md"), "utf8")).toBe("# Review\n");
+		expect(workerState.writtenPaths.has("out/review.md")).toBe(true);
 	});
 
 	it("ignores top-level null placeholders when a provider submits a batch", async () => {

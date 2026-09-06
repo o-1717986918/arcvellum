@@ -30,6 +30,7 @@ from literary_engineering_studio_engine.public.literary import REQUIRED_FIELDS
 from .completion_receipts import canonicalize_agent_completion_markers
 from .project_review_repair_scope import canonicalize_project_review_repair_scope
 from .project_review_markdown import canonicalize_project_review_markdown
+from .project_review_aliases import project_review_semantic_aliases
 from .semantic_metadata import canonicalize_semantic_artifact_metadata
 
 
@@ -397,7 +398,7 @@ def _canonicalize_project_review_artifact(
     if payload is None:
         return []
     expected: dict[str, Any] = {"schema": schema}
-    expected.update(_project_review_semantic_aliases(payload, committee=committee))
+    expected.update(project_review_semantic_aliases(payload, committee=committee))
     if state.endswith("agent-task"):
         expected["source_paths"] = [str(item).replace("\\", "/") for item in task.source_paths]
     if committee:
@@ -435,72 +436,6 @@ def _project_review_applied_repairs(
             }
         )
     return actions
-
-
-def _project_review_semantic_aliases(
-    payload: dict[str, Any],
-    *,
-    committee: bool,
-) -> dict[str, Any]:
-    """Normalize only explicit, semantically equivalent review fields."""
-
-    expected = _project_review_verdict_alias(payload, committee=committee)
-    expected.update(_project_review_action_alias(payload, committee=committee))
-    return expected
-
-
-def _project_review_verdict_alias(
-    payload: dict[str, Any],
-    *,
-    committee: bool,
-) -> dict[str, Any]:
-    verdict_field = "final_recommendation" if committee else "conclusion"
-    allowed = (
-        {"approve", "approve_with_notes", "revise", "reject"}
-        if committee
-        else {"pass", "pass_with_notes", "revise_required", "reject"}
-    )
-    if str(payload.get(verdict_field) or "").strip():
-        return {}
-    for alias in ("verdict", "recommendation"):
-        candidate = str(payload.get(alias) or "").strip().lower()
-        if candidate in allowed:
-            return {verdict_field: candidate}
-    return {}
-
-
-def _project_review_action_alias(
-    payload: dict[str, Any],
-    *,
-    committee: bool,
-) -> dict[str, Any]:
-    action_field = "action_items" if committee else "recommendations"
-    current_actions = payload.get(action_field)
-    if isinstance(current_actions, list) and current_actions:
-        return {}
-    findings = payload.get("findings") if isinstance(payload.get("findings"), list) else []
-    actions = [_actionable_project_review_finding(item) for item in findings]
-    normalized = [item for item in actions if item]
-    return {action_field: normalized} if normalized else {}
-
-
-def _actionable_project_review_finding(item: Any) -> dict[str, str]:
-    if not isinstance(item, dict):
-        return {}
-    target = str(item.get("target_path") or item.get("target") or "").strip()
-    action = str(item.get("action") or "").strip()
-    verification = str(item.get("verification") or "").strip()
-    if not target or not action or not verification:
-        return {}
-    normalized = {
-        "target_path": target,
-        "action": action,
-        "verification": verification,
-    }
-    if str(item.get("id") or "").strip():
-        normalized["id"] = str(item["id"]).strip()
-    return normalized
-
 
 
 def _canonicalize_agent_completion_markers(task: TaskPackage, sandbox: SandboxManifest) -> list[dict[str, str]]:

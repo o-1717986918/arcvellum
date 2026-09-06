@@ -61,16 +61,10 @@ class RuntimeRegistryTests(unittest.TestCase):
         self.assertIsInstance(context, RuntimeFactoryContext)
         self.assertIs(context.runtime_pool, pool)
 
-    def test_default_opencode_descriptor_injects_runtime_pool(self):
-        pool = object()
-
-        runtime = build_runtime(
-            "opencode",
-            {"agent_runners": {"opencode": {"enabled": True}}},
-            runtime_pool=pool,
-        )
-
-        self.assertIs(runtime.runtime_pool, pool)
+    def test_retired_opencode_runtime_is_not_registered(self):
+        self.assertNotIn("opencode", DEFAULT_RUNTIME_REGISTRY.ids())
+        with self.assertRaisesRegex(ValueError, "unknown Agent runtime"):
+            build_runtime("opencode", {"agent_runners": {}})
 
     def test_status_probe_can_use_an_isolated_registry(self):
         registry = RuntimeRegistry((runtime_descriptor(FixtureRuntime),))

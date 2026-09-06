@@ -7,7 +7,6 @@ from typing import Any
 
 from ..application.ports import ApplicationPorts
 from ..integrations.model_connections import model_connection_status
-from ..integrations.opencode.opencode_runtime_pool import OpenCodeRuntimePool
 from ..observability.live_events import LiveEventBus
 from ..persistence.job_store import JobStore
 from ..persistence.composition import sqlite_persistence_ports
@@ -15,6 +14,7 @@ from ..projections.read_model_cache import ReadModelCache
 from ..runtime.execution_coordinator import ProjectExecutionCoordinator
 from ..runtime.prepared_context_cache import PreparedContextCache
 from ..runtime.process_manager import ProcessManager
+from ..runtime.runtime_pool import NullRuntimePool
 from ..runtime.supervisor import WorkerSupervisor
 from ..runtimes import DEFAULT_RUNTIME_REGISTRY, agent_runner_status
 
@@ -43,7 +43,7 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
             states=tuple(str(item) for item in cache.get("states") or []),
         ),
         process_manager=process_manager,
-        runtime_pool=OpenCodeRuntimePool(config, process_manager),
+        runtime_pool=NullRuntimePool(),
         execution_coordinator=execution_coordinator,
         supervisor=WorkerSupervisor(
             persistence.worker,

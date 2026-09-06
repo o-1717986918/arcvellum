@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 import threading
-import time
 from typing import Any
 import uuid
 
@@ -27,6 +26,7 @@ from .policy import (
     normalize_policy,
 )
 from .run_loop import ClaimedRunLoop
+from .no_progress import register_no_progress
 from .campaign_runtime import CampaignRuntimeCoordinator
 from .runtime_event_routing import (
     route_steward_event,
@@ -50,7 +50,7 @@ from ..advisor.creative_steward import CreativeSteward
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
 from ..runtime.prepared_context_cache import PreparedContextCache
-from ..orchestration import orchestration_settings, recovery_step
+from ..orchestration import orchestration_settings
 
 
 ROUTE_ORDER = (
@@ -63,7 +63,6 @@ PROACTIVE_DECISIONS = {
     "word_budget_direction", "canon_patch_approval",
 }
 TERMINAL_STATUSES = {"complete", "paused", "blocked", "cancelled", "failed"}
-NO_PROGRESS_LIMIT = 3
 class AutopilotService:
     def __init__(
         self,
@@ -453,61 +452,15 @@ class AutopilotService:
         )
 
     def _register_no_progress(self, run_id: str, task_id: str, route: str, message: str) -> bool:
-        run = self.runs.read_autopilot_run(run_id)
-        stalled_cycles = int(run.get("stalled_cycles") or 0) + 1
-        changes: dict[str, Any] = {
-            "stalled_cycles": stalled_cycles,
-            "last_error": message,
-            "current_task_id": task_id,
-        }
-        if stalled_cycles == 2:
-            changes["last_recovery_at"] = _now()
-            if self._campaign_runtime_enabled():
-                changes["current_task_id"] = ""
-        self.runs.update_autopilot_run(run_id, **changes)
-        self.runs.append_autopilot_event(
-            run_id,
-            "progress.stalled",
-            {
-                "route": route,
-                "task_id": task_id,
-                "stalled_cycles": stalled_cycles,
-                "message": message,
-            },
+        return register_no_progress(
+            self.runs,
+            run_id=run_id,
+            task_id=task_id,
+            route=route,
+            message=message,
+            campaign_runtime_enabled=self._campaign_runtime_enabled(),
+            pause=self._pause_for,
         )
-        if stalled_cycles == 2:
-            self.runs.append_autopilot_event(
-                run_id,
-                "task.recovery_requested",
-                {
-                    "route": route,
-                    "task_id": task_id,
-                    "strategy": "re-open-current-formal-task",
-                },
-            )
-        if self._campaign_runtime_enabled() and stalled_cycles >= 2:
-            attempt = 1 if stalled_cycles < NO_PROGRESS_LIMIT else 2
-            decision = recovery_step("no_progress", attempt)
-            self.runs.append_autopilot_event(
-                run_id,
-                "campaign.recovery.selected",
-                {
-                    "task_id": task_id,
-                    "failure_code": "no_progress",
-                    "attempt": attempt,
-                    "step": decision.step.value,
-                    "reasons": list(decision.reasons),
-                },
-            )
-        if stalled_cycles >= NO_PROGRESS_LIMIT:
-            self._pause_for(
-                run_id,
-                "no-progress",
-                f"{message} 已连续 {stalled_cycles} 次未推进；系统已暂停，避免空转消耗。",
-            )
-            return True
-        time.sleep(0.15 * stalled_cycles)
-        return False
 
     def _campaign_runtime_enabled(self) -> bool:
         settings = orchestration_settings(self.config)

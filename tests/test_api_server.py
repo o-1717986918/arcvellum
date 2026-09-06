@@ -25,7 +25,7 @@ class ApiServerTests(unittest.TestCase):
         self.config["application"]["database_path"] = str(root / "studio.sqlite3")
         self.config["application"]["projects_root"] = str(root / "projects")
         self.config["worker"]["runs_root"] = str(root / "runs")
-        self.config["agent_runners"]["opencode"]["data_root"] = str(root)
+        self.config["agent_runners"]["pi-worker"]["data_root"] = str(root)
         self.config["agent_runners"]["pi-worker"]["auth_path"] = str(root / "pi-auth.json")
         self.client = TestClient(create_app(self.config))
 
@@ -42,14 +42,14 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(payload["model_connection_policy"], "runner-managed")
         self.assertEqual(
             {item["runner_id"] for item in payload["agent_runners"]},
-            {"opencode", "host-agent", "claude-code", "codex-cli", "pi-rpc", "pi-worker"},
+            {"host-agent", "claude-code", "codex-cli", "pi-rpc", "pi-worker"},
         )
         pi_status = next(item for item in payload["agent_runners"] if item["runner_id"] == "pi-rpc")
         self.assertFalse(pi_status["enabled"])
         self.assertFalse(pi_status["probed"])
         self.assertEqual(payload["model_connections"][0]["connection_id"], "pi-worker-managed")
         runners = self.client.get("/agent-runners").json()
-        self.assertEqual(len(runners["items"]), 6)
+        self.assertEqual(len(runners["items"]), 5)
         connections = self.client.get("/model-connections").json()
         self.assertEqual(connections["managed_by"], "agent-runner")
 
@@ -75,8 +75,8 @@ class ApiServerTests(unittest.TestCase):
     def test_bootstrap_endpoint_defers_model_catalog_until_settings(self):
         service = self.client.app.state.bootstrap
         service._catalog_loader = lambda _config: {
-            "runner": "opencode",
-            "selected_model": "opencode/example-model",
+            "runner": "pi-worker",
+            "selected_model": "deepseek/example-model",
             "providers": [],
             "connected_provider_count": 1,
             "available_model_count": 1,
@@ -169,62 +169,6 @@ class ApiServerTests(unittest.TestCase):
             self.assertEqual(stream.status_code, 200)
             self.assertIn("event: narrative.v3.projection", stream.text)
             self.assertIn("id: 1", stream.text)
-
-    def test_model_provider_disconnect_is_exposed_through_control_api(self):
-        catalog = {
-            "runner": "opencode",
-            "selected_model": "opencode/big-pickle",
-            "providers": [],
-            "connected_provider_count": 0,
-            "available_model_count": 0,
-        }
-        with patch("literary_engineering_studio.api_server.disconnect_provider", return_value=catalog) as disconnect:
-            response = self.client.delete("/model-connections/opencode/credential/deepseek")
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-        disconnect.assert_called_once()
-        self.assertEqual(disconnect.call_args.args[1], "deepseek")
-
-    def test_model_selection_updates_bootstrap_catalog_instead_of_replaying_default(self):
-        catalog = {
-            "runner": "opencode",
-            "selected_model": "zhipuai/glm-5",
-            "selected_models": {"worker": "zhipuai/glm-5", "advisor": "zhipuai/glm-5", "steward": "zhipuai/glm-5"},
-            "providers": [],
-            "connected_provider_count": 1,
-            "available_model_count": 1,
-        }
-        with (
-            patch("literary_engineering_studio.api_server.select_model", return_value={"selected_model": "zhipuai/glm-5", "selected_models": catalog["selected_models"], "saved": True}),
-            patch("literary_engineering_studio.api_server.provider_catalog", return_value=catalog),
-        ):
-            response = self.client.put("/model-connections/opencode/model", json={"model": "zhipuai/glm-5", "role": "all"})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["catalog"]["selected_model"], "zhipuai/glm-5")
-        self.assertEqual(self.client.app.state.bootstrap.snapshot()["model_catalog"]["selected_model"], "zhipuai/glm-5")
-
-    def test_custom_provider_connection_is_exposed_through_control_api(self):
-        catalog = {
-            "runner": "opencode",
-            "selected_model": "my-gateway/qwen-plus",
-            "providers": [],
-            "connected_provider_count": 1,
-            "available_model_count": 1,
-        }
-        with patch("literary_engineering_studio.api_server.connect_custom_provider", return_value=catalog) as connect:
-            response = self.client.put(
-                "/model-connections/opencode/custom",
-                json={
-                    "provider_id": "my-gateway",
-                    "display_name": "My Gateway",
-                    "base_url": "https://models.example.test/v1",
-                    "models": [{"id": "qwen-plus", "name": "Qwen Plus", "context": 128000, "output": 8192}],
-                    "credential": "test-placeholder-key",
-                },
-            )
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-        self.assertEqual(connect.call_args.args[1]["provider_id"], "my-gateway")
 
     def test_frontend_is_served(self):
         response = self.client.get("/")
@@ -319,7 +263,7 @@ class ApiServerTests(unittest.TestCase):
         run = store.create_autopilot_run(
             "C:/test",
             mode="full_auto",
-            runtime="opencode",
+            runtime="pi-worker",
             policy={"mode": "full_auto"},
         )
         first = store.append_autopilot_event(
@@ -530,7 +474,7 @@ class ApiServerTests(unittest.TestCase):
             self.client.put("/autopilot/policy", json={"project_root": str(project), "policy": policy})
             blocked = self.client.post(
                 "/autopilot/start",
-                json={"project_root": str(project), "runtime": "opencode", "authorized": False},
+                json={"project_root": str(project), "runtime": "pi-worker", "authorized": False},
             )
             self.assertEqual(blocked.status_code, 400)
             self.assertIn("明确确认授权", blocked.json()["detail"])

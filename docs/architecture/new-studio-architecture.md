@@ -2,7 +2,7 @@
 
 ## Product Definition
 
-Literary Engineering Studio is a standalone literary project client and controlled Agent execution platform. It embeds the literary workflow engine and a pinned OpenCode Agent Runner, while deliberately keeping model connections separate from the literary engine.
+ArcVellum is a standalone literary project client and controlled Agent execution platform. It embeds the literary workflow engine and the specialized Pi Worker while deliberately keeping model connections separate from the literary engine.
 
 ```mermaid
 flowchart LR
@@ -13,10 +13,10 @@ flowchart LR
     W --> C["Embedded CLI State Machine"]
     C --> T["Task Package"]
     T --> S["Isolated Task Workspace"]
-    S --> OC["Bundled OpenCode"]
+    S --> PI["Bundled Pi Worker"]
     S --> H["Optional Host Agent"]
     S --> CL["Optional Claude Code"]
-    OC --> O["Expected Outputs"]
+    PI --> O["Expected Outputs"]
     H --> O
     CL --> O
     O --> V["Diff Preview, Whitelist, Backup, Submit, Audit"]
@@ -53,12 +53,12 @@ The Worker is the controlled execution loop:
 
 ### Runtime Adapters
 
-- `opencode` is the default built-in Runner. Studio starts a pinned local OpenCode server with application-owned profiles, denies unneeded tools, and binds it to one task sandbox.
+- `pi-worker` is the default built-in Runtime. Studio starts the bundled specialized worker with role-specific prompt recipes, bounded tools and one isolated task sandbox.
 - `host-agent` prepares a task for a Codex or Claude environment already supervising the project.
 - `claude-code` is an optional locally authenticated compatibility Runner with explicit model selection and normalized stream-json events.
 - `codex-cli` remains an experimental compatibility adapter, not an ordinary-user dependency.
 
-Runner identity and model connection are separate contracts. The frontend may submit a provider credential once to OpenCode Auth and choose a model, but neither the secret nor provider protocol enters the literary engine, work project, task package, ordinary Studio configuration, or event log.
+Runtime identity and model connection are separate contracts. The frontend stores provider credentials through the Pi credential service and selects role-specific models; secrets and provider protocols do not enter the literary engine, work project, task package, ordinary event log or narrative projections.
 
 ### Application Lifecycle
 
@@ -85,8 +85,8 @@ Raw JSON and Markdown remain available as evidence but are not the primary prese
 - Embedded task packages are trusted policy input.
 - Agent runtime output is untrusted until path whitelisting and engine validation pass.
 - The connected user is authoritative for human gates.
-- OpenCode or an optional external CLI owns provider authentication and protocol behavior.
-- Studio ordinary configuration rejects model credentials; the dedicated credential endpoint forwards secrets only to OpenCode Auth.
+- Pi Worker or an optional external CLI owns provider authentication and protocol behavior.
+- Studio ordinary configuration rejects model credentials; the dedicated credential endpoint forwards secrets only to the protected Pi credential store.
 - A separate Skill repository is neither discovered nor imported at runtime.
 
 ## Distribution Boundary

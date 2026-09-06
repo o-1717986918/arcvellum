@@ -53,7 +53,7 @@ def drive_benchmark_preparation(
         result = worker.run_once(
             project,
             route=route,
-            runtime_id="opencode",
+            runtime_id="pi-worker",
             task_id=task.task_id,
         )
         if result.status != "complete":

@@ -85,7 +85,7 @@ def evaluate_prompt_assets(
     *,
     config: dict[str, Any] | None = None,
     live: bool = False,
-    runner_id: str = "opencode",
+    runner_id: str = "pi-worker",
     model: str = "",
     timeout: int = 240,
 ) -> dict[str, Any]:

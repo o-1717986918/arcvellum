@@ -15,7 +15,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             config["application"]["database_path"] = str(root / "studio.sqlite3")
             config["application"]["projects_root"] = str(root / "projects")
             config["worker"]["runs_root"] = str(root / "runs")
-            config["agent_runners"]["opencode"]["data_root"] = str(root)
+            config["agent_runners"]["pi-worker"]["data_root"] = str(root)
             app = create_app(config)
         def route_pairs(items, prefix: str = ""):
             for route in items:
@@ -41,7 +41,6 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             ("POST", "/desktop/session"),
             ("GET", "/agent-runners"),
             ("GET", "/model-connections"),
-            ("PUT", "/model-connections/opencode/model"),
             ("GET", "/model-connections/pi-worker/catalog"),
             ("PUT", "/model-connections/pi-worker/credential"),
             ("DELETE", "/model-connections/pi-worker/credential/{provider_id}"),

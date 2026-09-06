@@ -97,12 +97,12 @@ flowchart LR
 3. **创作候选与项目事实必须分层。** 正文候选、Canon 提案、人物状态补丁与已晋升正文不是同一种东西，各自拥有不同的来源、审查和写回规则。
 4. **界面只展示真实状态。** 星仪、决策中心、阅读器、任务面板与进度条都投影自同一份受内核验证的项目状态，而不是演示数据。
 
-## v0.99.4 技术基线
+## v0.99.5 技术基线
 
 | 能力 | 当前实现 |
 | --- | --- |
 | 正式文学路线 | 7 条：长篇规划、场景开发、来源导入、文风工程、人物与世界资产、审查审计、导出发布 |
-| 内置 Agent | Pi Worker，随桌面包提供固定 Node 运行时；OpenCode 仅保留为显式外部适配器 |
+| 内置 Agent | Pi Worker，随桌面包提供固定 Node 运行时；通用 Runtime SPI 保留外部执行器扩展能力 |
 | Agent 边界 | 双工作区、白名单资料、声明输出、确定性预检、事务写回与有限修复 |
 | 提示词工程 | Prompt v3 按 structured / planning / prose / review / style 等 Recipe 编译任务 |
 | 文学求解 | 字数预算、场景功能、角色推演、分支选择、节奏与衔接、Review CI、状态与 Canon 写回 |
@@ -155,14 +155,14 @@ ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学�
 | 产品界面 | Vue 3 + TypeScript + Vite | 星仪、阅读器、决策、设置与流式项目视图 |
 | 应用服务 | FastAPI + SSE | 本地认证 API、实时读模型、事件流与项目控制 |
 | 文学工程内核 | Python CLI | 路线状态机、任务包、Schema、门禁、审计与交付准备 |
-| Agent Runtime | 内置 Pi Worker + 可选外部适配器 | 受控文学任务执行、权限隔离、独立主创与审查 Profile |
+| Agent Runtime | 内置 Pi Worker + 通用 Runtime SPI | 受控文学任务执行、权限隔离、独立主创与审查 Profile |
 | 模型连接 | Pi Provider Catalog | 常用厂商预设、按角色持久选模、OpenAI 兼容自定义端点 |
 | 项目格式 | 人类可读文件 + 账本 | Canon、人物、场景、Review 和交付物的长期保存 |
 | 交付 | Markdown/DOCX 管线 | 过滤流程痕迹后的完整作品输出 |
 
 ### 模型连接不锁定厂商
 
-内置 Pi Worker 提供 DeepSeek、智谱 AI、阿里云百炼、Moonshot、MiniMax、SiliconFlow、OpenAI、Anthropic、Google、OpenRouter、Groq 等常用预设，也支持自定义 OpenAI-compatible 接口。OpenCode 仍可作为显式启用的外部兼容适配器，但不再是默认运行时或安装包依赖。
+内置 Pi Worker 提供 DeepSeek、智谱 AI、阿里云百炼、Moonshot、MiniMax、SiliconFlow、OpenAI、Anthropic、Google、OpenRouter、Groq 等常用预设，也支持自定义 OpenAI-compatible 接口。其他执行器通过通用 Runtime SPI 扩展，不进入普通安装包的默认依赖。
 
 模型选择按角色持久保存。切换模型时，未来的空闲 Worker 会更新为新选择，正在运行的任务不会被粗暴中断。凭证由 Runner 的认证机制管理，不进入项目文件、任务包、普通日志或 Studio 常规配置。
 

@@ -93,7 +93,7 @@ class ProjectReadModels:
                 events,
                 dashboard,
                 self._lifecycle.persistence.sessions.list_agent_sessions(str(root), limit=30),
-                self._lifecycle.opencode_pool.status(),
+                self._lifecycle.runtime_pool.status(),
             ),
         }
         source_revisions, revision = build_workspace_revisions(sections)

@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.application.config import default_config
-from literary_engineering_studio.integrations.opencode.runner_probe import (
+from literary_engineering_studio.integrations.runner_probe import (
     probe_agent_runner,
 )
 from literary_engineering_studio.runtimes.base import (
@@ -18,7 +18,7 @@ from literary_engineering_studio.runtimes.base import (
 class _RuntimeWithoutOutput:
     def capabilities(self):
         return AgentRunnerCapabilities(
-            runner_id="opencode",
+            runner_id="pi-worker",
             version="fixture",
             available=True,
             readiness_state="ready",
@@ -43,7 +43,7 @@ class _RuntimeWithoutOutput:
 
     def execute(self, _workspace, _prompt, run_root, **_kwargs):
         return RuntimeResult(
-            runtime="opencode",
+            runtime="pi-worker",
             status="timeout",
             returncode=None,
             command=(),
@@ -56,12 +56,12 @@ class RunnerProbeTests(unittest.TestCase):
     def test_missing_runtime_output_preserves_original_failure(self):
         with tempfile.TemporaryDirectory():
             with patch(
-                "literary_engineering_studio.integrations.opencode.runner_probe.build_runtime",
+                "literary_engineering_studio.integrations.runner_probe.build_runtime",
                 return_value=_RuntimeWithoutOutput(),
             ):
                 result = probe_agent_runner(
                     default_config(),
-                    "opencode",
+                    "pi-worker",
                     timeout=10,
                 )
 

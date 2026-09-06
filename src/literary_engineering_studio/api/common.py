@@ -48,8 +48,7 @@ def frontend_file(relative: str, content_type: str):
 def friendly_error(exc: Exception) -> str:
     value = str(exc).strip()
     replacements = {
-        "bundled OpenCode Runner is not installed": "创作顾问尚未准备好，请先在“设置”中完成 Agent 连接。",
-        "select an OpenCode provider/model before using the advisor": "请先在“设置”中选择顾问使用的模型。",
+        "Pi Worker model is not configured": "请先在“设置”中选择顾问使用的模型。",
         "advisor answer timed out": "这次思考时间有点久，请稍后重试。",
         "read-only advisor project integrity check failed": "作品在顾问思考期间发生了内容变化，请重新提问以读取最新版本。",
     }

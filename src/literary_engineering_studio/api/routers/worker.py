@@ -104,7 +104,7 @@ def launch_worker(deps: WorkerRouterDependencies, payload: WorkerRequest, *, res
             deps.config,
             event_sink=emit,
             cancel_event=cancel_event,
-            runtime_pool=deps.lifecycle.opencode_pool,
+            runtime_pool=deps.lifecycle.runtime_pool,
         )
         if resume_run_root is not None:
             try:
@@ -139,7 +139,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
     @router.post("/worker/prepare")
     def worker_prepare(payload: WorkerRequest):
         try:
-            task, sandbox, terminal = deps.worker_factory(deps.config, runtime_pool=deps.lifecycle.opencode_pool).prepare(
+            task, sandbox, terminal = deps.worker_factory(deps.config, runtime_pool=deps.lifecycle.runtime_pool).prepare(
                 resolve_project_root(payload.project_root),
                 route=payload.route,
                 runtime_id=payload.runtime,
@@ -199,7 +199,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
                 def emit(event: str, data: dict[str, Any]) -> None:
                     _persist_writeback_event(deps, project_root, job_id, event, data)
 
-                worker = deps.worker_factory(deps.config, event_sink=emit, runtime_pool=deps.lifecycle.opencode_pool)
+                worker = deps.worker_factory(deps.config, event_sink=emit, runtime_pool=deps.lifecycle.runtime_pool)
                 decision = payload.decision.strip().lower()
                 if decision == "approve":
                     result = worker.approve_writeback(run_root, approved_by="studio-user")
@@ -232,7 +232,7 @@ def build_worker_router(deps: WorkerRouterDependencies) -> APIRouter:
                 raise ValueError("active jobs cannot be retried")
             request_data = dict(previous.get("request") or {})
             if payload.runtime.strip():
-                if payload.runtime not in {"pi-worker", "opencode", "host-agent", "claude-code", "codex-cli"}:
+                if payload.runtime not in {"pi-worker", "host-agent", "claude-code", "codex-cli"}:
                     raise ValueError("unknown Agent Runner")
                 request_data["runtime"] = payload.runtime
             request_data["idempotency_key"] = ""

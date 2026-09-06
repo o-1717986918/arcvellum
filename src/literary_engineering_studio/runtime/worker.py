@@ -438,7 +438,7 @@ class AgentWorker:
         preflight = self.writeback.validate_outputs(
             task,
             sandbox,
-            runtime_id=str(run.get("runtime") or "opencode"),
+            runtime_id=str(run.get("runtime") or "pi-worker"),
         )
         if not preflight.passed:
             update_run_manifest(
@@ -457,5 +457,5 @@ class AgentWorker:
         return self.writeback.complete_outputs(
             task,
             sandbox,
-            str(run.get("runtime") or "opencode"),
+            str(run.get("runtime") or "pi-worker"),
         )

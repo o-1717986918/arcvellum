@@ -147,26 +147,9 @@ def validate_prompt_registry(skill_root: Path | str | None = None, *, include_ta
     seen_exact: dict[str, Path] = {}
 
     for asset in assets:
-        rel = _rel(asset.path, root)
-        missing = sorted(REQUIRED_FIELDS - set(asset.metadata))
-        if missing:
-            errors.append(f"{rel}: missing fields: {', '.join(missing)}")
-        if asset.metadata.get("schema") != PROMPT_ASSET_SCHEMA:
-            errors.append(f"{rel}: schema must be {PROMPT_ASSET_SCHEMA}")
-        if not asset.prompt_asset_id:
-            errors.append(f"{rel}: prompt_asset_id is empty")
-        elif not asset.is_wildcard:
-            previous = seen_exact.get(asset.prompt_asset_id)
-            if previous:
-                errors.append(f"{rel}: duplicate exact prompt_asset_id already defined in {_rel(previous, root)}")
-            seen_exact[asset.prompt_asset_id] = asset.path
-        if not asset.body.strip():
-            errors.append(f"{rel}: body is empty")
-        for field in LIST_FIELDS:
-            if field in asset.metadata and not isinstance(asset.metadata[field], list):
-                errors.append(f"{rel}: {field} must be a list")
-        if asset.version and not str(asset.version).startswith("v"):
-            warnings.append(f"{rel}: version should use v-prefixed semantic form, got {asset.version}")
+        asset_errors, asset_warnings = _validate_asset(asset, root, seen_exact)
+        errors.extend(asset_errors)
+        warnings.extend(asset_warnings)
 
     task_ids = _task_registry_prompt_ids(root) if include_task_registry else []
     for prompt_id in task_ids:
@@ -175,6 +158,36 @@ def validate_prompt_registry(skill_root: Path | str | None = None, *, include_ta
             errors.append(f"task_registry prompt_asset_id has no registered asset: {prompt_id}")
 
     return PromptRegistryValidation(root, assets, task_ids, errors, warnings)
+
+
+def _validate_asset(
+    asset: PromptAsset,
+    root: Path,
+    seen_exact: dict[str, Path],
+) -> tuple[list[str], list[str]]:
+    rel = _rel(asset.path, root)
+    errors: list[str] = []
+    missing = sorted(REQUIRED_FIELDS - set(asset.metadata))
+    if missing:
+        errors.append(f"{rel}: missing fields: {', '.join(missing)}")
+    if asset.metadata.get("schema") != PROMPT_ASSET_SCHEMA:
+        errors.append(f"{rel}: schema must be {PROMPT_ASSET_SCHEMA}")
+    if not asset.prompt_asset_id:
+        errors.append(f"{rel}: prompt_asset_id is empty")
+    elif not asset.is_wildcard:
+        previous = seen_exact.get(asset.prompt_asset_id)
+        if previous:
+            errors.append(f"{rel}: duplicate exact prompt_asset_id already defined in {_rel(previous, root)}")
+        seen_exact[asset.prompt_asset_id] = asset.path
+    if not asset.body.strip():
+        errors.append(f"{rel}: body is empty")
+    for field in LIST_FIELDS:
+        if field in asset.metadata and not isinstance(asset.metadata[field], list):
+            errors.append(f"{rel}: {field} must be a list")
+    warnings = []
+    if asset.version and not str(asset.version).startswith("v"):
+        warnings.append(f"{rel}: version should use v-prefixed semantic form, got {asset.version}")
+    return errors, warnings
 
 
 def render_prompt_registry_list(skill_root: Path | str | None = None) -> str:

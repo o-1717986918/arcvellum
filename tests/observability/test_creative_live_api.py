@@ -28,7 +28,7 @@ class CreativeLiveApiTests(unittest.TestCase):
         config["application"]["database_path"] = str(data_root / "studio.sqlite3")
         config["application"]["projects_root"] = str(data_root / "projects")
         config["worker"]["runs_root"] = str(data_root / "runs")
-        config["agent_runners"]["opencode"]["data_root"] = str(data_root)
+        config["agent_runners"]["pi-worker"]["data_root"] = str(data_root)
         config["agent_runners"]["pi-worker"]["auth_path"] = str(data_root / "pi-auth.json")
         self.client = TestClient(create_app(config))
 

@@ -1,10 +1,9 @@
-export type CreativeRuntime = "pi-worker" | "opencode";
+export type CreativeRuntime = "pi-worker";
 
 const KEY = "arcvellum.creativeRuntime";
 
 export function readCreativeRuntime(): CreativeRuntime {
-  const value = localStorage.getItem(KEY);
-  return value === "opencode" ? "opencode" : "pi-worker";
+  return "pi-worker";
 }
 
 export function saveCreativeRuntime(value: CreativeRuntime): CreativeRuntime {

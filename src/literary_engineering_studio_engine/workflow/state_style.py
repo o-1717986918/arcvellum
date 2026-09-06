@@ -19,6 +19,7 @@ from ..literary.style.version import (
     inspect_style_profile_version,
     plan_style_profile_version,
 )
+from ..literary.style.lab import active_project_style
 from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
 from .state_common import _file_step, _read, _read_json, _rel, _slug_profile_id
 
@@ -38,10 +39,38 @@ def _style_engineering_states(root: Path) -> list[dict[str, object]]:
             parts = profile_dir.relative_to(style_root).parts
         except ValueError:
             parts = profile_dir.parts
-        if profile_dir == style_root or "mounted" in parts:
+        if profile_dir == style_root or "mounted" in parts or "versions" in parts:
+            continue
+        if _is_active_curated_default(root, profile_dir):
             continue
         states.append(_style_engineering_state(root, profile_dir))
     return states
+
+
+def _is_active_curated_default(root: Path, profile_dir: Path) -> bool:
+    """Exclude the immutable bundled preset from the mutable Atelier queue."""
+
+    config = _read_json(root / "style" / "default_style.json")
+    if config.get("auto_mounted") is not True:
+        return False
+    expected_profile = (
+        root
+        / "style"
+        / "atelier"
+        / "arcvellum"
+        / "clear-plain-prose"
+    ).resolve()
+    if profile_dir.resolve() != expected_profile:
+        return False
+    active = active_project_style(root)
+    return (
+        str(active.get("style_id") or "")
+        == str(config.get("style_id") or "")
+        == "arcvellum-clear-plain-prose"
+        and str(active.get("version_id") or "")
+        == str(config.get("version_id") or "")
+        and str((active.get("integrity") or {}).get("status") or "") == "pass"
+    )
 
 
 def _style_engineering_state(root: Path, profile_dir: Path) -> dict[str, object]:

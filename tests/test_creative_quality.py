@@ -163,7 +163,7 @@ class CreativeQualityApiTests(unittest.TestCase):
             config["application"]["database_path"] = str(application_root / "studio.sqlite3")
             config["application"]["projects_root"] = str(application_root / "projects")
             config["worker"]["runs_root"] = str(application_root / "runs")
-            config["agent_runners"]["opencode"]["data_root"] = str(application_root)
+            config["agent_runners"]["pi-worker"]["data_root"] = str(application_root)
             client = TestClient(create_app(config))
             root = Path(directory)
             root.joinpath("project.yaml").write_text("project:\n  title: test\n", encoding="utf-8")
