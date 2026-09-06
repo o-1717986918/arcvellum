@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..agent_tasks import default_agent_completion_path
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_completion_path
 
 
 def cli_path(root: Path, value: str | Path) -> Path:

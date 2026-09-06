@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..agent_provider import run_agent_task
-from ..agent_schema import validate_agent_run
-from ..model_config import resolve_model_provider
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import validate_agent_run
+from literary_engineering_studio_engine.foundation.model_config import resolve_model_provider
 from .bootstrap import _director_run_id
 from .contracts import DIRECTOR_SCHEMA, DirectorTurnResult
 from .helpers import _now, _rel_str

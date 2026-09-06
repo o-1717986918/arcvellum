@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...foundation.display_cleaner import scalar_from_yaml_text
-from ...release_fingerprint import release_candidate_fingerprint
-from ...task_paths import relative_path
+from literary_engineering_studio_engine.literary.export.fingerprint import release_candidate_fingerprint
+from literary_engineering_studio_engine.tasking.paths import relative_path
 from .approval_evidence import release_approval_is_current
 
 

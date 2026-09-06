@@ -31,16 +31,16 @@ from literary_engineering_studio.preflight.scene_review_contract import (
 from literary_engineering_studio_engine.projects.source_ingest import (
     ingest_existing_work,
 )
-from literary_engineering_studio_engine.creative_quality import (
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     default_creative_quality_profile,
 )
-from literary_engineering_studio_engine.source_ingest_route import (
+from literary_engineering_studio_engine.routes.source_ingest.definition import (
     build_task_payload as build_source_ingest_task_payload,
 )
-from literary_engineering_studio_engine.task_package_contract import (
+from literary_engineering_studio_engine.tasking.package_contract import (
     enrich_task_payload,
 )
-from literary_engineering_studio_engine.story_architecture import REQUIRED_FIELDS
+from literary_engineering_studio_engine.literary.assets.continuity.architecture import REQUIRED_FIELDS
 
 
 class TaskPreflightTests(unittest.TestCase):
@@ -1639,7 +1639,7 @@ class TaskPreflightTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with patch(
-                "literary_engineering_studio_engine.candidate_promotion.candidate_generation_gate",
+                "literary_engineering_studio_engine.literary.scene.promotion.candidate.candidate_generation_gate",
                 return_value={"status": "invalid", "message": "provenance invalid", "invalid": ["new_character_register.blocking_issues is not empty"]},
             ):
                 result = validate_task_outputs(task, sandbox)

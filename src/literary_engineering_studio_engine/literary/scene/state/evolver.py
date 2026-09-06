@@ -9,10 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
-from ....flow_gates import ensure_composition_ready_for_generation
-from ....roleplay_lab import CharacterCard, _list_after, _load_characters, _nested_list, _nested_scalar, _read, _scalar
-from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_tasks_path, write_agent_tasks
+from literary_engineering_studio_engine.tasking.gates import ensure_composition_ready_for_generation
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard, _list_after, _load_characters, _nested_list, _nested_scalar, _read, _scalar
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
 from ..facts import load_scene_facts
 from .contracts import CharacterStatePatchResult, StatePatchSources
 from .rendering import render_state_patch

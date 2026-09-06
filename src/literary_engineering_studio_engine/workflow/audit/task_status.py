@@ -6,13 +6,13 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 
-from ...agent_task_inventory import AgentTaskRecord, _path_exists, scan_agent_tasks
-from ...agent_task_inventory import summarize_records as _summary
-from ...agent_task_rendering import render_route_audit_markdown as _render_route_audit_markdown
-from ...agent_task_rendering import render_status_markdown as _render_status_markdown
-from ...route_audit import build_route_gates as _route_gates
-from ...route_audit import scene_audit_scope as _scene_audit_scope
-from ...route_audit_common import _normalize_route, _now, _resolve_output
+from literary_engineering_studio_engine.tasking.agent_tasks.inventory import AgentTaskRecord, _path_exists, scan_agent_tasks
+from literary_engineering_studio_engine.tasking.agent_tasks.inventory import summarize_records as _summary
+from literary_engineering_studio_engine.tasking.agent_tasks.rendering import render_route_audit_markdown as _render_route_audit_markdown
+from literary_engineering_studio_engine.tasking.agent_tasks.rendering import render_status_markdown as _render_status_markdown
+from literary_engineering_studio_engine.workflow.audit.service import build_route_gates as _route_gates
+from literary_engineering_studio_engine.workflow.audit.service import scene_audit_scope as _scene_audit_scope
+from literary_engineering_studio_engine.workflow.audit.common import _normalize_route, _now, _resolve_output
 
 
 @dataclass(frozen=True)

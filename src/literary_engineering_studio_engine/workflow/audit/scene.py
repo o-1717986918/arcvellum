@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...route_audit_common import _read_json
-from ...route_audit_evidence import _review_needs_revision
+from literary_engineering_studio_engine.workflow.audit.common import _read_json
+from literary_engineering_studio_engine.workflow.audit.evidence import _review_needs_revision
 from ...literary.scene.facts import load_scene_facts
 from ..historical_truth import preserve_current_historical_style_gates
 from ..scene_scope import started_scene_ids as _started_scene_ids

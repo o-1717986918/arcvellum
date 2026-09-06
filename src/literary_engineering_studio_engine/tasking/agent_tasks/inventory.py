@@ -9,7 +9,7 @@ import re
 
 from .writer import agent_task_completion_status, default_agent_completion_path
 from ..storage import load_task_payload
-from ...route_audit_common import _path_exists, _rel
+from literary_engineering_studio_engine.workflow.audit.common import _path_exists, _rel
 
 
 BACKTICK_RE = re.compile(r"`([^`]+)`")

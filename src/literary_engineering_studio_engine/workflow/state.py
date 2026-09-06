@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from ..atomic_io import atomic_write_text
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
 from .state_assets import _asset_state, _asset_states
 from .state_common import _normalize_route, _now, _render_markdown, _resolve_output
 from .state_export_release import (

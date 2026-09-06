@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-from ...display_cleaner import read_json_file, truncate_text
+from literary_engineering_studio_engine.foundation.display_cleaner import read_json_file, truncate_text
 
 UI_OVERRIDES_SCHEMA = "literary-engineering-workbench/ui-overrides/v0.1"
 

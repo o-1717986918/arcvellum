@@ -6,8 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from ..agent_tasks import agent_task_completion_status
-from ..asset_workshop import ASSET_CANDIDATE_DIRS
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_CANDIDATE_DIRS
 from .state_common import _approval_record, _file_step, _parse_datetime, _read_json, _rel
 
 

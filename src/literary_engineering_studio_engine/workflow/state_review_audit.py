@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..agent_tasks import agent_task_completion_status
-from ..canon_evolver import canon_patch_backlog_items
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.literary.assets.canon.evolver import canon_patch_backlog_items
 from ..literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from ..literary.review.longform_contract import longform_audit_gate_errors
 from ..literary.review.project_targets import project_review_repair_target_issues

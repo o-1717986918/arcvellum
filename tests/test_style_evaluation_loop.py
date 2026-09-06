@@ -4,10 +4,10 @@ import json
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.platform_agent_tasks import write_platform_style_prompt_eval_task
-from literary_engineering_studio_engine.style_engineering_route import build_task_payload, validate_task
-from literary_engineering_studio_engine.workflow_state import _style_engineering_state
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.prompting.platform_tasks import write_platform_style_prompt_eval_task
+from literary_engineering_studio_engine.routes.style.definition import build_task_payload, validate_task
+from literary_engineering_studio_engine.workflow.state import _style_engineering_state
 from literary_engineering_studio_engine.literary.style.review import (
     prepare_style_semantic_review,
     style_eval_generation_digest_errors,

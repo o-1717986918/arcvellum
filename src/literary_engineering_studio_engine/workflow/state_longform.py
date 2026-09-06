@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..longform_materializer import longform_materialization_status
+from literary_engineering_studio_engine.literary.planning.materializer import longform_materialization_status
 from ..literary.planning.review import (
     planning_candidate_status,
     planning_review_prepare_status,
@@ -11,7 +11,7 @@ from ..literary.planning.review import (
     planning_review_task_status,
     review_spec,
 )
-from ..story_architecture import (
+from literary_engineering_studio_engine.literary.assets.continuity.architecture import (
     candidate_path,
     review_path,
     story_architecture_review_status,

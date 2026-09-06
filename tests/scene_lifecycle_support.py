@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from literary_engineering_studio_engine.agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
     write_agent_tasks,
 )
-from literary_engineering_studio_engine.creative_quality import (
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     load_creative_quality_profile,
 )
-from literary_engineering_studio_engine.platform_agent_tasks import (
+from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_scene_review_task,
 )
 from literary_engineering_studio_engine.projects.demo import build_demo_project

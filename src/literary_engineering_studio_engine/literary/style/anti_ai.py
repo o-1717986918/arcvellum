@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from ...creative_quality import apply_rule_mode, quality_rule_mode, quality_threshold
+from literary_engineering_studio_engine.literary.review.creative_quality import apply_rule_mode, quality_rule_mode, quality_threshold
 
 
 ANTI_EVASION_REVISION_PROTOCOL = """## 修订反规避协议

@@ -7,11 +7,11 @@ import unittest
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from literary_engineering_studio_engine.projects.source_ingest import ingest_existing_work
-from literary_engineering_studio_engine.source_ingest_route import (
+from literary_engineering_studio_engine.routes.source_ingest.definition import (
     build_task_payload,
     manifest_gate_errors,
 )
-from literary_engineering_studio_engine.task_registry import issue_next_task
+from literary_engineering_studio_engine.tasking.registry import issue_next_task
 from literary_engineering_studio_engine.tasking.paths import load_task
 
 

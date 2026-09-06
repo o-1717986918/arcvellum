@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from ...draft_text import (
+from literary_engineering_studio_engine.foundation.draft_text import (
     count_delivery_chars,
     count_delivery_chinese_content_chars,
     final_body_from_draft_path,

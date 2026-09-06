@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..asset_workshop import list_asset_candidates
-from ..style_lab import active_project_style
+from literary_engineering_studio_engine.literary.assets.workshop import list_asset_candidates
+from literary_engineering_studio_engine.literary.style.lab import active_project_style
 
 def build_director_status(project_root: Path, *, limit: int = 8) -> dict[str, Any]:
     root = project_root.resolve()

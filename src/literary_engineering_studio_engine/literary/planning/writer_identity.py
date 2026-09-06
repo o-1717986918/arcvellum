@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from ...agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ...tasking.storage import load_task_payload
 
 

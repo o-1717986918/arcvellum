@@ -6,9 +6,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from ....agent_provider import run_agent_task
-from ....agent_schema import validate_agent_run
-from ....canon_lint import build_canon_lint
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import validate_agent_run
+from literary_engineering_studio_engine.literary.assets.canon.lint import build_canon_lint
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,7 @@ from literary_engineering_studio.config import default_config
 from literary_engineering_studio.narrative_projection_v3 import (
     build_narrative_projection_v3,
 )
-from literary_engineering_studio_engine.project_library import (
+from literary_engineering_studio_engine.projections.library.service import (
     build_narrative_evidence,
     build_project_library,
 )

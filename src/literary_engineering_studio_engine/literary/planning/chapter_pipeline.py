@@ -9,12 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from ...context_broker import default_context_trace_path
-from ...draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
-from ...platform_agent_tasks import write_platform_scene_review_task
-from ...review_ci import review_scene_draft
-from ...narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract
-from ...scene_draft import build_scene_draft
+from literary_engineering_studio_engine.literary.scene.context.broker import default_context_trace_path
+from literary_engineering_studio_engine.foundation.draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
+from literary_engineering_studio_engine.prompting.platform_tasks import write_platform_scene_review_task
+from literary_engineering_studio_engine.literary.review.ci import review_scene_draft
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.scene.composition.draft import build_scene_draft
 from ..scene.facts import load_scene_facts
 from .chapter_readiness import chapter_scene_readiness
 

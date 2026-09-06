@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..style_evaluator import STYLE_EVAL_MODES
+from literary_engineering_studio_engine.literary.style.evaluator import STYLE_EVAL_MODES
 
 
 def register_style_commands(sub) -> None:

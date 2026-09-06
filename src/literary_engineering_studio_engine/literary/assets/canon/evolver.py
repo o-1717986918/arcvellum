@@ -9,10 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ....agent_tasks import agent_task_completion_status, write_agent_tasks
-from ....atomic_io import atomic_write_batch
-from ....semantic_task_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
-from ....semantic_task_contracts import semantic_artifact_errors
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, write_agent_tasks
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_batch
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_relative_path, write_semantic_artifact_template
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_errors
 from ...scene.facts import load_scene_facts
 from .apply_status import canon_application_status
 from .approval import approval_matches_patch, approval_record_for_run, patch_requires_approval

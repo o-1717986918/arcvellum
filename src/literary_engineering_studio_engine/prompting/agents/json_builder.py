@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...agent_provider import run_agent_task
-from ...agent_schema import minimal_payload, validate_agent_run
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import minimal_payload, validate_agent_run
 
 
 ALLOWED_PATCH_TARGET_PREFIXES = ("characters/", "scenes/", "plot/", "style/", "drafts/", "reviews/")

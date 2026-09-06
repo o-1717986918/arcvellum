@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from ...model_config import load_config
-from ...platform_agent_tasks import write_platform_style_prompt_task
-from ...style_compiler import StyleCompileOptions, compile_style_profile
-from ...style_prompt import (
+from literary_engineering_studio_engine.foundation.model_config import load_config
+from literary_engineering_studio_engine.prompting.platform_tasks import write_platform_style_prompt_task
+from literary_engineering_studio_engine.literary.style.compiler import StyleCompileOptions, compile_style_profile
+from literary_engineering_studio_engine.literary.style.prompt import (
     STYLE_PROMPT_MAX_DETAIL_CHARS,
     STYLE_PROMPT_MIN_DETAIL_CHARS,
     count_style_prompt_detail_chars,

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_schema import compact_schema_contract
-from ...asset_workshop import ASSET_SCHEMA_NAMES
-from ...task_paths import resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.prompting.agents.schema import compact_schema_contract
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_SCHEMA_NAMES
+from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
 from ...tasking.builder import TaskBuilder
 from .blueprints import asset_blueprint_for_state
 from .evidence import candidate_digest, file_sha256

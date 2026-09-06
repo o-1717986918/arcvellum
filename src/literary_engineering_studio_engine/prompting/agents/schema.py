@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ...agent_provider import run_agent_task
-from ...resources import engine_path
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.foundation.resources import engine_path
 
 
 SCHEMA_DIR = engine_path("schemas", "agent_outputs")

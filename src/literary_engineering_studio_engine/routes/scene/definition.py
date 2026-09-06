@@ -12,15 +12,15 @@ from ...literary.scene.promotion.historical_context import (
     historical_revision_reading_paths,
     historical_revision_source_paths,
 )
-from ...scene_route_blueprints import _blueprint_for_state
-from ...scene_route_gates import (
+from literary_engineering_studio_engine.routes.scene.blueprints import _blueprint_for_state
+from literary_engineering_studio_engine.routes.scene.gates import (
     _candidate_review_gate_errors,
     _composition_gate_errors,
     _state_gate_validation,
 )
-from ...scene_route_support import _file_sha256, _static_review_conclusion, _unique
-from ...semantic_task_contracts import semantic_artifact_contract
-from ...task_paths import resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.routes.scene.support import _file_sha256, _static_review_conclusion, _unique
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_contract
+from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
 from ...tasking.builder import TaskBuilder, WordCountContract
 
 

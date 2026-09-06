@@ -242,7 +242,7 @@ class MutationReceiptTests(unittest.TestCase):
 def _project_and_config(temporary: Path):
     config = default_config()
     install_core_import_path(config)
-    from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
+    from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 
     project = temporary / "work"
     init_work_project(

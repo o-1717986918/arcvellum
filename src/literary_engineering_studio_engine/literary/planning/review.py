@@ -9,8 +9,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ...agent_tasks import agent_task_completion_status, write_agent_tasks
-from ...atomic_io import atomic_write_text
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, write_agent_tasks
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
 from .writer_identity import (
     candidate_writer_identity as _candidate_writer_identity,
     candidate_writer_task_path as _candidate_writer_task_path,

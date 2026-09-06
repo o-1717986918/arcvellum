@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...agent_provider import run_agent_task
-from ...agent_schema import validate_agent_run
-from ...style_prompt import STYLE_PROMPT_LENGTH_RULE, STYLE_PROMPT_QUALITY_RULE
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import validate_agent_run
+from literary_engineering_studio_engine.literary.style.prompt import STYLE_PROMPT_LENGTH_RULE, STYLE_PROMPT_QUALITY_RULE
 
 
 @dataclass(frozen=True)

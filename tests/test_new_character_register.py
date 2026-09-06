@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from literary_engineering_studio_engine.new_character_register import (
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import (
     new_character_register_issues,
 )
 

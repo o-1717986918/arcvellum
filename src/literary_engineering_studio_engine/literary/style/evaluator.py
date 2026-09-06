@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...style_compiler import analyze_style
+from literary_engineering_studio_engine.literary.style.compiler import analyze_style
 
 
 STYLE_EVAL_MODES = {"back-translation", "outline-expansion", "blind-review"}

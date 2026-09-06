@@ -14,10 +14,10 @@ except ImportError:  # pragma: no cover
 
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.config import default_config
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.approval import record_workflow_approval
-from literary_engineering_studio_engine.asset_workshop import _dry_payload
-from literary_engineering_studio_engine.context_broker import write_context_trace
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
+from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload
+from literary_engineering_studio_engine.literary.scene.context.broker import write_context_trace
 
 
 @unittest.skipIf(TestClient is None, "FastAPI test dependencies are not installed")

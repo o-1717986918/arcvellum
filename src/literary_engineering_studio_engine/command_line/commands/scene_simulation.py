@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...branch_lab import build_branch_simulation
-from ...cli_support import print_agent_task_notice
-from ...roleplay_lab import build_roleplay_simulation
-from ...scene_composer import build_scene_composition
+from literary_engineering_studio_engine.literary.scene.branching.lab import build_branch_simulation
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import build_roleplay_simulation
+from literary_engineering_studio_engine.literary.scene.composition.composer import build_scene_composition
 
 
 def handle_simulate_scene(args, parser) -> int:

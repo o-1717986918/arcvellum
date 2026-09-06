@@ -9,17 +9,17 @@ from pathlib import Path
 import re
 from uuid import uuid4
 
-from ..agent_tasks import agent_task_completion_status, default_agent_tasks_path
-from ..branch_lab import build_branch_simulation
-from ..candidate_promotion import promote_scene_candidate
-from ..character_state_evolver import build_character_state_patch
-from ..chapter_pipeline import build_chapter_workspace
-from ..context_packet import build_context_packet
-from ..export_package import build_export_package
-from ..flow_gates import FlowGateError, branch_selection_status
-from ..longform_audit import build_longform_audit
-from ..memory_index import build_memory_index
-from ..platform_agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, default_agent_tasks_path
+from literary_engineering_studio_engine.literary.scene.branching.lab import build_branch_simulation
+from literary_engineering_studio_engine.literary.scene.promotion.candidate import promote_scene_candidate
+from literary_engineering_studio_engine.literary.scene.state.evolver import build_character_state_patch
+from literary_engineering_studio_engine.literary.planning.chapter_pipeline import build_chapter_workspace
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.literary.export.package import build_export_package
+from literary_engineering_studio_engine.tasking.gates import FlowGateError, branch_selection_status
+from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
+from literary_engineering_studio_engine.foundation.memory_index import build_memory_index
+from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_asset_creation_task,
     write_platform_asset_review_task,
     write_platform_canon_review_task,
@@ -27,11 +27,11 @@ from ..platform_agent_tasks import (
     write_platform_scene_generation_task,
     write_platform_scene_review_task,
 )
-from ..prompt_pack import build_scene_prompt_pack, write_prompt_manifest
-from ..review_ci import review_scene_draft
-from ..roleplay_lab import build_roleplay_simulation
-from ..scene_composer import build_scene_composition
-from ..scene_draft import build_scene_draft
+from literary_engineering_studio_engine.prompting.pack import build_scene_prompt_pack, write_prompt_manifest
+from literary_engineering_studio_engine.literary.review.ci import review_scene_draft
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import build_roleplay_simulation
+from literary_engineering_studio_engine.literary.scene.composition.composer import build_scene_composition
+from literary_engineering_studio_engine.literary.scene.composition.draft import build_scene_draft
 
 
 WORKFLOW_MODES = {"scene-loop", "chapter-publish", "full-cycle", "project-seeding", "character-lab", "worldbuilding-lab", "outline-lab"}

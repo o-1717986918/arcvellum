@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ....flow_gates import (
+from literary_engineering_studio_engine.tasking.gates import (
     FlowGateError,
     branch_selection_status,
     fallback_selection_reason_error,
     selected_branch_from,
 )
-from ....semantic_task_contracts import validated_branch_proposals
+from literary_engineering_studio_engine.tasking.semantic_contracts import validated_branch_proposals
 from ..facts import SceneFacts
 
 

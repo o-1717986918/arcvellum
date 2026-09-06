@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
 from literary_engineering_studio_engine.literary.planning.review import (
     planning_review_evidence_paths,
     planning_review_pass_status,

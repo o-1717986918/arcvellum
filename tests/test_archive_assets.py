@@ -16,11 +16,11 @@ from literary_engineering_studio.application.assets.revisions import AssetRevisi
 from literary_engineering_studio.application.assets.validation import validate_asset_content
 from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.projections.archive.service import ArchiveProjectionService
-from literary_engineering_studio_engine.context_broker import (
+from literary_engineering_studio_engine.literary.scene.context.broker import (
     context_trace_status,
     write_context_trace,
 )
-from literary_engineering_studio_engine.workflow_state import build_workflow_state
+from literary_engineering_studio_engine.workflow.state import build_workflow_state
 
 
 class ArchiveAssetTests(unittest.TestCase):

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...anti_ai_style import lint_ai_style
-from ...draft_text import final_body_from_workbench_text
-from ...new_character_register import empty_new_character_register
+from literary_engineering_studio_engine.literary.style.anti_ai import lint_ai_style
+from literary_engineering_studio_engine.foundation.draft_text import final_body_from_workbench_text
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import empty_new_character_register
 
 
 def dry_scene_review(

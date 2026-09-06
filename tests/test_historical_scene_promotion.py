@@ -50,7 +50,7 @@ from literary_engineering_studio_engine.workflow.historical_truth import (
     preserve_historical_style_steps,
     preserve_valid_revision_preparation_steps,
 )
-import literary_engineering_studio_engine.task_registry as task_registry
+import literary_engineering_studio_engine.tasking.registry as task_registry
 
 
 class HistoricalScenePromotionTests(unittest.TestCase):

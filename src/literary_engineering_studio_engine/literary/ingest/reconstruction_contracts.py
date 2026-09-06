@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ...agent_schema import validate_payload
+from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
 from ..assets.registry import ASSET_SCHEMA_NAMES
 from .evidence import canonical_digest
 

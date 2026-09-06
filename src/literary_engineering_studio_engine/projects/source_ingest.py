@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import re
 
-from ..agent_tasks import write_agent_tasks
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_tasks
 from ..literary.ingest import (
     EXTRACTOR_VERSION,
     SOURCE_INGEST_SCHEMA_V2,

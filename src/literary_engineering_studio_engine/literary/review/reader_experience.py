@@ -9,8 +9,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-from ...agent_tasks import agent_task_completion_status, write_agent_tasks
-from ...text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, write_agent_tasks
+from literary_engineering_studio_engine.foundation.text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
 from ..scene.facts import SceneFacts, load_scene_facts, load_scene_mapping
 from .reader_contract_validation import (
     chapter_obligation_issues,

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import re
 
-from ..agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 
 

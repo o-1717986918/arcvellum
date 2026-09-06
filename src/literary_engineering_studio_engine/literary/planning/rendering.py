@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import write_agent_tasks
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_tasks
 from .common import _rel
 from .contracts import load_word_budget_summary, scene_word_budget_contract
 

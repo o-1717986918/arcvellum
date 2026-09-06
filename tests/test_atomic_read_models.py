@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.core_read_models import _read_json_with_retry
-from literary_engineering_studio_engine.atomic_io import atomic_write_text
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
 
 
 class AtomicReadModelTests(unittest.TestCase):

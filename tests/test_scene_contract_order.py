@@ -3,9 +3,9 @@ import json
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.narrative_rhythm import narrative_rhythm_contract
-from literary_engineering_studio_engine.scene_composer import composition_input_digest
-from literary_engineering_studio_engine.workflow_state import _composition_step, _scene_state
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.scene.composition.composer import composition_input_digest
+from literary_engineering_studio_engine.workflow.state import _composition_step, _scene_state
 
 
 class SceneContractOrderTests(unittest.TestCase):

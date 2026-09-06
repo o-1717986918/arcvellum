@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ...agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     agent_task_completion_status,
     write_agent_completion_marker,
     write_agent_tasks,

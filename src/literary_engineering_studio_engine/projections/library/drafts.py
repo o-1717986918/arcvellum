@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...display_cleaner import display_counts, prose_body_for_display, summarize_text
+from literary_engineering_studio_engine.foundation.display_cleaner import display_counts, prose_body_for_display, summarize_text
 from .common import (
     _apply_overrides,
     _display_scene_name,
@@ -14,7 +14,7 @@ from .common import (
     _rel,
     _safe_item_id,
 )
-from ...display_cleaner import scalar_from_yaml_text
+from literary_engineering_studio_engine.foundation.display_cleaner import scalar_from_yaml_text
 
 def _draft_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []

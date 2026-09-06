@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 from uuid import uuid4
 
-from ...atomic_io import atomic_write_batch
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_batch
 from .mount_contracts import (
     STYLE_VERSION_MOUNT_RECEIPT_SCHEMA,
     STYLE_VERSION_MOUNT_SCHEMA,

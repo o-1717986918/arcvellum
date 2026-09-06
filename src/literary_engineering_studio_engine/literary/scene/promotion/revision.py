@@ -10,22 +10,22 @@ from pathlib import Path
 import re
 from typing import Any
 
-from ....agent_tasks import write_agent_tasks
-from ....anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE, render_ai_style_lint_block
-from ....context_broker import context_trace_status, default_context_trace_path
-from ....creative_quality import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_tasks
+from literary_engineering_studio_engine.literary.style.anti_ai import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE, render_ai_style_lint_block
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_exists,
     creative_quality_profile_path,
     load_creative_quality_profile,
     render_creative_quality_prompt,
 )
-from ....context_packet import build_context_packet
-from ....draft_text import count_delivery_chars, final_body_from_draft_text
-from ....narrative_rhythm import narrative_rhythm_contract
-from ....new_character_register import render_new_character_register_contract
-from ....punctuation_standard import render_punctuation_standard_for_prompt
-from ....reader_experience import reader_experience_contract
-from ....word_budget import render_word_budget_generation_standard
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.foundation.draft_text import count_delivery_chars, final_body_from_draft_text
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import render_new_character_register_contract
+from literary_engineering_studio_engine.literary.style.punctuation import render_punctuation_standard_for_prompt
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_contract
+from ...planning.rendering import render_word_budget_generation_standard
 from ...style.snapshot import (
     active_style_evidence_paths,
     active_style_mount_snapshot_payload,

@@ -10,14 +10,14 @@ except ImportError:  # pragma: no cover
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.preflight.scene import _append_candidate_language_issue
-from literary_engineering_studio_engine.anti_ai_style import style_lint_gate, style_lint_gate_message
-from literary_engineering_studio_engine.creative_quality import (
+from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate, style_lint_gate_message
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_path,
     default_creative_quality_profile,
     load_creative_quality_profile,
     save_creative_quality_profile,
 )
-from literary_engineering_studio_engine.punctuation_standard import lint_punctuation
+from literary_engineering_studio_engine.literary.style.punctuation import lint_punctuation
 from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import (
     candidate_language_gate,
 )

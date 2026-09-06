@@ -10,7 +10,7 @@ from ...literary.export.readiness import (
     final_delivery_length_errors,
 )
 from ...literary.export.approval_evidence import release_approval_is_current
-from ...task_paths import relative_path as _rel
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
 from .evidence import approval_record_for_run, delivery_trace_hits, read_optional_json, to_int
 
 

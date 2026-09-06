@@ -6,15 +6,15 @@ import json
 import re
 from pathlib import Path
 
-from ...agent_provider import run_agent_task
-from ...director_agent import (
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from ...director import (
     DirectorBootstrapResult,
     bootstrap_project_from_direction,
     build_director_status,
     director_project_slug,
     run_director_turn,
 )
-from ...model_config import load_config, redacted_effective_config, save_config
+from literary_engineering_studio_engine.foundation.model_config import load_config, redacted_effective_config, save_config
 from ..common import ensure_target_allowed, is_relative_to, rel_str, require_api_token, safe_agent_run_dir, safe_project_root
 from ..models import AssistantChatRequest, DirectorChatRequest, RunAgentRequest
 

@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from literary_engineering_studio_engine.prompt_compiler import compile_active_constraints, render_compiled_constraints
+from literary_engineering_studio_engine.prompting.compiler import compile_active_constraints, render_compiled_constraints
 
 
 class PromptCompilerTests(unittest.TestCase):

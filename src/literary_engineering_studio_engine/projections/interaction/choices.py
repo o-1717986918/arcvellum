@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...display_cleaner import read_jsonl_tail
-from ...project_interaction_common import _now
+from literary_engineering_studio_engine.foundation.display_cleaner import read_jsonl_tail
+from literary_engineering_studio_engine.projections.interaction.common import _now
 from ...workflow.dashboard_projection import project_workflow_dashboard
 from ...workflow.state import project_workflow_state
-from ...workflow_state import next_scene_workflow_state
+from literary_engineering_studio_engine.workflow.state import next_scene_workflow_state
 from .choice_builders import (
     approval_choice,
     asset_approval_source_paths,

@@ -4,8 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.story_architecture import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.literary.assets.continuity.architecture import (
     ARCHITECTURE_REVIEW_SCHEMA,
     ARCHITECTURE_SCHEMA,
     candidate_path,
@@ -15,7 +15,7 @@ from literary_engineering_studio_engine.story_architecture import (
     story_architecture_status,
 )
 from literary_engineering_studio_engine.workflow.state_longform import _longform_state
-from literary_engineering_studio_engine.longform_planning_route import (
+from literary_engineering_studio_engine.routes.longform.definition import (
     build_task_payload,
     validate_task,
 )

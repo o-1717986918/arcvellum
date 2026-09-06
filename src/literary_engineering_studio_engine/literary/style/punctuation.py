@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from ...creative_quality import apply_rule_mode, quality_rule_mode, quality_threshold, render_creative_quality_prompt
+from literary_engineering_studio_engine.literary.review.creative_quality import apply_rule_mode, quality_rule_mode, quality_threshold, render_creative_quality_prompt
 
 
 PUNCTUATION_STANDARD_TITLE = "标准中文标点约束"

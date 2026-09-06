@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from shutil import copyfile
 
-from ..creative_quality import default_creative_quality_profile
-from ..resources import engine_root
+from literary_engineering_studio_engine.literary.review.creative_quality import default_creative_quality_profile
+from literary_engineering_studio_engine.foundation.resources import engine_root
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ....narrative_rhythm import render_narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import render_narrative_rhythm_contract
 from .execution_contract import render_prose_execution_contract
 
 

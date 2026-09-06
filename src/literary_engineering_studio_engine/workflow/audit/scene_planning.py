@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
-from ...context_broker import context_trace_status
-from ...flow_gates import branch_selection_status
-from ...narrative_rhythm import narrative_rhythm_contract
-from ...reader_experience import reader_experience_contract
-from ...route_audit_common import _add_gate, _read_json, _read_text
-from ...word_budget import scene_word_budget_contract
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.tasking.gates import branch_selection_status
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_contract
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _read_json, _read_text
+from ...literary.planning.contracts import scene_word_budget_contract
 
 
 def add_scene_planning_gates(

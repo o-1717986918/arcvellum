@@ -13,7 +13,7 @@ from literary_engineering_studio.config import default_config
 from literary_engineering_studio_engine.literary.style.version import (
     build_style_profile_version,
 )
-from literary_engineering_studio_engine.style_lab import (
+from literary_engineering_studio_engine.literary.style.lab import (
     create_author_project,
     create_author_work,
     import_work_source,

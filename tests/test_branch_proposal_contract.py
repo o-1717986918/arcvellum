@@ -15,7 +15,7 @@ from literary_engineering_studio_engine.literary.scene.composition.execution_con
 from literary_engineering_studio_engine.literary.scene.facts import SceneFacts
 from literary_engineering_studio_engine.routes.scene.gates import _branch_selection_gate
 from literary_engineering_studio_engine.prompting.pack import _sources
-from literary_engineering_studio_engine.semantic_task_contracts import (
+from literary_engineering_studio_engine.tasking.semantic_contracts import (
     semantic_artifact_relative_path,
     semantic_artifact_template,
 )

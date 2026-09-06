@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..model_config import MODEL_PROVIDER_CHOICES
+from literary_engineering_studio_engine.foundation.model_config import MODEL_PROVIDER_CHOICES
 
 DIRECTOR_SCHEMA = "director_decision.v1"
 DIRECTOR_SCHEMA_VALUE = "literary-engineering-workbench/director-decision/v0.1"

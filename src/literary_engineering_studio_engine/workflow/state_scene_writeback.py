@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..canon_evolver import canon_writeback_status
-from ..character_state_apply import state_patch_writeback_status
-from ..scene_handoff import scene_handoff_source_status
+from literary_engineering_studio_engine.literary.assets.canon.evolver import canon_writeback_status
+from literary_engineering_studio_engine.literary.scene.state.apply import state_patch_writeback_status
+from literary_engineering_studio_engine.literary.scene.context.handoff import scene_handoff_source_status
 from .state_common import _semantic_task_step
 
 

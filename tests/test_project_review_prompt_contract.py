@@ -9,7 +9,7 @@ from literary_engineering_studio.preflight.canonicalization import canonicalize_
 from literary_engineering_studio.preflight.common import PreflightIssue
 from literary_engineering_studio.preflight.project_review import validate_project_review_contract
 from literary_engineering_studio.sandbox import SandboxManifest
-from literary_engineering_studio_engine.platform_agent_tasks import (
+from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_canon_review_task,
     write_platform_committee_task,
 )

@@ -11,7 +11,7 @@ from unittest.mock import patch
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_read_models import install_core_import_path
 from literary_engineering_studio.worker import AgentWorker
-from literary_engineering_studio_engine.agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
     write_agent_tasks,
 )
@@ -27,7 +27,7 @@ from literary_engineering_studio_engine.literary.style.version import (
     plan_style_profile_version,
     style_profile_version_errors,
 )
-from literary_engineering_studio_engine.workflow_state import _style_engineering_state
+from literary_engineering_studio_engine.workflow.state import _style_engineering_state
 
 
 class StyleProfileVersionTests(unittest.TestCase):

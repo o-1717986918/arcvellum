@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import argparse
-from ..agent_provider import AGENT_PROVIDERS
-from ..asset_workshop import ASSET_TYPES
+from literary_engineering_studio_engine.prompting.agents.provider import AGENT_PROVIDERS
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_TYPES
 from .policy import FORMAL_HELP_COMMANDS, FORMAL_HELP_METAVAR
-from ..dify_dsl import DEFAULT_DIFY_DSL_PATH
-from ..docx_export import DOCX_KINDS
-from ..knowledge_store import KNOWLEDGE_BACKENDS
-from ..source_ingest import INGEST_MODES
-from ..workflow_runner import WORKFLOW_MODES
+from literary_engineering_studio_engine.foundation.dify_dsl import DEFAULT_DIFY_DSL_PATH
+from literary_engineering_studio_engine.literary.export.docx import DOCX_KINDS
+from literary_engineering_studio_engine.foundation.knowledge_store import KNOWLEDGE_BACKENDS
+from literary_engineering_studio_engine.projects.source_ingest import INGEST_MODES
+from literary_engineering_studio_engine.workflow.runner import WORKFLOW_MODES
 from .length_repair_parser import add_length_repair_parser
 from .parser_handoffs import register_handoff_commands
 from .parser_style import register_style_commands

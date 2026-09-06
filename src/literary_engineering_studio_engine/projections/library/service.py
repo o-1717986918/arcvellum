@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...display_cleaner import nested_scalar_from_yaml_text, read_jsonl_tail, scalar_from_yaml_text
+from literary_engineering_studio_engine.foundation.display_cleaner import nested_scalar_from_yaml_text, read_jsonl_tail, scalar_from_yaml_text
 from .assets import _branch_items, _character_items, _review_items, _scene_items, _style_items, _world_items
 from .common import (
     PROJECT_LIBRARY_SCHEMA,

@@ -9,7 +9,7 @@ from ...literary.style.review import (
     style_eval_generation_digest_errors,
     style_semantic_review_errors,
 )
-from ...style_prompt import style_prompt_quality_report
+from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
 from .support import declared_repair_targets_changed, file_sha256
 
 

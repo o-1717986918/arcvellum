@@ -10,9 +10,9 @@ from literary_engineering_studio.advisor.creative_steward import (
     _decision_prompt,
 )
 from literary_engineering_studio import core_read_models
-from literary_engineering_studio_engine import project_interaction
-from literary_engineering_studio_engine import project_interaction_choices
-from literary_engineering_studio_engine import workflow_state
+from literary_engineering_studio_engine.projections.interaction import choices as project_interaction_choices
+from literary_engineering_studio_engine.projections.interaction import choices as project_interaction
+from literary_engineering_studio_engine.workflow import state as workflow_state
 from literary_engineering_studio_engine.routes.export.blueprints import (
     export_release_blueprint_for_state,
 )
@@ -178,7 +178,7 @@ class RouteLocalChoiceTests(unittest.TestCase):
             calls.append((project_root, route))
             return {"choices": []}
 
-        with patch.object(core_read_models, "_function", return_value=fake_builder):
+        with patch.object(core_read_models, "engine_build_current_human_choices", fake_builder):
             payload = core_read_models.current_choices(
                 {},
                 Path("C:/work/project"),
@@ -402,7 +402,7 @@ class RouteLocalChoiceTests(unittest.TestCase):
             return {"choices": []}
 
         with (
-            patch.object(core_read_models, "_function", return_value=fake_builder),
+            patch.object(core_read_models, "engine_build_current_human_choices", fake_builder),
             patch.object(core_read_models, "ENGINE_ACCESS_LOCK", BombLock()),
         ):
             payload = core_read_models.current_choices(

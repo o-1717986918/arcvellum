@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..agent_provider import run_agent_task
-from ..agent_schema import validate_agent_run
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import validate_agent_run
 from .contracts import DIRECTOR_MAX_TOOL_STEPS, DIRECTOR_SCHEMA, DIRECTOR_SCHEMA_VALUE
 from .helpers import _rel_str
 from .prompts import _template

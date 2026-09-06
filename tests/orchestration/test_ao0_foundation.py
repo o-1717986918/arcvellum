@@ -5,7 +5,7 @@ import unittest
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.automation.controller import ROUTE_ORDER
 from literary_engineering_studio.orchestration import OrchestrationMode, orchestration_settings
-from literary_engineering_studio_engine.orchestration_blueprint import (
+from literary_engineering_studio_engine.platforms.orchestration_blueprint import (
     build_orchestration_blueprint as root_blueprint,
 )
 from literary_engineering_studio_engine.orchestration import (

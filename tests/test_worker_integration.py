@@ -22,7 +22,7 @@ class WorkerIntegrationTests(unittest.TestCase):
     def test_archaeology_fan_in_runs_in_deterministic_control_workspace(self):
         config = default_config()
         install_core_import_path(config)
-        from literary_engineering_studio_engine.agent_tasks import (
+        from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
             write_agent_completion_marker,
         )
         from literary_engineering_studio_engine.literary.ingest import (
@@ -125,7 +125,7 @@ class WorkerIntegrationTests(unittest.TestCase):
     def test_asset_intake_runs_concrete_seed_command_and_writes_sidecars(self):
         config = default_config()
         install_core_import_path(config)
-        from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
+        from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
@@ -151,7 +151,7 @@ class WorkerIntegrationTests(unittest.TestCase):
     def test_deterministic_task_runs_in_sandbox_without_agent_runtime(self):
         config = default_config()
         install_core_import_path(config)
-        from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
+        from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
@@ -176,7 +176,7 @@ class WorkerIntegrationTests(unittest.TestCase):
     def test_prepares_real_core_task_for_host_agent(self):
         config = default_config()
         install_core_import_path(config)
-        from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
+        from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)

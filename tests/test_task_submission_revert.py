@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.task_registry import _enrich_task_payload, revert_task_submission, submit_task
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload, revert_task_submission, submit_task
 
 
 class TaskSubmissionRevertTests(unittest.TestCase):

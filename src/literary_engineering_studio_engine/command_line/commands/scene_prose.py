@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...candidate_promotion import promote_scene_candidate
-from ...cli_support import cli_path, print_agent_task_notice
-from ...context_broker import context_trace_status, default_context_trace_path
-from ...context_packet import build_context_packet
-from ...flow_gates import ensure_scene_pre_generation_tasks_completed
-from ...platform_agent_tasks import write_platform_scene_generation_task
-from ...prompt_pack import build_scene_prompt_pack, write_prompt_manifest
-from ...review_ci import review_scene_draft
-from ...scene_character_assets import (
+from literary_engineering_studio_engine.literary.scene.promotion.candidate import promote_scene_candidate
+from literary_engineering_studio_engine.command_line.support import cli_path, print_agent_task_notice
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.tasking.gates import ensure_scene_pre_generation_tasks_completed
+from literary_engineering_studio_engine.prompting.platform_tasks import write_platform_scene_generation_task
+from literary_engineering_studio_engine.prompting.pack import build_scene_prompt_pack, write_prompt_manifest
+from literary_engineering_studio_engine.literary.review.ci import review_scene_draft
+from literary_engineering_studio_engine.literary.scene.state.character_assets import (
     ensure_scene_character_asset_tasks,
     scene_character_asset_requirements,
 )
-from ...scene_draft import build_scene_draft
-from ...scene_revision import build_scene_revision_task
+from literary_engineering_studio_engine.literary.scene.composition.draft import build_scene_draft
+from literary_engineering_studio_engine.literary.scene.promotion.revision import build_scene_revision_task
 
 
 def handle_draft_scene(args, parser) -> int:

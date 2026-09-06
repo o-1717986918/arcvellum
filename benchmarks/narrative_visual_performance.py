@@ -9,7 +9,7 @@ from time import perf_counter
 from typing import Any, Iterable
 
 from literary_engineering_studio.projections.narrative_projection_v3 import build_narrative_projection_v3
-from literary_engineering_studio_engine.project_library import build_narrative_evidence
+from literary_engineering_studio_engine.public.projections import build_narrative_evidence
 
 from .narrative_visual_fixture import materialize_narrative_visual_fixture
 

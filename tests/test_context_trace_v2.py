@@ -3,9 +3,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.context_broker import context_trace_status
-from literary_engineering_studio_engine.context_packet import build_context_packet
-from literary_engineering_studio_engine.workflow_state import _scene_state
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.workflow.state import _scene_state
 
 
 class ContextTraceV2Tests(unittest.TestCase):

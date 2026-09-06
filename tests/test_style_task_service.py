@@ -15,7 +15,7 @@ from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_bridge import task_command_parameters
 from literary_engineering_studio.core_read_models import install_core_import_path
 from literary_engineering_studio.worker import AgentWorker
-from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
+from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 from literary_engineering_studio_engine.literary.style.session import (
     StyleSessionSourceError,
     StyleSourceSelection,
@@ -24,8 +24,8 @@ from literary_engineering_studio_engine.literary.style.session import (
 from literary_engineering_studio_engine.literary.style.version import (
     build_style_profile_version,
 )
-from literary_engineering_studio_engine.style_engineering_route import build_task_payload
-from literary_engineering_studio_engine.workflow_state import _style_engineering_state
+from literary_engineering_studio_engine.routes.style.definition import build_task_payload
+from literary_engineering_studio_engine.workflow.state import _style_engineering_state
 from tests.test_style_profile_version import _formal_reviewed_profile
 
 

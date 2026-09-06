@@ -14,9 +14,9 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
 
-from ....atomic_io import atomic_write_batch
-from ....agent_tasks import agent_task_completion_status
-from ....semantic_task_contracts import semantic_artifact_errors
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_batch
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_errors
 from .writeback_source import has_state_changes, structured_scene_writeback
 
 

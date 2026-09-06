@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 
-from ...task_paths import relative_path
+from literary_engineering_studio_engine.tasking.paths import relative_path
 
 
 def file_sha256(path: Path) -> str:

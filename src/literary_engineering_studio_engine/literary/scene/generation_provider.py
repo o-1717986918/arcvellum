@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Protocol
 from urllib import error, request
 
-from ...agent_tasks import default_agent_tasks_path, write_agent_tasks
-from ...anti_ai_style import ANTI_EVASION_SHORT_RULE
-from ...context_broker import context_trace_status, default_context_trace_path
-from ...context_packet import build_context_packet
-from ...model_config import MODEL_PROVIDER_CHOICES, get_model_settings, resolve_model_provider
-from ...new_character_register import empty_new_character_register, render_new_character_register_contract
-from ...prompt_pack import build_scene_prompt_pack, write_prompt_manifest
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_tasks_path, write_agent_tasks
+from literary_engineering_studio_engine.literary.style.anti_ai import ANTI_EVASION_SHORT_RULE
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.foundation.model_config import MODEL_PROVIDER_CHOICES, get_model_settings, resolve_model_provider
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import empty_new_character_register, render_new_character_register_contract
+from literary_engineering_studio_engine.prompting.pack import build_scene_prompt_pack, write_prompt_manifest
 
 
 GENERATION_PROVIDERS = MODEL_PROVIDER_CHOICES

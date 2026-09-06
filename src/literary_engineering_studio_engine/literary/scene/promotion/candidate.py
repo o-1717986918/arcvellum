@@ -8,8 +8,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from ....anti_ai_style import style_lint_gate_message
-from ....flow_gates import FlowGateError
+from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate_message
+from literary_engineering_studio_engine.tasking.gates import FlowGateError
 from .gate_support import (
     candidate_body as _candidate_body,
     canon_writeback_declaration as _canon_writeback_declaration,

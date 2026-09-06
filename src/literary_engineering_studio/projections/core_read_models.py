@@ -8,9 +8,30 @@ import json
 from pathlib import Path
 import threading
 import time
-from typing import Any, Callable
+from typing import Any
 
-from literary_engineering_studio_engine.public.workflow import project_workflow_dashboard
+from literary_engineering_studio_engine.public.literary import (
+    active_project_style as engine_active_project_style,
+    default_style_library_root as engine_default_style_library_root,
+    ensure_style_library as engine_ensure_style_library,
+    list_author_projects as engine_list_author_projects,
+    list_style_skills as engine_list_style_skills,
+    mount_style_skill as engine_mount_style_skill,
+)
+from literary_engineering_studio_engine.public.projections import (
+    build_current_human_choices as engine_build_current_human_choices,
+    build_narrative_evidence as engine_build_narrative_evidence,
+    build_project_library as engine_build_project_library,
+    finalize_human_choice as engine_finalize_human_choice,
+    record_human_choice as engine_record_human_choice,
+    record_ui_note as engine_record_ui_note,
+    save_display_field as engine_save_display_field,
+)
+from literary_engineering_studio_engine.public.workflow import (
+    build_task_package_summary as engine_build_task_package_summary,
+    build_workflow_activity as engine_build_workflow_activity,
+    project_workflow_dashboard,
+)
 
 from ..application.choice_effects import apply_choice_effect
 
@@ -67,23 +88,27 @@ def _read_json_with_retry(path: Path, *, attempts: int = 4, delay_seconds: float
 
 
 def build_activity(config: dict[str, Any], project_root: Path, limit: int = 30) -> dict[str, Any]:
+    del config
     with ENGINE_ACCESS_LOCK:
-        payload = _function(config, "workflow_activity", "build_workflow_activity")(project_root, limit=limit)
+        payload = engine_build_workflow_activity(project_root, limit=limit)
     return {"ok": True, **payload}
 
 
 def build_task_summary(config: dict[str, Any], project_root: Path, task_id: str) -> dict[str, Any]:
-    payload = _function(config, "workflow_activity", "build_task_package_summary")(project_root, task_id)
+    del config
+    payload = engine_build_task_package_summary(project_root, task_id)
     return {"ok": True, **payload}
 
 
 def build_library(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
-    payload = _function(config, "project_library", "build_project_library")(project_root)
+    del config
+    payload = engine_build_project_library(project_root)
     return {"ok": True, **payload}
 
 
 def build_narrative_evidence(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
-    payload = _function(config, "project_library", "build_narrative_evidence")(project_root)
+    del config
+    payload = engine_build_narrative_evidence(project_root)
     return {"ok": True, **payload}
 
 
@@ -94,7 +119,8 @@ def current_choices(
     route: str = "",
     dashboard: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    builder = _function(config, "project_interaction", "build_current_human_choices")
+    del config
+    builder = engine_build_current_human_choices
     if route:
         payload = builder(project_root, route=route)
     else:
@@ -111,7 +137,7 @@ def record_choice(
     style_mount_service: Any | None = None,
 ) -> dict[str, Any]:
     before = current_choices(config, project_root)
-    result = _function(config, "project_interaction", "record_human_choice")(project_root, payload)
+    result = engine_record_human_choice(project_root, payload)
     choice = result.get("choice") if isinstance(result.get("choice"), dict) else {}
     if result.get("duplicate") and choice.get("consumed") is True:
         return _choice_receipt(config, project_root, result, before)
@@ -126,7 +152,7 @@ def record_choice(
         style_mount_service=style_mount_service,
     )
     materialized = str(result.get("materialized") or "")
-    finalized = _function(config, "project_interaction", "finalize_human_choice")(
+    finalized = engine_finalize_human_choice(
         project_root,
         str(choice.get("choice_id") or payload.get("choice_id") or ""),
         materialized=materialized,
@@ -175,7 +201,8 @@ def _choice_receipt(
 
 
 def save_display_field(config: dict[str, Any], project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    return _function(config, "project_interaction", "save_display_field")(
+    del config
+    return engine_save_display_field(
         project_root,
         target_type=str(payload.get("target_type") or ""),
         target_id=str(payload.get("target_id") or ""),
@@ -186,7 +213,8 @@ def save_display_field(config: dict[str, Any], project_root: Path, payload: dict
 
 
 def record_ui_note(config: dict[str, Any], project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    return _function(config, "project_interaction", "record_ui_note")(
+    del config
+    return engine_record_ui_note(
         project_root,
         target_type=str(payload.get("target_type") or ""),
         target_id=str(payload.get("target_id") or ""),
@@ -196,32 +224,36 @@ def record_ui_note(config: dict[str, Any], project_root: Path, payload: dict[str
 
 
 def style_library(config: dict[str, Any], style_library_root: str = "") -> dict[str, Any]:
-    module = _module(config, "style_lab")
-    root = Path(style_library_root).expanduser().resolve() if style_library_root else module.default_style_library_root()
-    library = module.ensure_style_library(root)
+    del config
+    root = Path(style_library_root).expanduser().resolve() if style_library_root else engine_default_style_library_root()
+    library = engine_ensure_style_library(root)
     return {
         "ok": True,
         "style_library_root": str(library),
-        "default_style_library_root": str(module.default_style_library_root()),
-        "authors": module.list_author_projects(library),
-        "style_skills": module.list_style_skills(library),
+        "default_style_library_root": str(engine_default_style_library_root()),
+        "authors": engine_list_author_projects(library),
+        "style_skills": engine_list_style_skills(library),
     }
 
 
 def style_mounts(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
-    module = _module(config, "style_lab")
+    del config
     return {
         "ok": True,
         "project_root": str(project_root),
-        "active_style_skill": module.active_project_style(project_root),
+        "active_style_skill": engine_active_project_style(project_root),
     }
 
 
 def mount_style(config: dict[str, Any], project_root: Path, style_library_root: str, style_id: str) -> dict[str, Any]:
-    module = _module(config, "style_lab")
-    result = module.mount_style_skill(
+    del config
+    result = engine_mount_style_skill(
         project_root,
-        library_root=Path(style_library_root).expanduser().resolve() if style_library_root else module.default_style_library_root(),
+        library_root=(
+            Path(style_library_root).expanduser().resolve()
+            if style_library_root
+            else engine_default_style_library_root()
+        ),
         style_id=style_id,
         allow_unreviewed=False,
     )
@@ -232,17 +264,8 @@ def mount_style(config: dict[str, Any], project_root: Path, style_library_root: 
         "mount_dir": _relative(result.mount_dir, project_root),
         "mount_manifest": _relative(result.mount_manifest_path, project_root),
         "project_style": _relative(result.project_style_path, project_root),
-        "active_style_skill": module.active_project_style(project_root),
+        "active_style_skill": engine_active_project_style(project_root),
     }
-
-
-def _module(config: dict[str, Any], name: str):
-    install_core_import_path(config)
-    return importlib.import_module(f"literary_engineering_studio_engine.{name}")
-
-
-def _function(config: dict[str, Any], module: str, name: str) -> Callable[..., Any]:
-    return getattr(_module(config, module), name)
 
 
 def _relative(path: Path, root: Path) -> str:

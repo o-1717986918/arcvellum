@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.context_packet import _plot_context, build_context_packet
+from literary_engineering_studio_engine.literary.scene.context.packet import _plot_context, build_context_packet
 
 
 class ContextPacketCompactionTests(unittest.TestCase):

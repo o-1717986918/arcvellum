@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...longform_materializer import planned_longform_outputs
+from literary_engineering_studio_engine.literary.planning.materializer import planned_longform_outputs
 from ...literary.planning.review import (
     all_planning_review_evidence_paths,
     planning_candidate_evidence_paths,

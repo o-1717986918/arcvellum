@@ -22,7 +22,7 @@ from literary_engineering_studio.sandbox import (
 from literary_engineering_studio.runtime.sandbox_hygiene import (
     restore_unexpected_agent_changes,
 )
-from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload
 from literary_engineering_studio.runtime.context_budget import (
     ContextBudgetExceeded,
     resolve_task_context_budget,

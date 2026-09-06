@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from literary_engineering_studio_engine.agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
     write_agent_tasks,
 )

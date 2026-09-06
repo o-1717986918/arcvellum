@@ -3,11 +3,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.narrative_rhythm import (
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import (
     narrative_rhythm_contract,
     render_narrative_rhythm_contract,
 )
-from literary_engineering_studio_engine.rhythm_plan import load_rhythm_plan, save_rhythm_plan
+from literary_engineering_studio_engine.literary.planning.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 
 
 class RhythmPlanTests(unittest.TestCase):

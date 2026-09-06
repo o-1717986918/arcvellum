@@ -8,10 +8,10 @@ from ...literary.assets.canon.approval import patch_requires_approval
 from ...literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from ...literary.review.project_targets import project_review_repair_target_issues
 
-from ...agent_schema import validate_payload
-from ...agent_tasks import agent_task_completion_status
-from ...task_paths import relative_path as _rel
-from ...task_paths import resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
+from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
 from .evidence import (
     approval_matches_file,
     approval_record_for_run,

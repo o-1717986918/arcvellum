@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...agent_tasks import default_agent_completion_path
-from ...asset_context import compact_asset_context_relpaths
-from ...task_paths import relative_path as _rel
-from ...task_paths import resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_completion_path
+from literary_engineering_studio_engine.literary.assets.context import compact_asset_context_relpaths
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
+from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
 from .evidence import (
     asset_promoted_output_rels,
     asset_promotion_group,

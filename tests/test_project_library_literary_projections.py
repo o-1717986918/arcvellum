@@ -3,8 +3,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
-from literary_engineering_studio_engine.project_library import build_project_library
+from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.projections.library.service import build_project_library
 
 
 class ProjectLibraryLiteraryProjectionTests(unittest.TestCase):

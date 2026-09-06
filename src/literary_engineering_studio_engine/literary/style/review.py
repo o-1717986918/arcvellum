@@ -9,9 +9,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ...agent_tasks import agent_task_completion_status, write_agent_tasks
-from ...atomic_io import atomic_write_text
-from ...task_paths import relative_path, task_id
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, write_agent_tasks
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
+from literary_engineering_studio_engine.tasking.paths import relative_path, task_id
 from .session import load_style_session, style_session_holdout_reference
 
 

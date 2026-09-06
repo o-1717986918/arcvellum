@@ -6,16 +6,16 @@ from dataclasses import dataclass
 import hashlib
 from pathlib import Path
 
-from ...context_broker import default_context_trace_path
-from ...creative_quality import (
+from literary_engineering_studio_engine.literary.scene.context.broker import default_context_trace_path
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_exists,
     creative_quality_profile_path,
     load_creative_quality_profile,
 )
-from ...draft_text import final_body_from_workbench_text
-from ...narrative_rhythm import render_narrative_rhythm_contract
-from ...reader_experience import reader_experience_adherence_for_body, scene_chapter_obligation_id
-from ...word_budget import word_budget_adherence_for_body
+from literary_engineering_studio_engine.foundation.draft_text import final_body_from_workbench_text
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import render_narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_adherence_for_body, scene_chapter_obligation_id
+from ..planning.contracts import word_budget_adherence_for_body
 from .style_context import render_review_style_snapshot, scene_review_style_context
 
 

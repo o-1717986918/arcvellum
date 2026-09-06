@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
-from ....context_broker import default_context_trace_path
-from ....semantic_task_contracts import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_tasks_path, write_agent_tasks
+from literary_engineering_studio_engine.literary.scene.context.broker import default_context_trace_path
+from literary_engineering_studio_engine.tasking.semantic_contracts import (
     semantic_artifact_relative_path,
     write_semantic_artifact_template,
 )

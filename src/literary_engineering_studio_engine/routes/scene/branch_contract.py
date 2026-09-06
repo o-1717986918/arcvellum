@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...flow_gates import branch_selection_status, fallback_selection_reason_error
-from ...semantic_task_contracts import (
+from literary_engineering_studio_engine.tasking.gates import branch_selection_status, fallback_selection_reason_error
+from literary_engineering_studio_engine.tasking.semantic_contracts import (
     semantic_artifact_errors,
     semantic_artifact_relative_path,
     validated_branch_proposal_ids,
 )
-from ...task_paths import relative_path as _rel
-from ...scene_route_support import _read_optional_json
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
+from literary_engineering_studio_engine.routes.scene.support import _read_optional_json
 
 
 def branch_proposal_count(root: Path, scene_id: str) -> int:

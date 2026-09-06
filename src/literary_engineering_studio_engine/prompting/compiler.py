@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
 from ..literary.scene.facts import load_scene_facts
 
 

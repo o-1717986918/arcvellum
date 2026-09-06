@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 
-from ..project_interaction import build_current_human_choices
+from ..projections.interaction.choices import build_current_human_choices
 from ..tasking.storage import load_task_payload
 
 

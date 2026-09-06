@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..task_registry import SUPPORTED_ROUTES
+from literary_engineering_studio_engine.tasking.registry import SUPPORTED_ROUTES
 from .activity_labels import (
     EVENT_LABELS,
     ROUTE_ORDER,

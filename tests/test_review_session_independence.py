@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from literary_engineering_studio_engine.candidate_promotion import _review_session_independence
+from literary_engineering_studio_engine.literary.scene.promotion.candidate import _review_session_independence
 
 
 class ReviewSessionIndependenceTests(unittest.TestCase):

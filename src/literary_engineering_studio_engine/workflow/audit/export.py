@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 from ...literary.export.readiness import export_scene_readiness_errors
-from ...route_audit_common import _add_gate, _approval_record, _path_exists, _read_json, _read_text, _rel
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _approval_record, _path_exists, _read_json, _read_text, _rel
 def _non_ready_scene_count(chapter_jsons: list[Path]) -> int:
     total = 0
     for path in chapter_jsons:

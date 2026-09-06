@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ...task_paths import normalize_relative_path
+from literary_engineering_studio_engine.tasking.paths import normalize_relative_path
 
 
 _AGENT_SOURCES = {

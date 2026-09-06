@@ -6,9 +6,9 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from ..agent_task_status import build_agent_task_status, build_route_audit
-from ..atomic_io import atomic_write_text
-from ..task_registry import SUPPORTED_ROUTES
+from literary_engineering_studio_engine.workflow.audit.task_status import build_agent_task_status, build_route_audit
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
+from literary_engineering_studio_engine.tasking.registry import SUPPORTED_ROUTES
 from .dashboard_model import WORKFLOW_DASHBOARD_SCHEMA
 from .dashboard_model import audit_int as _audit_int
 from .dashboard_model import authority_hierarchy as _authority_hierarchy

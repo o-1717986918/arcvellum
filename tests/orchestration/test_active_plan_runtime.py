@@ -33,12 +33,12 @@ from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio.runtime.task_snapshot import load_run_task_snapshot
 from literary_engineering_studio.runtime.worker_results import WorkerRunResult
 from literary_engineering_studio.worker import AgentWorker
-from literary_engineering_studio_engine.agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
 )
-from literary_engineering_studio_engine.approval import record_workflow_approval
-from literary_engineering_studio_engine.canon_evolver import apply_canon_patch
-from literary_engineering_studio_engine.character_state_apply import (
+from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
+from literary_engineering_studio_engine.literary.assets.canon.evolver import apply_canon_patch
+from literary_engineering_studio_engine.literary.scene.state.apply import (
     apply_character_state_patch,
 )
 from literary_engineering_studio_engine.literary.scene.promotion.candidate import (
@@ -47,7 +47,7 @@ from literary_engineering_studio_engine.literary.scene.promotion.candidate impor
 from literary_engineering_studio_engine.routes.scene.definition import (
     _build_task_payload,
 )
-from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload
 
 from tests.orchestration.fixtures import scene_plan_candidate
 from tests.orchestration.plan_persistence_support import (

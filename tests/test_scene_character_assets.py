@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from literary_engineering_studio_engine.scene_character_assets import (
+from literary_engineering_studio_engine.literary.scene.state.character_assets import (
     ensure_scene_character_asset_tasks,
     scene_character_asset_requirements,
 )

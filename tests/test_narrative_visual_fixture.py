@@ -6,7 +6,7 @@ from benchmarks.narrative_visual_fixture import (
     FIXTURE_SCHEMA,
     materialize_narrative_visual_fixture,
 )
-from literary_engineering_studio_engine.project_library import build_narrative_evidence
+from literary_engineering_studio_engine.projections.library.service import build_narrative_evidence
 
 
 class NarrativeVisualFixtureTests(unittest.TestCase):

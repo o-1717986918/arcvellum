@@ -5,20 +5,20 @@ import hashlib
 import json
 from pathlib import Path
 
-from ..character_state_apply import state_patch_writeback_status
-from ..candidate_promotion import candidate_generation_gate, candidate_review_gate
-from ..continuity_ledger import continuity_ledger_task_status
-from ..context_broker import context_trace_status
-from ..flow_gates import branch_selection_status
-from ..narrative_rhythm import narrative_rhythm_contract
-from ..reader_experience import reader_experience_contract
-from ..scene_character_assets import scene_character_asset_requirements
-from ..scene_composer import composition_input_digest
+from literary_engineering_studio_engine.literary.scene.state.apply import state_patch_writeback_status
+from literary_engineering_studio_engine.literary.scene.promotion.candidate import candidate_generation_gate, candidate_review_gate
+from literary_engineering_studio_engine.literary.assets.continuity.ledger import continuity_ledger_task_status
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.tasking.gates import branch_selection_status
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_contract
+from literary_engineering_studio_engine.literary.scene.state.character_assets import scene_character_asset_requirements
+from literary_engineering_studio_engine.literary.scene.composition.composer import composition_input_digest
 from ..literary.scene.promotion.historical_readiness import static_review_evidence
 from ..literary.scene.facts import load_scene_facts
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..tasking.storage import load_task_payload
-from ..word_budget import scene_word_budget_contract
+from ..literary.planning.contracts import scene_word_budget_contract
 from .historical_truth import candidate_supersedes_promotion
 from .historical_truth import preserve_current_historical_style_steps
 from .scene_length_repair import target_length_revision_step

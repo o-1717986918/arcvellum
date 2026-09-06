@@ -6,12 +6,12 @@ import json
 import time
 from pathlib import Path
 
-from ...approval import record_workflow_approval
-from ...canon_evolver import apply_canon_patch, build_canon_patch_backlog
-from ...project_interaction import build_current_human_choices, record_human_choice
-from ...workflow_activity import build_task_package_summary, build_workflow_activity
+from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
+from literary_engineering_studio_engine.literary.assets.canon.evolver import apply_canon_patch, build_canon_patch_backlog
+from ...projections.interaction.choices import build_current_human_choices, record_human_choice
+from literary_engineering_studio_engine.workflow.activity import build_task_package_summary, build_workflow_activity
 from ...workflow.dashboard_projection import project_workflow_dashboard
-from ...workflow_runner import run_workflow
+from literary_engineering_studio_engine.workflow.runner import run_workflow
 from ..common import rel_str, reject_bypass, require_api_token, run_state_path, safe_project_root, safe_relative_path
 from ..models import ApprovalRequest, CanonApplyRequest, HumanChoiceRequest, RunWorkflowRequest
 

@@ -21,7 +21,7 @@ from literary_engineering_studio_engine.literary.style.version import (
 from literary_engineering_studio_engine.literary.style.snapshot import (
     active_style_mount_snapshot_payload,
 )
-from literary_engineering_studio_engine.project_interaction import (
+from literary_engineering_studio_engine.projections.interaction.choices import (
     build_current_human_choices,
 )
 from tests.test_style_profile_version import _formal_reviewed_profile

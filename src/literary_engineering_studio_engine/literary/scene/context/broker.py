@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ....atomic_io import atomic_write_text
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
 from ...style.snapshot import validate_style_mount_snapshot
 
 

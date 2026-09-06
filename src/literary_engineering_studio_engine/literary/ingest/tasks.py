@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...agent_tasks import write_agent_tasks
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_tasks
 from .entities import CHUNK_EXTRACTION_SCHEMA
 
 

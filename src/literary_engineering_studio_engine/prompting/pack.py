@@ -10,36 +10,32 @@ from pathlib import Path
 from string import Formatter
 from typing import Any
 
-from ..anti_ai_style import ANTI_AI_STYLE_PROMPT, ANTI_EVASION_REVISION_PROTOCOL
-from ..context_broker import context_trace_status, default_context_trace_path
-from ..creative_quality import (
+from literary_engineering_studio_engine.literary.style.anti_ai import ANTI_AI_STYLE_PROMPT, ANTI_EVASION_REVISION_PROTOCOL
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_exists,
     creative_quality_profile_path,
     load_creative_quality_profile,
     render_creative_quality_prompt,
 )
-from ..flow_gates import ensure_composition_ready_for_generation
+from literary_engineering_studio_engine.tasking.gates import ensure_composition_ready_for_generation
 from ..literary.scene.composition.execution_contract import (
     load_prose_execution_contract,
     render_prose_execution_contract,
 )
-from ..narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
-from ..new_character_register import render_new_character_register_contract
-from ..prompt_compiler import compile_active_constraints, render_compiled_constraints
-from ..punctuation_standard import render_punctuation_standard_for_prompt
-from ..reader_experience import (
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import render_new_character_register_contract
+from literary_engineering_studio_engine.prompting.compiler import compile_active_constraints, render_compiled_constraints
+from literary_engineering_studio_engine.literary.style.punctuation import render_punctuation_standard_for_prompt
+from literary_engineering_studio_engine.literary.review.reader_experience import (
     chapter_obligation_path,
     ensure_reader_experience_ready,
     render_reader_experience_contract,
     scene_chapter_obligation_id,
 )
-from ..resources import engine_root
-from ..word_budget import (
-    ensure_scene_word_budget_ready,
-    render_scene_word_budget_contract,
-    render_word_budget_generation_standard,
-    scene_word_budget_contract,
-)
+from literary_engineering_studio_engine.foundation.resources import engine_root
+from ..literary.planning import contracts as word_budget_contracts
+from ..literary.planning import rendering as word_budget_rendering
 from .style_context import resolve_style_prompt_context
 
 
@@ -174,7 +170,7 @@ def build_scene_prompt_pack(
         allow_unselected_composition=allow_unselected_composition,
         allow_missing_composition=allow_missing_composition,
     )
-    word_budget_contract = ensure_scene_word_budget_ready(
+    word_budget_contract = word_budget_contracts.ensure_scene_word_budget_ready(
         root,
         scene_path,
         materialization_scope=materialization_scope,
@@ -203,8 +199,8 @@ def build_scene_prompt_pack(
         "composition_text": _composition_contract_prompt_text(composition_path, allow_incomplete=allow_unselected_composition or allow_missing_composition),
         "style_profile": style_context.constraint,
         "style_generation_standard": _render_style_generation_standard(root, style_profile_path),
-        "word_budget_generation_standard": render_word_budget_generation_standard(root),
-        "scene_word_budget_contract": render_scene_word_budget_contract(
+        "word_budget_generation_standard": word_budget_rendering.render_word_budget_generation_standard(root),
+        "scene_word_budget_contract": word_budget_rendering.render_scene_word_budget_contract(
             root,
             scene_path,
             materialization_scope=materialization_scope,

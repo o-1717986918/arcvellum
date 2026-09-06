@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
-from ....context_broker import context_trace_status, default_context_trace_path
-from ....context_packet import build_context_packet
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
 
 
 @dataclass(frozen=True)

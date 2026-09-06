@@ -3,7 +3,7 @@ import json
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.canon_lint import build_canon_lint
+from literary_engineering_studio_engine.literary.assets.canon.lint import build_canon_lint
 from literary_engineering_studio_engine.literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 
 

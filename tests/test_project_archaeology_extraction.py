@@ -13,13 +13,13 @@ from literary_engineering_studio_engine.literary.ingest import (
     build_chunk_extraction_plan,
     validate_chunk_extraction,
 )
-from literary_engineering_studio_engine.agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
 )
 from literary_engineering_studio_engine.projects.source_ingest import (
     ingest_existing_work,
 )
-from literary_engineering_studio_engine.workflow_state import build_workflow_state
+from literary_engineering_studio_engine.workflow.state import build_workflow_state
 
 
 class ProjectArchaeologyExtractionTests(unittest.TestCase):

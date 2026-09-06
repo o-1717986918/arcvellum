@@ -8,20 +8,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_task_inventory import AgentTaskRecord
+from literary_engineering_studio_engine.tasking.agent_tasks.inventory import AgentTaskRecord
 from ...literary.planning.chapter_inventory import formal_chapter_files
-from ...route_audit_assets import _add_asset_route_gates
-from ...route_audit_common import _add_gate, _debug_waiver_hits
-from ...route_audit_export import (
+from literary_engineering_studio_engine.workflow.audit.assets import _add_asset_route_gates
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _debug_waiver_hits
+from literary_engineering_studio_engine.workflow.audit.export import (
     _add_export_release_route_gates,
     _non_ready_scene_count,
     _stale_or_weak_chapter_gate_count,
     _unapplied_canon_patch_count,
     _unapplied_state_patch_count,
 )
-from ...route_audit_longform import _add_longform_budget_gates
-from ...route_audit_review import _add_review_audit_route_gates
-from ...route_audit_scene import (
+from literary_engineering_studio_engine.workflow.audit.longform import _add_longform_budget_gates
+from literary_engineering_studio_engine.workflow.audit.review import _add_review_audit_route_gates
+from literary_engineering_studio_engine.workflow.audit.scene import (
     _add_scene_development_gates,
     _scene_audit_scope,
     _scene_files,

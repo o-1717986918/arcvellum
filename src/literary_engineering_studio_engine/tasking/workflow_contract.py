@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..workflow_state import build_workflow_state
+from literary_engineering_studio_engine.workflow.state import build_workflow_state
 from .storage import load_task_payload
 
 

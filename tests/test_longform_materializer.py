@@ -3,7 +3,7 @@ import json
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.longform_materializer import (
+from literary_engineering_studio_engine.literary.planning.materializer import (
     longform_materialization_status,
     materialize_longform_plan,
     planned_longform_outputs,

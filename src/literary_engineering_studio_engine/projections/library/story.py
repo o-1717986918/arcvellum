@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...display_cleaner import nested_scalar_from_yaml_text, read_json_file, scalar_from_yaml_text, summarize_text
+from literary_engineering_studio_engine.foundation.display_cleaner import nested_scalar_from_yaml_text, read_json_file, scalar_from_yaml_text, summarize_text
 from .common import (
     _apply_overrides,
     _display_hooks,
@@ -15,7 +15,7 @@ from .common import (
     _read_text,
     _rel,
 )
-from ...display_cleaner import truncate_text
+from literary_engineering_studio_engine.foundation.display_cleaner import truncate_text
 
 def _word_budget_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []

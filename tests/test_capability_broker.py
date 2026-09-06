@@ -13,7 +13,7 @@ from literary_engineering_studio.runtime.capabilities import (
     CapabilityRequest,
     build_capability_manifest,
 )
-from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload
 
 
 class CapabilityBrokerTests(unittest.TestCase):

@@ -10,27 +10,27 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..agent_tasks import write_agent_tasks
-from ..agent_schema import compact_schema_contract
-from ..anti_ai_style import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE
-from ..asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES
-from ..asset_context import compact_asset_context_paths
-from ..context_broker import default_context_trace_path
-from ..creative_quality import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_tasks
+from literary_engineering_studio_engine.prompting.agents.schema import compact_schema_contract
+from literary_engineering_studio_engine.literary.style.anti_ai import ANTI_EVASION_REVISION_PROTOCOL, ANTI_EVASION_SHORT_RULE
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES
+from literary_engineering_studio_engine.literary.assets.context import compact_asset_context_paths
+from literary_engineering_studio_engine.literary.scene.context.broker import default_context_trace_path
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_exists,
     creative_quality_profile_path,
     load_creative_quality_profile,
     render_creative_quality_prompt,
 )
-from ..draft_text import count_delivery_chars
+from literary_engineering_studio_engine.foundation.draft_text import count_delivery_chars
 from ..literary.review.context_evidence import build_scene_review_evidence, scene_review_context_path, write_scene_review_context
-from ..narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
-from ..new_character_register import render_new_character_register_contract
-from ..punctuation_standard import PUNCTUATION_STANDARD_SHORT_RULE
-from ..reader_experience import reader_experience_contract, scene_chapter_obligation_id
-from ..resources import engine_path
-from ..style_prompt import STYLE_PROMPT_LENGTH_RULE, STYLE_PROMPT_QUALITY_RULE
-from ..word_budget import scene_word_budget_contract
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract, render_narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import render_new_character_register_contract
+from literary_engineering_studio_engine.literary.style.punctuation import PUNCTUATION_STANDARD_SHORT_RULE
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_contract, scene_chapter_obligation_id
+from literary_engineering_studio_engine.foundation.resources import engine_path
+from literary_engineering_studio_engine.literary.style.prompt import STYLE_PROMPT_LENGTH_RULE, STYLE_PROMPT_QUALITY_RULE
+from ..literary.planning.contracts import scene_word_budget_contract
 from .style_task_contract import render_scene_review_style_task, scene_review_style_materials
 from .platform_task_support import (
     PlatformAgentTaskResult,

@@ -5,8 +5,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine import task_registry
-from literary_engineering_studio_engine.task_contract_audit import build_task_contract_audit
+from literary_engineering_studio_engine.tasking import registry as task_registry
+from literary_engineering_studio_engine.tasking.contract_audit import build_task_contract_audit
 from literary_engineering_studio_engine.tasking.package_contract import TASK_TYPE_EXECUTION, enrich_task_payload
 
 

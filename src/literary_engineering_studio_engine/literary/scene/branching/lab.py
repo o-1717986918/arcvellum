@@ -7,12 +7,12 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
-from ....context_broker import context_trace_status, default_context_trace_path
-from ....context_packet import build_context_packet
-from ....flow_gates import ensure_agent_task_completed, selected_branch_from
-from ....roleplay_lab import CharacterCard, _load_characters
-from ....semantic_task_contracts import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_tasks_path, write_agent_tasks
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.tasking.gates import ensure_agent_task_completed, selected_branch_from
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard, _load_characters
+from literary_engineering_studio_engine.tasking.semantic_contracts import (
     read_semantic_artifact,
     semantic_artifact_relative_path,
     write_semantic_artifact_template,

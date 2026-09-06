@@ -12,9 +12,9 @@ from ...literary.scene.promotion.historical_context import (
 from ...literary.scene.promotion.legacy_context_bootstrap import (
     legacy_context_migration_output_paths,
 )
-from ...scene_route_support import _unique
+from literary_engineering_studio_engine.routes.scene.support import _unique
 from ...tasking.paths import read_json
-from ...task_paths import relative_path, resolve_project_path
+from literary_engineering_studio_engine.tasking.paths import relative_path, resolve_project_path
 
 
 def state_patch_character_files(root: Path, state_patch: str) -> list[str]:

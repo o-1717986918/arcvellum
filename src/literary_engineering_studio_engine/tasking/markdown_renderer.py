@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..prompt_registry import resolve_prompt_asset
+from literary_engineering_studio_engine.prompting.registry import resolve_prompt_asset
 
 
 OPERATING_REFERENCE_PATHS = {

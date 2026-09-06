@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...workflow.state import project_workflow_state
-from ...workflow_state import next_scene_workflow_state
+from literary_engineering_studio_engine.workflow.state import next_scene_workflow_state
 
 
 def route_choice_actions(

@@ -16,7 +16,7 @@ from literary_engineering_studio_engine.tasking.package_contract import (
     task_contract_fingerprint,
 )
 from literary_engineering_studio_engine.tasking.paths import load_task
-import literary_engineering_studio_engine.task_registry as task_registry
+import literary_engineering_studio_engine.tasking.registry as task_registry
 
 
 class SceneContextContractTests(unittest.TestCase):

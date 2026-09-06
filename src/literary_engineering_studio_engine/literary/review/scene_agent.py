@@ -6,9 +6,9 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from ...agent_provider import run_agent_task
-from ...agent_schema import validate_agent_run
-from ...creative_quality import creative_quality_profile_exists
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import validate_agent_run
+from literary_engineering_studio_engine.literary.review.creative_quality import creative_quality_profile_exists
 from .scene_agent_context import SceneAgentReviewContext, prepare_scene_agent_review_context
 from .scene_agent_context import read_text as _read
 from .scene_agent_context import relative_path as _rel_str

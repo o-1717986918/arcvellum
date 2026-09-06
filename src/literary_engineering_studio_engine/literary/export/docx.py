@@ -17,7 +17,7 @@ from typing import Iterable
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
-from ...draft_text import final_body_from_workbench_text
+from literary_engineering_studio_engine.foundation.draft_text import final_body_from_workbench_text
 
 
 DOCX_KINDS = {"novel", "screenplay", "video_prompt_pack", "report"}

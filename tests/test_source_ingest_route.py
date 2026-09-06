@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.source_ingest_route import build_task_payload, validate_task
+from literary_engineering_studio_engine.routes.source_ingest.definition import build_task_payload, validate_task
 
 
 class SourceIngestRouteTests(unittest.TestCase):

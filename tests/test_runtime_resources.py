@@ -12,7 +12,7 @@ from literary_engineering_studio.runtime.resources import (
     derive_resource_claim,
     paths_overlap,
 )
-from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload
 
 
 class RuntimeResourceTests(unittest.TestCase):

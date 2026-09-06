@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.longform_planning_route import build_task_payload, validate_task
+from literary_engineering_studio_engine.routes.longform.definition import build_task_payload, validate_task
 from literary_engineering_studio_engine.tasking.package_contract import enrich_task_payload
 
 

@@ -5,16 +5,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ...cli_support import print_agent_task_notice as _print_agent_task_notice
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice as _print_agent_task_notice
 from ...literary.style.review import prepare_style_semantic_review
 from ...literary.style.version import build_style_profile_version
-from ...platform_agent_tasks import (
+from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_style_prompt_eval_task,
     write_platform_style_prompt_task,
 )
-from ...style_compiler import StyleCompileOptions, compile_style_profile
-from ...style_evaluator import StyleEvalOptions, evaluate_style
-from ...style_lab import (
+from literary_engineering_studio_engine.literary.style.compiler import StyleCompileOptions, compile_style_profile
+from literary_engineering_studio_engine.literary.style.evaluator import StyleEvalOptions, evaluate_style
+from literary_engineering_studio_engine.literary.style.lab import (
     active_project_style,
     build_style_skill,
     create_author_project,

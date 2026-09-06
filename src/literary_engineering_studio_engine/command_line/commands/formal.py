@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sys
 
-from ...cli_parser import build_parser
-from ...cli_support import render_formal_help
-from ...formal_mode import bypass_hits, formal_bypass_message
+from literary_engineering_studio_engine.command_line.parser import build_parser
+from literary_engineering_studio_engine.command_line.support import render_formal_help
+from literary_engineering_studio_engine.command_line.formal_mode import bypass_hits, formal_bypass_message
 from .formal_prompts import HANDLERS as PROMPT_HANDLERS
 from .formal_tasks import HANDLERS as TASK_HANDLERS
 from .formal_workflow import HANDLERS as WORKFLOW_HANDLERS

@@ -8,7 +8,7 @@ from literary_engineering_studio.contracts import load_task_package, normalize_r
 
 class ContractTests(unittest.TestCase):
     def test_longform_review_parser_accepts_markdown_label_but_preserves_status(self):
-        from literary_engineering_studio_engine.task_registry import _static_review_conclusion
+        from literary_engineering_studio_engine.tasking.registry import _static_review_conclusion
 
         with tempfile.TemporaryDirectory() as temporary:
             report = Path(temporary) / "review.md"

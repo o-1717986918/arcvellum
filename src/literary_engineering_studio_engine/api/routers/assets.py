@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...asset_workshop import create_asset_candidate, list_asset_candidates, promote_candidate_asset, review_candidate_asset
+from literary_engineering_studio_engine.literary.assets.workshop import create_asset_candidate, list_asset_candidates, promote_candidate_asset, review_candidate_asset
 from ..common import rel_str, reject_bypass, require_api_token, safe_project_root
 from ..models import AssetCreateRequest, AssetPromoteRequest, AssetReviewRequest
 

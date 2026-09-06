@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
-from ...draft_text import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.foundation.draft_text import (
     count_delivery_chars,
     count_delivery_chinese_content_chars,
     delivery_char_count_mapping,
 )
-from ...longform_materializer import longform_materialization_status
-from ...text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
+from literary_engineering_studio_engine.literary.planning.materializer import longform_materialization_status
+from literary_engineering_studio_engine.foundation.text_counts import CHINESE_CONTENT_COUNT_UNIT, MACHINE_NONSPACE_COUNT_UNIT
 from ..scene.facts import load_scene_facts
 from .review import all_planning_reviews_pass
 from .common import _project_int, _read, _read_json, _rel, _to_int

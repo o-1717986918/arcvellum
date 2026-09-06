@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from ..agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ..literary.style.session import (
     load_style_session,
     style_session_gate_errors,
@@ -19,7 +19,7 @@ from ..literary.style.version import (
     inspect_style_profile_version,
     plan_style_profile_version,
 )
-from ..style_prompt import style_prompt_quality_report
+from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
 from .state_common import _file_step, _read, _read_json, _rel, _slug_profile_id
 
 

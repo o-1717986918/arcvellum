@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ...literary.style.session import (
     load_style_session,
     style_session_gate_errors,
     style_session_holdout_reference,
 )
-from ...style_prompt import style_prompt_quality_report
-from ...task_paths import (
+from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
+from literary_engineering_studio_engine.tasking.paths import (
     relative_path,
     resolve_project_path,
 )

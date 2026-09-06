@@ -6,9 +6,9 @@ import csv
 import re
 from pathlib import Path
 
-from ...draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
-from ...narrative_rhythm import narrative_rhythm_contract
-from ...scene_readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
+from literary_engineering_studio_engine.foundation.draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.scene.promotion.readiness import agent_review_gate_state, scene_flow_gate_issues, scene_readiness_status
 from ..scene.promotion.historical_readiness import historical_scene_readiness
 from .longform_analysis import scene_identity
 from .longform_models import LongformSceneRecord

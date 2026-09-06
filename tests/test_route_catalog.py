@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from literary_engineering_studio_engine.route_catalog import RouteCatalogCallbacks, route_definition
+from literary_engineering_studio_engine.routes.catalog import RouteCatalogCallbacks, route_definition
 
 
 class RouteCatalogTests(unittest.TestCase):

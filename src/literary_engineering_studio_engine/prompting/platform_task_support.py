@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import re
 
-from ..asset_workshop import ASSET_TYPES
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_TYPES
 
 
 @dataclass(frozen=True)

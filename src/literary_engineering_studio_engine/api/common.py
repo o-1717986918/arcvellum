@@ -6,7 +6,7 @@ import json
 import secrets
 from pathlib import Path
 
-from ..formal_mode import FormalModeBypassError, ensure_no_bypass
+from literary_engineering_studio_engine.command_line.formal_mode import FormalModeBypassError, ensure_no_bypass
 
 try:
     from fastapi import HTTPException, Request

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ...literary.ingest import (
     archaeology_materialization_errors,
     read_chunk_extraction,
@@ -17,7 +17,7 @@ from ...literary.ingest import (
     verify_archaeology_plan,
     verify_ingest_manifest,
 )
-from ...task_paths import read_json, relative_path, resolve_project_path
+from literary_engineering_studio_engine.tasking.paths import read_json, relative_path, resolve_project_path
 from .support import (
     SOURCE_INGEST_SCHEMA_V2,
     SOURCE_INGEST_SCHEMAS,

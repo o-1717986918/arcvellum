@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.task_paths import (
+from literary_engineering_studio_engine.tasking.paths import (
     append_event,
     events_path,
     load_task,
@@ -13,7 +13,7 @@ from literary_engineering_studio_engine.task_paths import (
     task_id,
     task_json_path,
 )
-from literary_engineering_studio_engine.task_lifecycle import LifecycleServices, advance_workflow
+from literary_engineering_studio_engine.tasking.lifecycle import LifecycleServices, advance_workflow
 
 
 class TaskPathTests(unittest.TestCase):

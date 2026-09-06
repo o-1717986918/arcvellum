@@ -3,7 +3,7 @@ import json
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.route_selection import (
+from literary_engineering_studio_engine.routes.selection import (
     select_asset_state,
     select_export_release_state,
     select_source_ingest_state,

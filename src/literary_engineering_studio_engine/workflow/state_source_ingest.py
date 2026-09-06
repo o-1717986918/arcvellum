@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ..literary.ingest import (
     SOURCE_INGEST_SCHEMA_V2,
     archaeology_materialization_errors,

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
-from ...model_config import MODEL_PROVIDER_CHOICES, get_model_settings, resolve_model_provider
+from literary_engineering_studio_engine.foundation.model_config import MODEL_PROVIDER_CHOICES, get_model_settings, resolve_model_provider
 
 
 AGENT_PROVIDERS = MODEL_PROVIDER_CHOICES

@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ...agent_provider import run_agent_task
-from ...agent_schema import load_schema_spec, validate_agent_run, validate_payload
-from ...resources import engine_path
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import load_schema_spec, validate_agent_run, validate_payload
+from literary_engineering_studio_engine.foundation.resources import engine_path
 from .promotion import (
     commit_promotion,
     file_sha256,

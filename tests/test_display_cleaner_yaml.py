@@ -1,6 +1,6 @@
 import unittest
 
-from literary_engineering_studio_engine.display_cleaner import (
+from literary_engineering_studio_engine.foundation.display_cleaner import (
     list_from_yaml_text,
     nested_scalar_from_yaml_text,
 )

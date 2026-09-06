@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...cli_support import (
+from literary_engineering_studio_engine.command_line.support import (
     print_agent_task_notice,
     print_human_decision_notice,
 )
-from ...task_contract_audit import build_task_contract_audit
-from ...task_registry import (
+from literary_engineering_studio_engine.tasking.contract_audit import build_task_contract_audit
+from literary_engineering_studio_engine.tasking.registry import (
     advance_workflow,
     complete_task,
     issue_next_task,

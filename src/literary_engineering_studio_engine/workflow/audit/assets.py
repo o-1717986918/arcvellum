@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
-from ...asset_workshop import ASSET_CANDIDATE_DIRS
-from ...route_audit_common import _add_gate, _approval_record, _path_exists, _read_json, _rel
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_CANDIDATE_DIRS
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _approval_record, _path_exists, _read_json, _rel
 def _add_asset_route_gates(gates: list[dict[str, str]], root: Path) -> None:
     candidates = _asset_candidate_files(root)
     sidecars = _asset_creation_sidecars(root)

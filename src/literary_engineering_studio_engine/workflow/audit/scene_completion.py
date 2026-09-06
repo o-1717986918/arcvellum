@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
-from ...canon_evolver import canon_writeback_status
-from ...character_state_apply import state_patch_writeback_status
-from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
-from ...route_audit_common import _add_gate
-from ...route_audit_evidence import _mounted_style_exists, _style_adherence_status
-from ...scene_handoff import scene_handoff_source_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.literary.assets.canon.evolver import canon_writeback_status
+from literary_engineering_studio_engine.literary.scene.state.apply import state_patch_writeback_status
+from literary_engineering_studio_engine.literary.assets.continuity.ledger import continuity_ledger_status, continuity_ledger_task_status
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate
+from literary_engineering_studio_engine.workflow.audit.evidence import _mounted_style_exists, _style_adherence_status
+from literary_engineering_studio_engine.literary.scene.context.handoff import scene_handoff_source_status
 
 
 def add_scene_completion_gates(

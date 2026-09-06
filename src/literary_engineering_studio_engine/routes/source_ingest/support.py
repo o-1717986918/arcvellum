@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 from ...literary.ingest import SOURCE_INGEST_SCHEMA_V2
-from ...task_paths import resolve_project_path
+from literary_engineering_studio_engine.tasking.paths import resolve_project_path
 
 
 SOURCE_INGEST_SCHEMA_V1 = "literary-engineering-workbench/source-ingest/v1"

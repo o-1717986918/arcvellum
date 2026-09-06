@@ -8,17 +8,17 @@ from unittest.mock import patch
 
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.runtime.task_program import build_task_context
-from literary_engineering_studio_engine.agent_task_status import build_agent_task_status, build_route_audit
-import literary_engineering_studio_engine.agent_task_status as agent_task_status
+from literary_engineering_studio_engine.workflow.audit.task_status import build_agent_task_status, build_route_audit
+import literary_engineering_studio_engine.workflow.audit.task_status as agent_task_status
 from literary_engineering_studio_engine.workflow.audit.task_status import _route_summary
-import literary_engineering_studio_engine.agent_task_inventory as agent_task_inventory
-import literary_engineering_studio_engine.route_audit_common as route_audit_common
-import literary_engineering_studio_engine.asset_route as asset_route
-import literary_engineering_studio_engine.export_release_route as export_release_route
-import literary_engineering_studio_engine.task_registry as task_registry
-from literary_engineering_studio_engine.platform_agent_tasks import write_project_seed_asset_tasks
+import literary_engineering_studio_engine.tasking.agent_tasks.inventory as agent_task_inventory
+import literary_engineering_studio_engine.workflow.audit.common as route_audit_common
+import literary_engineering_studio_engine.routes.assets.definition as asset_route
+import literary_engineering_studio_engine.routes.export.definition as export_release_route
+import literary_engineering_studio_engine.tasking.registry as task_registry
+from literary_engineering_studio_engine.prompting.platform_tasks import write_project_seed_asset_tasks
 from literary_engineering_studio_engine.routes.scene.definition import _agent_reading_paths
-from literary_engineering_studio_engine.task_registry import _enrich_task_payload, _render_task_markdown, complete_task, submit_task
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload, _render_task_markdown, complete_task, submit_task
 from literary_engineering_studio_engine.tasking.paths import load_task, write_task
 from literary_engineering_studio_engine.tasking.spec_models import TASK_SCHEMA_V1, TASK_SCHEMA_V2
 from tests.scene_lifecycle_support import prepare_promotable_candidate
@@ -582,16 +582,16 @@ class TaskContractTransportTests(unittest.TestCase):
 
     def test_every_declared_task_type_has_an_exact_execution_contract(self):
         route_modules = [
-            "scene_development_route.py",
-            "longform_planning_route.py",
-            "source_ingest_route.py",
-            "style_engineering_route.py",
-            "asset_route.py",
-            "review_audit_route.py",
-            "export_release_route.py",
+            "routes.scene.definition",
+            "routes.longform.definition",
+            "routes.source_ingest.definition",
+            "routes.style.definition",
+            "routes.assets.definition",
+            "routes.review.definition",
+            "routes.export.definition",
         ]
         source = "\n".join(
-            Path(import_module(f"literary_engineering_studio_engine.{name.removesuffix('.py')}").__file__).read_text(encoding="utf-8")
+            Path(import_module(f"literary_engineering_studio_engine.{name}").__file__).read_text(encoding="utf-8")
             for name in route_modules
         )
         declared = set(re.findall(r'"task_type"\s*:\s*"([^"]+)"', source))

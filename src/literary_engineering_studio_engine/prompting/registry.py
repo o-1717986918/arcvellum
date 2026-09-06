@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import re
 
-from ..resources import engine_root
+from literary_engineering_studio_engine.foundation.resources import engine_root
 
 
 PROMPT_ASSET_SCHEMA = "literary-engineering-workbench/prompt-asset/v1"

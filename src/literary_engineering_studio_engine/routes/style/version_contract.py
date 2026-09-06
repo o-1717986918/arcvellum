@@ -10,7 +10,7 @@ from ...literary.style.version import (
     plan_style_profile_version,
     style_version_source_paths,
 )
-from ...task_paths import relative_path
+from literary_engineering_studio_engine.tasking.paths import relative_path
 
 
 def style_version_blueprints(

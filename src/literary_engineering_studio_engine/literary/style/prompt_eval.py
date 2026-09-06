@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib import error, request
 
-from ...model_config import get_model_settings, resolve_model_provider
-from ...punctuation_standard import PUNCTUATION_STANDARD_PROMPT
-from ...style_evaluator import STYLE_EVAL_MODES, StyleEvalOptions, evaluate_style
-from ...style_prompt import STYLE_PROMPT_PROVIDERS
+from literary_engineering_studio_engine.foundation.model_config import get_model_settings, resolve_model_provider
+from literary_engineering_studio_engine.literary.style.punctuation import PUNCTUATION_STANDARD_PROMPT
+from literary_engineering_studio_engine.literary.style.evaluator import STYLE_EVAL_MODES, StyleEvalOptions, evaluate_style
+from literary_engineering_studio_engine.literary.style.prompt import STYLE_PROMPT_PROVIDERS
 
 
 @dataclass(frozen=True)

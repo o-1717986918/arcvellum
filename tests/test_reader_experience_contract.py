@@ -3,8 +3,8 @@ import json
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.reader_experience import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.literary.review.reader_experience import (
     CHAPTER_OBLIGATION_SCHEMA,
     chapter_obligation_contract_issues,
     chapter_obligation_contract,

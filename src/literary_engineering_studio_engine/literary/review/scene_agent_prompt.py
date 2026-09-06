@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 
-from ...anti_ai_style import (
+from literary_engineering_studio_engine.literary.style.anti_ai import (
     ANTI_EVASION_REVISION_PROTOCOL,
     ANTI_EVASION_SHORT_RULE,
     render_ai_style_lint_block,
 )
-from ...creative_quality import render_creative_quality_prompt
-from ...draft_text import final_body_from_workbench_text
-from ...new_character_register import render_new_character_register_contract
+from literary_engineering_studio_engine.literary.review.creative_quality import render_creative_quality_prompt
+from literary_engineering_studio_engine.foundation.draft_text import final_body_from_workbench_text
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import render_new_character_register_contract
 
 
 USER_PROMPT_TEMPLATE = """Source paths: {source_paths}

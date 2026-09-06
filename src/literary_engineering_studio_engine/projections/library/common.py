@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from typing import Iterable
 
-from ...display_cleaner import (
+from literary_engineering_studio_engine.foundation.display_cleaner import (
     list_from_yaml_text,
     markdown_to_display_text,
     read_json_file,

@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from ..agent_tasks import default_agent_completion_path
-from ..longform_planning_route import build_task_payload as _build_longform_route_task_payload
-from ..longform_planning_route import validate_task as _validate_longform_route_task
-from ..route_selection import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_completion_path
+from literary_engineering_studio_engine.routes.longform.definition import build_task_payload as _build_longform_route_task_payload
+from literary_engineering_studio_engine.routes.longform.definition import validate_task as _validate_longform_route_task
+from literary_engineering_studio_engine.routes.selection import (
     select_asset_state,
     select_export_release_state,
     select_longform_state,
@@ -17,23 +17,23 @@ from ..route_selection import (
     select_source_ingest_state,
     select_style_engineering_state,
 )
-from ..route_catalog import RouteCatalogCallbacks, RouteDefinition, route_definition as _catalog_route_definition
-from ..source_ingest_route import build_task_payload as _build_source_ingest_route_task_payload
-from ..source_ingest_route import validate_task as _validate_source_ingest_route_task
-from ..style_engineering_route import build_task_payload as _build_style_engineering_route_task_payload
-from ..style_engineering_route import validate_task as _validate_style_engineering_route_task
-from ..asset_route import build_task_payload as _build_asset_route_task_payload
-from ..asset_route import validate_task as _validate_asset_route_task
-from ..review_audit_route import build_task_payload as _build_review_audit_route_task_payload
-from ..review_audit_route import validate_task as _validate_review_audit_route_task
-from ..export_release_route import build_task_payload as _build_export_release_route_task_payload
-from ..export_release_route import validate_task as _validate_export_release_route_task
-from ..scene_development_route import _build_task_payload
-from ..scene_development_route import _static_review_conclusion
-from ..scene_development_route import blueprint_for_state as _blueprint_for_state
-from ..scene_development_route import candidate_review_gate_errors as _candidate_review_gate_errors
-from ..scene_development_route import composition_gate_errors as _composition_gate_errors
-from ..scene_development_route import validate_task as _state_gate_validation
+from literary_engineering_studio_engine.routes.catalog import RouteCatalogCallbacks, RouteDefinition, route_definition as _catalog_route_definition
+from literary_engineering_studio_engine.routes.source_ingest.definition import build_task_payload as _build_source_ingest_route_task_payload
+from literary_engineering_studio_engine.routes.source_ingest.definition import validate_task as _validate_source_ingest_route_task
+from literary_engineering_studio_engine.routes.style.definition import build_task_payload as _build_style_engineering_route_task_payload
+from literary_engineering_studio_engine.routes.style.definition import validate_task as _validate_style_engineering_route_task
+from literary_engineering_studio_engine.routes.assets.definition import build_task_payload as _build_asset_route_task_payload
+from literary_engineering_studio_engine.routes.assets.definition import validate_task as _validate_asset_route_task
+from literary_engineering_studio_engine.routes.review.definition import build_task_payload as _build_review_audit_route_task_payload
+from literary_engineering_studio_engine.routes.review.definition import validate_task as _validate_review_audit_route_task
+from literary_engineering_studio_engine.routes.export.definition import build_task_payload as _build_export_release_route_task_payload
+from literary_engineering_studio_engine.routes.export.definition import validate_task as _validate_export_release_route_task
+from literary_engineering_studio_engine.routes.scene.definition import _build_task_payload
+from literary_engineering_studio_engine.routes.scene.definition import _static_review_conclusion
+from literary_engineering_studio_engine.routes.scene.definition import blueprint_for_state as _blueprint_for_state
+from literary_engineering_studio_engine.routes.scene.definition import candidate_review_gate_errors as _candidate_review_gate_errors
+from literary_engineering_studio_engine.routes.scene.definition import composition_gate_errors as _composition_gate_errors
+from literary_engineering_studio_engine.routes.scene.definition import validate_task as _state_gate_validation
 from ..tasking.package_contract import (
     TASK_CONTRACT_REVISION,
     TASK_TYPE_EXECUTION,
@@ -64,7 +64,7 @@ from ..tasking.paths import task_json_path as _task_json_path
 from ..tasking.paths import task_markdown_path as _task_markdown_path
 from ..tasking.paths import write_task as _write_task
 from ..tasking.spec_models import TASK_SCHEMA_V2
-from ..workflow_state import build_workflow_state, next_scene_workflow_state
+from literary_engineering_studio_engine.workflow.state import build_workflow_state, next_scene_workflow_state
 
 
 SUPPORTED_ROUTES = {

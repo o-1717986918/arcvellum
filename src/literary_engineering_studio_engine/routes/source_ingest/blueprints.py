@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...task_paths import (
+from literary_engineering_studio_engine.tasking.paths import (
     read_json,
     resolve_project_path,
 )

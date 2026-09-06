@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from ....memory_index import trust_tier_for_relative_path
+from literary_engineering_studio_engine.foundation.memory_index import trust_tier_for_relative_path
 from ...style.snapshot import (
     active_style_evidence_paths,
     active_style_mount_snapshot_payload,

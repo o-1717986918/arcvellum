@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
-from ....context_broker import default_context_trace_path, write_context_trace
-from ....memory_index import SearchHit, build_memory_index, search_memory
-from ....scene_handoff import scene_handoff_status
-from ....word_budget import render_scene_word_budget_contract
+from literary_engineering_studio_engine.literary.scene.context.broker import default_context_trace_path, write_context_trace
+from literary_engineering_studio_engine.foundation.memory_index import SearchHit, build_memory_index, search_memory
+from literary_engineering_studio_engine.literary.scene.context.handoff import scene_handoff_status
+from ...planning.rendering import render_scene_word_budget_contract
 from ..facts import parse_scene_mapping
 from .rendering import (
     ContextPacketSections,

@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...creative_quality import load_creative_quality_profile
+from literary_engineering_studio_engine.literary.review.creative_quality import load_creative_quality_profile
 from typing import Sequence
 
-from ...chapter_pipeline import build_chapter_workspace
-from ...docx_export import export_markdown_to_docx
-from ...draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
-from ...flow_gates import FlowGateError
-from ...punctuation_standard import normalize_punctuation_for_delivery
+from literary_engineering_studio_engine.literary.planning.chapter_pipeline import build_chapter_workspace
+from literary_engineering_studio_engine.literary.export.docx import export_markdown_to_docx
+from literary_engineering_studio_engine.foundation.draft_text import count_delivery_chars, count_delivery_chinese_content_chars, final_body_from_draft_text
+from literary_engineering_studio_engine.tasking.gates import FlowGateError
+from literary_engineering_studio_engine.literary.style.punctuation import normalize_punctuation_for_delivery
 from .readiness import export_scene_readiness_errors
 
 

@@ -6,13 +6,13 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.agent_tasks import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     agent_task_digest,
     agent_task_completion_status,
     write_agent_completion_marker,
     write_agent_tasks,
 )
-from literary_engineering_studio_engine.word_budget import build_word_budget
+from literary_engineering_studio_engine.literary.planning.service import build_word_budget
 
 
 class AgentTaskFreshnessTests(unittest.TestCase):

@@ -16,7 +16,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from ....atomic_io import atomic_write_text
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
 from ...assets.canon.evolver import canon_writeback_status
 from ...assets.canon.paths import canon_apply_manifest_for_scene, canon_patch_path
 from ...assets.continuity.ledger import continuity_ledger_status, continuity_ledger_task_status, delta_path

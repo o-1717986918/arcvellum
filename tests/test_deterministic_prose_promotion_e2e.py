@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.flow_gates import FlowGateError
+from literary_engineering_studio_engine.tasking.gates import FlowGateError
 from literary_engineering_studio_engine.literary.scene.promotion.candidate import (
     candidate_generation_gate,
     candidate_review_gate,
@@ -20,7 +20,7 @@ from literary_engineering_studio_engine.literary.scene.promotion.historical impo
 from literary_engineering_studio_engine.literary.scene.promotion.gate_support import (
     candidate_body,
 )
-from literary_engineering_studio_engine.canon_evolver import canon_writeback_status
+from literary_engineering_studio_engine.literary.assets.canon.evolver import canon_writeback_status
 
 from tests.scene_lifecycle_support import candidate_text, prepare_promotable_candidate
 

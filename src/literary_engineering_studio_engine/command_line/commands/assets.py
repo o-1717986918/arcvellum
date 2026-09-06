@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...asset_workshop import list_asset_candidates, promote_candidate_asset
-from ...cli_support import print_agent_task_notice as _print_agent_task_notice
-from ...platform_agent_tasks import (
+from literary_engineering_studio_engine.literary.assets.workshop import list_asset_candidates, promote_candidate_asset
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice as _print_agent_task_notice
+from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_asset_creation_task, write_platform_asset_review_task,
     write_project_seed_asset_tasks,
 )

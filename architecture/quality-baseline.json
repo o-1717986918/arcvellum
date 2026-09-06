@@ -21,6 +21,7 @@
       "@/features/orrery/OrreryWorkbench.vue"
     ]
   },
+  "compatibility_imports": {},
   "duplicate_routes": {},
   "facade_dependencies": {
     "literary_engineering_studio.advisor": [
@@ -217,12 +218,12 @@
     "literary_engineering_studio_engine.cli_scene_commands": [],
     "literary_engineering_studio_engine.cli_support": [],
     "literary_engineering_studio_engine.command_line.commands.legacy": [
-      "literary_engineering_studio_engine.cli_support",
       "literary_engineering_studio_engine.command_line.commands",
-      "literary_engineering_studio_engine.dify_dsl",
-      "literary_engineering_studio_engine.director_agent",
-      "literary_engineering_studio_engine.langgraph_adapter",
-      "literary_engineering_studio_engine.model_config"
+      "literary_engineering_studio_engine.command_line.support",
+      "literary_engineering_studio_engine.director",
+      "literary_engineering_studio_engine.foundation.dify_dsl",
+      "literary_engineering_studio_engine.foundation.langgraph_adapter",
+      "literary_engineering_studio_engine.foundation.model_config"
     ],
     "literary_engineering_studio_engine.command_line.entry": [
       "literary_engineering_studio_engine.command_line.commands.agent",
@@ -434,13 +435,13 @@
       "literary_engineering_studio_engine.literary.planning.service"
     ],
     "literary_engineering_studio_engine.workflow.audit.task_status": [
-      "literary_engineering_studio_engine.agent_task_inventory",
-      "literary_engineering_studio_engine.agent_task_rendering",
-      "literary_engineering_studio_engine.route_audit",
-      "literary_engineering_studio_engine.route_audit_common"
+      "literary_engineering_studio_engine.tasking.agent_tasks.inventory",
+      "literary_engineering_studio_engine.tasking.agent_tasks.rendering",
+      "literary_engineering_studio_engine.workflow.audit.common",
+      "literary_engineering_studio_engine.workflow.audit.service"
     ],
     "literary_engineering_studio_engine.workflow.state": [
-      "literary_engineering_studio_engine.atomic_io",
+      "literary_engineering_studio_engine.foundation.atomic_io",
       "literary_engineering_studio_engine.workflow.state_assets",
       "literary_engineering_studio_engine.workflow.state_common",
       "literary_engineering_studio_engine.workflow.state_export_release",
@@ -451,7 +452,7 @@
       "literary_engineering_studio_engine.workflow.state_style"
     ],
     "literary_engineering_studio_engine.workflow.state_common": [
-      "literary_engineering_studio_engine.agent_tasks",
+      "literary_engineering_studio_engine.tasking.agent_tasks.writer",
       "literary_engineering_studio_engine.tasking.semantic_contracts"
     ],
     "literary_engineering_studio_engine.workflow_activity": [

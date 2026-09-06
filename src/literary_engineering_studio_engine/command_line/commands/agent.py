@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_provider import run_agent_task
-from ...agent_schema import repair_agent_run, validate_agent_run
-from ...cli_support import read_prompt_arg as _read_prompt_arg
-from ...cli_support import print_agent_task_notice as _print_agent_task_notice
-from ...platform_agent_tasks import (
+from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
+from literary_engineering_studio_engine.prompting.agents.schema import repair_agent_run, validate_agent_run
+from literary_engineering_studio_engine.command_line.support import read_prompt_arg as _read_prompt_arg
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice as _print_agent_task_notice
+from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_canon_review_task, write_platform_committee_task, write_platform_json_task,
     write_platform_patch_plan_task, write_platform_scene_review_task,
     write_platform_style_prompt_task,

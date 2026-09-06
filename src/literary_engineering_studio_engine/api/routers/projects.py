@@ -6,12 +6,12 @@ import json
 import time
 from pathlib import Path
 
-from ...demo_project import build_demo_project
-from ...init_project import InitOptions, init_work_project
-from ...model_config import config_path
-from ...project_interaction import build_editable_schema, record_ui_note, save_display_field
-from ...project_library import build_project_library, find_project_library_item
-from ...style_lab import active_project_style
+from literary_engineering_studio_engine.projects.demo import build_demo_project
+from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.foundation.model_config import config_path
+from ...projections.interaction.editing import build_editable_schema, record_ui_note, save_display_field
+from ...projections.library.service import build_project_library, find_project_library_item
+from literary_engineering_studio_engine.literary.style.lab import active_project_style
 from ..common import (
     ensure_target_allowed,
     read_text,

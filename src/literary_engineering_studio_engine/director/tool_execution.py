@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from ..asset_workshop import create_asset_candidate, list_asset_candidates, review_candidate_asset
-from ..workflow_runner import run_workflow
+from literary_engineering_studio_engine.literary.assets.workshop import create_asset_candidate, list_asset_candidates, review_candidate_asset
+from literary_engineering_studio_engine.workflow.runner import run_workflow
 from .contracts import DIRECTOR_ALLOWED_TOOLS
 from .helpers import _now, _positive_int, _rel_str
 from .records import _append_project_direction_memory

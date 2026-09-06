@@ -5,11 +5,11 @@ import json
 import os
 from pathlib import Path
 
-from ...cli_support import print_agent_task_notice as _print_agent_task_notice
-from ...dify_dsl import DifyDslOptions, build_dify_workflow_dsl
-from ...director_agent import build_director_status, run_director_turn
-from ...langgraph_adapter import run_literary_graph
-from ...model_config import config_path, default_config, load_config, redacted_effective_config, save_config
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice as _print_agent_task_notice
+from literary_engineering_studio_engine.foundation.dify_dsl import DifyDslOptions, build_dify_workflow_dsl
+from ...director import build_director_status, run_director_turn
+from literary_engineering_studio_engine.foundation.langgraph_adapter import run_literary_graph
+from literary_engineering_studio_engine.foundation.model_config import config_path, default_config, load_config, redacted_effective_config, save_config
 def handle(args, parser) -> int | None:
     if args.command == "director-chat":
         try:

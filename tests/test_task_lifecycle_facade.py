@@ -1,4 +1,4 @@
-"""Characterization tests for task registry lifecycle compatibility facades."""
+"""Characterization tests for the canonical task registry lifecycle."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from literary_engineering_studio_engine.agent_task_status import build_agent_task_status
-from literary_engineering_studio_engine.task_paths import events_path, read_events
-from literary_engineering_studio_engine.task_registry import build_workflow_events, issue_next_task, open_task
+from literary_engineering_studio_engine.workflow.audit.task_status import build_agent_task_status
+from literary_engineering_studio_engine.tasking.paths import events_path, read_events
+from literary_engineering_studio_engine.tasking.registry import build_workflow_events, issue_next_task, open_task
 from literary_engineering_studio_engine.tasking.paths import load_task
 
 
-class TaskLifecycleFacadeTests(unittest.TestCase):
+class TaskLifecycleContractTests(unittest.TestCase):
     def test_issue_open_and_event_report_keep_their_file_and_event_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

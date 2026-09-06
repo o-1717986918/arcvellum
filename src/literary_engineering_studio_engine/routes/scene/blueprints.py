@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...scene_character_assets import scene_character_asset_requirements
-from ...semantic_task_contracts import semantic_artifact_relative_path
-from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
-from ...workflow_state import current_scene_candidate
+from literary_engineering_studio_engine.literary.scene.state.character_assets import scene_character_asset_requirements
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_relative_path
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel, resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.workflow.state import current_scene_candidate
 from ...literary.planning.review import all_planning_review_evidence_paths
 from ...literary.scene.facts import load_scene_facts
-from ...scene_route_support import (
+from literary_engineering_studio_engine.routes.scene.support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
     _unique,
 )

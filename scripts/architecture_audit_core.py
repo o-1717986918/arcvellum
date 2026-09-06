@@ -59,6 +59,7 @@ def audit_repository(repository_root: Path) -> dict[str, Any]:
         "oversized_functions": _oversized_functions(root, parsed),
         "import_cycles": _import_cycles(modules, imports),
         "facade_dependencies": _facade_dependencies(modules, parsed, imports),
+        "compatibility_imports": _compatibility_imports(modules, parsed),
         "duplicate_routes": _duplicate_routes(root, parsed),
         "application_adapter_dependencies": application_adapter_dependencies(root, parsed),
         "studio_engine_dependencies": studio_engine_dependencies(root, parsed),
@@ -118,6 +119,13 @@ def compare_with_baseline(report: dict[str, Any], baseline: dict[str, Any]) -> l
         )
     )
     violations.extend(_compare_facades(report, baseline))
+    violations.extend(
+        compare_dependency_map(
+            "new compatibility-facade import",
+            report.get("compatibility_imports") or {},
+            baseline.get("compatibility_imports") or {},
+        )
+    )
     violations.extend(_compare_duplicate_routes(report, baseline))
     violations.extend(
         compare_dependency_map(
@@ -170,6 +178,7 @@ def baseline_from_report(report: dict[str, Any]) -> dict[str, Any]:
         "oversized_functions": report["oversized_functions"],
         "import_cycles": report["import_cycles"],
         "facade_dependencies": report["facade_dependencies"],
+        "compatibility_imports": report["compatibility_imports"],
         "duplicate_routes": report["duplicate_routes"],
         "application_adapter_dependencies": report["application_adapter_dependencies"],
         "studio_engine_dependencies": report["studio_engine_dependencies"],
@@ -221,9 +230,9 @@ def _module_name(path: Path, source_root: Path) -> str:
     return ".".join(parts)
 
 
-def _module_imports(source: str, tree: ast.AST) -> set[str]:
+def _module_imports(source: str, tree: ast.AST, *, is_package: bool = False) -> set[str]:
     imports: set[str] = set()
-    package = source.split(".")[:-1]
+    package = source.split(".") if is_package else source.split(".")[:-1]
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names)
@@ -447,6 +456,43 @@ def _facade_dependencies(
             if (resolved := _closest_module(imported, names)) and resolved != module
         }
         result[module] = sorted(dependencies)
+    return result
+
+
+def _compatibility_imports(
+    modules: dict[str, Path],
+    parsed: dict[Path, ast.AST],
+) -> dict[str, list[str]]:
+    """Report production modules that still route through top-level facades."""
+
+    names = set(modules)
+    facades = {
+        module
+        for module, path in modules.items()
+        if module.startswith("literary_engineering_studio_engine.")
+        and module.count(".") == 1
+        and (tree := parsed.get(path)) is not None
+        and _is_facade(tree)
+    }
+    result: dict[str, list[str]] = {}
+    for module, path in modules.items():
+        if module in facades:
+            continue
+        tree = parsed.get(path)
+        if tree is None:
+            continue
+        imported_modules = _module_imports(
+            module,
+            tree,
+            is_package=path.name == "__init__.py",
+        )
+        dependencies = {
+            resolved
+            for imported in imported_modules
+            if (resolved := _closest_module(imported, names)) in facades
+        }
+        if dependencies:
+            result[module] = sorted(dependencies)
     return result
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...display_cleaner import (
+from literary_engineering_studio_engine.foundation.display_cleaner import (
     file_label,
     list_from_yaml_text,
     markdown_to_display_text,
@@ -27,7 +27,7 @@ from .common import (
     _safe_item_id,
     _selected_branch,
 )
-from ...style_lab import active_project_style
+from literary_engineering_studio_engine.literary.style.lab import active_project_style
 
 def _character_items(
     root: Path,

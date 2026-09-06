@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..resources import engine_path
+from literary_engineering_studio_engine.foundation.resources import engine_path
 
 
 def _director_user_prompt(direction: str, project_status: dict[str, Any]) -> str:

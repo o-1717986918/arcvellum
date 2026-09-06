@@ -3,16 +3,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...canon_lint import build_canon_lint
-from ...context_broker import default_context_trace_path
-from ...context_packet import build_context_packet
-from ...demo_project import build_demo_project
-from ...init_project import InitOptions, init_work_project
-from ...knowledge_store import build_knowledge_store, search_knowledge_store
-from ...memory_index import build_memory_index, search_memory
-from ...source_ingest import ingest_existing_work
+from literary_engineering_studio_engine.literary.assets.canon.lint import build_canon_lint
+from literary_engineering_studio_engine.literary.scene.context.broker import default_context_trace_path
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.projects.demo import build_demo_project
+from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.foundation.knowledge_store import build_knowledge_store, search_knowledge_store
+from literary_engineering_studio_engine.foundation.memory_index import build_memory_index, search_memory
+from literary_engineering_studio_engine.projects.source_ingest import ingest_existing_work
 from ...literary.ingest import aggregate_source_import, materialize_archaeology_candidates
-from ...cli_support import print_agent_task_notice as _print_agent_task_notice
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice as _print_agent_task_notice
 from .style import handle as handle_style
 
 

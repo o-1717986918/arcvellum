@@ -72,6 +72,9 @@ from ..literary.style.lab import (
     default_style_library_root,
     ensure_style_library,
     import_work_source,
+    list_author_projects,
+    list_style_skills,
+    mount_style_skill,
 )
 from ..literary.style.mount import (
     StyleMountPriority,
@@ -154,10 +157,13 @@ __all__ = [
     "inspect_style_version_directory",
     "latest_approval",
     "lint_punctuation",
+    "list_author_projects",
+    "list_style_skills",
     "load_creative_quality_profile",
     "load_rhythm_plan",
     "load_style_session",
     "mount_style_profile_version",
+    "mount_style_skill",
     "plan_style_profile_version",
     "prepare_style_engineering_session",
     "project_review_repair_target_issues",

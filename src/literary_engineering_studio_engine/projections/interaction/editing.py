@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...display_cleaner import read_json_file, truncate_text
-from ...project_interaction_common import (
+from literary_engineering_studio_engine.foundation.display_cleaner import read_json_file, truncate_text
+from literary_engineering_studio_engine.projections.interaction.common import (
     DIRECT_EDIT_FIELDS, TARGET_TYPES, UI_OVERRIDES_SCHEMA, USER_NOTE_SCHEMA,
     _append_jsonl, _make_id, _now, _rel, _safe_target_id, _safe_token, _safe_value, _stamp,
     _write_json_atomic,

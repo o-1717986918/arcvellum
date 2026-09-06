@@ -6,16 +6,16 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.branch_lab import build_branch_simulation
-from literary_engineering_studio_engine.roleplay_lab import build_roleplay_simulation
-from literary_engineering_studio_engine.semantic_task_contracts import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.literary.scene.branching.lab import build_branch_simulation
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import build_roleplay_simulation
+from literary_engineering_studio_engine.tasking.semantic_contracts import (
     read_semantic_artifact,
     semantic_artifact_errors,
     semantic_artifact_relative_path,
     semantic_artifact_template,
 )
-from literary_engineering_studio_engine import task_registry
+from literary_engineering_studio_engine.tasking import registry as task_registry
 from literary_engineering_studio_engine.literary.scene.branching.proposals import (
     branch_proposal_quality_errors,
 )

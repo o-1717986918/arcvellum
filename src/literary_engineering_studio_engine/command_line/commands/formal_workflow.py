@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_task_status import build_agent_task_status, build_route_audit
-from ...protocol import (
+from literary_engineering_studio_engine.workflow.audit.task_status import build_agent_task_status, build_route_audit
+from literary_engineering_studio_engine.tasking.protocol import (
     protocol_to_json,
     render_protocol,
     render_protocol_list,
     resolve_protocol_route,
 )
-from ...task_registry import build_workflow_events
-from ...workflow_contract import validate_workflow_contract
-from ...workflow_dashboard import build_workflow_dashboard
-from ...workflow_state import build_workflow_state, next_scene_workflow_state
+from literary_engineering_studio_engine.tasking.registry import build_workflow_events
+from literary_engineering_studio_engine.tasking.workflow_contract import validate_workflow_contract
+from literary_engineering_studio_engine.workflow.dashboard import build_workflow_dashboard
+from literary_engineering_studio_engine.workflow.state import build_workflow_state, next_scene_workflow_state
 
 
 def handle_protocol(args, parser) -> int:

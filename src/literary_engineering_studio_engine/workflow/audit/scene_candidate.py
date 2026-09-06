@@ -4,13 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from ...agent_tasks import agent_task_completion_status
-from ...anti_ai_style import style_lint_gate_message
-from ...candidate_promotion import candidate_generation_gate, candidate_review_gate
-from ...new_character_register import new_character_register_issues
-from ...narrative_rhythm import rhythm_review_status
-from ...route_audit_common import _add_gate, _read_json, _read_text
-from ...route_audit_evidence import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate_message
+from literary_engineering_studio_engine.literary.scene.promotion.candidate import candidate_generation_gate, candidate_review_gate
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import new_character_register_issues
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import rhythm_review_status
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _read_json, _read_text
+from literary_engineering_studio_engine.workflow.audit.evidence import (
     _agent_review_canon_writeback_ok,
     _word_budget_adherence_status,
 )

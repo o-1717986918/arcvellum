@@ -5,14 +5,14 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.word_budget import (
-    build_word_budget,
+from literary_engineering_studio_engine.literary.planning.contracts import (
     load_word_budget_summary,
-    render_scene_word_budget_contract,
     scene_word_budget_contract,
     word_budget_adherence_for_body,
 )
-from literary_engineering_studio_engine.text_counts import CHINESE_CONTENT_COUNT_UNIT
+from literary_engineering_studio_engine.literary.planning.rendering import render_scene_word_budget_contract
+from literary_engineering_studio_engine.literary.planning.service import build_word_budget
+from literary_engineering_studio_engine.foundation.text_counts import CHINESE_CONTENT_COUNT_UNIT
 from unittest.mock import patch
 
 

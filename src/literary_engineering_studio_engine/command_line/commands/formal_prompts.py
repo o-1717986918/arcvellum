@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ...prompt_registry import (
+from literary_engineering_studio_engine.prompting.registry import (
     list_prompt_assets,
     render_prompt_preview,
     render_prompt_registry_list,

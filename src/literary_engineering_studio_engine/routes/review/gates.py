@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from ...task_paths import relative_path as _rel
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
 from .canon_gates import (
     canon_lint_gate_errors,
     canon_patch_apply_gate_errors,

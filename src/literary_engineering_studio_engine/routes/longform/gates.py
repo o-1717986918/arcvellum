@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...longform_materializer import longform_materialization_status
+from literary_engineering_studio_engine.literary.planning.materializer import longform_materialization_status
 from ...literary.planning.review import (
     all_planning_reviews_pass,
     planning_candidate_status,
@@ -14,11 +14,11 @@ from ...literary.planning.review import (
     planning_review_task_status,
     review_spec,
 )
-from ...story_architecture import (
+from literary_engineering_studio_engine.literary.assets.continuity.architecture import (
     story_architecture_status,
     story_architecture_task_status,
 )
-from ...task_paths import relative_path, resolve_project_path
+from literary_engineering_studio_engine.tasking.paths import relative_path, resolve_project_path
 from .support import file_sha256, read_optional_json, to_int
 
 

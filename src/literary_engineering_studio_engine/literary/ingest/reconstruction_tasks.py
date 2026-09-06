@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import write_agent_tasks
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_tasks
 from .reconstruction_contracts import ARCHAEOLOGY_DOMAINS, reconstruction_paths
 
 

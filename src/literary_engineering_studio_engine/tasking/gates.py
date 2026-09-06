@@ -7,9 +7,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ..agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ..literary.style.snapshot import validate_style_mount_snapshot
-from ..semantic_task_contracts import semantic_artifact_errors
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_errors
 
 
 FORMAL_BRANCH_DECISIONS = {
@@ -112,7 +112,7 @@ def ensure_agent_task_completed(root: Path, task_path: Path, *, label: str) -> d
 def ensure_scene_pre_generation_tasks_completed(root: Path, scene_id: str) -> None:
     """Require completed RP/branch/composition sidecars before formal scene generation."""
 
-    from ..context_broker import context_trace_status
+    from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
 
     trace = context_trace_status(root, scene_id)
     if not trace.passed:

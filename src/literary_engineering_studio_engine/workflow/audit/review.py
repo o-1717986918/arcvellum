@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_schema import validate_payload
-from ...agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ...literary.review.longform_contract import longform_audit_gate_errors
-from ...route_audit_common import _add_gate, _read_json
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _read_json
 def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> None:
     canon_lint = root / "reviews" / "canon_lint.json"
     canon_lint_payload = _read_json(canon_lint)

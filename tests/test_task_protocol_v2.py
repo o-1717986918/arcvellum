@@ -16,7 +16,7 @@ from literary_engineering_studio_engine.public.tasking import (
     task_document_to_v2,
     task_semantic_fingerprint,
 )
-from literary_engineering_studio_engine.task_registry import issue_next_task, open_task
+from literary_engineering_studio_engine.tasking.registry import issue_next_task, open_task
 from literary_engineering_studio_engine.tasking.package_contract import enrich_task_payload
 from literary_engineering_studio_engine.tasking.paths import load_task
 

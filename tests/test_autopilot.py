@@ -31,7 +31,7 @@ from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.project_manager import record_direction
 from literary_engineering_studio.worker import WorkerRunResult
 from literary_engineering_studio.whole_book_release import WholeBookReleaseCoordinator
-from literary_engineering_studio_engine.project_interaction import record_human_choice
+from literary_engineering_studio_engine.projections.interaction.choice_recording import record_human_choice
 
 
 class _Audit:

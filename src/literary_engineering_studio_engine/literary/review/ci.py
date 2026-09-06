@@ -6,10 +6,10 @@ from pathlib import Path
 import hashlib
 import re
 
-from ...anti_ai_style import is_style_lint_blocking, lint_ai_style
-from ...creative_quality import load_creative_quality_profile
-from ...punctuation_standard import lint_punctuation
-from ...scene_draft import extract_draft_body
+from literary_engineering_studio_engine.literary.style.anti_ai import is_style_lint_blocking, lint_ai_style
+from literary_engineering_studio_engine.literary.review.creative_quality import load_creative_quality_profile
+from literary_engineering_studio_engine.literary.style.punctuation import lint_punctuation
+from literary_engineering_studio_engine.literary.scene.composition.draft import extract_draft_body
 
 
 @dataclass(frozen=True)

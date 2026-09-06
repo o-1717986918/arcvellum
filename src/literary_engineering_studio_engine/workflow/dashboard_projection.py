@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..task_registry import SUPPORTED_ROUTES
+from literary_engineering_studio_engine.tasking.registry import SUPPORTED_ROUTES
 from .audit.task_status import project_agent_task_status, project_route_audit
 from .dashboard_model import build_dashboard_payload, read_events
 from .state import project_workflow_state

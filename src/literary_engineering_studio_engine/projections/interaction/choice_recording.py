@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...approval import record_workflow_approval
-from ...display_cleaner import read_json_file, truncate_text
-from ...project_interaction_common import (
+from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
+from literary_engineering_studio_engine.foundation.display_cleaner import read_json_file, truncate_text
+from literary_engineering_studio_engine.projections.interaction.common import (
     DECISION_TYPES,
     HUMAN_CHOICE_SCHEMA,
     _append_jsonl,

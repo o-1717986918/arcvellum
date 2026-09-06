@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...word_budget import load_word_budget_summary
+from ..planning.contracts import load_word_budget_summary
 from ..planning.chapter_inventory import formal_chapter_files
 from .longform_analysis import collect_expanded_evidence, extended_summary
 from .longform_contract import LONGFORM_AUDIT_SCHEMA, longform_input_snapshot

@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agent_tasks import agent_task_completion_status
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ...literary.planning.review import planning_review_pass_status
-from ...route_audit_common import _add_gate, _project_target_words
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _project_target_words
 def _add_longform_budget_gates(gates: list[dict[str, str]], root: Path, *, force: bool) -> None:
     target_words = _project_target_words(root)
     if not force and target_words < 100000:

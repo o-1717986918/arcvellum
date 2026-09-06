@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.longform_planning_route import (
+from literary_engineering_studio_engine.routes.longform.definition import (
     _repair_targets_changed,
     blueprint_for_state,
     build_task_payload,

@@ -10,8 +10,8 @@ import shutil
 from typing import Any
 from uuid import uuid4
 
-from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
-from ...style_prompt import style_prompt_quality_report
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, default_agent_completion_path
+from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
 from .review import (
     style_review_evidence,
     style_review_paths,

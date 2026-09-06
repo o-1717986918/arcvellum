@@ -10,15 +10,15 @@ from literary_engineering_studio.contracts import TASK_SCHEMA, TaskPackage, load
 from literary_engineering_studio.sandbox import SandboxManifest, stage_task
 from literary_engineering_studio.preflight.scene_manifest_metadata import canonicalize_scene_revision_manifest
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, canonicalize_task_outputs, validate_task_outputs
-import literary_engineering_studio_engine.task_registry as task_registry
-from literary_engineering_studio_engine.candidate_promotion import _candidate_review_content_match, _human_decision_notes, _unresolved_review_notes
-from literary_engineering_studio_engine.review_ci import review_scene_draft
+import literary_engineering_studio_engine.tasking.registry as task_registry
+from literary_engineering_studio_engine.literary.scene.promotion.candidate import _candidate_review_content_match, _human_decision_notes, _unresolved_review_notes
+from literary_engineering_studio_engine.literary.review.ci import review_scene_draft
 from literary_engineering_studio_engine.literary.style.anti_ai import AIStyleIssue
-from literary_engineering_studio_engine.scene_revision import _prompt_manifest
+from literary_engineering_studio_engine.literary.scene.promotion.revision import _prompt_manifest
 from literary_engineering_studio_engine.literary.scene.promotion.revision_contract import revision_manifest_errors
 from literary_engineering_studio_engine.literary.review.resolution import review_semantic_consistency_issues
-from literary_engineering_studio_engine.workflow_state import _current_scene_candidate, _static_review_step
-from literary_engineering_studio_engine.workflow_state import _review_step
+from literary_engineering_studio_engine.workflow.state import _current_scene_candidate, _static_review_step
+from literary_engineering_studio_engine.workflow.state import _review_step
 
 
 class SceneReviewRevisionLoopTests(unittest.TestCase):
@@ -416,9 +416,9 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
 
     def test_workflow_routes_semantic_failure_to_revision_but_infrastructure_failure_to_review(self):
         candidate = Path("C:/project/drafts/candidates/scene_0001-platform-agent.md")
-        with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value={"status": "style_lint_failed", "review": "reviews/agent/scene_0001_scene_review.json", "message": "lint"}):
+        with patch("literary_engineering_studio_engine.workflow.state_scene.candidate_review_gate", return_value={"status": "style_lint_failed", "review": "reviews/agent/scene_0001_scene_review.json", "message": "lint"}):
             revision = _review_step(Path("C:/project"), "scene_0001", candidate)
-        with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value={"status": "task_incomplete", "review": "reviews/agent/scene_0001_scene_review.json", "message": "marker"}):
+        with patch("literary_engineering_studio_engine.workflow.state_scene.candidate_review_gate", return_value={"status": "task_incomplete", "review": "reviews/agent/scene_0001_scene_review.json", "message": "marker"}):
             review = _review_step(Path("C:/project"), "scene_0001", candidate)
 
         self.assertEqual(revision["key"], "candidate-revision")
@@ -427,7 +427,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
     def test_review_artifact_integrity_failure_routes_to_review_not_prose_revision(self):
         candidate = Path("C:/project/drafts/revisions/scene_0001_revision.md")
         with patch(
-            "literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate",
+            "literary_engineering_studio_engine.workflow.state_scene.candidate_review_gate",
             return_value={
                 "status": "revision_integrity_review_failed",
                 "review": "reviews/agent/scene_0001_scene_review.json",
@@ -452,7 +452,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                 "message": "formal age conflict",
                 "candidate_sha256": digest,
             }
-            with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value=gate):
+            with patch("literary_engineering_studio_engine.workflow.state_scene.candidate_review_gate", return_value=gate):
                 pending = _review_step(root, "scene_0001", candidate)
             self.assertEqual(pending["key"], "candidate-human-decision")
             self.assertEqual(pending["status"], "human_required")
@@ -469,7 +469,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
                 ) + "\n",
                 encoding="utf-8",
             )
-            with patch("literary_engineering_studio_engine.workflow_state_scene.candidate_review_gate", return_value=gate):
+            with patch("literary_engineering_studio_engine.workflow.state_scene.candidate_review_gate", return_value=gate):
                 routed = _review_step(root, "scene_0001", candidate)
             self.assertEqual(routed["key"], "candidate-revision")
             self.assertEqual(routed["status"], "needs_revision")
@@ -587,7 +587,7 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
         self.assertIn("revision_integrity.anti_evasion_checked must be true", issues)
 
     def test_non_pass_scene_review_is_recordable_for_revision_routing(self):
-        with patch("literary_engineering_studio_engine.scene_route_gates.candidate_review_gate", return_value={"status": "notes_unresolved", "message": "revise"}):
+        with patch("literary_engineering_studio_engine.routes.scene.gates.candidate_review_gate", return_value={"status": "notes_unresolved", "message": "revise"}):
             errors = task_registry._candidate_review_gate_errors(Path("C:/project"), {"scene_id": "scene_0001"}, Path("candidate.md"), require_pass=False)
             promotion_errors = task_registry._candidate_review_gate_errors(Path("C:/project"), {"scene_id": "scene_0001"}, Path("candidate.md"), require_pass=True)
 

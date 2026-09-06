@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...display_cleaner import truncate_text
+from literary_engineering_studio_engine.foundation.display_cleaner import truncate_text
 from ...literary.style.mount import inspect_active_style_mount
 from ...literary.style.session import formal_style_profile_dirs
 from ...literary.style.version_inspection import (

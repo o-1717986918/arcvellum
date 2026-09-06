@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 from ruamel.yaml import YAML
 
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.approval import record_workflow_approval
-from literary_engineering_studio_engine.character_state_apply import apply_character_state_patch, state_patch_writeback_status
-from literary_engineering_studio_engine.character_state_evolver import build_character_state_patch
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
+from literary_engineering_studio_engine.literary.scene.state.apply import apply_character_state_patch, state_patch_writeback_status
+from literary_engineering_studio_engine.literary.scene.state.evolver import build_character_state_patch
 from literary_engineering_studio_engine.workflow.state_scene import (
     _state_patch_review_step,
     _state_patch_writeback_step,

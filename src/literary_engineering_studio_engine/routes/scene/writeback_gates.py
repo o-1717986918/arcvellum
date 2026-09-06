@@ -5,13 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from ...canon_evolver import canon_writeback_status
-from ...character_state_apply import state_patch_writeback_status
-from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
-from ...scene_handoff import scene_handoff_source_status
-from ...scene_route_support import _read_optional_json
-from ...semantic_task_contracts import semantic_artifact_errors
-from ...task_paths import relative_path as _rel
+from literary_engineering_studio_engine.literary.assets.canon.evolver import canon_writeback_status
+from literary_engineering_studio_engine.literary.scene.state.apply import state_patch_writeback_status
+from literary_engineering_studio_engine.literary.assets.continuity.ledger import continuity_ledger_status, continuity_ledger_task_status
+from literary_engineering_studio_engine.literary.scene.context.handoff import scene_handoff_source_status
+from literary_engineering_studio_engine.routes.scene.support import _read_optional_json
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_errors
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
 from ..review.canon_gates import (
     canon_patch_apply_gate_errors,
     canon_patch_candidate_gate_errors,

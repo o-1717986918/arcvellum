@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from ..init_project import InitOptions, InitResult, init_work_project
+from literary_engineering_studio_engine.projects.init import InitOptions, InitResult, init_work_project
 from .contracts import DirectorBootstrapResult
 from .helpers import _now, _rel_str
 

@@ -5,15 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from ...agent_schema import validate_payload
-from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
-from ...asset_workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES
+from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, default_agent_completion_path
+from literary_engineering_studio_engine.literary.assets.workshop import ASSET_CANDIDATE_DIRS, ASSET_SCHEMA_NAMES
 from ...literary.assets.promotion import approval_gate_errors as _shared_approval_gate_errors
 from ...literary.assets.promotion import approval_matches_file as _shared_approval_matches_file
 from ...literary.assets.promotion import candidate_review_gate_errors as _shared_review_gate_errors
-from ...task_paths import read_json as _read_json
-from ...task_paths import relative_path as _rel
-from ...task_paths import resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.tasking.paths import read_json as _read_json
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
+from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
 from .evidence import (
     asset_type_from_payload_or_path,
     candidate_path_for_id,

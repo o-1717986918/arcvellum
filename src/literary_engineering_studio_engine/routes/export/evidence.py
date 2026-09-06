@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import re
 
-from ...task_paths import relative_path as _rel
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
 
 
 DELIVERY_TRACE_PATTERNS = {

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TypedDict
 from uuid import uuid4
 
-from ..workflow_runner import run_workflow
+from literary_engineering_studio_engine.workflow.runner import run_workflow
 
 
 class LiteraryWorkflowState(TypedDict, total=False):

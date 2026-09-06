@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...canon_evolver import (
+from literary_engineering_studio_engine.literary.assets.canon.evolver import (
     apply_canon_patch,
     build_canon_patch_backlog,
     build_canon_patch_task,
 )
-from ...character_state_apply import apply_character_state_patch
-from ...character_state_evolver import build_character_state_patch
-from ...cli_support import print_agent_task_notice
+from literary_engineering_studio_engine.literary.scene.state.apply import apply_character_state_patch
+from literary_engineering_studio_engine.literary.scene.state.evolver import build_character_state_patch
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice
 
 
 def handle_state_evolve(args, parser) -> int:

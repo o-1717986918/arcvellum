@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...project_interaction_common import _resolved_choice_ids, _stable_choice_id
+from literary_engineering_studio_engine.projections.interaction.common import _resolved_choice_ids, _stable_choice_id
 from .choice_builders import (
     approval_choice,
     branch_choice,

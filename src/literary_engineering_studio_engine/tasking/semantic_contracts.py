@@ -13,7 +13,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from ..agent_schema import validate_payload
+from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
 from ..literary.scene.branching.proposals import (
     branch_option_ids,
     branch_proposal_options,

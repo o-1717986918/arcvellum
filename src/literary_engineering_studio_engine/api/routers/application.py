@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...model_config import as_env_exports, config_path, default_config, load_config, redacted_effective_config, save_config
+from literary_engineering_studio_engine.foundation.model_config import as_env_exports, config_path, default_config, load_config, redacted_effective_config, save_config
 from ..common import frontend_file, require_api_token
 from ..models import SaveConfigRequest
 

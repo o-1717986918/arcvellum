@@ -16,7 +16,7 @@ from literary_engineering_studio.observability.context_ledger_tracking import (
 )
 from literary_engineering_studio.sandbox import stage_task
 from literary_engineering_studio.sandbox import materialize_agent_workspace
-from literary_engineering_studio_engine.task_registry import _enrich_task_payload
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload
 
 
 class RuntimeContextLedgerTests(unittest.TestCase):

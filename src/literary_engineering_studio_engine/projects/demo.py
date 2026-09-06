@@ -5,17 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..context_packet import build_context_packet
-from ..init_project import InitOptions, init_work_project
-from ..platform_agent_tasks import (
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.prompting.platform_tasks import (
     write_platform_asset_creation_task,
     write_platform_canon_review_task,
     write_platform_committee_task,
     write_platform_scene_review_task,
 )
-from ..review_ci import review_scene_draft
-from ..scene_draft import build_scene_draft
-from ..workflow_runner import run_workflow
+from literary_engineering_studio_engine.literary.review.ci import review_scene_draft
+from literary_engineering_studio_engine.literary.scene.composition.draft import build_scene_draft
+from literary_engineering_studio_engine.workflow.runner import run_workflow
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ from literary_engineering_studio.narrative_projection_v3 import (
     build_narrative_node_detail_v3,
     build_narrative_projection_v3,
 )
-from literary_engineering_studio_engine.rhythm_plan import save_rhythm_plan
+from literary_engineering_studio_engine.literary.planning.rhythm_plan import save_rhythm_plan
 
 
 class NarrativeProjectionV3Tests(unittest.TestCase):

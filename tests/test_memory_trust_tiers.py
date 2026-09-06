@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.memory_index import (
+from literary_engineering_studio_engine.foundation.memory_index import (
     build_memory_index,
     memory_index_is_fresh,
     search_memory,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...context_broker import context_trace_status
-from ...display_cleaner import read_json_file, summarize_text, truncate_text
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.foundation.display_cleaner import read_json_file, summarize_text, truncate_text
 from .common import (
     _apply_overrides,
     _bounded_paths,

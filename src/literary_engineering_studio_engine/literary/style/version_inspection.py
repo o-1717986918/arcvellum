@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ...style_prompt import style_prompt_quality_report
+from literary_engineering_studio_engine.literary.style.prompt import style_prompt_quality_report
 from .version_contracts import (
     COMPATIBLE_STYLE_SKILL_SCHEMA,
     STYLE_VERSION_BUILDER,

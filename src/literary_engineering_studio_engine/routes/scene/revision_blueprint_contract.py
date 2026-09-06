@@ -8,7 +8,7 @@ from pathlib import Path
 from ...literary.scene.promotion.historical_context import (
     historical_revision_source_paths,
 )
-from ...task_paths import relative_path, resolve_project_path
+from literary_engineering_studio_engine.tasking.paths import relative_path, resolve_project_path
 from ...tasking.paths import read_json
 
 

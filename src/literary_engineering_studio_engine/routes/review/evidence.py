@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 import re
 
-from ...task_paths import read_json as _read_json
-from ...task_paths import relative_path as _rel
-from ...task_paths import resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.tasking.paths import read_json as _read_json
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
+from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
 from ...literary.review.project_targets import valid_project_review_repair_targets
 
 

@@ -1,6 +1,6 @@
 import unittest
 
-from literary_engineering_studio_engine.narrative_rhythm import (
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import (
     analyze_narrative_rhythm_sequence,
     normalize_tension_curve,
 )

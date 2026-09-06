@@ -7,8 +7,8 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...punctuation_standard import PUNCTUATION_STANDARD_SHORT_RULE
-from ...resources import engine_path
+from literary_engineering_studio_engine.literary.style.punctuation import PUNCTUATION_STANDARD_SHORT_RULE
+from literary_engineering_studio_engine.foundation.resources import engine_path
 
 
 AGENT_TASK_MARKER = "[AGENT_TASK:"

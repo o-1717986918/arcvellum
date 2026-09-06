@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Callable, Protocol
 
-from ..agent_tasks import default_agent_completion_path, write_agent_completion_marker
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_completion_path, write_agent_completion_marker
 from .paths import (
     SUBMISSION_SCHEMA,
     append_event,

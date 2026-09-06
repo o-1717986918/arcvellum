@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ....agent_tasks import agent_task_completion_status
-from ....context_broker import context_trace_status
-from ....creative_quality import creative_quality_profile_exists, load_creative_quality_profile
-from ....new_character_register import new_character_register_issues
-from ....narrative_rhythm import narrative_rhythm_contract
-from ....reader_experience import reader_experience_adherence_for_body
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.literary.review.creative_quality import creative_quality_profile_exists, load_creative_quality_profile
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import new_character_register_issues
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_adherence_for_body
 from ...style.anti_ai import style_lint_gate
 from ...style.punctuation import lint_punctuation
 from .gate_support import (

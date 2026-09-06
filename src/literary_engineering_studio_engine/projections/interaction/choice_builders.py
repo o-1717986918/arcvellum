@@ -6,15 +6,15 @@ import hashlib
 import json
 from pathlib import Path
 
-from ...character_state_apply import state_patch_writeback_status
-from ...display_cleaner import read_json_file, truncate_text
+from literary_engineering_studio_engine.literary.scene.state.apply import state_patch_writeback_status
+from literary_engineering_studio_engine.foundation.display_cleaner import read_json_file, truncate_text
 from ...literary.export.approval_evidence import (
     release_approval_context_sha256,
     release_approval_evidence_paths,
     release_approval_scope,
 )
-from ...project_interaction_common import _make_id, _rel, _safe_approval_target, _safe_target_id
-from ...release_fingerprint import release_candidate_fingerprint
+from literary_engineering_studio_engine.projections.interaction.common import _make_id, _rel, _safe_approval_target, _safe_target_id
+from literary_engineering_studio_engine.literary.export.fingerprint import release_candidate_fingerprint
 
 
 def branch_choice(root: Path, scene_id: str) -> dict[str, object] | None:

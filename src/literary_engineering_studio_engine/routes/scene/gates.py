@@ -5,23 +5,23 @@ import json
 from pathlib import Path
 import re
 
-from ...agent_tasks import agent_task_completion_status, default_agent_completion_path
-from ...anti_ai_style import style_lint_gate, style_lint_gate_message
-from ...candidate_promotion import candidate_generation_gate, candidate_review_gate
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, default_agent_completion_path
+from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate, style_lint_gate_message
+from literary_engineering_studio_engine.literary.scene.promotion.candidate import candidate_generation_gate, candidate_review_gate
 from ...literary.scene.promotion.historical import validate_historical_promotion
-from ...context_broker import context_trace_status
-from ...creative_quality import load_creative_quality_profile
-from ...continuity_ledger import continuity_ledger_status, continuity_ledger_task_status
-from ...draft_text import final_body_from_draft_path
-from ...flow_gates import FlowGateError, branch_selection_status, ensure_composition_ready_for_generation
-from ...narrative_rhythm import narrative_rhythm_contract
-from ...reader_experience import ensure_reader_experience_ready, reader_experience_adherence_for_body
-from ...scene_character_assets import scene_character_asset_requirements
-from ...semantic_task_contracts import semantic_artifact_errors
-from ...task_paths import relative_path as _rel, resolve_project_path as _resolve_project_path
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.literary.review.creative_quality import load_creative_quality_profile
+from literary_engineering_studio_engine.literary.assets.continuity.ledger import continuity_ledger_status, continuity_ledger_task_status
+from literary_engineering_studio_engine.foundation.draft_text import final_body_from_draft_path
+from literary_engineering_studio_engine.tasking.gates import FlowGateError, branch_selection_status, ensure_composition_ready_for_generation
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.review.reader_experience import ensure_reader_experience_ready, reader_experience_adherence_for_body
+from literary_engineering_studio_engine.literary.scene.state.character_assets import scene_character_asset_requirements
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_errors
+from literary_engineering_studio_engine.tasking.paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from ...tasking.state_contracts import SCENE_REVISION_STATES
-from ...word_budget import ensure_scene_word_budget_ready, word_budget_adherence_for_body
-from ...scene_route_support import (
+from ...literary.planning.contracts import ensure_scene_word_budget_ready, word_budget_adherence_for_body
+from literary_engineering_studio_engine.routes.scene.support import (
     _file_sha256, _parse_datetime, _read_optional_json, _read_text,
     _static_review_conclusion,
 )

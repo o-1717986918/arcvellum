@@ -387,3 +387,23 @@ Route Domain
 - verify_compatibility_surface.py：通过；
 - scripts/architecture_audit.py：通过，保持 16 个既有大文件、104 个既有复杂函数、0 新增违规；
 - git diff --check：通过。
+
+### 2026-09-06：TD-5 完成
+
+- [x] Engine 内部、Studio、测试与性能基准全部迁到 canonical 或 `public.*` 路径；
+- [x] 顶层兼容 facade 从 143 个收敛到 8 个，仅保留 2 个正式入口与 6 个有界弃用别名；
+- [x] 6 个弃用别名均发出 `DeprecationWarning`，并承诺不早于 `1.0.0` 移除；
+- [x] compatibility manifest 升级为 v2，明确区分当前 Pi Worker 默认值和 OpenCode 历史默认记录；
+- [x] Studio 只读投影移除字符串选择 Engine 子模块的路径，改用稳定的 Engine public API；
+- [x] 兼容审计覆盖源码、测试、脚本与性能基准，并拒绝缺失模块和动态 Engine 子模块加载；
+- [x] 架构审计增加兼容 facade 导入门禁，包级相对导入按真实 Python 语义解析；
+- [x] 旧项目、历史正文、v1/v2 协议和 Pi Worker 默认 Runtime 的兼容测试保持通过。
+
+验证：
+
+- compatibility surface：通过，facade 预算 `8 / 8`；
+- 兼容、公共 API、任务协议、项目投影和文风定向测试：74 项通过；
+- 旧项目及历史迁移定向测试：35 项通过；
+- 全量 Python：1362 项通过，1 项跳过；
+- scripts/architecture_audit.py：通过，保持 16 个既有大文件、104 个既有复杂函数、0 新增违规；
+- git diff --check：通过。

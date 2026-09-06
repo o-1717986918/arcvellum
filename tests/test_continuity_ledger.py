@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.continuity_ledger import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.literary.assets.continuity.ledger import (
     DELTA_SCHEMA,
     REVIEW_SCHEMA,
     apply_continuity_ledger,

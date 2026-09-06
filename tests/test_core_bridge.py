@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.core_bridge import CoreBridge, CoreCommandResult, _assert_studio_engine_args, parse_cli_fields, task_command_parameters
-from literary_engineering_studio_engine.cli import main as engine_main
+from literary_engineering_studio_engine.command_line.entry import main as engine_main
 
 
 class CoreBridgeTests(unittest.TestCase):

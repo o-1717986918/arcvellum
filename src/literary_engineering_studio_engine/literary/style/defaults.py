@@ -9,8 +9,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ...agent_tasks import write_agent_completion_marker, write_agent_tasks
-from ...resources import engine_root
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker, write_agent_tasks
+from literary_engineering_studio_engine.foundation.resources import engine_root
 from .lab import active_project_style
 from .mount import mount_style_profile_version
 from .review import (

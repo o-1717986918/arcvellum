@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...semantic_task_contracts import semantic_artifact_contract
+from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_contract
 from ...tasking.builder import TaskBuilder, WordCountContract
 from .blueprints import blueprint_for_state
 from .context_policy import agent_context_payload

@@ -13,9 +13,9 @@ from literary_engineering_studio.preflight.archaeology import (
     validate_archaeology_reconstruction_output,
 )
 from literary_engineering_studio.sandbox import SandboxManifest
-from literary_engineering_studio_engine.agent_tasks import write_agent_completion_marker
-from literary_engineering_studio_engine.approval import record_workflow_approval
-from literary_engineering_studio_engine.asset_workshop import _dry_payload
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
+from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
+from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload
 from literary_engineering_studio_engine.literary.assets.promotion import (
     promotion_eligibility_errors,
 )
@@ -35,11 +35,11 @@ from literary_engineering_studio_engine.literary.ingest import (
 from literary_engineering_studio_engine.literary.ingest.evidence import canonical_digest
 from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 from literary_engineering_studio_engine.projects.source_ingest import ingest_existing_work
-from literary_engineering_studio_engine.source_ingest_route import build_task_payload
-from literary_engineering_studio_engine.task_registry import issue_next_task
+from literary_engineering_studio_engine.routes.source_ingest.definition import build_task_payload
+from literary_engineering_studio_engine.tasking.registry import issue_next_task
 from literary_engineering_studio_engine.tasking.paths import load_task
 from literary_engineering_studio_engine.workflow.state_assets import asset_candidate_states
-from literary_engineering_studio_engine.workflow_state import build_workflow_state
+from literary_engineering_studio_engine.workflow.state import build_workflow_state
 
 
 class ProjectArchaeologyReconstructionTests(unittest.TestCase):

@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 import re
 
-from ...atomic_io import atomic_write_text
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
 from .review import all_planning_reviews_pass
 from .materialization_parser import (
     parse_chapter_obligations,

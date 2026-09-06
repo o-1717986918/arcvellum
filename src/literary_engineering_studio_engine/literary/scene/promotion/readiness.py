@@ -7,14 +7,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ....agent_schema import validate_payload
-from ....anti_ai_style import style_lint_gate, style_lint_gate_message
-from ....creative_quality import load_creative_quality_profile
-from ....context_broker import context_trace_status
-from ....flow_gates import branch_selection_status
-from ....new_character_register import new_character_register_issues
-from ....reader_experience import reader_experience_adherence_for_body
-from ....word_budget import word_budget_adherence_for_body
+from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate, style_lint_gate_message
+from literary_engineering_studio_engine.literary.review.creative_quality import load_creative_quality_profile
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
+from literary_engineering_studio_engine.tasking.gates import branch_selection_status
+from literary_engineering_studio_engine.literary.scene.state.new_character_register import new_character_register_issues
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_adherence_for_body
+from ...planning.contracts import word_budget_adherence_for_body
 from ...review.resolution import actionable_review_findings
 
 

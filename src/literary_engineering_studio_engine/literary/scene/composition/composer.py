@@ -13,27 +13,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ....agent_tasks import default_agent_tasks_path, write_agent_tasks
-from ....context_broker import context_trace_status, default_context_trace_path
-from ....context_packet import build_context_packet
-from ....creative_quality import (
+from literary_engineering_studio_engine.tasking.agent_tasks.writer import default_agent_tasks_path, write_agent_tasks
+from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
+from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
+from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_exists,
     creative_quality_profile_path,
     load_creative_quality_profile,
     render_creative_quality_prompt,
 )
-from ....flow_gates import (
+from literary_engineering_studio_engine.tasking.gates import (
     FlowGateError,
     ensure_agent_task_completed,
 )
-from ....narrative_rhythm import narrative_rhythm_contract
-from ....reader_experience import reader_experience_contract
-from ....roleplay_lab import CharacterCard, _load_characters
-from ....semantic_task_contracts import (
+from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
+from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_contract
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard, _load_characters
+from literary_engineering_studio_engine.tasking.semantic_contracts import (
     semantic_artifact_relative_path,
     write_semantic_artifact_template,
 )
-from ....word_budget import scene_word_budget_contract
+from ...planning.contracts import scene_word_budget_contract
 from ...style.snapshot import (
     active_style_mount_snapshot_bytes,
     active_style_mount_snapshot_payload,

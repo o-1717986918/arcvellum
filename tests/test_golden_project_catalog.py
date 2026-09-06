@@ -3,10 +3,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.anti_ai_style import style_lint_gate
-from literary_engineering_studio_engine.init_project import InitOptions, init_work_project
-from literary_engineering_studio_engine.task_contract_audit import build_task_contract_audit
-from literary_engineering_studio_engine.task_registry import issue_next_task
+from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate
+from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
+from literary_engineering_studio_engine.tasking.contract_audit import build_task_contract_audit
+from literary_engineering_studio_engine.tasking.registry import issue_next_task
 
 
 CATALOG = Path(__file__).parent / "fixtures" / "golden_projects" / "catalog.json"

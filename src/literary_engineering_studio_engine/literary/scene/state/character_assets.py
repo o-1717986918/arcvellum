@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ....platform_agent_tasks import write_platform_asset_creation_task
+from literary_engineering_studio_engine.prompting.platform_tasks import write_platform_asset_creation_task
 from ...assets.character_identity import (
     character_slug,
     formal_character_aliases,

@@ -9,13 +9,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...creative_quality import load_creative_quality_profile
+from literary_engineering_studio_engine.literary.review.creative_quality import load_creative_quality_profile
 from .readiness import require_final_delivery_length
 
-from ...canon_lint import build_canon_lint
-from ...chapter_pipeline import ChapterWorkspaceResult, build_chapter_workspace
-from ...export_package import build_export_package, load_export_package
-from ...release_fingerprint import release_candidate_fingerprint
+from literary_engineering_studio_engine.literary.assets.canon.lint import build_canon_lint
+from literary_engineering_studio_engine.literary.planning.chapter_pipeline import ChapterWorkspaceResult, build_chapter_workspace
+from literary_engineering_studio_engine.literary.export.package import build_export_package, load_export_package
+from literary_engineering_studio_engine.literary.export.fingerprint import release_candidate_fingerprint
 from .approval_evidence import release_approval_is_current
 
 

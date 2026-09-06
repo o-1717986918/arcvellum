@@ -3,13 +3,13 @@ import json
 import tempfile
 import unittest
 
-from literary_engineering_studio_engine.approval import record_workflow_approval
+from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
 from literary_engineering_studio_engine.literary.export.approval_evidence import (
     release_approval_context_sha256,
 )
-from literary_engineering_studio_engine.release_fingerprint import release_candidate_fingerprint
-import literary_engineering_studio_engine.export_release_route as export_release_route
-from literary_engineering_studio_engine.workflow_state import _export_package_step, _release_approval_step
+from literary_engineering_studio_engine.literary.export.fingerprint import release_candidate_fingerprint
+import literary_engineering_studio_engine.routes.export.definition as export_release_route
+from literary_engineering_studio_engine.workflow.state import _export_package_step, _release_approval_step
 
 
 def _write_export(root: Path, chapter_id: str = "chapter_0001") -> Path:

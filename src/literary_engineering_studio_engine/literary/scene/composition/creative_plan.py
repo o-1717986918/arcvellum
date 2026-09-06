@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ....roleplay_lab import CharacterCard
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard
 from ..facts import SceneFacts
 
 

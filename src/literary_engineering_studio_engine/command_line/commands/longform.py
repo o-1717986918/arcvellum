@@ -3,22 +3,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...approval import build_approval_summary
-from ...chapter_pipeline import build_chapter_workspace
-from ...cli_support import print_agent_task_notice as _print_agent_task_notice
-from ...continuity_ledger import apply_continuity_ledger, prepare_continuity_ledger, prepare_continuity_ledger_review
-from ...docx_export import export_markdown_to_docx
-from ...export_package import build_export_package
-from ...longform_audit import build_longform_audit
-from ...longform_materializer import materialize_longform_plan
+from literary_engineering_studio_engine.tasking.approval import build_approval_summary
+from literary_engineering_studio_engine.literary.planning.chapter_pipeline import build_chapter_workspace
+from literary_engineering_studio_engine.command_line.support import print_agent_task_notice as _print_agent_task_notice
+from literary_engineering_studio_engine.literary.assets.continuity.ledger import apply_continuity_ledger, prepare_continuity_ledger, prepare_continuity_ledger_review
+from literary_engineering_studio_engine.literary.export.docx import export_markdown_to_docx
+from literary_engineering_studio_engine.literary.export.package import build_export_package
+from literary_engineering_studio_engine.literary.review.longform_audit import build_longform_audit
+from literary_engineering_studio_engine.literary.planning.materializer import materialize_longform_plan
 from ...literary.planning.review import prepare_longform_review
-from ...orchestration_blueprint import build_orchestration_blueprint
-from ...publish import publish_chapter
-from ...reader_experience import build_chapter_obligation_tasks
-from ...scene_handoff import build_scene_handoff
-from ...story_architecture import prepare_story_architecture, prepare_story_architecture_review, story_architecture_status
-from ...workflow_runner import run_workflow
-from ...word_budget import build_word_budget
+from literary_engineering_studio_engine.platforms.orchestration_blueprint import build_orchestration_blueprint
+from literary_engineering_studio_engine.literary.export.publish import publish_chapter
+from literary_engineering_studio_engine.literary.review.reader_experience import build_chapter_obligation_tasks
+from literary_engineering_studio_engine.literary.scene.context.handoff import build_scene_handoff
+from literary_engineering_studio_engine.literary.assets.continuity.architecture import prepare_story_architecture, prepare_story_architecture_review, story_architecture_status
+from literary_engineering_studio_engine.workflow.runner import run_workflow
+from ...literary.planning.service import build_word_budget
 from .length_repair import handle as handle_length_repair
 def handle(args, parser) -> int | None:
     if args.command == "orchestration-plan":
