@@ -5,7 +5,7 @@ import type { RuntimeEventSink, WorkerOptions, WorkerState } from "./contracts.t
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { WorkerEventAdapter } from "./event-adapter.ts";
 import { reasoningThinkingBudgets, safeThinkingLevel } from "./reasoning-budget.ts";
-import { providerStreamControls } from "./provider-reliability.ts";
+import { classifyProviderFailure, providerStreamControls } from "./provider-reliability.ts";
 
 export interface ConversationResult {
 	status: "completed" | "blocked";
@@ -21,6 +21,9 @@ export interface ConversationResult {
 	textCharacters: number;
 	writtenOutputs: string[];
 	validationPassed: boolean;
+	failureKind?: string;
+	providerError?: string;
+	providerFailureRetryable?: boolean;
 }
 
 /** Run one bounded, tool-free role conversation through the embedded Pi core. */
@@ -66,6 +69,8 @@ export async function runConversation(
 	await agent.prompt(prompt);
 	const answer = lastAssistantText(agent.state.messages as unknown[]);
 	const status = answer ? "completed" : "blocked";
+	const providerError = answer ? "" : String(agent.state.errorMessage || "").trim();
+	const providerFailure = providerError ? classifyProviderFailure(providerError) : null;
 	const result: ConversationResult = {
 		status,
 		message: answer ? "conversation completed" : (agent.state.errorMessage || "conversation returned no answer"),
@@ -80,6 +85,11 @@ export async function runConversation(
 		textCharacters: state.textCharacters,
 		writtenOutputs: [],
 		validationPassed: Boolean(answer),
+		...(providerFailure ? {
+			failureKind: providerFailure.kind,
+			providerError: providerFailure.message,
+			providerFailureRetryable: providerFailure.retryable,
+		} : {}),
 	};
 	emit("runner.conversation.result", { session_id: sessionId, status, answer });
 	return result;

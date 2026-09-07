@@ -40,7 +40,10 @@ def probe_agent_runner(
             encoding="utf-8",
         )
         started = time.monotonic()
-        result = runtime.execute(workspace, prompt, root, timeout=max(10, int(timeout)))
+        execute_options: dict[str, object] = {"timeout": max(10, int(timeout))}
+        if runner_id == "pi-worker":
+            execute_options["worker_mode"] = "conversation"
+        result = runtime.execute(workspace, prompt, root, **execute_options)
         total_ms = round((time.monotonic() - started) * 1000)
         events = _read_events(root / "runtime.events.jsonl")
         actual_model = _actual_model(events)

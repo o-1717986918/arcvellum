@@ -458,6 +458,8 @@ Route Domain
 - [x] 修复资产独立审查的 `review_status` 有界别名规范化，冲突值继续 fail closed；
 - [x] 修复文风任务的精确 holdout 选择、已审定默认文风终态识别和文风提示词写回预检；
 - [x] 《我胆小如鼠》授权演示包已通过确定性完整性校验，Tauri 资源清单和首次空项目注册表自动安装链路均已覆盖；
+- [x] Pi Worker 连接探针改用单轮、无工具、无项目写权限的 conversation 模式，不再错误要求正式任务的 `TASK_CONTEXT.json`；Provider 配额和认证错误会按真实类别回传；
+- [x] `v0.99.5` Windows 安装器已在独立目录完成静默安装冒烟；安装后的冻结 sidecar 启动成功，并从安装资源自动解包、注册和打开只读《我胆小如鼠》演示项目；
 - [ ] 真实 Pi Worker 正文晋升闭环待恢复模型通道后完成。
 
 真实运行证据：
@@ -467,14 +469,16 @@ Route Domain
 - 已连续完成 42 个正式任务，覆盖默认文风、长篇规划、资产候选与独立审查、资产晋升、RP、分支、读者体验与场景 composition；
 - 当前停在 `scene-development-scene-0001-candidate-generation-provenance`；
 - DeepSeek `v4-pro` 与 `v4-flash` 均由官方端点返回 `402 Insufficient Balance`，Pi Worker 已将其正确分类为不可重试的 `provider_quota`，没有空转或绕过 Gate；
+- 修复后的独立 Pi Worker 连接探针已再次抵达同一官方端点，并保留 `provider_quota` 诊断；当前凭证库未发生变化；
 - 恢复有效凭证后应继续同一 Autopilot，直到正文晋升、状态写回、连续性账本写回并进入 `scene_0002`。
 
 阶段验证：
 
-- Python 全量：除修复前并发启动的架构基线用例外，其余 1333 项通过，1 项跳过；修复后架构定向测试与审计通过；
+- Python 全量：1335 项中 1334 项一次通过，1 项因子进程调度达到 180 秒超时；该精确文风路由测试独立重跑 3.5 秒通过，1 项按既有 Windows 符号链接条件跳过；
 - Client：203 项通过；
 - Pi Worker：84 项通过；
 - compatibility surface：通过；
 - demo bundle：通过；
+- 安装后 sidecar：`0.99.5` 健康检查通过，空作品库自动得到 1 个只读授权演示项目，安装前后演示归档 SHA-256 一致；
 - 架构审计：通过，收敛到 12 个历史大文件、80 个历史复杂函数、0 新增违规；
 - git diff --check：通过。
