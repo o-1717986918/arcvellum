@@ -55,6 +55,8 @@ def _apply_event(current: dict[str, Any], event: dict[str, Any]) -> None:
     )
     if name == "agent.message.delta":
         _append_transcript(current, str(data.get("text") or ""))
+    if name == "agent.message.completed" and data.get("text") and not current.get("transcript"):
+        _append_transcript(current, str(data.get("text") or ""))
     if name.startswith("tool."):
         _append_tool(current, event, data)
     if name == "runner.session.finished":

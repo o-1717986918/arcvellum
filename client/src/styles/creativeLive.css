@@ -112,6 +112,10 @@
 .creative-artifact-list > button > i { width: 6px; height: 6px; margin-top: 3px; background: #64756f; border-radius: 50%; }
 .creative-artifact-list > button > i[data-identity="streaming_preview"] { background: var(--live-signal); box-shadow: 0 0 9px var(--live-signal); }
 .creative-artifact-list > button > i[data-identity="promoted"] { background: #c6a45f; box-shadow: 0 0 9px rgba(198, 164, 95, .45); }
+.creative-artifact-list > button > i[data-kind="character"] { background: #83a8d8; }
+.creative-artifact-list > button > i[data-kind="world"] { background: #c49b68; }
+.creative-artifact-list > button > i[data-kind="planning"] { background: #a894c9; }
+.creative-artifact-list > button > i[data-kind="review"] { background: #d48779; }
 .creative-artifact-list button strong,
 .creative-artifact-list button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .creative-artifact-list button strong { font-size: 10px; }

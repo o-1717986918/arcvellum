@@ -123,7 +123,7 @@ def _raw_events(
     status = deps.autopilot.status(root)
     current_run = status.get("run") if isinstance(status.get("run"), dict) else {}
     durable = (
-        deps.jobs.autopilot_events_since(str(current_run.get("run_id") or ""), 0, limit=400)
+        deps.jobs.autopilot_events_since(str(current_run.get("run_id") or ""), 0, limit=1200)
         if current_run.get("run_id")
         else []
     )

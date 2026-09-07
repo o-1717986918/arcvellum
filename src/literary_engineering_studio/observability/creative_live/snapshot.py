@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .artifact_projection import reduce_artifacts
+from .artifact_hydration import hydrate_presentable_artifacts
 from .contracts import project_id
 from .projector import project_runtime_event
 from .review_projection import review_events
@@ -34,8 +35,10 @@ def build_creative_live_snapshot(
     visible = _unique_events(visible)
     projected_reviews = [item for item in visible if item.get("channel") == "review"]
     artifacts = apply_review_identities(reduce_artifacts(visible), projected_reviews)
+    artifacts = hydrate_presentable_artifacts(project_root, artifacts)
     session_projection = reduce_sessions(visible, sessions)
     current_run = run or {}
+    _reconcile_session_status(current_run, session_projection)
     revision_source = {
         "event_ids": [item["event_id"] for item in visible],
         "artifact_states": [
@@ -82,15 +85,32 @@ def _unique_events(events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _status(run: dict[str, Any], sessions: list[dict[str, Any]]) -> str:
-    if str(run.get("status") or "") == "running":
+    run_status = str(run.get("status") or "")
+    if run_status == "running":
         return "active"
+    if run_status in {"blocked", "failed"}:
+        return "blocked"
+    if run_status == "paused":
+        return "paused"
+    if run_status:
+        return "idle"
     if any(str(item.get("status") or "") == "running" for item in sessions):
         return "active"
-    if str(run.get("status") or "") in {"blocked", "failed"}:
-        return "blocked"
-    if str(run.get("status") or "") == "paused":
-        return "paused"
     return "idle"
+
+
+def _reconcile_session_status(run: dict[str, Any], sessions: list[dict[str, Any]]) -> None:
+    run_id = str(run.get("run_id") or "")
+    run_status = str(run.get("status") or "")
+    if not run_id or run_status not in {"paused", "blocked", "failed", "completed", "cancelled"}:
+        return
+    terminal = "paused" if run_status == "paused" else "complete" if run_status == "completed" else run_status
+    for session in sessions:
+        if (
+            str(session.get("status") or "") == "running"
+            and str(session.get("controller_id") or "") == run_id
+        ):
+            session["status"] = terminal
 
 
 def _controller(run: dict[str, Any]) -> dict[str, Any] | None:
@@ -108,18 +128,35 @@ def _controller(run: dict[str, Any]) -> dict[str, Any] | None:
 def _active_task(run: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any] | None:
     task_id = str(run.get("current_task_id") or "")
     route = str(run.get("current_route") or "")
-    latest = next((item for item in reversed(events) if item.get("task_id") or item.get("route")), None)
+    candidates = [
+        item
+        for item in events
+        if (item.get("task_id") or item.get("route"))
+        and item.get("visibility") == "user"
+        and (not task_id or item.get("task_id") == task_id)
+    ]
+    latest = max(
+        candidates,
+        key=lambda item: (str(item.get("at") or ""), int(item.get("sequence") or 0)),
+        default=None,
+    )
     if not task_id and latest:
         task_id = str(latest.get("task_id") or "")
         route = str(latest.get("route") or "")
     if not task_id and not route:
         return None
+    if run.get("status") == "paused":
+        last_event = "autopilot.paused"
+        message = str(run.get("last_error") or "自动创作已暂停。")
+    else:
+        last_event = str(latest.get("event") or "") if latest else ""
+        message = str((latest.get("data") or {}).get("message") or "") if latest else ""
     return {
         "task_id": task_id,
         "route": route,
         "title": _route_title(route),
-        "last_event": latest.get("event") if latest else "",
-        "message": (latest.get("data") or {}).get("message") if latest else "",
+        "last_event": last_event,
+        "message": message,
     }
 
 
@@ -137,6 +174,7 @@ def _activity(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for item in events
         if item.get("channel") in {"activity", "control", "artifact", "review"}
+        and item.get("visibility") == "user"
     ][-120:]
 
 

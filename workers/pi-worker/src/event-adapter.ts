@@ -8,6 +8,7 @@ export class WorkerEventAdapter {
 	private lastReasoningEmit = 0;
 	private reasoningActive = false;
 	private pendingText = "";
+	private completedText = "";
 	private pendingTextEvents = 0;
 	private lastTextEmit = 0;
 	private messageIndex = 0;
@@ -78,7 +79,11 @@ export class WorkerEventAdapter {
 			this.flushText(true);
 			this.messageIndex += 1;
 			this.emitUsage(event.message, this.messageIndex);
-			this.emit("agent.message.completed", { session_id: this.sessionId });
+			this.emit("agent.message.completed", {
+				session_id: this.sessionId,
+				...(this.completedText ? { text: this.completedText } : {}),
+			});
+			this.completedText = "";
 		}
 	}
 
@@ -108,6 +113,7 @@ export class WorkerEventAdapter {
 		if (type === "text_delta" && delta) {
 			this.flushReasoning(true);
 			this.state.textCharacters += delta.length;
+			this.completedText = `${this.completedText}${delta}`.slice(-120_000);
 			if (!this.pendingText) this.lastTextEmit = Date.now();
 			this.pendingText += delta;
 			this.pendingTextEvents += 1;

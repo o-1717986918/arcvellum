@@ -9,6 +9,7 @@ import LiveManuscript from "./LiveManuscript.vue";
 import ReviewRail from "./ReviewRail.vue";
 import RevisionDiff from "./RevisionDiff.vue";
 import SessionTranscript from "./SessionTranscript.vue";
+import { artifactKindLabel, artifactStatusLabel, artifactTitle } from "../artifactPresentation";
 
 const app = useAppStore();
 const live = useCreativeLiveStore();
@@ -35,9 +36,6 @@ async function openRevisionMode(): Promise<void> {
   if (latest) await live.loadRevision(latest.revision_id);
 }
 
-function shortName(path: string): string {
-  return path.split(/[\\/]/).pop()?.replace(/\.(md|txt|json|ya?ml)$/i, "") || "候选产物";
-}
 </script>
 
 <template>
@@ -65,13 +63,13 @@ function shortName(path: string): string {
           <details v-if="live.snapshot?.active_task?.task_id"><summary>技术身份</summary><small>{{ live.snapshot.active_task.task_id }}</small></details>
         </section>
         <nav class="creative-artifact-list" aria-label="创作产物">
-          <header><ScrollText :size="13" /><strong>现场产物</strong><span>{{ artifacts.length }}</span></header>
+          <header><ScrollText :size="13" /><strong>创作内容</strong><span>{{ artifacts.length }}</span></header>
           <button v-for="artifact in artifacts" :key="artifact.artifact_id" :class="{ active: live.activeArtifact?.artifact_id === artifact.artifact_id }" @click="live.selectArtifact(artifact.artifact_id)">
-            <i :data-identity="artifact.identity"></i><span><strong>{{ shortName(artifact.path) }}</strong><small>{{ artifact.identity === 'promoted' ? '已晋升' : artifact.identity === 'streaming_preview' ? '正在写' : '候选链' }}</small></span>
+            <i :data-identity="artifact.identity" :data-kind="artifact.kind"></i><span><strong>{{ artifactTitle(artifact) }}</strong><small>{{ artifactKindLabel(artifact) }} · {{ artifactStatusLabel(artifact) }}</small></span>
           </button>
-          <p v-if="!artifacts.length">开始写作后，候选正文和修订稿会出现在这里。</p>
+          <p v-if="!artifacts.length">人物、世界观、规划、审查意见和正文形成后，都会在这里留下可阅读的现场记录。</p>
         </nav>
-        <ArtifactStatusRail :identity="live.activeArtifact?.identity" :characters="live.activeArtifact?.characters || live.activeArtifact?.content.length" />
+        <ArtifactStatusRail :identity="live.activeArtifact?.identity" :characters="live.activeArtifact?.characters || live.activeArtifact?.content.length" :kind="live.activeArtifact?.kind" />
       </aside>
 
       <LiveManuscript :artifact="live.activeArtifact" />

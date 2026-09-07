@@ -41,7 +41,7 @@ def project_runtime_event(
         sequence=sequence,
         event=event if "." in event else f"runtime.{event}",
         channel=_channel(event),
-        visibility=_visibility(event),
+        visibility=_visibility(event, data),
         durability=classify_runtime_event(event).value,
         at=at,
         project_id=project,
@@ -81,10 +81,14 @@ def _channel(event: str) -> EventChannel:
     return EventChannel.ACTIVITY
 
 
-def _visibility(event: str) -> EventVisibility:
+def _visibility(event: str, data: dict[str, Any]) -> EventVisibility:
+    if event == "runner.warning" and str(data.get("kind") or "") == "worker_protocol":
+        return EventVisibility.DIAGNOSTIC
     if event.startswith("runner.reasoning"):
         return EventVisibility.ADVANCED
     if event.startswith("tool.") or event.startswith("runner."):
+        return EventVisibility.ADVANCED
+    if event.startswith("sandbox."):
         return EventVisibility.ADVANCED
     if event in {"core.command_started", "core.command_failed"}:
         return EventVisibility.DIAGNOSTIC
@@ -102,7 +106,7 @@ def _artifact(project: str, event: str, data: dict[str, Any]) -> dict[str, Any] 
     return {
         "artifact_id": artifact_id(project, path, attempt),
         "path": path.replace("\\", "/"),
-        "kind": _first_text(data, "kind") or "agent-authored",
+        "kind": _first_text(data, "kind") or _artifact_kind(path),
         "format": _first_text(data, "format") or _format(path),
         "identity": identity,
         "revision": _non_negative_int(data.get("revision")),
@@ -194,6 +198,23 @@ def _message(event: str, data: dict[str, Any]) -> str:
 def _format(path: str) -> str:
     suffix = Path(path).suffix.casefold()
     return {".md": "markdown", ".json": "json", ".yaml": "yaml", ".yml": "yaml"}.get(suffix, "text")
+
+
+def _artifact_kind(path: str) -> str:
+    normalized = path.replace("\\", "/").casefold()
+    if normalized.startswith(("drafts/", "manuscript/")) or "/drafts/" in normalized:
+        return "prose"
+    if normalized.startswith("reviews/") or "/reviews/" in normalized:
+        return "review"
+    if normalized.startswith("characters/") or "/characters/" in normalized:
+        return "character"
+    if normalized.startswith("canon/") or "/canon/" in normalized:
+        return "world"
+    if normalized.startswith(("plot/", "scenes/")) or "/plot/" in normalized:
+        return "planning"
+    if normalized.startswith(("styles/", "style/")) or "/styles/" in normalized:
+        return "style"
+    return "agent-authored"
 
 
 def _fallback_event_id(

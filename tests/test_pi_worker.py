@@ -514,6 +514,24 @@ class PiWorkerRuntimeTests(unittest.TestCase):
         self.assertNotIn("do-not-repeat", json.dumps(malformed))
         self.assertEqual(secret[0][1], {"detail": "safe", "nested": {}})
 
+    def test_protocol_preserves_creative_live_and_runtime_profile_events(self):
+        runtime = PiWorkerRuntime({})
+        event_names = (
+            "artifact.preview.delta",
+            "artifact.preview.snapshot",
+            "artifact.checkpoint.written",
+            "runner.profile.bound",
+            "runner.reasoning.level.degraded",
+            "runner.repair.phase_handoff",
+        )
+
+        for event_name in event_names:
+            projected = runtime.normalize_output_line(
+                json.dumps({"event": event_name, "data": {"path": "characters/protagonist.md"}})
+            )
+            self.assertEqual(projected[0][0], event_name)
+            self.assertNotEqual(projected[0][0], "runner.warning")
+
     def test_capabilities_declare_no_general_purpose_tools(self):
         runtime = PiWorkerRuntime({"model": "fixture/model"})
         capabilities = runtime.capabilities()

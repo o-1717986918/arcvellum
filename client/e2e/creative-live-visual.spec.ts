@@ -30,7 +30,12 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
   await expect(page.locator(".live-manuscript-scroll")).toContainText("那艘本该昨天离港的船");
   await expect(page.locator(".creative-review-rail")).toContainText("确定性预检通过");
   await expect(page.locator(".creative-task-card")).toContainText("写作第三章第一场");
-  await expect(page.locator(".creative-artifact-list button.active")).toContainText("scene_0009");
+  await expect(page.locator(".creative-artifact-list button.active")).toContainText("第三章 潮线以内");
+  await expect(page.locator(".creative-artifact-list")).toContainText("人物设定");
+  await page.locator(".creative-artifact-list button").filter({ hasText: "林舟" }).click();
+  await expect(page.locator(".live-manuscript-scroll")).toContainText("把未拆的信压在登记册下面");
+  await expect(page.locator(".creative-identity-rail")).toContainText("内容状态");
+  await page.locator(".creative-artifact-list button").filter({ hasText: "第三章 潮线以内" }).click();
   await expect(page.locator(".creative-live-view")).toBeVisible();
   const workspaceHeight = await page.locator(".creative-workspace-host").evaluate((node) => node.getBoundingClientRect().height);
   const dockHeight = await page.locator(".creative-live-dock").evaluate((node) => node.getBoundingClientRect().height);
@@ -77,19 +82,34 @@ function liveSnapshot(content: string) {
       title: "写作第三章第一场",
       message: "候选正文正在形成，随后进入确定性检查与语义审读。",
     },
-    artifacts: [{
-      artifact_id: "scene-0009-prose",
-      path: "drafts/candidates/scene_0009.md",
-      kind: "prose",
-      format: "markdown",
-      identity: "streaming_preview",
-      revision: 3,
-      digest: "sha256:visual",
-      characters: content.length,
-      content,
-      updated_at: "2026-08-31T09:00:00Z",
-      source_event: "artifact.preview.snapshot",
-    }],
+    artifacts: [
+      {
+        artifact_id: "scene-0009-prose",
+        path: "drafts/candidates/scene_0009.md",
+        kind: "prose",
+        format: "markdown",
+        identity: "streaming_preview",
+        revision: 3,
+        digest: "sha256:visual",
+        characters: content.length,
+        content,
+        updated_at: "2026-08-31T09:00:00Z",
+        source_event: "artifact.preview.snapshot",
+      },
+      {
+        artifact_id: "character-linzhou",
+        path: "characters/candidates/lin-zhou.md",
+        kind: "character",
+        format: "markdown",
+        identity: "deterministic_preflight_passed",
+        revision: 1,
+        digest: "sha256:character",
+        characters: 42,
+        content: "# 林舟\n\n她习惯把未拆的信压在登记册下面，等潮水退去再作决定。",
+        updated_at: "2026-08-31T08:58:00Z",
+        source_event: "artifact.checkpoint.written",
+      },
+    ],
     sessions: [{
       session_id: "pi-visual-session",
       role: "主创 Agent",

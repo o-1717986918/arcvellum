@@ -3,12 +3,10 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { BookOpenText, FileClock, PauseCircle, PlayCircle, Radio, Sparkles } from "lucide-vue-next";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import type { CreativeArtifact } from "../types";
+import { artifactKindLabel, artifactStatusLabel, artifactTitle } from "../artifactPresentation";
 
 const props = defineProps<{ artifact?: CreativeArtifact | null }>();
-const title = computed(() => {
-  const path = String(props.artifact?.path || "");
-  return path.split(/[\\/]/).pop()?.replace(/\.(md|txt)$/i, "") || "等待主创落笔";
-});
+const title = computed(() => artifactTitle(props.artifact));
 const isFormal = computed(() => props.artifact?.identity === "promoted");
 const renderedContent = ref("");
 const scroll = ref<HTMLElement | null>(null);
@@ -47,9 +45,9 @@ function resumeFollowing(): void {
   <section class="live-manuscript" :class="{ 'motion-paused': !animateChanges }" :data-identity="artifact?.identity || 'waiting'">
     <header>
       <div>
-        <span class="creative-live-kicker"><Radio v-if="artifact?.identity === 'streaming_preview'" :size="12" />{{ isFormal ? '正式正文快照' : '候选稿现场' }}</span>
+        <span class="creative-live-kicker"><Radio v-if="artifact?.identity === 'streaming_preview'" :size="12" />{{ artifactKindLabel(artifact) }} · {{ artifactStatusLabel(artifact) }}</span>
         <h2>{{ title }}</h2>
-        <p v-if="artifact">{{ isFormal ? '已进入正式长卷' : '独立候选区' }} · {{ Number(artifact.characters || artifact.content.length).toLocaleString('zh-CN') }} 字符</p>
+        <p v-if="artifact">{{ isFormal ? '已进入正式项目' : '创作工作区' }} · {{ Number(artifact.characters || artifact.content.length).toLocaleString('zh-CN') }} 字符</p>
       </div>
       <div class="live-manuscript-controls">
         <button v-if="!following" title="回到新增内容" @click="resumeFollowing"><PlayCircle :size="13" />跟随</button>
@@ -63,8 +61,8 @@ function resumeFollowing(): void {
     </div>
     <div v-else class="creative-live-empty manuscript-empty">
       <BookOpenText :size="28" />
-      <strong>这里会出现真正的创作内容</strong>
-      <p>主创开始写作后，候选正文会逐段形成。它通过审查和晋升前不会混入正式阅读器。</p>
+      <strong>这里会出现正在形成的作品</strong>
+      <p>人物、世界观、情节规划、审查意见和正文都会以可读形式呈现。正式正文仍需通过审查与晋升。</p>
       <span><FileClock :size="13" />当前仍在等待可展示的产物</span>
     </div>
   </section>

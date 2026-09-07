@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import json
+import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -186,6 +187,114 @@ class CreativeLiveProjectionTests(unittest.TestCase):
             self.assertEqual(candidate["identity"], "semantic_review_passed")
             self.assertEqual(snapshot["reviews"][0]["status"], "pass")
             self.assertEqual(snapshot["reviews"][0]["message"], "人物选择与当前设定一致。")
+
+    def test_snapshot_hydrates_a_readable_project_artifact_after_reconnect(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "characters" / "protagonist-foundation.md"
+            path.parent.mkdir(parents=True)
+            content = "# 林遥\n\n她在城市停电后仍坚持寻找失踪的妹妹。"
+            path.write_text(content, encoding="utf-8")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            raw = [_raw(1, "artifact.checkpoint.written", {
+                "path": "characters/protagonist-foundation.md",
+                "kind": "character",
+                "sha256": digest,
+                "identity": "candidate_written",
+            })]
+
+            snapshot = build_creative_live_snapshot(root, raw)
+
+            self.assertEqual(len(snapshot["artifacts"]), 1)
+            self.assertEqual(snapshot["artifacts"][0]["content"], content)
+            self.assertEqual(snapshot["artifacts"][0]["kind"], "character")
+
+    def test_snapshot_does_not_hydrate_stale_or_machine_artifacts(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            readable = root / "plot" / "story.md"
+            machine = root / "plot" / "story.agent_completion.json"
+            readable.parent.mkdir(parents=True)
+            readable.write_text("current content", encoding="utf-8")
+            machine.write_text('{"complete": true}', encoding="utf-8")
+            raw = [
+                _raw(1, "artifact.checkpoint.written", {
+                    "path": "plot/story.md", "kind": "planning", "sha256": "f" * 64,
+                }),
+                _raw(2, "artifact.checkpoint.written", {
+                    "path": "plot/story.agent_completion.json", "kind": "planning",
+                }),
+            ]
+
+            snapshot = build_creative_live_snapshot(root, raw)
+
+            self.assertEqual([item["path"] for item in snapshot["artifacts"]], ["plot/story.md"])
+            self.assertEqual(snapshot["artifacts"][0]["content"], "")
+
+    def test_snapshot_excludes_protocol_noise_and_restores_completed_message(self):
+        raw = [
+            {
+                "sequence": 1,
+                "event": "runner.warning",
+                "at": "2026-08-31T00:00:01+00:00",
+                "data": {
+                    "runtime_event_id": "warning-1",
+                    "run_id": "run-1",
+                    "session_id": "session-1",
+                    "task_id": "task-1",
+                    "route": "longform-planning",
+                    "kind": "worker_protocol",
+                    "detail": "unknown worker event omitted",
+                },
+            },
+            {
+                "sequence": 2,
+                "event": "agent.message.completed",
+                "at": "2026-08-31T00:00:02+00:00",
+                "data": {
+                    "runtime_event_id": "message-2",
+                    "run_id": "run-1",
+                    "session_id": "session-1",
+                    "task_id": "task-1",
+                    "route": "longform-planning",
+                    "text": "人物设定已经完成，正在进入审查。",
+                },
+            },
+        ]
+
+        snapshot = build_creative_live_snapshot(
+            ".",
+            raw,
+            run={"status": "running", "current_task_id": "task-1", "current_route": "longform-planning"},
+        )
+
+        self.assertFalse(any(item["event"] == "runner.warning" for item in snapshot["activity"]))
+        self.assertEqual(snapshot["sessions"][0]["transcript"], "人物设定已经完成，正在进入审查。")
+        self.assertNotEqual(snapshot["active_task"]["last_event"], "runner.warning")
+
+    def test_paused_controller_overrides_stale_running_session(self):
+        snapshot = build_creative_live_snapshot(
+            ".",
+            [],
+            sessions=[{
+                "session_id": "session-1",
+                "controller_id": "run-1",
+                "status": "running",
+                "route": "scene-development",
+                "task_id": "scene-1",
+            }],
+            run={
+                "run_id": "run-1",
+                "status": "paused",
+                "current_route": "scene-development",
+                "current_task_id": "scene-1",
+                "last_error": "自动创作已暂停。",
+            },
+        )
+
+        self.assertEqual(snapshot["status"], "paused")
+        self.assertEqual(snapshot["sessions"][0]["status"], "paused")
+        self.assertEqual(snapshot["active_task"]["message"], "自动创作已暂停。")
 
 
 def _raw(sequence: int, event: str, changes: dict) -> dict:

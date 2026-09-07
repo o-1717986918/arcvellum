@@ -47,6 +47,7 @@ describe("WorkerEventAdapter", () => {
 		expect(events.find((item) => item.event === "agent.message.delta")?.data.delta_events).toBe(20);
 		expect(workerState.reasoningCharacters).toBe(600);
 		expect(workerState.textCharacters).toBe(40);
+		expect(events.find((item) => item.event === "agent.message.completed")?.data.text).toBe("片段".repeat(20));
 	});
 
 	it("records provider requests and reported reasoning tokens without storing reasoning text", () => {
