@@ -2,6 +2,24 @@ import { defineAsyncComponent, type Component } from "vue";
 import type { CreativeNodeKind } from "@/types/spatial";
 import type { SpatialWindowKind, SpatialWindowSize } from "@/types/spatialWindows";
 
+type WorkspaceModule = { default: Component };
+
+function workspaceComponent(loader: () => Promise<WorkspaceModule>): Component {
+  return defineAsyncComponent({
+    loader,
+    timeout: 15_000,
+    onError(error, retry, fail, attempts) {
+      const message = error instanceof Error ? error.message : String(error);
+      const transient = /fetch|load|module|network|import/i.test(message);
+      if (transient && attempts < 2) {
+        window.setTimeout(retry, 350);
+        return;
+      }
+      fail();
+    },
+  });
+}
+
 export type CreativeWorkspaceKind = Extract<
   SpatialWindowKind,
   "archive" | "style" | "quality" | "strategy" | "observatory" | "archaeology"
@@ -26,7 +44,7 @@ const descriptors: WorkspaceDescriptor[] = [
     title: "作品档案室",
     shortLabel: "档案",
     description: "维护人物、世界、地点与组织等正式作品资产。",
-    component: defineAsyncComponent(() => import("@/features/archive/ArchiveView.vue")),
+    component: workspaceComponent(() => import("@/features/archive/ArchiveView.vue")),
     defaultSize: { width: 720, height: 590 },
     minimumSize: { width: 520, height: 420 },
     allowMultiple: false,
@@ -38,7 +56,7 @@ const descriptors: WorkspaceDescriptor[] = [
     title: "文风工坊",
     shortLabel: "文风",
     description: "学习语料、评测风格提示词并管理正式挂载。",
-    component: defineAsyncComponent(() => import("@/features/style-atelier/StyleAtelierView.vue")),
+    component: workspaceComponent(() => import("@/features/style-atelier/StyleAtelierView.vue")),
     defaultSize: { width: 680, height: 570 },
     minimumSize: { width: 480, height: 400 },
     allowMultiple: false,
@@ -50,7 +68,7 @@ const descriptors: WorkspaceDescriptor[] = [
     title: "语言与节奏",
     shortLabel: "质量",
     description: "管理标点、表达习惯、节奏曲线、审查阈值与修订方向。",
-    component: defineAsyncComponent(() => import("@/features/quality/QualityView.vue")),
+    component: workspaceComponent(() => import("@/features/quality/QualityView.vue")),
     defaultSize: { width: 660, height: 560 },
     minimumSize: { width: 460, height: 390 },
     allowMultiple: false,
@@ -62,7 +80,7 @@ const descriptors: WorkspaceDescriptor[] = [
     title: "创作策略室",
     shortLabel: "策略",
     description: "查看全书结构、场景库存、执行计划与自适应编排。",
-    component: defineAsyncComponent(() => import("@/features/strategy/CreationStrategyView.vue")),
+    component: workspaceComponent(() => import("@/features/strategy/CreationStrategyView.vue")),
     defaultSize: { width: 620, height: 540 },
     minimumSize: { width: 440, height: 380 },
     allowMultiple: false,
@@ -74,7 +92,7 @@ const descriptors: WorkspaceDescriptor[] = [
     title: "创作现场",
     shortLabel: "现场",
     description: "实时阅读候选稿、审查轨迹、修订差异与 Agent 会话。",
-    component: defineAsyncComponent(() => import("@/features/creative-live/CreativeLiveView.vue")),
+    component: workspaceComponent(() => import("@/features/creative-live/CreativeLiveView.vue")),
     defaultSize: { width: 690, height: 570 },
     minimumSize: { width: 500, height: 410 },
     allowMultiple: false,
@@ -86,7 +104,7 @@ const descriptors: WorkspaceDescriptor[] = [
     title: "作品考古台",
     shortLabel: "考古",
     description: "从已有作品提取结构、人物、世界与可继续开发的正式候选。",
-    component: defineAsyncComponent(() => import("@/features/archaeology/ArchaeologyView.vue")),
+    component: workspaceComponent(() => import("@/features/archaeology/ArchaeologyView.vue")),
     defaultSize: { width: 650, height: 550 },
     minimumSize: { width: 460, height: 390 },
     allowMultiple: false,

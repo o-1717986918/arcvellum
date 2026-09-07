@@ -48,7 +48,7 @@ async function openRevisionMode(): Promise<void> {
       <div class="creative-live-runtime">
         <i :class="{ live: live.connected && live.snapshot?.status === 'active' }"></i>
         <span>{{ live.snapshot?.status === 'active' ? '实时连接' : live.connected ? '已连接 · 当前待命' : '正在连接' }}</span>
-        <button class="icon-button" title="重新连接创作现场" @click="live.connect(app.currentProjectPath)"><RefreshCw :size="14" /></button>
+        <button class="icon-button" title="重新连接创作现场" @click="live.reconnect(app.currentProjectPath)"><RefreshCw :size="14" /></button>
       </div>
     </header>
 

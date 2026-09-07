@@ -276,8 +276,8 @@
 
 .orrery-creative-live-beacon {
   position: absolute;
-  z-index: 8;
-  right: 20px;
+  z-index: 14;
+  right: 218px;
   bottom: 108px;
   display: grid;
   width: 184px;

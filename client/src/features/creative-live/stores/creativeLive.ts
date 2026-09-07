@@ -29,9 +29,9 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
   });
   const proseIsStreaming = computed(() => activeArtifact.value?.identity === "streaming_preview" && activeArtifact.value?.kind === "prose");
 
-  async function connect(root: string): Promise<void> {
+  async function connect(root: string, force = false): Promise<void> {
     if (!root) return;
-    if (projectRoot.value === root && connection) return;
+    if (!force && projectRoot.value === root && connection) return;
     disconnect();
     projectRoot.value = root;
     selectionPinned = false;
@@ -54,6 +54,10 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
     } finally {
       loading.value = false;
     }
+  }
+
+  async function reconnect(root = projectRoot.value): Promise<void> {
+    await connect(root, true);
   }
 
   function applySnapshot(value: CreativeLiveSnapshot): void {
@@ -149,6 +153,6 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
   return {
     snapshot, projectRoot, selectedArtifactId, selectedSessionId, loading, connected, error,
     revisions, selectedRevision, activeArtifact, activeSession, proseIsStreaming,
-    connect, selectArtifact, selectSession, loadRevisions, loadRevision, disconnect, reset,
+    connect, reconnect, selectArtifact, selectSession, loadRevisions, loadRevision, disconnect, reset,
   };
 });
