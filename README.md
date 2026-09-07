@@ -260,6 +260,8 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新�
 - [Agent 面向接口开发标准](docs/architecture/agent-interface-development-standard.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
+- [v0.99.5 发行说明](docs/releases/v0.99.5.md)
+- [v0.99.5 发布验证记录](docs/releases/v0.99.5-verification.md)
 - [v0.99.0 发行说明](docs/releases/v0.99.0.md)
 - [v0.98.0 发行说明](docs/releases/v0.98.0.md)
 - [v0.97.4 发行说明](docs/releases/v0.97.4.md)
