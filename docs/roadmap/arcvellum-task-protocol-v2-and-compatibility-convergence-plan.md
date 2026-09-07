@@ -482,3 +482,4 @@ Route Domain
 - 安装后 sidecar：`0.99.5` 健康检查通过，空作品库自动得到 1 个只读授权演示项目，安装前后演示归档 SHA-256 一致；
 - 架构审计：通过，收敛到 12 个历史大文件、80 个历史复杂函数、0 新增违规；
 - git diff --check：通过。
+- GitHub Actions：`v0.99.5` 的 Windows、macOS Apple Silicon、macOS Intel 与发布 Job 全部通过；正式 Release 已发布 6 个安装、更新与校验资产。
