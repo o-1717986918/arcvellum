@@ -48,10 +48,36 @@ _RECIPES = {
     ),
 }
 
+_LEAN_SCENE_RECIPES = {
+    "create": PromptRecipe(
+        "lean-scene/create/v1",
+        ContextTaskKind.PROSE,
+        28_000,
+        40_000,
+        0,
+        ("scene_brief",),
+    ),
+    "review": PromptRecipe(
+        "lean-scene/review/v1",
+        ContextTaskKind.REVIEW,
+        20_000,
+        28_000,
+        0,
+        ("scene_brief", "candidate"),
+    ),
+}
+
 
 def prompt_recipe(task_kind: str | ContextTaskKind) -> PromptRecipe:
     kind = task_kind if isinstance(task_kind, ContextTaskKind) else ContextTaskKind(task_kind)
     return _RECIPES[kind]
 
 
-__all__ = ["PromptRecipe", "prompt_recipe"]
+def lean_scene_prompt_recipe(purpose: str) -> PromptRecipe:
+    try:
+        return _LEAN_SCENE_RECIPES[purpose.strip().lower()]
+    except KeyError as exc:
+        raise ValueError(f"unsupported lean scene prompt purpose: {purpose}") from exc
+
+
+__all__ = ["PromptRecipe", "lean_scene_prompt_recipe", "prompt_recipe"]
