@@ -1,11 +1,18 @@
 # ArcVellum 模块边界与渐进拆分准则
 
+> **架构状态更新（2026-09-08）**：依赖方向、兼容 facade 和拆分纪律继续有效；
+> 文学 Gate 的数量与粒度改由
+> [ArcVellum 精简文学内核 v2 架构设计](arcvellum-lean-literary-kernel-v2-design.md)
+> 决定。v2 可以减少可逆过程 Gate，但不得形成 Engine 到 Studio 的反向依赖或第二套 Runtime/Task Registry。
+
 > v0.99 的统一接口化差距、完整模块清单和分批实施路线见
 > `docs/roadmap/arcvellum-v0.99-modular-interface-development-plan.md`。本文继续记录已经落地的
 > 模块所有权与拆分准则，不把规划中的目标接口视为现状。
 > 当前机器生成的目录所有权摘要见 `docs/architecture/generated-module-map.md`。
 
-> 本文服务于 Studio 维护者。普通创作 Agent 不应把本文件当作操作入口；正式执行仍由 `task-next → task-open → task-submit → task-complete` 的任务包驱动。
+> 本文服务于 Studio 维护者。普通创作 Agent 不应把本文件当作操作入口。`strict-v1` 继续由
+> `task-next → task-open → task-submit → task-complete` 驱动；v2 由 `SceneTransactionService`
+> 签发粗粒度模型任务并统一提交，二者均不允许 Agent 直接写正式项目事实。
 
 v0.96 - v1.0 的功能扩展必须同时遵守本文件与[统一工程实施方案](../roadmap/arcvellum-v0.96-v1.0-integrated-engineering-implementation-plan.md)。统一方案决定新增模块和施工顺序，本文件继续拥有依赖方向、compatibility facade 和目录归位纪律；任何产品路线不得以功能需要为由绕过这些边界。
 

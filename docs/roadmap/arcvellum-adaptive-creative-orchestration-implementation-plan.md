@@ -1,5 +1,11 @@
 # ArcVellum 自适应创作编排系统实施方案
 
+> **架构状态更新（2026-09-08）**：本方案保留为既有自适应编排的设计与实施记录。
+> 后续生产内核施工以
+> [ArcVellum 精简文学内核 v2 架构设计](../architecture/arcvellum-lean-literary-kernel-v2-design.md)
+> 为上位决策。两者冲突时，以 v2 对门禁粒度、场景事务、模型调用数量、上下文和模块退役的决策为准；
+> Planner、Compiler、Simulator 与 shadow 管线不得自动成为 v2 的生产前置条件。
+
 > 文档状态：下一阶段强指导性开发基线  
 > 基线版本：ArcVellum v0.95.3  
 > 更新日期：2026-07-28
