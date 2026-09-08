@@ -40,6 +40,11 @@ The committed K5 A/B fixture reports:
 The blind literary scorecard is absent, so `ready_for_default=false`. Structural
 savings do not substitute for prose quality evidence.
 
+A final live `runner-probe` reached the embedded Pi Worker, selected
+`deepseek/deepseek-v4-pro`, opened a provider request and received HTTP 402
+`Insufficient Balance`. The worker process, model selection and event stream
+were available; model output and the literary A/B remain externally blocked.
+
 ## Verification
 
 Passed during final closure:
