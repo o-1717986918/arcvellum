@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 from typing import Any, Callable
 
-from literary_engineering_studio_engine.literary.scene.transaction import (
+from literary_engineering_studio_engine.public.literary import (
     ChangeProposal,
     CreativeResult,
     ReviewDecision,

@@ -5,10 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from literary_engineering_studio_engine.literary.planning.narrative_rhythm import (
+from literary_engineering_studio_engine.public.literary import (
     analyze_narrative_rhythm_sequence,
-)
-from literary_engineering_studio_engine.literary.scene.transaction import (
     SceneDelta,
     SceneTransactionStatus,
 )

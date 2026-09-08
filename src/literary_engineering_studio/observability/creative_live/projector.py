@@ -199,16 +199,17 @@ def _message(event: str, data: dict[str, Any]) -> str:
         return detail or f"{scene_id} 已推进到 {status or '下一阶段'}。"
     if event.startswith("artifact.preview"):
         return "候选内容仍在生成，尚未成为正式正文。"
-    if event == "artifact.checkpoint.written":
-        return "候选产物已完整写入，等待正式检查。"
-    if event == "validation.passed":
-        return "本轮机器可验证条件已经满足。"
-    if event == "tool.started":
-        return f"正在执行 {data.get('tool') or '当前工具'}。"
-    if event == "tool.completed":
-        return f"{data.get('tool') or '当前工具'} 已完成。"
-    if event == "runner.reasoning.activity":
-        return "模型仍在进行当前任务的推理。"
+    fixed = {
+        "artifact.checkpoint.written": "候选产物已完整写入，等待正式检查。",
+        "validation.passed": "本轮机器可验证条件已经满足。",
+        "runner.reasoning.activity": "模型仍在进行当前任务的推理。",
+    }
+    if event in fixed:
+        return fixed[event]
+    tool_actions = {"tool.started": "正在执行", "tool.completed": "已完成"}
+    if event in tool_actions:
+        tool = data.get("tool") or "当前工具"
+        return f"{tool_actions[event]} {tool}。"
     return str(data.get("message") or data.get("detail") or "项目状态已有新变化。")
 
 

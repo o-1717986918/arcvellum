@@ -89,3 +89,19 @@ K6 records compatibility consumers and release milestones. Deletion is allowed
 only after two released versions have observed zero production consumers and a
 separate change packet names every removed import, command, fixture, and user
 migration. This batch performs no compatibility deletion.
+
+## Implementation outcome
+
+- Kernel selection, explicit migration, rollback and project-origin markers
+  are implemented behind a packaged compatibility manifest.
+- Scene transaction diagnostics reuse the production repository, project
+  adapter, runtime and coordinator through a dedicated CLI adapter.
+- Autopilot delegates lean scene execution to a bounded host collaborator;
+  the main controller no longer owns transaction locks, event projection or
+  coordinator construction.
+- Engine literary contracts are consumed only through
+  `literary_engineering_studio_engine.public.literary`.
+- The consumer and retirement evidence is recorded in
+  `docs/verification/lean-kernel-v2-k6-retirement-inventory-2026-09-08.md`.
+- The structural gate passes; the literary blind-review gate remains pending,
+  so `strict-v1` remains the recommendation and lean-v2 remains preview.

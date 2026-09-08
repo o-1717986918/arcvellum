@@ -8,29 +8,23 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
-from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_batch
-from literary_engineering_studio_engine.literary.assets.character_identity import (
-    character_field_value,
-    character_slug,
-    read_character_text,
-)
-from literary_engineering_studio_engine.literary.scene.facts import (
-    SceneFacts,
-    load_scene_facts,
-    load_scene_mapping,
-)
-from literary_engineering_studio_engine.literary.scene.transaction import (
+from literary_engineering_studio_engine.public.projects import atomic_write_batch
+from literary_engineering_studio_engine.public.literary import (
     RhythmDirective,
     SceneCommitPlan,
     SceneExecutionMode,
+    SceneFacts,
     SceneRisk,
     SceneRiskLevel,
     StyleMountRef,
-    build_scene_brief,
-)
-from literary_engineering_studio_engine.literary.style.snapshot import (
     active_style_evidence_paths,
     active_style_mount_snapshot_payload,
+    build_scene_brief,
+    character_field_value,
+    character_slug,
+    load_scene_facts,
+    load_scene_mapping,
+    read_character_text,
 )
 
 from ..application.scene_transaction import PreparedScene, SceneCommitReceipt

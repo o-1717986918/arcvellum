@@ -9,23 +9,14 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 from uuid import uuid4
 
-from literary_engineering_studio_engine.literary.scene.transaction import (
-    ChangeProposal,
+from literary_engineering_studio_engine.public.literary import (
     CreativeResult,
-    IssueSeverity,
-    LengthTarget,
     ReviewDecision,
     ReviewResult,
-    RhythmDirective,
     SceneBrief,
-    SceneDelta,
     SceneExecutionMode,
     ScenePolicy,
-    SceneRisk,
-    SceneRiskLevel,
     SceneTransactionStatus,
-    StyleMountRef,
-    VerificationIssue,
     VerificationReport,
     SceneCommitPlan,
     build_scene_commit_plan,
@@ -388,143 +379,6 @@ class SceneTransactionService:
             )
 
 
-def scene_transaction_from_dict(payload: dict[str, Any]) -> SceneTransaction:
-    brief_data = dict(payload["brief"])
-    risk_data = dict(brief_data["risk"])
-    brief = SceneBrief(
-        scene_id=str(brief_data["scene_id"]),
-        objective=str(brief_data["objective"]),
-        scene_function=str(brief_data["scene_function"]),
-        participants=tuple(brief_data.get("participants") or ()),
-        canon_constraints=tuple(brief_data.get("canon_constraints") or ()),
-        incoming_handoff=tuple(brief_data.get("incoming_handoff") or ()),
-        chapter_obligations=tuple(brief_data.get("chapter_obligations") or ()),
-        rhythm=RhythmDirective(**dict(brief_data.get("rhythm") or {})),
-        length=LengthTarget(**dict(brief_data.get("length") or {})),
-        style_mount=StyleMountRef(**dict(brief_data.get("style_mount") or {})),
-        risk=SceneRisk(
-            SceneRiskLevel(str(risk_data["level"])),
-            tuple(risk_data.get("reasons") or ()),
-        ),
-        source_refs=tuple(brief_data.get("source_refs") or ()),
-        viewpoint=str(brief_data.get("viewpoint") or ""),
-        location=str(brief_data.get("location") or ""),
-        external_conflict=str(brief_data.get("external_conflict") or ""),
-        internal_conflict=str(brief_data.get("internal_conflict") or ""),
-    )
-    policy_data = dict(payload["policy"])
-    policy_risk = dict(policy_data["risk"])
-    policy = ScenePolicy(
-        mode=SceneExecutionMode(str(policy_data["mode"])),
-        risk=SceneRisk(
-            SceneRiskLevel(str(policy_risk["level"])),
-            tuple(policy_risk.get("reasons") or ()),
-        ),
-        independent_review_required=bool(policy_data["independent_review_required"]),
-        explicit_decision_trace_required=bool(policy_data["explicit_decision_trace_required"]),
-        defer_semantic_review_to_chapter=bool(policy_data["defer_semantic_review_to_chapter"]),
-        automatic_revision_allowed=bool(policy_data["automatic_revision_allowed"]),
-        max_revision_attempts=int(policy_data["max_revision_attempts"]),
-        steward_approval_required=bool(policy_data["steward_approval_required"]),
-    )
-    return SceneTransaction(
-        transaction_id=str(payload["transaction_id"]),
-        project_root=str(payload["project_root"]),
-        scene_id=str(payload["scene_id"]),
-        mode=SceneExecutionMode(str(payload["mode"])),
-        status=SceneTransactionStatus(str(payload["status"])),
-        base_revision=str(payload["base_revision"]),
-        brief=brief,
-        policy=policy,
-        creative_result=_creative_result(payload.get("creative_result")),
-        verification=_verification(payload.get("verification")),
-        review=_review(payload.get("review")),
-        commit_receipt=_receipt(payload.get("commit_receipt")),
-        revision_attempts=int(payload.get("revision_attempts") or 0),
-        blocked_from=str(payload.get("blocked_from") or ""),
-        last_error=str(payload.get("last_error") or ""),
-        version=int(payload.get("version") or 0),
-    )
-
-
-def _creative_result(value: Any) -> CreativeResult | None:
-    if not isinstance(value, dict):
-        return None
-    delta = dict(value.get("scene_delta") or {})
-    return CreativeResult(
-        prose=str(value.get("prose") or ""),
-        decision_summary=str(value.get("decision_summary") or ""),
-        scene_delta=SceneDelta(
-            character_changes=_proposals(delta.get("character_changes")),
-            canon_candidates=_proposals(delta.get("canon_candidates")),
-            continuity_changes=_proposals(delta.get("continuity_changes")),
-            promise_updates=_proposals(delta.get("promise_updates")),
-            reader_question_updates=_proposals(delta.get("reader_question_updates")),
-            next_handoff=tuple(delta.get("next_handoff") or ()),
-            new_asset_candidates=_proposals(delta.get("new_asset_candidates")),
-        ),
-        decision_trace=tuple(value.get("decision_trace") or ()),
-        escalation_reasons=tuple(value.get("escalation_reasons") or ()),
-    )
-
-
-def _proposals(value: Any) -> tuple[ChangeProposal, ...]:
-    if not isinstance(value, list):
-        return ()
-    return tuple(
-        ChangeProposal(
-            target_ref=str(item.get("target_ref") or ""),
-            summary=str(item.get("summary") or ""),
-            evidence=str(item.get("evidence") or ""),
-            operation=str(item.get("operation") or "update"),
-            attributes=tuple(tuple(pair) for pair in item.get("attributes") or ()),
-        )
-        for item in value
-        if isinstance(item, dict)
-    )
-
-
-def _verification(value: Any) -> VerificationReport | None:
-    if not isinstance(value, dict):
-        return None
-    return VerificationReport(
-        scene_id=str(value.get("scene_id") or ""),
-        body_hanzi=int(value.get("body_hanzi") or 0),
-        issues=tuple(
-            VerificationIssue(
-                code=str(item.get("code") or ""),
-                severity=IssueSeverity(str(item.get("severity") or "warning")),
-                message=str(item.get("message") or ""),
-                evidence=str(item.get("evidence") or ""),
-            )
-            for item in value.get("issues") or ()
-            if isinstance(item, dict)
-        ),
-    )
-
-
-def _review(value: Any) -> ReviewResult | None:
-    if not isinstance(value, dict):
-        return None
-    return ReviewResult(
-        decision=ReviewDecision(str(value.get("decision") or "pass")),
-        summary=str(value.get("summary") or ""),
-        revision_instructions=tuple(value.get("revision_instructions") or ()),
-        evidence=tuple(value.get("evidence") or ()),
-    )
-
-
-def _receipt(value: Any) -> SceneCommitReceipt | None:
-    if not isinstance(value, dict):
-        return None
-    return SceneCommitReceipt(
-        transaction_id=str(value.get("transaction_id") or ""),
-        scene_id=str(value.get("scene_id") or ""),
-        committed_revision=str(value.get("committed_revision") or ""),
-        written_refs=tuple(value.get("written_refs") or ()),
-    )
-
-
 def _json_value(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
@@ -546,5 +400,4 @@ __all__ = [
     "SceneTransactionRepository",
     "SceneTransactionService",
     "TransactionEventSink",
-    "scene_transaction_from_dict",
 ]

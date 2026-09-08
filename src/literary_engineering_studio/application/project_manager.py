@@ -17,7 +17,7 @@ from literary_engineering_studio_engine.public.projects import InitOptions, init
 
 from .config import default_config_path, default_projects_root, repository_root
 from .demo_distribution import clone_demo_project, install_demo_bundle, verify_demo_bundle
-from ..compatibility import mark_studio_created_project
+from ..compatibility.literary_kernel import mark_studio_created_project
 
 
 REGISTRY_SCHEMA = "literary-engineering-studio/project-registry/v0.1"

@@ -138,31 +138,11 @@ def _controller(run: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _active_task(run: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any] | None:
-    task_id = str(run.get("current_task_id") or "")
-    route = str(run.get("current_route") or "")
-    candidates = [
-        item
-        for item in events
-        if (item.get("task_id") or item.get("route"))
-        and item.get("visibility") == "user"
-        and (not task_id or item.get("task_id") == task_id)
-    ]
-    latest = max(
-        candidates,
-        key=lambda item: (str(item.get("at") or ""), int(item.get("sequence") or 0)),
-        default=None,
-    )
-    if not task_id and latest:
-        task_id = str(latest.get("task_id") or "")
-        route = str(latest.get("route") or "")
+    latest = _latest_task_event(run, events)
+    task_id, route = _task_identity(run, latest)
     if not task_id and not route:
         return None
-    if run.get("status") == "paused":
-        last_event = "autopilot.paused"
-        message = str(run.get("last_error") or "自动创作已暂停。")
-    else:
-        last_event = str(latest.get("event") or "") if latest else ""
-        message = str((latest.get("data") or {}).get("message") or "") if latest else ""
+    last_event, message = _task_feedback(run, latest)
     return {
         "task_id": task_id,
         "route": route,
@@ -170,6 +150,39 @@ def _active_task(run: dict[str, Any], events: list[dict[str, Any]]) -> dict[str,
         "last_event": last_event,
         "message": message,
     }
+
+
+def _latest_task_event(run: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    task_id = str(run.get("current_task_id") or "")
+    candidates = [
+        item
+        for item in events
+        if (item.get("task_id") or item.get("route"))
+        and item.get("visibility") == "user"
+        and (not task_id or item.get("task_id") == task_id)
+    ]
+    return max(
+        candidates,
+        key=lambda item: (str(item.get("at") or ""), int(item.get("sequence") or 0)),
+        default=None,
+    )
+
+
+def _task_identity(run: dict[str, Any], latest: dict[str, Any] | None) -> tuple[str, str]:
+    task_id = str(run.get("current_task_id") or "")
+    route = str(run.get("current_route") or "")
+    if not task_id and latest:
+        task_id = str(latest.get("task_id") or "")
+        route = str(latest.get("route") or "")
+    return task_id, route
+
+
+def _task_feedback(run: dict[str, Any], latest: dict[str, Any] | None) -> tuple[str, str]:
+    if run.get("status") == "paused":
+        return "autopilot.paused", str(run.get("last_error") or "自动创作已暂停。")
+    if latest is None:
+        return "", ""
+    return str(latest.get("event") or ""), str((latest.get("data") or {}).get("message") or "")
 
 
 def _activity(events: list[dict[str, Any]]) -> list[dict[str, Any]]:

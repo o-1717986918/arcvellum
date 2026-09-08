@@ -17,6 +17,11 @@ from ..literary.assets.promotion import (
 )
 from ..literary.assets.registry import ASSET_SCHEMA_NAMES
 from ..literary.assets.workshop import ASSET_CANDIDATE_DIRS
+from ..literary.assets.character_identity import (
+    character_field_value,
+    character_slug,
+    read_character_text,
+)
 from ..literary.export.docx import export_markdown_to_docx
 from ..literary.ingest import (
     DOMAIN_REVIEW_SCHEMA,
@@ -34,6 +39,7 @@ from ..literary.planning.contracts import word_budget_adherence_for_body
 from ..literary.planning.materializer import scene_inventory_contract_issues
 from ..literary.planning.length_repair import target_length_repair_pending
 from ..literary.planning.rhythm_plan import load_rhythm_plan, save_rhythm_plan
+from ..literary.planning.narrative_rhythm import analyze_narrative_rhythm_sequence
 from ..literary.review.creative_quality import (
     creative_quality_profile_exists,
     creative_quality_profile_path,
@@ -54,6 +60,32 @@ from ..literary.review.resolution import (
 )
 from ..literary.scene.branching.proposals import branch_proposal_contract
 from ..literary.scene.context.broker import context_trace_status
+from ..literary.scene.facts import SceneFacts, load_scene_facts, load_scene_mapping
+from ..literary.scene.transaction import (
+    ChangeProposal,
+    CreativeResult,
+    IssueSeverity,
+    LengthTarget,
+    ReviewDecision,
+    ReviewResult,
+    RhythmDirective,
+    SceneBrief,
+    SceneCommitPlan,
+    SceneDelta,
+    SceneExecutionMode,
+    ScenePolicy,
+    SceneRisk,
+    SceneRiskLevel,
+    SceneTransactionStatus,
+    StyleMountRef,
+    VerificationIssue,
+    VerificationReport,
+    build_scene_brief,
+    build_scene_commit_plan,
+    derive_scene_policy,
+    scene_brief_issues,
+    verify_creative_result,
+)
 from ..literary.scene.promotion.generation_gate import (
     candidate_generation_gate,
     candidate_language_gate,
@@ -99,6 +131,7 @@ from ..literary.style.session import (
     source_content_digest,
 )
 from ..literary.style.snapshot import (
+    active_style_evidence_paths,
     active_style_mount_snapshot_payload,
     artifact_style_mount_snapshot,
     read_artifact_style_mount_snapshot,
@@ -114,6 +147,8 @@ __all__ = [
     "ASSET_CANDIDATE_DIRS",
     "ASSET_SCHEMA_NAMES",
     "CanonPatchCandidateIssue",
+    "ChangeProposal",
+    "CreativeResult",
     "DOMAIN_REVIEW_SCHEMA",
     "IDENTITY_RESOLUTION_SCHEMA",
     "ProjectReviewTargetIssue",
@@ -121,7 +156,17 @@ __all__ = [
     "REQUIRED_FIELDS",
     "SCENE_LIFECYCLE_VALUES",
     "SceneLifecycleStatus",
+    "SceneBrief",
+    "SceneCommitPlan",
+    "SceneDelta",
+    "SceneExecutionMode",
+    "SceneFacts",
+    "ScenePolicy",
+    "SceneRisk",
+    "SceneRiskLevel",
+    "SceneTransactionStatus",
     "StyleMountPriority",
+    "StyleMountRef",
     "StyleMountScope",
     "StyleSessionConflictError",
     "StyleSessionError",
@@ -129,12 +174,23 @@ __all__ = [
     "StyleSourceSelection",
     "StyleVersionMountConflictError",
     "StyleVersionMountError",
+    "IssueSeverity",
+    "LengthTarget",
+    "ReviewDecision",
+    "ReviewResult",
+    "RhythmDirective",
+    "VerificationIssue",
+    "VerificationReport",
     "active_project_style",
+    "active_style_evidence_paths",
     "active_style_mount_snapshot_payload",
     "artifact_style_mount_snapshot",
+    "analyze_narrative_rhythm_sequence",
     "branch_proposal_contract",
     "candidate_generation_gate",
     "candidate_language_gate",
+    "character_field_value",
+    "character_slug",
     "canon_patch_candidate_issues",
     "canonical_digest",
     "chapter_obligation_contract_issues",
@@ -142,6 +198,8 @@ __all__ = [
     "continuity_ledger_status",
     "create_author_project",
     "create_author_work",
+    "build_scene_brief",
+    "build_scene_commit_plan",
     "creative_quality_profile_exists",
     "creative_quality_profile_path",
     "default_style_library_root",
@@ -160,6 +218,8 @@ __all__ = [
     "list_author_projects",
     "list_style_skills",
     "load_creative_quality_profile",
+    "load_scene_facts",
+    "load_scene_mapping",
     "load_rhythm_plan",
     "load_style_session",
     "mount_style_profile_version",
@@ -171,6 +231,7 @@ __all__ = [
     "promotion_output_paths",
     "read_artifact_style_mount_snapshot",
     "read_chunk_extraction",
+    "read_character_text",
     "reader_experience_adherence_for_body",
     "reconstruction_paths",
     "resolve_formal_style_profile",
@@ -181,16 +242,19 @@ __all__ = [
     "save_creative_quality_profile",
     "save_rhythm_plan",
     "scene_inventory_contract_issues",
+    "scene_brief_issues",
     "source_content_digest",
     "style_lint_gate",
     "style_prompt_quality_report",
     "style_review_machine_values",
     "style_version_mount_snapshot",
     "target_length_repair_pending",
+    "derive_scene_policy",
     "validate_chunk_extraction",
     "validate_domain_review",
     "validate_historical_promotion",
     "validate_identity_resolution",
     "validate_reconstruction_candidate",
     "word_budget_adherence_for_body",
+    "verify_creative_result",
 ]

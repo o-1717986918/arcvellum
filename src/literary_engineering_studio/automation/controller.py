@@ -20,12 +20,13 @@ from .policy import (
     MODES,
     POLICY_SCHEMA,
     REVISION_TASK_MARKERS,
-    default_policy,
     is_revision_task,
     next_revision_count,
     normalize_policy,
 )
+from .policy_service import AutopilotPolicyService
 from .run_loop import ClaimedRunLoop
+from .lean_scene_host import LeanSceneAutopilotHost
 from .lean_scene_loop import LeanSceneRunCoordinator
 from .no_progress import register_no_progress
 from .campaign_runtime import CampaignRuntimeCoordinator
@@ -52,10 +53,6 @@ from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
 from ..runtime.prepared_context_cache import PreparedContextCache
 from ..persistence.scene_transactions import SceneTransactionRepository
-from ..compatibility import initial_kernel_selection, kernel_compatibility_manifest
-from ..infrastructure.lean_scene_runtime import build_lean_scene_runtime
-from ..observability.creative_live.scene_transactions import scene_transaction_summary
-from literary_engineering_studio_engine.literary.scene.transaction import SceneExecutionMode
 from ..orchestration import orchestration_settings
 
 
@@ -69,58 +66,6 @@ PROACTIVE_DECISIONS = {
     "word_budget_direction", "canon_patch_approval",
 }
 TERMINAL_STATUSES = {"complete", "paused", "blocked", "cancelled", "failed"}
-
-
-class _AutopilotSceneEvents:
-    def __init__(self, host, run_id: str):
-        self.host = host
-        self.run_id = run_id
-
-    def emit(self, event: str, transaction) -> None:
-        summary = scene_transaction_summary(transaction)
-        data = {
-            **summary,
-            "scene_transaction_id": transaction.transaction_id,
-        }
-        self.host._worker_event(
-            self.run_id,
-            event,
-            data,
-        )
-        if transaction.creative_result is not None and event in {
-            "scene.created",
-            "scene.revised",
-        }:
-            self.host._worker_event(
-                self.run_id,
-                "artifact.preview.snapshot",
-                {
-                    **data,
-                    "attempt_id": transaction.transaction_id,
-                    "path": f"drafts/scenes/{transaction.scene_id}.md",
-                    "kind": "prose",
-                    "format": "markdown",
-                    "identity": "streaming_preview",
-                    "content": transaction.creative_result.prose,
-                    "characters": len(transaction.creative_result.prose),
-                    "revision": transaction.version,
-                },
-            )
-        if event == "scene.committed":
-            self.host._worker_event(
-                self.run_id,
-                "writeback.approved",
-                {
-                    **data,
-                    "attempt_id": transaction.transaction_id,
-                    "path": f"drafts/scenes/{transaction.scene_id}.md",
-                    "kind": "prose",
-                    "format": "markdown",
-                    "identity": "promoted",
-                    "characters": data["body_hanzi"],
-                    "revision": transaction.version,
-                },
-            )
 
 
 class AutopilotService:
@@ -152,12 +97,20 @@ class AutopilotService:
             if store is not None and hasattr(store, "unit_of_work")
             else None
         )
-        self._lean_scene_coordinators: dict[str, LeanSceneRunCoordinator] = {}
         self._choice_delegator = DecisionDelegator(
             config,
             self.runs,
             self.style_mount_service,
             self._pause_for,
+        )
+        self._policy_service = AutopilotPolicyService(self.runs, self.sessions)
+        self._lean_scene_host = LeanSceneAutopilotHost(
+            config=config,
+            runs=self.runs,
+            scene_transactions=self.scene_transactions,
+            execution_coordinator=self.execution_coordinator,
+            emit_event=self._worker_event,
+            pause=self._pause_for,
         )
         self.runs.recover_autopilot_runs()
         self._lock = threading.RLock()
@@ -166,28 +119,10 @@ class AutopilotService:
         self._controller_id = f"studio-controller-{uuid.uuid4().hex[:12]}"
 
     def policy(self, project_root: Path) -> dict[str, Any]:
-        root = str(project_root.expanduser().resolve())
-        stored = self.sessions.read_delegation_policy(root)
-        if stored is None:
-            selection = initial_kernel_selection(project_root)
-            return self.sessions.save_delegation_policy(
-                root,
-                default_policy(
-                    literary_kernel=selection.kernel,
-                    scene_execution_mode=selection.scene_execution_mode,
-                ),
-            )
-        return {**stored, "policy": normalize_policy(stored.get("policy"))}
+        return self._policy_service.read(project_root)
 
     def kernel_compatibility(self, project_root: Path) -> dict[str, Any]:
-        policy = self.policy(project_root)["policy"]
-        manifest = kernel_compatibility_manifest()
-        return {
-            "manifest": manifest,
-            "current_kernel": policy["literary_kernel"],
-            "scene_execution_mode": policy["scene_execution_mode"],
-            "rollback_target": "strict-v1",
-        }
+        return self._policy_service.compatibility(project_root)
 
     def migrate_kernel(
         self,
@@ -196,47 +131,14 @@ class AutopilotService:
         target_kernel: str,
         scene_execution_mode: str = "",
     ) -> dict[str, Any]:
-        current = self.policy(project_root)["policy"]
-        previous = str(current["literary_kernel"])
-        requested = {
-            **current,
-            "literary_kernel": target_kernel,
-            "scene_execution_mode": scene_execution_mode or current["scene_execution_mode"],
-        }
-        saved = self.save_policy(project_root, requested)
-        manifest = kernel_compatibility_manifest()
-        kernel_info = manifest["kernels"][saved["policy"]["literary_kernel"]]
-        return {
-            **saved,
-            "previous_kernel": previous,
-            "current_kernel": saved["policy"]["literary_kernel"],
-            "compatibility_status": kernel_info["status"],
-            "selection_source": "explicit-user-migration",
-            "rollback_target": "strict-v1",
-        }
+        return self._policy_service.migrate(
+            project_root,
+            target_kernel=target_kernel,
+            scene_execution_mode=scene_execution_mode,
+        )
 
     def save_policy(self, project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
-        root = str(project_root.expanduser().resolve())
-        active = self.runs.latest_autopilot_run(root)
-        if active and active["status"] == "running":
-            raise ValueError("请先暂停自动创作，再修改创作模式。")
-        policy = normalize_policy(payload)
-        saved = self.sessions.save_delegation_policy(root, policy)
-        # A paused run keeps a policy snapshot for auditability. Reflect an
-        # explicit mode or delegation change into that run so resume uses the
-        # same policy the user can see in the control panel.
-        if active and active["status"] in {"paused", "blocked", "failed"}:
-            renewed = self.runs.update_autopilot_run_policy(active["run_id"], policy)
-            self.runs.append_autopilot_event(
-                active["run_id"],
-                "autopilot.policy_updated",
-                {
-                    "mode": policy["mode"],
-                    "limits": policy["limits"],
-                },
-            )
-            saved["run"] = renewed
-        return saved
+        return self._policy_service.save(project_root, payload)
 
     def start(self, project_root: Path, *, runtime: str = DEFAULT_CREATIVE_RUNTIME) -> dict[str, Any]:
         root = project_root.expanduser().resolve()
@@ -316,7 +218,7 @@ class AutopilotService:
                 pass
         for thread in list(self._threads.values()):
             thread.join(timeout=5)
-        self._lean_scene_coordinators.clear()
+        self._lean_scene_host.shutdown()
 
     def _launch(self, run_id: str) -> None:
         with self._lock:
@@ -463,104 +365,15 @@ class AutopilotService:
         project: Path,
         policy: DelegationPolicy,
     ) -> bool:
-        run = self.runs.read_autopilot_run(run_id)
-        if str(run.get("runtime") or "") != "pi-worker":
-            raise ValueError("lean-v2 scene transactions currently require the Pi Worker runtime")
-        for role in ("worker", "reviewer"):
-            if runtime_for_role(self.config, role) != "pi-worker":
-                raise ValueError(f"lean-v2 requires agent_runtime_roles.{role}=pi-worker")
         coordinator = self._lean_scene_coordinator(run_id, project)
-        owner = f"autopilot:{run_id}:lean-scene"
-        if self.execution_coordinator is not None and not self.execution_coordinator.acquire(project, owner):
-            self._pause_for(
-                run_id,
-                "project-busy",
-                "同一作品已有另一项正式任务正在执行，请稍后继续。",
-            )
-            return True
-        try:
-            step = coordinator.advance_one(
-                mode=SceneExecutionMode(policy.scene_execution_mode),
-                steward_approved=policy.permits(
-                    "scene-development",
-                    "canon_patch_approval",
-                ),
-            )
-        finally:
-            if self.execution_coordinator is not None:
-                self.execution_coordinator.release(project, owner)
-        task_id = (
-            f"lean-scene:{step.scene_id}:{step.transaction_status}"
-            if step.scene_id
-            else f"lean-scene:{step.action}"
-        )
-        self.runs.append_autopilot_event(
-            run_id,
-            f"lean_scene.{step.action}",
-            {
-                "scene_id": step.scene_id,
-                "transaction_id": step.transaction_id,
-                "status": step.transaction_status,
-                "message": step.message,
-            },
-        )
-        if step.route_ready:
-            self.runs.update_autopilot_run(
-                run_id,
-                route_index=int(run.get("route_index") or 0) + 1,
-                current_task_id="",
-            )
-            return False
-        if step.waiting_human:
-            self._pause_for(run_id, "lean-scene-approval-required", step.message)
-            return True
-        if step.blocked:
-            self._pause_for(run_id, "lean-scene-checkpoint", step.message)
-            return True
-        if step.committed:
-            self.runs.advance_autopilot_run(
-                run_id,
-                current_route="scene-development",
-                current_task_id=task_id,
-                last_error="",
-                consecutive_revisions=0,
-            )
-        else:
-            self.runs.update_autopilot_run(
-                run_id,
-                current_route="scene-development",
-                current_task_id=task_id,
-                last_error="",
-            )
-        return False
+        return self._lean_scene_host.advance(run_id, project, policy, coordinator)
 
     def _lean_scene_coordinator(
         self,
         run_id: str,
         project: Path,
     ) -> LeanSceneRunCoordinator:
-        existing = self._lean_scene_coordinators.get(run_id)
-        if existing is not None:
-            return existing
-        if self.scene_transactions is None:
-            raise RuntimeError("lean-v2 scene transaction persistence is unavailable")
-        application = (
-            self.config.get("application")
-            if isinstance(self.config.get("application"), dict)
-            else {}
-        )
-        data_root = Path(str(application.get("data_root") or ".")).expanduser().resolve()
-        bundle = build_lean_scene_runtime(
-            self.config,
-            project_root=project,
-            data_root=data_root,
-            repository=self.scene_transactions,
-            event_sink=lambda event, data: self._worker_event(run_id, event, data),
-            transaction_events=_AutopilotSceneEvents(self, run_id),
-        )
-        coordinator = bundle.coordinator
-        self._lean_scene_coordinators[run_id] = coordinator
-        return coordinator
+        return self._lean_scene_host.coordinator(run_id, project)
 
     def _current_choices(self, project: Path, route: str) -> list[dict[str, Any]]:
         payload = current_choices(self.config, project, route=route)

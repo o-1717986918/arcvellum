@@ -6,10 +6,8 @@ from dataclasses import replace
 from datetime import datetime, timezone
 import json
 
-from ..application.scene_transaction import (
-    SceneTransaction,
-    scene_transaction_from_dict,
-)
+from ..application.scene_transaction import SceneTransaction
+from ..application.scene_transaction_codec import scene_transaction_from_dict
 from .sqlite_uow import SqliteUnitOfWork
 
 

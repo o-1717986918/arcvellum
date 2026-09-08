@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from ...application.scene_transaction import SceneTransaction
-from literary_engineering_studio_engine.literary.scene.transaction import (
+from literary_engineering_studio_engine.public.literary import (
     SceneTransactionStatus,
 )
 

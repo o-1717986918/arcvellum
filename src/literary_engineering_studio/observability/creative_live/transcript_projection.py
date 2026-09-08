@@ -53,14 +53,19 @@ def _apply_event(current: dict[str, Any], event: dict[str, Any]) -> None:
         task_id=str(event.get("task_id") or current.get("task_id") or ""),
         runtime=str(data.get("runtime") or current.get("runtime") or ""),
     )
-    if name == "agent.message.delta":
-        _append_transcript(current, str(data.get("text") or ""))
-    if name == "agent.message.completed" and data.get("text") and not current.get("transcript"):
-        _append_transcript(current, str(data.get("text") or ""))
+    _apply_message(current, name, data)
     if name.startswith("tool."):
         _append_tool(current, event, data)
     if name == "runner.session.finished":
         current["status"] = str(data.get("status") or "complete")
+
+
+def _apply_message(current: dict[str, Any], name: str, data: dict[str, Any]) -> None:
+    text = str(data.get("text") or "")
+    if name == "agent.message.delta":
+        _append_transcript(current, text)
+    elif name == "agent.message.completed" and text and not current.get("transcript"):
+        _append_transcript(current, text)
 
 
 def _append_transcript(current: dict[str, Any], text: str) -> None:

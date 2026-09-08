@@ -468,8 +468,6 @@ def create_app(
         )
     )
 
-    app.include_router(
-        build_worker_router(worker_dependencies)
-    )
+    app.include_router(build_worker_router(worker_dependencies))
 
     return app

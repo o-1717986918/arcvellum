@@ -9,8 +9,10 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.automation.controller import AutopilotService
-from literary_engineering_studio.application.cli import _scene_transaction_command
-from literary_engineering_studio.compatibility import (
+from literary_engineering_studio.application.scene_transaction_cli import (
+    run_scene_transaction_command,
+)
+from literary_engineering_studio.compatibility.literary_kernel import (
     initial_kernel_selection,
     kernel_compatibility_manifest,
     mark_studio_created_project,
@@ -93,7 +95,7 @@ class LeanKernelCompatibilityTests(unittest.TestCase):
             }
             prepared_output = StringIO()
             with redirect_stdout(prepared_output):
-                result = _scene_transaction_command(
+                result = run_scene_transaction_command(
                     argparse.Namespace(
                         command="scene-transaction-prepare",
                         project=str(project),
@@ -105,7 +107,7 @@ class LeanKernelCompatibilityTests(unittest.TestCase):
             prepared = json.loads(prepared_output.getvalue())
             status_output = StringIO()
             with redirect_stdout(status_output):
-                status_result = _scene_transaction_command(
+                status_result = run_scene_transaction_command(
                     argparse.Namespace(
                         command="scene-transaction-status",
                         project=str(project),

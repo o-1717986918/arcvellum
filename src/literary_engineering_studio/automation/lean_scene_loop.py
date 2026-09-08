@@ -8,16 +8,14 @@ import json
 from pathlib import Path
 from typing import Protocol
 
-from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
-from literary_engineering_studio_engine.literary.scene.facts import (
-    load_scene_facts,
-    load_scene_mapping,
-)
-from literary_engineering_studio_engine.literary.scene.transaction import (
+from literary_engineering_studio_engine.public.projects import atomic_write_text
+from literary_engineering_studio_engine.public.literary import (
     CreativeResult,
     ReviewDecision,
     SceneExecutionMode,
     SceneTransactionStatus,
+    load_scene_facts,
+    load_scene_mapping,
 )
 
 from ..application.chapter_checkpoint import (
@@ -104,61 +102,70 @@ class LeanSceneRunCoordinator:
         """Advance one exact transaction through the production state logic."""
 
         transaction = self.repository.load(transaction_id)
-        scene_id = transaction.scene_id
         status = transaction.status
+        regular = self._regular_stage(transaction, status)
+        if regular is not None:
+            return regular
+        if status is SceneTransactionStatus.REVISION_NEEDED:
+            return self._revise(transaction)
+        if status is SceneTransactionStatus.COMMITTABLE:
+            return self._commit(transaction, steward_approved)
+        if status is SceneTransactionStatus.BLOCKED:
+            return self._resume_blocked(transaction)
+        if status is SceneTransactionStatus.CANCELLED:
+            return self._blocked(transaction, "scene transaction was cancelled")
+        return self._blocked(transaction, f"unsupported scene transaction status: {status.value}")
+
+    def _regular_stage(self, transaction, status: SceneTransactionStatus) -> LeanSceneStep | None:
         if status is SceneTransactionStatus.PREPARED:
             return self._step("created", self.service.create(transaction.transaction_id))
         if status is SceneTransactionStatus.CREATING:
             return self._step("resumed", self.service.resume(transaction.transaction_id))
         if status is SceneTransactionStatus.VERIFYING:
-            return self._step(
-                "verified",
-                self.service.verify(
-                    transaction.transaction_id,
-                    known_refs=known_scene_refs(transaction.brief),
-                ),
+            verified = self.service.verify(
+                transaction.transaction_id,
+                known_refs=known_scene_refs(transaction.brief),
             )
+            return self._step("verified", verified)
         if status is SceneTransactionStatus.REVIEWING:
             return self._step("reviewed", self.service.review_if_required(transaction.transaction_id))
-        if status is SceneTransactionStatus.REVISION_NEEDED:
-            if transaction.creative_result is None or transaction.verification is None:
-                return self._blocked(transaction, "revision inputs are incomplete")
-            if transaction.revision_attempts >= transaction.policy.max_revision_attempts:
-                return self._blocked(transaction, "automatic scene revision budget is exhausted")
-            revised = self.revision_runtime.revise_scene(
-                transaction.transaction_id,
-                transaction.brief,
-                transaction.creative_result,
-                transaction.verification,
-                transaction.review,
-                attempt=transaction.revision_attempts + 1,
+        return None
+
+    def _revise(self, transaction) -> LeanSceneStep:
+        if transaction.creative_result is None or transaction.verification is None:
+            return self._blocked(transaction, "revision inputs are incomplete")
+        if transaction.revision_attempts >= transaction.policy.max_revision_attempts:
+            return self._blocked(transaction, "automatic scene revision budget is exhausted")
+        revised = self.revision_runtime.revise_scene(
+            transaction.transaction_id,
+            transaction.brief,
+            transaction.creative_result,
+            transaction.verification,
+            transaction.review,
+            attempt=transaction.revision_attempts + 1,
+        )
+        return self._step("revised", self.service.accept_revision(transaction.transaction_id, revised))
+
+    def _commit(self, transaction, steward_approved: bool) -> LeanSceneStep:
+        if transaction.policy.steward_approval_required and not steward_approved:
+            return LeanSceneStep(
+                "approval-required",
+                scene_id=transaction.scene_id,
+                transaction_id=transaction.transaction_id,
+                transaction_status=transaction.status.value,
+                message="high-risk scene commit requires delegated or human approval",
+                waiting_human=True,
             )
-            return self._step(
-                "revised",
-                self.service.accept_revision(transaction.transaction_id, revised),
-            )
-        if status is SceneTransactionStatus.COMMITTABLE:
-            if transaction.policy.steward_approval_required and not steward_approved:
-                return LeanSceneStep(
-                    "approval-required",
-                    scene_id=scene_id,
-                    transaction_id=transaction.transaction_id,
-                    transaction_status=status.value,
-                    message="high-risk scene commit requires delegated or human approval",
-                    waiting_human=True,
-                )
-            committed = self.service.commit(
-                transaction.transaction_id,
-                steward_approved=steward_approved,
-            )
-            return self._step("committed", committed, committed=True)
-        if status is SceneTransactionStatus.BLOCKED:
-            if transaction.review is not None and transaction.review.decision is ReviewDecision.ESCALATE:
-                return self._blocked(transaction, transaction.last_error or "review escalated")
-            return self._step("resumed", self.service.resume(transaction.transaction_id))
-        if status is SceneTransactionStatus.CANCELLED:
-            return self._blocked(transaction, "scene transaction was cancelled")
-        return self._blocked(transaction, f"unsupported scene transaction status: {status.value}")
+        committed = self.service.commit(
+            transaction.transaction_id,
+            steward_approved=steward_approved,
+        )
+        return self._step("committed", committed, committed=True)
+
+    def _resume_blocked(self, transaction) -> LeanSceneStep:
+        if transaction.review is not None and transaction.review.decision is ReviewDecision.ESCALATE:
+            return self._blocked(transaction, transaction.last_error or "review escalated")
+        return self._step("resumed", self.service.resume(transaction.transaction_id))
 
     def _next_scene_id(self) -> str:
         for scene_id in self._ordered_scene_ids():
