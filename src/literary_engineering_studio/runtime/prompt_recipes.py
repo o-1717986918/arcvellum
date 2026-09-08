@@ -65,6 +65,14 @@ _LEAN_SCENE_RECIPES = {
         0,
         ("scene_brief", "candidate"),
     ),
+    "revise": PromptRecipe(
+        "lean-scene/revise/v1",
+        ContextTaskKind.CREATIVE,
+        30_000,
+        42_000,
+        0,
+        ("scene_brief", "candidate", "revision_instructions"),
+    ),
 }
 
 

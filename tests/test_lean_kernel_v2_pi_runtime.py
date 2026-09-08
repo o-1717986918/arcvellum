@@ -21,14 +21,17 @@ from literary_engineering_studio.runtimes.pi_scene_transaction import (
     render_scene_create_prompt,
 )
 from literary_engineering_studio_engine.literary.scene.transaction import (
+    CreativeResult,
     LengthTarget,
     RhythmDirective,
     SceneBrief,
     SceneExecutionMode,
     SceneRisk,
     SceneRiskLevel,
+    SceneDelta,
     SceneTransactionStatus,
     StyleMountRef,
+    VerificationReport,
 )
 
 
@@ -173,6 +176,27 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
 
             self.assertEqual(committed.status, SceneTransactionStatus.COMMITTED)
             self.assertEqual([call[0] for call in gateway.calls], ["worker", "reviewer"])
+
+    def test_review_cache_is_bound_to_the_exact_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gateway = _Gateway()
+            runtime = PiSceneTransactionRuntime(
+                {},
+                project_root=root,
+                data_root=root / ".studio",
+                gateway=gateway,
+            )
+            report = VerificationReport("scene_0001", 20)
+            first = CreativeResult("第一版正文。", "初稿", SceneDelta())
+            second = CreativeResult("第二版正文。", "修订稿", SceneDelta())
+
+            runtime.review_scene("tx-review", _brief(), first, report)
+            runtime.review_scene("tx-review", _brief(), first, report)
+            runtime.review_scene("tx-review", _brief(), second, report)
+
+            self.assertEqual([role for role, _ in gateway.calls], ["reviewer", "reviewer"])
+            self.assertEqual(runtime.metrics.cache_hits, 1)
 
 
 if __name__ == "__main__":

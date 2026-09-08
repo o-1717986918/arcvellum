@@ -13,6 +13,7 @@ from .lifecycle import ApplicationLifecycleManager
 from .ports import ApplicationPorts
 from .style.mount_service import StyleMountApplicationService
 from ..observability.agent_session_tracking import AgentSessionEventProjector
+from ..persistence.scene_transactions import SceneTransactionRepository
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ def build_application_container(
         style_mount_service=style_mounts,
         prepared_context_cache=ports.prepared_context_cache,
         live_events=ports.live_events,
+        scene_transactions=SceneTransactionRepository(ports.persistence.unit_of_work),
     )
     return ApplicationContainer(
         config=config,

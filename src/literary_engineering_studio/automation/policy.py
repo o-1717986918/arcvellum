@@ -7,6 +7,8 @@ from typing import Any
 
 POLICY_SCHEMA = "arcvellum/delegation-policy/v0.1"
 MODES = {"collaborative", "supervised_auto", "full_auto"}
+LITERARY_KERNELS = {"strict-v1", "lean-v2"}
+SCENE_EXECUTION_MODES = {"draft", "standard", "publication"}
 VALID_ROUTES = (
     "source-ingest",
     "longform-planning",
@@ -55,6 +57,8 @@ def default_policy(mode: str = "collaborative") -> dict[str, Any]:
         "schema": POLICY_SCHEMA,
         "version": "0.1",
         "mode": normalized,
+        "literary_kernel": "strict-v1",
+        "scene_execution_mode": "standard",
         "delegated_routes": delegated_routes,
         "delegated_decisions": decisions,
         "limits": {
@@ -71,7 +75,13 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
     if mode not in MODES:
         raise ValueError("mode must be collaborative, supervised_auto, or full_auto")
     policy = default_policy(mode)
-    for key in ("delegated_routes", "delegated_decisions", "release_policy"):
+    for key in (
+        "delegated_routes",
+        "delegated_decisions",
+        "release_policy",
+        "literary_kernel",
+        "scene_execution_mode",
+    ):
         if key in incoming:
             policy[key] = incoming[key]
     limits = {**policy["limits"], **(incoming.get("limits") if isinstance(incoming.get("limits"), dict) else {})}
@@ -87,6 +97,10 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
     policy["delegated_decisions"] = sorted({str(item) for item in policy["delegated_decisions"]})
     if policy["release_policy"] not in {"require_user", "delegated"}:
         raise ValueError("release_policy must be require_user or delegated")
+    if policy["literary_kernel"] not in LITERARY_KERNELS:
+        raise ValueError("literary_kernel must be strict-v1 or lean-v2")
+    if policy["scene_execution_mode"] not in SCENE_EXECUTION_MODES:
+        raise ValueError("scene_execution_mode must be draft, standard, or publication")
     return policy
 
 
@@ -97,6 +111,14 @@ class DelegationPolicy:
     @property
     def mode(self) -> str:
         return str(self.payload["mode"])
+
+    @property
+    def literary_kernel(self) -> str:
+        return str(self.payload["literary_kernel"])
+
+    @property
+    def scene_execution_mode(self) -> str:
+        return str(self.payload["scene_execution_mode"])
 
     def permits(self, route: str, decision_type: str) -> bool:
         if self.mode == "collaborative" or route not in self.payload["delegated_routes"]:

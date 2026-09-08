@@ -83,6 +83,17 @@ class ClaimedRunLoop:
             cycle = self._enter_route(run, route_index)
             if self._proactive_choice_stopped(cycle):
                 return
+            if (
+                cycle.route == "scene-development"
+                and self.policy.literary_kernel == "lean-v2"
+            ):
+                if self.host._advance_lean_scene(
+                    self.run_id,
+                    self.project,
+                    self.policy,
+                ):
+                    return
+                continue
             progress_before, _ = self.results.progress_identity()
             result = self._execute_worker(run, cycle)
             if result is None:

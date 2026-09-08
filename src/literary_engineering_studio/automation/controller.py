@@ -26,6 +26,7 @@ from .policy import (
     normalize_policy,
 )
 from .run_loop import ClaimedRunLoop
+from .lean_scene_loop import LeanSceneRunCoordinator
 from .no_progress import register_no_progress
 from .campaign_runtime import CampaignRuntimeCoordinator
 from .runtime_event_routing import (
@@ -50,6 +51,14 @@ from ..advisor.creative_steward import CreativeSteward
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
 from ..runtime.prepared_context_cache import PreparedContextCache
+from ..application.scene_transaction import SceneTransactionService
+from ..infrastructure.project_scene_transactions import (
+    AtomicProjectSceneCommitter,
+    ProjectSceneBriefProvider,
+)
+from ..persistence.scene_transactions import SceneTransactionRepository
+from ..runtimes.pi_scene_transaction import PiSceneTransactionRuntime
+from literary_engineering_studio_engine.literary.scene.transaction import SceneExecutionMode
 from ..orchestration import orchestration_settings
 
 
@@ -63,6 +72,29 @@ PROACTIVE_DECISIONS = {
     "word_budget_direction", "canon_patch_approval",
 }
 TERMINAL_STATUSES = {"complete", "paused", "blocked", "cancelled", "failed"}
+
+
+class _AutopilotSceneEvents:
+    def __init__(self, host, run_id: str):
+        self.host = host
+        self.run_id = run_id
+
+    def emit(self, event: str, transaction) -> None:
+        verification = transaction.verification
+        self.host._worker_event(
+            self.run_id,
+            event,
+            {
+                "scene_transaction_id": transaction.transaction_id,
+                "scene_id": transaction.scene_id,
+                "transaction_status": transaction.status.value,
+                "risk": transaction.brief.risk.level.value,
+                "body_hanzi": verification.body_hanzi if verification else 0,
+                "warning_count": len(verification.warnings) if verification else 0,
+            },
+        )
+
+
 class AutopilotService:
     def __init__(
         self,
@@ -75,6 +107,7 @@ class AutopilotService:
         style_mount_service: StyleMountApplicationService | None = None,
         prepared_context_cache: PreparedContextCache | None = None,
         live_events=None,
+        scene_transactions=None,
     ):
         self.config = config
         persistence = resolve_autopilot_persistence(
@@ -86,6 +119,12 @@ class AutopilotService:
         self.style_mount_service = style_mount_service or StyleMountApplicationService()
         self.prepared_context_cache = prepared_context_cache
         self.live_events = live_events
+        self.scene_transactions = scene_transactions or (
+            SceneTransactionRepository(store.unit_of_work)
+            if store is not None and hasattr(store, "unit_of_work")
+            else None
+        )
+        self._lean_scene_coordinators: dict[str, LeanSceneRunCoordinator] = {}
         self._choice_delegator = DecisionDelegator(
             config,
             self.runs,
@@ -206,6 +245,7 @@ class AutopilotService:
                 pass
         for thread in list(self._threads.values()):
             thread.join(timeout=5)
+        self._lean_scene_coordinators.clear()
 
     def _launch(self, run_id: str) -> None:
         with self._lock:
@@ -345,6 +385,123 @@ class AutopilotService:
             with self._lock:
                 self._stops.pop(run_id, None)
                 self._threads.pop(run_id, None)
+
+    def _advance_lean_scene(
+        self,
+        run_id: str,
+        project: Path,
+        policy: DelegationPolicy,
+    ) -> bool:
+        run = self.runs.read_autopilot_run(run_id)
+        if str(run.get("runtime") or "") != "pi-worker":
+            raise ValueError("lean-v2 scene transactions currently require the Pi Worker runtime")
+        for role in ("worker", "reviewer"):
+            if runtime_for_role(self.config, role) != "pi-worker":
+                raise ValueError(f"lean-v2 requires agent_runtime_roles.{role}=pi-worker")
+        coordinator = self._lean_scene_coordinator(run_id, project)
+        owner = f"autopilot:{run_id}:lean-scene"
+        if self.execution_coordinator is not None and not self.execution_coordinator.acquire(project, owner):
+            self._pause_for(
+                run_id,
+                "project-busy",
+                "同一作品已有另一项正式任务正在执行，请稍后继续。",
+            )
+            return True
+        try:
+            step = coordinator.advance_one(
+                mode=SceneExecutionMode(policy.scene_execution_mode),
+                steward_approved=policy.permits(
+                    "scene-development",
+                    "canon_patch_approval",
+                ),
+            )
+        finally:
+            if self.execution_coordinator is not None:
+                self.execution_coordinator.release(project, owner)
+        task_id = (
+            f"lean-scene:{step.scene_id}:{step.transaction_status}"
+            if step.scene_id
+            else f"lean-scene:{step.action}"
+        )
+        self.runs.append_autopilot_event(
+            run_id,
+            f"lean_scene.{step.action}",
+            {
+                "scene_id": step.scene_id,
+                "transaction_id": step.transaction_id,
+                "status": step.transaction_status,
+                "message": step.message,
+            },
+        )
+        if step.route_ready:
+            self.runs.update_autopilot_run(
+                run_id,
+                route_index=int(run.get("route_index") or 0) + 1,
+                current_task_id="",
+            )
+            return False
+        if step.waiting_human:
+            self._pause_for(run_id, "lean-scene-approval-required", step.message)
+            return True
+        if step.blocked:
+            self._pause_for(run_id, "lean-scene-checkpoint", step.message)
+            return True
+        if step.committed:
+            self.runs.advance_autopilot_run(
+                run_id,
+                current_route="scene-development",
+                current_task_id=task_id,
+                last_error="",
+                consecutive_revisions=0,
+            )
+        else:
+            self.runs.update_autopilot_run(
+                run_id,
+                current_route="scene-development",
+                current_task_id=task_id,
+                last_error="",
+            )
+        return False
+
+    def _lean_scene_coordinator(
+        self,
+        run_id: str,
+        project: Path,
+    ) -> LeanSceneRunCoordinator:
+        existing = self._lean_scene_coordinators.get(run_id)
+        if existing is not None:
+            return existing
+        if self.scene_transactions is None:
+            raise RuntimeError("lean-v2 scene transaction persistence is unavailable")
+        application = (
+            self.config.get("application")
+            if isinstance(self.config.get("application"), dict)
+            else {}
+        )
+        data_root = Path(str(application.get("data_root") or ".")).expanduser().resolve()
+        runtime = PiSceneTransactionRuntime(
+            self.config,
+            project_root=project,
+            data_root=data_root,
+            event_sink=lambda event, data: self._worker_event(run_id, event, data),
+        )
+        service = SceneTransactionService(
+            briefs=ProjectSceneBriefProvider(),
+            runtime=runtime,
+            critic=runtime,
+            repository=self.scene_transactions,
+            commits=AtomicProjectSceneCommitter(project),
+            events=_AutopilotSceneEvents(self, run_id),
+        )
+        coordinator = LeanSceneRunCoordinator(
+            project_root=project,
+            data_root=data_root,
+            service=service,
+            repository=self.scene_transactions,
+            revision_runtime=runtime,
+        )
+        self._lean_scene_coordinators[run_id] = coordinator
+        return coordinator
 
     def _current_choices(self, project: Path, route: str) -> list[dict[str, Any]]:
         payload = current_choices(self.config, project, route=route)

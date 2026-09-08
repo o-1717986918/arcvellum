@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -91,7 +92,11 @@ class PiSceneTransactionRuntime:
         result: CreativeResult,
         verification: VerificationReport,
     ) -> ReviewResult:
-        cache = self._cache_path(transaction_id, "review_result.json")
+        candidate_digest = hashlib.sha256(result.prose.encode("utf-8")).hexdigest()[:16]
+        cache = self._cache_path(
+            transaction_id,
+            f"review_result_{candidate_digest}.json",
+        )
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
@@ -114,6 +119,33 @@ class PiSceneTransactionRuntime:
             },
         )
         return review
+
+    def revise_scene(
+        self,
+        transaction_id: str,
+        brief: SceneBrief,
+        result: CreativeResult,
+        verification: VerificationReport,
+        review: ReviewResult | None,
+        *,
+        attempt: int,
+    ) -> CreativeResult:
+        cache = self._cache_path(transaction_id, f"revision_result_{attempt}.json")
+        cached = _read_json(cache)
+        if cached is not None:
+            self._cache_hits += 1
+            return creative_result_from_payload(cached)
+        prompt = render_scene_revision_prompt(
+            brief,
+            result,
+            verification,
+            review,
+            source_evidence=self._source_evidence(brief, purpose="revise"),
+        )
+        answer = self._run(prompt, role="worker", transaction_id=transaction_id)
+        revised = creative_result_from_payload(_answer_payload(answer))
+        _atomic_json(cache, revised.to_dict())
+        return revised
 
     def _run(self, prompt: str, *, role: str, transaction_id: str) -> str:
         self._provider_calls += 1
@@ -174,6 +206,7 @@ def render_scene_create_prompt(brief: SceneBrief, *, source_evidence: str = "") 
 
 每个变化项使用 {{"target_ref":"已有引用或候选名","summary":"变化","evidence":"正文证据","operation":"update","attributes":{{}}}}。
 只提出正文确实发生的变化；无法确认的内容放进 escalation_reasons。
+若 SceneBrief.risk.level 为 high，decision_trace 必须用少量条目记录关键创作取舍。
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene create prompt exceeds hard character limit")
@@ -209,6 +242,47 @@ def render_scene_review_prompt(
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene review prompt exceeds hard character limit")
+    return prompt
+
+
+def render_scene_revision_prompt(
+    brief: SceneBrief,
+    result: CreativeResult,
+    verification: VerificationReport,
+    review: ReviewResult | None,
+    *,
+    source_evidence: str = "",
+) -> str:
+    recipe = lean_scene_prompt_recipe("revise")
+    instructions = list(review.revision_instructions) if review is not None else []
+    prompt = f"""# Scene Revision
+
+你是本场景原主创。只修复列出的硬失败或文学问题，保留有效情节、人物声音和已有细节。
+不得用另一种模板化转折替换问题表达。修改后的正文仍须满足同一 SceneBrief，并重新提取实际 SceneDelta。
+直接返回与 Scene Create 完全相同的 JSON 对象，不要 Markdown、工作流说明、路径或哈希。
+
+## SceneBrief
+{json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
+
+## Candidate
+{result.prose}
+
+## Deterministic Issues
+{json.dumps(verification.to_dict(), ensure_ascii=False, separators=(",", ":"))}
+
+## Review Instructions
+{json.dumps(instructions, ensure_ascii=False, separators=(",", ":"))}
+
+## Relevant Sources
+{source_evidence or "无额外资料。"}
+
+## Output
+{{"prose":"修订后的完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[]}}
+
+若 SceneBrief.risk.level 为 high，decision_trace 必须保留关键创作取舍，不得清空。
+"""
+    if len(prompt) > recipe.hard_character_limit:
+        raise ValueError("lean scene revision prompt exceeds hard character limit")
     return prompt
 
 
@@ -337,6 +411,7 @@ __all__ = [
     "PiSceneTransactionRuntime",
     "creative_result_from_payload",
     "render_scene_create_prompt",
+    "render_scene_revision_prompt",
     "render_scene_review_prompt",
     "review_result_from_payload",
 ]

@@ -73,6 +73,13 @@ class RunLoopHost(Protocol):
         policy: DelegationPolicy,
     ) -> None: ...
 
+    def _advance_lean_scene(
+        self,
+        run_id: str,
+        project: Path,
+        policy: DelegationPolicy,
+    ) -> bool: ...
+
     def _register_no_progress(
         self,
         run_id: str,
