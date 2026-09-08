@@ -160,6 +160,18 @@ def _identity(event: str, data: dict[str, Any]) -> str:
 
 
 def _title(event: str, data: dict[str, Any]) -> str:
+    scene_titles = {
+        "scene.prepared": "场景资料已经就绪",
+        "scene.created": "本场正文已经形成",
+        "scene.verified": "正文确定性检查完成",
+        "scene.reviewed": "独立文学审读完成",
+        "scene.revised": "本场正文已经修订",
+        "scene.committed": "正文已经进入正式作品",
+        "scene.resumed": "场景事务已经恢复",
+        "scene.blocked": "场景创作需要处理",
+    }
+    if event in scene_titles:
+        return scene_titles[event]
     if event.startswith("artifact.preview"):
         return "正文正在形成" if data.get("preview_mode") == "prose_stream" else "创作产物正在形成"
     if event == "artifact.checkpoint.written":
@@ -180,6 +192,11 @@ def _title(event: str, data: dict[str, Any]) -> str:
 
 
 def _message(event: str, data: dict[str, Any]) -> str:
+    if event.startswith("scene."):
+        scene_id = str(data.get("scene_id") or "当前场景")
+        status = str(data.get("status") or "")
+        detail = str(data.get("review_summary") or data.get("message") or "").strip()
+        return detail or f"{scene_id} 已推进到 {status or '下一阶段'}。"
     if event.startswith("artifact.preview"):
         return "候选内容仍在生成，尚未成为正式正文。"
     if event == "artifact.checkpoint.written":

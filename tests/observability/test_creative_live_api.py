@@ -11,6 +11,18 @@ from fastapi.testclient import TestClient
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.observability.creative_live.contracts import project_channel
+from literary_engineering_studio.application.scene_transaction import SceneTransaction
+from literary_engineering_studio_engine.literary.scene.transaction import (
+    LengthTarget,
+    RhythmDirective,
+    SceneBrief,
+    SceneExecutionMode,
+    SceneRisk,
+    SceneRiskLevel,
+    SceneTransactionStatus,
+    StyleMountRef,
+    derive_scene_policy,
+)
 
 
 class CreativeLiveApiTests(unittest.TestCase):
@@ -79,6 +91,41 @@ class CreativeLiveApiTests(unittest.TestCase):
             response.json()["usage"],
             {"total_tokens": 0, "cost_usd": 0.0, "updates": 1},
         )
+
+    def test_snapshot_recovers_lean_scene_transaction_from_sqlite(self) -> None:
+        brief = SceneBrief(
+            scene_id="scene_0007",
+            objective="让迟到的回信改变两人的关系",
+            scene_function="relationship-turn",
+            participants=("character/protagonist",),
+            canon_constraints=(),
+            incoming_handoff=(),
+            chapter_obligations=(),
+            rhythm=RhythmDirective("slow-to-fast", "selective"),
+            length=LengthTarget(target_hanzi=1600, soft_min=1200, soft_max=2100),
+            style_mount=StyleMountRef("plain-flowing", "v1"),
+            risk=SceneRisk(SceneRiskLevel.STANDARD),
+        )
+        mode = SceneExecutionMode.STANDARD
+        transaction = SceneTransaction(
+            transaction_id="scene-tx-api-1",
+            project_root=str(self.project.resolve()),
+            scene_id=brief.scene_id,
+            mode=mode,
+            status=SceneTransactionStatus.PREPARED,
+            base_revision="revision-1",
+            brief=brief,
+            policy=derive_scene_policy(mode=mode, risk=brief.risk),
+        )
+        self.client.app.state.autopilot.scene_transactions.insert(transaction)
+
+        payload = self.client.get(
+            "/creative-live", params={"project_root": str(self.project)}
+        ).json()
+
+        self.assertEqual(payload["active_scene_transaction"]["scene_id"], "scene_0007")
+        self.assertEqual(payload["scene_transactions"][0]["status"], "prepared")
+        self.assertNotIn(str(self.project), json.dumps(payload["scene_transactions"], ensure_ascii=False))
 
     def test_project_stream_starts_with_snapshot_then_real_event(self) -> None:
         self._publish_preview("流式候选。", revision=1)

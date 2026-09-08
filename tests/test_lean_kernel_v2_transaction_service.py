@@ -253,6 +253,14 @@ class LeanKernelV2TransactionServiceTests(unittest.TestCase):
         self.assertGreater(loaded.version, 0)
         self.assertEqual(loaded.brief.style_mount.style_id, "plain-flowing")
 
+    def test_repository_lists_project_transactions_for_read_models(self) -> None:
+        service = self._service(SceneRiskLevel.LOW)
+        transaction = service.prepare(self.root, "scene_0001")
+
+        values = self.repository.list_for_project(str(self.root.resolve()))
+
+        self.assertEqual([item.transaction_id for item in values], [transaction.transaction_id])
+
 
 if __name__ == "__main__":
     unittest.main()

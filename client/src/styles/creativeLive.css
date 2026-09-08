@@ -71,6 +71,23 @@
 .creative-live-runtime .icon-button { width: 27px; height: 27px; color: var(--live-muted); border-color: var(--live-line); }
 .creative-live-error { margin: 0; padding: 7px 14px; color: #e6a497; background: rgba(164, 65, 48, .12); border-bottom: 1px solid rgba(214, 106, 87, .22); font-size: 10px; }
 
+.scene-transaction-pulse { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(310px, 2fr) minmax(86px, auto); align-items: center; gap: 14px; min-height: 52px; padding: 7px 14px; background: linear-gradient(90deg, rgba(79, 151, 127, .11), rgba(12, 25, 21, .55) 58%, rgba(79, 151, 127, .06)); border-bottom: 1px solid var(--live-line); }
+.scene-transaction-copy { min-width: 0; }
+.scene-transaction-copy > span { display: flex; align-items: center; gap: 4px; color: var(--live-signal); font: 700 7px/1 var(--font-utility); }
+.scene-transaction-copy > strong { display: block; margin-top: 3px; overflow: hidden; color: var(--live-ink); font: 500 10px/1.25 var(--font-display); text-overflow: ellipsis; white-space: nowrap; }
+.scene-transaction-copy > small { display: block; margin-top: 2px; color: var(--live-muted); font-size: 7px; }
+.scene-transaction-pulse ol { display: grid; grid-template-columns: repeat(7, minmax(30px, 1fr)); margin: 0; padding: 0; list-style: none; }
+.scene-transaction-pulse li { position: relative; display: grid; justify-items: center; gap: 3px; color: #61766e; font-size: 7px; }
+.scene-transaction-pulse li:not(:last-child)::after { position: absolute; z-index: 0; top: 4px; left: 52%; width: 96%; height: 1px; background: rgba(123, 161, 147, .18); content: ""; }
+.scene-transaction-pulse li i { z-index: 1; width: 9px; height: 9px; background: #1c312a; border: 1px solid rgba(126, 165, 151, .24); border-radius: 50%; }
+.scene-transaction-pulse li.complete,
+.scene-transaction-pulse li.active { color: var(--live-ink); }
+.scene-transaction-pulse li.complete i { background: var(--live-signal); border-color: var(--live-signal); }
+.scene-transaction-pulse li.active i { background: #e0eee9; border-color: var(--live-signal); box-shadow: 0 0 10px var(--live-signal); animation: creative-pulse 1.5s ease-in-out infinite; }
+.scene-transaction-result { display: flex; justify-content: flex-end; align-items: center; gap: 5px; color: var(--live-signal); font-size: 8px; white-space: nowrap; }
+.scene-transaction-pulse[data-status="blocked"] .scene-transaction-result,
+.scene-transaction-pulse[data-risk="high"] .scene-transaction-result { color: #d5a35f; }
+
 .creative-live-grid {
   display: grid;
   grid-template-columns: minmax(155px, .66fr) minmax(320px, 1.65fr) minmax(190px, .82fr);

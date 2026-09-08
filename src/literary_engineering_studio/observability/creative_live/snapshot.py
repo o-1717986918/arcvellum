@@ -14,6 +14,7 @@ from .projector import project_runtime_event
 from .review_projection import review_events
 from .review_artifacts import apply_review_identities, project_review_artifacts
 from .transcript_projection import reduce_sessions
+from .scene_transactions import active_scene_transaction
 
 
 SNAPSHOT_SCHEMA = "arcvellum/creative-live-snapshot/v1"
@@ -25,6 +26,7 @@ def build_creative_live_snapshot(
     *,
     sessions: list[dict[str, Any]] | None = None,
     run: dict[str, Any] | None = None,
+    scene_transactions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     projected = _unique_events(
         project_runtime_event(item, project_root, source=str(item.get("source") or "runtime"))
@@ -38,6 +40,7 @@ def build_creative_live_snapshot(
     artifacts = hydrate_presentable_artifacts(project_root, artifacts)
     session_projection = reduce_sessions(visible, sessions)
     current_run = run or {}
+    transaction_projection = list(scene_transactions or [])
     _reconcile_session_status(current_run, session_projection)
     revision_source = {
         "event_ids": [item["event_id"] for item in visible],
@@ -49,6 +52,13 @@ def build_creative_live_snapshot(
             key: current_run.get(key)
             for key in ("run_id", "status", "current_task_id", "current_route", "updated_at")
         },
+        "scene_transactions": [
+            (
+                item.get("transaction_id"), item.get("status"),
+                item.get("version"), item.get("body_hanzi"),
+            )
+            for item in transaction_projection
+        ],
     }
     revision = hashlib.sha256(
         json.dumps(revision_source, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
@@ -66,6 +76,8 @@ def build_creative_live_snapshot(
         "activity": _activity(visible),
         "reviews": review_events(visible),
         "usage": _usage(visible),
+        "active_scene_transaction": active_scene_transaction(transaction_projection),
+        "scene_transactions": transaction_projection,
         "events": visible[-240:],
         "cursor": max((int(item.get("sequence") or 0) for item in visible), default=0),
     }

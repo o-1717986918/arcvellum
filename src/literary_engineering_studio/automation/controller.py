@@ -58,6 +58,7 @@ from ..infrastructure.project_scene_transactions import (
 )
 from ..persistence.scene_transactions import SceneTransactionRepository
 from ..runtimes.pi_scene_transaction import PiSceneTransactionRuntime
+from ..observability.creative_live.scene_transactions import scene_transaction_summary
 from literary_engineering_studio_engine.literary.scene.transaction import SceneExecutionMode
 from ..orchestration import orchestration_settings
 
@@ -80,19 +81,50 @@ class _AutopilotSceneEvents:
         self.run_id = run_id
 
     def emit(self, event: str, transaction) -> None:
-        verification = transaction.verification
+        summary = scene_transaction_summary(transaction)
+        data = {
+            **summary,
+            "scene_transaction_id": transaction.transaction_id,
+        }
         self.host._worker_event(
             self.run_id,
             event,
-            {
-                "scene_transaction_id": transaction.transaction_id,
-                "scene_id": transaction.scene_id,
-                "transaction_status": transaction.status.value,
-                "risk": transaction.brief.risk.level.value,
-                "body_hanzi": verification.body_hanzi if verification else 0,
-                "warning_count": len(verification.warnings) if verification else 0,
-            },
+            data,
         )
+        if transaction.creative_result is not None and event in {
+            "scene.created",
+            "scene.revised",
+        }:
+            self.host._worker_event(
+                self.run_id,
+                "artifact.preview.snapshot",
+                {
+                    **data,
+                    "attempt_id": transaction.transaction_id,
+                    "path": f"drafts/scenes/{transaction.scene_id}.md",
+                    "kind": "prose",
+                    "format": "markdown",
+                    "identity": "streaming_preview",
+                    "content": transaction.creative_result.prose,
+                    "characters": len(transaction.creative_result.prose),
+                    "revision": transaction.version,
+                },
+            )
+        if event == "scene.committed":
+            self.host._worker_event(
+                self.run_id,
+                "writeback.approved",
+                {
+                    **data,
+                    "attempt_id": transaction.transaction_id,
+                    "path": f"drafts/scenes/{transaction.scene_id}.md",
+                    "kind": "prose",
+                    "format": "markdown",
+                    "identity": "promoted",
+                    "characters": data["body_hanzi"],
+                    "revision": transaction.version,
+                },
+            )
 
 
 class AutopilotService:

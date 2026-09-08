@@ -9,6 +9,7 @@ import LiveManuscript from "./LiveManuscript.vue";
 import ReviewRail from "./ReviewRail.vue";
 import RevisionDiff from "./RevisionDiff.vue";
 import SessionTranscript from "./SessionTranscript.vue";
+import SceneTransactionPulse from "./SceneTransactionPulse.vue";
 import { artifactKindLabel, artifactStatusLabel, artifactTitle } from "../artifactPresentation";
 
 const app = useAppStore();
@@ -53,6 +54,8 @@ async function openRevisionMode(): Promise<void> {
     </header>
 
     <p v-if="live.error" class="creative-live-error">{{ live.error }}</p>
+
+    <SceneTransactionPulse :transaction="live.snapshot?.active_scene_transaction" />
 
     <div class="creative-live-grid">
       <aside class="creative-live-left">

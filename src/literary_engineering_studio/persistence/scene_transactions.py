@@ -124,6 +124,31 @@ class SceneTransactionRepository:
             ).fetchone()
         return self.load(str(row["transaction_id"])) if row is not None else None
 
+    def list_for_project(
+        self,
+        project_root: str,
+        *,
+        limit: int = 80,
+    ) -> list[SceneTransaction]:
+        """Return recent transactions without leaking persistence rows upward."""
+
+        bounded = max(1, min(500, int(limit)))
+        with self._uow.read() as connection:
+            rows = connection.execute(
+                """
+                SELECT payload_json, version FROM scene_transactions
+                WHERE project_root = ?
+                ORDER BY updated_at DESC LIMIT ?
+                """,
+                (project_root, bounded),
+            ).fetchall()
+        transactions: list[SceneTransaction] = []
+        for row in rows:
+            payload = json.loads(str(row["payload_json"]))
+            payload["version"] = int(row["version"])
+            transactions.append(scene_transaction_from_dict(payload))
+        return transactions
+
 
 def _payload(transaction: SceneTransaction) -> str:
     return json.dumps(transaction.to_dict(), ensure_ascii=False, separators=(",", ":"))

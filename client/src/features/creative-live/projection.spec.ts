@@ -16,6 +16,8 @@ function snapshot(): CreativeLiveSnapshot {
     activity: [],
     reviews: [],
     usage: { total_tokens: 0, cost_usd: 0, updates: 0 },
+    active_scene_transaction: null,
+    scene_transactions: [],
     events: [],
     cursor: 0,
   };
@@ -121,5 +123,45 @@ describe("Creative Live projection", () => {
     expect(value.artifacts[0].truncated).toBe(false);
     expect(value.events).toHaveLength(50);
     expect(value.cursor).toBe(50);
+  });
+
+  it("projects one lean scene transaction through its business states", () => {
+    const prepared = applyCreativeEvent(snapshot(), event({
+      event_id: "scene-prepared",
+      event: "scene.prepared",
+      channel: "activity",
+      artifact: null,
+      data: {
+        scene_transaction_id: "scene-tx-1",
+        scene_id: "scene_0001",
+        status: "prepared",
+        risk: "standard",
+        objective: "主角决定进入封锁区",
+        body_hanzi: 0,
+      },
+    }));
+    const reviewed = applyCreativeEvent(prepared, event({
+      event_id: "scene-reviewed",
+      sequence: 2,
+      event: "scene.reviewed",
+      channel: "review",
+      artifact: null,
+      data: {
+        scene_transaction_id: "scene-tx-1",
+        scene_id: "scene_0001",
+        status: "committable",
+        review_decision: "pass",
+        review_summary: "人物选择可信。",
+        body_hanzi: 1680,
+      },
+    }));
+
+    expect(reviewed.active_scene_transaction).toMatchObject({
+      transaction_id: "scene-tx-1",
+      status: "committable",
+      body_hanzi: 1680,
+      review_decision: "pass",
+    });
+    expect(reviewed.scene_transactions).toHaveLength(1);
   });
 });

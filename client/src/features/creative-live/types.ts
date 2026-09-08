@@ -112,6 +112,25 @@ export interface CreativeReview {
   artifact_id?: string;
 }
 
+export interface SceneTransactionSummary {
+  transaction_id: string;
+  scene_id: string;
+  status: string;
+  mode: string;
+  risk: "low" | "standard" | "high";
+  objective: string;
+  scene_function: string;
+  body_hanzi: number;
+  warning_count: number;
+  hard_issue_count: number;
+  review_decision: string;
+  review_summary: string;
+  revision_attempts: number;
+  requires_input: boolean;
+  message: string;
+  version: number;
+}
+
 export interface CreativeLiveSnapshot {
   ok: boolean;
   schema: string;
@@ -125,6 +144,8 @@ export interface CreativeLiveSnapshot {
   activity: CreativeActivity[];
   reviews: CreativeReview[];
   usage: { total_tokens: number; cost_usd: number; updates: number };
+  active_scene_transaction: SceneTransactionSummary | null;
+  scene_transactions: SceneTransactionSummary[];
   events: CreativeLiveEvent[];
   cursor: number;
 }

@@ -14,6 +14,7 @@ from ...observability.creative_live.contracts import project_channel
 from ...observability.creative_live.artifact_revisions import artifact_revisions
 from ...observability.creative_live.projector import project_runtime_event
 from ...observability.creative_live.snapshot import build_creative_live_snapshot
+from ...observability.creative_live.scene_transactions import project_scene_transactions
 from ..common import call_handler, project_root as resolve_project_root
 from ..streaming import sse_headers
 
@@ -24,6 +25,7 @@ class CreativeLiveRouterDependencies:
     autopilot: Any
     live_events: Any
     context_ledgers: Any
+    scene_transactions: Any
     sse: Callable[[str, dict[str, Any], int | str | None], str]
 
 
@@ -114,7 +116,16 @@ def _snapshot(
     raw, discovered_run = _raw_events(deps, root)
     current_run = run or discovered_run
     sessions = deps.jobs.list_agent_sessions(str(root), limit=40)
-    return build_creative_live_snapshot(root, raw, sessions=sessions, run=current_run)
+    transactions = project_scene_transactions(
+        deps.scene_transactions.list_for_project(str(root), limit=80)
+    )
+    return build_creative_live_snapshot(
+        root,
+        raw,
+        sessions=sessions,
+        run=current_run,
+        scene_transactions=transactions,
+    )
 
 
 def _raw_events(

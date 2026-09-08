@@ -349,6 +349,7 @@ def create_app(
                 autopilot=autopilot,
                 live_events=lifecycle.live_events,
                 context_ledgers=lifecycle.persistence.context_ledgers,
+                scene_transactions=autopilot.scene_transactions,
                 sse=_sse,
             )
         )
