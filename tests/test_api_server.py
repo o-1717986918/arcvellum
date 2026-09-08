@@ -479,6 +479,42 @@ class ApiServerTests(unittest.TestCase):
             self.assertEqual(blocked.status_code, 400)
             self.assertIn("明确确认授权", blocked.json()["detail"])
 
+    def test_literary_kernel_migration_is_persisted_and_reversible(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "project.yaml").write_text("title: kernel migration\n", encoding="utf-8")
+
+            compatibility = self.client.get(
+                "/autopilot/kernel-compatibility",
+                params={"project_root": str(project)},
+            )
+            self.assertEqual(compatibility.status_code, 200)
+            self.assertFalse(compatibility.json()["manifest"]["adoption"]["ready_for_default"])
+
+            migrated = self.client.post(
+                "/autopilot/kernel-migrate",
+                json={
+                    "project_root": str(project),
+                    "target_kernel": "lean-v2",
+                    "scene_execution_mode": "draft",
+                },
+            )
+            self.assertEqual(migrated.status_code, 200)
+            self.assertEqual(migrated.json()["compatibility_status"], "preview")
+            current = self.client.get(
+                "/autopilot/status",
+                params={"project_root": str(project)},
+            ).json()
+            self.assertEqual(current["policy"]["literary_kernel"], "lean-v2")
+            self.assertEqual(current["policy"]["scene_execution_mode"], "draft")
+
+            rolled_back = self.client.post(
+                "/autopilot/kernel-migrate",
+                json={"project_root": str(project), "target_kernel": "strict-v1"},
+            )
+            self.assertEqual(rolled_back.status_code, 200)
+            self.assertEqual(rolled_back.json()["current_kernel"], "strict-v1")
+
     def test_advisor_stream_separates_visible_text_from_final_answer(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)

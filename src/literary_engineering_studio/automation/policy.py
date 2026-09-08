@@ -41,7 +41,12 @@ def next_revision_count(run: dict[str, Any], task_id: str) -> int:
     return int(run.get("consecutive_revisions") or 0) + 1 if is_revision_task(task_id) else 0
 
 
-def default_policy(mode: str = "collaborative") -> dict[str, Any]:
+def default_policy(
+    mode: str = "collaborative",
+    *,
+    literary_kernel: str = "strict-v1",
+    scene_execution_mode: str = "standard",
+) -> dict[str, Any]:
     normalized = mode if mode in MODES else "collaborative"
     decisions = [] if normalized == "collaborative" else [
         "branch_selection", "style_mount", "revision_direction", "budget_expansion",
@@ -57,8 +62,8 @@ def default_policy(mode: str = "collaborative") -> dict[str, Any]:
         "schema": POLICY_SCHEMA,
         "version": "0.1",
         "mode": normalized,
-        "literary_kernel": "strict-v1",
-        "scene_execution_mode": "standard",
+        "literary_kernel": literary_kernel,
+        "scene_execution_mode": scene_execution_mode,
         "delegated_routes": delegated_routes,
         "delegated_decisions": decisions,
         "limits": {

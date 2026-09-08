@@ -90,6 +90,21 @@ class LeanSceneRunCoordinator:
         if transaction is None:
             transaction = self.service.prepare(self.project, scene_id, mode=mode)
             return self._step("prepared", transaction)
+        return self.advance_transaction(
+            transaction.transaction_id,
+            steward_approved=steward_approved,
+        )
+
+    def advance_transaction(
+        self,
+        transaction_id: str,
+        *,
+        steward_approved: bool,
+    ) -> LeanSceneStep:
+        """Advance one exact transaction through the production state logic."""
+
+        transaction = self.repository.load(transaction_id)
+        scene_id = transaction.scene_id
         status = transaction.status
         if status is SceneTransactionStatus.PREPARED:
             return self._step("created", self.service.create(transaction.transaction_id))

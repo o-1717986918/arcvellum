@@ -24,6 +24,13 @@ from ..runtime.sidecar_protocol import (
 )
 from ..runtime.worker import AgentWorker
 from ..runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME
+from ..infrastructure.composition import resolve_application_container
+from ..infrastructure.lean_scene_runtime import build_lean_scene_runtime
+from ..persistence.scene_transactions import SceneTransactionRepository
+from literary_engineering_studio_engine.literary.scene.transaction import (
+    SceneExecutionMode,
+    SceneTransactionStatus,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -73,6 +80,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     worker = sub.add_parser("agent-worker-once", help="Issue and run the next task for one formal route.")
     _task_arguments(worker, include_task_id=False)
+
+    transaction_status = sub.add_parser(
+        "scene-transaction-status",
+        help="Inspect lean scene transactions without changing project state.",
+    )
+    transaction_status.add_argument("project")
+    transaction_status.add_argument("--scene", default="")
+    transaction_status.add_argument("--transaction-id", default="")
+    transaction_status.add_argument("--limit", type=int, default=20)
+    transaction_prepare = sub.add_parser(
+        "scene-transaction-prepare",
+        help="Prepare one recoverable lean scene transaction.",
+    )
+    transaction_prepare.add_argument("project")
+    transaction_prepare.add_argument("scene")
+    _scene_transaction_mode(transaction_prepare)
+    transaction_run = sub.add_parser(
+        "scene-transaction-run",
+        help="Run an existing lean scene transaction through production state logic.",
+    )
+    transaction_run.add_argument("project")
+    transaction_run.add_argument("transaction_id")
+    transaction_run.add_argument("--max-steps", type=int, default=12)
+    transaction_run.add_argument("--steward-approved", action="store_true")
+    transaction_resume = sub.add_parser(
+        "scene-transaction-resume",
+        help="Resume one blocked or interrupted lean scene transaction.",
+    )
+    transaction_resume.add_argument("project")
+    transaction_resume.add_argument("transaction_id")
 
     serve = sub.add_parser("serve", help="Start the local Studio API and frontend.")
     serve.add_argument("--host", default="")
@@ -196,6 +233,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
         return 0 if result.status in {"complete", "route_ready", "waiting_host_agent", "waiting_human"} else 1
 
+    if args.command.startswith("scene-transaction-"):
+        return _scene_transaction_command(args, config)
+
     if args.command == "serve":
         return _serve_command(parser, args, config)
 
@@ -254,6 +294,94 @@ def _task_arguments(parser: argparse.ArgumentParser, *, include_task_id: bool = 
     parser.add_argument("--scene", default="")
     if include_task_id:
         parser.add_argument("--task-id", default="")
+
+
+def _scene_transaction_mode(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--mode",
+        choices=[item.value for item in SceneExecutionMode],
+        default=SceneExecutionMode.STANDARD.value,
+    )
+
+
+def _scene_transaction_command(args: argparse.Namespace, config: dict[str, object]) -> int:
+    project = Path(args.project).expanduser().resolve()
+    if not (project / "project.yaml").is_file():
+        raise FileNotFoundError(f"Literary project not found: {project}")
+    container = resolve_application_container(config, None)
+    repository = SceneTransactionRepository(container.ports.persistence.unit_of_work)
+    try:
+        if args.command == "scene-transaction-status":
+            if args.transaction_id:
+                items = [repository.load(args.transaction_id)]
+            elif args.scene:
+                latest = repository.latest_for_scene(str(project), args.scene)
+                items = [latest] if latest is not None else []
+            else:
+                items = repository.list_for_project(str(project), limit=args.limit)
+            _print_json(
+                {
+                    "status": "ready",
+                    "project_root": str(project),
+                    "items": [item.to_dict() for item in items],
+                }
+            )
+            return 0
+
+        data_root = _application_data_root(config)
+        bundle = build_lean_scene_runtime(
+            config,
+            project_root=project,
+            data_root=data_root,
+            repository=repository,
+        )
+        if args.command == "scene-transaction-prepare":
+            existing = repository.latest_for_scene(str(project), args.scene)
+            reused = existing is not None and existing.status is not SceneTransactionStatus.CANCELLED
+            transaction = existing if reused else bundle.service.prepare(
+                project,
+                args.scene,
+                mode=SceneExecutionMode(args.mode),
+            )
+            _print_json({"status": "prepared", "reused": reused, "transaction": transaction.to_dict()})
+            return 0
+        if args.command == "scene-transaction-resume":
+            transaction = _require_transaction_project(repository.load(args.transaction_id), project)
+            resumed = bundle.service.resume(transaction.transaction_id)
+            _print_json({"status": "resumed", "transaction": resumed.to_dict()})
+            return 0
+        transaction = _require_transaction_project(repository.load(args.transaction_id), project)
+        steps: list[dict[str, object]] = []
+        if transaction.status is not SceneTransactionStatus.COMMITTED:
+            for _ in range(max(1, min(32, int(args.max_steps)))):
+                step = bundle.coordinator.advance_transaction(
+                    transaction.transaction_id,
+                    steward_approved=bool(args.steward_approved),
+                )
+                steps.append(step.__dict__)
+                transaction = repository.load(transaction.transaction_id)
+                if step.committed or step.blocked or step.waiting_human:
+                    break
+        _print_json({"status": transaction.status.value, "steps": steps, "transaction": transaction.to_dict()})
+        return 0 if transaction.status is not SceneTransactionStatus.BLOCKED else 1
+    finally:
+        container.shutdown()
+
+
+def _application_data_root(config: dict[str, object]) -> Path:
+    application = config.get("application")
+    values = application if isinstance(application, dict) else {}
+    return Path(str(values.get("data_root") or ".")).expanduser().resolve()
+
+
+def _require_transaction_project(transaction, project: Path):
+    if Path(transaction.project_root).resolve() != project:
+        raise ValueError("scene transaction belongs to another project")
+    return transaction
+
+
+def _print_json(payload: dict[str, object]) -> None:
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

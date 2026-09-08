@@ -1,0 +1,31 @@
+{
+  "schema": "arcvellum/literary-kernel-compatibility/v1",
+  "manifest_version": 1,
+  "candidate": "lean-v2",
+  "fallback": "strict-v1",
+  "new_project_mode": "standard",
+  "adoption": {
+    "decision": "pending-literary-evidence",
+    "ready_for_default": false,
+    "required_evidence": "same-model blind literary noninferiority"
+  },
+  "kernels": {
+    "strict-v1": {
+      "status": "supported",
+      "user_selectable": true,
+      "required_runtime": "any-supported"
+    },
+    "lean-v2": {
+      "status": "preview",
+      "user_selectable": true,
+      "required_runtime": "pi-worker"
+    }
+  },
+  "retirement": {
+    "strict-v1": {
+      "minimum_zero_consumer_release_cycles": 2,
+      "observed_zero_consumer_release_cycles": 0,
+      "deletion_allowed": false
+    }
+  }
+}

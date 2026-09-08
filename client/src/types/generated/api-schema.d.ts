@@ -788,6 +788,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/autopilot/kernel-compatibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Autopilot Kernel Compatibility */
+        get: operations["autopilot_kernel_compatibility_autopilot_kernel_compatibility_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/autopilot/kernel-migrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Autopilot Kernel Migrate */
+        post: operations["autopilot_kernel_migrate_autopilot_kernel_migrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/autopilot/policy": {
         parameters: {
             query?: never;
@@ -2738,6 +2772,18 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** LiteraryKernelMigrationRequest */
+        LiteraryKernelMigrationRequest: {
+            /** Project Root */
+            project_root: string;
+            /**
+             * Scene Execution Mode
+             * @default
+             */
+            scene_execution_mode: string;
+            /** Target Kernel */
+            target_kernel: string;
+        };
         /** ModelSelectionRequest */
         ModelSelectionRequest: {
             /** Model */
@@ -4542,6 +4588,70 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    autopilot_kernel_compatibility_autopilot_kernel_compatibility_get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    autopilot_kernel_migrate_autopilot_kernel_migrate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiteraryKernelMigrationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

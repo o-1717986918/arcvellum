@@ -51,13 +51,9 @@ from ..advisor.creative_steward import CreativeSteward
 from ..projections.whole_book_release import WholeBookReleaseCoordinator
 from ..runtime.worker import AgentWorker, WorkerRunResult
 from ..runtime.prepared_context_cache import PreparedContextCache
-from ..application.scene_transaction import SceneTransactionService
-from ..infrastructure.project_scene_transactions import (
-    AtomicProjectSceneCommitter,
-    ProjectSceneBriefProvider,
-)
 from ..persistence.scene_transactions import SceneTransactionRepository
-from ..runtimes.pi_scene_transaction import PiSceneTransactionRuntime
+from ..compatibility import initial_kernel_selection, kernel_compatibility_manifest
+from ..infrastructure.lean_scene_runtime import build_lean_scene_runtime
 from ..observability.creative_live.scene_transactions import scene_transaction_summary
 from literary_engineering_studio_engine.literary.scene.transaction import SceneExecutionMode
 from ..orchestration import orchestration_settings
@@ -173,8 +169,51 @@ class AutopilotService:
         root = str(project_root.expanduser().resolve())
         stored = self.sessions.read_delegation_policy(root)
         if stored is None:
-            return self.sessions.save_delegation_policy(root, default_policy())
+            selection = initial_kernel_selection(project_root)
+            return self.sessions.save_delegation_policy(
+                root,
+                default_policy(
+                    literary_kernel=selection.kernel,
+                    scene_execution_mode=selection.scene_execution_mode,
+                ),
+            )
         return {**stored, "policy": normalize_policy(stored.get("policy"))}
+
+    def kernel_compatibility(self, project_root: Path) -> dict[str, Any]:
+        policy = self.policy(project_root)["policy"]
+        manifest = kernel_compatibility_manifest()
+        return {
+            "manifest": manifest,
+            "current_kernel": policy["literary_kernel"],
+            "scene_execution_mode": policy["scene_execution_mode"],
+            "rollback_target": "strict-v1",
+        }
+
+    def migrate_kernel(
+        self,
+        project_root: Path,
+        *,
+        target_kernel: str,
+        scene_execution_mode: str = "",
+    ) -> dict[str, Any]:
+        current = self.policy(project_root)["policy"]
+        previous = str(current["literary_kernel"])
+        requested = {
+            **current,
+            "literary_kernel": target_kernel,
+            "scene_execution_mode": scene_execution_mode or current["scene_execution_mode"],
+        }
+        saved = self.save_policy(project_root, requested)
+        manifest = kernel_compatibility_manifest()
+        kernel_info = manifest["kernels"][saved["policy"]["literary_kernel"]]
+        return {
+            **saved,
+            "previous_kernel": previous,
+            "current_kernel": saved["policy"]["literary_kernel"],
+            "compatibility_status": kernel_info["status"],
+            "selection_source": "explicit-user-migration",
+            "rollback_target": "strict-v1",
+        }
 
     def save_policy(self, project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         root = str(project_root.expanduser().resolve())
@@ -511,27 +550,15 @@ class AutopilotService:
             else {}
         )
         data_root = Path(str(application.get("data_root") or ".")).expanduser().resolve()
-        runtime = PiSceneTransactionRuntime(
+        bundle = build_lean_scene_runtime(
             self.config,
             project_root=project,
             data_root=data_root,
+            repository=self.scene_transactions,
             event_sink=lambda event, data: self._worker_event(run_id, event, data),
+            transaction_events=_AutopilotSceneEvents(self, run_id),
         )
-        service = SceneTransactionService(
-            briefs=ProjectSceneBriefProvider(),
-            runtime=runtime,
-            critic=runtime,
-            repository=self.scene_transactions,
-            commits=AtomicProjectSceneCommitter(project),
-            events=_AutopilotSceneEvents(self, run_id),
-        )
-        coordinator = LeanSceneRunCoordinator(
-            project_root=project,
-            data_root=data_root,
-            service=service,
-            repository=self.scene_transactions,
-            revision_runtime=runtime,
-        )
+        coordinator = bundle.coordinator
         self._lean_scene_coordinators[run_id] = coordinator
         return coordinator
 

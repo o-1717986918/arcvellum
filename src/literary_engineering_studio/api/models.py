@@ -223,6 +223,12 @@ class AutopilotPolicyRequest(BaseModel):
     policy: dict[str, Any]
 
 
+class LiteraryKernelMigrationRequest(BaseModel):
+    project_root: str
+    target_kernel: str
+    scene_execution_mode: str = ""
+
+
 class AutopilotStartRequest(BaseModel):
     project_root: str
     runtime: str = DEFAULT_CREATIVE_RUNTIME
@@ -355,6 +361,7 @@ __all__ = [
     "AdvisorSessionRequest",
     "AutopilotControlRequest",
     "AutopilotPolicyRequest",
+    "LiteraryKernelMigrationRequest",
     "AutopilotStartRequest",
     "CreativeQualityPreviewRequest",
     "CreativeQualityRequest",

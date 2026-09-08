@@ -19,6 +19,8 @@ const policy = {
   delegated_decisions: [],
   limits: { max_consecutive_revisions: 3, max_failures_per_task: 2 },
   release_policy: "require_user" as const,
+  literary_kernel: "strict-v1" as const,
+  scene_execution_mode: "standard" as const,
 };
 
 describe("AutopilotPanel", () => {
@@ -28,6 +30,11 @@ describe("AutopilotPanel", () => {
     apiMock.mockReset();
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.startsWith("/autopilot/status")) return { ok: true, policy, run: null };
+      if (path.startsWith("/autopilot/kernel-compatibility")) return { manifest: { adoption: { decision: "pending-literary-evidence", ready_for_default: false, required_evidence: "blind review" }, kernels: {} }, current_kernel: "strict-v1", scene_execution_mode: "standard", rollback_target: "strict-v1" };
+      if (path === "/autopilot/kernel-migrate") {
+        const next = JSON.parse(String(init?.body || "{}"));
+        return { policy: { ...policy, literary_kernel: next.target_kernel, scene_execution_mode: next.scene_execution_mode }, current_kernel: next.target_kernel, compatibility_status: "preview" };
+      }
       if (path === "/autopilot/policy") {
         const next = JSON.parse(String(init?.body || "{}"));
         return { ok: true, policy: next.policy };
@@ -39,6 +46,7 @@ describe("AutopilotPanel", () => {
   it("starts formal creation with the embedded Pi worker by default", async () => {
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.startsWith("/autopilot/status")) return { ok: true, policy, run: null };
+      if (path.startsWith("/autopilot/kernel-compatibility")) return { manifest: { adoption: { decision: "pending-literary-evidence", ready_for_default: false, required_evidence: "blind review" }, kernels: {} }, current_kernel: "strict-v1", scene_execution_mode: "standard", rollback_target: "strict-v1" };
       if (path === "/autopilot/start") {
         const request = JSON.parse(String(init?.body || "{}"));
         expect(request.runtime).toBe("pi-worker");
@@ -102,6 +110,27 @@ describe("AutopilotPanel", () => {
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true);
     expect(wrapper.text()).toContain("不设任务数、时长或费用上限");
     expect(wrapper.text()).not.toContain("授权需要续期");
+  });
+
+  it("persists an explicit lean-kernel preview selection", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const { useAppStore } = await import("@/stores/app");
+    useAppStore().setCurrentProject("C:\\ArcVellum\\作品", false);
+    const wrapper = mount(AutopilotPanel, { global: { plugins: [pinia] } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("精简内核仍在文学盲评期");
+    const lean = wrapper.findAll("button").find((button) => button.text().includes("精简事务"));
+    await lean?.trigger("click");
+    await flushPromises();
+
+    const migration = apiMock.mock.calls.find((call) => call[0] === "/autopilot/kernel-migrate");
+    expect(migration).toBeTruthy();
+    expect(JSON.parse(String(migration?.[1]?.body || "{}"))).toMatchObject({
+      target_kernel: "lean-v2",
+      scene_execution_mode: "standard",
+    });
   });
 
   it("labels the counter as formal gate advances rather than finished creative works", async () => {

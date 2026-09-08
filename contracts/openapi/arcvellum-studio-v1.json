@@ -671,6 +671,29 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "LiteraryKernelMigrationRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "scene_execution_mode": {
+            "default": "",
+            "title": "Scene Execution Mode",
+            "type": "string"
+          },
+          "target_kernel": {
+            "title": "Target Kernel",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "target_kernel"
+        ],
+        "title": "LiteraryKernelMigrationRequest",
+        "type": "object"
+      },
       "ModelSelectionRequest": {
         "properties": {
           "model": {
@@ -3077,6 +3100,79 @@
           }
         },
         "summary": "Archive Tree"
+      }
+    },
+    "/autopilot/kernel-compatibility": {
+      "get": {
+        "operationId": "autopilot_kernel_compatibility_autopilot_kernel_compatibility_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Kernel Compatibility"
+      }
+    },
+    "/autopilot/kernel-migrate": {
+      "post": {
+        "operationId": "autopilot_kernel_migrate_autopilot_kernel_migrate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiteraryKernelMigrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autopilot Kernel Migrate"
       }
     },
     "/autopilot/policy": {

@@ -12,7 +12,12 @@ from fastapi.responses import StreamingResponse
 from ..streaming import numeric_resume_cursor, sse_headers, stream_terminal
 
 from ..common import call_handler, project_root as resolve_project_root
-from ..models import AutopilotControlRequest, AutopilotPolicyRequest, AutopilotStartRequest
+from ..models import (
+    AutopilotControlRequest,
+    AutopilotPolicyRequest,
+    AutopilotStartRequest,
+    LiteraryKernelMigrationRequest,
+)
 from ...application.failures import present_run
 from ...observability.live_events import coalesce_live_events
 
@@ -179,6 +184,28 @@ def build_automation_router(deps: AutomationRouterDependencies) -> APIRouter:
     @router.put("/autopilot/policy")
     def autopilot_policy_save(payload: AutopilotPolicyRequest):
         return call_handler(lambda: _save_policy(deps, payload))
+
+    @router.get("/autopilot/kernel-compatibility")
+    def autopilot_kernel_compatibility(project_root: str):
+        return call_handler(
+            lambda: {
+                "ok": True,
+                **deps.autopilot.kernel_compatibility(resolve_project_root(project_root)),
+            }
+        )
+
+    @router.post("/autopilot/kernel-migrate")
+    def autopilot_kernel_migrate(payload: LiteraryKernelMigrationRequest):
+        return call_handler(
+            lambda: {
+                "ok": True,
+                **deps.autopilot.migrate_kernel(
+                    resolve_project_root(payload.project_root),
+                    target_kernel=payload.target_kernel,
+                    scene_execution_mode=payload.scene_execution_mode,
+                ),
+            }
+        )
 
     @router.post("/autopilot/start")
     def autopilot_start(payload: AutopilotStartRequest):

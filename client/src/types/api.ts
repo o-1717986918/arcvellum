@@ -390,6 +390,18 @@ export interface DelegationPolicy {
     max_failures_per_task: number;
   };
   release_policy: "require_user" | "delegated";
+  literary_kernel?: "strict-v1" | "lean-v2";
+  scene_execution_mode?: "draft" | "standard" | "publication";
+}
+
+export interface LiteraryKernelCompatibility {
+  manifest: {
+    adoption: { decision: string; ready_for_default: boolean; required_evidence: string };
+    kernels: Record<string, { status: string; user_selectable: boolean; required_runtime: string }>;
+  };
+  current_kernel: "strict-v1" | "lean-v2";
+  scene_execution_mode: "draft" | "standard" | "publication";
+  rollback_target: "strict-v1";
 }
 
 export interface FailureRecoveryAction {
