@@ -120,6 +120,21 @@ class LeanKernelV2DomainTests(unittest.TestCase):
         self.assertTrue(high.explicit_decision_trace_required)
         self.assertTrue(high.steward_approval_required)
 
+    def test_draft_mode_defers_standard_review_but_keeps_high_risk_protection(self) -> None:
+        standard = derive_scene_policy(
+            mode=SceneExecutionMode.DRAFT,
+            risk=SceneRisk(SceneRiskLevel.STANDARD),
+        )
+        high = derive_scene_policy(
+            mode=SceneExecutionMode.DRAFT,
+            risk=SceneRisk(SceneRiskLevel.HIGH),
+        )
+
+        self.assertFalse(standard.independent_review_required)
+        self.assertTrue(standard.defer_semantic_review_to_chapter)
+        self.assertTrue(high.independent_review_required)
+        self.assertTrue(high.steward_approval_required)
+
     def test_length_range_is_advisory_but_process_residue_is_hard(self) -> None:
         brief = _brief()
         policy = derive_scene_policy(mode=SceneExecutionMode.STANDARD, risk=brief.risk)

@@ -40,13 +40,14 @@ def derive_scene_policy(
 
     high = risk.level is SceneRiskLevel.HIGH
     standard = risk.level is SceneRiskLevel.STANDARD
+    draft = mode is SceneExecutionMode.DRAFT
     publication = mode is SceneExecutionMode.PUBLICATION
     return ScenePolicy(
         mode=mode,
         risk=risk,
-        independent_review_required=high or standard or publication,
+        independent_review_required=high or ((standard or publication) and not draft),
         explicit_decision_trace_required=high,
-        defer_semantic_review_to_chapter=(risk.level is SceneRiskLevel.LOW and not publication),
+        defer_semantic_review_to_chapter=(draft or (risk.level is SceneRiskLevel.LOW and not publication)),
         automatic_revision_allowed=True,
         max_revision_attempts=1,
         steward_approval_required=high,
