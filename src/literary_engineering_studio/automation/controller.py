@@ -20,6 +20,7 @@ from .policy import (
     MODES,
     POLICY_SCHEMA,
     REVISION_TASK_MARKERS,
+    default_policy,
     is_revision_task,
     next_revision_count,
     normalize_policy,
