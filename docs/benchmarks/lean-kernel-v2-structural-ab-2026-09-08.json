@@ -1,0 +1,43 @@
+{
+  "schema": "arcvellum/lean-kernel-ab/v1",
+  "routes": {
+    "strict-v1": {
+      "route": "strict-v1",
+      "model_calls": 8,
+      "recoverable_states": 31,
+      "project_agent_task_files": 8,
+      "committed_hanzi": 0,
+      "canon_regressions": 0
+    },
+    "lean-v2": {
+      "route": "lean-v2-standard",
+      "model_calls": 2,
+      "recoverable_states": 5,
+      "project_agent_task_files": 0,
+      "committed_hanzi": 0,
+      "canon_regressions": 0
+    }
+  },
+  "reductions": {
+    "model_calls": 0.75,
+    "recoverable_states": 0.8387,
+    "project_agent_task_files": 1.0
+  },
+  "structural_criteria": {
+    "standard_model_calls_at_most_two": true,
+    "project_agent_task_files_reduced_at_least_70_percent": true,
+    "no_more_canon_regressions": true
+  },
+  "literary_quality": {
+    "available": false,
+    "noninferior": false,
+    "margin": 0.25,
+    "reason": "blind literary scores were not supplied"
+  },
+  "decision": "pending-literary-evidence",
+  "ready_for_default": false,
+  "source": {
+    "strict_baseline": "tests/fixtures/lean_kernel_v2/strict_v1_scene_baseline.json",
+    "lean_contract": "standard scene: create, verify, conditional review, commit"
+  }
+}

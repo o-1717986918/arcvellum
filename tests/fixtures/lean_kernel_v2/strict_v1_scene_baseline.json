@@ -3,6 +3,8 @@
   "captured_at": "2026-09-08",
   "route": "scene-development",
   "state_count": 31,
+  "ideal_model_calls": 8,
+  "ideal_agent_task_files": 8,
   "state_sequence": [
     "scene-character-assets",
     "context-packet",
