@@ -14,6 +14,7 @@ from .mutation_receipts import MUTATION_RECEIPT_SCHEMA_SQL
 from .primitives import DATABASE_SCHEMA_VERSION
 from .recycle_bin import RECYCLE_BIN_SCHEMA_SQL
 from .resource_leases import RESOURCE_LEASE_SCHEMA_SQL
+from .scene_transactions import SCENE_TRANSACTION_SCHEMA_SQL
 
 
 CORE_SCHEMA_SQL = """
@@ -215,6 +216,7 @@ FULL_SCHEMA_SQL = (
     + CONTEXT_LEDGER_SCHEMA_SQL
     + MUTATION_RECEIPT_SCHEMA_SQL
     + RESOURCE_LEASE_SCHEMA_SQL
+    + SCENE_TRANSACTION_SCHEMA_SQL
 )
 
 
