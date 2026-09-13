@@ -1,6 +1,6 @@
 # ArcVellum Agent Desktop 与顶层 Agent 分阶段设计方案
 
-> 状态：D2 已完成，D3 有条件通过；允许进入 D4 只读后端实现，暂不允许写工具与完整产品迁移
+> 状态：D2-D4 已完成；只读 Project Agent 产品切片通过，D5 写工具仍需独立接口审查
 >
 > 日期：2026-09-13
 >
@@ -720,7 +720,7 @@ D2 完成后暂停实现，执行一次正式审查：
 
 ### D4：只读顶层 Agent
 
-状态：后端基础已完成，生产 Agent UI 待接入。现已具备独立 Project Agent 会话、三项只读工具、既有顾问人格复用、每回合持久 Job/Event、异步执行与基于 durable cursor 的 SSE；写工具仍未开放。
+状态：已完成。现已具备独立 Project Agent 会话、三项只读工具、既有顾问人格复用、每回合持久 Job/Event、异步执行、基于 durable cursor 的 SSE，以及生产 Vue Agent UI；写工具仍未开放。
 
 工作：
 
@@ -733,6 +733,42 @@ D2 完成后暂停实现，执行一次正式审查：
 - 验证同一会话并发发送时的排队、停止和顺序一致性。
 
 退出条件：能自然回答项目问题、查询真实资料、持续会话，不修改项目。
+
+#### D4 生产前端实施切片
+
+本切片只完成只读 Project Agent 的真实产品入口，不提前实现 D5 写工具。代码按以下边界落地：
+
+```text
+client/src/features/project-agent/
+  types.ts                              # 会话、消息、Job、流事件的前端合同
+  services/projectAgentClient.ts        # 六个 Project Agent HTTP/SSE 接口
+  composables/useProjectAgentSession.ts # 会话选择、发送、流合并、断线恢复
+  components/                           # 会话栏、对话、活动组、输入与上下文栏
+  AgentWorkspaceView.vue                # 只负责编排布局和现有工作区跳转
+client/src/styles/projectAgent.css       # 独立的中性编辑桌面令牌和响应式布局
+```
+
+实施顺序与依赖方向：
+
+1. `types.ts` 固定 API 数据形状，不修改当前仍有并行工作的全局 `types/api.ts`。
+2. `projectAgentClient.ts` 复用 `featureTransport`；`POST turn` 只取得 durable job，随后读取 Job SSE，不复用 Advisor 的请求内流。
+3. `useProjectAgentSession.ts` 负责最近会话、乐观用户消息、批量文本 delta、工具活动、终态重载与错误恢复；组件不得自行拼接协议事件。
+4. `AgentWorkspaceView.vue` 只读取 `useAppStore` 的 dashboard、progress、reader 和 observability 投影；复杂展示通过现有 route 打开。
+5. `router.ts` 与 `App.vue` 增加可逆的 `/agent` 顶层模式；星仪仍是平级入口，旧 Advisor 暂不删除。
+6. 定向组件测试、TypeScript 检查与生产前端构建通过后，再进行真实 API 和桌面尺寸视觉验收。
+
+首版明确不做：取消 API、写工具、审批恢复、第二个 Pinia store、会话全文搜索、项目树读取、旧工作区重写。若 D4 使用数据证明需要，再进入 D5 设计。
+
+#### D4 实施结果
+
+- `/agent` 已成为与星仪平级的全屏工作模式，旧阅读器、现场、档案、文风、质量和交付入口继续可达。
+- 前端协议集中在 `features/project-agent/services` 与 `composables`；组件不解析底层事件，也不复制后端业务判断。
+- 会话选择、乐观用户消息、64 ms 文本批处理、工具活动分组、durable SSE 游标恢复和终态重载已经接通。
+- 真实 Project Agent 回合成功调用 `project_overview` 与 `creation_observe`，回答准确定位当前场景、阻断原因和后续建议。
+- 浅色桌面尺寸下完成视觉验收：三栏均独立滚动，工具活动可折叠，输入区在长回答后保持可达，没有面板遮挡。
+- 本阶段未增加写权限、审批系统、第二状态机、第二事件流或额外 Agent 框架。
+
+详细证据见 `docs/verification/project-agent-d4-product-checkpoint-2026-09-14.md`。
 
 ### D5：受控项目操作
 

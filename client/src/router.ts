@@ -5,6 +5,7 @@ export const router = createRouter({
   routes: [
     { path: "/", redirect: "/projects" },
     { path: "/projects", name: "projects", component: () => import("@/features/projects/ProjectsView.vue"), meta: { label: "作品" } },
+    { path: "/agent", name: "project-agent", component: () => import("@/features/project-agent/AgentWorkspaceView.vue"), meta: { label: "项目 Agent" } },
     { path: "/overview", name: "overview", component: () => import("@/features/workflow/OverviewView.vue"), meta: { label: "创作总控" } },
     { path: "/reader", name: "reader", component: () => import("@/features/spatial-os/SpatialWorkspaceRoute.vue"), props: { workspace: "reader" }, meta: { label: "阅读" } },
     { path: "/library", name: "library", component: () => import("@/features/spatial-os/SpatialWorkspaceRoute.vue"), props: { workspace: "archive" }, meta: { label: "作品档案" } },

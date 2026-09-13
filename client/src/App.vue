@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
   BookOpenText,
+  Bot,
   ChevronDown,
   CircleHelp,
   Cog,
@@ -34,6 +35,7 @@ applyOrreryExperience({});
 
 const nav = [
   { to: "/projects", label: "作品", icon: FolderKanban, needsProject: false },
+  { to: "/agent", label: "项目 Agent", icon: Bot, needsProject: true },
   { to: "/overview", label: "创作星链", icon: Orbit, needsProject: true },
   { to: "/settings", label: "设置", icon: Settings2, needsProject: false },
 ];
@@ -47,6 +49,8 @@ const statusLabel = computed(() => {
 });
 
 const spatialStageMode = computed(() => route.name === "overview");
+const projectAgentMode = computed(() => route.name === "project-agent");
+const standaloneStageMode = computed(() => spatialStageMode.value || projectAgentMode.value);
 
 async function enterImmersiveOrrery(): Promise<void> {
   if (!store.hasProject) {
@@ -102,7 +106,7 @@ watch(showStartup, (visible) => {
 watch(
   () => store.currentProjectPath,
   (path) => {
-    if (!path && ["overview", "reader", "library", "archive", "archaeology", "style", "quality", "strategy", "observatory", "delivery"].includes(String(route.name))) void router.push("/projects");
+    if (!path && ["project-agent", "overview", "reader", "library", "archive", "archaeology", "style", "quality", "strategy", "observatory", "delivery"].includes(String(route.name))) void router.push("/projects");
   },
 );
 
@@ -164,8 +168,8 @@ async function waitForBackendReady(): Promise<void> {
     />
   </Transition>
 
-  <div class="app-shell" :class="{ 'startup-obscured': showStartup, 'orrery-mode': route.name === 'overview', 'spatial-stage-mode': spatialStageMode }">
-    <aside v-if="!spatialStageMode" class="sidebar">
+  <div class="app-shell" :class="{ 'startup-obscured': showStartup, 'orrery-mode': route.name === 'overview', 'spatial-stage-mode': spatialStageMode, 'agent-stage-mode': projectAgentMode }">
+    <aside v-if="!standaloneStageMode" class="sidebar">
       <div class="brand-lockup" aria-label="ArcVellum">
         <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
         <div>
@@ -225,7 +229,7 @@ async function waitForBackendReady(): Promise<void> {
     </aside>
 
     <main class="workspace">
-      <header v-if="route.name !== 'overview'" class="workspace-header">
+      <header v-if="!standaloneStageMode" class="workspace-header">
         <div>
           <span class="context-label">{{ String(route.meta.label || "ArcVellum") }}</span>
           <strong>{{ store.currentProject?.title || "建立你的第一部作品" }}</strong>
@@ -248,7 +252,7 @@ async function waitForBackendReady(): Promise<void> {
         </Transition>
       </RouterView>
     </main>
-    <AdvisorDock />
+    <AdvisorDock v-if="!projectAgentMode" />
     <OnboardingTour :active="showOnboarding && !showStartup" :has-project="store.hasProject" @complete="closeOnboarding" @dismiss="closeOnboarding" />
   </div>
 </template>

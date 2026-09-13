@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Eye, EyeOff, X } from "lucide-vue-next";
-import { useRoute } from "vue-router";
+import { Bot, Eye, EyeOff, X } from "lucide-vue-next";
+import { RouterLink, useRoute } from "vue-router";
 import WorkspaceOrreryHost from "@/components/WorkspaceOrreryHost.vue";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { readCreativeRuntime } from "@/services/runtimePreference";
@@ -179,6 +179,7 @@ function advanceSpatialRun(): void {
       />
 
       <div class="orrery-view-tools" aria-label="叙事星仪外观">
+        <RouterLink class="orrery-icon" to="/agent" title="打开项目 Agent"><Bot :size="16" /></RouterLink>
         <button class="orrery-icon" :title="instrumentsVisible ? '暂隐边缘工作台' : '显示边缘工作台'" @click="instrumentsVisible = !instrumentsVisible">
           <EyeOff v-if="instrumentsVisible" :size="16" /><Eye v-else :size="16" />
         </button>
