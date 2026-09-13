@@ -49,6 +49,9 @@ export interface WorkerOptions {
 	repairReferences: string[];
 }
 
+export type ProjectAgentOptions = Omit<WorkerOptions, "mode"> & { mode: "project-agent" };
+export type RunnerOptions = WorkerOptions | ProjectAgentOptions;
+
 export interface ProviderReliabilityPolicy {
 	firstEventTimeoutMs: number;
 	interEventTimeoutMs: number;

@@ -4,11 +4,12 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import type { ReasoningBudget, RuntimeEventSink, WorkerOptions } from "./contracts.ts";
+import type { ReasoningBudget, RunnerOptions, RuntimeEventSink, WorkerOptions } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { validateReasoningBudget } from "./reasoning-budget.ts";
 import { runWorker } from "./worker.ts";
 import { runConversation } from "./conversation.ts";
+import { runProjectAgentProcess } from "./project-agent.ts";
 
 const VERSION = "0.99.5";
 const DEFAULT_STATES = ["asset-creation-agent-task", "canon-review-agent-task", "candidate-review"];
@@ -24,6 +25,9 @@ async function main(): Promise<number> {
 		return 0;
 	}
 	const options = parseOptions(args);
+	if (options.mode === "project-agent") {
+		return await runProjectAgentProcess(options, VERSION);
+	}
 	const prompt = (await readStdin()).trim() || await readFile(join(options.workspace, "AGENT_TASK.md"), "utf8");
 	const emit: RuntimeEventSink = (event, data = {}) => {
 		process.stdout.write(`${JSON.stringify({ event, data, at: new Date().toISOString() })}\n`);
@@ -76,7 +80,7 @@ async function writeCatalog(args: string[]): Promise<void> {
 	})}\n`);
 }
 
-function parseOptions(args: string[]): WorkerOptions {
+function parseOptions(args: string[]): RunnerOptions {
 	const values = optionValues(args);
 	const workspace = resolve(single(values, "--workspace") || process.cwd());
 	const model = required(values, "--model");
@@ -136,7 +140,7 @@ function optionValues(args: string[]): Map<string, string[]> {
 	return values;
 }
 
-function parseReasoningBudget(values: Map<string, string[]>, initialLevel: WorkerOptions["thinking"]): ReasoningBudget {
+function parseReasoningBudget(values: Map<string, string[]>, initialLevel: RunnerOptions["thinking"]): ReasoningBudget {
 	const enabled = [
 		"--max-thinking-level",
 		"--reasoning-total",
@@ -190,15 +194,15 @@ function nonNegativeInteger(value: string, fallback: number): number {
 	return parsed;
 }
 
-function isThinkingLevel(value: string): value is WorkerOptions["thinking"] {
+function isThinkingLevel(value: string): value is RunnerOptions["thinking"] {
 	return ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(value);
 }
 
-function isWorkerMode(value: string): value is WorkerOptions["mode"] {
-	return value === "task" || value === "repair" || value === "conversation";
+function isWorkerMode(value: string): value is RunnerOptions["mode"] {
+	return value === "task" || value === "repair" || value === "conversation" || value === "project-agent";
 }
 
-function sanitizeError(error: unknown, options: WorkerOptions): string {
+function sanitizeError(error: unknown, options: RunnerOptions): string {
 	const message = error instanceof Error ? error.message : String(error);
 	return message.replaceAll(options.workspace, "[workspace]").replaceAll(options.authPath, "[auth]");
 }
