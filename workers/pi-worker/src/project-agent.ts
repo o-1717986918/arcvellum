@@ -19,7 +19,15 @@ import { safeThinkingLevel } from "./reasoning-budget.ts";
 const PROJECT_OVERVIEW_TOOL = "project_overview";
 const PROJECT_SEARCH_TOOL = "project_search";
 const CREATION_OBSERVE_TOOL = "creation_observe";
-const SUPPORTED_TOOLS = new Set([PROJECT_OVERVIEW_TOOL, PROJECT_SEARCH_TOOL, CREATION_OBSERVE_TOOL]);
+const PROJECT_RECORD_DIRECTION_TOOL = "project_record_direction";
+const CREATION_CONTROL_TOOL = "creation_control";
+const SUPPORTED_TOOLS = new Set([
+	PROJECT_OVERVIEW_TOOL,
+	PROJECT_SEARCH_TOOL,
+	CREATION_OBSERVE_TOOL,
+	PROJECT_RECORD_DIRECTION_TOOL,
+	CREATION_CONTROL_TOOL,
+]);
 
 export interface ProjectAgentStart {
 	sessionId: string;
@@ -217,10 +225,27 @@ function projectToolDefinition(name: string): {
 			}),
 		};
 	}
-	return {
+	if (name === CREATION_OBSERVE_TOOL) return {
 		label: "Observe Creation",
 		description: "Read current creation run, Agent activity, and recent workflow events.",
 		parameters: Type.Object({ focus: Type.Optional(Type.String({ maxLength: 200 })) }),
+	};
+	if (name === PROJECT_RECORD_DIRECTION_TOOL) return {
+		label: "Record Creative Direction",
+		description: "Record a direction only when the current user explicitly asks. intent_quote must be copied verbatim from the current user message.",
+		parameters: Type.Object({
+			message: Type.String({ minLength: 1, maxLength: 6000 }),
+			intent_quote: Type.String({ minLength: 2, maxLength: 500 }),
+		}),
+	};
+	return {
+		label: "Control Creation",
+		description: "Start, pause, or resume creation only when the current user explicitly requests it. intent_quote must be copied verbatim from the current user message.",
+		parameters: Type.Object({
+			operation: Type.Union([Type.Literal("start"), Type.Literal("pause"), Type.Literal("resume")]),
+			intent_quote: Type.String({ minLength: 2, maxLength: 500 }),
+			reason: Type.Optional(Type.String({ maxLength: 500 })),
+		}),
 	};
 }
 

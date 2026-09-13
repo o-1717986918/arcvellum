@@ -4,8 +4,10 @@ import unittest
 
 from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.project_agent import (
+    ProjectAgentActionDependencies,
     ProjectAgentDependencies,
     ProjectAgentService,
+    ProjectAgentToolCall,
     ProjectAgentTurnResult,
 )
 
@@ -28,6 +30,27 @@ class _Runtime:
             self.result.message,
         )
         return self.result
+
+
+class _ActionRuntime:
+    def __init__(self):
+        self.requests = []
+
+    def run_turn(self, request, tool_handler, **_kwargs):
+        self.requests.append(request)
+        result = tool_handler(ProjectAgentToolCall(
+            "request-action",
+            request.turn_id,
+            "project_record_direction",
+            {"message": "主角拒绝王位", "intent_quote": "记录为创作方向"},
+        ))
+        return ProjectAgentTurnResult(
+            "completed",
+            f"已记录：{result['message']}",
+            request.turn_id,
+            0,
+            1,
+        )
 
 
 class ProjectAgentServiceTests(unittest.TestCase):
@@ -81,6 +104,36 @@ class ProjectAgentServiceTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "does not belong"):
                 service.run_turn(session["session_id"], "继续")
+
+    def test_explicit_user_request_reaches_bounded_action_port(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            root.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            runtime = _ActionRuntime()
+            writes = []
+            service = ProjectAgentService(
+                {},
+                sessions=store.sessions,
+                jobs=store,
+                dependencies=_dependencies(),
+                actions=ProjectAgentActionDependencies(
+                    record_direction=lambda _root, args: writes.append(dict(args)) or {
+                        "message": str(args["message"]),
+                        "receipt": {"token": "receipt-1"},
+                    },
+                    creation_control=lambda _root, _args: {},
+                ),
+                runtime_factory=lambda _config, _root: runtime,
+            )
+            session = service.create_session(root)
+
+            result = service.run_turn(session["session_id"], "请记录为创作方向：主角拒绝王位。")
+
+            self.assertEqual(result["answer"], "已记录：主角拒绝王位")
+            self.assertEqual(len(writes), 1)
+            self.assertIn("project_record_direction", runtime.requests[0].allowed_tools)
+            self.assertIn("intent_quote", runtime.requests[0].system_prompt)
 
 
 def _dependencies() -> ProjectAgentDependencies:

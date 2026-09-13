@@ -69,6 +69,55 @@ describe("Project Agent bridge protocol", () => {
 		expect(bridge.pendingCount).toBe(0);
 	});
 
+	it("exposes bounded write tools with explicit intent evidence", async () => {
+		const faux = createFauxCore({
+			provider: "arcvellum-faux-actions",
+			models: [{ id: "project-agent-action-test", reasoning: false }],
+		});
+		faux.setResponses([
+			fauxAssistantMessage(
+				fauxToolCall("project_record_direction", {
+					message: "主角拒绝王位",
+					intent_quote: "记录为创作方向",
+				}),
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("这条方向已经记录。"),
+		]);
+		const outbound: BridgeEnvelope[] = [];
+		let bridge: ProjectToolBridge;
+		const write = (value: BridgeEnvelope) => {
+			outbound.push(value);
+			if (value.type !== "tool.call") return;
+			queueMicrotask(() => bridge.receive(envelope("tool.result", "turn-action", {
+				request_id: value.payload.request_id,
+				name: value.payload.name,
+				ok: true,
+				result: { ok: true, receipt: { token: "receipt-1" } },
+			})));
+		};
+		bridge = new ProjectToolBridge("turn-action", write, 1_000);
+
+		const result = await runProjectAgentTurn(
+			{
+				sessionId: "session-action",
+				turnId: "turn-action",
+				prompt: "请记录为创作方向：主角拒绝王位。",
+				systemPrompt: "写操作必须引用当前用户原话。",
+				allowedTools: ["project_record_direction"],
+				maxTurns: 3,
+				maxToolCalls: 2,
+			},
+			{ model: faux.getModel(), streamFn: faux.streamSimple },
+			bridge,
+			write,
+		);
+
+		expect(result.status).toBe("completed");
+		expect(result.toolCalls).toBe(1);
+		expect(outbound.find((item) => item.type === "tool.call")?.payload.name).toBe("project_record_direction");
+	});
+
 	it("rejects timed out and cancelled tool requests without leaking pending calls", async () => {
 		const timed = new ProjectToolBridge("turn-timeout", () => undefined, 5);
 		await expect(timed.request("project_overview", {})).rejects.toThrow("timed out");

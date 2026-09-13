@@ -81,6 +81,7 @@ from .project_manager import (
     validate_project_location,
 )
 from .project_agent import ProjectAgentService
+from .project_agent.actions import dependencies_from_actions
 from .project_agent.read_models import dependencies_from_read_models
 from .reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
 from .supervisor import project_lock_key
@@ -265,6 +266,10 @@ def create_app(
         sessions=lifecycle.persistence.sessions,
         jobs=lifecycle.persistence.worker,
         dependencies=dependencies_from_read_models(read_models),
+        actions=dependencies_from_actions(
+            record_direction=record_direction,
+            autopilot=autopilot,
+        ),
         persona_loader=lambda root: active_persona(
             Path(str(config.get("application", {}).get("data_root") or ".")),
             root,

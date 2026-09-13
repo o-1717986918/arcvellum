@@ -195,6 +195,7 @@ class ProjectAgentTurnResult:
 
 
 ProjectReadModel = Callable[[Path, Mapping[str, Any]], Mapping[str, Any]]
+ProjectAction = Callable[[Path, Mapping[str, Any]], Mapping[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -208,3 +209,11 @@ class ProjectAgentDependencies:
     project_overview: ProjectReadModel
     project_search: ProjectReadModel
     creation_observe: ProjectReadModel
+
+
+@dataclass(frozen=True)
+class ProjectAgentActionDependencies:
+    """Narrow adapters over existing application services that may mutate state."""
+
+    record_direction: ProjectAction
+    creation_control: ProjectAction

@@ -1,6 +1,6 @@
 # ArcVellum Agent Desktop 与顶层 Agent 分阶段设计方案
 
-> 状态：D2-D4 已完成；只读 Project Agent 产品切片通过，D5 写工具仍需独立接口审查
+> 状态：D2-D4 与 D5-A 已完成；Project Agent 已具备只读查询及两项受控操作，其余写工具仍需逐批审查
 >
 > 日期：2026-09-13
 >
@@ -772,6 +772,8 @@ client/src/styles/projectAgent.css       # 独立的中性编辑桌面令牌和�
 
 ### D5：受控项目操作
 
+状态：D5-A 已完成。记录创作方向与创作启停已接入；通用审批恢复、节奏配置、文风管理和正式资产操作尚未开放。
+
 工作：
 
 - 接入记录方向、启动/暂停/恢复、预览、节奏配置和文风管理；
@@ -780,6 +782,36 @@ client/src/styles/projectAgent.css       # 独立的中性编辑桌面令牌和�
 - 对话内展示真实工具结果。
 
 退出条件：协作、托管和全自动三种模式的审批差异可验证。
+
+#### D5-A 最小可写切片：架构与代码合同
+
+D5 不从通用审批框架起步。第一批只验证两个已有业务能力能否被顶层 Agent 安全复用：
+
+1. `project_record_direction`：追加一条用户明确表达的创作方向；调用现有 `record_direction`，actor 固定为 `project-agent`。
+2. `creation_control`：启动、暂停或恢复现有 Autopilot；调用同一个 `AutopilotService` 实例，不拼 HTTP 请求，不复制其状态判断。
+
+代码边界：
+
+```text
+project_agent/contracts.py       # 保留只读依赖；新增两个动作端口，不依赖具体服务类
+project_agent/actions.py         # 将 record_direction / AutopilotService 适配成动作端口
+project_agent/tools.py           # 一个 allowlist dispatcher；校验风险、显式用户原话和单回合幂等
+project_agent/service.py         # 选择本回合工具并提供当前用户消息；不承载业务规则
+workers/pi-worker/project-agent  # 只增加两个窄 schema 的 Pi tools
+```
+
+确定性约束：
+
+- 写工具必须携带 `intent_quote`，且该原话逐字存在于当前用户消息；模型概括、历史消息和工具资料不能授权写入。
+- `creation_control.operation` 只允许 `start|pause|resume`；不允许 Agent 传 runtime、run id、授权豁免或任意命令。
+- 全自动模式的授权规则继续由既有 Autopilot 拒绝，Project Agent 固定传 `authorized=False`。
+- 同一 Agent 回合中，相同动作及参数只执行一次；重试返回首个 receipt。
+- 动作结果必须返回现有业务 receipt 的有界投影，供 Agent 解释和 durable job event 审计。
+- D5-A 不开放资产写回、正式晋升、删除、交付、Canon apply、质量豁免或配置修改。
+
+实施顺序：先锁定 Python 端口与 Worker tool schema，再实现适配器和 dispatcher，最后接入 service、前端活动标签与真实 API 回合。任一动作无法通过现有服务完成时停止扩展，不新造平行流程。
+
+D5-A 验收证据见 `docs/verification/project-agent-d5a-controlled-actions-checkpoint-2026-09-14.md`。
 
 ### D6：复杂功能接管
 

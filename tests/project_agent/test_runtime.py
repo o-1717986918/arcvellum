@@ -10,8 +10,9 @@ import time
 import unittest
 
 from literary_engineering_studio.project_agent import (
+    ProjectAgentActionDependencies,
     ProjectAgentDependencies,
-    ProjectAgentReadDispatcher,
+    ProjectAgentToolDispatcher,
     ProjectAgentRuntime,
     ProjectAgentToolCall,
     ProjectAgentTurnRequest,
@@ -29,7 +30,7 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
             project_search=lambda _root, _args: {},
             creation_observe=lambda _root, _args: {},
         )
-        dispatcher = ProjectAgentReadDispatcher(Path("."), dependencies)
+        dispatcher = ProjectAgentToolDispatcher(Path("."), dependencies)
 
         result = dispatcher(ProjectAgentToolCall("request-1", "turn-1", "project_overview", {"focus": "progress"}))
 
@@ -37,6 +38,36 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
         self.assertEqual(seen[0][1], {"focus": "progress"})
         with self.assertRaisesRegex(ValueError, "not enabled"):
             dispatcher(ProjectAgentToolCall("request-2", "turn-1", "project_search", {}))
+
+    def test_mutation_requires_current_user_intent_and_is_idempotent(self):
+        calls = []
+        dispatcher = ProjectAgentToolDispatcher(
+            Path("."),
+            _dependencies(),
+            enabled=("project_record_direction",),
+            actions=ProjectAgentActionDependencies(
+                record_direction=lambda _root, args: calls.append(dict(args)) or {"ok": True},
+                creation_control=lambda _root, _args: {},
+            ),
+            user_message="请把主角拒绝王位记录为创作方向。",
+        )
+        allowed = ProjectAgentToolCall(
+            "request-3",
+            "turn-1",
+            "project_record_direction",
+            {"message": "主角拒绝王位", "intent_quote": "记录为创作方向"},
+        )
+
+        self.assertEqual(dispatcher(allowed), {"ok": True})
+        self.assertEqual(dispatcher(allowed), {"ok": True})
+        self.assertEqual(len(calls), 1)
+        with self.assertRaisesRegex(ValueError, "not present"):
+            dispatcher(ProjectAgentToolCall(
+                "request-4",
+                "turn-1",
+                "project_record_direction",
+                {"message": "修改结局", "intent_quote": "立即修改结局"},
+            ))
 
     def test_dispatches_one_allowed_tool_and_reaps_the_process(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -60,7 +91,11 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
 
             result = runtime.run_turn(
                 request,
-                lambda call: {"stage": "review", "focus": call.arguments.get("focus")},
+                lambda call: {
+                    "stage": "review",
+                    "focus": call.arguments.get("focus"),
+                    "receipt": {"token": "receipt-1"},
+                },
                 timeout=3,
                 event_sink=lambda event, data: events.append((event, data)),
             )
@@ -70,6 +105,8 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
             self.assertEqual(result.tool_calls, 1)
             self.assertEqual(result.returncode, 0)
             self.assertIn("project_agent.tool.finished", [event for event, _ in events])
+            finished = next(data for event, data in events if event == "project_agent.tool.finished")
+            self.assertEqual(finished["receipt"], {"token": "receipt-1"})
             self.assertEqual(sorted(path.name for path in root.iterdir()), ["fake_project_agent.py"])
 
     def test_rejects_an_undeclared_tool(self):
@@ -136,6 +173,14 @@ def _request() -> ProjectAgentTurnRequest:
         turn_id="turn-1",
         prompt="项目现在进行到哪里？",
         system_prompt="根据工具事实自然回答。",
+    )
+
+
+def _dependencies() -> ProjectAgentDependencies:
+    return ProjectAgentDependencies(
+        project_overview=lambda _root, _args: {},
+        project_search=lambda _root, _args: {},
+        creation_observe=lambda _root, _args: {},
     )
 
 

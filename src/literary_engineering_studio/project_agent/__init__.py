@@ -5,6 +5,7 @@ from .contracts import (
     BridgeEnvelope,
     BridgeMessageType,
     DelegationMode,
+    ProjectAgentActionDependencies,
     ProjectAgentDependencies,
     ProjectAgentToolCall,
     ProjectAgentToolResult,
@@ -14,13 +15,14 @@ from .contracts import (
 )
 from .runtime import ProjectAgentRuntime
 from .service import ProjectAgentService
-from .tools import ProjectAgentReadDispatcher
+from .tools import ProjectAgentToolDispatcher
 
 __all__ = [
     "PROJECT_AGENT_BRIDGE_SCHEMA",
     "BridgeEnvelope",
     "BridgeMessageType",
     "DelegationMode",
+    "ProjectAgentActionDependencies",
     "ProjectAgentDependencies",
     "ProjectAgentToolCall",
     "ProjectAgentToolResult",
@@ -28,6 +30,6 @@ __all__ = [
     "ProjectAgentTurnResult",
     "ProjectAgentRuntime",
     "ProjectAgentService",
-    "ProjectAgentReadDispatcher",
+    "ProjectAgentToolDispatcher",
     "ToolRisk",
 ]

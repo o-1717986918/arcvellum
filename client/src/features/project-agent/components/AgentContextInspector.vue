@@ -44,7 +44,7 @@ defineProps<{
     </section>
 
     <section class="pa-inspector-note">
-      <Gauge :size="15" /><p>当前对话可以了解作品，暂时不会直接改动正文、设定或创作进度。</p>
+      <Gauge :size="15" /><p>Agent 可记录你的方向并控制创作启停；正式资产和高风险决定仍由你确认。</p>
     </section>
   </aside>
 </template>

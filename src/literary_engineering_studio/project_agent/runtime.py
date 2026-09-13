@@ -127,10 +127,19 @@ class ProjectAgentRuntime:
                                 _emit(event_sink, "project_agent.tool.started", {"name": call.name, "request_id": call.request_id})
                                 result = _execute_tool(call, tool_handler)
                                 _write_envelope(process, result.envelope(_message_id()))
+                                finished = {
+                                    "name": call.name,
+                                    "request_id": call.request_id,
+                                    "ok": result.ok,
+                                }
+                                if result.ok and isinstance(result.result, Mapping):
+                                    receipt = result.result.get("receipt")
+                                    if isinstance(receipt, Mapping):
+                                        finished["receipt"] = dict(receipt)
                                 _emit(
                                     event_sink,
                                     "project_agent.tool.finished",
-                                    {"name": call.name, "request_id": call.request_id, "ok": result.ok},
+                                    finished,
                                 )
                             elif envelope.type is BridgeMessageType.TURN_COMPLETE:
                                 if terminal is not None:
