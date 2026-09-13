@@ -177,6 +177,16 @@ class AdvisorSessionRequest(BaseModel):
     title: str = "项目问答"
 
 
+class ProjectAgentSessionRequest(BaseModel):
+    project_root: str
+    title: str = "项目 Agent"
+
+
+class ProjectAgentTurnRequest(BaseModel):
+    message: str
+    timeout: int = 180
+
+
 class AdvisorQuestionRequest(BaseModel):
     question: str
     timeout: int = 180

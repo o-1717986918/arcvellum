@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS advisor_sessions (
     project_root TEXT NOT NULL,
     snapshot_digest TEXT NOT NULL,
     title TEXT NOT NULL,
+    session_kind TEXT NOT NULL DEFAULT 'advisor',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

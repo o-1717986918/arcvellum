@@ -81,6 +81,50 @@ describe("Project Agent bridge protocol", () => {
 		expect(waiting.pendingCount).toBe(0);
 	});
 
+	it("exposes search and creation observation as separate bounded tools", async () => {
+		const faux = createFauxCore({
+			provider: "arcvellum-faux",
+			models: [{ id: "project-agent-tools", reasoning: false }],
+		});
+		faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("project_search", { query: "地图", limit: 5 }), { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxToolCall("creation_observe", { focus: "active" }), { stopReason: "toolUse" }),
+			fauxAssistantMessage("资料已找到，创作现场正在运行。"),
+		]);
+		let bridge: ProjectToolBridge;
+		const calls: string[] = [];
+		const write = (value: BridgeEnvelope) => {
+			if (value.type !== "tool.call") return;
+			calls.push(String(value.payload.name));
+			queueMicrotask(() => bridge.receive(envelope("tool.result", "turn-tools", {
+				request_id: value.payload.request_id,
+				name: value.payload.name,
+				ok: true,
+				result: { ok: true },
+			})));
+		};
+		bridge = new ProjectToolBridge("turn-tools", write, 1_000);
+
+		const result = await runProjectAgentTurn(
+			{
+				sessionId: "session-tools",
+				turnId: "turn-tools",
+				prompt: "找到地图，并告诉我现场是否仍在工作。",
+				systemPrompt: "按需使用只读工具。",
+				allowedTools: ["project_search", "creation_observe"],
+				maxTurns: 4,
+				maxToolCalls: 3,
+			},
+			{ model: faux.getModel(), streamFn: faux.streamSimple },
+			bridge,
+			write,
+		);
+
+		expect(result.status).toBe("completed");
+		expect(calls).toEqual(["project_search", "creation_observe"]);
+		expect(result.toolCalls).toBe(2);
+	});
+
 	it("fails closed for a mismatched tool result", async () => {
 		let bridge: ProjectToolBridge;
 		let outbound: BridgeEnvelope | null = null;

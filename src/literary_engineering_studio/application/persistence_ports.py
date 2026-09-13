@@ -126,6 +126,32 @@ class AutopilotRepositoryPort(Protocol):
 
 @runtime_checkable
 class SessionRepositoryPort(Protocol):
+    def create_conversation_session(
+        self,
+        project_root: str,
+        snapshot_digest: str,
+        *,
+        title: str,
+        session_kind: str,
+    ) -> dict[str, Any]: ...
+
+    def read_conversation_session(self, session_id: str) -> dict[str, Any]: ...
+
+    def list_conversation_sessions(
+        self,
+        project_root: str,
+        *,
+        session_kind: str,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]: ...
+
+    def append_session_message(
+        self,
+        session_id: str,
+        role: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
     def create_advisor_session(
         self,
         project_root: str,

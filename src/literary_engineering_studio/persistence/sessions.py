@@ -16,6 +16,9 @@ from .primitives import _json, _validate_advisor_id, _validate_agent_session_id
 from .sqlite_uow import SqliteUnitOfWork
 
 
+_CONVERSATION_KINDS = {"advisor", "project-agent"}
+
+
 class SessionRepository:
     """Persist user and Agent sessions through an explicit unit of work."""
 
@@ -30,46 +33,79 @@ class SessionRepository:
         self._clock = clock or SystemClock()
         self._ids = ids or UuidIdGenerator()
 
-    def create_advisor_session(self, project_root: str, snapshot_digest: str, *, title: str = "项目问答") -> dict[str, Any]:
-        session_id = self._ids.new_id("advisor")
+    def create_conversation_session(
+        self,
+        project_root: str,
+        snapshot_digest: str,
+        *,
+        title: str,
+        session_kind: str,
+    ) -> dict[str, Any]:
+        kind = _conversation_kind(session_kind)
+        session_id = self._ids.new_id(kind)
         now = iso_now(self._clock)
         with self._uow.write() as connection:
             connection.execute(
                 """
                 INSERT INTO advisor_sessions (
-                    session_id, project_root, snapshot_digest, title, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    session_id, project_root, snapshot_digest, title, session_kind,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, project_root, snapshot_digest, title.strip() or "项目问答", now, now),
+                (
+                    session_id,
+                    project_root,
+                    snapshot_digest,
+                    title.strip() or _default_conversation_title(kind),
+                    kind,
+                    now,
+                    now,
+                ),
             )
-        return self.read_advisor_session(session_id)
+        return self.read_conversation_session(session_id)
+
+    def create_advisor_session(self, project_root: str, snapshot_digest: str, *, title: str = "项目问答") -> dict[str, Any]:
+        return self.create_conversation_session(
+            project_root,
+            snapshot_digest,
+            title=title,
+            session_kind="advisor",
+        )
 
     def read_advisor_session(self, session_id: str) -> dict[str, Any]:
         _validate_advisor_id(session_id)
+        session = self.read_conversation_session(session_id)
+        if session["session_kind"] != "advisor":
+            raise FileNotFoundError(f"Advisor session not found: {session_id}")
+        return session
+
+    def read_conversation_session(self, session_id: str) -> dict[str, Any]:
+        session = _validate_agent_session_id(session_id)
         with self._uow.read() as connection:
-            row = connection.execute("SELECT * FROM advisor_sessions WHERE session_id = ?", (session_id,)).fetchone()
+            row = connection.execute("SELECT * FROM advisor_sessions WHERE session_id = ?", (session,)).fetchone()
             messages = connection.execute(
                 """
                 SELECT sequence, role, at, payload_json FROM advisor_messages
                 WHERE session_id = ? ORDER BY sequence ASC
                 """,
-                (session_id,),
+                (session,),
             ).fetchall()
             summary_row = connection.execute(
                 "SELECT summary, updated_at FROM advisor_session_summaries WHERE session_id = ?",
-                (session_id,),
+                (session,),
             ).fetchone()
             preference_rows = connection.execute(
                 "SELECT preference FROM advisor_pinned_preferences WHERE session_id = ? ORDER BY position ASC, rowid ASC",
-                (session_id,),
+                (session,),
             ).fetchall()
         if row is None:
-            raise FileNotFoundError(f"Advisor session not found: {session_id}")
+            raise FileNotFoundError(f"Conversation session not found: {session}")
         return {
             "session_id": row["session_id"],
             "project_root": row["project_root"],
             "snapshot_digest": row["snapshot_digest"],
             "title": row["title"],
+            "session_kind": row["session_kind"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "session_summary": summary_row["summary"] if summary_row is not None else "",
@@ -87,14 +123,29 @@ class SessionRepository:
         }
 
     def list_advisor_sessions(self, project_root: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        return self.list_conversation_sessions(
+            project_root,
+            session_kind="advisor",
+            limit=limit,
+        )
+
+    def list_conversation_sessions(
+        self,
+        project_root: str,
+        *,
+        session_kind: str,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        kind = _conversation_kind(session_kind)
         with self._uow.read() as connection:
             rows = connection.execute(
                 """
-                SELECT session_id, project_root, snapshot_digest, title, created_at, updated_at
-                FROM advisor_sessions WHERE project_root = ?
+                SELECT session_id, project_root, snapshot_digest, title, session_kind,
+                       created_at, updated_at
+                FROM advisor_sessions WHERE project_root = ? AND session_kind = ?
                 ORDER BY updated_at DESC LIMIT ?
                 """,
-                (project_root, max(1, min(200, int(limit)))),
+                (project_root, kind, max(1, min(200, int(limit)))),
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -198,23 +249,33 @@ class SessionRepository:
         _validate_advisor_id(session_id)
         if role not in {"user", "advisor"}:
             raise ValueError("advisor message role must be user or advisor")
+        session = self.read_conversation_session(session_id)
+        if session["session_kind"] != "advisor":
+            raise FileNotFoundError(f"Advisor session not found: {session_id}")
+        return self.append_session_message(session_id, role, payload)
+
+    def append_session_message(self, session_id: str, role: str, payload: dict[str, Any]) -> dict[str, Any]:
+        session = _validate_agent_session_id(session_id)
+        normalized_role = str(role or "").strip().lower()
+        if normalized_role not in {"user", "assistant", "tool", "advisor"}:
+            raise ValueError("conversation message role must be user, assistant, tool, or advisor")
         now = iso_now(self._clock)
         with self._uow.write(immediate=True) as connection:
-            existing = connection.execute("SELECT 1 FROM advisor_sessions WHERE session_id = ?", (session_id,)).fetchone()
+            existing = connection.execute("SELECT 1 FROM advisor_sessions WHERE session_id = ?", (session,)).fetchone()
             if existing is None:
-                raise FileNotFoundError(f"Advisor session not found: {session_id}")
+                raise FileNotFoundError(f"Conversation session not found: {session}")
             sequence = int(
                 connection.execute(
                     "SELECT COALESCE(MAX(sequence), 0) + 1 FROM advisor_messages WHERE session_id = ?",
-                    (session_id,),
+                    (session,),
                 ).fetchone()[0]
             )
             connection.execute(
                 "INSERT INTO advisor_messages (session_id, sequence, role, at, payload_json) VALUES (?, ?, ?, ?, ?)",
-                (session_id, sequence, role, now, _json(payload)),
+                (session, sequence, normalized_role, now, _json(payload)),
             )
-            connection.execute("UPDATE advisor_sessions SET updated_at = ? WHERE session_id = ?", (now, session_id))
-        return {"sequence": sequence, "role": role, "at": now, "payload": payload}
+            connection.execute("UPDATE advisor_sessions SET updated_at = ? WHERE session_id = ?", (now, session))
+        return {"sequence": sequence, "role": normalized_role, "at": now, "payload": payload}
 
     def save_advisor_memory(self, session_id: str, *, summary: str, preferences: list[str]) -> dict[str, Any]:
         _validate_advisor_id(session_id)
@@ -412,6 +473,17 @@ def _merged_session_values(existing, **values: Any) -> dict[str, Any]:
         max(0, int(values.get("retry_count") or 0)),
     )
     return result
+
+
+def _conversation_kind(value: str) -> str:
+    kind = str(value or "").strip().lower()
+    if kind not in _CONVERSATION_KINDS:
+        raise ValueError(f"unsupported conversation session kind: {value}")
+    return kind
+
+
+def _default_conversation_title(kind: str) -> str:
+    return "项目问答" if kind == "advisor" else "项目 Agent"
 
 
 def _preserved_text(existing, key: str, value: Any, limit: int | None) -> str:

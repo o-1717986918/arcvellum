@@ -13,6 +13,7 @@ from .contracts import (
     ToolRisk,
 )
 from .runtime import ProjectAgentRuntime
+from .service import ProjectAgentService
 from .tools import ProjectAgentReadDispatcher
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "ProjectAgentTurnRequest",
     "ProjectAgentTurnResult",
     "ProjectAgentRuntime",
+    "ProjectAgentService",
     "ProjectAgentReadDispatcher",
     "ToolRisk",
 ]

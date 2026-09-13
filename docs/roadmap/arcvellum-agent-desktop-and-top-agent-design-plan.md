@@ -720,6 +720,8 @@ D2 完成后暂停实现，执行一次正式审查：
 
 ### D4：只读顶层 Agent
 
+状态：后端基础已完成，生产 Agent UI 待接入。现已具备独立 Project Agent 会话、三项只读工具、既有顾问人格复用、每回合持久 Job/Event、异步执行与基于 durable cursor 的 SSE；写工具仍未开放。
+
 工作：
 
 - 建立 ProjectAgentService 和 session SSE；

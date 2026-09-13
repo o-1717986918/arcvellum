@@ -40,6 +40,10 @@ class MemoryCompatibilityFacade:
     delegated_decisions = RepositoryMethod("autopilot_runs")
     recover_autopilot_runs = RepositoryMethod("autopilot_runs")
 
+    create_conversation_session = RepositoryMethod("sessions")
+    read_conversation_session = RepositoryMethod("sessions")
+    list_conversation_sessions = RepositoryMethod("sessions")
+    append_session_message = RepositoryMethod("sessions")
     create_advisor_session = RepositoryMethod("sessions")
     read_advisor_session = RepositoryMethod("sessions")
     list_advisor_sessions = RepositoryMethod("sessions")

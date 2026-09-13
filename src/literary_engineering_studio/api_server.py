@@ -17,7 +17,13 @@ from .api.common import friendly_error as _friendly_error, frontend_file as _fro
 from .api.models import (
     WorkerRequest,
 )
-from .api.streaming import sse as _sse, stream_read_model as _stream_read_model, visible_delta_chunks as _visible_delta_chunks
+from .api.streaming import (
+    numeric_resume_cursor as _numeric_resume_cursor,
+    sse as _sse,
+    stream_read_model as _stream_read_model,
+    stream_terminal as _stream_terminal,
+    visible_delta_chunks as _visible_delta_chunks,
+)
 from .api.routers.application import ApplicationRouterDependencies, build_application_router
 from .api.routers.archive import build_archive_router, default_archive_dependencies
 from .api.routers.archaeology import build_archaeology_router
@@ -35,11 +41,12 @@ from .api.routers.delivery import DeliveryRouterDependencies, build_delivery_rou
 from .api.routers.style_lab import build_style_lab_router
 from .api.routers.strategy import StrategyRouterDependencies, build_strategy_router
 from .api.routers.project_details import ProjectDetailRouterDependencies, build_project_detail_router
+from .api.routers.project_agent import ProjectAgentRouterDependencies, build_project_agent_router
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
 from .agent_observability import build_agent_observability
 from .api_read_models import ProjectReadModels
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
-from .advisor_personas import persona_catalog, save_custom_persona, select_persona
+from .advisor_personas import active_persona, persona_catalog, save_custom_persona, select_persona
 from .config import default_projects_root, save_config
 from .core_read_models import build_activity, build_dashboard, build_task_summary, current_choices
 from .core_read_models import record_choice, record_ui_note, save_display_field
@@ -73,6 +80,8 @@ from .project_manager import (
     register_project,
     validate_project_location,
 )
+from .project_agent import ProjectAgentService
+from .project_agent.read_models import dependencies_from_read_models
 from .reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
 from .supervisor import project_lock_key
 from .worker import AgentWorker
@@ -216,7 +225,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"],
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "Last-Event-ID"],
         # The packaged WebView talks to the loopback sidecar from a Tauri
         # origin. Its authenticated requests use credentials="include" so the
         # browser requires this response header even when Bearer auth is also
@@ -251,6 +260,17 @@ def create_app(
     progress_snapshot = read_models.progress
     delivery_snapshot = read_models.delivery
     workspace_snapshot = read_models.workspace
+    project_agent = ProjectAgentService(
+        config,
+        sessions=lifecycle.persistence.sessions,
+        jobs=lifecycle.persistence.worker,
+        dependencies=dependencies_from_read_models(read_models),
+        persona_loader=lambda root: active_persona(
+            Path(str(config.get("application", {}).get("data_root") or ".")),
+            root,
+        ),
+    )
+    app.state.project_agent = project_agent
 
     def shutdown_application():
         container.shutdown()
@@ -293,6 +313,17 @@ def create_app(
     )
     app.include_router(build_pi_worker_router(config))
     app.include_router(build_project_router(_project_router_dependencies(config)))
+    app.include_router(
+        build_project_agent_router(
+            ProjectAgentRouterDependencies(
+                service=project_agent,
+                jobs=lifecycle.persistence.worker,
+                sse=_sse,
+                numeric_resume_cursor=_numeric_resume_cursor,
+                stream_terminal=_stream_terminal,
+            )
+        )
+    )
 
     app.include_router(
         build_quality_router(

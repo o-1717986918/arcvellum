@@ -17,7 +17,9 @@ import {
 import { safeThinkingLevel } from "./reasoning-budget.ts";
 
 const PROJECT_OVERVIEW_TOOL = "project_overview";
-const SUPPORTED_TOOLS = new Set([PROJECT_OVERVIEW_TOOL]);
+const PROJECT_SEARCH_TOOL = "project_search";
+const CREATION_OBSERVE_TOOL = "creation_observe";
+const SUPPORTED_TOOLS = new Set([PROJECT_OVERVIEW_TOOL, PROJECT_SEARCH_TOOL, CREATION_OBSERVE_TOOL]);
 
 export interface ProjectAgentStart {
 	sessionId: string;
@@ -174,13 +176,12 @@ function createProjectAgentTools(
 ): AgentTool[] {
 	return start.allowedTools.map((name) => {
 		if (!SUPPORTED_TOOLS.has(name)) throw new Error(`unsupported Project Agent tool: ${name}`);
+		const definition = projectToolDefinition(name);
 		return {
-			name: PROJECT_OVERVIEW_TOOL,
-			label: "Read Project Overview",
-			description: "Read the current ArcVellum project overview, progress, and blocking state.",
-			parameters: Type.Object({
-				focus: Type.Optional(Type.String({ maxLength: 200 })),
-			}),
+			name,
+			label: definition.label,
+			description: definition.description,
+			parameters: definition.parameters,
 			executionMode: "sequential",
 			execute: async (_toolCallId, params, signal) => {
 				onCall();
@@ -192,6 +193,35 @@ function createProjectAgentTools(
 			},
 		} satisfies AgentTool;
 	});
+}
+
+function projectToolDefinition(name: string): {
+	label: string;
+	description: string;
+	parameters: ReturnType<typeof Type.Object>;
+} {
+	if (name === PROJECT_OVERVIEW_TOOL) {
+		return {
+			label: "Read Project Overview",
+			description: "Read current project identity, progress, next action, and blocking state.",
+			parameters: Type.Object({ focus: Type.Optional(Type.String({ maxLength: 200 })) }),
+		};
+	}
+	if (name === PROJECT_SEARCH_TOOL) {
+		return {
+			label: "Search Project",
+			description: "Search the indexed project library and promoted manuscript without reading arbitrary files.",
+			parameters: Type.Object({
+				query: Type.String({ minLength: 1, maxLength: 300 }),
+				limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 })),
+			}),
+		};
+	}
+	return {
+		label: "Observe Creation",
+		description: "Read current creation run, Agent activity, and recent workflow events.",
+		parameters: Type.Object({ focus: Type.Optional(Type.String({ maxLength: 200 })) }),
+	};
 }
 
 function parseStart(value: BridgeEnvelope): ProjectAgentStart {

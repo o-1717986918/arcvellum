@@ -10,6 +10,9 @@ from .primitives import iso_now
 from .state import MemoryPersistenceState
 
 
+_CONVERSATION_KINDS = {"advisor", "project-agent"}
+
+
 class InMemorySessionRepository:
     path = Path(":memory:")
 
@@ -18,21 +21,24 @@ class InMemorySessionRepository:
         self._clock = clock
         self._ids = ids
 
-    def create_advisor_session(
+    def create_conversation_session(
         self,
         project_root: str,
         snapshot_digest: str,
         *,
-        title: str = "项目问答",
+        title: str,
+        session_kind: str,
     ) -> dict[str, Any]:
+        kind = _conversation_kind(session_kind)
         with self._state.lock:
-            session_id = self._ids.new_id("advisor")
+            session_id = self._ids.new_id(kind)
             now = iso_now(self._clock)
             self._state.advisor_sessions[session_id] = {
                 "session_id": session_id,
                 "project_root": project_root,
                 "snapshot_digest": snapshot_digest,
-                "title": title.strip() or "项目问答",
+                "title": title.strip() or _default_conversation_title(kind),
+                "session_kind": kind,
                 "created_at": now,
                 "updated_at": now,
                 "session_summary": "",
@@ -40,23 +46,57 @@ class InMemorySessionRepository:
                 "pinned_user_preferences": [],
                 "messages": [],
             }
-            return self.read_advisor_session(session_id)
+            return self.read_conversation_session(session_id)
+
+    def create_advisor_session(
+        self,
+        project_root: str,
+        snapshot_digest: str,
+        *,
+        title: str = "项目问答",
+    ) -> dict[str, Any]:
+        return self.create_conversation_session(
+            project_root,
+            snapshot_digest,
+            title=title,
+            session_kind="advisor",
+        )
 
     def read_advisor_session(self, session_id: str) -> dict[str, Any]:
+        session = self.read_conversation_session(session_id)
+        if session.get("session_kind") != "advisor":
+            raise FileNotFoundError(f"Advisor session not found: {session_id}")
+        return session
+
+    def read_conversation_session(self, session_id: str) -> dict[str, Any]:
         with self._state.lock:
             try:
                 return deepcopy(self._state.advisor_sessions[session_id])
             except KeyError as exc:
-                raise FileNotFoundError(f"Advisor session not found: {session_id}") from exc
+                raise FileNotFoundError(f"Conversation session not found: {session_id}") from exc
 
     def list_advisor_sessions(self, project_root: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        return self.list_conversation_sessions(
+            project_root,
+            session_kind="advisor",
+            limit=limit,
+        )
+
+    def list_conversation_sessions(
+        self,
+        project_root: str,
+        *,
+        session_kind: str,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        kind = _conversation_kind(session_kind)
         with self._state.lock:
             sessions = [
                 {key: value for key, value in item.items() if key not in {
                     "messages", "session_summary", "summary_updated_at", "pinned_user_preferences",
                 }}
                 for item in self._state.advisor_sessions.values()
-                if item["project_root"] == project_root
+                if item["project_root"] == project_root and item.get("session_kind", "advisor") == kind
             ]
             sessions.sort(key=lambda item: (item["updated_at"], item["session_id"]), reverse=True)
             return deepcopy(sessions[:max(1, min(200, int(limit)))])
@@ -64,12 +104,21 @@ class InMemorySessionRepository:
     def append_advisor_message(self, session_id: str, role: str, payload: dict[str, Any]) -> dict[str, Any]:
         if role not in {"user", "advisor"}:
             raise ValueError("advisor message role must be user or advisor")
+        session = self.read_conversation_session(session_id)
+        if session.get("session_kind") != "advisor":
+            raise FileNotFoundError(f"Advisor session not found: {session_id}")
+        return self.append_session_message(session_id, role, payload)
+
+    def append_session_message(self, session_id: str, role: str, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized_role = str(role or "").strip().lower()
+        if normalized_role not in {"user", "assistant", "tool", "advisor"}:
+            raise ValueError("conversation message role must be user, assistant, tool, or advisor")
         with self._state.lock:
-            session = self._required_advisor(session_id)
+            session = self._required_conversation(session_id)
             now = iso_now(self._clock)
             message = {
                 "sequence": len(session["messages"]) + 1,
-                "role": role,
+                "role": normalized_role,
                 "at": now,
                 "payload": deepcopy(payload),
             }
@@ -186,13 +235,30 @@ class InMemorySessionRepository:
             return deepcopy(sessions[:max(1, min(200, int(limit)))])
 
     def _required_advisor(self, session_id: str) -> dict[str, Any]:
+        session = self._required_conversation(session_id)
+        if session.get("session_kind", "advisor") != "advisor":
+            raise FileNotFoundError(f"Advisor session not found: {session_id}")
+        return session
+
+    def _required_conversation(self, session_id: str) -> dict[str, Any]:
         try:
             return self._state.advisor_sessions[session_id]
         except KeyError as exc:
-            raise FileNotFoundError(f"Advisor session not found: {session_id}") from exc
+            raise FileNotFoundError(f"Conversation session not found: {session_id}") from exc
 
 
 __all__ = ["InMemorySessionRepository"]
+
+
+def _conversation_kind(value: str) -> str:
+    kind = str(value or "").strip().lower()
+    if kind not in _CONVERSATION_KINDS:
+        raise ValueError(f"unsupported conversation session kind: {value}")
+    return kind
+
+
+def _default_conversation_title(kind: str) -> str:
+    return "项目问答" if kind == "advisor" else "项目 Agent"
 
 
 def _agent_session_values(previous: dict[str, Any], **fields: Any) -> dict[str, Any]:

@@ -6,6 +6,16 @@ import sqlite3
 
 
 def ensure_additive_columns(connection: sqlite3.Connection) -> None:
+    advisor_session_columns = _columns(connection, "advisor_sessions")
+    if "session_kind" not in advisor_session_columns:
+        connection.execute(
+            "ALTER TABLE advisor_sessions "
+            "ADD COLUMN session_kind TEXT NOT NULL DEFAULT 'advisor'"
+        )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS advisor_sessions_kind_idx "
+        "ON advisor_sessions(project_root, session_kind, updated_at)"
+    )
     preference_columns = _columns(connection, "advisor_pinned_preferences")
     if "position" not in preference_columns:
         connection.execute(
@@ -63,6 +73,7 @@ def ensure_additive_columns(connection: sqlite3.Connection) -> None:
 
 def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
     if table not in {
+        "advisor_sessions",
         "advisor_pinned_preferences",
         "autopilot_runs",
         "archive_asset_transactions",
