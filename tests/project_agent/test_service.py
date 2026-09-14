@@ -42,7 +42,7 @@ class _ActionRuntime:
             "request-action",
             request.turn_id,
             "project_record_direction",
-            {"message": "主角拒绝王位", "intent_quote": "记录为创作方向"},
+            {"message": "主角拒绝王位"},
         ))
         return ProjectAgentTurnResult(
             "completed",
@@ -133,7 +133,8 @@ class ProjectAgentServiceTests(unittest.TestCase):
             self.assertEqual(result["answer"], "已记录：主角拒绝王位")
             self.assertEqual(len(writes), 1)
             self.assertIn("project_record_direction", runtime.requests[0].allowed_tools)
-            self.assertIn("intent_quote", runtime.requests[0].system_prompt)
+            self.assertIn("不要请求用户批准", runtime.requests[0].system_prompt)
+            self.assertIn("lean-v2", runtime.requests[0].system_prompt)
 
 
 def _dependencies() -> ProjectAgentDependencies:

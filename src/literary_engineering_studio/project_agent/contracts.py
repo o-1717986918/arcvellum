@@ -209,6 +209,7 @@ class ProjectAgentDependencies:
     project_overview: ProjectReadModel
     project_search: ProjectReadModel
     creation_observe: ProjectReadModel
+    project_controls: ProjectReadModel | None = None
 
 
 @dataclass(frozen=True)
@@ -217,3 +218,8 @@ class ProjectAgentActionDependencies:
 
     record_direction: ProjectAction
     creation_control: ProjectAction
+    resolve_decision: ProjectAction | None = None
+    update_quality: ProjectAction | None = None
+    update_rhythm: ProjectAction | None = None
+    mount_style: ProjectAction | None = None
+    promote_asset: ProjectAction | None = None

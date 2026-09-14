@@ -69,7 +69,7 @@ describe("Project Agent bridge protocol", () => {
 		expect(bridge.pendingCount).toBe(0);
 	});
 
-	it("exposes bounded write tools with explicit intent evidence", async () => {
+	it("exposes bounded autonomous write tools", async () => {
 		const faux = createFauxCore({
 			provider: "arcvellum-faux-actions",
 			models: [{ id: "project-agent-action-test", reasoning: false }],
@@ -78,7 +78,6 @@ describe("Project Agent bridge protocol", () => {
 			fauxAssistantMessage(
 				fauxToolCall("project_record_direction", {
 					message: "主角拒绝王位",
-					intent_quote: "记录为创作方向",
 				}),
 				{ stopReason: "toolUse" },
 			),
@@ -103,7 +102,7 @@ describe("Project Agent bridge protocol", () => {
 				sessionId: "session-action",
 				turnId: "turn-action",
 				prompt: "请记录为创作方向：主角拒绝王位。",
-				systemPrompt: "写操作必须引用当前用户原话。",
+				systemPrompt: "在领域门禁内自主执行项目操作。",
 				allowedTools: ["project_record_direction"],
 				maxTurns: 3,
 				maxToolCalls: 2,

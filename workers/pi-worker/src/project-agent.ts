@@ -19,14 +19,26 @@ import { safeThinkingLevel } from "./reasoning-budget.ts";
 const PROJECT_OVERVIEW_TOOL = "project_overview";
 const PROJECT_SEARCH_TOOL = "project_search";
 const CREATION_OBSERVE_TOOL = "creation_observe";
+const PROJECT_CONTROLS_TOOL = "project_controls";
 const PROJECT_RECORD_DIRECTION_TOOL = "project_record_direction";
 const CREATION_CONTROL_TOOL = "creation_control";
+const PROJECT_DECISION_RESOLVE_TOOL = "project_decision_resolve";
+const PROJECT_QUALITY_UPDATE_TOOL = "project_quality_update";
+const PROJECT_RHYTHM_UPDATE_TOOL = "project_rhythm_update";
+const PROJECT_STYLE_MOUNT_TOOL = "project_style_mount";
+const PROJECT_ASSET_PROMOTE_TOOL = "project_asset_promote";
 const SUPPORTED_TOOLS = new Set([
 	PROJECT_OVERVIEW_TOOL,
 	PROJECT_SEARCH_TOOL,
 	CREATION_OBSERVE_TOOL,
+	PROJECT_CONTROLS_TOOL,
 	PROJECT_RECORD_DIRECTION_TOOL,
 	CREATION_CONTROL_TOOL,
+	PROJECT_DECISION_RESOLVE_TOOL,
+	PROJECT_QUALITY_UPDATE_TOOL,
+	PROJECT_RHYTHM_UPDATE_TOOL,
+	PROJECT_STYLE_MOUNT_TOOL,
+	PROJECT_ASSET_PROMOTE_TOOL,
 ]);
 
 export interface ProjectAgentStart {
@@ -230,23 +242,79 @@ function projectToolDefinition(name: string): {
 		description: "Read current creation run, Agent activity, and recent workflow events.",
 		parameters: Type.Object({ focus: Type.Optional(Type.String({ maxLength: 200 })) }),
 	};
-	if (name === PROJECT_RECORD_DIRECTION_TOOL) return {
-		label: "Record Creative Direction",
-		description: "Record a direction only when the current user explicitly asks. intent_quote must be copied verbatim from the current user message.",
+	if (name === PROJECT_CONTROLS_TOOL) return {
+		label: "Inspect Project Controls",
+		description: "Read pending decisions, quality rules, rhythm, mounted style, or delivery readiness.",
 		parameters: Type.Object({
-			message: Type.String({ minLength: 1, maxLength: 6000 }),
-			intent_quote: Type.String({ minLength: 2, maxLength: 500 }),
+			section: Type.Optional(Type.Union([
+				Type.Literal("all"),
+				Type.Literal("decisions"),
+				Type.Literal("quality"),
+				Type.Literal("rhythm"),
+				Type.Literal("style"),
+				Type.Literal("archive"),
+				Type.Literal("delivery"),
+			])),
 		}),
 	};
-	return {
+	if (name === PROJECT_RECORD_DIRECTION_TOOL) return {
+		label: "Record Creative Direction",
+		description: "Record a durable creative direction for the current project when it advances the user's stated goal.",
+		parameters: Type.Object({
+			message: Type.String({ minLength: 1, maxLength: 6000 }),
+		}),
+	};
+	if (name === CREATION_CONTROL_TOOL) return {
 		label: "Control Creation",
-		description: "Start, pause, or resume creation only when the current user explicitly requests it. intent_quote must be copied verbatim from the current user message.",
+		description: "Start, pause, or resume the project's lean-v2 creation run. Use this directly; do not ask for tool approval.",
 		parameters: Type.Object({
 			operation: Type.Union([Type.Literal("start"), Type.Literal("pause"), Type.Literal("resume")]),
-			intent_quote: Type.String({ minLength: 2, maxLength: 500 }),
 			reason: Type.Optional(Type.String({ maxLength: 500 })),
 		}),
 	};
+	if (name === PROJECT_DECISION_RESOLVE_TOOL) return {
+		label: "Resolve Project Decision",
+		description: "Choose one currently available option and resume creation after it is consumed.",
+		parameters: Type.Object({
+			choice_id: Type.String({ minLength: 1, maxLength: 300 }),
+			selected: Type.String({ minLength: 1, maxLength: 300 }),
+			rationale: Type.Optional(Type.String({ maxLength: 2000 })),
+		}),
+	};
+	if (name === PROJECT_QUALITY_UPDATE_TOOL) return {
+		label: "Update Quality Rules",
+		description: "Replace the complete validated language and lint profile for future candidates.",
+		parameters: Type.Object({
+			profile: Type.Object({}, { additionalProperties: true }),
+		}),
+	};
+	if (name === PROJECT_RHYTHM_UPDATE_TOOL) return {
+		label: "Update Narrative Rhythm",
+		description: "Replace full-book rhythm entries and the optional book-level rhythm profile.",
+		parameters: Type.Object({
+			entries: Type.Array(Type.Object({}, { additionalProperties: true }), { maxItems: 500 }),
+			book_profile: Type.Optional(Type.Object({}, { additionalProperties: true })),
+		}),
+	};
+	if (name === PROJECT_STYLE_MOUNT_TOOL) return {
+		label: "Mount Style Version",
+		description: "Mount one exact immutable style version after Studio validates its current impact preview.",
+		parameters: Type.Object({
+			style_id: Type.String({ minLength: 1, maxLength: 200 }),
+			version_id: Type.String({ minLength: 1, maxLength: 200 }),
+			content_hash: Type.String({ minLength: 8, maxLength: 200 }),
+			scope: Type.Optional(Type.String({ maxLength: 40 })),
+			priority: Type.Optional(Type.String({ maxLength: 40 })),
+		}),
+	};
+	if (name === PROJECT_ASSET_PROMOTE_TOOL) return {
+		label: "Promote Reviewed Asset",
+		description: "Start formal promotion for an archive candidate only after its existing review and promotion gates pass.",
+		parameters: Type.Object({
+			candidate_id: Type.String({ minLength: 1, maxLength: 300 }),
+		}),
+	};
+	throw new Error(`unsupported Project Agent tool: ${name}`);
 }
 
 function parseStart(value: BridgeEnvelope): ProjectAgentStart {

@@ -14,16 +14,53 @@ from .contracts import (
 )
 
 
-READ_TOOLS = ("project_overview", "project_search", "creation_observe")
-ACTION_TOOLS = ("project_record_direction", "creation_control")
+READ_TOOLS = ("project_overview", "project_search", "creation_observe", "project_controls")
+ACTION_TOOLS = (
+    "project_record_direction",
+    "creation_control",
+    "project_decision_resolve",
+    "project_quality_update",
+    "project_rhythm_update",
+    "project_style_mount",
+    "project_asset_promote",
+)
 TOOL_RISKS = {
     **{name: ToolRisk.READ for name in READ_TOOLS},
     **{name: ToolRisk.REVERSIBLE_WRITE for name in ACTION_TOOLS},
 }
 
 
+def available_read_tools(dependencies: ProjectAgentDependencies) -> tuple[str, ...]:
+    return tuple(
+        name for name, handler in (
+            ("project_overview", dependencies.project_overview),
+            ("project_search", dependencies.project_search),
+            ("creation_observe", dependencies.creation_observe),
+            ("project_controls", dependencies.project_controls),
+        )
+        if handler is not None
+    )
+
+
+def available_action_tools(actions: ProjectAgentActionDependencies | None) -> tuple[str, ...]:
+    if actions is None:
+        return ()
+    return tuple(
+        name for name, handler in (
+            ("project_record_direction", actions.record_direction),
+            ("creation_control", actions.creation_control),
+            ("project_decision_resolve", actions.resolve_decision),
+            ("project_quality_update", actions.update_quality),
+            ("project_rhythm_update", actions.update_rhythm),
+            ("project_style_mount", actions.mount_style),
+            ("project_asset_promote", actions.promote_asset),
+        )
+        if handler is not None
+    )
+
+
 class ProjectAgentToolDispatcher:
-    """Dispatch bounded tools and require current-message evidence for mutations."""
+    """Dispatch bounded tools through existing application-service ports."""
 
     def __init__(
         self,
@@ -38,7 +75,9 @@ class ProjectAgentToolDispatcher:
         self.dependencies = dependencies
         self.actions = actions
         self.enabled = frozenset(enabled)
-        self.user_message = _normalized_text(user_message)
+        # Kept in the constructor for source compatibility with D5-A callers.
+        # Project Agent sessions now authorize allowlisted actions directly.
+        del user_message
         self._mutation_results: dict[str, Any] = {}
 
     def __call__(self, call: ProjectAgentToolCall):
@@ -51,20 +90,27 @@ class ProjectAgentToolDispatcher:
             "project_overview": self.dependencies.project_overview,
             "project_search": self.dependencies.project_search,
             "creation_observe": self.dependencies.creation_observe,
+            "project_controls": self.dependencies.project_controls,
         }
         handler = read_handlers.get(call.name)
-        if risk is ToolRisk.READ and handler is not None:
+        if risk is ToolRisk.READ:
+            if handler is None:
+                raise ValueError(f"Project Agent read tool is not configured: {call.name}")
             return handler(self.project_root, call.arguments)
         if self.actions is None:
             raise ValueError("Project Agent write actions are not configured")
-        _require_explicit_intent(call.arguments, self.user_message)
         action_handlers = {
             "project_record_direction": self.actions.record_direction,
             "creation_control": self.actions.creation_control,
+            "project_decision_resolve": self.actions.resolve_decision,
+            "project_quality_update": self.actions.update_quality,
+            "project_rhythm_update": self.actions.update_rhythm,
+            "project_style_mount": self.actions.mount_style,
+            "project_asset_promote": self.actions.promote_asset,
         }
         handler = action_handlers.get(call.name)
         if handler is None:
-            raise ValueError(f"unknown Project Agent tool: {call.name}")
+            raise ValueError(f"Project Agent action is not configured: {call.name}")
         key = json.dumps(
             {"name": call.name, "arguments": dict(call.arguments)},
             ensure_ascii=False,
@@ -75,17 +121,11 @@ class ProjectAgentToolDispatcher:
             self._mutation_results[key] = handler(self.project_root, call.arguments)
         return self._mutation_results[key]
 
-
-def _require_explicit_intent(arguments: Any, user_message: str) -> None:
-    quote = _normalized_text(str(arguments.get("intent_quote") or ""))
-    if len(quote) < 2:
-        raise ValueError("Project Agent write action requires intent_quote from the current user message")
-    if quote not in user_message:
-        raise ValueError("Project Agent intent_quote is not present in the current user message")
-
-
-def _normalized_text(value: str) -> str:
-    return " ".join(value.strip().casefold().split())
-
-
-__all__ = ["ACTION_TOOLS", "READ_TOOLS", "TOOL_RISKS", "ProjectAgentToolDispatcher"]
+__all__ = [
+    "ACTION_TOOLS",
+    "READ_TOOLS",
+    "TOOL_RISKS",
+    "ProjectAgentToolDispatcher",
+    "available_action_tools",
+    "available_read_tools",
+]

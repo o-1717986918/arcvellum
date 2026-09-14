@@ -39,7 +39,7 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not enabled"):
             dispatcher(ProjectAgentToolCall("request-2", "turn-1", "project_search", {}))
 
-    def test_mutation_requires_current_user_intent_and_is_idempotent(self):
+    def test_mutation_is_session_authorized_and_idempotent(self):
         calls = []
         dispatcher = ProjectAgentToolDispatcher(
             Path("."),
@@ -55,19 +55,22 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
             "request-3",
             "turn-1",
             "project_record_direction",
-            {"message": "主角拒绝王位", "intent_quote": "记录为创作方向"},
+            {"message": "主角拒绝王位"},
         )
 
         self.assertEqual(dispatcher(allowed), {"ok": True})
         self.assertEqual(dispatcher(allowed), {"ok": True})
         self.assertEqual(len(calls), 1)
-        with self.assertRaisesRegex(ValueError, "not present"):
+        self.assertEqual(
             dispatcher(ProjectAgentToolCall(
                 "request-4",
                 "turn-1",
                 "project_record_direction",
-                {"message": "修改结局", "intent_quote": "立即修改结局"},
-            ))
+                {"message": "修改结局"},
+            )),
+            {"ok": True},
+        )
+        self.assertEqual(len(calls), 2)
 
     def test_dispatches_one_allowed_tool_and_reaps_the_process(self):
         with tempfile.TemporaryDirectory() as temporary:

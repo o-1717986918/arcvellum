@@ -28,6 +28,9 @@ class _ReadModels:
             "dashboard": self.dashboard(root),
         }
 
+    def delivery(self, _root):
+        return {"ready": False, "blockers": ["正文尚未完成"]}
+
 
 class ProjectAgentReadModelTests(unittest.TestCase):
     def setUp(self):
@@ -47,6 +50,25 @@ class ProjectAgentReadModelTests(unittest.TestCase):
         value = self.dependencies.creation_observe(_root(), {})
         self.assertEqual(value["autopilot"]["status"], "running")
         self.assertEqual(value["recent_events"][0]["event"], "review.started")
+
+    def test_control_projection_selects_one_bounded_domain(self):
+        dependencies = dependencies_from_read_models(
+            _ReadModels(),
+            choices=lambda _root: {"choices": [{"choice_id": "choice-1"}]},
+            quality=lambda _root: {"profile": "plain"},
+            rhythm=lambda _root: {"entries": [{"chapter": 1}]},
+            style_mounts=lambda _root: {"status": "active"},
+            archive_candidates=lambda _root: ({"candidate_id": "character-lin-che"},),
+        )
+
+        decisions = dependencies.project_controls(_root(), {"section": "decisions"})
+        all_controls = dependencies.project_controls(_root(), {"section": "all"})
+
+        self.assertEqual(decisions["decisions"]["choices"][0]["choice_id"], "choice-1")
+        self.assertNotIn("quality", decisions)
+        self.assertEqual(all_controls["style"]["status"], "active")
+        self.assertEqual(all_controls["archive"]["candidates"][0]["candidate_id"], "character-lin-che")
+        self.assertFalse(all_controls["delivery"]["ready"])
 
 
 def _root():

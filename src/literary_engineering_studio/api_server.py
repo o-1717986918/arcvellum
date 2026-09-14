@@ -261,14 +261,54 @@ def create_app(
     progress_snapshot = read_models.progress
     delivery_snapshot = read_models.delivery
     workspace_snapshot = read_models.workspace
+    worker_dependencies = _worker_dependencies(config, jobs, lifecycle, services.session_events)
+    archive_dependencies = default_archive_dependencies(
+        jobs,
+        launch_worker=lambda request: launch_worker(
+            worker_dependencies,
+            WorkerRequest(**request),
+        ),
+    )
     project_agent = ProjectAgentService(
         config,
         sessions=lifecycle.persistence.sessions,
         jobs=lifecycle.persistence.worker,
-        dependencies=dependencies_from_read_models(read_models),
+        dependencies=dependencies_from_read_models(
+            read_models,
+            choices=lambda root: current_choices(
+                config,
+                root,
+                dashboard=read_models.dashboard(root).get("dashboard"),
+            ),
+            quality=lambda root: load_creative_quality_profile(root),
+            rhythm=lambda root: load_rhythm_plan(root),
+            style_mounts=lambda root: style_mounts.status(root),
+            archive_candidates=lambda root: archive_dependencies.candidates.list(root),
+        ),
         actions=dependencies_from_actions(
             record_direction=record_direction,
             autopilot=autopilot,
+            config=config,
+            current_choices=lambda settings, root: current_choices(
+                settings,
+                root,
+                dashboard=read_models.dashboard(root).get("dashboard"),
+            ),
+            record_choice=lambda settings, root, payload: record_choice(
+                settings,
+                root,
+                payload,
+                style_mount_service=style_mounts,
+            ),
+            save_quality=save_creative_quality_profile,
+            save_rhythm=save_rhythm_plan,
+            style_mounts=style_mounts,
+            candidate_promotions=archive_dependencies.candidates,
+            launch_worker=lambda request: launch_worker(
+                worker_dependencies,
+                WorkerRequest(**request),
+            ),
+            invalidate_project=read_models.invalidate,
         ),
         persona_loader=lambda root: active_persona(
             Path(str(config.get("application", {}).get("data_root") or ".")),
@@ -414,17 +454,8 @@ def create_app(
         )
     )
 
-    worker_dependencies = _worker_dependencies(config, jobs, lifecycle, services.session_events)
     app.include_router(
-        build_archive_router(
-            default_archive_dependencies(
-                jobs,
-                launch_worker=lambda request: launch_worker(
-                    worker_dependencies,
-                    WorkerRequest(**request),
-                ),
-            )
-        )
+        build_archive_router(archive_dependencies)
     )
 
     app.include_router(build_archaeology_router(archaeology_router_dependencies()))

@@ -10,7 +10,15 @@ from typing import Any
 from .contracts import ProjectAgentDependencies
 
 
-def dependencies_from_read_models(read_models: Any) -> ProjectAgentDependencies:
+def dependencies_from_read_models(
+    read_models: Any,
+    *,
+    choices: Any | None = None,
+    quality: Any | None = None,
+    rhythm: Any | None = None,
+    style_mounts: Any | None = None,
+    archive_candidates: Any | None = None,
+) -> ProjectAgentDependencies:
     def overview(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         dashboard = read_models.dashboard(root)
         return _fit_payload({
@@ -50,7 +58,27 @@ def dependencies_from_read_models(read_models: Any) -> ProjectAgentDependencies:
             "recent_events": _items(_mapping(dashboard).get("recent_events"), 24),
         })
 
-    return ProjectAgentDependencies(overview, search, observe)
+    def controls(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        section = str(arguments.get("section") or "all").strip().lower()
+        allowed = {"all", "decisions", "quality", "rhythm", "style", "archive", "delivery"}
+        if section not in allowed:
+            raise ValueError(f"unsupported project control section: {section}")
+        payload: dict[str, Any] = {"section": section}
+        if section in {"all", "decisions"} and choices is not None:
+            payload["decisions"] = choices(root)
+        if section in {"all", "quality"} and quality is not None:
+            payload["quality"] = quality(root)
+        if section in {"all", "rhythm"} and rhythm is not None:
+            payload["rhythm"] = rhythm(root)
+        if section in {"all", "style"} and style_mounts is not None:
+            payload["style"] = style_mounts(root)
+        if section in {"all", "archive"} and archive_candidates is not None:
+            payload["archive"] = {"candidates": list(archive_candidates(root))[:50]}
+        if section in {"all", "delivery"}:
+            payload["delivery"] = read_models.delivery(root)
+        return _fit_payload(payload)
+
+    return ProjectAgentDependencies(overview, search, observe, controls)
 
 
 def _search_value(

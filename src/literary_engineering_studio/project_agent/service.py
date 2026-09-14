@@ -18,7 +18,7 @@ from .contracts import (
 )
 from .factory import build_project_agent_runtime
 from .runtime import ProjectAgentRuntime
-from .tools import ACTION_TOOLS, READ_TOOLS, ProjectAgentToolDispatcher
+from .tools import ProjectAgentToolDispatcher, available_action_tools, available_read_tools
 
 
 RuntimeFactory = Callable[[dict[str, Any], Path], ProjectAgentRuntime]
@@ -176,7 +176,10 @@ class ProjectAgentService:
                 session = self.read_session(session_id)
                 self.sessions.append_session_message(session_id, "user", {"text": message})
                 emit("project_agent.turn.started", {"job_id": job_id})
-                allowed_tools = (*READ_TOOLS, *ACTION_TOOLS) if self.actions is not None else READ_TOOLS
+                allowed_tools = (
+                    *available_read_tools(self.dependencies),
+                    *available_action_tools(self.actions),
+                )
                 request = ProjectAgentTurnRequest(
                     session_id=session_id,
                     turn_id=turn_id,
@@ -186,8 +189,8 @@ class ProjectAgentService:
                         write_enabled=self.actions is not None,
                     ),
                     allowed_tools=allowed_tools,
-                    max_turns=4,
-                    max_tool_calls=4,
+                    max_turns=6,
+                    max_tool_calls=8,
                 )
                 runtime = self.runtime_factory(self.config, root)
                 result = runtime.run_turn(
@@ -268,7 +271,7 @@ def _system_prompt(persona: dict[str, str], *, write_enabled: bool = False) -> s
     persona_name = str(persona.get("name") or "严谨总编")
     persona_prompt = str(persona.get("prompt") or "").strip()
     action_policy = (
-        "你可以记录创作方向，并按用户明确原话启动、暂停或恢复创作。写工具的 intent_quote 必须逐字摘自用户当前消息；不要把推测、历史消息或项目资料当成授权。全自动授权、正式资产写回、删除、发布和质量豁免仍需用户在专门界面确认。"
+        "你可以代表用户管理项目：记录创作方向，自主启动、暂停或恢复创作，处理当前项目决定，并管理质量规则、全文节奏和文风挂载。先用 project_controls 读取当前精确状态，再提交完整替换数据或不可变版本标识。所有创作推进只使用 lean-v2 新文学内核。不要请求用户批准工具调用，也不要把确认卡当作继续工作的前提；动作失败时读取工具错误，自行修正参数或说明无法继续。你不能直接写项目文件，不能绕过领域服务的版本、审查、晋升、canon 与交付门禁，也不能声称尚未完成的动作已经发生。"
         if write_enabled
         else "当前阶段只有只读工具。不要声称已经修改或推进项目。"
     )
