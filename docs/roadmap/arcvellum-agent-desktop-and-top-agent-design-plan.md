@@ -1,12 +1,12 @@
 # ArcVellum Agent Desktop 与顶层 Agent 分阶段设计方案
 
-> 状态：D2-D4 与 D5-A 已完成；Project Agent 已具备只读查询及两项受控操作，其余写工具仍需逐批审查
+> 状态：D2-D5-A 已完成；D5-B 至 D7 按“新内核自主控制 + Agent 子工作区”修订并进入实施
 >
 > 日期：2026-09-13
 >
 > 适用范围：ArcVellum Studio 前端产品外壳、项目级顶层 Agent、既有功能复用和后续迁移
 >
-> 本文不授权修改文学内核、任务状态机、正式资产写回协议或 Pi Worker 创作职责。
+> 本文只允许 Project Agent 驱动 `lean-v2` 新文学内核；不得为顶层 Agent 扩展旧 `strict-v1` 流程，也不得复制任务状态机、正式资产写回协议或 Pi Worker 创作职责。
 
 > 第二轮评审结论：产品方向成立，原方案低估了 Pi 与 Python Application Service 之间的双向工具协议、动作幂等与中断恢复成本。本文已把这些问题提升为 D2/D3 的前置门禁。
 
@@ -14,14 +14,43 @@
 
 ArcVellum 下一阶段采用双主界面：
 
-1. **Agent 工作台**作为默认入口。用户通过持续对话表达目标、查看执行、修正方向和处理少量高风险确认。
+1. **Agent 工作台**作为默认入口。用户通过持续对话表达目标、查看执行和修正方向；Project Agent 在既有领域 Gate 内自主完成项目操作，不再请求用户审批。
 2. **叙事星仪**继续作为空间化项目视图。它显示与 Agent 工作台相同的项目事实、创作进度和当前焦点。
 
 复杂功能由顶层 Agent 通过类型化工具调用现有 Application Service/API 完成。现有阅读器、创作现场、档案 IDE、文风工坊、质量规则、节奏规划、决策、交付、设置、SSE 与星仪投影继续复用。它们不再共同组成要求普通用户逐页操作的主流程，而是以下三类能力：
 
 - Agent 可以调用的项目能力；
 - Agent 可以打开的可视工作区；
-- 用户可以随时直接进入的展示工作区和高级手动接管界面。
+- Agent 工作台内部的展示子工作区和高级手动接管界面。
+
+### 1.1 2026-09-14 路线修订
+
+本轮把此前的“受控操作 + 高风险审批”改为“自主操作 + 确定性领域 Gate”。取消的是 Project Agent 的用户审批协议、确认卡和 `intent_quote` 授权证据；继续保留的是现有 Application Service 的 schema、revision、digest、并发、候选晋升、canon、review、delivery 和 `lean-v2` 状态检查。顶层 Agent 可以代表用户推进项目，但不能用自然语言覆盖这些工程事实。
+
+前端也从“新 Agent 页旁挂旧查看页”改为一个新的项目桌面：
+
+```text
+/agent                  对话工作区（默认）
+/agent/reader           正文子工作区
+/agent/live             创作现场子工作区
+/agent/archive          档案子工作区
+/agent/style            文风子工作区
+/agent/quality          质量与节奏子工作区
+/agent/observatory      Agent 观测子工作区
+/agent/delivery         交付子工作区
+/overview               叙事星仪（平级主界面）
+/settings               设置（独立页面）
+```
+
+左栏“查看作品”只切换 Agent 桌面内部子工作区，不把用户交给旧页面外壳。旧 `/reader`、`/archive`、`/style` 等 URL 仅保留兼容重定向；原业务组件与 API 可以复用，旧导航、旧页面容器和重复视觉层逐步剥离。
+
+实现纪律：
+
+1. 创建或选择作品后进入 `/agent`，不再把 `/overview` 当默认项目主页。
+2. 顶层 Agent 的 `creation_control` 只能启动采用 `literary_kernel=lean-v2` 的 Autopilot；配置不满足时给出可操作错误，不回退旧内核。
+3. Project Agent 不创建 approval interruption，不等待确认卡，不把一次用户原话当作每次动作的授权票据。
+4. 正式写入全部复用既有领域服务；无公开 Application Service 的能力先保持只读，不以直接写文件补齐。
+5. D7 只重做项目桌面外壳与查看体验，业务编辑器先以子工作区方式复用；视觉重构不复制 API 请求与状态管理。
 
 本轮选择制作一个纯 HTML 视觉原型，不生成概念图。桌面 Agent 的成败依赖信息层级、面板比例、长文本滚动、工具反馈和操作连续性，HTML 原型比静态生图更能验证这些约束。
 
@@ -772,16 +801,17 @@ client/src/styles/projectAgent.css       # 独立的中性编辑桌面令牌和�
 
 ### D5：受控项目操作
 
-状态：D5-A 已完成。记录创作方向与创作启停已接入；通用审批恢复、节奏配置、文风管理和正式资产操作尚未开放。
+状态：D5-A 已完成，D5-B 按自主操作合同实施。记录创作方向与新内核创作启停已接入；本阶段删除 Project Agent 专属审批语义，不建设通用审批恢复。
 
 工作：
 
 - 接入记录方向、启动/暂停/恢复、预览、节奏配置和文风管理；
-- 建立 approval interruption 与恢复；
+- 所有创作启动强制写入或验证 `literary_kernel=lean-v2`，不调用旧内核；
+- 删除 `intent_quote` 和 approval interruption；Agent 可依据当前会话目标自主调用已开放动作；
 - 每个写操作返回 receipt、领域 concurrency token 和真实恢复语义；
 - 对话内展示真实工具结果。
 
-退出条件：协作、托管和全自动三种模式的审批差异可验证。
+退出条件：动作不依赖用户确认即可连续执行，重复调用保持幂等，新内核 Gate 仍能拒绝非法写入。
 
 #### D5-A 最小可写切片：架构与代码合同
 
@@ -802,9 +832,9 @@ workers/pi-worker/project-agent  # 只增加两个窄 schema 的 Pi tools
 
 确定性约束：
 
-- 写工具必须携带 `intent_quote`，且该原话逐字存在于当前用户消息；模型概括、历史消息和工具资料不能授权写入。
+- 写工具不再携带 `intent_quote`；Project Agent 会话本身代表项目操作授权，具体动作仍受工具 allowlist 和领域校验限制。
 - `creation_control.operation` 只允许 `start|pause|resume`；不允许 Agent 传 runtime、run id、授权豁免或任意命令。
-- 全自动模式的授权规则继续由既有 Autopilot 拒绝，Project Agent 固定传 `authorized=False`。
+- Project Agent 可以自主恢复 Autopilot，不再传递用户审批状态；恢复后的每一步继续由 `lean-v2` 新内核状态机判定。
 - 同一 Agent 回合中，相同动作及参数只执行一次；重试返回首个 receipt。
 - 动作结果必须返回现有业务 receipt 的有界投影，供 Agent 解释和 durable job event 审计。
 - D5-A 不开放资产写回、正式晋升、删除、交付、Canon apply、质量豁免或配置修改。
@@ -815,26 +845,35 @@ D5-A 验收证据见 `docs/verification/project-agent-d5a-controlled-actions-che
 
 ### D6：复杂功能接管
 
+状态：待实施。按“少量领域工具 + 新内核服务复用”推进，不把旧 CLI 命令面包装成工具。
+
 工作：
 
 - 接入档案编辑/晋升、决策、质量、交付；
+- 接入文风挂载与节奏配置；对需要 preview/digest 的领域由 Agent 在同一回合或后续回合自主完成 preview → commit，不暂停等待用户审批；
 - Agent 能根据用户自然语言组合多个工具；
-- 复杂操作从主导航收敛到 Agent 工具；原有展示工作区继续保留稳定直达入口，页面内的高级编辑作为手动接管；
+- 复杂操作从主导航收敛到 Agent 工具；展示能力迁入 Agent 子工作区，页面内的高级编辑作为手动接管；
 - Creative Live、Reader 和 Orrery 与当前 Agent run 同步。
+- 任何推进动作必须进入 `lean-v2`；旧内核只作为历史项目兼容读取面，不接受新功能开发。
 
 退出条件：普通用户可以只通过 Agent 完成从作品方向到连续推进和交付的主要流程。
 
 ### D7：双主界面与视觉迁移
 
+状态：待实施。目标是剥离旧项目主页与旧查看页外壳，保留其成熟业务组件和数据能力。
+
 工作：
 
 - Agent 成为默认项目页；
 - 星仪成为顶层平级模式；
+- “查看作品”改为 Agent 桌面内的子页面栏，正文、现场、档案、文风、质量、观测和交付在同一外壳内切换；
+- 旧查看 URL 重定向到对应 Agent 子页面，旧 `SpatialWorkspaceRoute` 不再承担普通查看入口；
+- 新子页面拥有统一标题、返回对话、全屏、加载、空状态和错误呈现，业务内容不裸露 JSON；
 - 替换旧 Moss/Brass 主配色为中性笔记配色；
 - 保留星仪自身深色空间背景，但统一窗口和文字令牌；
 - 建立浅色、深色、系统和高对比度模式。
 
-退出条件：双界面共享选择、会话、run 和待确认状态。
+退出条件：双界面共享作品、会话、run 和当前焦点；Agent 子页面不触发整页跳转；正常项目使用不再依赖旧主页；界面不存在审批卡和待确认状态。
 
 ### D8：收敛与删除
 
