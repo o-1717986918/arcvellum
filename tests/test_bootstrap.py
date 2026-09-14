@@ -5,7 +5,7 @@ import time
 import unittest
 from types import SimpleNamespace
 
-from literary_engineering_studio.bootstrap import ApplicationBootstrapService, BOOTSTRAP_SCHEMA
+from literary_engineering_studio.application.bootstrap import ApplicationBootstrapService, BOOTSTRAP_SCHEMA
 
 
 class _Lifecycle:

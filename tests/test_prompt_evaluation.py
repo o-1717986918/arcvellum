@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio.prompt_evaluation import HIGH_RISK_CASES, evaluate_prompt_assets, write_prompt_evaluation
+from literary_engineering_studio.automation.prompt_evaluation import HIGH_RISK_CASES, evaluate_prompt_assets, write_prompt_evaluation
 from literary_engineering_studio.runtimes.claude_code import ClaudeCodeRuntime
 from literary_engineering_studio.runtimes.pi_worker import PiWorkerRuntime
 from literary_engineering_studio_engine.prompting.registry import list_prompt_assets

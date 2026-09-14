@@ -112,7 +112,7 @@ function chooseMapPoint(nodeId: string): void {
 function handleKeydown(event: KeyboardEvent): void {
   const target = event.target instanceof HTMLElement ? event.target : null;
   const isEditable = Boolean(target?.closest("input, textarea, select, [contenteditable='true']"));
-  const outsideInstrument = Boolean(target?.closest(".spatial-window, .advisor-dock, .project-band-menu, .relation-lens, .chapter-rail, .character-thread-rail"));
+  const outsideInstrument = Boolean(target?.closest(".spatial-window, .project-band-menu, .relation-lens, .chapter-rail, .character-thread-rail"));
   const interactive = Boolean(target?.closest("button, a, [role='button']"));
   if (outsideInstrument) return;
   if (event.key === "/" && !isEditable && !event.ctrlKey && !event.metaKey && !event.altKey) {

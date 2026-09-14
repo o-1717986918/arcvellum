@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.config import default_config
-from literary_engineering_studio.lifecycle import ApplicationLifecycleManager
-from literary_engineering_studio.process_manager import ProcessSpec
+from literary_engineering_studio.infrastructure.legacy_lifecycle import ApplicationLifecycleManager
+from literary_engineering_studio.runtime.process_manager import ProcessSpec
 from literary_engineering_studio.runtimes import RUNTIME_TYPES
 from literary_engineering_studio.runtimes.base import AgentRuntime
 
@@ -68,7 +68,7 @@ class RuntimeFoundationTests(unittest.TestCase):
                 release.wait(2)
                 return [{"runner_id": "opencode", "available": True}]
 
-            with patch("literary_engineering_studio.lifecycle.agent_runner_status", side_effect=slow_status):
+            with patch("literary_engineering_studio.infrastructure.legacy_lifecycle.agent_runner_status", side_effect=slow_status):
                 lifecycle = ApplicationLifecycleManager(config)
                 self.assertTrue(started.wait(1))
                 before = time.monotonic()

@@ -157,17 +157,7 @@ export function anchoredPositionFor(
   anchor: SpatialWindowAnchor,
   size: SpatialWindowSize,
 ): SpatialWindowPosition {
-  const position = clampPosition({ left: point.x + anchor.offsetX, top: point.y + anchor.offsetY }, size);
-  if (typeof window === "undefined") return position;
-  // The advisor is a user-controlled floating console, not disposable chrome.
-  // Node inspectors yield upward when their preferred anchor would cover it.
-  const advisorSafeLeft = window.innerWidth - 116;
-  const advisorSafeTop = window.innerHeight - 118;
-  const overlapsAdvisor = position.left + size.width > advisorSafeLeft
-    && position.top + size.height > advisorSafeTop;
-  return overlapsAdvisor
-    ? clampPosition({ left: position.left, top: advisorSafeTop - size.height - 12 }, size)
-    : position;
+  return clampPosition({ left: point.x + anchor.offsetX, top: point.y + anchor.offsetY }, size);
 }
 
 export function anchoredPosition(

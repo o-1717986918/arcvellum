@@ -2,7 +2,6 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import StartupScene from "@/components/StartupScene.vue";
-import AdvisorDock from "@/features/advisor/components/AdvisorDock.vue";
 import OnboardingTour from "@/components/OnboardingTour.vue";
 import { projectsClient } from "@/features/projects/services/projectsClient";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
@@ -139,7 +138,6 @@ async function waitForBackendReady(): Promise<void> {
         </Transition>
       </RouterView>
     </main>
-    <AdvisorDock v-if="route.name === 'overview'" />
     <OnboardingTour :active="showOnboarding && !showStartup" :has-project="store.hasProject" @complete="closeOnboarding" @dismiss="closeOnboarding" />
   </div>
 </template>

@@ -7,7 +7,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from literary_engineering_studio.agent_session_tracking import track_agent_session_event
+from literary_engineering_studio.observability.agent_session_tracking import track_agent_session_event
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.observability.context_ledger import parse_context_ledger

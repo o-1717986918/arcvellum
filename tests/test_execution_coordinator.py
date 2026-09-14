@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock
 
-from literary_engineering_studio.execution_coordinator import ProjectExecutionCoordinator
+from literary_engineering_studio.runtime.execution_coordinator import ProjectExecutionCoordinator
 from literary_engineering_studio.runtime.execution_admission import (
     ExecutionAdmission,
     release_execution_admission,

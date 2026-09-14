@@ -4,8 +4,8 @@ import time
 import unittest
 from unittest import mock
 
-from literary_engineering_studio import read_model_cache
-from literary_engineering_studio.read_model_cache import ReadModelCache
+from literary_engineering_studio.projections import read_model_cache
+from literary_engineering_studio.projections.read_model_cache import ReadModelCache
 
 
 class ReadModelCacheTests(unittest.TestCase):

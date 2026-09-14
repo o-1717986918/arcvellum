@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from literary_engineering_studio.project_progress import build_project_progress
+from literary_engineering_studio.application.project_progress import build_project_progress
 
 
 class ProjectProgressTests(unittest.TestCase):

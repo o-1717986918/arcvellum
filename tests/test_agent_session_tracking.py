@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock
 
-from literary_engineering_studio.agent_session_tracking import (
+from literary_engineering_studio.observability.agent_session_tracking import (
     AgentSessionEventProjector,
     track_agent_session_event,
 )
