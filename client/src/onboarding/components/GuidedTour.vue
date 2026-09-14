@@ -25,7 +25,7 @@ const step = computed(() => props.steps[Math.min(index.value, props.steps.length
 const last = computed(() => index.value >= props.steps.length - 1);
 
 function updatePosition(): void {
-  if (!props.active || !step.value) return;
+  if (!props.active || !step.value || typeof document === "undefined" || typeof window === "undefined") return;
   const element = document.querySelector<HTMLElement>(
     `[data-tour-id="${step.value.targetId}"]`,
   );

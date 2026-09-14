@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Bot, PanelLeft, PanelRight, Settings2, SunMoon } from "lucide-vue-next";
-import { RouterLink, useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import AgentComposer from "@/features/project-agent/components/AgentComposer.vue";
 import AgentContextInspector from "@/features/project-agent/components/AgentContextInspector.vue";
 import AgentConversation from "@/features/project-agent/components/AgentConversation.vue";
@@ -17,6 +17,7 @@ import { friendlyError, useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const route = useRoute();
+const router = useRouter();
 const railOpen = ref(false);
 const inspectorOpen = ref(false);
 type AppearanceMode = "system" | "light" | "dark" | "contrast";
@@ -33,6 +34,7 @@ let colorScheme: MediaQueryList | null = null;
 const projectRoot = computed(() => store.currentProjectPath || "");
 const projectTitle = computed(() => store.currentProject?.title || "当前作品");
 const workspace = computed(() => projectAgentWorkspaces.get(activeWorkspace.value));
+const applicationWorkspace = computed(() => workspace.value?.scope === "application");
 const dark = computed(() => appearance.value === "dark" || (appearance.value === "system" && systemDark.value));
 const agent = useProjectAgentSession({
   projectRoot,
@@ -73,17 +75,26 @@ onMounted(async () => {
   systemDark.value = colorScheme.matches;
   colorScheme.addEventListener("change", updateSystemAppearance);
   openWorkspaceFromQuery(route.query.workspace);
+  if (!activeWorkspace.value && !projectRoot.value) openWorkspace("projects");
+  window.addEventListener("arcvellum:onboarding", returnToConversation);
   if (projectRoot.value) {
     await store.refreshWorkspace();
     await agent.load();
   }
 });
 
-onBeforeUnmount(() => colorScheme?.removeEventListener("change", updateSystemAppearance));
+onBeforeUnmount(() => {
+  colorScheme?.removeEventListener("change", updateSystemAppearance);
+  window.removeEventListener("arcvellum:onboarding", returnToConversation);
+});
 
 watch(projectRoot, async (root) => {
   agent.reset();
-  if (!root) return;
+  if (!root) {
+    openWorkspace("projects");
+    return;
+  }
+  if (activeWorkspace.value === "projects") closeWorkspace();
   await store.refreshWorkspace();
   await agent.load();
 });
@@ -101,19 +112,58 @@ function updateSystemAppearance(event: MediaQueryListEvent): void {
 
 function openWorkspaceFromQuery(value: unknown): void {
   const requested = Array.isArray(value) ? String(value[0] || "") : String(value || "");
-  if (projectAgentWorkspaces.has(requested)) openWorkspace(requested);
-}
-
-function openWorkspace(next: ProjectAgentWorkspaceId): void {
-  activeWorkspace.value = next;
+  if (projectAgentWorkspaces.has(requested)) {
+    openWorkspace(requested);
+    return;
+  }
+  if (!projectRoot.value) {
+    openWorkspace("projects");
+    return;
+  }
+  activeWorkspace.value = null;
   workspaceFullscreen.value = false;
   railOpen.value = false;
   inspectorOpen.value = false;
 }
 
-function closeWorkspace(): void {
-  activeWorkspace.value = null;
+function openWorkspace(next: ProjectAgentWorkspaceId): void {
+  const descriptor = projectAgentWorkspaces.get(next);
+  if (!descriptor || (descriptor.requiresProject && !projectRoot.value)) {
+    syncWorkspaceQuery("projects");
+    activeWorkspace.value = "projects";
+    return;
+  }
+  activeWorkspace.value = next;
+  syncWorkspaceQuery(next);
   workspaceFullscreen.value = false;
+  railOpen.value = false;
+  inspectorOpen.value = false;
+}
+
+function syncWorkspaceQuery(workspace: ProjectAgentWorkspaceId | null): void {
+  if (route.name !== "project-agent") return;
+  const current = Array.isArray(route.query.workspace) ? route.query.workspace[0] : route.query.workspace;
+  if ((current || null) === workspace) return;
+  const query = { ...route.query };
+  if (workspace) query.workspace = workspace;
+  else delete query.workspace;
+  void router.replace({ name: "project-agent", query });
+}
+
+function closeWorkspace(): void {
+  if (!projectRoot.value) {
+    syncWorkspaceQuery("projects");
+    activeWorkspace.value = "projects";
+    return;
+  }
+  activeWorkspace.value = null;
+  syncWorkspaceQuery(null);
+  workspaceFullscreen.value = false;
+  if (route.query.workspace) void router.replace({ name: "project-agent" });
+}
+
+function returnToConversation(): void {
+  closeWorkspace();
 }
 </script>
 
@@ -127,6 +177,8 @@ function closeWorkspace(): void {
       'pa-inspector-open': inspectorOpen,
       'pa-workspace-active': workspace,
       'pa-workspace-fullscreen': workspaceFullscreen,
+      'pa-utility-workspace': applicationWorkspace,
+      'pa-no-project': !projectRoot,
     }"
   >
     <AgentThreadRail
@@ -134,11 +186,13 @@ function closeWorkspace(): void {
       :active-session-id="agent.session.value?.session_id"
       :project-title="projectTitle"
       :project-progress="progress"
+      :has-project="Boolean(projectRoot)"
       :active-workspace="activeWorkspace"
       :disabled="agent.sending.value || agent.loading.value || agent.creating.value"
       @create="agent.createSession"
       @select="agent.openSession"
       @workspace="openWorkspace"
+      @conversation="closeWorkspace"
     />
 
     <main class="pa-workbench">
@@ -149,7 +203,7 @@ function closeWorkspace(): void {
           <strong>{{ workspace?.title || agent.session.value?.title || '项目 Agent' }}</strong>
           <small>{{ workspace ? workspace.description : (agent.sending.value ? (agent.activity.value?.statusLabel || '正在工作') : '可以继续交谈') }}</small>
         </div>
-        <label class="pa-project-select">
+        <label v-if="store.projects.length" class="pa-project-select">
           <select :value="store.currentProjectPath" aria-label="切换当前作品" @change="selectProject">
             <option v-for="project in store.projects" :key="project.path" :value="project.path">{{ project.title }}</option>
           </select>
@@ -163,7 +217,7 @@ function closeWorkspace(): void {
             <option value="contrast">高对比度</option>
           </select>
         </label>
-        <RouterLink class="pa-icon-button" to="/settings" title="设置"><Settings2 :size="17" /></RouterLink>
+        <button class="pa-icon-button" title="设置" @click="openWorkspace('settings')"><Settings2 :size="17" /></button>
         <button v-if="!workspaceFullscreen" class="pa-icon-button pa-inspector-toggle" title="查看作品上下文" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="17" /></button>
       </header>
 
@@ -173,6 +227,7 @@ function closeWorkspace(): void {
         :fullscreen="workspaceFullscreen"
         @close="closeWorkspace"
         @fullscreen="workspaceFullscreen = !workspaceFullscreen"
+        @navigate="openWorkspace"
       />
       <template v-else>
         <AgentConversation
@@ -182,11 +237,12 @@ function closeWorkspace(): void {
           :omitted-count="agent.omittedMessageCount.value"
           @starter="agent.ask"
         />
-        <AgentComposer :disabled="agent.sending.value || agent.loading.value" @send="agent.ask" />
+        <AgentComposer data-tour-id="advisor" :disabled="agent.sending.value || agent.loading.value || !projectRoot" @send="agent.ask" />
       </template>
     </main>
 
     <AgentContextInspector
+      v-if="projectRoot && !applicationWorkspace"
       :title="projectTitle"
       :premise="store.currentProject?.premise || ''"
       :progress="progress"

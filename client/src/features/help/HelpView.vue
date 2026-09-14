@@ -19,14 +19,14 @@ function replayTour(): void {
 
 <template>
   <div class="view help-view">
-    <header class="help-hero"><CircleHelp :size="30" /><div><span class="eyebrow">使用帮助</span><h1>现在不必先学会整个系统</h1><p>ArcVellum 会把下一步准备成明确任务。你负责作品方向，状态机会守住资料、审查和交付。</p></div></header>
+    <header class="help-hero"><CircleHelp :size="30" /><div><span class="eyebrow">使用帮助</span><h1>从作品方向开始，其余交给 Agent</h1><p>你可以用自然语言管理项目，也可以随时打开正文、档案和创作现场核对结果。</p></div></header>
     <section class="help-current"><span></span><div><strong>{{ phase }}</strong><p>{{ store.currentProject ? `当前作品：${store.currentProject.title}` : "先建立或打开一部作品。" }}</p></div><div class="help-current-actions"><button class="secondary-button" @click="replayTour"><Compass :size="15" />观看界面引导</button><button class="secondary-button" @click="store.initialize"><RotateCw :size="15" />重新检查</button></div></section>
     <div class="help-grid">
       <article><Sparkles :size="20" /><h2>第一次使用</h2><p>建立作品，写下创作方向，连接一个 Agent 与模型，然后在创作总控准备下一项任务。无需手工管理项目文件。</p></article>
-      <article><Gauge :size="20" /><h2>为什么会停住</h2><p>分支选择、设定写回、修订方向和最终交付会等待明确决定。阻塞不是故障，而是作品完整性正在被保护。</p></article>
+      <article><Gauge :size="20" /><h2>为什么会停住</h2><p>缺少项目资料、模型连接失败或文学内核校验未通过时会暂停。Project Agent 会先尝试修正，再把真正的阻断原因告诉你。</p></article>
       <article><Bot :size="20" /><h2>Agent 与模型</h2><p>Agent 执行受控任务，模型提供创作判断。它们只能读取任务包允许的资料，正式产物仍要经过验收与晋升。</p></article>
       <article><BookOpenText :size="20" /><h2>边写边读</h2><p>进入“阅读”即可按卷章连续阅读已经晋升的正文。候选稿、审查备注和项目标记不会混入阅读内容。</p></article>
-      <article><Radio :size="20" /><h2>创作现场</h2><p>从星仪打开“现场”，可以实时查看候选正文、审查轨迹、Agent 会话和修订差异。这里出现的临时文字只有完成晋升后才会进入正式阅读器。</p></article>
+      <article><Radio :size="20" /><h2>创作现场</h2><p>从左栏打开“创作现场”，可以实时查看候选正文、审查轨迹、Agent 会话和修订差异。临时文字完成晋升后才会进入正式阅读器。</p></article>
       <article><ShieldCheck :size="20" /><h2>你的数据在哪里</h2><p>作品默认保存在本机作品库。连接第三方模型时，当前任务所需材料会交给对应提供商，具体政策由提供商决定。</p></article>
       <article><FileDown :size="20" /><h2>交付与备份</h2><p>只有通过正式门禁的正文会进入交付。更新应用不会删除作品；卸载前仍建议备份作品库。</p></article>
     </div>

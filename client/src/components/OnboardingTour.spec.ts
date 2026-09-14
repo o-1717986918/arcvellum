@@ -5,7 +5,7 @@ import OnboardingTour from "./OnboardingTour.vue";
 describe("OnboardingTour", () => {
   it("adapts to project state and can finish the visual guide", async () => {
     const wrapper = mount(OnboardingTour, { props: { active: true, hasProject: true } });
-    expect(document.body.textContent).toContain("作品已经就位");
+    expect(document.body.textContent).toContain("当前作品在这里");
     expect(document.body.textContent).toContain("1 / 5");
     for (let index = 0; index < 4; index += 1) {
       await document.querySelector<HTMLButtonElement>(".tour-next")?.click();

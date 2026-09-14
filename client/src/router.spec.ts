@@ -10,6 +10,11 @@ describe("legacy project viewing routes", () => {
     ["/strategy", "strategy"],
     ["/observatory", "live"],
     ["/delivery", "delivery"],
+    ["/projects", "projects"],
+    ["/settings", "settings"],
+    ["/help", "help"],
+    ["/details", "details"],
+    ["/legal", "legal"],
   ])("redirects %s into the Agent child workspace", async (path, workspace) => {
     await router.push(path);
     expect(router.currentRoute.value.name).toBe("project-agent");

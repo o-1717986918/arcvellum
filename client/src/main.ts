@@ -12,5 +12,6 @@ import "./styles/spatialOperatingSystem.css";
 import "./styles/spatialIdentity.css";
 import "./styles/creativeLive.css";
 import "./styles/projectAgent.css";
+import "./styles/agentWorkspaces.css";
 
 createApp(App).use(createPinia()).use(router).mount("#app");

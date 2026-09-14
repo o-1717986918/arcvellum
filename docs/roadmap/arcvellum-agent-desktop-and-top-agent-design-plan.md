@@ -30,12 +30,11 @@ ArcVellum 下一阶段采用双主界面：
 前端也从“新 Agent 页旁挂旧查看页”改为一个新的项目桌面：
 
 ```text
-/agent                  对话工作区（默认）及全部内嵌作品子工作区
+/agent                  对话工作区（默认）、作品子工作区与应用子工作区
 /overview               叙事星仪（平级主界面）
-/settings               设置（独立页面）
 ```
 
-左栏“查看作品”只切换 `/agent` 桌面内部状态，不改变页面 URL，也不把用户交给旧页面外壳。正文、现场、档案、文风、质量、策略、观测、考古和交付按需加载到同一中央工作区。旧 `/reader`、`/archive`、`/style` 等 URL 仅保留兼容重定向，通过一次 `workspace` 查询参数把旧书签导入 Agent 桌面；原业务组件与 API 继续复用，旧导航、旧页面容器和重复视觉层逐步剥离。
+左栏在 `/agent` 桌面内部切换工作区，并用 `workspace` 查询参数保存当前界面，以便刷新、返回和旧书签恢复。正文、现场、档案、文风、质量、策略、观测、考古和交付属于作品工作区；项目、设置、帮助、详情和协议属于应用工作区。旧 `/reader`、`/archive`、`/style`、`/settings` 等 URL 仅保留兼容重定向，不再把用户交给旧页面外壳。原业务组件、store 与 API 继续复用，旧导航、旧页面容器和重复视觉层逐步剥离。
 
 实现纪律：
 
@@ -43,7 +42,7 @@ ArcVellum 下一阶段采用双主界面：
 2. 顶层 Agent 的 `creation_control` 只能启动采用 `literary_kernel=lean-v2` 的 Autopilot；配置不满足时给出可操作错误，不回退旧内核。
 3. Project Agent 不创建 approval interruption，不等待确认卡，不把一次用户原话当作每次动作的授权票据。
 4. 正式写入全部复用既有领域服务；无公开 Application Service 的能力先保持只读，不以直接写文件补齐。
-5. D7 只重做项目桌面外壳与查看体验，业务编辑器先以子工作区方式复用；视觉重构不复制 API 请求与状态管理。
+5. D7 重做项目桌面外壳与全部内嵌工作区的视觉表达；业务组件、API 请求与状态管理继续复用，视觉重构不得复制业务逻辑。
 
 本轮选择制作一个纯 HTML 视觉原型，不生成概念图。桌面 Agent 的成败依赖信息层级、面板比例、长文本滚动、工具反馈和操作连续性，HTML 原型比静态生图更能验证这些约束。
 
@@ -53,7 +52,7 @@ ArcVellum 下一阶段采用双主界面：
 
 ### 2.1 已有前端能力
 
-- `client/src/App.vue` 已把常规主导航收敛为作品、创作星链和设置，并在全局挂载 `AdvisorDock`。
+- `client/src/App.vue` 的旧主页导航已退出普通路径；应用启动后由 `/agent` 项目桌面或 `/overview` 叙事星仪承载交互。
 - `client/src/router.ts` 仍保留阅读器、档案管理、作品考古、文风工坊、质量规则、创作策略、Agent 观测、交付和说明页。
 - `client/src/features/creative-live/` 已拥有正文候选、审查、修订、会话、工具与执行时间线投影。
 - `client/src/features/archive/` 已拥有资产树、结构化编辑、影响分析、历史、回收站与候选晋升。
@@ -330,7 +329,7 @@ Agent 与星仪不是两套产品。切换时必须保留：
 
 1. 三栏 Agent 桌面是成熟模式，也容易让 ArcVellum 看起来像通用聊天客户端；手稿脊线和作品内容字体需要在真实组件中证明品牌辨识度。
 2. 右栏一旦承载项目健康、规则、人物和全部任务，会重新长成旧仪表盘；默认只能显示“当前焦点、当前运行、最近正式变化”三类信息。
-3. 把 Reader、Archive 或 Creative Live 整页嵌入消息，会造成嵌套滚动、重复订阅和狭窄正文；消息中只展示摘要与只读预览，完整工作区继续独立打开。
+3. 把 Reader、Archive 或 Creative Live 整页嵌入消息，会造成嵌套滚动、重复订阅和狭窄正文；消息中只展示摘要与只读预览，完整能力在 Agent 桌面的独立子工作区打开。
 4. Notion-like 中性工作台与深色星仪视觉差异很大；两者应共享字体、状态色、窗口 chrome 和焦点身份，不强行共享背景与空间材质。
 5. 长会话若把每个 token、工具事件和正文版本永久挂在 DOM，会比现有前端更卡；消息分段、工具组折叠、虚拟列表和 SSE 合并是生产前置条件。
 
@@ -642,7 +641,7 @@ client/src/features/project-agent/
 - workspace registry 和空间窗口系统；
 - API transport、SSE、错误文案和项目 store。
 
-生产迁移时，对话内只复用无副作用 presenter 和只读卡片。档案 IDE、文风工坊、Reader、Creative Live 与交付页通过现有 route 打开；避免把完整页面组件重新挂载到消息列表造成重复请求、重复 Pinia watcher 和滚动性能问题。
+生产迁移时，对话内只复用无副作用 presenter 和只读卡片。档案 IDE、文风工坊、Reader、Creative Live 与交付页在 Agent 桌面的子工作区按需挂载；避免把完整页面组件重新挂载到消息列表造成重复请求、重复 Pinia watcher 和滚动性能问题。
 
 ## 8. 分阶段实施
 
@@ -761,7 +760,7 @@ client/src/features/project-agent/
   services/projectAgentClient.ts        # 六个 Project Agent HTTP/SSE 接口
   composables/useProjectAgentSession.ts # 会话选择、发送、流合并、断线恢复
   components/                           # 会话栏、对话、活动组、输入与上下文栏
-  AgentWorkspaceView.vue                # 只负责编排布局和现有工作区跳转
+  AgentWorkspaceView.vue                # 编排桌面布局、内部工作区和可恢复查询状态
 client/src/styles/projectAgent.css       # 独立的中性编辑桌面令牌和响应式布局
 ```
 
@@ -770,7 +769,7 @@ client/src/styles/projectAgent.css       # 独立的中性编辑桌面令牌和�
 1. `types.ts` 固定 API 数据形状，不修改当前仍有并行工作的全局 `types/api.ts`。
 2. `projectAgentClient.ts` 复用 `featureTransport`；`POST turn` 只取得 durable job，随后读取 Job SSE，不复用 Advisor 的请求内流。
 3. `useProjectAgentSession.ts` 负责最近会话、乐观用户消息、批量文本 delta、工具活动、终态重载与错误恢复；组件不得自行拼接协议事件。
-4. `AgentWorkspaceView.vue` 只读取 `useAppStore` 的 dashboard、progress、reader 和 observability 投影；复杂展示通过现有 route 打开。
+4. `AgentWorkspaceView.vue` 只负责编排布局、工作区状态和应用投影；复杂展示由懒加载子工作区承接，业务状态仍归原 feature/store 所有。
 5. `router.ts` 与 `App.vue` 增加可逆的 `/agent` 顶层模式；星仪仍是平级入口，旧 Advisor 暂不删除。
 6. 定向组件测试、TypeScript 检查与生产前端构建通过后，再进行真实 API 和桌面尺寸视觉验收。
 
@@ -863,7 +862,7 @@ D5-A 验收证据见 `docs/verification/project-agent-d5a-controlled-actions-che
 - 保留星仪自身深色空间背景，但统一窗口和文字令牌；
 - 建立浅色、深色、系统和高对比度模式。
 
-实施结果：创建、打开和继续作品均进入 `/agent`；左栏按钮在同一桌面内切换九个按需加载的子工作区，支持返回对话、刷新和全屏。旧查看 URL 通过兼容重定向导入相应子工作区，已删除不再使用的 `SpatialWorkspaceRoute`。星仪继续保留为平级主界面，设置保留独立页面。
+实施结果：创建、打开和继续作品均进入 `/agent`；左栏在同一桌面内切换九个作品工作区与五个应用工作区，支持返回对话、刷新、全屏和 URL 状态恢复。项目、设置、帮助、详情与协议已经迁入桌面；旧查看 URL 通过兼容重定向导入相应子工作区，已删除不再使用的 `SpatialWorkspaceRoute`。各工作区复用原业务能力，并以统一的编辑型视觉令牌、紧凑信息密度和容器响应规则重做内部表达；Creative Live 与档案 IDE 保留适合其用途的深色专业界面。叙事星仪继续作为平级主界面。
 
 退出条件：双界面共享作品、会话、run 和当前焦点；Agent 子页面不触发整页跳转；正常项目使用不再依赖旧主页；界面不存在审批卡和待确认状态。
 

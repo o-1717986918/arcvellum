@@ -9,6 +9,7 @@ describe("AgentThreadRail", () => {
         sessions: [],
         projectTitle: "潮线",
         projectProgress: 24,
+        hasProject: true,
       },
       global: {
         stubs: {
@@ -17,11 +18,25 @@ describe("AgentThreadRail", () => {
       },
     });
 
-    const buttons = wrapper.findAll(".pa-workspace-links button");
-    expect(buttons).toHaveLength(9);
-    expect(wrapper.findAll(".pa-workspace-links a")).toHaveLength(0);
+    const projectButtons = wrapper.findAll(".pa-workspace-links:not(.pa-application-links) button");
+    const appButtons = wrapper.findAll(".pa-application-links button");
+    expect(projectButtons).toHaveLength(9);
+    expect(appButtons).toHaveLength(5);
 
-    await buttons[0].trigger("click");
+    await projectButtons[0].trigger("click");
     expect(wrapper.emitted("workspace")?.[0]).toEqual(["reader"]);
+
+    await appButtons[1].trigger("click");
+    expect(wrapper.emitted("workspace")?.[1]).toEqual(["settings"]);
+  });
+
+  it("keeps application settings available before a project is selected", () => {
+    const wrapper = mount(AgentThreadRail, {
+      props: { sessions: [], projectTitle: "尚未选择作品", projectProgress: 0, hasProject: false },
+      global: { stubs: { RouterLink: { template: "<a><slot /></a>" } } },
+    });
+
+    expect(wrapper.findAll(".pa-workspace-links:not(.pa-application-links) button").every((button) => button.attributes("disabled") !== undefined)).toBe(true);
+    expect(wrapper.findAll(".pa-application-links button").every((button) => button.attributes("disabled") === undefined)).toBe(true);
   });
 });

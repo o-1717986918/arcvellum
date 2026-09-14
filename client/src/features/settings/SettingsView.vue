@@ -99,7 +99,7 @@ async function connectProvider(): Promise<void> {
 async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> {
   const expectedModel = selectedModels[role];
   if (!expectedModel || roleSaving[role]) return;
-  const labels = { worker: "正文与审查", advisor: "创作顾问", steward: "自动审批" };
+  const labels = { worker: "正文与审查", advisor: "项目 Agent", steward: "项目监督" };
   roleSaving[role] = true;
   roleSaved[role] = false;
   feedback.value = "";
@@ -248,12 +248,12 @@ function pathValue(key: string): string {
 
     <div class="settings-grid">
       <section class="settings-section">
-        <header><span class="section-icon"><WandSparkles :size="18" /></span><div><h2>按工作选择模型</h2><p>高质量正文、快速对话和日常审批可以各用合适的模型。</p></div></header>
+        <header><span class="section-icon"><WandSparkles :size="18" /></span><div><h2>按工作选择模型</h2><p>高质量正文、快速对话和异常判断可以各用合适的模型。</p></div></header>
         <div class="role-model-list">
           <article v-for="role in ([
             { id: 'worker', title: '正文与审查', text: '负责写作、推演、修订和正式审查。' },
-            { id: 'advisor', title: '创作顾问', text: '优先选择响应快、对话自然的模型。' },
-            { id: 'steward', title: '自动审批', text: '在授权范围内比较候选方向。' },
+            { id: 'advisor', title: '项目 Agent', text: '负责对话、查询项目并调用正式项目能力。' },
+            { id: 'steward', title: '项目监督', text: '用于异常判断和自动化过程中的项目级选择。' },
           ] as const)" :key="role.id">
             <div><strong>{{ role.title }}</strong><p>{{ role.text }}</p></div>
             <select v-model="selectedModels[role.id]" :disabled="roleSaving[role.id]" @change="saveModel(role.id)"><option value="">先连接一个模型服务</option><option v-for="model in models" :key="model.qualified_id" :value="model.qualified_id">{{ model.name }} · {{ model.qualified_id }}</option></select>
