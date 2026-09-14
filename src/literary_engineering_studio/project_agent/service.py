@@ -73,7 +73,7 @@ class ProjectAgentService:
     def read_session(self, session_id: str) -> dict[str, Any]:
         session = self.sessions.read_conversation_session(session_id)
         self._require_project_agent(session)
-        return session
+        return {**session, "active_turn": self._active_turn(session)}
 
     def run_turn(
         self,
@@ -174,7 +174,11 @@ class ProjectAgentService:
                 if not self.jobs.claim(job_id, worker_id, lease_seconds=max(30, int(timeout) + 10)):
                     raise RuntimeError("Project Agent turn could not claim its durable job")
                 session = self.read_session(session_id)
-                self.sessions.append_session_message(session_id, "user", {"text": message})
+                self.sessions.append_session_message(
+                    session_id,
+                    "user",
+                    {"text": message, "turn_id": turn_id, "job_id": job_id},
+                )
                 emit("project_agent.turn.started", {"job_id": job_id})
                 allowed_tools = (
                     *available_read_tools(self.dependencies),
@@ -249,11 +253,60 @@ class ProjectAgentService:
         with self._locks_guard:
             return self._locks.setdefault(session_id, threading.Lock())
 
+    def _active_turn(self, session: dict[str, Any]) -> dict[str, Any] | None:
+        """Resolve the latest durable turn without adding a second session state store."""
+
+        for message in reversed(list(session.get("messages") or [])):
+            reference = _turn_reference(message)
+            if reference is None:
+                continue
+            job_id, turn_id = reference
+            try:
+                job = self.jobs.read(job_id)
+            except (FileNotFoundError, ValueError):
+                return None
+            return _active_turn_payload(job, job_id, turn_id, str(session.get("session_id") or ""))
+        return None
+
     @staticmethod
     def _require_project_agent(session: dict[str, Any]) -> None:
         if session.get("session_kind") != "project-agent":
             raise ValueError("session does not belong to the Project Agent")
 
+
+def _turn_reference(message: object) -> tuple[str, str] | None:
+    if not isinstance(message, dict):
+        return None
+    payload = message.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    job_id = str(payload.get("job_id") or "").strip()
+    if not job_id:
+        return None
+    return job_id, str(payload.get("turn_id") or "")
+
+
+def _active_turn_payload(
+    job: dict[str, Any],
+    job_id: str,
+    fallback_turn_id: str,
+    session_id: str,
+) -> dict[str, Any] | None:
+    request_value = job.get("request")
+    request = request_value if isinstance(request_value, dict) else {}
+    if request.get("kind") != "project-agent-turn":
+        return None
+    if str(request.get("session_id") or "") != session_id:
+        return None
+    status = str(job.get("status") or "")
+    if status not in {"queued", "running", "stopping"}:
+        return None
+    return {
+        "job_id": job_id,
+        "turn_id": str(request.get("turn_id") or fallback_turn_id),
+        "status": status,
+        "started_at": str(job.get("started_at") or job.get("created_at") or ""),
+    }
 
 def _turn_prompt(message: str, session: dict[str, Any]) -> str:
     history: list[str] = []

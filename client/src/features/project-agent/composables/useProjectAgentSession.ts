@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, ref, type Ref } from "vue";
 import {
   PROJECT_AGENT_TOOL_LABELS,
   type ProjectAgentMessage,
+  type ProjectAgentActiveTurn,
   type ProjectAgentSession,
   type ProjectAgentSessionSummary,
   type ProjectAgentStreamEvent,
@@ -41,6 +42,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     return Math.max(0, count - MAX_RENDERED_MESSAGES);
   });
   let eventController: AbortController | null = null;
+  let observedJobId = "";
   let deltaBuffer = "";
   let deltaTimer = 0;
 
@@ -89,6 +91,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       transientMessages.value = [];
       activity.value = null;
       await notifyRendered();
+      void recoverActiveTurn(session.value.active_turn);
       return session.value;
     } catch (cause) {
       options.onError?.(cause, "暂时无法打开这段对话。");
@@ -118,6 +121,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
         turnId: turn.turn_id,
         statusLabel: "等待执行",
       };
+      observedJobId = turn.job_id;
       eventController = new AbortController();
       await client.observeJob(turn.job_id, eventController.signal, consumeEvent);
       flushDelta();
@@ -136,6 +140,57 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       options.onError?.(cause, "项目 Agent 暂时没有完成回答。");
     } finally {
       eventController = null;
+      observedJobId = "";
+      sending.value = false;
+      await notifyRendered();
+    }
+  }
+
+  async function recover(): Promise<boolean> {
+    if (!session.value || sending.value || !options.projectRoot.value) return false;
+    try {
+      const restored = await client.readSession(session.value.session_id);
+      session.value = restored;
+      return await recoverActiveTurn(restored.active_turn);
+    } catch (cause) {
+      options.onError?.(cause, "项目 Agent 暂时无法恢复进行中的回答。");
+      return false;
+    }
+  }
+
+  async function recoverActiveTurn(active: ProjectAgentActiveTurn | null | undefined): Promise<boolean> {
+    if (!active?.job_id || sending.value || observedJobId === active.job_id) return false;
+    sending.value = true;
+    observedJobId = active.job_id;
+    resetDelta();
+    const persisted = session.value?.messages || [];
+    transientMessages.value = [
+      ...persisted.filter((message) => String(message.payload.job_id || "") !== active.job_id || message.role !== "assistant"),
+      { role: "assistant", at: new Date().toISOString(), payload: { text: "", turn_id: active.turn_id, job_id: active.job_id } },
+    ];
+    activity.value = {
+      ...emptyActivity(),
+      jobId: active.job_id,
+      turnId: active.turn_id,
+      status: active.status === "queued" ? "queued" : "running",
+      statusLabel: active.status === "interrupted" ? "正在恢复创作会话" : "正在重新连接",
+    };
+    await notifyRendered();
+    eventController = new AbortController();
+    try {
+      await client.observeJob(active.job_id, eventController.signal, consumeEvent);
+      flushDelta();
+      if (session.value) session.value = await client.readSession(session.value.session_id);
+      transientMessages.value = [];
+      return true;
+    } catch (cause) {
+      flushDelta();
+      patchActivity({ status: "failed", statusLabel: "会话恢复中断" });
+      options.onError?.(cause, "项目 Agent 的进行中回答暂时无法恢复。");
+      return false;
+    } finally {
+      eventController = null;
+      observedJobId = "";
       sending.value = false;
       await notifyRendered();
     }
@@ -220,6 +275,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   function reset(): void {
     eventController?.abort();
     eventController = null;
+    observedJobId = "";
     sessions.value = [];
     session.value = null;
     transientMessages.value = [];
@@ -260,6 +316,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     messages,
     omittedMessageCount,
     openSession,
+    recover,
     reset,
     sending,
     session,

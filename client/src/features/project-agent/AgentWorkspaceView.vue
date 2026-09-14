@@ -11,7 +11,7 @@ import { useProjectAgentSession } from "@/features/project-agent/composables/use
 import {
   projectAgentWorkspaces,
   type ProjectAgentWorkspaceId,
-} from "@/features/project-agent/workspaces";
+} from "@/workspaces/projectAgentWorkspaceRegistry";
 import { asList, asRecord, describeWorkflowAction, workflowStepLabel } from "@/services/presentation";
 import { friendlyError, useAppStore } from "@/stores/app";
 
@@ -77,6 +77,8 @@ onMounted(async () => {
   openWorkspaceFromQuery(route.query.workspace);
   if (!activeWorkspace.value && !projectRoot.value) openWorkspace("projects");
   window.addEventListener("arcvellum:onboarding", returnToConversation);
+  window.addEventListener("focus", recoverAgentOnForeground);
+  document.addEventListener("visibilitychange", recoverAgentOnForeground);
   if (projectRoot.value) {
     await store.refreshWorkspace();
     await agent.load();
@@ -86,6 +88,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   colorScheme?.removeEventListener("change", updateSystemAppearance);
   window.removeEventListener("arcvellum:onboarding", returnToConversation);
+  window.removeEventListener("focus", recoverAgentOnForeground);
+  document.removeEventListener("visibilitychange", recoverAgentOnForeground);
 });
 
 watch(projectRoot, async (root) => {
@@ -164,6 +168,10 @@ function closeWorkspace(): void {
 
 function returnToConversation(): void {
   closeWorkspace();
+}
+
+function recoverAgentOnForeground(): void {
+  if (document.visibilityState === "visible" && projectRoot.value) void agent.recover();
 }
 </script>
 

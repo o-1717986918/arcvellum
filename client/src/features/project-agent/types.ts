@@ -26,6 +26,14 @@ export interface ProjectAgentSession extends ProjectAgentSessionSummary {
   session_summary?: string;
   pinned_user_preferences?: string[];
   messages: ProjectAgentMessage[];
+  active_turn?: ProjectAgentActiveTurn | null;
+}
+
+export interface ProjectAgentActiveTurn {
+  job_id: string;
+  turn_id: string;
+  status: "queued" | "running" | "stopping" | "interrupted" | string;
+  started_at?: string;
 }
 
 export interface ProjectAgentTurnStart {

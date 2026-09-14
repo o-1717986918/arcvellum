@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 import { Activity, ArrowUpRight, BookOpenText, CircleCheck, CircleDashed, Gauge, Radio } from "lucide-vue-next";
-import type { ProjectAgentWorkspaceId } from "@/features/project-agent/workspaces";
+import type { ProjectAgentWorkspaceId } from "@/workspaces/projectAgentWorkspaceRegistry";
 
 defineProps<{
   title: string;

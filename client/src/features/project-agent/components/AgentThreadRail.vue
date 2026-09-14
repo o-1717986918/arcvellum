@@ -22,7 +22,7 @@ import {
   Waypoints,
 } from "lucide-vue-next";
 import type { ProjectAgentSessionSummary } from "@/features/project-agent/types";
-import type { ProjectAgentWorkspaceId } from "@/features/project-agent/workspaces";
+import type { ProjectAgentWorkspaceId } from "@/workspaces/projectAgentWorkspaceRegistry";
 
 const props = defineProps<{
   sessions: ProjectAgentSessionSummary[];

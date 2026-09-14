@@ -79,6 +79,9 @@ class ProjectAgentServiceTests(unittest.TestCase):
 
             restored = service.read_session(session["session_id"])
             self.assertEqual([item["role"] for item in restored["messages"]], ["user", "assistant"])
+            self.assertEqual(restored["messages"][0]["payload"]["job_id"], result["job_id"])
+            self.assertEqual(restored["messages"][0]["payload"]["turn_id"], result["turn_id"])
+            self.assertIsNone(restored["active_turn"])
             self.assertEqual(result["answer"], "当前阶段是 review。")
             self.assertIn("project_agent.event", [event for event, _ in streamed])
             events = store.events_since(result["job_id"])
@@ -135,6 +138,41 @@ class ProjectAgentServiceTests(unittest.TestCase):
             self.assertIn("project_record_direction", runtime.requests[0].allowed_tools)
             self.assertIn("不要请求用户批准", runtime.requests[0].system_prompt)
             self.assertIn("lean-v2", runtime.requests[0].system_prompt)
+
+    def test_read_session_exposes_only_its_latest_active_turn(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            root.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            service = ProjectAgentService(
+                {},
+                sessions=store.sessions,
+                jobs=store,
+                dependencies=_dependencies(),
+                runtime_factory=lambda _config, _root: None,
+            )
+            session = service.create_session(root)
+            job = store.create({
+                "kind": "project-agent-turn",
+                "project_root": str(root),
+                "session_id": session["session_id"],
+                "turn_id": "turn-recover",
+            })
+            self.assertTrue(store.claim(job["job_id"], "project-agent-test"))
+            store.append_session_message(
+                session["session_id"],
+                "user",
+                {"text": "继续", "turn_id": "turn-recover", "job_id": job["job_id"]},
+            )
+
+            active = service.read_session(session["session_id"])["active_turn"]
+
+            self.assertEqual(active["job_id"], job["job_id"])
+            self.assertEqual(active["turn_id"], "turn-recover")
+            self.assertEqual(active["status"], "running")
+
+            store.update(job["job_id"], status="interrupted")
+            self.assertIsNone(service.read_session(session["session_id"])["active_turn"])
 
 
 def _dependencies() -> ProjectAgentDependencies:

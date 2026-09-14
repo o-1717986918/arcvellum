@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { ArrowLeft, Maximize2, Minimize2, RefreshCw } from "lucide-vue-next";
-import type { ProjectAgentWorkspaceDescriptor, ProjectAgentWorkspaceId } from "@/features/project-agent/workspaces";
+import type { ProjectAgentWorkspaceDescriptor, ProjectAgentWorkspaceId } from "@/workspaces/projectAgentWorkspaceRegistry";
 
 defineProps<{
   workspace: ProjectAgentWorkspaceDescriptor;
@@ -15,10 +15,9 @@ const revision = ref(0);
   <section class="pa-subworkspace" :data-workspace="workspace.id" :aria-label="workspace.title">
     <header class="pa-subworkspace-head">
       <button class="pa-subworkspace-back" type="button" @click="emit('close')"><ArrowLeft :size="16" />返回对话</button>
-      <div>
-        <span>{{ workspace.scope === "application" ? "应用工作区" : "作品工作区" }}</span>
+      <div class="pa-subworkspace-identity">
+        <span>{{ workspace.scope === "application" ? "应用" : "作品" }}</span>
         <strong>{{ workspace.title }}</strong>
-        <small>{{ workspace.description }}</small>
       </div>
       <div class="pa-subworkspace-actions">
         <button class="pa-icon-button" type="button" title="重新读取当前工作区" @click="revision += 1"><RefreshCw :size="16" /></button>

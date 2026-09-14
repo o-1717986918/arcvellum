@@ -20,4 +20,10 @@ describe("legacy project viewing routes", () => {
     expect(router.currentRoute.value.name).toBe("project-agent");
     expect(router.currentRoute.value.query.workspace).toBe(workspace);
   });
+
+  it("keeps the narrative orrery as a first-class mode", async () => {
+    await router.push("/overview");
+    expect(router.currentRoute.value.name).toBe("overview");
+    expect(router.currentRoute.value.redirectedFrom).toBeUndefined();
+  });
 });

@@ -5,6 +5,7 @@ import { ArrowRight, BookOpenText, BookPlus, Check, Copy, FolderOpen, LocateFixe
 import { projectsClient } from "@/features/projects/services/projectsClient";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { friendlyError, useAppStore } from "@/stores/app";
+import { labelFor } from "@/services/presentation";
 import type { DemoBundleSummary } from "@/types/api";
 
 const store = useAppStore();
@@ -263,7 +264,7 @@ async function copyDemoForWriting(): Promise<void> {
       <header><div><span class="eyebrow">最近作品</span><h2>继续上次停下的地方</h2></div><span>{{ store.projects.length }} 部作品</span></header>
       <div v-if="store.projects.length" class="work-shelf">
         <button v-for="project in store.projects" :key="project.path" class="work-spine" @click="continueProject(project.path)">
-          <span class="spine-status">{{ project.is_demo ? "授权演示 · 只读" : (project.status || "创作中") }}</span>
+          <span class="spine-status">{{ project.is_demo ? "授权演示 · 只读" : labelFor(project.status || "drafting") }}</span>
           <strong>{{ project.title }}</strong>
           <p>{{ project.premise || "尚未填写作品简介" }}</p>
           <div><span>{{ project.demo_author || project.genre || project.work_type }}</span><span>{{ project.is_demo ? "按原作实际篇幅" : `${Math.round((project.target_length || 0) / 10000)} 万字目标` }}</span></div>

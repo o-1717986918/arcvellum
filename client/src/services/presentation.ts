@@ -20,6 +20,12 @@ const LABELS: Record<string, string> = {
   "review-and-audit": "质量审查",
   "export-and-release": "交付出版",
   "source-ingest": "作品导入",
+  pending_word_budget: "等待篇幅规划",
+  drafting: "创作中",
+  planned: "已规划",
+  ready: "已就绪",
+  blocked: "需要处理",
+  published: "已交付",
 };
 
 export function labelFor(value: unknown): string {
@@ -74,6 +80,7 @@ export function workflowStepLabel(value: unknown): string {
     ["branch", "剧情分支比较"],
     ["composition", "场景编排"],
     ["generation", "正文创作"],
+    ["revision", "修订场景正文"],
     ["agent-review", "语义审查"],
     ["review", "质量审查"],
     ["promotion", "确认正式正文"],

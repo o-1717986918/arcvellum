@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectAgentWorkspaces } from "./workspaces";
+import { projectAgentWorkspaces } from "./projectAgentWorkspaceRegistry";
 
 describe("projectAgentWorkspaces", () => {
   it("keeps project and application workspaces inside the Agent desktop", () => {
@@ -19,6 +19,16 @@ describe("projectAgentWorkspaces", () => {
       "details",
       "legal",
     ]);
+  });
+
+  it("protects every project-bound showcase entry", () => {
+    const protectedEntries = ["reader", "live", "archive", "style", "quality", "observatory", "delivery"];
+    for (const id of protectedEntries) {
+      const workspace = projectAgentWorkspaces.get(id);
+      expect(workspace, id).toBeDefined();
+      expect(workspace?.requiresProject, id).toBe(true);
+      expect(workspace?.scope, id).toBe("project");
+    }
   });
 
   it("separates project-bound tools from application workspaces", () => {

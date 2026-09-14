@@ -43,6 +43,73 @@ describe("useProjectAgentSession", () => {
     expect(agent.sending.value).toBe(false);
     wrapper.unmount();
   });
+
+  it("reattaches a persisted active turn after the desktop returns", async () => {
+    let publish: Parameters<ProjectAgentClient["observeJob"]>[2] | undefined;
+    let finish: (() => void) | undefined;
+    const active = session([
+      { role: "user", payload: { text: "继续推进", turn_id: "turn-2", job_id: "job-2" } },
+    ]);
+    active.active_turn = { job_id: "job-2", turn_id: "turn-2", status: "running" };
+    const completed = session([
+      ...active.messages,
+      { role: "assistant", payload: { text: "已经恢复并完成。", turn_id: "turn-2", job_id: "job-2" } },
+    ]);
+    const readSession = vi.fn()
+      .mockResolvedValueOnce(active)
+      .mockResolvedValueOnce(completed);
+    const client = fakeClient({
+      createSession: vi.fn(async () => active),
+      readSession,
+      observeJob: vi.fn((_job, _signal, onEvent) => {
+        publish = onEvent;
+        return new Promise<void>((resolve) => { finish = resolve; });
+      }),
+    });
+    const { wrapper, agent } = mountSession(client);
+    await agent.load();
+
+    const recovering = agent.recover();
+    await vi.waitFor(() => expect(publish).toBeTypeOf("function"));
+    expect(agent.sending.value).toBe(true);
+    expect(agent.activity.value?.statusLabel).toBe("正在重新连接");
+    publish?.({ event: "project_agent.event", cursor: 9, data: { event: "text.delta", text: "已经恢复" } });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(agent.messages.value.at(-1)?.payload.text).toBe("已经恢复");
+
+    finish?.();
+    await recovering;
+    expect(agent.messages.value.at(-1)?.payload.text).toBe("已经恢复并完成。");
+    expect(agent.sending.value).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("keeps a long conversation responsive while reporting omitted history", async () => {
+    const history = Array.from({ length: 95 }, (_, index) => ({
+      role: index % 2 ? "assistant" as const : "user" as const,
+      payload: { text: `message-${index + 1}` },
+    }));
+    const restored = session(history);
+    const client = fakeClient({
+      listSessions: vi.fn(async () => ({ items: [{
+        session_id: restored.session_id,
+        project_root: restored.project_root,
+        title: restored.title,
+        session_kind: "project-agent" as const,
+        created_at: restored.created_at,
+        updated_at: restored.updated_at,
+      }] })),
+      readSession: vi.fn(async () => restored),
+    });
+    const { wrapper, agent } = mountSession(client);
+
+    await agent.load();
+
+    expect(agent.messages.value).toHaveLength(80);
+    expect(agent.messages.value[0].payload.text).toBe("message-16");
+    expect(agent.omittedMessageCount.value).toBe(15);
+    wrapper.unmount();
+  });
 });
 
 function mountSession(client: ProjectAgentClient) {

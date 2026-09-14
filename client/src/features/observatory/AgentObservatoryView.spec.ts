@@ -91,11 +91,13 @@ describe("AgentObservatoryView", () => {
     });
     await flushPromises();
 
-    expect(wrapper.text()).toContain("main-creative-agent");
     expect(wrapper.text()).toContain("scene_0002-state-agent-task");
-    expect(wrapper.text()).toContain("writer");
     expect(wrapper.text()).toContain("task.started");
     expect(wrapper.text()).toContain("主创 Agent");
+    expect(wrapper.text()).toContain("场景创作");
+    expect(wrapper.text()).toContain("更新人物状态");
+    expect(wrapper.text()).toContain("按任务精简");
+    expect(wrapper.text()).not.toContain("main-creative-agent");
     expect(wrapper.text()).toContain("任务已开始");
     expect(wrapper.text()).toContain("正在推演");
     expect(wrapper.text()).toContain("8 直接 / 3 按需 / 2 排除");

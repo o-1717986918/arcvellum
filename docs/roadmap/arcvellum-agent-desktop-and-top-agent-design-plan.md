@@ -1,6 +1,6 @@
 # ArcVellum Agent Desktop 与顶层 Agent 分阶段设计方案
 
-> 状态：D2-D7 已完成；D8 收敛与兼容清理待后续独立实施
+> 状态：D2-D8 已完成；Project Agent 桌面进入兼容收敛期
 >
 > 日期：2026-09-13
 >
@@ -868,6 +868,8 @@ D5-A 验收证据见 `docs/verification/project-agent-d5a-controlled-actions-che
 
 ### D8：收敛与删除
 
+状态：已完成（2026-09-14）。
+
 工作：
 
 - 真实用户路径 E2E；
@@ -876,6 +878,10 @@ D5-A 验收证据见 `docs/verification/project-agent-d5a-controlled-actions-che
 - 删除被替代的 Advisor UI 外壳、重复动作卡和不再使用的样式；
 - 建立展示入口保护清单，Reader、Creative Live、Archive browser、Style results、Observatory、Orrery 和 Delivery status 不得因默认路径简化被删除；
 - 保留必要兼容期后再删除旧 facade。
+
+实施结果：完成 Project Agent 会话的活动任务持久化与 SSE 断线重连，窗口重新获得焦点或桌面从休眠返回时可接回同一 durable job；长会话只渲染最近 80 条并明确提示省略数量。展示工作区注册表已移出 Project Agent feature，Reader、Creative Live、Archive、Style、Observatory、Orrery 与 Delivery 由独立保护测试守住。已删除旧 Advisor 前端外壳和重复入口，保留后端兼容 facade、`strict-v1` 与 Advisor 数据契约供迁移期使用。设置、质量、交付和运行现场统一到项目桌面的中性编辑视觉，其中专业阅读与观测表面保留各自的信息密度。请求和 token 路径没有增加模型调用：恢复过程只读取已有会话并续接现有 SSE job。
+
+验证记录见 `docs/verification/project-agent-d8-convergence-checkpoint-2026-09-14.md`。签名更新仍需随真实发布通道执行安装包级 smoke test，不以本地 mock 代替发布签名验证。
 
 退出条件：功能没有削减，默认路径显著简化，代码和运行复杂度没有上升失控。
 
