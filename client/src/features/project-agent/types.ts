@@ -77,6 +77,12 @@ export const PROJECT_AGENT_TOOL_LABELS: Record<string, string> = {
   project_overview: "查看作品进度",
   project_search: "查找作品资料",
   creation_observe: "观察创作现场",
+  project_controls: "读取项目控制面",
   project_record_direction: "记录创作方向",
   creation_control: "控制创作进程",
+  project_decision_resolve: "处理当前创作决定",
+  project_quality_update: "更新语言质量规则",
+  project_rhythm_update: "更新叙事节奏",
+  project_style_mount: "挂载文风版本",
+  project_asset_promote: "晋升作品资产",
 };

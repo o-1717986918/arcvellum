@@ -1,0 +1,122 @@
+import { defineAsyncComponent, type Component } from "vue";
+import { creativeWorkspaceRegistry } from "@/workspaces/creativeWorkspaceRegistry";
+
+export type ProjectAgentWorkspaceId =
+  | "reader"
+  | "live"
+  | "archive"
+  | "style"
+  | "quality"
+  | "strategy"
+  | "observatory"
+  | "archaeology"
+  | "delivery";
+
+export interface ProjectAgentWorkspaceDescriptor {
+  id: ProjectAgentWorkspaceId;
+  title: string;
+  shortLabel: string;
+  description: string;
+  component: Component;
+}
+
+function asyncWorkspace(loader: () => Promise<{ default: Component }>): Component {
+  return defineAsyncComponent({
+    loader,
+    timeout: 15_000,
+    onError(error, retry, fail, attempts) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/fetch|load|module|network|import/i.test(message) && attempts < 2) {
+        window.setTimeout(retry, 350);
+        return;
+      }
+      fail();
+    },
+  });
+}
+
+function migrated(id: "archive" | "style" | "quality" | "strategy" | "archaeology"): Component {
+  const descriptor = creativeWorkspaceRegistry.get(id);
+  if (!descriptor) throw new Error(`missing creative workspace: ${id}`);
+  return descriptor.component;
+}
+
+const workspaces: ProjectAgentWorkspaceDescriptor[] = [
+  {
+    id: "reader",
+    title: "正文长卷",
+    shortLabel: "正文",
+    description: "连续阅读已经晋升的正式正文，创作推进时会自动接入新内容。",
+    component: asyncWorkspace(() => import("@/features/reader/ReaderView.vue")),
+  },
+  {
+    id: "live",
+    title: "创作现场",
+    shortLabel: "现场",
+    description: "观察主创会话、候选正文、审查结论与修订过程。",
+    component: asyncWorkspace(() => import("@/features/creative-live/CreativeLiveView.vue")),
+  },
+  {
+    id: "archive",
+    title: "作品档案",
+    shortLabel: "档案",
+    description: "查阅和校勘人物、地点、组织、世界规则与作品资产。",
+    component: migrated("archive"),
+  },
+  {
+    id: "style",
+    title: "文风工作台",
+    shortLabel: "文风",
+    description: "管理语料、文风版本、评测结果与当前正式挂载。",
+    component: migrated("style"),
+  },
+  {
+    id: "quality",
+    title: "质量与节奏",
+    shortLabel: "规则",
+    description: "调整语言规则、审查阈值和全书叙事节奏曲线。",
+    component: migrated("quality"),
+  },
+  {
+    id: "strategy",
+    title: "创作策略",
+    shortLabel: "策略",
+    description: "查看作品结构、场景库存、执行计划与编排状态。",
+    component: migrated("strategy"),
+  },
+  {
+    id: "observatory",
+    title: "Agent 观测",
+    shortLabel: "观测",
+    description: "查看当前任务、会话边界、上下文摘要和运行事件。",
+    component: asyncWorkspace(() => import("@/features/observatory/AgentObservatoryView.vue")),
+  },
+  {
+    id: "archaeology",
+    title: "作品考古",
+    shortLabel: "考古",
+    description: "从已有文本重建人物、世界、结构和可继续开发的候选资产。",
+    component: migrated("archaeology"),
+  },
+  {
+    id: "delivery",
+    title: "交付中心",
+    shortLabel: "交付",
+    description: "检查交付准备度并取得已经通过门禁的正式作品文件。",
+    component: asyncWorkspace(() => import("@/features/delivery/DeliveryView.vue")),
+  },
+];
+
+const byId = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+
+export const projectAgentWorkspaces = {
+  all(): readonly ProjectAgentWorkspaceDescriptor[] {
+    return workspaces;
+  },
+  get(id: string | null | undefined): ProjectAgentWorkspaceDescriptor | undefined {
+    return id ? byId.get(id as ProjectAgentWorkspaceId) : undefined;
+  },
+  has(id: string | null | undefined): id is ProjectAgentWorkspaceId {
+    return Boolean(id && byId.has(id as ProjectAgentWorkspaceId));
+  },
+};

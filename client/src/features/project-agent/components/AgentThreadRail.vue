@@ -6,14 +6,18 @@ import {
   BookOpenText,
   Bot,
   Boxes,
+  Compass,
   FileCheck2,
   MessageSquarePlus,
   Orbit,
   Palette,
   Radio,
+  ScanSearch,
   Search,
+  Waypoints,
 } from "lucide-vue-next";
 import type { ProjectAgentSessionSummary } from "@/features/project-agent/types";
+import type { ProjectAgentWorkspaceId } from "@/features/project-agent/workspaces";
 
 const props = defineProps<{
   sessions: ProjectAgentSessionSummary[];
@@ -21,8 +25,13 @@ const props = defineProps<{
   projectTitle: string;
   projectProgress?: number | null;
   disabled?: boolean;
+  activeWorkspace?: ProjectAgentWorkspaceId | null;
 }>();
-const emit = defineEmits<{ create: []; select: [sessionId: string] }>();
+const emit = defineEmits<{
+  create: [];
+  select: [sessionId: string];
+  workspace: [workspace: ProjectAgentWorkspaceId];
+}>();
 const query = ref("");
 const filteredSessions = computed(() => {
   const value = query.value.trim().toLowerCase();
@@ -59,12 +68,15 @@ function relativeDate(value: string): string {
 
     <div class="pa-workspace-links">
       <span>查看作品</span>
-      <RouterLink to="/reader"><BookOpenText :size="14" />正文长卷</RouterLink>
-      <RouterLink to="/observatory"><Radio :size="14" />创作现场</RouterLink>
-      <RouterLink to="/archive"><Archive :size="14" />作品档案</RouterLink>
-      <RouterLink to="/style"><Palette :size="14" />文风成果</RouterLink>
-      <RouterLink to="/quality"><Boxes :size="14" />质量与规则</RouterLink>
-      <RouterLink to="/delivery"><FileCheck2 :size="14" />交付状态</RouterLink>
+      <button :class="{ active: activeWorkspace === 'reader' }" @click="emit('workspace', 'reader')"><BookOpenText :size="14" />正文长卷</button>
+      <button :class="{ active: activeWorkspace === 'live' }" @click="emit('workspace', 'live')"><Radio :size="14" />创作现场</button>
+      <button :class="{ active: activeWorkspace === 'archive' }" @click="emit('workspace', 'archive')"><Archive :size="14" />作品档案</button>
+      <button :class="{ active: activeWorkspace === 'style' }" @click="emit('workspace', 'style')"><Palette :size="14" />文风成果</button>
+      <button :class="{ active: activeWorkspace === 'quality' }" @click="emit('workspace', 'quality')"><Boxes :size="14" />质量与节奏</button>
+      <button :class="{ active: activeWorkspace === 'strategy' }" @click="emit('workspace', 'strategy')"><Waypoints :size="14" />创作策略</button>
+      <button :class="{ active: activeWorkspace === 'observatory' }" @click="emit('workspace', 'observatory')"><Compass :size="14" />Agent 观测</button>
+      <button :class="{ active: activeWorkspace === 'archaeology' }" @click="emit('workspace', 'archaeology')"><ScanSearch :size="14" />作品考古</button>
+      <button :class="{ active: activeWorkspace === 'delivery' }" @click="emit('workspace', 'delivery')"><FileCheck2 :size="14" />交付状态</button>
     </div>
 
     <div class="pa-project-chip">

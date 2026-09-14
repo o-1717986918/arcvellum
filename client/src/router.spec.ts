@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { router } from "./router";
 
-describe("public route surface", () => {
-  it("opens the production strategy and Agent observatory views", () => {
-    const names = new Set(router.getRoutes().map((route) => route.name));
-
-    expect(names.has("strategy")).toBe(true);
-    expect(names.has("observatory")).toBe(true);
+describe("legacy project viewing routes", () => {
+  it.each([
+    ["/reader", "reader"],
+    ["/archive", "archive"],
+    ["/style", "style"],
+    ["/quality", "quality"],
+    ["/strategy", "strategy"],
+    ["/observatory", "live"],
+    ["/delivery", "delivery"],
+  ])("redirects %s into the Agent child workspace", async (path, workspace) => {
+    await router.push(path);
+    expect(router.currentRoute.value.name).toBe("project-agent");
+    expect(router.currentRoute.value.query.workspace).toBe(workspace);
   });
 });

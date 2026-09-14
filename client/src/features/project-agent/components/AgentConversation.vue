@@ -35,7 +35,7 @@ function messageText(message: ProjectAgentMessage): string {
       <section v-if="!messages.length && !loading" class="pa-welcome">
         <span class="pa-welcome-mark"><Bot :size="24" /></span>
         <h1>和作品本身交谈。</h1>
-        <p>我可以查阅当前进度、正文、人物与世界资料，也能解释创作为什么停在这里。这个阶段只读取项目，不会替你修改作品。</p>
+        <p>我可以查阅正文与项目资料、解释当前进度，也能记录你的方向、继续创作并处理推进中出现的项目决定。</p>
         <div class="pa-starters">
           <button @click="emit('starter', '结合当前作品状态，告诉我现在最值得关注的创作问题。')"><Waypoints :size="16" /><span><strong>现在最值得关注什么？</strong><small>从进度和作品结构中判断</small></span></button>
           <button @click="emit('starter', '当前创作进行到哪里？有没有阻断或异常？')"><CircleDashed :size="16" /><span><strong>创作推进到哪里了？</strong><small>查看现场与阻断</small></span></button>

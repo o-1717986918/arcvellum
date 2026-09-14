@@ -97,7 +97,7 @@ async function createProject(): Promise<void> {
     if (!check.valid) throw new Error(check.conflicts.join(" "));
     await store.createProject({ ...createForm });
     localStorage.setItem("arcvellum.createDirectory", createForm.parent_directory);
-    await router.push("/overview");
+    await router.push("/agent");
   } catch (cause) {
     feedback.value = friendlyError(cause, "作品暂时没有建立，请检查保存位置。 ");
   } finally {
@@ -113,7 +113,7 @@ async function openProject(): Promise<void> {
     if (!check.valid) throw new Error(check.conflicts.join(" "));
     await store.openProject(openPath.value);
     localStorage.setItem("arcvellum.openDirectory", openPath.value);
-    await router.push("/overview");
+    await router.push("/agent");
   } catch (cause) {
     feedback.value = friendlyError(cause, "这里没有找到可以打开的 ArcVellum 作品。 ");
   } finally {
@@ -123,8 +123,7 @@ async function openProject(): Promise<void> {
 
 async function continueProject(path: string): Promise<void> {
   store.setCurrentProject(path);
-  const project = store.projects.find((item) => item.path === path);
-  await router.push(project?.is_demo ? "/reader" : "/overview");
+  await router.push("/agent");
 }
 
 async function openOrInstallDemo(): Promise<void> {
@@ -135,7 +134,7 @@ async function openOrInstallDemo(): Promise<void> {
     const project = installedDemo.value || (await projectsClient.installDemo(primaryDemo.value.bundle_id)).project;
     await store.loadProjects();
     store.setCurrentProject(project.path);
-    await router.push("/reader");
+    await router.push({ name: "project-agent", query: { workspace: "reader" } });
   } catch (cause) {
     feedback.value = friendlyError(cause, "演示作品没有成功安装，请检查安装资源是否完整。 ");
   } finally {
@@ -157,7 +156,7 @@ async function copyDemoForWriting(): Promise<void> {
     });
     await store.loadProjects();
     store.setCurrentProject(response.project.path);
-    await router.push("/overview");
+    await router.push("/agent");
   } catch (cause) {
     feedback.value = friendlyError(cause, "演示作品没有成功复制，请换一个保存位置后重试。 ");
   } finally {
