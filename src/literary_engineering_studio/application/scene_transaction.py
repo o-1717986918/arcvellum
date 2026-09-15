@@ -189,6 +189,7 @@ class SceneTransactionService:
         transaction_id: str,
         *,
         known_refs: Collection[str] = (),
+        quality_profile: dict[str, object] | None = None,
     ) -> SceneTransaction:
         current = self._repository.load(transaction_id)
         if current.verification is not None:
@@ -202,6 +203,7 @@ class SceneTransactionService:
                 current.creative_result,
                 current.policy,
                 known_refs=known_refs,
+                quality_profile=quality_profile,
             )
         except Exception as exc:
             self._block(current, SceneTransactionStatus.VERIFYING, exc)
@@ -261,8 +263,8 @@ class SceneTransactionService:
     ) -> SceneTransaction:
         current = self._repository.load(transaction_id)
         self._require_status(current, SceneTransactionStatus.REVISION_NEEDED)
-        if current.revision_attempts >= current.policy.max_revision_attempts:
-            raise ValueError("automatic scene revision budget is exhausted")
+        if result == current.creative_result:
+            raise ValueError("scene revision produced no observable change")
         saved = self._store(
             current,
             status=SceneTransactionStatus.VERIFYING,

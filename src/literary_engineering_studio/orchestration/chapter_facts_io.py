@@ -48,6 +48,7 @@ def load_chapter_planning_facts(
     obligation_ids, obligation_contract_present = _obligation_contract(
         root,
         chapter_id,
+        scene_paths,
     )
     scenes = tuple(
         _scene_fact(path, chapter_id, rhythm_by_scene, budget_row)
@@ -57,7 +58,7 @@ def load_chapter_planning_facts(
         chapter_id=chapter_id,
         scenes=scenes,
         chapter_word_target=_int_value(budget_row.get("target_words")),
-        rhythm_contract_hash=_rhythm_digest(root),
+        rhythm_contract_hash=_rhythm_digest(root, scene_paths),
         promise_obligation_ids=obligation_ids,
         obligation_contract_present=obligation_contract_present,
         base_project_revision=planning_project_fingerprint(root),
@@ -130,7 +131,7 @@ def _scene_fact(
         scene_ref=scene_id,
         word_target=_word_target(payload, rhythm, budget_row),
         function=_function(payload, rhythm),
-        pace=_pace(rhythm),
+        pace=_pace(payload, rhythm),
         canon_change=risks["canon_change"],
         character_state_change=risks["character_state_change"],
         new_asset_risk=risks["new_asset_risk"],
@@ -206,8 +207,13 @@ def _function(payload: dict[str, Any], rhythm: dict[str, Any]) -> str:
     return " / ".join(values)
 
 
-def _pace(rhythm: dict[str, Any]) -> str:
-    return str(rhythm.get("pace") or "")
+def _pace(payload: dict[str, Any], rhythm: dict[str, Any]) -> str:
+    value = rhythm.get("pace")
+    if not value:
+        scene_rhythm = payload.get("narrative_rhythm")
+        if isinstance(scene_rhythm, dict):
+            value = scene_rhythm.get("pace")
+    return str(value or "")
 
 
 def _scene_obligations(payload: dict[str, Any]) -> tuple[str, ...]:
@@ -222,11 +228,30 @@ def _rhythm_entries(root: Path) -> list[dict[str, Any]]:
     return [item for item in entries if isinstance(item, dict)]
 
 
-def _rhythm_digest(root: Path) -> str:
+def _rhythm_digest(root: Path, scene_paths: list[Path]) -> str:
     payload = _read_json(root / "plot" / "rhythm_plan.json")
-    if not isinstance(payload, dict):
+    if isinstance(payload, dict) and payload.get("digest"):
+        return str(payload["digest"])
+
+    scene_contracts: list[dict[str, Any]] = []
+    for path in scene_paths:
+        scene = _scene_payload(path)
+        rhythm = scene.get("narrative_rhythm")
+        if not isinstance(rhythm, dict):
+            return ""
+        if not str(rhythm.get("pace") or "").strip():
+            return ""
+        if not _string_list(rhythm.get("scene_function")):
+            return ""
+        scene_contracts.append(
+            {
+                "scene_id": str(scene.get("scene_id") or path.stem),
+                "narrative_rhythm": rhythm,
+            }
+        )
+    if not scene_contracts:
         return ""
-    return str(payload.get("digest") or "")
+    return canonical_json_digest({"scene_contracts": scene_contracts})
 
 
 def _chapter_budget_row(root: Path, chapter_id: str) -> dict[str, Any]:
@@ -243,10 +268,11 @@ def _chapter_budget_row(root: Path, chapter_id: str) -> dict[str, Any]:
 def _obligation_contract(
     root: Path,
     chapter_id: str,
+    scene_paths: list[Path],
 ) -> tuple[tuple[str, ...], bool]:
     path = root / "plot" / "chapter_obligations" / f"{chapter_id}.json"
     if not path.is_file():
-        return (), False
+        return _scene_obligation_contract(scene_paths, chapter_id)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -263,6 +289,34 @@ def _obligation_contract(
         if ids:
             return tuple(ids), True
     return (), True
+
+
+def _scene_obligation_contract(
+    scene_paths: list[Path],
+    chapter_id: str,
+) -> tuple[tuple[str, ...], bool]:
+    """Use complete scene reader contracts when no duplicate chapter file exists."""
+
+    obligations: list[str] = []
+    for path in scene_paths:
+        payload = _scene_payload(path)
+        if str(payload.get("chapter_obligation_id") or "") != chapter_id:
+            return (), False
+        reader = payload.get("reader_experience")
+        if not isinstance(reader, dict) or not any(
+            reader.get(name)
+            for name in (
+                "reader_question",
+                "promised_reward",
+                "tension_source",
+                "curiosity_hook",
+                "reader_aftertaste",
+                "payoff_or_delay",
+            )
+        ):
+            return (), False
+        obligations.extend(_string_list(payload.get("obligations")))
+    return tuple(dict.fromkeys(obligations)), bool(scene_paths)
 
 
 def _contract_obligation_ids(value: Any) -> list[str]:

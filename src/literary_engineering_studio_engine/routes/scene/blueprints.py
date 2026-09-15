@@ -7,7 +7,6 @@ from literary_engineering_studio_engine.literary.scene.state.character_assets im
 from literary_engineering_studio_engine.tasking.semantic_contracts import semantic_artifact_relative_path
 from literary_engineering_studio_engine.tasking.paths import relative_path as _rel, resolve_project_path as _resolve_project_path
 from literary_engineering_studio_engine.workflow.state import current_scene_candidate
-from ...literary.planning.review import all_planning_review_evidence_paths
 from ...literary.scene.facts import load_scene_facts
 from literary_engineering_studio_engine.routes.scene.support import (
     _context_source_paths, _project_int, _project_scalar, _read_optional_json,
@@ -20,11 +19,14 @@ from .branch_contract import branch_proposal_count as issued_branch_proposal_cou
 from .length_repair import target_length_revision_entry
 from .blueprint_support import (
     candidate_markdown as _candidate_markdown,
+    formal_character_sources as _formal_character_sources,
     legacy_revision_migration_outputs as _legacy_revision_migration_outputs,
+    longform_budget_evidence_sources as _longform_budget_evidence_sources,
     matching_revision_choice_sources as _matching_revision_choice_sources,
     promotion_archive_outputs as _promotion_archive_outputs,
     promotion_historical_sources as _promotion_historical_sources,
     reader_obligation_outputs as _reader_obligation_outputs,
+    scene_runtime_sources as _scene_runtime_sources,
     select_blueprint as _select_blueprint,
     state_patch_character_files as _state_patch_character_files,
 )
@@ -80,6 +82,7 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     )
     common_sources = [scene_rel]
     context_sources = _context_source_paths(root, scene_rel)
+    formal_character_sources = _formal_character_sources(root)
     roleplay_task = f"{branch_dir}/roleplay_simulation.agent_tasks.md"
     roleplay_completion = f"{branch_dir}/roleplay_simulation.agent_completion.json"
     roleplay_result = semantic_artifact_relative_path("roleplay-agent-task", scene_id)
@@ -105,32 +108,14 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
     # budget sidecar and its review before creating a prose task.  Carry the
     # evidence into the sandbox so a controlled worker observes the same gate
     # result as the project root.
-    longform_budget_evidence_sources = [
-        "plot/word_budget/word_budget.agent_tasks.md",
-        "plot/word_budget/word_budget.agent_completion.json",
-        "plot/word_budget/scene_inventory_expansion.agent_tasks.md",
-        "plot/word_budget/scene_inventory_expansion.agent_completion.json",
-        "plot/chapter_obligations/chapter_obligations.agent_tasks.md",
-        "plot/chapter_obligations/chapter_obligations.agent_completion.json",
-        "plot/candidates/outlines/word_budget_expansion.md",
-        "plot/candidates/scenes/word_budget_scene_inventory.md",
-        "plot/candidates/chapters/chapter_obligation_plan.md",
-        *all_planning_review_evidence_paths(root),
-    ]
-    scene_runtime_sources = list(
-        dict.fromkeys(
-            [
-                *context_sources,
-                # Formal longform materialization and word-budget gates inspect
-                # the complete scene inventory. This is control-workspace-only;
-                # definition.py still limits the Agent reading set.
-                "scenes",
-                context,
-                context_trace,
-                *chapter_contract_sources,
-                *longform_budget_evidence_sources,
-            ]
-        )
+    longform_budget_evidence_sources = _longform_budget_evidence_sources(root)
+    scene_runtime_sources = _scene_runtime_sources(
+        context_sources,
+        formal_character_sources,
+        context,
+        context_trace,
+        chapter_contract_sources,
+        longform_budget_evidence_sources,
     )
     scene_character_assets = scene_character_asset_requirements(root, scene_path)
     scene_character_asset_tasks = [
@@ -164,7 +149,13 @@ def _blueprint_for_state(root: Path, scene_id: str, scene_rel: str, current_stat
             "task_type": "deterministic-cli",
             "prompt_asset_id": "route.scene-development.character-assets.prepare.v1",
             "command": f"python -m literary_engineering_studio_engine prepare-scene-character-assets <project> --scene {scene_rel}",
-            "source_paths": [scene_rel, "characters", "canon", "plot/outline.md"],
+            "source_paths": [
+                scene_rel,
+                "characters",
+                "canon",
+                "plot/outline.md",
+                *formal_character_sources,
+            ],
             "expected_outputs": scene_character_asset_tasks,
             "hard_constraints": [
                 "Run the documented preparation command; it emits candidate task contracts only and never invents or promotes characters.",

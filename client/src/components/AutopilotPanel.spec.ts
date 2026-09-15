@@ -17,7 +17,7 @@ const policy = {
   mode: "collaborative" as const,
   delegated_routes: [],
   delegated_decisions: [],
-  limits: { max_consecutive_revisions: 3, max_failures_per_task: 2 },
+  limits: { max_failures_per_task: 2 },
   release_policy: "require_user" as const,
   literary_kernel: "strict-v1" as const,
   scene_execution_mode: "standard" as const,

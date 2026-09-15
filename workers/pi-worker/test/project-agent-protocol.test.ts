@@ -173,6 +173,50 @@ describe("Project Agent bridge protocol", () => {
 		expect(result.toolCalls).toBe(2);
 	});
 
+	it("supports work-catalog targeting and durable goal control", async () => {
+		const faux = createFauxCore({
+			provider: "arcvellum-faux",
+			models: [{ id: "project-agent-goal", reasoning: false }],
+		});
+		const workId = "work-0123456789abcdef";
+		faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("workspace_catalog", {}), { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxToolCall("project_goal_manage", {
+				work_id: workId,
+				operation: "start",
+				objective: "完成两章并形成可交付正文",
+			}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("长期目标已经开始，后台会持续推进。"),
+		]);
+		const calls: Array<{ name: string; arguments: unknown }> = [];
+		let bridge: ProjectToolBridge;
+		const write = (value: BridgeEnvelope) => {
+			if (value.type !== "tool.call") return;
+			calls.push({ name: String(value.payload.name), arguments: value.payload.arguments });
+			queueMicrotask(() => bridge.receive(envelope("tool.result", "turn-goal", {
+				request_id: value.payload.request_id,
+				name: value.payload.name,
+				ok: true,
+				result: { ok: true, work_id: workId },
+			})));
+		};
+		bridge = new ProjectToolBridge("turn-goal", write, 1_000);
+
+		const result = await runProjectAgentTurn({
+			sessionId: "session-goal",
+			turnId: "turn-goal",
+			prompt: "把这部作品作为长期目标推进到交付。",
+			systemPrompt: "先确认作品，再启动长期目标。",
+			allowedTools: ["workspace_catalog", "project_goal_manage"],
+			maxTurns: 4,
+			maxToolCalls: 3,
+		}, { model: faux.getModel(), streamFn: faux.streamSimple }, bridge, write);
+
+		expect(result.status).toBe("completed");
+		expect(calls.map((item) => item.name)).toEqual(["workspace_catalog", "project_goal_manage"]);
+		expect(calls[1].arguments).toMatchObject({ work_id: workId, operation: "start" });
+	});
+
 	it("fails closed for a mismatched tool result", async () => {
 		let bridge: ProjectToolBridge;
 		let outbound: BridgeEnvelope | null = null;

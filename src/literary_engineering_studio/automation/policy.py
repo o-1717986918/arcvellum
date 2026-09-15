@@ -67,7 +67,6 @@ def default_policy(
         "delegated_routes": delegated_routes,
         "delegated_decisions": decisions,
         "limits": {
-            "max_consecutive_revisions": 3,
             "max_failures_per_task": 2,
         },
         "release_policy": "delegated" if normalized == "full_auto" else "require_user",
@@ -91,9 +90,6 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
             policy[key] = incoming[key]
     limits = {**policy["limits"], **(incoming.get("limits") if isinstance(incoming.get("limits"), dict) else {})}
     policy["limits"] = {
-        "max_consecutive_revisions": max(
-            1, min(20, int(limits["max_consecutive_revisions"]))
-        ),
         "max_failures_per_task": max(
             0, min(10, int(limits["max_failures_per_task"]))
         ),
@@ -137,11 +133,3 @@ class DelegationPolicy:
         if self.mode == "collaborative" or route not in self.payload["delegated_routes"]:
             return False
         return route != "export-and-release" or self.payload["release_policy"] == "delegated"
-
-    def limit_reason(self, run: dict[str, Any]) -> str:
-        """Return only a quality-loop stop; creative time and spend are open-ended."""
-
-        limits = self.payload["limits"]
-        if int(run["consecutive_revisions"]) >= int(limits["max_consecutive_revisions"]):
-            return "revision-limit"
-        return ""

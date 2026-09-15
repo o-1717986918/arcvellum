@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 
 from literary_engineering_studio.persistence.job_store import JobStore
@@ -50,6 +51,43 @@ class _ActionRuntime:
             request.turn_id,
             0,
             1,
+        )
+
+
+class _DelegatingRuntime:
+    def __init__(self):
+        self.requests = []
+
+    def run_turn(self, request, _tool_handler, **kwargs):
+        self.requests.append(request)
+        if len(self.requests) == 1:
+            kwargs["event_sink"](
+                "project_agent.tool.finished",
+                {
+                    "name": "project_goal_manage",
+                    "request_id": "goal-1",
+                    "ok": True,
+                    "receipt": {
+                        "operation": "goal_start",
+                        "run_id": "autopilot-1",
+                        "run_status": "running",
+                        "work_id": "work-1",
+                    },
+                },
+            )
+            return ProjectAgentTurnResult(
+                "completed",
+                "已经接手，我会继续推进。",
+                request.turn_id,
+                0,
+                1,
+            )
+        return ProjectAgentTurnResult(
+            "completed",
+            "全书已经完成并通过交付复核。",
+            request.turn_id,
+            0,
+            2,
         )
 
 
@@ -173,6 +211,111 @@ class ProjectAgentServiceTests(unittest.TestCase):
 
             store.update(job["job_id"], status="interrupted")
             self.assertIsNone(service.read_session(session["session_id"])["active_turn"])
+
+    def test_workspace_session_can_start_without_a_selected_project(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = JobStore(root / "studio.sqlite3")
+            dependencies = _dependencies()
+            dependencies = ProjectAgentDependencies(
+                dependencies.project_overview,
+                dependencies.project_search,
+                dependencies.creation_observe,
+                workspace_catalog=lambda _root, _args: {"works": [], "count": 0},
+            )
+            service = ProjectAgentService(
+                {"application": {"projects_root": str(root / "Works")}},
+                sessions=store.sessions,
+                jobs=store,
+                dependencies=dependencies,
+                runtime_factory=lambda _config, _root: None,
+            )
+
+            session = service.create_session(None, title="作品库总控")
+
+            self.assertEqual(session["project_root"], str((root / "Works").resolve()))
+            self.assertEqual(service.list_sessions(None)[0]["session_id"], session["session_id"])
+
+    def test_cancelled_queued_turn_never_becomes_a_runtime_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            root.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            service = ProjectAgentService(
+                {},
+                sessions=store.sessions,
+                jobs=store,
+                dependencies=_dependencies(),
+                runtime_factory=lambda _config, _root: None,
+            )
+            session = service.create_session(root)
+            prepared = service._prepare_turn(session["session_id"], "停止这个回答")
+            cancellation = threading.Event()
+            cancellation.set()
+
+            stopped = service.cancel_turn(prepared["job_id"])
+            result = service._execute_prepared(
+                prepared,
+                timeout=30,
+                event_sink=None,
+                cancel_event=cancellation,
+            )
+
+            self.assertEqual(stopped["status"], "cancelled")
+            self.assertEqual(result["status"], "cancelled")
+            self.assertEqual(store.read(prepared["job_id"])["status"], "cancelled")
+
+    def test_delegated_goal_keeps_the_same_turn_open_and_reports_its_terminal_result(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            root.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            runtime = _DelegatingRuntime()
+            snapshots = iter([
+                {
+                    "run_id": "autopilot-1",
+                    "status": "running",
+                    "current_route": "scene-development",
+                    "current_task_id": "scene-0001",
+                    "tasks_completed": 3,
+                },
+                {
+                    "run_id": "autopilot-1",
+                    "status": "complete",
+                    "current_route": "release",
+                    "current_task_id": "",
+                    "tasks_completed": 12,
+                },
+            ])
+            service = ProjectAgentService(
+                {},
+                sessions=store.sessions,
+                jobs=store,
+                dependencies=_dependencies(),
+                actions=ProjectAgentActionDependencies(
+                    record_direction=lambda _root, _args: {},
+                    creation_control=lambda _root, _args: {},
+                    manage_goal=lambda _root, _args: {},
+                ),
+                runtime_factory=lambda _config, _root: runtime,
+                goal_run_reader=lambda _run_id: next(snapshots),
+                goal_poll_interval=0.001,
+            )
+            session = service.create_session(root)
+
+            result = service.run_turn(session["session_id"], "完成这部作品并交付")
+
+            self.assertEqual(result["answer"], "全书已经完成并通过交付复核。")
+            self.assertEqual(len(runtime.requests), 2)
+            self.assertIn("同一条用户消息", runtime.requests[1].prompt)
+            restored = service.read_session(session["session_id"])
+            self.assertEqual([item["role"] for item in restored["messages"]], ["user", "assistant"])
+            events = [item["event"] for item in store.events_since(result["job_id"])]
+            self.assertIn("project_agent.goal.waiting", events)
+            self.assertIn("project_agent.goal.progress", events)
+            self.assertIn("project_agent.goal.terminal", events)
+            self.assertIn("project_agent.goal.followup.started", events)
+            self.assertEqual(store.read(result["job_id"])["status"], "complete")
 
 
 def _dependencies() -> ProjectAgentDependencies:

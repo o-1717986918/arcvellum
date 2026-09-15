@@ -10,7 +10,9 @@ not yet been accepted.
 ## Delivered capability
 
 - One recoverable `SceneTransaction` owns prepare, create, verify, conditional
-  review, one bounded revision and atomic commit.
+  review, evidence-driven revision and atomic commit. Effective revisions have
+  no count ceiling; an exact no-op is stopped as stalled work rather than as a
+  revision quota.
 - Low, standard and high-risk policies change semantic work without weakening
   sandbox, locked fact, Canon or commit protection.
 - Pi Worker receives a bounded scene brief and returns prose plus semantic
@@ -40,10 +42,14 @@ The committed K5 A/B fixture reports:
 The blind literary scorecard is absent, so `ready_for_default=false`. Structural
 savings do not substitute for prose quality evidence.
 
-A final live `runner-probe` reached the embedded Pi Worker, selected
-`deepseek/deepseek-v4-pro`, opened a provider request and received HTTP 402
-`Insufficient Balance`. The worker process, model selection and event stream
-were available; model output and the literary A/B remain externally blocked.
+A live scene transaction reached the embedded Pi Worker with
+`deepseek/deepseek-v4-pro`, completed three effective revisions, passed
+deterministic verification and independent literary review, then atomically
+committed the prose, `SceneDelta` and commit receipt. The final body contained
+2528 Chinese content characters against a 2700-character soft minimum; review
+accepted the shortfall because the scene function, irreversible turn, two
+pressure lines and outgoing handoff were complete. This is the intended soft
+length behavior rather than a bypass.
 
 ## Verification
 
@@ -59,6 +65,12 @@ Passed during final closure:
 - frontend production build and desktop asset synchronization;
 - OpenAPI export and generated TypeScript contract check;
 - `compileall` and `git diff --check` for the changed modules.
+
+The unlimited-revision follow-up added and passed focused evidence for five
+successive effective revisions, exact no-op detection, legacy persisted-policy
+decoding, Autopilot policy normalization and the Vue policy contract. A real
+transaction that had previously stopped after its first revision resumed under
+the new policy and committed after revision attempt 3.
 
 One full Python discovery run was completed. It exposed a controller
 compatibility import, which was fixed and reverified. Its remaining failing

@@ -9,6 +9,7 @@ from ...literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from ...literary.review.project_targets import project_review_repair_target_issues
 
 from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
+from ...literary.review.project_review_semantics import canon_review_is_clean
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
 from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
@@ -261,7 +262,7 @@ def _canon_review_cleanliness_errors(payload: dict[str, object]) -> list[str]:
         "unresolved_facts": payload.get("unresolved_facts") if isinstance(payload.get("unresolved_facts"), list) else [],
         "timeline_risks": payload.get("timeline_risks") if isinstance(payload.get("timeline_risks"), list) else [],
     }
-    if conclusion != "pass":
+    if not canon_review_is_clean(payload):
         errors.append(f"canon review conclusion must be pass; got {conclusion or 'missing'}")
     labels = {
         "blocking_issues": "canon review blocking_issues must be empty",

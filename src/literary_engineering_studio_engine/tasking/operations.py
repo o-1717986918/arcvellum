@@ -127,7 +127,7 @@ def build_task_operations(task: Mapping[str, object]) -> dict[str, object]:
     if str(task.get("execution_policy") or "") == "human-required":
         return {}
     operations: dict[str, object] = {}
-    prepare = operation_from_legacy_command(str(task.get("command") or ""))
+    prepare = _prepare_operation_from_task(task)
     if prepare is not None:
         operations["prepare"] = prepare.as_dict()
     task_id = str(task.get("task_id") or "").strip()
@@ -144,6 +144,23 @@ def build_task_operations(task: Mapping[str, object]) -> dict[str, object]:
             display_command=str(task["completion_command"]),
         ).as_dict()
     return operations
+
+
+def _prepare_operation_from_task(task: Mapping[str, object]) -> EngineOperation | None:
+    raw_argv = task.get("prepare_argv")
+    if isinstance(raw_argv, (list, tuple)):
+        argv = tuple(str(item) for item in raw_argv)
+        if not argv:
+            raise ValueError("task prepare_argv is empty")
+        operation_id = prepare_operation_id(argv[0])
+        if operation_id not in OPERATION_REGISTRY:
+            raise ValueError(f"unregistered formal Engine operation: {argv[0]}")
+        return EngineOperation(
+            operation_id=operation_id,
+            arguments={"argv": argv},
+            display_command=str(task.get("command") or ""),
+        )
+    return operation_from_legacy_command(str(task.get("command") or ""))
 
 
 def operation_from_legacy_command(command: str) -> EngineOperation | None:

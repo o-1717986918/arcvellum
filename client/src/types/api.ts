@@ -386,7 +386,6 @@ export interface DelegationPolicy {
   delegated_routes: string[];
   delegated_decisions: string[];
   limits: {
-    max_consecutive_revisions: number;
     max_failures_per_task: number;
   };
   release_policy: "require_user" | "delegated";

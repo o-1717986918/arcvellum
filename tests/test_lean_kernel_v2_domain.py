@@ -116,6 +116,7 @@ class LeanKernelV2DomainTests(unittest.TestCase):
 
         self.assertTrue(low.defer_semantic_review_to_chapter)
         self.assertFalse(low.independent_review_required)
+        self.assertFalse(hasattr(low, "max_revision_attempts"))
         self.assertTrue(standard.independent_review_required)
         self.assertTrue(high.explicit_decision_trace_required)
         self.assertTrue(high.steward_approval_required)
@@ -168,6 +169,47 @@ class LeanKernelV2DomainTests(unittest.TestCase):
         )
 
         self.assertIn("unknown-delta-target", {issue.code for issue in report.hard_failures})
+
+    def test_configured_language_lint_is_part_of_deterministic_verification(self) -> None:
+        brief = _brief()
+        report = verify_creative_result(
+            brief,
+            _result("他停下来。不是因为害怕，而是因为终于明白了命运的意义。"),
+            derive_scene_policy(mode=SceneExecutionMode.STANDARD, risk=brief.risk),
+            known_refs={"character/protagonist"},
+        )
+
+        codes = {issue.code for issue in report.hard_failures}
+        self.assertIn("style-mechanical-contrast-frame", codes)
+        self.assertFalse(report.can_commit)
+
+    def test_punctuation_correctness_blocks_while_rhythm_density_remains_advisory(self) -> None:
+        brief = _brief()
+        policy = derive_scene_policy(mode=SceneExecutionMode.STANDARD, risk=brief.risk)
+        staccato = "。".join("他停下" for _ in range(30)) + "。"
+        rhythm_report = verify_creative_result(
+            brief,
+            _result(staccato),
+            policy,
+            known_refs={"character/protagonist"},
+        )
+        quote_report = verify_creative_result(
+            brief,
+            _result("他问『你还走吗』。她没有回答。"),
+            policy,
+            known_refs={"character/protagonist"},
+        )
+
+        self.assertIn(
+            "punctuation-staccato-period-overuse",
+            {issue.code for issue in rhythm_report.warnings},
+        )
+        self.assertTrue(rhythm_report.can_commit)
+        self.assertIn(
+            "punctuation-corner-quotes-in-horizontal-prose",
+            {issue.code for issue in quote_report.hard_failures},
+        )
+        self.assertFalse(quote_report.can_commit)
 
     def test_commit_plan_obeys_review_policy(self) -> None:
         brief = _brief(risk=SceneRiskLevel.STANDARD)

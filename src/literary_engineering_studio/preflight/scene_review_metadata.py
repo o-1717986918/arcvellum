@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -41,7 +42,12 @@ def canonicalize_scene_review_metadata(
             str(item).replace("\\", "/") for item in task.source_paths
         ],
         "reviewer_session_id": _session_identity(task, "reviewer"),
-        "style_mount_snapshot": candidate_style_snapshot(candidate_path),
+        "style_mount_snapshot": _review_style_snapshot(
+            task,
+            sandbox,
+            candidate_rel,
+            candidate_path,
+        ),
     }
     quality_identity = _creative_quality_identity(sandbox.workspace)
     if quality_identity:
@@ -66,6 +72,44 @@ def canonicalize_scene_review_metadata(
         }
         for field in changed
     ]
+
+
+def _review_style_snapshot(
+    task: TaskPackage,
+    sandbox: SandboxManifest,
+    candidate_rel: str,
+    candidate_path: Path,
+) -> dict[str, object]:
+    """Read machine provenance from the compact review evidence first.
+
+    Candidate-review intentionally excludes the candidate manifest from the
+    Agent workspace. The CLI-owned compact evidence carries the same immutable
+    style snapshot, so review canonicalization must not depend on an excluded
+    file. Candidate metadata remains a compatibility fallback for older tasks.
+    """
+
+    for relative in task.expected_outputs:
+        if not relative.endswith("_scene_review.context.json"):
+            continue
+        path = sandbox.workspace / Path(relative)
+        try:
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if not isinstance(evidence, dict):
+            continue
+        candidate = evidence.get("candidate")
+        snapshot = evidence.get("style_mount_snapshot")
+        if not isinstance(candidate, dict) or not isinstance(snapshot, dict):
+            continue
+        if str(candidate.get("path") or "").replace("\\", "/") != candidate_rel:
+            continue
+        if str(candidate.get("sha256") or "").lower() != hashlib.sha256(
+            candidate_path.read_bytes()
+        ).hexdigest():
+            continue
+        return dict(snapshot)
+    return candidate_style_snapshot(candidate_path)
 
 
 def _review_output(task: TaskPackage) -> str:

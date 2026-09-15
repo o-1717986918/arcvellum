@@ -16,10 +16,12 @@ context_groups:
   - ending choice and volume obligations
 hard_constraints:
   - Reviewer session must differ from writer session.
-  - A review with required changes must use revise, never pass_with_notes.
+  - "verdict must be exactly one of: pass, revise, block. Never emit pass_with_notes."
+  - A review with any required_changes or any dimension marked revise must use verdict=revise.
   - Review the exact candidate digest and do not rewrite the candidate.
 output_contract:
-  - Write only the declared review record and completion evidence.
+  - "Overwrite reviews/longform/story_architecture_review.json with one JSON object. Set verdict to exactly pass, revise, or block; include findings and required_changes as arrays."
+  - Write only the declared review record; Studio writes lifecycle completion evidence.
 review_requirements:
   - Challenge empty endgame choices, unsupported transformation, and volume padding.
   - Block a long target that has no causal inventory for its requested scale.

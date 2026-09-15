@@ -66,19 +66,18 @@ class ClaimedRunLoop:
     def run(self) -> None:
         while not self.stop.is_set():
             run = self.host.runs.read_autopilot_run(self.run_id)
-            if self._pause_at_quality_limit(run):
-                return
             if self._campaign_stopped(run):
                 return
             route_index = max(0, int(run.get("route_index") or 0))
             if route_index >= len(self.route_order):
-                self.host._complete_release(
+                if self.host._complete_release(
                     self.run_id,
                     self.project,
                     run,
                     self.policy,
-                )
-                return
+                ):
+                    return
+                continue
 
             cycle = self._enter_route(run, route_index)
             if self._proactive_choice_stopped(cycle):
@@ -91,6 +90,7 @@ class ClaimedRunLoop:
                     self.run_id,
                     self.project,
                     self.policy,
+                    cycle,
                 ):
                     return
                 continue
@@ -101,17 +101,6 @@ class ClaimedRunLoop:
             result = self.results.recover_runtime_failure(result, cycle)
             if self.results.handle(run, cycle, result, progress_before):
                 return
-
-    def _pause_at_quality_limit(self, run: dict[str, Any]) -> bool:
-        reason = self.policy.limit_reason(run)
-        if not reason:
-            return False
-        self.host._pause_for(
-            self.run_id,
-            reason,
-            "连续修订没有解决当前质量问题，自动创作已暂停并保留全部成果。",
-        )
-        return True
 
     def _campaign_stopped(self, run: dict[str, Any]) -> bool:
         if self.campaign is None:

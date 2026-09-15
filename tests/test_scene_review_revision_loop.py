@@ -439,6 +439,21 @@ class SceneReviewRevisionLoopTests(unittest.TestCase):
         self.assertEqual(step["key"], "candidate-review")
         self.assertIn("agent-review-scene", step["next_action"])
 
+    def test_stale_review_style_snapshot_routes_to_review_not_prose_revision(self):
+        candidate = Path("C:/project/drafts/revisions/scene_0001_revision.md")
+        with patch(
+            "literary_engineering_studio_engine.workflow.state_scene.candidate_review_gate",
+            return_value={
+                "status": "style_mount_snapshot_stale",
+                "review": "reviews/agent/scene_0001_scene_review.json",
+                "message": "scene review snapshot is stale",
+            },
+        ):
+            step = _review_step(Path("C:/project"), "scene_0001", candidate)
+
+        self.assertEqual(step["key"], "candidate-review")
+        self.assertIn("agent-review-scene", step["next_action"])
+
     def test_cross_asset_review_finding_stops_for_exact_candidate_decision(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

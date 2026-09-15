@@ -91,6 +91,9 @@ class TaskBuilder:
         payload: dict[str, object],
         expected_outputs: list[str],
     ) -> None:
+        prepare_argv = self.blueprint.get("prepare_argv")
+        if isinstance(prepare_argv, (list, tuple)):
+            payload["prepare_argv"] = [str(item) for item in prepare_argv]
         agent_sources = self.blueprint.get("agent_source_paths")
         if isinstance(agent_sources, (list, tuple)):
             payload["agent_source_paths"] = normalized_unique(agent_sources)

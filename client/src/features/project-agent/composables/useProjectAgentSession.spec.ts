@@ -22,7 +22,8 @@ describe("useProjectAgentSession", () => {
         return new Promise<void>((resolve) => { finish = resolve; });
       }),
     });
-    const { wrapper, agent } = mountSession(client);
+    const onToolFinished = vi.fn();
+    const { wrapper, agent } = mountSession(client, onToolFinished);
 
     await agent.load();
     const pending = agent.ask("项目到哪里了？");
@@ -30,12 +31,23 @@ describe("useProjectAgentSession", () => {
     await vi.waitFor(() => expect(publish).toBeTypeOf("function"));
     publish?.({ event: "project_agent.turn.started", cursor: 1, data: {} });
     publish?.({ event: "project_agent.tool.started", cursor: 2, data: { name: "project_overview", request_id: "read-1" } });
-    publish?.({ event: "project_agent.event", cursor: 3, data: { event: "text.delta", text: "第一章" } });
-    publish?.({ event: "project_agent.event", cursor: 4, data: { event: "text.delta", text: "正在准备。" } });
+    publish?.({ event: "project_agent.tool.finished", cursor: 3, data: { name: "project_overview", request_id: "read-1", ok: true } });
+    publish?.({ event: "project_agent.event", cursor: 4, data: { event: "text.delta", text: "第一章" } });
+    publish?.({ event: "project_agent.event", cursor: 5, data: { event: "text.delta", text: "正在准备。" } });
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
     expect(agent.messages.value.at(-1)?.payload.text).toBe("第一章正在准备。");
     expect(agent.activity.value?.tools[0].label).toBe("查看作品进度");
+    expect(onToolFinished).toHaveBeenCalledWith("project_overview", true);
+    publish?.({ event: "project_agent.goal.waiting", cursor: 6, data: { run_id: "autopilot-1" } });
+    expect(agent.activity.value?.statusLabel).toBe("后台正在持续完成长期目标");
+    publish?.({ event: "project_agent.goal.progress", cursor: 7, data: { current_route: "scene-development", tasks_completed: 4 } });
+    expect(agent.activity.value?.statusLabel).toBe("正在推进正文创作 · 已完成 4 项");
+    publish?.({ event: "project_agent.goal.terminal", cursor: 8, data: { status: "complete" } });
+    expect(agent.activity.value?.statusLabel).toBe("长期目标已完成，正在复核交付");
+    publish?.({ event: "project_agent.goal.followup.started", cursor: 9, data: {} });
+    expect(agent.activity.value?.statusLabel).toBe("正在核验最终结果");
+    expect(agent.messages.value.at(-1)?.payload.text).toBe("");
     finish?.();
     await pending;
 
@@ -112,7 +124,7 @@ describe("useProjectAgentSession", () => {
   });
 });
 
-function mountSession(client: ProjectAgentClient) {
+function mountSession(client: ProjectAgentClient, onToolFinished?: (name: string, ok: boolean) => void) {
   let agent: ReturnType<typeof useProjectAgentSession> | undefined;
   const wrapper = mount(defineComponent({
     setup() {
@@ -121,6 +133,7 @@ function mountSession(client: ProjectAgentClient) {
         projectTitle: ref("潮汐之后"),
         client,
         flushDelayMs: 0,
+        onToolFinished,
       });
       return {};
     },
@@ -148,6 +161,7 @@ function fakeClient(overrides: Partial<ProjectAgentClient> = {}): ProjectAgentCl
     readSession: vi.fn(async () => session([])),
     startTurn: vi.fn(async () => ({ session_id: "project-agent-1", turn_id: "turn-1", job_id: "job-1", status: "queued" })),
     readJob: vi.fn(),
+    stopJob: vi.fn(async () => ({ job_id: "job-1", status: "stopping", stopped: true })),
     observeJob: vi.fn(async () => undefined),
     ...overrides,
   } as ProjectAgentClient;

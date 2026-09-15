@@ -27,8 +27,11 @@ from .policy import (
 )
 from .policy_service import AutopilotPolicyService
 from .run_loop import ClaimedRunLoop
+from .run_result_contracts import RouteCycle
 from .lean_scene_host import LeanSceneAutopilotHost
 from .lean_scene_loop import LeanSceneRunCoordinator
+from .managed_goal import start_managed_goal as _start_managed_goal
+from .release_completion import complete_release
 from .no_progress import register_no_progress
 from .campaign_runtime import CampaignRuntimeCoordinator
 from .runtime_event_routing import (
@@ -152,6 +155,8 @@ class AutopilotService:
         run = self.runs.create_autopilot_run(str(root), mode=policy["mode"], runtime=runtime, policy=policy)
         self._launch(run["run_id"])
         return run
+
+    start_managed_goal = _start_managed_goal
 
     def resume(self, run_id: str, *, authorized: bool = False) -> dict[str, Any]:
         run = self.runs.read_autopilot_run(run_id)
@@ -365,9 +370,21 @@ class AutopilotService:
         run_id: str,
         project: Path,
         policy: DelegationPolicy,
+        cycle: RouteCycle | None = None,
     ) -> bool:
         coordinator = self._lean_scene_coordinator(run_id, project)
-        return self._lean_scene_host.advance(run_id, project, policy, coordinator)
+        ready_route_index = (
+            cycle.resume_route_index
+            if cycle is not None and cycle.dependency_route
+            else None
+        )
+        return self._lean_scene_host.advance(
+            run_id,
+            project,
+            policy,
+            coordinator,
+            ready_route_index=ready_route_index,
+        )
 
     def _lean_scene_coordinator(
         self,
@@ -387,31 +404,18 @@ class AutopilotService:
         project: Path,
         run: dict[str, Any],
         policy: DelegationPolicy,
-    ) -> None:
-        if policy.payload["release_policy"] != "delegated":
-            self._pause_for(
-                run_id,
-                "release-approval-required",
-                "全书已经完成正式路线，等待你批准最终交付。",
-            )
-            return
-        release = WholeBookReleaseCoordinator(self.config).release(
-            project,
-            approved_by="delegated-agent:creative-steward",
-            autopilot_run_id=run_id,
+    ) -> bool:
+        return complete_release(
+            config=self.config,
+            runs=self.runs,
+            pause=self._pause_for,
+            run_id=run_id,
+            project=project,
+            run=run,
+            release_policy=str(policy.payload["release_policy"]),
+            coordinator_factory=WholeBookReleaseCoordinator,
         )
-        self.runs.append_autopilot_event(run_id, "release.completed", release)
-        self.runs.update_autopilot_run(
-            run_id,
-            status="complete",
-            finished_at=_now(),
-            stop_reason="",
-        )
-        self.runs.append_autopilot_event(
-            run_id,
-            "autopilot.completed",
-            {"tasks_completed": run["tasks_completed"]},
-        )
+
     def _resolve_proactive_choice(
         self,
         run_id: str,

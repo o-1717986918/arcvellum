@@ -14,7 +14,6 @@ from .evidence import (
     asset_promotion_group,
     asset_promotion_sources,
     pending_revision_action_ids,
-    revision_evidence_requirement,
     worker_managed_revision_evidence_requirement,
 )
 
@@ -175,7 +174,7 @@ def _asset_review_execute(context: AssetBlueprintContext) -> dict[str, object]:
 
 
 def _asset_review_revise(context: AssetBlueprintContext) -> dict[str, object]:
-    evidence = revision_evidence_requirement(list(context.pending_revision_ids))
+    evidence = worker_managed_revision_evidence_requirement(list(context.pending_revision_ids))
     return _blueprint(
         "platform-agent-revision",
         "route.character-world-assets.review-fix.v1",
@@ -188,8 +187,7 @@ def _asset_review_revise(context: AssetBlueprintContext) -> dict[str, object]:
             "Do not bury revise_required findings as harmless warnings.",
             "Do not self-pass the review that requested this revision and do not replace critical findings with a clean verdict.",
             evidence,
-            "After revising the candidate and candidate report, preserve the previous findings as applied_revision_actions, set review status to recheck_required, and reset the review completion marker to recheck_required with expected_artifacts_checked=false.",
-            "A fresh asset-review-agent-task must independently inspect the revised candidate before approval is possible.",
+            "Studio resets review lifecycle evidence after the candidate changes; a fresh asset-review-agent-task independently inspects the revision.",
         ],
         [
             "candidate schema validates",
@@ -199,6 +197,7 @@ def _asset_review_revise(context: AssetBlueprintContext) -> dict[str, object]:
             "review completion evidence reset for independent recheck",
         ],
         ["asset-review-agent-task"],
+        core_managed_outputs=[context.candidate_report, context.review, context.review_json, context.review_completion],
     )
 
 
@@ -225,7 +224,7 @@ def _asset_approval_revise(context: AssetBlueprintContext) -> dict[str, object]:
             "review completion evidence reset for independent recheck",
         ],
         ["asset-review-agent-task"],
-        core_managed_outputs=[context.review, context.review_json, context.review_completion],
+        core_managed_outputs=[context.candidate_report, context.review, context.review_json, context.review_completion],
     )
 
 

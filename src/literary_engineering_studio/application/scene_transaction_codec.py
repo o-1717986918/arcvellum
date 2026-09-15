@@ -78,7 +78,6 @@ def _policy(value: dict[str, Any]) -> ScenePolicy:
         explicit_decision_trace_required=bool(value["explicit_decision_trace_required"]),
         defer_semantic_review_to_chapter=bool(value["defer_semantic_review_to_chapter"]),
         automatic_revision_allowed=bool(value["automatic_revision_allowed"]),
-        max_revision_attempts=int(value["max_revision_attempts"]),
         steward_approval_required=bool(value["steward_approval_required"]),
     )
 

@@ -106,6 +106,24 @@ class LeanProjectAdapterTests(unittest.TestCase):
             delta = json.loads((root / "workflow/scene_deltas/scene_0001.json").read_text(encoding="utf-8"))
             self.assertEqual(delta["next_handoff"], ["渡船即将停航"])
 
+    def test_structured_output_facts_raise_the_machine_minimum_risk(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _project(root)
+            scene = root / "scenes" / "scene_0001.yaml"
+            text = scene.read_text(encoding="utf-8").replace(
+                "character_state_change: 1\n",
+                "output_state:\n  new_facts: [渡船事故由人为破坏造成]\n",
+            )
+            scene.write_text(text, encoding="utf-8")
+
+            prepared = ProjectSceneBriefProvider().prepare(
+                root, "scene_0001", SceneExecutionMode.STANDARD
+            )
+
+            self.assertEqual(prepared.brief.risk.level.value, "standard")
+            self.assertIn("canon_change>=standard:1", prepared.brief.risk.reasons)
+
     def test_changed_source_and_foreign_replay_fail_closed(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

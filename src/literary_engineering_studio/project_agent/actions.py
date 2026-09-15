@@ -10,6 +10,7 @@ from typing import Any
 
 from ..application.failures import present_run
 from .contracts import ProjectAgentActionDependencies
+from .scope import work_reference
 
 
 RecordDirection = Callable[..., dict[str, Any]]
@@ -28,6 +29,7 @@ def dependencies_from_actions(
     candidate_promotions: Any | None = None,
     launch_worker: Callable[[dict[str, str]], dict[str, Any]] | None = None,
     invalidate_project: Callable[[Path, str], Any] | None = None,
+    create_project: Callable[..., dict[str, Any]] | None = None,
 ) -> ProjectAgentActionDependencies:
     settings = config or {}
 
@@ -79,46 +81,15 @@ def dependencies_from_actions(
         }
 
     def resolve_decision(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
-        if current_choices is None or record_choice is None:
-            raise RuntimeError("Project Agent decision service is unavailable")
-        choice_id = str(arguments.get("choice_id") or "").strip()
-        selected = str(arguments.get("selected") or "").strip()
-        if not choice_id or not selected:
-            raise ValueError("project_decision_resolve requires choice_id and selected")
-        available = current_choices(settings, root)
-        rows = available.get("choices") if isinstance(available.get("choices"), list) else []
-        choice = next(
-            (item for item in rows if isinstance(item, dict) and str(item.get("choice_id") or "") == choice_id),
-            None,
+        return _resolve_decision(
+            root,
+            arguments,
+            settings=settings,
+            current_choices=current_choices,
+            record_choice=record_choice,
+            invalidate_project=invalidate_project,
+            autopilot=autopilot,
         )
-        if choice is None:
-            raise ValueError("the requested project decision is no longer pending")
-        option_ids = {
-            str(item.get("id") or item.get("label") or "").strip()
-            for item in choice.get("options", [])
-            if isinstance(item, dict)
-        }
-        if selected not in option_ids:
-            raise ValueError("selected decision option is not available")
-        payload = {
-            **choice,
-            "selected": selected,
-            "rationale": str(arguments.get("rationale") or "项目 Agent 根据当前创作目标完成选择。").strip(),
-            "actor": "project-agent",
-        }
-        result = record_choice(settings, root, payload)
-        if invalidate_project is not None:
-            invalidate_project(root, "project-agent-decision")
-        _resume_after_decision(autopilot, root, result)
-        return {
-            "ok": True,
-            "operation": "resolve_decision",
-            "choice_id": choice_id,
-            "selected": selected,
-            "consumed": bool(result.get("consumed")),
-            "effect": result.get("effect") or {},
-            "receipt": _receipt("resolve_decision", result),
-        }
 
     def update_quality(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         if save_quality is None:
@@ -211,6 +182,40 @@ def dependencies_from_actions(
             "receipt": _receipt("promote_asset", job),
         }
 
+    def create_work(_root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        if create_project is None:
+            raise RuntimeError("Project Agent project creation service is unavailable")
+        title = str(arguments.get("title") or "").strip()
+        if not title:
+            raise ValueError("project_create requires a title")
+        created = create_project(
+            title=title,
+            folder_name="",
+            work_type=str(arguments.get("work_type") or "novel").strip() or "novel",
+            target_length=max(1000, int(arguments.get("target_length") or 30000)),
+            target_chapters=max(0, int(arguments.get("target_chapters") or 0)),
+            target_scenes=max(0, int(arguments.get("target_scenes") or 0)),
+            premise=str(arguments.get("premise") or "").strip(),
+            genre=str(arguments.get("genre") or "").strip(),
+        )
+        reference = work_reference(created)
+        return {
+            "ok": True,
+            "operation": "create_project",
+            "work": reference,
+            "receipt": _receipt("create_project", reference),
+        }
+
+    def manage_goal(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        return _manage_goal(
+            root,
+            arguments,
+            record_direction=record_direction,
+            autopilot=autopilot,
+            current_choices=current_choices,
+            settings=settings,
+        )
+
     return ProjectAgentActionDependencies(
         save_direction,
         control_creation,
@@ -219,6 +224,227 @@ def dependencies_from_actions(
         update_rhythm,
         mount_style,
         promote_asset,
+        create_work if create_project is not None else None,
+        manage_goal,
+    )
+
+
+def _resolve_decision(
+    root: Path,
+    arguments: Mapping[str, Any],
+    *,
+    settings: dict[str, Any],
+    current_choices: Callable[..., dict[str, Any]] | None,
+    record_choice: Callable[..., dict[str, Any]] | None,
+    invalidate_project: Callable[[Path, str], Any] | None,
+    autopilot: Any,
+) -> Mapping[str, Any]:
+    if current_choices is None or record_choice is None:
+        raise RuntimeError("Project Agent decision service is unavailable")
+    choice_id = str(arguments.get("choice_id") or "").strip()
+    selected = str(arguments.get("selected") or "").strip()
+    if not choice_id or not selected:
+        raise ValueError("project_decision_resolve requires choice_id and selected")
+    choice = _find_pending_choice(current_choices(settings, root), choice_id)
+    if selected not in _decision_option_ids(choice):
+        raise ValueError("selected decision option is not available")
+    payload = {
+        **choice,
+        "selected": selected,
+        "rationale": str(arguments.get("rationale") or "项目 Agent 根据当前创作目标完成选择。").strip(),
+        "actor": "project-agent",
+    }
+    result = record_choice(settings, root, payload)
+    if invalidate_project is not None:
+        invalidate_project(root, "project-agent-decision")
+    _resume_after_decision(autopilot, root, result)
+    value = {
+        "ok": True,
+        "operation": "resolve_decision",
+        "choice_id": choice_id,
+        "selected": selected,
+        "consumed": bool(result.get("consumed")),
+        "effect": result.get("effect") or {},
+    }
+    return {**value, "receipt": _receipt("resolve_decision", result)}
+
+
+def _find_pending_choice(available: Mapping[str, Any], choice_id: str) -> dict[str, Any]:
+    rows = available.get("choices") if isinstance(available.get("choices"), list) else []
+    choice = next(
+        (item for item in rows if isinstance(item, dict) and str(item.get("choice_id") or "") == choice_id),
+        None,
+    )
+    if choice is None:
+        raise ValueError("the requested project decision is no longer pending")
+    return choice
+
+
+def _decision_option_ids(choice: Mapping[str, Any]) -> set[str]:
+    return {
+        str(item.get("id") or item.get("label") or "").strip()
+        for item in choice.get("options", [])
+        if isinstance(item, dict)
+    }
+
+
+def _goal_result(root: Path, operation: str, run: Mapping[str, Any], status: str) -> dict[str, Any]:
+    presented = present_run(dict(run))
+    value = {
+        "ok": True,
+        "operation": f"goal_{operation}",
+        "status": status,
+        "work_id": work_reference(root)["work_id"],
+        "run": presented,
+    }
+    receipt: dict[str, Any] = _receipt(f"goal_{operation}", value)
+    receipt.update(
+        run_id=str(presented.get("run_id") or ""),
+        run_status=str(presented.get("status") or ""),
+        work_id=str(value["work_id"]),
+        goal_status=status,
+    )
+    return {**value, "receipt": receipt}
+
+
+def _manage_goal(
+    root: Path,
+    arguments: Mapping[str, Any],
+    *,
+    record_direction: RecordDirection,
+    autopilot: Any,
+    current_choices: Callable[..., dict[str, Any]] | None,
+    settings: dict[str, Any],
+) -> Mapping[str, Any]:
+    operation = str(arguments.get("operation") or "start").strip().lower()
+    if operation not in {"start", "pause", "resume", "recover"}:
+        raise ValueError("project_goal_manage operation must be start, pause, resume, or recover")
+    objective = str(arguments.get("objective") or "").strip()
+    if operation == "start":
+        return _start_goal(root, objective, record_direction, autopilot)
+    return _continue_goal(
+        root,
+        operation,
+        objective,
+        record_direction=record_direction,
+        autopilot=autopilot,
+        current_choices=current_choices,
+        settings=settings,
+    )
+
+
+def _start_goal(
+    root: Path,
+    objective: str,
+    record_direction: RecordDirection,
+    autopilot: Any,
+) -> Mapping[str, Any]:
+    if not objective:
+        raise ValueError("project_goal_manage start requires an objective")
+    record_direction(root, f"长期创作目标：{objective}", actor="project-agent")
+    current = autopilot.policy(root).get("policy", {})
+    goal_policy = {
+        "mode": "full_auto",
+        "literary_kernel": "lean-v2",
+        "scene_execution_mode": str(current.get("scene_execution_mode") or "standard"),
+        "release_policy": "delegated",
+    }
+    start_goal = getattr(autopilot, "start_managed_goal", None)
+    if callable(start_goal):
+        run = start_goal(root, goal_policy)
+    else:
+        autopilot.save_policy(root, goal_policy)
+        run = autopilot.start(root)
+    return _goal_result(root, "start", run, "accepted")
+
+
+def _continue_goal(
+    root: Path,
+    operation: str,
+    objective: str,
+    *,
+    record_direction: RecordDirection,
+    autopilot: Any,
+    current_choices: Callable[..., dict[str, Any]] | None,
+    settings: dict[str, Any],
+) -> Mapping[str, Any]:
+    status = autopilot.status(root)
+    run = status.get("run") if isinstance(status.get("run"), dict) else {}
+    run_id = str(run.get("run_id") or "").strip()
+    if not run_id:
+        if operation == "recover" and objective:
+            return _start_goal(root, objective, record_direction, autopilot)
+        raise ValueError("project_goal_manage requires an existing long-running goal")
+    if operation == "pause":
+        paused = autopilot.pause(run_id, reason="project-agent-goal-paused")
+        return _goal_result(root, operation, paused, "accepted")
+    run_status = str(run.get("status") or "")
+    if run_status == "complete":
+        return _goal_result(root, operation, run, "already_complete")
+    if run_status == "running":
+        return _goal_result(root, operation, run, "already_running")
+    if not _is_managed_goal(run):
+        return _non_goal_result(root, operation, objective, record_direction, autopilot)
+    pending = _pending_choices(settings, root, current_choices) if operation == "recover" else []
+    if pending:
+        return _decision_required_result(root, pending)
+    resumed = autopilot.resume(run_id, authorized=True)
+    return _goal_result(root, operation, resumed, "accepted")
+
+
+def _non_goal_result(
+    root: Path,
+    operation: str,
+    objective: str,
+    record_direction: RecordDirection,
+    autopilot: Any,
+) -> Mapping[str, Any]:
+    if operation == "recover" and objective:
+        return _start_goal(root, objective, record_direction, autopilot)
+    return {
+        "ok": False,
+        "operation": f"goal_{operation}",
+        "status": "goal_objective_required",
+        "work_id": work_reference(root)["work_id"],
+        "message": "当前运行不是长期目标；请提供 objective 后启动目标模式。",
+        "recommended_tool": "project_goal_manage",
+    }
+
+
+def _pending_choices(
+    settings: dict[str, Any],
+    root: Path,
+    current_choices: Callable[..., dict[str, Any]] | None,
+) -> list[Mapping[str, Any]]:
+    if current_choices is None:
+        return []
+    pending = current_choices(settings, root).get("choices", [])
+    return [item for item in pending if isinstance(item, Mapping)] if isinstance(pending, list) else []
+
+
+def _decision_required_result(
+    root: Path,
+    pending: list[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    return {
+        "ok": False,
+        "operation": "recover_goal",
+        "status": "decision_required",
+        "work_id": work_reference(root)["work_id"],
+        "pending_choice_ids": [
+            str(item.get("choice_id") or "")
+            for item in pending
+        ],
+        "recommended_tool": "project_decision_resolve",
+    }
+
+
+def _is_managed_goal(run: Mapping[str, Any]) -> bool:
+    policy = run.get("policy") if isinstance(run.get("policy"), Mapping) else {}
+    return (
+        str(policy.get("mode") or run.get("mode") or "") == "full_auto"
+        and str(policy.get("literary_kernel") or "") == "lean-v2"
+        and str(policy.get("release_policy") or "") == "delegated"
     )
 
 

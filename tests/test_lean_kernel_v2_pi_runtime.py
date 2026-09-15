@@ -19,8 +19,10 @@ from literary_engineering_studio.runtimes.pi_scene_transaction import (
     PiSceneTransactionRuntime,
     creative_result_from_payload,
     render_scene_create_prompt,
+    render_scene_revision_prompt,
 )
 from literary_engineering_studio_engine.literary.scene.transaction import (
+    ChangeProposal,
     CreativeResult,
     LengthTarget,
     RhythmDirective,
@@ -110,6 +112,61 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
                     "task_id": "forged",
                 }
             )
+
+    def test_parser_discards_only_empty_placeholders_and_normalizes_handoff(self) -> None:
+        result = creative_result_from_payload(
+            {
+                "prose": "正文。",
+                "decision_summary": "摘要。",
+                "scene_delta": {
+                    "character_changes": [
+                        {"target_ref": "", "summary": "", "evidence": "", "attributes": []},
+                        {"target_ref": "", "summary": "缺少引用", "evidence": "正文证据"},
+                    ],
+                    "new_asset_candidates": [
+                        {"target_ref": "location/new", "summary": "出现新地点"}
+                    ],
+                    "next_handoff": [
+                        {"handoff": "下一场接住未完成的承诺"},
+                        {"unexpected": "ignored"},
+                    ],
+                },
+            }
+        )
+
+        self.assertEqual(len(result.scene_delta.character_changes), 1)
+        self.assertEqual(result.scene_delta.character_changes[0].summary, "缺少引用")
+        self.assertEqual(result.scene_delta.new_asset_candidates[0].operation, "create")
+        self.assertEqual(result.scene_delta.next_handoff, ("下一场接住未完成的承诺",))
+
+    def test_prompts_explain_exact_reference_and_revision_delta_contracts(self) -> None:
+        brief = _brief()
+        create = render_scene_create_prompt(
+            brief,
+            allowed_refs={"character/protagonist", "character/sister"},
+        )
+        result = CreativeResult(
+            "第一版正文。",
+            "初稿",
+            SceneDelta(
+                character_changes=(
+                    ChangeProposal("invented-id", "人物改变", "正文证据"),
+                )
+            ),
+        )
+        revision = render_scene_revision_prompt(
+            brief,
+            result,
+            VerificationReport("scene_0001", 6),
+            None,
+            allowed_refs={"character/protagonist", "character/sister"},
+        )
+
+        self.assertIn('"character/protagonist"', create)
+        self.assertIn("只能逐字选自 Allowed Existing Refs", create)
+        self.assertIn("Existing SceneDelta", revision)
+        self.assertIn("invented-id", revision)
+        self.assertIn("不得保留空对象", revision)
 
     def test_runtime_inlines_only_project_local_sources_and_caches_result(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

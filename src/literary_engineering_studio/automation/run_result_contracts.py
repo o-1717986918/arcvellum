@@ -71,13 +71,14 @@ class RunLoopHost(Protocol):
         project: Path,
         run: dict[str, Any],
         policy: DelegationPolicy,
-    ) -> None: ...
+    ) -> bool: ...
 
     def _advance_lean_scene(
         self,
         run_id: str,
         project: Path,
         policy: DelegationPolicy,
+        cycle: RouteCycle | None = None,
     ) -> bool: ...
 
     def _register_no_progress(

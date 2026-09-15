@@ -36,6 +36,10 @@ describe("provider failure classification", () => {
 			retryable: true,
 		});
 		expect(classifyProviderFailure("socket ECONNRESET")).toMatchObject({ kind: "transient_network" });
+		expect(classifyProviderFailure("terminated")).toMatchObject({
+			kind: "transient_network",
+			retryable: true,
+		});
 		expect(classifyProviderFailure("unsupported model", 400)).toMatchObject({
 			kind: "model_error",
 			retryable: false,

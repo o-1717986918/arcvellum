@@ -15,7 +15,6 @@ class ScenePolicy:
     explicit_decision_trace_required: bool
     defer_semantic_review_to_chapter: bool
     automatic_revision_allowed: bool
-    max_revision_attempts: int
     steward_approval_required: bool
 
 
@@ -34,7 +33,6 @@ def derive_scene_policy(
             explicit_decision_trace_required=True,
             defer_semantic_review_to_chapter=False,
             automatic_revision_allowed=True,
-            max_revision_attempts=1,
             steward_approval_required=risk.level is SceneRiskLevel.HIGH,
         )
 
@@ -42,14 +40,14 @@ def derive_scene_policy(
     standard = risk.level is SceneRiskLevel.STANDARD
     draft = mode is SceneExecutionMode.DRAFT
     publication = mode is SceneExecutionMode.PUBLICATION
+    review_required = high or ((standard or publication) and not draft)
     return ScenePolicy(
         mode=mode,
         risk=risk,
-        independent_review_required=high or ((standard or publication) and not draft),
+        independent_review_required=review_required,
         explicit_decision_trace_required=high,
         defer_semantic_review_to_chapter=(draft or (risk.level is SceneRiskLevel.LOW and not publication)),
         automatic_revision_allowed=True,
-        max_revision_attempts=1,
         steward_approval_required=high,
     )
 

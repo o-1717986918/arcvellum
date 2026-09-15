@@ -122,7 +122,7 @@ def _validate_initial(
     _validate_required_fields(payload, relative, committee, issues)
     action_field = "action_items" if committee else "recommendations"
     actionable = _indexed_action_items(payload, action_field)
-    clean_pass = (committee and verdict == "approve") or (not committee and verdict == "pass")
+    clean_pass = _structured_clean_pass(payload, committee=committee)
     if clean_pass and not actionable:
         return
     if clean_pass:
@@ -164,6 +164,28 @@ def _validate_initial(
             target_issue.message,
             "reviews/ 与 workflow/ 是只读证据，不是作品修复目标。若该条只是 attention、偏好或可选润色，将结论改为 clean pass 并清空必修动作；若确有阻断缺陷，只能选择项目中已存在且位于 canon/、characters/、plot/、scenes/ 或 drafts/candidates/ 的精确文本文件，并保留可验证的 action 与 verification。",
         )
+
+
+def _structured_clean_pass(payload: dict[str, object], *, committee: bool) -> bool:
+    if committee:
+        verdict = str(payload.get("final_recommendation") or "").strip().lower()
+        return (
+            verdict in {"approve", "approve_with_notes"}
+            and isinstance(payload.get("action_items"), list)
+            and not payload.get("action_items")
+            and isinstance(payload.get("disagreements"), list)
+            and not payload.get("disagreements")
+        )
+    verdict = str(payload.get("conclusion") or "").strip().lower()
+    return verdict in {"pass", "pass_with_notes"} and all(
+        isinstance(payload.get(field), list) and not payload.get(field)
+        for field in (
+            "blocking_issues",
+            "warnings",
+            "unresolved_facts",
+            "timeline_risks",
+        )
+    )
 
 
 def _validate_required_fields(

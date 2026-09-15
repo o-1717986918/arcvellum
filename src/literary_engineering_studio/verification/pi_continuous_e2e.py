@@ -288,7 +288,6 @@ def authorize_and_start(api: StudioApi, project_root: Path) -> dict[str, Any]:
         **(policy.get("limits") if isinstance(policy.get("limits"), dict) else {}),
         "max_tasks": 500,
         "max_runtime_hours": 24,
-        "max_consecutive_revisions": 6,
         "max_failures_per_task": 2,
         "max_cost": 100,
     }

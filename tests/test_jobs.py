@@ -307,7 +307,7 @@ class DurableJobTests(unittest.TestCase):
 
             restarted = JobStore(database)
             self.assertIsNotNone(restarted.migration_backup)
-            self.assertEqual(restarted.health()["schema_version"], 16)
+            self.assertEqual(restarted.health()["schema_version"], 17)
             session = restarted.read_agent_session("session-before-ledger")
             self.assertEqual(session["context_ledger_id"], "")
             self.assertEqual(session["context_ledger_digest"], "")
@@ -341,7 +341,7 @@ class DurableJobTests(unittest.TestCase):
 
             restarted = JobStore(database)
 
-            self.assertEqual(restarted.health()["schema_version"], 16)
+            self.assertEqual(restarted.health()["schema_version"], 17)
             with restarted._connection() as connection:
                 ledger_columns = {
                     row["name"]

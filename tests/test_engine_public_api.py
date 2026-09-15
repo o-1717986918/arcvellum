@@ -43,6 +43,7 @@ EXPECTED_SYMBOLS = {
         "seal_authorized_demo_project",
     ),
     "tasking": (
+        "agent_task_digest",
         "agent_task_completion_status",
         "branch_selection_status",
         "COMPLETION_SCHEMA",

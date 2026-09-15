@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from literary_engineering_studio_engine.workflow.audit.common import _read_json
+from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _read_json
 from literary_engineering_studio_engine.workflow.audit.evidence import _review_needs_revision
 from ...literary.scene.facts import load_scene_facts
+from ...literary.scene.promotion.historical_readiness import lean_scene_readiness
 from ..historical_truth import preserve_current_historical_style_gates
 from ..scene_scope import started_scene_ids as _started_scene_ids
 from .scene_candidate import add_scene_candidate_gates
@@ -89,6 +90,18 @@ def _add_scene_development_gates(
 
     first_scene_gate = len(gates)
     scene_id = _scene_id(scene_path)
+    lean_readiness = lean_scene_readiness(root, scene_id)
+    if lean_readiness is not None:
+        status, issues = lean_readiness
+        _add_gate(
+            gates,
+            f"{scene_id}:lean-scene-commit",
+            status == "ready",
+            "blocking",
+            f"{scene_id} has an exact ready lean-v2 scene commit",
+            f"{scene_id} 的 Lean v2 场景提交不可用：{'；'.join(issues) or status}。恢复或重跑该场景事务。",
+        )
+        return
     add_scene_planning_gates(gates, root, scene_path, scene_id)
     review_payload = add_scene_candidate_gates(gates, root, scene_id)
     add_scene_completion_gates(gates, root, scene_id, review_payload)

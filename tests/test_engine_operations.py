@@ -13,6 +13,7 @@ from literary_engineering_studio_engine.public.tasking import (
 from literary_engineering_studio_engine.tasking.operations import (
     TASK_COMPLETE_OPERATION,
     TASK_SUBMIT_OPERATION,
+    build_task_operations,
 )
 
 
@@ -30,6 +31,29 @@ class EngineOperationTests(unittest.TestCase):
         self.assertEqual(argv[0], "word-budget")
         self.assertEqual(argv[1], str(project.resolve()))
         self.assertEqual(argv[2:], ("--target-words", "30000"))
+
+    def test_structured_prepare_argv_preserves_user_text_as_one_argument(self):
+        operations = build_task_operations(
+            {
+                "execution_policy": "deterministic",
+                "command": "python -m literary_engineering_studio_engine word-budget <project>",
+                "prepare_argv": [
+                    "word-budget",
+                    "<project>",
+                    "--genre",
+                    "近未来科幻 / 硬科幻悬念",
+                ],
+            }
+        )
+        operation = EngineOperation(
+            operation_id=str(operations["prepare"]["operation_id"]),
+            arguments=operations["prepare"]["arguments"],
+            display_command=str(operations["prepare"]["display_command"]),
+        )
+
+        argv = resolve_operation_argv(operation, Path("C:/project"))
+
+        self.assertEqual(argv[-2:], ("--genre", "近未来科幻 / 硬科幻悬念"))
 
     def test_unknown_operation_fails_closed(self):
         operation = EngineOperation("arcvellum.engine/unknown.v1", {})

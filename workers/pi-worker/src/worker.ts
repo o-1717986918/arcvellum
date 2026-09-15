@@ -210,7 +210,11 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 					return true;
 				}
 				state.blocked = true;
-				state.blockerReason = budgetStop;
+				const issueSummary = state.lastValidation.issues
+					.slice(0, 4)
+					.map((issue) => `${issue.path}:${issue.code}`)
+					.join(", ");
+				state.blockerReason = issueSummary ? `${budgetStop}: ${issueSummary}` : budgetStop;
 				return true;
 			}
 			const digest = await progressDigest(context, options.workspace, state);

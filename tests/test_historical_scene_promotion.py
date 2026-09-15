@@ -50,10 +50,88 @@ from literary_engineering_studio_engine.workflow.historical_truth import (
     preserve_historical_style_steps,
     preserve_valid_revision_preparation_steps,
 )
+from literary_engineering_studio_engine.workflow.audit.service import build_route_gates
+from literary_engineering_studio_engine.workflow.state_scene import next_scene_workflow_state
 import literary_engineering_studio_engine.tasking.registry as task_registry
 
 
 class HistoricalScenePromotionTests(unittest.TestCase):
+    def test_lean_commit_is_current_readiness_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("潮水越过旧堤。\n", encoding="utf-8")
+            receipt = root / "workflow" / "scene_commits" / "scene_0001.json"
+            receipt.parent.mkdir(parents=True)
+            receipt.write_text(
+                json.dumps(
+                    {
+                        "schema": "arcvellum/scene-commit/v2",
+                        "scene_id": "scene_0001",
+                        "prose_sha256": hashlib.sha256(
+                            "潮水越过旧堤。".encode("utf-8")
+                        ).hexdigest(),
+                        "review_decision": "pass",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                historical_scene_readiness(root, "scene_0001"),
+                ("ready", ()),
+            )
+
+            draft.write_text("潮水越过新堤。\n", encoding="utf-8")
+            status, issues = historical_scene_readiness(root, "scene_0001") or ("", ())
+            self.assertEqual(status, "blocked")
+            self.assertIn("digest mismatch", issues[0])
+
+    def test_lean_commit_replaces_strict_scene_steps_in_read_projections(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "project:\n  title: lean projection\n  target_length: 0\n",
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\nlocation: 月面站\nparticipants: [陶真]\nscene_goal: 确认信号\n",
+                encoding="utf-8",
+            )
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("月面站收到了十分钟后的回声。\n", encoding="utf-8")
+            receipt = root / "workflow" / "scene_commits" / "scene_0001.json"
+            receipt.parent.mkdir(parents=True)
+            receipt.write_text(
+                json.dumps(
+                    {
+                        "schema": "arcvellum/scene-commit/v2",
+                        "scene_id": "scene_0001",
+                        "prose_sha256": hashlib.sha256(
+                            "月面站收到了十分钟后的回声。".encode("utf-8")
+                        ).hexdigest(),
+                        "review_decision": "pass",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            state = next_scene_workflow_state(root, scene)
+            self.assertIsNotNone(state)
+            self.assertEqual(state["status"], "ready")
+            self.assertEqual([item["key"] for item in state["steps"]], ["lean-scene-commit"])
+
+            gates = build_route_gates(root, "scene-development", [])
+            scene_gates = [item for item in gates if item["key"].startswith("scene_0001:")]
+            self.assertEqual([item["key"] for item in scene_gates], ["scene_0001:lean-scene-commit"])
+            self.assertEqual(scene_gates[0]["status"], "pass")
+
     def test_current_promotion_seals_preparation_but_requires_exact_static_review(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, _manifest, _candidate, draft = self._sealed_promotion(

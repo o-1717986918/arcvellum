@@ -9,7 +9,12 @@ from pathlib import Path
 import re
 from typing import Any
 
-from literary_engineering_studio_engine.public.literary import export_markdown_to_docx
+from literary_engineering_studio_engine.public.literary import (
+    export_markdown_to_docx,
+    formal_chapter_ids,
+    formal_scene_ids_for_chapter,
+    lean_scene_readiness,
+)
 from literary_engineering_studio_engine.public.projections import final_body_from_workbench_text
 
 from ..advisor_snapshot import project_hashes
@@ -25,6 +30,10 @@ TRACE_PATTERN = re.compile(
 SCENE_HEADING = re.compile(r"(?m)^#{1,6}\s*(?:scene[_-]?\d{1,6}|场景\s*\d{1,6})\s*$\n?")
 
 
+class MissingFormalChapterSources(RuntimeError):
+    """The release route has not produced any formal chapter artifact yet."""
+
+
 class WholeBookReleaseCoordinator:
     def __init__(self, config: dict[str, Any]):
         self.config = config
@@ -34,12 +43,16 @@ class WholeBookReleaseCoordinator:
         root = project_root.expanduser().resolve()
         sources = _formal_chapter_sources(root)
         if not sources:
-            raise RuntimeError("还没有可汇总的正式章节，请先完成导出路线。")
+            raise MissingFormalChapterSources("还没有可汇总的正式章节，请先完成导出路线。")
         audits = {}
+        lean_scene_audit = _lean_scene_audit(root)
         for route in ("longform-planning", "scene-development", "review-and-audit", "export-and-release"):
-            result = self.bridge.route_audit(root, route)
-            audits[route] = result.fields
-            raw_blocking = result.fields.get("blocking")
+            if route == "scene-development" and lean_scene_audit is not None:
+                fields = lean_scene_audit
+            else:
+                fields = self.bridge.route_audit(root, route).fields
+            audits[route] = fields
+            raw_blocking = fields.get("blocking")
             if raw_blocking is None:
                 raise RuntimeError(f"{route} 正式审计未返回 blocking 字段，不能生成全书交付。")
             try:
@@ -112,6 +125,32 @@ def _formal_chapter_sources(root: Path) -> list[Path]:
     if published:
         return published
     return sorted(root.glob("exports/*/*_novel.md"), key=lambda path: path.as_posix())
+
+
+def _lean_scene_audit(root: Path) -> dict[str, Any] | None:
+    scene_ids = tuple(
+        scene_id
+        for chapter_id in formal_chapter_ids(root)
+        for scene_id in formal_scene_ids_for_chapter(root, chapter_id)
+    )
+    if not scene_ids:
+        return None
+    readiness = {scene_id: lean_scene_readiness(root, scene_id) for scene_id in scene_ids}
+    if not any(result is not None for result in readiness.values()):
+        return None
+    blocked = {
+        scene_id: list(result[1]) if result is not None else ["lean scene commit receipt is missing"]
+        for scene_id, result in readiness.items()
+        if result is None or result[0] != "ready"
+    }
+    return {
+        "status": "pass" if not blocked else "blocked",
+        "blocking": str(len(blocked)),
+        "literary_kernel": "lean-v2",
+        "scene_count": len(scene_ids),
+        "ready_scene_count": len(scene_ids) - len(blocked),
+        "blocked_scenes": blocked,
+    }
 
 
 def _project_title(root: Path) -> str:

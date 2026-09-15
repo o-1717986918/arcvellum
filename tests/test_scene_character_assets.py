@@ -6,6 +6,10 @@ from literary_engineering_studio_engine.literary.scene.state.character_assets im
     ensure_scene_character_asset_tasks,
     scene_character_asset_requirements,
 )
+from literary_engineering_studio_engine.literary.assets.character_identity import (
+    formal_character_aliases,
+    formal_character_promotion_manifests,
+)
 
 
 class SceneCharacterAssetTests(unittest.TestCase):
@@ -118,6 +122,36 @@ class SceneCharacterAssetTests(unittest.TestCase):
             )
 
             self.assertEqual(scene_character_asset_requirements(root, scene), [])
+
+    def test_character_aliases_ignore_non_character_promotion_receipts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "characters").mkdir()
+            (root / "characters" / "li-wang.yaml").write_text(
+                "character_id: li-wang\nname: 李望\nrole: major\n",
+                encoding="utf-8",
+            )
+            promotions = root / "workflow" / "asset_promotions"
+            promotions.mkdir(parents=True)
+            (promotions / "protagonist-foundation_promotion.json").write_text(
+                '{"candidate_id":"protagonist-foundation","asset_type":"character",'
+                '"status":"promoted","outputs":["characters/li-wang.yaml"]}\n',
+                encoding="utf-8",
+            )
+            (promotions / "world-foundation_promotion.json").write_text(
+                '{"candidate_id":"world-foundation","asset_type":"world",'
+                '"status":"promoted","outputs":["canon/world_rules.yaml"]}\n',
+                encoding="utf-8",
+            )
+
+            aliases = formal_character_aliases(root)
+
+            self.assertIn("主角", aliases)
+            self.assertNotIn("world-foundation", aliases)
+            self.assertEqual(
+                [path.name for path in formal_character_promotion_manifests(root)],
+                ["protagonist-foundation_promotion.json"],
+            )
 
     def test_descriptive_protagonist_role_resolves_inside_minimal_sandbox(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import ProjectAgentDependencies
+from .scope import registered_work_rows, work_id_for_root, work_reference
 
 
 def dependencies_from_read_models(
@@ -18,11 +19,54 @@ def dependencies_from_read_models(
     rhythm: Any | None = None,
     style_mounts: Any | None = None,
     archive_candidates: Any | None = None,
+    project_catalog: Any | None = None,
 ) -> ProjectAgentDependencies:
+    def catalog(_root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        if project_catalog is None:
+            raise RuntimeError("Project Agent work catalog is unavailable")
+        payload = project_catalog()
+        rows = registered_work_rows(payload)
+        query = str(arguments.get("query") or "").strip().casefold()
+        items = [work_reference(item) for item in rows]
+        if query:
+            items = [
+                item for item in items
+                if query in " ".join(str(item.get(key) or "") for key in ("title", "genre", "premise")).casefold()
+            ]
+        current = str(payload.get("current_project") or "").strip()
+        return _fit_payload({
+            "count": len(items),
+            "current_work_id": work_id_for_root(current) if current else "",
+            "works": items[:50],
+        })
+
+    def resolve(anchor: Path, arguments: Mapping[str, Any]) -> Path:
+        requested = str(arguments.get("work_id") or "").strip()
+        if project_catalog is None:
+            return anchor
+        payload = project_catalog()
+        rows = registered_work_rows(payload)
+        by_id = {
+            work_id_for_root(str(item.get("path") or "")): Path(str(item.get("path") or "")).expanduser().resolve()
+            for item in rows
+            if str(item.get("path") or "").strip()
+        }
+        if requested:
+            if requested not in by_id:
+                raise ValueError("unknown or unregistered Project Agent work_id")
+            return by_id[requested]
+        resolved_anchor = anchor.expanduser().resolve()
+        if (resolved_anchor / "project.yaml").is_file() and work_id_for_root(resolved_anchor) in by_id:
+            return resolved_anchor
+        current = str(payload.get("current_project") or "").strip()
+        if current and work_id_for_root(current) in by_id:
+            return by_id[work_id_for_root(current)]
+        raise ValueError("Project Agent needs a work_id because no current work is selected")
+
     def overview(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         dashboard = read_models.dashboard(root)
         return _fit_payload({
-            "project_root": str(root),
+            "work_id": work_id_for_root(root),
             "focus": str(arguments.get("focus") or ""),
             "summary": dashboard.get("summary", {}),
             "next_actions": _items(dashboard.get("next_actions"), 12),
@@ -78,7 +122,56 @@ def dependencies_from_read_models(
             payload["delivery"] = read_models.delivery(root)
         return _fit_payload(payload)
 
-    return ProjectAgentDependencies(overview, search, observe, controls)
+    def diagnose(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        workspace = read_models.workspace(root)
+        dashboard = _mapping(workspace.get("dashboard")) or read_models.dashboard(root)
+        autopilot = _mapping(workspace.get("autopilot_status"))
+        run = _mapping(autopilot.get("run"))
+        agent_status = _mapping(workspace.get("agent_observability"))
+        decision_payload = choices(root) if choices is not None else {}
+        decisions = _items(_mapping(decision_payload).get("choices"), 12)
+        classification, recoverable, recommendation = _diagnosis(run, decisions, agent_status)
+        return _fit_payload({
+            "work_id": work_id_for_root(root),
+            "focus": str(arguments.get("focus") or ""),
+            "classification": classification,
+            "recoverable": recoverable,
+            "recommended_tool": recommendation,
+            "run": run,
+            "pending_decisions": decisions,
+            "next_actions": _items(dashboard.get("next_actions"), 12),
+            "route_audits": _items(dashboard.get("route_audits"), 12),
+            "agents": agent_status,
+        })
+
+    return ProjectAgentDependencies(
+        overview,
+        search,
+        observe,
+        controls,
+        catalog if project_catalog is not None else None,
+        diagnose,
+        resolve if project_catalog is not None else None,
+    )
+
+
+def _diagnosis(
+    run: Mapping[str, Any],
+    decisions: list[Any],
+    agents: Mapping[str, Any],
+) -> tuple[str, bool, str]:
+    if decisions:
+        return "decision_required", False, "project_decision_resolve"
+    status = str(run.get("status") or "").strip().lower()
+    if status == "running":
+        if str(agents.get("status") or "").strip().lower() == "stalled":
+            return "stalled", True, "project_goal_manage"
+        return "running", False, "creation_observe"
+    if status == "complete":
+        return "complete", False, "project_controls"
+    if status in {"paused", "blocked", "runtime_failed", "cancelled", "stopped"}:
+        return "recoverable_stop", True, "project_goal_manage"
+    return "not_started", True, "project_goal_manage"
 
 
 def _search_value(

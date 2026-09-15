@@ -7,6 +7,7 @@ from pathlib import Path
 from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status, default_agent_completion_path
 from ...literary.review.longform_contract import longform_audit_gate_errors
+from ...literary.review.project_review_semantics import committee_review_is_clean
 from ...literary.review.project_targets import project_review_repair_target_issues
 from literary_engineering_studio_engine.tasking.paths import relative_path as _rel
 from literary_engineering_studio_engine.tasking.paths import resolve_project_path as _resolve_project_path
@@ -148,7 +149,7 @@ def _committee_decision_errors(
         return errors
     action_items = payload.get("action_items") if isinstance(payload.get("action_items"), list) else []
     disagreements = payload.get("disagreements") if isinstance(payload.get("disagreements"), list) else []
-    if recommendation != "approve":
+    if not committee_review_is_clean(payload):
         errors.append(f"committee final_recommendation must be approve; got {recommendation or 'missing'}")
     if action_items:
         errors.append(f"committee action_items must be empty before export/release; got {len(action_items)}")

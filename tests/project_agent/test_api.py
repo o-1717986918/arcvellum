@@ -28,6 +28,45 @@ class _Runtime:
 
 @unittest.skipIf(TestClient is None, "FastAPI test dependencies are not installed")
 class ProjectAgentApiTests(unittest.TestCase):
+    def test_workspace_session_and_queued_turn_stop_without_a_selected_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = default_config()
+            config["application"]["data_root"] = str(root / "data")
+            config["application"]["projects_root"] = str(root / "Works")
+            config["application"]["database_path"] = str(root / "studio.sqlite3")
+            config["worker"]["runs_root"] = str(root / "runs")
+
+            with TestClient(create_app(config)) as client:
+                service = client.app.state.project_agent
+                dependencies = service.dependencies
+                service.dependencies = ProjectAgentDependencies(
+                    dependencies.project_overview,
+                    dependencies.project_search,
+                    dependencies.creation_observe,
+                    workspace_catalog=lambda _root, _args: {"works": [], "count": 0},
+                )
+                created = client.post(
+                    "/project-agent/sessions",
+                    json={"project_root": "", "title": "作品库总控"},
+                )
+                self.assertEqual(created.status_code, 200)
+                job = client.app.state.lifecycle.persistence.worker.create({
+                    "kind": "project-agent-turn",
+                    "project_root": str(root / "Works"),
+                    "session_id": created.json()["session_id"],
+                    "turn_id": "turn-stop",
+                })
+
+                stopped = client.post(f"/project-agent/jobs/{job['job_id']}/stop")
+
+                self.assertEqual(stopped.status_code, 200)
+                self.assertEqual(stopped.json()["status"], "cancelled")
+                self.assertEqual(
+                    client.get(f"/project-agent/jobs/{job['job_id']}").json()["status"],
+                    "cancelled",
+                )
+
     def test_session_turn_and_durable_event_replay(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

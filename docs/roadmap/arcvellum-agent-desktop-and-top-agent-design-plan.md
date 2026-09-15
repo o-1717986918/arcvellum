@@ -1,6 +1,6 @@
 # ArcVellum Agent Desktop 与顶层 Agent 分阶段设计方案
 
-> 状态：D2-D8 已完成；Project Agent 桌面进入兼容收敛期
+> 状态：D2-D9 已完成；作品库级管理、长期目标与主动恢复已进入正式接口
 >
 > 日期：2026-09-13
 >
@@ -995,3 +995,9 @@ D2-D7 已形成可用交付切面：Agent 能回答项目问题、定位阻断�
 - Agent UI 使 Reader、Creative Live 或星仪的实际使用体验退化。
 
 综合判断：**方案可以实施，且产品收益明确；应从“有界 Pi 回合 + 小工具集 + 既有业务服务”开始。一次性重写前端、扩大所有权限或把顶层 Agent 做成常驻监督者，都会把刚削减的工程复杂度重新引回来。**
+
+## 13. D9：作品库级管理、长期目标与主动恢复
+
+D9 将 Project Agent 从单作品会话扩展为作品库级总控，同时保持有界领域工具和现有文学 Gate。长期目标复用 Autopilot 的持久执行能力，Project Agent 负责目标解释、跨作品选择、诊断、恢复与结果复核；Autopilot 退居内部执行泵，不再与顶层 Agent 形成两个用户总控入口。
+
+具体合同、模块边界、实施批次与退出条件见 [作品库级顶层 Agent、长期目标与主动恢复计划](arcvellum-workspace-agent-goal-and-recovery-plan.md)。

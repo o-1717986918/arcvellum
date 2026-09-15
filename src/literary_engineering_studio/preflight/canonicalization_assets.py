@@ -148,6 +148,7 @@ def _canonicalize_asset_review(
         return []
     changes = flatten_asset_review_envelope(path, review_rel, payload)
     changes.extend(canonicalize_asset_review_status_alias(path, review_rel, payload))
+    changes.extend(_canonicalize_review_collection_shapes(path, review_rel, payload))
     expected = review_machine_fields(
         task,
         sandbox,
@@ -168,11 +169,46 @@ def _canonicalize_asset_review(
         )
     )
     changes.extend(
-        _canonicalize_approval_revision(
+        _canonicalize_asset_revision(
             task, sandbox, path, review_rel, payload, candidate_rel
         )
     )
     return changes
+
+
+def _canonicalize_review_collection_shapes(
+    path: Path,
+    relative: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Fill omitted empty review collections without rewriting semantic findings."""
+
+    missing = [
+        field
+        for field in (
+            "blocking_issues",
+            "warnings",
+            "revision_actions",
+            "promotion_risks",
+        )
+        if field not in payload or payload.get(field) is None
+    ]
+    if not missing:
+        return []
+    for field in missing:
+        payload[field] = []
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return [
+        {
+            "path": relative,
+            "field": field,
+            "reason": "normalized omitted empty review collection",
+        }
+        for field in missing
+    ]
 
 
 def _review_relative_path(task: TaskPackage, contract: dict[str, Any]) -> str:
@@ -190,7 +226,7 @@ def _review_relative_path(task: TaskPackage, contract: dict[str, Any]) -> str:
     )
 
 
-def _canonicalize_approval_revision(
+def _canonicalize_asset_revision(
     task: TaskPackage,
     sandbox: SandboxManifest,
     review_path: Path,
@@ -198,7 +234,7 @@ def _canonicalize_approval_revision(
     review: dict[str, Any],
     candidate_rel: str,
 ) -> list[dict[str, str]]:
-    if task.current_state != "asset-approval-revision" or not candidate_rel:
+    if task.current_state not in {"asset-review-pass", "asset-approval-revision"} or not candidate_rel:
         return []
     candidate_path = sandbox.workspace / Path(candidate_rel)
     before = str(
@@ -208,14 +244,15 @@ def _canonicalize_approval_revision(
         return []
     if hashlib.sha256(candidate_path.read_bytes()).hexdigest() == before:
         return []
-    applied = review.get("applied_revision_actions")
-    if isinstance(applied, list) and applied:
-        return []
-    rationale = _latest_approval_rationale(
-        sandbox.workspace,
-        str(review.get("candidate_id") or ""),
-    )
-    _reset_review_for_recheck(review, candidate_rel, rationale)
+    if task.current_state == "asset-approval-revision":
+        rationale = _latest_approval_rationale(
+            sandbox.workspace,
+            str(review.get("candidate_id") or ""),
+        )
+        applied = [_approval_revision_action(candidate_rel, rationale)]
+    else:
+        applied = _review_revision_actions(review, candidate_rel)
+    _reset_review_for_recheck(review, applied)
     review_path.write_text(
         json.dumps(review, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -223,21 +260,20 @@ def _canonicalize_approval_revision(
     _append_revision_notice(
         review_path.with_suffix(".md"),
         int(review["revision_round"]),
-        rationale,
+        "; ".join(str(item.get("id") or "") for item in applied),
     )
     return [
         {
             "path": review_rel,
-            "field": "approval-revision-reset",
-            "reason": "generated deterministic approval-revision lifecycle evidence",
+            "field": "asset-revision-reset",
+            "reason": "generated deterministic asset-revision lifecycle evidence",
         }
     ]
 
 
 def _reset_review_for_recheck(
     review: dict[str, Any],
-    candidate_rel: str,
-    rationale: str,
+    applied: list[dict[str, str]],
 ) -> None:
     existing = review.get("revision_round")
     next_round = (
@@ -247,18 +283,62 @@ def _reset_review_for_recheck(
     )
     review["status"] = "recheck_required"
     review["revision_round"] = max(1, next_round)
-    review["applied_revision_actions"] = [
+    review["applied_revision_actions"] = applied
+    review["blocking_issues"] = []
+    review["revision_actions"] = []
+    review["revised_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _review_revision_actions(
+    review: dict[str, Any],
+    candidate_rel: str,
+) -> list[dict[str, str]]:
+    actions = review.get("revision_actions")
+    rows = actions if isinstance(actions, list) else []
+    applied: list[dict[str, str]] = []
+    for index, row in enumerate(rows, start=1):
+        item = row if isinstance(row, dict) else {}
+        identifier = str(item.get("id") or f"REV-{index:03d}").strip()
+        action = str(
+            item.get("action")
+            or item.get("description")
+            or item.get("finding")
+            or row
+        ).strip()
+        applied.append(
+            {
+                "id": identifier,
+                "action": action or "Applied the requested candidate-local revision.",
+                "evidence": (
+                    f"{candidate_rel} changed from the review-bound digest; "
+                    "the fresh independent review verifies the exact semantic result."
+                ),
+            }
+        )
+    return applied or [
         {
-            "id": "APPROVAL-REV-001",
-            "action": rationale
-            or "Applied the latest approval-bound candidate revision.",
+            "id": "REV-001",
+            "action": "Applied the requested candidate-local revision.",
             "evidence": (
-                f"{candidate_rel} changed from the approval-bound candidate digest; "
-                "a fresh independent review must verify the exact semantic change."
+                f"{candidate_rel} changed from the review-bound digest; "
+                "the fresh independent review verifies the exact semantic result."
             ),
         }
     ]
-    review["revised_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _approval_revision_action(
+    candidate_rel: str,
+    rationale: str,
+) -> dict[str, str]:
+    return {
+        "id": "APPROVAL-REV-001",
+        "action": rationale or "Applied the latest approval-bound candidate revision.",
+        "evidence": (
+            f"{candidate_rel} changed from the approval-bound candidate digest; "
+            "a fresh independent review must verify the exact semantic change."
+        ),
+    }
 
 
 def _latest_approval_rationale(workspace: Path, candidate_id: str) -> str:

@@ -21,6 +21,7 @@ from literary_engineering_studio_engine.public.literary import (
 
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from ..runtime.role_conversation import RoleConversationGateway
+from ..infrastructure.project_scene_transactions import known_scene_refs
 
 
 _MACHINE_FIELDS = frozenset(
@@ -79,6 +80,7 @@ class PiSceneTransactionRuntime:
         prompt = render_scene_create_prompt(
             brief,
             source_evidence=self._source_evidence(brief, purpose="create"),
+            allowed_refs=known_scene_refs(brief),
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         result = creative_result_from_payload(_answer_payload(answer))
@@ -141,6 +143,7 @@ class PiSceneTransactionRuntime:
             verification,
             review,
             source_evidence=self._source_evidence(brief, purpose="revise"),
+            allowed_refs=known_scene_refs(brief),
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         revised = creative_result_from_payload(_answer_payload(answer))
@@ -188,8 +191,14 @@ class PiSceneTransactionRuntime:
         return "\n\n".join(blocks)
 
 
-def render_scene_create_prompt(brief: SceneBrief, *, source_evidence: str = "") -> str:
+def render_scene_create_prompt(
+    brief: SceneBrief,
+    *,
+    source_evidence: str = "",
+    allowed_refs: Any = (),
+) -> str:
     recipe = lean_scene_prompt_recipe("create")
+    reference_contract = _reference_contract(brief, allowed_refs)
     prompt = f"""# Scene Create
 
 你是本章唯一的主创。依据 SceneBrief 写当前场景的完整小说正文，并提取正文实际造成的语义变化。
@@ -201,10 +210,20 @@ def render_scene_create_prompt(brief: SceneBrief, *, source_evidence: str = "") 
 ## Relevant Sources
 {source_evidence or "无额外资料；严格使用 SceneBrief。"}
 
+## Allowed Existing Refs
+{json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
+
+## Length Contract
+prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。必须写成完整场景，不得用梗概、节拍清单或压缩叙述代替正文。
+
 ## Output
 {{"prose":"完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[]}}
 
-每个变化项使用 {{"target_ref":"已有引用或候选名","summary":"变化","evidence":"正文证据","operation":"update","attributes":{{}}}}。
+既有对象变化项使用 {{"target_ref":"Allowed Existing Refs 中的精确字符串","summary":"变化","evidence":"正文证据","operation":"update","attributes":{{}}}}。
+character_changes、canon_candidates、continuity_changes、promise_updates、reader_question_updates 的 target_ref 只能逐字选自 Allowed Existing Refs，禁止自造同义 ID。
+正文出现的新人物、新地点、新组织或尚无精确引用的新事实，只能放入 new_asset_candidates，operation 使用 create；不得塞进既有对象变化组。
+若正文给“幸存者”“旧搭档”等角色占位符新增专名、亲属关系或可持续身份，也必须在 new_asset_candidates 登记该身份。仅沿用 SceneBrief 中的通用角色称谓不算新增身份。
+空组必须返回 []，禁止用空对象占位。next_handoff 只能是字符串数组，不得返回对象。
 只提出正文确实发生的变化；无法确认的内容放进 escalation_reasons。
 若 SceneBrief.risk.level 为 high，decision_trace 必须用少量条目记录关键创作取舍。
 """
@@ -227,6 +246,7 @@ def render_scene_review_prompt(
 确定性检查已经由程序完成，不复查路径、哈希、回执或任务流程。
 直接返回 JSON：{{"decision":"pass|revise|escalate","summary":"结论","revision_instructions":[],"evidence":[]}}。
 需要改动时必须选择 revise 并给出具体片段证据；轻微建议仍判 pass。
+检查正文中新出现的专名或稳定身份是否已进入 new_asset_candidates；仅沿用 SceneBrief 的通用角色称谓、普通设备名或场所类别无需登记。真正遗漏会影响后续场景时判 revise。
 
 ## SceneBrief
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
@@ -252,9 +272,11 @@ def render_scene_revision_prompt(
     review: ReviewResult | None,
     *,
     source_evidence: str = "",
+    allowed_refs: Any = (),
 ) -> str:
     recipe = lean_scene_prompt_recipe("revise")
     instructions = list(review.revision_instructions) if review is not None else []
+    reference_contract = _reference_contract(brief, allowed_refs)
     prompt = f"""# Scene Revision
 
 你是本场景原主创。只修复列出的硬失败或文学问题，保留有效情节、人物声音和已有细节。
@@ -267,6 +289,9 @@ def render_scene_revision_prompt(
 ## Candidate
 {result.prose}
 
+## Existing SceneDelta
+{json.dumps(result.scene_delta.to_dict(), ensure_ascii=False, separators=(",", ":"))}
+
 ## Deterministic Issues
 {json.dumps(verification.to_dict(), ensure_ascii=False, separators=(",", ":"))}
 
@@ -276,9 +301,19 @@ def render_scene_revision_prompt(
 ## Relevant Sources
 {source_evidence or "无额外资料。"}
 
+## Allowed Existing Refs
+{json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
+
+## Length Contract
+prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。若审查要求扩写，必须补充有效行动、信息、关系压力或选择代价，不得用重复解释凑字数。
+
 ## Output
 {{"prose":"修订后的完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[]}}
 
+修订 SceneDelta 时删除无效条目，不得保留空对象或把字段改成空字符串来占位。
+既有变化组的 target_ref 只能逐字选自 Allowed Existing Refs；找不到精确既有引用的新事实改放 new_asset_candidates，operation 使用 create。
+角色占位符在正文中获得新专名、亲属关系或可持续身份时，须补入 new_asset_candidates；通用角色称谓和普通设备名不登记。
+空组返回 []。next_handoff 只能是字符串数组。
 若 SceneBrief.risk.level 为 high，decision_trace 必须保留关键创作取舍，不得清空。
 """
     if len(prompt) > recipe.hard_character_limit:
@@ -304,7 +339,10 @@ def creative_result_from_payload(payload: dict[str, Any]) -> CreativeResult:
             promise_updates=_proposals(values.get("promise_updates")),
             reader_question_updates=_proposals(values.get("reader_question_updates")),
             next_handoff=_strings(values.get("next_handoff")),
-            new_asset_candidates=_proposals(values.get("new_asset_candidates")),
+            new_asset_candidates=_proposals(
+                values.get("new_asset_candidates"),
+                default_operation="create",
+            ),
         ),
         decision_trace=_strings(payload.get("decision_trace")),
         escalation_reasons=_strings(payload.get("escalation_reasons")),
@@ -325,40 +363,82 @@ def review_result_from_payload(payload: dict[str, Any]) -> ReviewResult:
     )
 
 
-def _proposals(value: Any) -> tuple[ChangeProposal, ...]:
+def _proposals(
+    value: Any,
+    *,
+    default_operation: str = "update",
+) -> tuple[ChangeProposal, ...]:
     if not isinstance(value, list):
         return ()
     proposals: list[ChangeProposal] = []
     for item in value:
         if not isinstance(item, dict):
             continue
-        attributes = item.get("attributes")
-        if isinstance(attributes, dict):
-            pairs = tuple((str(key), str(entry)) for key, entry in attributes.items())
-        elif isinstance(attributes, list):
-            pairs = tuple(
-                (str(pair[0]), str(pair[1]))
-                for pair in attributes
-                if isinstance(pair, list) and len(pair) == 2
-            )
-        else:
-            pairs = ()
+        pairs = _proposal_attributes(item.get("attributes"))
+        target_ref = str(item.get("target_ref") or "").strip()
+        summary = str(item.get("summary") or "").strip()
+        evidence = str(item.get("evidence") or "").strip()
+        if not target_ref and not summary and not evidence and not pairs:
+            continue
         proposals.append(
             ChangeProposal(
-                target_ref=str(item.get("target_ref") or "").strip(),
-                summary=str(item.get("summary") or "").strip(),
-                evidence=str(item.get("evidence") or "").strip(),
-                operation=str(item.get("operation") or "update").strip(),
+                target_ref=target_ref,
+                summary=summary,
+                evidence=evidence,
+                operation=str(item.get("operation") or default_operation).strip(),
                 attributes=pairs,
             )
         )
     return tuple(proposals)
 
 
+def _proposal_attributes(value: Any) -> tuple[tuple[str, str], ...]:
+    if isinstance(value, dict):
+        return tuple((str(key), str(entry)) for key, entry in value.items())
+    if isinstance(value, list):
+        return tuple(
+            (str(pair[0]), str(pair[1]))
+            for pair in value
+            if isinstance(pair, list) and len(pair) == 2
+        )
+    return ()
+
+
 def _strings(value: Any) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
-    return tuple(str(item).strip() for item in value if str(item).strip())
+    strings: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            text = item.strip()
+        elif isinstance(item, dict):
+            text = next(
+                (
+                    str(item.get(key) or "").strip()
+                    for key in ("handoff", "summary", "content", "text", "description")
+                    if str(item.get(key) or "").strip()
+                ),
+                "",
+            )
+        else:
+            text = ""
+        if text:
+            strings.append(text)
+    return tuple(strings)
+
+
+def _reference_contract(brief: SceneBrief, allowed_refs: Any) -> list[str]:
+    supplied = {
+        str(item).strip()
+        for item in allowed_refs
+        if str(item).strip()
+    }
+    if not supplied:
+        supplied.update(brief.source_refs)
+        supplied.update(brief.canon_constraints)
+        supplied.update(brief.chapter_obligations)
+        supplied.update(brief.participants)
+    return sorted(item for item in supplied if item)
 
 
 def _reject_machine_fields(payload: dict[str, Any]) -> None:

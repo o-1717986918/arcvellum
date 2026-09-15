@@ -2,6 +2,7 @@
 
 from ..foundation.schema_aliases import COMPLETION_SCHEMA, schema_matches
 from ..tasking.agent_tasks.writer import (
+    agent_task_digest,
     agent_task_completion_status,
     write_agent_completion_marker,
 )
@@ -47,6 +48,7 @@ from ..tasking.spec import (
 )
 
 __all__ = [
+    "agent_task_digest",
     "agent_task_completion_status",
     "branch_selection_status",
     "COMPLETION_SCHEMA",

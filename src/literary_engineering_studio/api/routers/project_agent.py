@@ -26,8 +26,8 @@ def build_project_agent_router(deps: ProjectAgentRouterDependencies) -> APIRoute
     router = APIRouter(prefix="/project-agent")
 
     @router.get("/sessions")
-    def list_sessions(project_root: str, limit: int = 30):
-        root = resolve_project_root(project_root)
+    def list_sessions(project_root: str = "", limit: int = 30):
+        root = resolve_project_root(project_root) if project_root.strip() else None
         return call_handler(
             lambda: {"ok": True, "items": deps.service.list_sessions(root, limit=limit)}
         )
@@ -38,7 +38,7 @@ def build_project_agent_router(deps: ProjectAgentRouterDependencies) -> APIRoute
             lambda: {
                 "ok": True,
                 **deps.service.create_session(
-                    resolve_project_root(payload.project_root),
+                    resolve_project_root(payload.project_root) if payload.project_root.strip() else None,
                     title=payload.title,
                 ),
             }
@@ -64,6 +64,10 @@ def build_project_agent_router(deps: ProjectAgentRouterDependencies) -> APIRoute
     @router.get("/jobs/{job_id}")
     def read_turn(job_id: str):
         return call_handler(lambda: {"ok": True, **_project_agent_job(deps.jobs, job_id)})
+
+    @router.post("/jobs/{job_id}/stop")
+    def stop_turn(job_id: str):
+        return call_handler(lambda: {"ok": True, **deps.service.cancel_turn(job_id)})
 
     @router.get("/jobs/{job_id}/events")
     def stream_turn_events(
@@ -94,7 +98,7 @@ def build_project_agent_router(deps: ProjectAgentRouterDependencies) -> APIRoute
                         yield deps.stream_terminal("project-agent", "event-limit", cursor)
                         return
                 job = deps.jobs.read(job_id)
-                if str(job.get("status") or "") not in {"queued", "running", "stopping", "interrupted"}:
+                if str(job.get("status") or "") not in {"queued", "running", "stopping"}:
                     if not events:
                         yield deps.stream_terminal("project-agent", str(job.get("status") or "complete"), cursor)
                         return

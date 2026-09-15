@@ -348,6 +348,13 @@ class TaskContractTransportTests(unittest.TestCase):
             (root / "workflow" / "longform_materialization.json").write_text(
                 '{"status": "materialized", "scene_count": 1}\n', encoding="utf-8"
             )
+            promotions = root / "workflow" / "asset_promotions"
+            promotions.mkdir(parents=True)
+            (promotions / "protagonist-foundation_promotion.json").write_text(
+                '{"candidate_id":"protagonist-foundation","asset_type":"character",'
+                '"status":"promoted","outputs":["characters/li-wang.yaml"]}\n',
+                encoding="utf-8",
+            )
             scene = root / "scenes" / "scene_0001.yaml"
             scene.parent.mkdir(parents=True)
             scene.write_text(
@@ -402,6 +409,7 @@ class TaskContractTransportTests(unittest.TestCase):
                 "plot/word_budget/word_budget.agent_tasks.md",
                 "plot/word_budget/word_budget.agent_completion.json",
                 "reviews/word_budget/word_budget_review.md",
+                "workflow/asset_promotions/protagonist-foundation_promotion.json",
             ):
                 self.assertIn(relative, generation["source_paths"])
 

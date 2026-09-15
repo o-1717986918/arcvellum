@@ -28,6 +28,9 @@ from literary_engineering_studio.preflight.scene import (
 from literary_engineering_studio.preflight.scene_review_contract import (
     validate_scene_review_contract,
 )
+from literary_engineering_studio.preflight.scene_review_metadata import (
+    canonicalize_scene_review_metadata,
+)
 from literary_engineering_studio_engine.projects.source_ingest import (
     ingest_existing_work,
 )
@@ -809,6 +812,66 @@ class TaskPreflightTests(unittest.TestCase):
             result = validate_task_outputs(task, sandbox)
             self.assertTrue(result.passed, result.issues)
 
+    def test_story_architecture_review_normalizes_pass_with_notes_to_revise(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "plot").mkdir(parents=True)
+            (workspace / "reviews" / "longform").mkdir(parents=True)
+            candidate = workspace / "plot" / "story_architecture.candidate.json"
+            candidate.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/story-architecture/v1",
+                        "status": "complete",
+                        "writer_session_id": "studio:writer:architecture",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            review = workspace / "reviews" / "longform" / "story_architecture_review.json"
+            review.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/story-architecture-review/v1",
+                        "status": "complete",
+                        "verdict": "pass_with_notes",
+                        "required_changes": ["clarify the causal payoff"],
+                        "final_state": "revise_before_drafting_dependent_tasks",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "longform-planning-longform-story-architecture-review",
+                    "route": "longform-planning",
+                    "current_state": "story-architecture-review",
+                    "expected_outputs": ["reviews/longform/story_architecture_review.json"],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            normalized = json.loads(review.read_text(encoding="utf-8"))
+
+            self.assertEqual(normalized["verdict"], "revise")
+            self.assertEqual(normalized["status"], "complete")
+            self.assertTrue(any(item.get("field") == "verdict" for item in changes))
+
     def test_branch_completion_marker_is_worker_owned_after_selection_exists(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1123,6 +1186,73 @@ class TaskPreflightTests(unittest.TestCase):
             program = (sandbox.workspace / "AGENT_TASK.md").read_text(encoding="utf-8")
             self.assertIn("## Prepared Context Snapshot", program)
             self.assertIn("drafts/candidates/scene_0001-platform-agent.md", program)
+
+    def test_scene_review_uses_compact_evidence_for_style_snapshot_when_manifest_is_hidden(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            candidate_rel = "drafts/revisions/scene_0001_revision.md"
+            candidate = workspace / candidate_rel
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("她推开门，终于看清了来人。\n", encoding="utf-8")
+            review_rel = "reviews/agent/scene_0001_scene_review.json"
+            context_rel = "reviews/agent/scene_0001_scene_review.context.json"
+            review = workspace / review_rel
+            context = workspace / context_rel
+            review.parent.mkdir(parents=True)
+            review.write_text(
+                json.dumps({"conclusion": "pass", "summary": "候选通过审查。"}),
+                encoding="utf-8",
+            )
+            snapshot = {
+                "schema": "arcvellum/style-mount-snapshot/v1",
+                "style_id": "fixture-style",
+                "version_id": "v1-fixture",
+                "digest": "a" * 64,
+            }
+            context.write_text(
+                json.dumps(
+                    {
+                        "candidate": {
+                            "path": candidate_rel,
+                            "sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                        },
+                        "style_mount_snapshot": snapshot,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "scene-development-scene-0001-candidate-review",
+                    "route": "scene-development",
+                    "scene_id": "scene_0001",
+                    "current_state": "candidate-review",
+                    "task_type": "platform-agent-review",
+                    "candidate": candidate_rel,
+                    "source_paths": [candidate_rel],
+                    "expected_outputs": [review_rel, context_rel],
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            changes = canonicalize_scene_review_metadata(task, sandbox)
+
+            normalized = json.loads(review.read_text(encoding="utf-8"))
+            self.assertTrue(changes)
+            self.assertFalse(candidate.with_suffix(".json").exists())
+            self.assertEqual(normalized["style_mount_snapshot"], snapshot)
 
     def test_scene_review_unwraps_only_non_blocking_style_notes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1896,6 +2026,79 @@ class TaskPreflightTests(unittest.TestCase):
             receipt = json.loads((workspace / "plot" / "ledger_deltas" / "scene_0001.agent_completion.json").read_text(encoding="utf-8"))
             self.assertEqual(receipt["status"], "complete")
             self.assertEqual(receipt["handled_by"], "studio-worker")
+
+    def test_agent_completion_receipt_refreshes_against_control_sidecar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            control = root / "control"
+            output_rel = "reviews/word_budget/scene_inventory_review.json"
+            marker_rel = "reviews/word_budget/scene_inventory_review.agent_completion.json"
+            sidecar_rel = "reviews/word_budget/scene_inventory_review.agent_tasks.md"
+            output = workspace / output_rel
+            marker = workspace / marker_rel
+            sidecar = control / sidecar_rel
+            output.parent.mkdir(parents=True)
+            sidecar.parent.mkdir(parents=True)
+            output.write_text('{"verdict": "pass"}\n', encoding="utf-8")
+            sidecar.write_text("fresh review instructions\n", encoding="utf-8")
+            marker.write_text(
+                json.dumps(
+                    {
+                        "schema": "literary-engineering-workbench/agent-task-completion/v1",
+                        "source_task": sidecar_rel,
+                        "status": "complete",
+                        "handled_by": "studio-worker",
+                        "completed_at": "2026-01-01T00:00:00+00:00",
+                        "expected_artifacts_checked": True,
+                        "notes": ["Machine-owned completion receipt; route gates validate the Agent-authored result separately."],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            task = TaskPackage(
+                project_root=root,
+                task_json_path=root / "task.json",
+                task_markdown_path=root / "task.md",
+                payload={
+                    "task_id": "longform-planning-longform-scene-inventory-review",
+                    "route": "longform-planning",
+                    "scene_id": "longform",
+                    "current_state": "scene-inventory-review",
+                    "task_type": "platform-agent-review",
+                    "execution_policy": "agent-required",
+                    "expected_outputs": [output_rel, marker_rel],
+                    "system_owned_fields": {
+                        "lifecycle": {
+                            "completion_receipts": [
+                                {
+                                    "path": marker_rel,
+                                    "source_task": sidecar_rel,
+                                    "status": "complete",
+                                    "expected_artifacts_checked": True,
+                                }
+                            ]
+                        }
+                    },
+                },
+            )
+            sandbox = SandboxManifest(
+                run_id="test",
+                run_root=root,
+                workspace=workspace,
+                control_workspace=control,
+                prompt_path=root / "prompt.md",
+                manifest_path=root / "manifest.json",
+                baseline_path=root / "baseline.json",
+                expected_outputs=task.expected_outputs,
+            )
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            receipt = json.loads(marker.read_text(encoding="utf-8"))
+
+            self.assertEqual(receipt["status"], "complete")
+            self.assertEqual(len(receipt["task_digest"]), 64)
+            self.assertTrue(any(item.get("path") == marker_rel for item in changes))
 
     def test_continuity_review_binds_digest_and_reviewer_identity(self):
         with tempfile.TemporaryDirectory() as temporary:

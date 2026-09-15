@@ -70,9 +70,11 @@ function requiredShapeIssues(
 	const issues: ValidationIssue[] = [];
 	for (const [field, rawDescriptor] of Object.entries(shape)) {
 		const descriptor = stringValue(rawDescriptor);
-		if (descriptor.toLowerCase().includes("optional")) continue;
+		const required = shapeFieldRequired(value, descriptor);
 		if (!Object.hasOwn(value, field)) {
-			issues.push(issue(path, "semantic_missing_field", `model-owned field is missing: ${prefix}.${field}`));
+			if (required) {
+				issues.push(issue(path, "semantic_missing_field", `model-owned field is missing: ${prefix}.${field}`));
+			}
 			continue;
 		}
 		if (descriptor && hasKnownType(descriptor) && !matchesType(value[field], descriptor)) {
@@ -82,16 +84,44 @@ function requiredShapeIssues(
 				`model-owned field ${prefix}.${field} must be ${descriptor}`,
 			));
 		}
+		if (
+			required
+			&& /\bnon-empty\b/i.test(descriptor)
+			&& typeof value[field] === "string"
+			&& !value[field].trim()
+		) {
+			issues.push(issue(
+				path,
+				"semantic_empty_field",
+				`model-owned field must be non-empty: ${prefix}.${field}`,
+			));
+		}
 	}
 	return issues;
 }
 
+function shapeFieldRequired(value: Record<string, unknown>, descriptor: string): boolean {
+	if (/\boptional\b/i.test(descriptor)) return false;
+	const condition = descriptor.match(/\brequired\b.*?\bwhen\s+([A-Za-z_][\w.-]*)\s*=\s*([^;,\s]+)/i);
+	if (!condition) return true;
+	return literalMatches(value[condition[1]], condition[2]);
+}
+
+function literalMatches(value: unknown, rawExpected: string): boolean {
+	const expected = rawExpected.trim().replace(/^["']|["']$/g, "").toLowerCase();
+	if (expected === "true") return value === true;
+	if (expected === "false") return value === false;
+	if (expected === "null" || expected === "none") return value === null;
+	if (/^-?\d+(?:\.\d+)?$/.test(expected)) return value === Number(expected);
+	return typeof value === "string" && value.trim().toLowerCase() === expected;
+}
+
 function hasKnownType(descriptor: string): boolean {
-	return /^(list|dict|object|str|string|bool|boolean|int|integer|number)\b/i.test(descriptor.trim());
+	return /\b(list|dict|object|str|string|bool|boolean|int|integer|number)\b/i.test(descriptor);
 }
 
 function matchesType(value: unknown, descriptor: string): boolean {
-	const expected = descriptor.trim().toLowerCase().split(/[;|\s]/, 1)[0];
+	const expected = descriptor.match(/\b(list|dict|object|str|string|bool|boolean|int|integer|number)\b/i)?.[1]?.toLowerCase() ?? "";
 	if (expected === "list") return Array.isArray(value);
 	if (expected === "dict" || expected === "object") return isRecord(value);
 	if (expected === "str" || expected === "string") return typeof value === "string";

@@ -16,6 +16,32 @@ from tests.longform_planning_support import (
 
 class LongformMaterializerTests(unittest.TestCase):
 
+    def test_scene_inventory_rejects_embedded_studio_lifecycle_metadata(self):
+        from literary_engineering_studio_engine.literary.planning.materializer import (
+            scene_inventory_contract_issues,
+        )
+
+        inventory = """# Candidate
+
+- candidate_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+### Ch 0001 — 信号 |
+| scene_id | name | target_chars | function | participants | conflict | information_release | consequence | setup_payoff_role | rhythm_role | obligation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SC-001 | 信号 | 1000 | setup | 主角 | 冲突 | 信息 | 后果 | setup | escalation | 建立问题 |
+"""
+        budget = {
+            "totals": {"scene_count": 1, "target_chinese_chars": 1000},
+            "chapter_budgets": [
+                {"chapter_id": "chapter_0001", "scene_count": 1, "target_words": 1000}
+            ],
+        }
+
+        issues = scene_inventory_contract_issues(inventory, budget=budget)
+
+        self.assertEqual(len(issues), 1)
+        self.assertIn("must not embed Studio-owned digests", issues[0])
+
     def test_participant_identity_rejects_explanatory_parenthetical(self):
         from literary_engineering_studio_engine.literary.planning.materializer import (
             scene_inventory_contract_issues,

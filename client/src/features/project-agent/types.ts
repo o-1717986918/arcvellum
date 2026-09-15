@@ -82,6 +82,7 @@ export interface ProjectAgentTurnActivity {
 }
 
 export const PROJECT_AGENT_TOOL_LABELS: Record<string, string> = {
+  workspace_catalog: "查看作品库",
   project_overview: "查看作品进度",
   project_search: "查找作品资料",
   creation_observe: "观察创作现场",
@@ -93,4 +94,7 @@ export const PROJECT_AGENT_TOOL_LABELS: Record<string, string> = {
   project_rhythm_update: "更新叙事节奏",
   project_style_mount: "挂载文风版本",
   project_asset_promote: "晋升作品资产",
+  project_diagnose: "诊断作品状态",
+  project_create: "建立新作品",
+  project_goal_manage: "管理长期创作目标",
 };

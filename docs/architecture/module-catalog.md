@@ -1,6 +1,6 @@
 # ArcVellum 模块目录
 
-> 状态：v0.99 M7 事实文档
+> 状态：v0.99 D9 事实文档
 > 适用对象：维护者、代码 Agent、Runtime/Exporter/Read Model/前端 Feature 开发者
 > 机器生成的目录计数见 [generated-module-map.md](generated-module-map.md)，更细的历史拆分说明见
 > [module-boundaries.md](module-boundaries.md)。本文只回答“需求归谁、从哪里进入、不能越过什么边界”。
@@ -72,8 +72,9 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `application/` | 用户用例、生命周期、项目管理、资产事务、文风挂载，以及授权演示包的安装、恢复和克隆 | `application/container.py`、具体 application service | application ports、Engine public API | FastAPI Request、SQLite row、Provider payload、解释或扩大授权范围 | `test_application_container.py`、application/service tests、`test_authorized_source_contract.py` |
 | `application/ports.py` | 事件、缓存、进程、Runtime pool、执行协调器等替换边界 | `ApplicationPorts` | DTO、Protocol | adapter 构造、业务默认值 | `test_application_container.py`、composition tests |
 | `application/persistence_ports.py` | job/autopilot/session/ledger/receipt/lease/plan/asset/event/UoW 合同 | `PersistencePorts` | DTO、Protocol | SQL、路径布局、文学决策 | `test_persistence_ports.py` |
-| `automation/` | 自动创作 Campaign、授权窗口、推进与恢复 | `automation/controller.py`、`campaign_runtime.py` | application/runtime ports、Engine state | 重写 Engine Gate、隐式批准高风险事实 | `test_autopilot.py`、`tests/automation/*` |
+| `automation/` | 自动创作 Campaign、长期目标执行泵、授权窗口、推进与恢复 | `automation/controller.py`、`managed_goal.py`、`campaign_runtime.py` | application/runtime ports、Engine state | 重写 Engine Gate、解释用户意图、与 Project Agent 争夺总控权 | `test_autopilot.py`、`tests/automation/*` |
 | `orchestration/` | CreativeExecutionPlan、Plan Lint/Compile/Simulate/Review/Recovery | package services；Engine 目录从 `public/orchestration.py` 读取 | Engine public catalog、ports | 第二套 task lifecycle、直接写项目事实 | `tests/orchestration/*` |
+| `project_agent/` | 作品库级顶层 Agent、稳定作品作用域、自然语言工具编排、长期目标管理与诊断恢复 | `project_agent/service.py`、`contracts.py`、`tools.py` | application services、automation facade、Project Agent runtime port | 直接写项目文件、生成正式正文、绕过 Engine Gate、创建第二套任务循环 | `tests/project_agent/*`、Pi Project Agent protocol tests |
 | `advisor/` | 只读项目顾问、persona、会话、动作建议与通知 | `advisor/service.py`、answer contract | read models、Runtime port、session repository | 直接写项目、隐式执行任意命令 | advisor/inbox/persona tests |
 | `preflight/` | 写回前确定性规范化与验证 | `preflight/task_preflight.py` facade | contracts、deterministic validators | 代替 Agent 作文学判断、偷偷修复失败产物 | preflight/worker writeback tests |
 | `projections/` | Library、Archive、Orrery、Agent 会话、模型连接等只读模型 | projection service/facade | read ports、Engine public facts | promotion、task completion、请求时隐藏写入 | API/read-model/observability tests |
@@ -119,6 +120,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | Feature | 稳定调用入口 | 主要职责 |
 |---|---|---|
 | `projects` | `services/projectsClient.ts` | 项目建立、选择、生命周期 |
+| `project-agent` | `services/projectAgentClient.ts` | 作品库级对话总控、跨作品管理、长期目标启停、流式任务状态与取消 |
 | `workflow` | `services/workflowClient.ts` | 总控状态、推进、自动创作 |
 | `strategy` | `services/strategyClient.ts` | 创作策略、节奏和计划 |
 | `quality` | `services/qualityClient.ts` | Gate、审查、质量证据 |

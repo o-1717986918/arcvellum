@@ -75,11 +75,16 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function loadProjects(): Promise<void> {
-    const response = await projectsClient.list();
-    projects.value = response.projects || [];
+    const response = await refreshProjectCatalog();
     const remembered = projects.value.some((item) => item.path === currentProjectPath.value);
     const preferred = remembered ? currentProjectPath.value : response.current_project || response.projects[0]?.path || "";
     if (preferred) setCurrentProject(preferred, false);
+  }
+
+  async function refreshProjectCatalog(): Promise<ProjectsResponse> {
+    const response = await projectsClient.list();
+    projects.value = response.projects || [];
+    return response;
   }
 
   function setCurrentProject(path: string, refresh = true): void {
@@ -328,6 +333,7 @@ export const useAppStore = defineStore("app", () => {
     agentObservability,
     initialize,
     loadProjects,
+    refreshProjectCatalog,
     setCurrentProject,
     createProject,
     openProject,

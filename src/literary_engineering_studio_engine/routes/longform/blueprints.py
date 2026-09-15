@@ -24,19 +24,24 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
     target_chapters = project_int(project_text, "target_chapters")
     target_scenes = project_int(project_text, "target_scenes")
     genre = project_scalar(project_text, "genre")
+    prepare_argv = ["word-budget", "<project>", "--target-words", str(target_words)]
     command = f"python -m literary_engineering_studio_engine word-budget <project> --target-words {target_words}"
     if volumes:
+        prepare_argv.extend(["--volumes", str(volumes)])
         command += f" --volumes {volumes}"
     if target_chapters:
+        prepare_argv.extend(["--target-chapters", str(target_chapters)])
         command += f" --target-chapters {target_chapters}"
     if target_scenes:
+        prepare_argv.extend(["--target-scenes", str(target_scenes)])
         command += f" --target-scenes {target_scenes}"
     if genre:
-        command += f" --genre {genre}"
+        prepare_argv.extend(["--genre", genre])
+        command += f' --genre "{genre}"'
     common_sources = ["project.yaml", "plot/outline.md", "scenes/"]
     table = {
         **_story_architecture_blueprints(),
-        **_budget_blueprints(root, target_words, command, common_sources),
+        **_budget_blueprints(root, target_words, command, prepare_argv, common_sources),
         **_inventory_blueprints(root, target_words),
         **_chapter_blueprints(root, target_words),
     }
@@ -112,13 +117,18 @@ def _story_architecture_blueprints() -> dict[str, dict[str, object]]:
 
 
 def _budget_blueprints(
-    root: Path, target_words: int, command: str, common_sources: list[str]
+    root: Path,
+    target_words: int,
+    command: str,
+    prepare_argv: list[str],
+    common_sources: list[str],
 ) -> dict[str, dict[str, object]]:
     return {
         "word-budget-file": {
             "task_type": "deterministic-cli",
             "prompt_asset_id": "route.longform-planning.word-budget.prepare.v1",
             "command": command,
+            "prepare_argv": prepare_argv,
             "source_paths": common_sources,
             "expected_outputs": [
                 "plot/word_budget/word_budget.md", "plot/word_budget/word_budget.json",
@@ -170,6 +180,7 @@ def _inventory_blueprints(root: Path, target_words: int) -> dict[str, dict[str, 
                 "Every participant is a bare stable identity label. Parentheses, action notes, aliases, reveal timing, and descriptive clauses belong in the other scene columns, never in a character identity.",
                 "Use the stable symbolic label 主角 for the foundational protagonist before its canonical name is fixed. Any other participant listed here is a deliberate request for a reusable character asset before RP and prose.",
                 "Scene inventory remains candidate material until an independent digest-bound review passes.",
+                "Never write candidate_sha256, task_digest, session identifiers, run identifiers, or other Studio lifecycle metadata into the candidate; Studio binds exact identity externally after writing.",
             ],
             "style_constraints": [],
             "word_count_target": target_words,
@@ -306,6 +317,7 @@ def _planning_review_agent_blueprint(
             f"Independently review the exact {spec.label} candidate without editing it.",
             "The Reviewer session must differ from the Writer session. Use pass/revise/block; required work cannot be hidden in passing notes.",
             "Write the authoritative structured JSON and a readable Markdown explanation. Studio owns machine identity and lifecycle receipts.",
+            "Use revise for defects repairable in the declared candidate. Reserve block for an irreconcilable user, canon, or budget conflict outside this task's repair scope.",
         ],
         "style_constraints": [],
         "word_count_target": target_words,

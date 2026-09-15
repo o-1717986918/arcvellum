@@ -18,6 +18,7 @@ interface ProjectAgentSessionOptions {
   projectTitle: Readonly<Ref<string>>;
   client?: ProjectAgentClient;
   onError?: (cause: unknown, fallback: string) => void;
+  onToolFinished?: (name: string, ok: boolean) => void | Promise<void>;
   afterRender?: () => void | Promise<void>;
   flushDelayMs?: number;
 }
@@ -47,7 +48,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   let deltaTimer = 0;
 
   async function load(): Promise<ProjectAgentSession | null> {
-    if (!options.projectRoot.value || loading.value) return session.value;
+    if (loading.value) return session.value;
     loading.value = true;
     try {
       const response = await client.listSessions(options.projectRoot.value);
@@ -63,7 +64,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   }
 
   async function createSession(): Promise<ProjectAgentSession | null> {
-    if (!options.projectRoot.value || sending.value || creating.value) return null;
+    if (sending.value || creating.value) return null;
     creating.value = true;
     try {
       const created = await client.createSession(
@@ -101,7 +102,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
 
   async function ask(message: string): Promise<void> {
     const value = message.trim();
-    if (!value || sending.value || !options.projectRoot.value) return;
+    if (!value || sending.value) return;
     const active = session.value || await load();
     if (!active) return;
     sending.value = true;
@@ -147,7 +148,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   }
 
   async function recover(): Promise<boolean> {
-    if (!session.value || sending.value || !options.projectRoot.value) return false;
+    if (!session.value || sending.value) return false;
     try {
       const restored = await client.readSession(session.value.session_id);
       session.value = restored;
@@ -206,12 +207,36 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       upsertTool(String(data.request_id || data.name || "tool"), String(data.name || ""), "running");
       patchActivity({ statusLabel: "正在查阅项目" });
     } else if (value.event === "project_agent.tool.finished") {
+      const name = String(data.name || "");
+      const ok = data.ok !== false;
       upsertTool(
         String(data.request_id || data.name || "tool"),
-        String(data.name || ""),
-        data.ok === false ? "failed" : "complete",
+        name,
+        ok ? "complete" : "failed",
       );
-      patchActivity({ statusLabel: data.ok === false ? "资料读取失败" : "已取得项目证据" });
+      patchActivity({ statusLabel: ok ? "已取得项目证据" : "资料读取失败" });
+      void options.onToolFinished?.(name, ok);
+    } else if (value.event === "project_agent.goal.waiting") {
+      patchActivity({ status: "running", statusLabel: "后台正在持续完成长期目标" });
+    } else if (value.event === "project_agent.goal.progress") {
+      const route = String(data.current_route || "");
+      const completed = Number(data.tasks_completed || 0);
+      patchActivity({
+        status: "running",
+        statusLabel: route ? `正在推进${goalRouteLabel(route)} · 已完成 ${completed} 项` : `后台已完成 ${completed} 项`,
+      });
+    } else if (value.event === "project_agent.goal.terminal") {
+      const status = String(data.status || "");
+      patchActivity({
+        status: "running",
+        statusLabel: status === "complete" ? "长期目标已完成，正在复核交付" : "长期目标已停止，正在诊断",
+      });
+    } else if (value.event === "project_agent.goal.followup.started") {
+      flushDelta();
+      deltaBuffer = "";
+      const answer = currentTransientAnswer();
+      if (answer) answer.payload.text = "";
+      patchActivity({ status: "running", statusLabel: "正在核验最终结果" });
     } else if (value.event === "project_agent.result") {
       flushDelta();
       const answer = currentTransientAnswer();
@@ -286,6 +311,17 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     resetDelta();
   }
 
+  async function stop(): Promise<void> {
+    const jobId = activity.value?.jobId || observedJobId;
+    if (!jobId || !sending.value) return;
+    patchActivity({ statusLabel: "正在停止" });
+    try {
+      await client.stopJob(jobId);
+    } catch (cause) {
+      options.onError?.(cause, "暂时无法停止这次回答。");
+    }
+  }
+
   function currentTransientAnswer(): ProjectAgentMessage | undefined {
     const last = transientMessages.value.at(-1);
     return last?.role === "assistant" ? last : undefined;
@@ -319,9 +355,22 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     recover,
     reset,
     sending,
+    stop,
     session,
     sessions,
   };
+}
+
+function goalRouteLabel(route: string): string {
+  const labels: Record<string, string> = {
+    "project-foundation": "创作准备",
+    "longform-planning": "全书规划",
+    "character-and-world-assets": "人物与世界",
+    "scene-development": "正文创作",
+    "whole-book-review": "全书复核",
+    "release": "作品交付",
+  };
+  return labels[route] || "当前阶段";
 }
 
 function emptyActivity(): ProjectAgentTurnActivity {

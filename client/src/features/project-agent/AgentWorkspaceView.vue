@@ -32,7 +32,7 @@ const activeWorkspace = ref<ProjectAgentWorkspaceId | null>(null);
 const workspaceFullscreen = ref(false);
 let colorScheme: MediaQueryList | null = null;
 const projectRoot = computed(() => store.currentProjectPath || "");
-const projectTitle = computed(() => store.currentProject?.title || "当前作品");
+const projectTitle = computed(() => store.currentProject?.title || "作品库");
 const workspace = computed(() => projectAgentWorkspaces.get(activeWorkspace.value));
 const applicationWorkspace = computed(() => workspace.value?.scope === "application");
 const dark = computed(() => appearance.value === "dark" || (appearance.value === "system" && systemDark.value));
@@ -40,6 +40,9 @@ const agent = useProjectAgentSession({
   projectRoot,
   projectTitle,
   onError: (cause, fallback) => { store.error = friendlyError(cause, fallback); },
+  onToolFinished: async (name, ok) => {
+    if (ok && name === "project_create") await store.refreshProjectCatalog();
+  },
 });
 
 const dashboard = computed(() => asRecord(store.dashboard));
@@ -75,14 +78,13 @@ onMounted(async () => {
   systemDark.value = colorScheme.matches;
   colorScheme.addEventListener("change", updateSystemAppearance);
   openWorkspaceFromQuery(route.query.workspace);
-  if (!activeWorkspace.value && !projectRoot.value) openWorkspace("projects");
   window.addEventListener("arcvellum:onboarding", returnToConversation);
   window.addEventListener("focus", recoverAgentOnForeground);
   document.addEventListener("visibilitychange", recoverAgentOnForeground);
   if (projectRoot.value) {
     await store.refreshWorkspace();
-    await agent.load();
   }
+  await agent.load();
 });
 
 onBeforeUnmount(() => {
@@ -95,7 +97,8 @@ onBeforeUnmount(() => {
 watch(projectRoot, async (root) => {
   agent.reset();
   if (!root) {
-    openWorkspace("projects");
+    closeWorkspace();
+    await agent.load();
     return;
   }
   if (activeWorkspace.value === "projects") closeWorkspace();
@@ -118,10 +121,6 @@ function openWorkspaceFromQuery(value: unknown): void {
   const requested = Array.isArray(value) ? String(value[0] || "") : String(value || "");
   if (projectAgentWorkspaces.has(requested)) {
     openWorkspace(requested);
-    return;
-  }
-  if (!projectRoot.value) {
-    openWorkspace("projects");
     return;
   }
   activeWorkspace.value = null;
@@ -155,11 +154,6 @@ function syncWorkspaceQuery(workspace: ProjectAgentWorkspaceId | null): void {
 }
 
 function closeWorkspace(): void {
-  if (!projectRoot.value) {
-    syncWorkspaceQuery("projects");
-    activeWorkspace.value = "projects";
-    return;
-  }
   activeWorkspace.value = null;
   syncWorkspaceQuery(null);
   workspaceFullscreen.value = false;
@@ -171,7 +165,7 @@ function returnToConversation(): void {
 }
 
 function recoverAgentOnForeground(): void {
-  if (document.visibilityState === "visible" && projectRoot.value) void agent.recover();
+  if (document.visibilityState === "visible") void agent.recover();
 }
 </script>
 
@@ -213,6 +207,7 @@ function recoverAgentOnForeground(): void {
         </div>
         <label v-if="store.projects.length" class="pa-project-select">
           <select :value="store.currentProjectPath" aria-label="切换当前作品" @change="selectProject">
+            <option value="">作品库总控</option>
             <option v-for="project in store.projects" :key="project.path" :value="project.path">{{ project.title }}</option>
           </select>
         </label>
@@ -245,7 +240,13 @@ function recoverAgentOnForeground(): void {
           :omitted-count="agent.omittedMessageCount.value"
           @starter="agent.ask"
         />
-        <AgentComposer data-tour-id="advisor" :disabled="agent.sending.value || agent.loading.value || !projectRoot" @send="agent.ask" />
+        <AgentComposer
+          data-tour-id="advisor"
+          :disabled="agent.loading.value"
+          :busy="agent.sending.value"
+          @send="agent.ask"
+          @stop="agent.stop"
+        />
       </template>
     </main>
 

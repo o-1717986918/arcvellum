@@ -54,11 +54,27 @@ def scene_inventory_contract_issues(
     *,
     budget: dict[str, object] | None = None,
 ) -> list[str]:
+    lifecycle_issues = _embedded_lifecycle_metadata_issues(text)
     try:
         scenes = parse_scene_inventory(text)
     except ValueError as exc:
-        return [str(exc)]
-    return _scene_inventory_budget_issues(scenes, budget or {})
+        return [*lifecycle_issues, str(exc)]
+    return [*lifecycle_issues, *_scene_inventory_budget_issues(scenes, budget or {})]
+
+
+def _embedded_lifecycle_metadata_issues(text: str) -> list[str]:
+    """Keep self-referential Studio metadata out of creative candidates."""
+
+    if re.search(
+        r"\b(?:candidate_sha256|task_digest|writer_session_id|reviewer_session_id)\s*[:=]",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        return [
+            "scene inventory must not embed Studio-owned digests or session metadata; "
+            "candidate identity is bound externally by the task and review contracts"
+        ]
+    return []
 
 
 def _scene_inventory_budget_issues(

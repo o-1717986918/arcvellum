@@ -34,11 +34,11 @@ function messageText(message: ProjectAgentMessage): string {
       <p v-if="omittedCount" class="pa-history-note">较早的 {{ omittedCount }} 条消息已收起，完整记录仍保存在当前会话中。</p>
       <section v-if="!messages.length && !loading" class="pa-welcome">
         <span class="pa-welcome-mark"><Bot :size="24" /></span>
-        <h1>和作品本身交谈。</h1>
-        <p>我可以查阅正文与项目资料、解释当前进度，也能记录你的方向、继续创作并处理推进中出现的项目决定。</p>
+        <h1>和整个作品库交谈。</h1>
+        <p>我可以建立和管理作品、查阅正文与资料，也能接下长期创作目标，在你离开当前对话后持续推进并处理途中问题。</p>
         <div class="pa-starters">
           <button @click="emit('starter', '结合当前作品状态，告诉我现在最值得关注的创作问题。')"><Waypoints :size="16" /><span><strong>现在最值得关注什么？</strong><small>从进度和作品结构中判断</small></span></button>
-          <button @click="emit('starter', '当前创作进行到哪里？有没有阻断或异常？')"><CircleDashed :size="16" /><span><strong>创作推进到哪里了？</strong><small>查看现场与阻断</small></span></button>
+          <button @click="emit('starter', '把当前作品设为长期目标，持续创作、审查并推进，直到满足正式交付条件。')"><CircleDashed :size="16" /><span><strong>持续完成到交付</strong><small>启动可恢复的长期目标</small></span></button>
           <button @click="emit('starter', '请在现有正文和项目资料中查找最重要的未解决问题。')"><Search :size="16" /><span><strong>作品还留下哪些问题？</strong><small>检索正文和项目档案</small></span></button>
         </div>
       </section>

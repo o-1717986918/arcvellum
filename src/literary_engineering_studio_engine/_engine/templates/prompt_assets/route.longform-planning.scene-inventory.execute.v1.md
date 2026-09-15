@@ -25,6 +25,7 @@ hard_constraints:
   - The participants column contains only durable human or character roles that should own formal character assets.
   - Every participants item is a bare stable identity label or role token. Never append parentheses, action notes, reveal timing, aliases, or descriptive clauses to an identity.
   - Never put a location vehicle signal object organization camera subject or unnamed crowd in participants.
+  - Never embed candidate_sha256 task_digest session identifiers or other Studio lifecycle metadata in the candidate; exact identity is bound externally after the file is complete.
 style_constraints:
   - Scene summaries must describe events and choices not prose decoration.
 output_contract:
@@ -54,5 +55,7 @@ Write `plot/candidates/scenes/word_budget_scene_inventory.md` in this exact repe
 Use one unique `SC-###` row for every planned scene. `target_chars` must be a positive integer. The 11 data columns are mandatory, and the total row count must reconcile with `word_budget.json`.
 
 Before finishing the candidate, reconcile the total row count, contiguous `SC-001..SC-N` sequence, each chapter's row count, each chapter's `target_chars` sum, and the whole-book sum with `word_budget.json`. Do not write a verdict; a separate Reviewer will parse and judge the finished candidate.
+
+Do not place a candidate digest, task digest, Writer or Reviewer session identifier, run identifier, or any other lifecycle metadata in this Markdown. A file cannot truthfully contain its own final digest because adding the digest changes the file. Studio computes and binds the exact digest outside the candidate after writing finishes.
 
 `participants` is a character contract, not a list of every noun present in the scene. Use `主角` for the foundational protagonist until a canonical name is fixed. List another participant only when the story intends that person or durable character role to receive a reusable formal character asset before roleplay and prose. Each item must be a bare identity such as `幸存者` or `调度员`; `幸存者（以信号点名身份现身）` is invalid because the parenthetical belongs in information release. Put stations, ships, signals, interfaces, organizations, objects, anonymous crowds, scenery, actions, aliases, and reveal notes into the conflict, information-release, consequence, or setting wording instead.

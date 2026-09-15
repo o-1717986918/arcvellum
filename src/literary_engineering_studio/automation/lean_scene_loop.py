@@ -14,6 +14,7 @@ from literary_engineering_studio_engine.public.literary import (
     ReviewDecision,
     SceneExecutionMode,
     SceneTransactionStatus,
+    load_creative_quality_profile,
     load_scene_facts,
     load_scene_mapping,
 )
@@ -125,6 +126,7 @@ class LeanSceneRunCoordinator:
             verified = self.service.verify(
                 transaction.transaction_id,
                 known_refs=known_scene_refs(transaction.brief),
+                quality_profile=load_creative_quality_profile(self.project),
             )
             return self._step("verified", verified)
         if status is SceneTransactionStatus.REVIEWING:
@@ -134,17 +136,19 @@ class LeanSceneRunCoordinator:
     def _revise(self, transaction) -> LeanSceneStep:
         if transaction.creative_result is None or transaction.verification is None:
             return self._blocked(transaction, "revision inputs are incomplete")
-        if transaction.revision_attempts >= transaction.policy.max_revision_attempts:
-            return self._blocked(transaction, "automatic scene revision budget is exhausted")
-        revised = self.revision_runtime.revise_scene(
-            transaction.transaction_id,
-            transaction.brief,
-            transaction.creative_result,
-            transaction.verification,
-            transaction.review,
-            attempt=transaction.revision_attempts + 1,
-        )
-        return self._step("revised", self.service.accept_revision(transaction.transaction_id, revised))
+        try:
+            revised = self.revision_runtime.revise_scene(
+                transaction.transaction_id,
+                transaction.brief,
+                transaction.creative_result,
+                transaction.verification,
+                transaction.review,
+                attempt=transaction.revision_attempts + 1,
+            )
+            accepted = self.service.accept_revision(transaction.transaction_id, revised)
+        except Exception as exc:
+            return self._blocked(transaction, str(exc))
+        return self._step("revised", accepted)
 
     def _commit(self, transaction, steward_approved: bool) -> LeanSceneStep:
         if transaction.policy.steward_approval_required and not steward_approved:
@@ -199,7 +203,8 @@ class LeanSceneRunCoordinator:
                 for item in transactions
             ):
                 continue
-            digest = _checkpoint_digest(transactions)
+            facts = load_chapter_planning_facts(self.project, chapter_id)
+            digest = _checkpoint_digest(transactions, facts)
             target = self._checkpoint_path(chapter_id)
             current = _read_json(target)
             if current.get("input_digest") == digest:
@@ -210,7 +215,6 @@ class LeanSceneRunCoordinator:
                         blocked=True,
                     )
                 continue
-            facts = load_chapter_planning_facts(self.project, chapter_id)
             bundle = ProjectPlanBundle(
                 chapter=facts,
                 story_spine_ref="plot/story_architecture.candidate.json",
@@ -298,12 +302,15 @@ class LeanSceneRunCoordinator:
         )
 
 
-def _checkpoint_digest(transactions) -> str:
+def _checkpoint_digest(transactions, facts) -> str:
     values = [
         item.commit_receipt.committed_revision
         for item in transactions
         if item is not None and item.commit_receipt is not None
     ]
+    values.append(
+        json.dumps(asdict(facts), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    )
     return hashlib.sha256("\n".join(values).encode("utf-8")).hexdigest()
 
 

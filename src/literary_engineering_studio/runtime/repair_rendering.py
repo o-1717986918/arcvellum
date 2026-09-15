@@ -84,6 +84,10 @@ Repair Context: `{payload.get('context_digest')}`
 
 写范围模式：`{payload.get('write_scope_mode')}`。只修改上列输出；其他已通过输出会由 Studio 确定性恢复。
 
+JSON 定点修复使用 `write_expected_output(operation="patch_json", patches=[...])`，选择器必须来自下方 issue。
+删除整条无效数组记录时对其父项使用 `remove`，例如 `revision_actions[4]`；修正字段时使用 `replace`。
+不得对 JSON 使用 `replace_fragment`，也不得依据有界片段重写完整大型 JSON。
+
 ## 确定性问题
 
 {issue_text}
@@ -143,11 +147,28 @@ def _quantitative_repair_text(
     payload: Mapping[str, object],
 ) -> str:
     length_issue = _length_shortfall(issue_rows)
-    if length_issue is None:
-        return ""
-    current, minimum = length_issue
     guard = payload.get("regression_guard")
     guard_row = guard if isinstance(guard, Mapping) else {}
+    if length_issue is None:
+        overage = _length_overage(issue_rows)
+        if overage is None:
+            return ""
+        current, maximum = overage
+        target = int(guard_row.get("word_count_target") or 0)
+        minimum = int(guard_row.get("word_count_min") or 0)
+        lower = max(minimum, target - 60) if target else minimum
+        upper = min(maximum, target + 60) if target else max(0, maximum - 40)
+        if upper < lower:
+            lower, upper = minimum, maximum
+        required_cut = max(1, current - upper)
+        return (
+            "\n\n## 量化减量修订合同\n\n"
+            f"确定性计数为当前 {current}、最高 {maximum}。本回合必须净删至少 {required_cut} 个中文内容字符，"
+            f"完成后的清洁正文应落在 {lower}-{upper}，不得只删几句后再次提交。"
+            "优先删除偏离选定分支的新增事件、重复心理解释和重复信息；保留审查要求的关键动作、因果、关系压力与场景桥。"
+            "删减后重新通读衔接，禁止用摘要句替代被删内容。\n\n"
+        )
+    current, minimum = length_issue
     maximum = int(guard_row.get("word_count_max") or 0)
     gap = max(0, minimum - current)
     safe_gain = max(120, gap + 80)
@@ -222,6 +243,30 @@ def _length_shortfall(
     return None
 
 
+def _length_overage(
+    issue_rows: list[Mapping[str, object]],
+) -> tuple[int, int] | None:
+    length_codes = {"candidate-word-budget-invalid", "scene-revision-invalid"}
+    patterns = (
+        re.compile(r"清洁正文\s*(\d+)\D+最高要求\s*(\d+)"),
+        re.compile(
+            r"cleaned body has\s*(\d+)\s*Chinese content chars,\s*"
+            r"above max_chinese_chars=(\d+)",
+            re.IGNORECASE,
+        ),
+    )
+    for row in issue_rows:
+        if str(row.get("code") or "") not in length_codes:
+            continue
+        message = str(row.get("message") or "")
+        for pattern in patterns:
+            match = pattern.search(message)
+            if match:
+                current, maximum = (int(value) for value in match.groups())
+                return current, maximum
+    return None
+
+
 def _reasoning_budget_text(payload: Mapping[str, object]) -> str:
     budgets = payload.get("budgets")
     budget_rows = budgets if isinstance(budgets, Mapping) else {}
@@ -265,17 +310,26 @@ def _select_value(
     selector: str,
 ) -> tuple[bool, object]:
     current = payload
-    segments = [
-        item
-        for item in selector.replace("/", ".").split(".")
-        if item
-    ]
+    segments = _selector_segments(selector)
     for segment in segments:
-        if isinstance(current, Mapping) and segment in current:
+        if isinstance(segment, int) and isinstance(current, list):
+            if segment < 0 or segment >= len(current):
+                return False, None
+            current = current[segment]
+            continue
+        if isinstance(segment, str) and isinstance(current, Mapping) and segment in current:
             current = current[segment]
             continue
         return False, None
     return True, current
+
+
+def _selector_segments(selector: str) -> list[str | int]:
+    normalized = selector.replace("/", ".")
+    segments: list[str | int] = []
+    for key, index in re.findall(r"(?:^|\.)([^.\[\]]+)|\[(\d+)\]", normalized):
+        segments.append(int(index) if index else key)
+    return segments
 
 
 def _head_tail(text: str, limit: int) -> str:

@@ -348,6 +348,72 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
             accepted = validate_task_outputs(task, sandbox)
             self.assertTrue(accepted.passed, accepted.as_dict())
 
+    def test_review_revision_canonicalization_resets_lifecycle_from_candidate_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            task_dir = project / "workflow" / "tasks"
+            task_dir.mkdir(parents=True)
+            candidate_rel = "characters/candidates/protagonist.json"
+            candidate_report_rel = "characters/candidates/protagonist.md"
+            review_rel = "reviews/assets/protagonist_review.json"
+            review_report_rel = "reviews/assets/protagonist_review.md"
+            completion_rel = "reviews/assets/protagonist_review.agent_completion.json"
+            candidate = _candidate_payload()
+            for relative, content in (
+                (candidate_rel, json.dumps(candidate, ensure_ascii=False)),
+                (candidate_report_rel, "# 候选人物\n"),
+                (review_rel, json.dumps(_review_payload("revise_required"), ensure_ascii=False)),
+                (review_report_rel, "# 审查报告\n"),
+            ):
+                path = project / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            before = hashlib.sha256((project / candidate_rel).read_bytes()).hexdigest()
+            task_json = task_dir / "revision-shape.json"
+            task_markdown = task_dir / "revision-shape.agent_tasks.md"
+            task_markdown.write_text("# revision\n", encoding="utf-8")
+            task_json.write_text(
+                json.dumps(
+                    {
+                        "schema": TASK_SCHEMA,
+                        "task_id": "revision-shape",
+                        "route": "character-and-world-assets",
+                        "current_state": "asset-review-pass",
+                        "task_type": "platform-agent-revision",
+                        "asset_type": "character",
+                        "candidate": candidate_rel,
+                        "candidate_sha256_before_revision": before,
+                        "task_markdown": "workflow/tasks/revision-shape.agent_tasks.md",
+                        "required_reading": [],
+                        "source_paths": [],
+                        "expected_outputs": [candidate_rel, candidate_report_rel, review_report_rel, review_rel, completion_rel],
+                        "core_managed_outputs": [candidate_report_rel, review_report_rel, review_rel, completion_rel],
+                        "validation_gates": ["candidate schema validates", "review status is recheck_required"],
+                        "forbidden_shortcuts": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            task = load_task_package(project, task_json)
+            sandbox = stage_task(task, root / "runs", runtime="pi-worker")
+            revised_candidate = json.loads((sandbox.workspace / candidate_rel).read_text(encoding="utf-8"))
+            revised_candidate["promotion_notes"] = "已完成候选内修订，等待独立复审。"
+            (sandbox.workspace / candidate_rel).write_text(json.dumps(revised_candidate, ensure_ascii=False), encoding="utf-8")
+
+            changes = canonicalize_task_outputs(task, sandbox)
+            accepted = validate_task_outputs(task, sandbox)
+            normalized = json.loads((sandbox.workspace / review_rel).read_text(encoding="utf-8"))
+
+            self.assertTrue(accepted.passed, accepted.as_dict())
+            self.assertEqual(normalized["status"], "recheck_required")
+            self.assertEqual(normalized["revision_round"], 1)
+            self.assertTrue(normalized["applied_revision_actions"])
+            self.assertEqual(normalized["blocking_issues"], [])
+            self.assertEqual(normalized["revision_actions"], [])
+            self.assertTrue(any(item.get("field") == "asset-revision-reset" for item in changes))
+
     def test_approval_revision_generates_lifecycle_evidence_after_candidate_change(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -495,6 +561,16 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
             contract = "\n".join(blueprint["hard_constraints"])
             self.assertIn("`REV-101`", contract)
             self.assertIn("`REV-102`", contract)
+            self.assertEqual(
+                set(blueprint["core_managed_outputs"]),
+                {
+                    "characters/candidates/protagonist.md",
+                    "reviews/assets/protagonist_review.md",
+                    "reviews/assets/protagonist_review.json",
+                    "reviews/assets/protagonist_review.agent_completion.json",
+                },
+            )
+            self.assertIn("只对候选 JSON", contract)
 
             fields = asset_route._asset_system_owned_fields(
                 candidate_id="protagonist",

@@ -16,7 +16,10 @@ from literary_engineering_studio_engine.public.workflow import (
     build_workflow_state,
     next_scene_workflow_state,
 )
-from literary_engineering_studio_engine.public.literary import target_length_repair_pending
+from literary_engineering_studio_engine.public.literary import (
+    lean_scene_readiness,
+    target_length_repair_pending,
+)
 from literary_engineering_studio_engine.public.projects import is_authorized_demo_reference
 from ..runtime.readiness import require_runtime_ready
 from ..runtime.runtime_selection import runtime_for_role
@@ -87,6 +90,20 @@ def _pending_scene_dependency(project: Path) -> bool:
     """Return whether formal export must first close an earlier scene."""
 
     try:
+        scene_paths = tuple(
+            path
+            for path in sorted((project / "scenes").glob("*.yaml"))
+            if not path.name.startswith("_")
+        )
+        lean_states = tuple(
+            lean_scene_readiness(project, path.stem)
+            for path in scene_paths
+        )
+        if any(state is not None for state in lean_states):
+            return any(
+                state is None or state[0] != "ready"
+                for state in lean_states
+            )
         return next_scene_workflow_state(project) is not None
     except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError):
         return False

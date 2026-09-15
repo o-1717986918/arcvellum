@@ -10,6 +10,7 @@ from typing import Any
 
 
 CONFIG_SCHEMA = "literary-engineering-studio/config/v0.9"
+DEFAULT_PI_MODEL = "deepseek/deepseek-v4-flash"
 
 
 def repository_root() -> Path:
@@ -192,9 +193,9 @@ def default_config() -> dict[str, Any]:
                 "enabled": True,
                 "executable": "",
                 "entrypoint": "",
-                "model": "",
+                "model": DEFAULT_PI_MODEL,
                 "models": {
-                    role: ""
+                    role: DEFAULT_PI_MODEL
                     for role in (
                         "worker",
                         "reviewer",

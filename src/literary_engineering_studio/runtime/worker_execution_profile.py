@@ -177,6 +177,8 @@ def build_runtime_kwargs(
     if runtime_id == "pi-worker":
         kwargs["allowed_states"] = (task.current_state,)
         _bind_initial_pi_repair(task, sandbox, kwargs)
+        _align_pi_prose_budget(task, profile, kwargs)
+        _align_pi_prose_repair_budget(task, profile, kwargs)
     return kwargs
 
 
@@ -243,3 +245,56 @@ def _raise_provider_request_floor(
         int(normalized.get("max_provider_requests") or 0), request_floor
     )
     kwargs["reasoning_budget"] = normalized
+
+
+def _align_pi_prose_budget(
+    task: TaskPackage,
+    profile: TaskExecutionProfile,
+    kwargs: dict[str, Any],
+) -> None:
+    """Reserve enough bounded turns to commit prose and its semantic receipt.
+
+    Pi models may conservatively split a scene into several finalizable writes.
+    A three-request reasoning budget can therefore stop after valid prose and
+    JSON have been produced but before the text artifact is committed.  Keep
+    the adjustment local to prose tasks; the existing no-progress, turn and
+    tool guards still bound every run.
+    """
+
+    if profile.task_kind.value != "prose":
+        return
+    if task.task_type == "platform-agent-revision" and _agent_repair_targets(task):
+        return
+    agent_outputs = sum(
+        output.kind == "agent-authored"
+        for output in task.execution_contract.outputs
+    )
+    is_revision = task.task_type == "platform-agent-revision"
+    # A fresh revision owns prose, a report and a semantic manifest.  Reserve
+    # enough same-session turns for one measured prose correction after the
+    # initial chunked write; restarting the whole task is much more expensive.
+    request_floor = max(10 if is_revision else 5, agent_outputs + (6 if is_revision else 3))
+    kwargs["max_turns"] = max(int(kwargs.get("max_turns") or 0), request_floor)
+    kwargs["max_tool_calls"] = max(
+        int(kwargs.get("max_tool_calls") or 0), request_floor + 1
+    )
+    _raise_provider_request_floor(kwargs, request_floor)
+
+
+def _align_pi_prose_repair_budget(
+    task: TaskPackage,
+    profile: TaskExecutionProfile,
+    kwargs: dict[str, Any],
+) -> None:
+    """Let semantic prose repair converge without making retries unbounded.
+
+    A revision can fix one deterministic punctuation or style finding and
+    expose another on the rewritten sentence. Two outer repair passes are too
+    narrow for that legitimate sequence and cause an expensive full-task
+    restart. Four passes remain bounded by the existing stagnation, progress,
+    turn and tool guards while covering the observed convergence depth.
+    """
+
+    if profile.task_kind.value != "prose" or task.task_type != "platform-agent-revision":
+        return
+    kwargs["max_repairs"] = max(int(kwargs.get("max_repairs") or 0), 4)

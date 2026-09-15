@@ -296,6 +296,7 @@ class IncrementalRepairContextTests(unittest.TestCase):
                 payload["invalid_outputs"][0]["excerpt"].strip(),
                 '{\n  "status": "bad"\n}',
             )
+            self.assertIn('operation="patch_json"', prepared.prompt)
             self.assertNotIn("X" * 20, prepared.prompt)
             self.assertNotIn("已经通过的正文", prepared.prompt)
             self.assertIn("review-invalid-", prepared.prompt)
@@ -317,6 +318,47 @@ class IncrementalRepairContextTests(unittest.TestCase):
                 finalized["restored_outputs"],
                 ["out/passed.md"],
             )
+
+    def test_targeted_context_selects_nested_json_array_value(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root, ("out/invalid.json",))
+            sandbox = _sandbox(root)
+            invalid = sandbox.workspace / "out" / "invalid.json"
+            invalid.parent.mkdir(parents=True)
+            invalid.write_text(
+                json.dumps(
+                    {
+                        "revision_actions": [
+                            {"target": "candidate.json"},
+                            {"target": "review.md"},
+                        ],
+                        "large": "X" * 5_000,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "asset-review-invalid",
+                        "out/invalid.json#revision_actions[1].target",
+                        "target must address the candidate",
+                        "remove the invalid revision action",
+                    ),
+                ),
+            )
+
+            prepared = RepairContextCoordinator(task, sandbox).prepare(result, 1, 2)
+            payload = json.loads(prepared.artifact_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(
+                json.loads(payload["invalid_outputs"][0]["excerpt"]),
+                {"revision_actions[1].target": "review.md"},
+            )
+            self.assertNotIn("X" * 20, prepared.prompt)
 
     def test_repair_context_carries_a_non_escalating_mechanical_budget(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -518,6 +560,42 @@ class IncrementalRepairContextTests(unittest.TestCase):
             self.assertEqual(prepared.repair_references, ("drafts/scenes/scene_0005.md",))
             self.assertEqual(payload["repair_references"], ["drafts/scenes/scene_0005.md"])
             self.assertNotIn("canon/timeline.yaml", payload["repair_references"])
+
+    def test_overlong_revision_gets_a_quantified_reduction_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _task(root, ("out/scene_revision.md",), current_state="candidate-revision")
+            task.payload.update(
+                {
+                    "word_count_target": 1212,
+                    "word_count_min": 1091,
+                    "word_count_max": 1333,
+                }
+            )
+            sandbox = _sandbox(root)
+            output = sandbox.workspace / "out" / "scene_revision.md"
+            output.parent.mkdir(parents=True)
+            output.write_text("正文" * 900, encoding="utf-8")
+            result = PreflightResult(
+                False,
+                (
+                    PreflightIssue(
+                        "scene-revision-invalid",
+                        "out/scene_revision.md",
+                        "cleaned body has 1708 Chinese content chars, above max_chinese_chars=1333",
+                        "压缩正文。",
+                    ),
+                ),
+            )
+            coordinator = RepairContextCoordinator(task, sandbox)
+
+            prepared = coordinator.prepare(result, 1, 2)
+            coordinator.finalize()
+
+            self.assertIn("量化减量修订合同", prepared.prompt)
+            self.assertIn("当前 1708、最高 1333", prepared.prompt)
+            self.assertIn("净删至少 436", prepared.prompt)
+            self.assertIn("1152-1272", prepared.prompt)
 
     def test_prose_repair_keeps_style_and_budget_as_cross_turn_guards(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -38,6 +38,10 @@ from ..literary.ingest.evidence import canonical_digest
 from ..literary.planning.contracts import word_budget_adherence_for_body
 from ..literary.planning.materializer import scene_inventory_contract_issues
 from ..literary.planning.length_repair import target_length_repair_pending
+from ..literary.planning.chapter_inventory import (
+    formal_chapter_ids,
+    formal_scene_ids_for_chapter,
+)
 from ..literary.planning.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 from ..literary.planning.narrative_rhythm import analyze_narrative_rhythm_sequence
 from ..literary.review.creative_quality import (
@@ -91,6 +95,7 @@ from ..literary.scene.promotion.generation_gate import (
     candidate_language_gate,
 )
 from ..literary.scene.promotion.historical import validate_historical_promotion
+from ..literary.scene.promotion.historical_readiness import lean_scene_readiness
 from ..literary.scene.promotion.revision_contract import (
     revision_manifest_errors,
     revision_source_requires_anti_evasion_rows,
@@ -143,7 +148,7 @@ from ..literary.style.version import (
     plan_style_profile_version,
 )
 
-__all__ = [
+__all__ = sorted([
     "ASSET_CANDIDATE_DIRS",
     "ASSET_SCHEMA_NAMES",
     "CanonPatchCandidateIssue",
@@ -208,12 +213,15 @@ __all__ = [
     "export_markdown_to_docx",
     "file_sha256",
     "final_body_from_draft_path",
+    "formal_chapter_ids",
+    "formal_scene_ids_for_chapter",
     "formal_style_profile_dirs",
     "import_work_source",
     "inspect_active_style_mount",
     "inspect_style_profile_version",
     "inspect_style_version_directory",
     "latest_approval",
+    "lean_scene_readiness",
     "lint_punctuation",
     "list_author_projects",
     "list_style_skills",
@@ -257,4 +265,4 @@ __all__ = [
     "validate_reconstruction_candidate",
     "word_budget_adherence_for_body",
     "verify_creative_result",
-]
+])

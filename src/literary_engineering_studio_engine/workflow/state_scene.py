@@ -18,6 +18,7 @@ from ..literary.scene.promotion.historical_readiness import static_review_eviden
 from ..literary.scene.facts import load_scene_facts
 from ..tasking.semantic_contracts import semantic_artifact_errors, semantic_artifact_relative_path
 from ..tasking.storage import load_task_payload
+from .lean_scene_state import build_lean_scene_state
 from ..literary.planning.contracts import scene_word_budget_contract
 from .historical_truth import candidate_supersedes_promotion
 from .historical_truth import preserve_current_historical_style_steps
@@ -131,6 +132,9 @@ def _latest_scene_task_id(root: Path) -> str:
 
 def _scene_state(root: Path, scene_path: Path) -> dict[str, object]:
     scene_id = _scene_id(scene_path)
+    lean_state = build_lean_scene_state(root, scene_id, _rel(scene_path, root))
+    if lean_state is not None:
+        return lean_state
     candidate = _current_scene_candidate(root, scene_id)
     context_trace = root / "memory" / "context_packets" / f"{scene_id}.trace.json"
     roleplay = root / "branches" / scene_id / "roleplay_simulation.md"
@@ -420,6 +424,7 @@ def _review_step(root: Path, scene_id: str, candidate: Path | None) -> dict[str,
         "semantic_contract_failed",
         "stale_or_wrong_source",
         "creative_quality_review_stale",
+        "style_mount_snapshot_stale",
         "word_budget_review_failed",
         "reader_experience_review_failed",
         "narrative_rhythm_review_failed",

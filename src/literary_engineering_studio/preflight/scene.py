@@ -11,6 +11,7 @@ from .common import PreflightIssue
 from .scene_review_contract import validate_scene_review_contract as _validate_scene_review_contract
 from .scene_manifest_metadata import scene_revision_paths
 from .scene_length_repair import target_length_revision_errors
+from .revision_guidance import revision_manifest_repair
 from ..sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.tasking import SCENE_CANDIDATE_STATES, SCENE_REVISION_STATES
 
@@ -311,6 +312,10 @@ def _revision_preflight_errors(
     if not (source.is_file() and candidate.is_file()):
         return []
     errors = _revision_file_errors(source_rel, source, candidate_rel, candidate, previous)
+    anti_evasion_rows_required = revision_source_requires_anti_evasion_rows(source,
+        quality_profile=load_creative_quality_profile(sandbox.workspace),
+        scene_id=str(task.payload.get("scene_id") or task.scene_id or ""),
+    )
     contract_errors = revision_manifest_errors(
         payload,
         scene_id=str(task.payload.get("scene_id") or task.scene_id or candidate.stem.replace("_revision", "")),
@@ -320,14 +325,11 @@ def _revision_preflight_errors(
         candidate_rel=candidate_rel,
         candidate_sha256=hashlib.sha256(candidate.read_bytes()).hexdigest(),
         candidate_body=final_body_from_draft_path(candidate),
-        anti_evasion_rows_required=revision_source_requires_anti_evasion_rows(source,
-            quality_profile=load_creative_quality_profile(sandbox.workspace),
-            scene_id=str(task.payload.get("scene_id") or task.scene_id or ""),
-        ),
+        anti_evasion_rows_required=anti_evasion_rows_required,
     )
     manifest_rel = scene_revision_paths(task)[1]
     errors.extend(
-        (manifest_rel, message, "按 revision prompt 的 exact-source 与 anti_evasion_rows 契约修正 manifest；不得伪造摘要或换皮修订。")
+        (manifest_rel, message, revision_manifest_repair(message, anti_evasion_rows_required))
         for message in contract_errors
     )
     errors.extend(target_length_revision_errors(task, sandbox, candidate_rel, candidate))

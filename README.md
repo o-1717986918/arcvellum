@@ -51,11 +51,11 @@ v0.99.4 新增“创作现场”。正文候选会在 Pi Worker 写入正式文�
 
 ![ArcVellum v0.99.4 创作现场](docs/images/arcvellum-creative-live-v0994.png)
 
-### 一位有边界的创作顾问
+### 一位能把长任务做完的项目 Agent
 
-悬浮顾问可以用自然语言讨论人物、结构、节奏、文风和下一步，并把“继续创作”“暂停”“记录这个方向”“打开正文”等明确意图翻译为可确认的 Studio 动作。
+项目 Agent 可以用自然语言讨论人物、结构、节奏和文风，也可以创建作品、记录方向、管理创作配置、处理项目决定，并把“完成这部作品”交给后台持续执行。长期目标运行时，对话会持续显示真实进度；作品完成或遇到阻断后，同一轮对话会自动恢复，核验项目证据并给出结果，无需用户再发一句“检查完成了吗”。
 
-它不是拥有隐藏文件权限的万能进程：顾问只读取项目投影，只能提出白名单动作，不能绕过审查、正文晋升、Canon 写回或交付门禁。创作判断仍然可以自由，项目权限必须保持克制。
+项目 Agent 通过有界领域工具管理整个作品库，不直接编辑项目文件。Autopilot 在内部负责长时间循环、租约和恢复，Lean v2 内核维护正文、审查、Canon 与交付事实，Pi Worker 完成具体文学任务。等待后台创作时不会保留空闲模型进程。
 
 ## ArcVellum 与普通 AI 写作工具的差别
 
@@ -97,7 +97,7 @@ flowchart LR
 3. **创作候选与项目事实必须分层。** 正文候选、Canon 提案、人物状态补丁与已晋升正文不是同一种东西，各自拥有不同的来源、审查和写回规则。
 4. **界面只展示真实状态。** 星仪、决策中心、阅读器、任务面板与进度条都投影自同一份受内核验证的项目状态，而不是演示数据。
 
-## v0.99.5 技术基线
+## v0.99.6 技术基线
 
 | 能力 | 当前实现 |
 | --- | --- |
@@ -108,6 +108,7 @@ flowchart LR
 | 文学求解 | 字数预算、场景功能、角色推演、分支选择、节奏与衔接、Review CI、状态与 Canon 写回 |
 | 只读产品投影 | Narrative Projection 为星仪、正文、决策、档案和 Agent 运行中心提供统一状态 |
 | 创作可观测性 | Creative Live Event、项目级 SSE、候选正文快照、会话、Review、Diff 与用量投影 |
+| 长任务对话 | Project Agent 委托 Autopilot 后保持同一会话任务，流式观察进度，终态自动复核与回复 |
 | 连续验证样本 | 两章六场、30,080 个中文内容字符，完成审查、晋升、状态、Canon 与连续性闭环 |
 | 当前阶段 | Beta，继续积累多题材长篇、无人值守恢复、干净机器安装和 macOS 签名证据 |
 
@@ -260,8 +261,8 @@ ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新�
 - [Agent 面向接口开发标准](docs/architecture/agent-interface-development-standard.md)
 - [模块边界](docs/architecture/module-boundaries.md)
 - [发布与签名指南](docs/releases/RELEASING.md)
-- [v0.99.5 发行说明](docs/releases/v0.99.5.md)
-- [v0.99.5 发布验证记录](docs/releases/v0.99.5-verification.md)
+- [v0.99.6 发行说明](docs/releases/v0.99.6.md)
+- [v0.99.6 发布验证记录](docs/releases/v0.99.6-verification.md)
 - [v0.99.0 发行说明](docs/releases/v0.99.0.md)
 - [v0.98.0 发行说明](docs/releases/v0.98.0.md)
 - [v0.97.4 发行说明](docs/releases/v0.97.4.md)

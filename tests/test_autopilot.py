@@ -39,6 +39,34 @@ class _Audit:
 
 
 class AutopilotTests(unittest.TestCase):
+    def test_managed_goal_replaces_an_incompatible_running_policy_without_overlap(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: Tide\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+            old = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="collaborative",
+                runtime="pi-worker",
+                policy=default_policy("collaborative", literary_kernel="strict-v1"),
+            )
+            target = default_policy("full_auto", literary_kernel="lean-v2")
+            target["release_policy"] = "delegated"
+
+            with patch("literary_engineering_studio.automation.controller._validate_autopilot_project"), patch(
+                "literary_engineering_studio.automation.controller._validate_autopilot_runtime"
+            ), patch.object(service, "_launch"):
+                run = service.start_managed_goal(project, target)
+
+            self.assertNotEqual(run["run_id"], old["run_id"])
+            self.assertEqual(store.read_autopilot_run(old["run_id"])["status"], "paused")
+            self.assertEqual(run["policy"]["mode"], "full_auto")
+            self.assertEqual(run["policy"]["literary_kernel"], "lean-v2")
+            self.assertEqual(run["policy"]["release_policy"], "delegated")
+
     def test_full_auto_steward_escalation_uses_safe_revision_when_available(self):
         class EscalatingSteward:
             def decide(self, project, choice, *, project_direction="", timeout=180, cancel_event=None):
@@ -275,17 +303,10 @@ class AutopilotTests(unittest.TestCase):
         })
         self.assertEqual(
             normalized["limits"],
-            {"max_consecutive_revisions": 4, "max_failures_per_task": 2},
+            {"max_failures_per_task": 2},
         )
         self.assertNotIn("expires_at", normalized)
-        self.assertEqual(
-            full.limit_reason({
-                "tasks_completed": 999999,
-                "estimated_cost": 999999,
-                "consecutive_revisions": 0,
-            }),
-            "",
-        )
+        self.assertNotIn("max_consecutive_revisions", normalized["limits"])
 
     def test_cancelled_steward_decision_never_records_a_choice(self):
         class CancellingSteward:
@@ -646,6 +667,46 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(completed["stalled_cycles"], 0)
             self.assertTrue(completed["progress_fingerprint"])
 
+    def test_missing_chapter_exports_rewinds_release_instead_of_blocking(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: 潮线\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy_payload = default_policy("full_auto")
+            run = store.create_autopilot_run(
+                str(project.resolve()),
+                mode="full_auto",
+                runtime="pi-worker",
+                policy=policy_payload,
+            )
+            store.update_autopilot_run(
+                run["run_id"],
+                route_index=len(ROUTE_ORDER),
+                current_route="scene-development",
+                status="running",
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+
+            completed = service._complete_release(
+                run["run_id"],
+                project,
+                store.read_autopilot_run(run["run_id"]),
+                DelegationPolicy(policy_payload),
+            )
+
+            recovered = store.read_autopilot_run(run["run_id"])
+            events = store.autopilot_events_since(run["run_id"])
+            self.assertFalse(completed)
+            self.assertEqual(recovered["status"], "running")
+            self.assertEqual(recovered["current_route"], "export-and-release")
+            self.assertEqual(
+                recovered["route_index"],
+                ROUTE_ORDER.index("export-and-release"),
+            )
+            self.assertTrue(any(event["event"] == "release.deferred" for event in events))
+
     def test_policy_update_discards_legacy_run_ceilings(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -663,7 +724,7 @@ class AutopilotTests(unittest.TestCase):
             resumed_policy = store.read_autopilot_run(run["run_id"])["policy"]
             self.assertEqual(
                 resumed_policy["limits"],
-                {"max_consecutive_revisions": 3, "max_failures_per_task": 2},
+                {"max_failures_per_task": 2},
             )
             self.assertNotIn("expires_at", resumed_policy)
             self.assertEqual(result["run"]["run_id"], run["run_id"])
@@ -681,7 +742,7 @@ class AutopilotTests(unittest.TestCase):
                 run["run_id"],
                 status="paused",
                 stop_reason="revision-limit",
-                consecutive_revisions=policy["limits"]["max_consecutive_revisions"],
+                consecutive_revisions=12,
                 last_error="连续修订没有解决当前质量问题。",
             )
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
@@ -693,7 +754,6 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(renewed["consecutive_revisions"], 0)
             self.assertEqual(renewed["stop_reason"], "")
             self.assertEqual(renewed["last_error"], "")
-            self.assertEqual(DelegationPolicy(renewed["policy"]).limit_reason(renewed), "")
             event = next(item for item in reversed(store.autopilot_events_since(run["run_id"])) if item["event"] == "autopilot.resumed")
             self.assertTrue(event["data"]["quality_retry_reset"])
 
@@ -1284,6 +1344,60 @@ class AutopilotTests(unittest.TestCase):
             )()
             with self.assertRaisesRegex(RuntimeError, "未返回 blocking 字段"):
                 coordinator.release(root, approved_by="studio-user")
+
+    def test_whole_book_release_uses_lean_scene_commits_instead_of_strict_scene_audit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            chapter = root / "exports" / "chapter_0001"
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            receipt = root / "workflow" / "scene_commits" / "scene_0001.json"
+            scene = root / "scenes" / "scene_0001.yaml"
+            chapter.mkdir(parents=True)
+            draft.parent.mkdir(parents=True)
+            receipt.parent.mkdir(parents=True)
+            scene.parent.mkdir(parents=True)
+            (root / "project.yaml").write_text("title: 潮汐之书\n", encoding="utf-8")
+            prose = "潮水退去，她看见了那封信。"
+            draft.write_text(prose, encoding="utf-8")
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n",
+                encoding="utf-8",
+            )
+            receipt.write_text(
+                json.dumps(
+                    {
+                        "schema": "arcvellum/scene-commit/v2",
+                        "scene_id": "scene_0001",
+                        "prose_sha256": hashlib.sha256(prose.encode("utf-8")).hexdigest(),
+                        "review_decision": "pass",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (chapter / "chapter_0001_novel.md").write_text(
+                f"# 第一章\n\n{prose}\n",
+                encoding="utf-8",
+            )
+            coordinator = WholeBookReleaseCoordinator(
+                {"engine": {"python": "python", "module": "literary_engineering_studio_engine"}}
+            )
+            audited_routes: list[str] = []
+
+            def route_audit(_root, route):
+                audited_routes.append(route)
+                if route == "scene-development":
+                    return type("StrictBlocked", (), {"fields": {"blocking": "99"}})()
+                return _Audit()
+
+            coordinator.bridge.route_audit = route_audit
+
+            result = coordinator.release(root, approved_by="studio-user")
+
+            self.assertNotIn("scene-development", audited_routes)
+            self.assertEqual(
+                result["manifest"]["formal_audits"]["scene-development"]["literary_kernel"],
+                "lean-v2",
+            )
 
     def test_full_auto_three_chapter_direction_to_docx(self):
         class ThreeChapterWorker:

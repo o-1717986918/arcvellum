@@ -196,6 +196,7 @@ class ProjectAgentTurnResult:
 
 ProjectReadModel = Callable[[Path, Mapping[str, Any]], Mapping[str, Any]]
 ProjectAction = Callable[[Path, Mapping[str, Any]], Mapping[str, Any]]
+ProjectScopeResolver = Callable[[Path, Mapping[str, Any]], Path]
 
 
 @dataclass(frozen=True)
@@ -210,6 +211,9 @@ class ProjectAgentDependencies:
     project_search: ProjectReadModel
     creation_observe: ProjectReadModel
     project_controls: ProjectReadModel | None = None
+    workspace_catalog: ProjectReadModel | None = None
+    project_diagnose: ProjectReadModel | None = None
+    resolve_project: ProjectScopeResolver | None = None
 
 
 @dataclass(frozen=True)
@@ -223,3 +227,5 @@ class ProjectAgentActionDependencies:
     update_rhythm: ProjectAction | None = None
     mount_style: ProjectAction | None = None
     promote_asset: ProjectAction | None = None
+    create_project: ProjectAction | None = None
+    manage_goal: ProjectAction | None = None

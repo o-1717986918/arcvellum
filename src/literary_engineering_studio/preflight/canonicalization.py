@@ -244,6 +244,7 @@ def _canonicalize_story_architecture_metadata(task: TaskPackage, sandbox: Sandbo
         payload = _read_object(path)
         source = _read_object(candidate)
         if payload is not None and candidate.is_file():
+            changes.extend(_canonicalize_terminal_review_verdict(path, review_rel, payload))
             expected = {
                 "schema": "literary-engineering-workbench/story-architecture-review/v1",
                 "candidate_path": candidate_rel,
@@ -286,6 +287,7 @@ def _canonicalize_longform_planning_review_metadata(
     candidate = sandbox.workspace / candidate_rel
     if payload is None or not candidate_rel or not candidate.is_file():
         return []
+    changes = _canonicalize_terminal_review_verdict(path, relative, payload)
     expected: dict[str, Any] = {
         "schema": "literary-engineering-workbench/longform-planning-review/v1",
         "review_kind": str(contract.get("review_kind") or ""),
@@ -300,13 +302,54 @@ def _canonicalize_longform_planning_review_metadata(
         "block",
     }:
         expected["status"] = "complete"
-    return _write_machine_fields(
-        path,
-        relative,
-        payload,
-        expected,
-        "longform-planning-review",
+    changes.extend(
+        _write_machine_fields(
+            path,
+            relative,
+            payload,
+            expected,
+            "longform-planning-review",
+        )
     )
+    return changes
+
+
+def _canonicalize_terminal_review_verdict(
+    path: Path,
+    relative: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Translate a common model alias into the review contract's enum."""
+
+    verdict = str(payload.get("verdict") or "").strip().lower().replace("-", "_")
+    if verdict != "pass_with_notes":
+        return []
+    required_changes = payload.get("required_changes")
+    has_required_changes = (
+        bool(required_changes)
+        if isinstance(required_changes, (list, dict))
+        else bool(str(required_changes or "").strip())
+    )
+    final_state = str(payload.get("final_state") or "").strip().lower()
+    dimension_results = {
+        str(item.get("result") or "").strip().lower()
+        for item in (payload.get("dimensions") or [])
+        if isinstance(item, dict)
+    }
+    normalized = (
+        "revise"
+        if has_required_changes or "revise" in final_state or "revise" in dimension_results
+        else "pass"
+    )
+    payload["verdict"] = normalized
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return [
+        {
+            "path": relative,
+            "field": "verdict",
+            "reason": f"normalized pass_with_notes to {normalized} for the terminal review contract",
+        }
+    ]
 
 
 

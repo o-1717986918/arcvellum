@@ -17,6 +17,7 @@ import {
 import { safeThinkingLevel } from "./reasoning-budget.ts";
 
 const PROJECT_OVERVIEW_TOOL = "project_overview";
+const WORKSPACE_CATALOG_TOOL = "workspace_catalog";
 const PROJECT_SEARCH_TOOL = "project_search";
 const CREATION_OBSERVE_TOOL = "creation_observe";
 const PROJECT_CONTROLS_TOOL = "project_controls";
@@ -27,7 +28,11 @@ const PROJECT_QUALITY_UPDATE_TOOL = "project_quality_update";
 const PROJECT_RHYTHM_UPDATE_TOOL = "project_rhythm_update";
 const PROJECT_STYLE_MOUNT_TOOL = "project_style_mount";
 const PROJECT_ASSET_PROMOTE_TOOL = "project_asset_promote";
+const PROJECT_DIAGNOSE_TOOL = "project_diagnose";
+const PROJECT_CREATE_TOOL = "project_create";
+const PROJECT_GOAL_MANAGE_TOOL = "project_goal_manage";
 const SUPPORTED_TOOLS = new Set([
+	WORKSPACE_CATALOG_TOOL,
 	PROJECT_OVERVIEW_TOOL,
 	PROJECT_SEARCH_TOOL,
 	CREATION_OBSERVE_TOOL,
@@ -39,6 +44,9 @@ const SUPPORTED_TOOLS = new Set([
 	PROJECT_RHYTHM_UPDATE_TOOL,
 	PROJECT_STYLE_MOUNT_TOOL,
 	PROJECT_ASSET_PROMOTE_TOOL,
+	PROJECT_DIAGNOSE_TOOL,
+	PROJECT_CREATE_TOOL,
+	PROJECT_GOAL_MANAGE_TOOL,
 ]);
 
 export interface ProjectAgentStart {
@@ -220,11 +228,18 @@ function projectToolDefinition(name: string): {
 	description: string;
 	parameters: ReturnType<typeof Type.Object>;
 } {
+	if (name === WORKSPACE_CATALOG_TOOL) {
+		return {
+			label: "Read Work Catalog",
+			description: "List registered works and stable work_id values without exposing filesystem paths.",
+			parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 200 })) }),
+		};
+	}
 	if (name === PROJECT_OVERVIEW_TOOL) {
 		return {
 			label: "Read Project Overview",
 			description: "Read current project identity, progress, next action, and blocking state.",
-			parameters: Type.Object({ focus: Type.Optional(Type.String({ maxLength: 200 })) }),
+			parameters: Type.Object({ work_id: workId(), focus: Type.Optional(Type.String({ maxLength: 200 })) }),
 		};
 	}
 	if (name === PROJECT_SEARCH_TOOL) {
@@ -232,6 +247,7 @@ function projectToolDefinition(name: string): {
 			label: "Search Project",
 			description: "Search the indexed project library and promoted manuscript without reading arbitrary files.",
 			parameters: Type.Object({
+				work_id: workId(),
 				query: Type.String({ minLength: 1, maxLength: 300 }),
 				limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 })),
 			}),
@@ -240,12 +256,13 @@ function projectToolDefinition(name: string): {
 	if (name === CREATION_OBSERVE_TOOL) return {
 		label: "Observe Creation",
 		description: "Read current creation run, Agent activity, and recent workflow events.",
-		parameters: Type.Object({ focus: Type.Optional(Type.String({ maxLength: 200 })) }),
+		parameters: Type.Object({ work_id: workId(), focus: Type.Optional(Type.String({ maxLength: 200 })) }),
 	};
 	if (name === PROJECT_CONTROLS_TOOL) return {
 		label: "Inspect Project Controls",
 		description: "Read pending decisions, quality rules, rhythm, mounted style, or delivery readiness.",
 		parameters: Type.Object({
+			work_id: workId(),
 			section: Type.Optional(Type.Union([
 				Type.Literal("all"),
 				Type.Literal("decisions"),
@@ -261,6 +278,7 @@ function projectToolDefinition(name: string): {
 		label: "Record Creative Direction",
 		description: "Record a durable creative direction for the current project when it advances the user's stated goal.",
 		parameters: Type.Object({
+			work_id: workId(),
 			message: Type.String({ minLength: 1, maxLength: 6000 }),
 		}),
 	};
@@ -268,6 +286,7 @@ function projectToolDefinition(name: string): {
 		label: "Control Creation",
 		description: "Start, pause, or resume the project's lean-v2 creation run. Use this directly; do not ask for tool approval.",
 		parameters: Type.Object({
+			work_id: workId(),
 			operation: Type.Union([Type.Literal("start"), Type.Literal("pause"), Type.Literal("resume")]),
 			reason: Type.Optional(Type.String({ maxLength: 500 })),
 		}),
@@ -276,6 +295,7 @@ function projectToolDefinition(name: string): {
 		label: "Resolve Project Decision",
 		description: "Choose one currently available option and resume creation after it is consumed.",
 		parameters: Type.Object({
+			work_id: workId(),
 			choice_id: Type.String({ minLength: 1, maxLength: 300 }),
 			selected: Type.String({ minLength: 1, maxLength: 300 }),
 			rationale: Type.Optional(Type.String({ maxLength: 2000 })),
@@ -285,6 +305,7 @@ function projectToolDefinition(name: string): {
 		label: "Update Quality Rules",
 		description: "Replace the complete validated language and lint profile for future candidates.",
 		parameters: Type.Object({
+			work_id: workId(),
 			profile: Type.Object({}, { additionalProperties: true }),
 		}),
 	};
@@ -292,6 +313,7 @@ function projectToolDefinition(name: string): {
 		label: "Update Narrative Rhythm",
 		description: "Replace full-book rhythm entries and the optional book-level rhythm profile.",
 		parameters: Type.Object({
+			work_id: workId(),
 			entries: Type.Array(Type.Object({}, { additionalProperties: true }), { maxItems: 500 }),
 			book_profile: Type.Optional(Type.Object({}, { additionalProperties: true })),
 		}),
@@ -300,6 +322,7 @@ function projectToolDefinition(name: string): {
 		label: "Mount Style Version",
 		description: "Mount one exact immutable style version after Studio validates its current impact preview.",
 		parameters: Type.Object({
+			work_id: workId(),
 			style_id: Type.String({ minLength: 1, maxLength: 200 }),
 			version_id: Type.String({ minLength: 1, maxLength: 200 }),
 			content_hash: Type.String({ minLength: 8, maxLength: 200 }),
@@ -311,10 +334,44 @@ function projectToolDefinition(name: string): {
 		label: "Promote Reviewed Asset",
 		description: "Start formal promotion for an archive candidate only after its existing review and promotion gates pass.",
 		parameters: Type.Object({
+			work_id: workId(),
 			candidate_id: Type.String({ minLength: 1, maxLength: 300 }),
 		}),
 	};
+	if (name === PROJECT_DIAGNOSE_TOOL) return {
+		label: "Diagnose Project",
+		description: "Diagnose decisions, stalls, recoverable stops, or completion before taking recovery action.",
+		parameters: Type.Object({ work_id: workId(), focus: Type.Optional(Type.String({ maxLength: 300 })) }),
+	};
+	if (name === PROJECT_CREATE_TOOL) return {
+		label: "Create Work",
+		description: "Create and register a new literary work in the configured ArcVellum library.",
+		parameters: Type.Object({
+			title: Type.String({ minLength: 1, maxLength: 200 }),
+			work_type: Type.Optional(Type.String({ maxLength: 80 })),
+			target_length: Type.Optional(Type.Integer({ minimum: 1000, maximum: 10000000 })),
+			target_chapters: Type.Optional(Type.Integer({ minimum: 0, maximum: 10000 })),
+			target_scenes: Type.Optional(Type.Integer({ minimum: 0, maximum: 100000 })),
+			premise: Type.Optional(Type.String({ maxLength: 6000 })),
+			genre: Type.Optional(Type.String({ maxLength: 200 })),
+		}),
+	};
+	if (name === PROJECT_GOAL_MANAGE_TOOL) return {
+		label: "Manage Long-running Goal",
+		description: "Start, pause, resume, or recover a durable full-auto lean-v2 goal for one registered work.",
+		parameters: Type.Object({
+			work_id: workId(),
+			operation: Type.Union([
+				Type.Literal("start"), Type.Literal("pause"), Type.Literal("resume"), Type.Literal("recover"),
+			]),
+			objective: Type.Optional(Type.String({ maxLength: 8000 })),
+		}),
+	};
 	throw new Error(`unsupported Project Agent tool: ${name}`);
+}
+
+function workId() {
+	return Type.Optional(Type.String({ pattern: "^work-[a-f0-9]{16}$" }));
 }
 
 function parseStart(value: BridgeEnvelope): ProjectAgentStart {

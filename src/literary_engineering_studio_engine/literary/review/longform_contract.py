@@ -37,6 +37,7 @@ LONGFORM_AUDIT_SOURCE_PATHS = (
     "plot/word_budget",
     "reviews",
     "workflow/handoffs",
+    "workflow/scene_commits",
 )
 STRUCTURAL_BLOCKING_CATEGORIES = frozenset(
     {
@@ -80,7 +81,8 @@ _INPUT_GLOBS = (
     "drafts/promotions/*.json",
     "memory/context_packets/*.md",
     "memory/context_packets/*.trace.json",
-    "plot/chapters/*.json",
+    # Chapter workspaces are deterministic export projections. The audit may read
+    # them, but generating one after review must not invalidate literary evidence.
     "plot/chapter_obligations/*.json",
     "plot/chapter_obligations/*.agent_tasks.md",
     "plot/chapter_obligations/*.agent_completion.json",
@@ -97,6 +99,7 @@ _INPUT_GLOBS = (
     "reviews/schema_validation/*.json",
     "reviews/assets/*.json",
     "workflow/handoffs/scene_*.json",
+    "workflow/scene_commits/scene_*.json",
 )
 _OPEN_STATUSES = frozenset({"active", "delayed", "open", "opened", "pending", "postponed"})
 _CLOSED_STATUSES = frozenset({"closed", "complete", "completed", "paid", "resolved"})

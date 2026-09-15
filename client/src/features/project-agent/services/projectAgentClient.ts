@@ -14,6 +14,7 @@ export interface ProjectAgentClient {
   readSession(sessionId: string): Promise<ProjectAgentSession>;
   startTurn(sessionId: string, message: string): Promise<ProjectAgentTurnStart>;
   readJob(jobId: string): Promise<ProjectAgentJob>;
+  stopJob(jobId: string): Promise<{ job_id: string; status: string; stopped: boolean }>;
   observeJob(
     jobId: string,
     signal: AbortSignal,
@@ -40,6 +41,10 @@ export function createProjectAgentClient(transport: ApiTransport = featureTransp
     ),
     readJob: (jobId) => transport.request<ProjectAgentJob>(
       `/project-agent/jobs/${encodeURIComponent(jobId)}`,
+    ),
+    stopJob: (jobId) => transport.request<{ job_id: string; status: string; stopped: boolean }>(
+      `/project-agent/jobs/${encodeURIComponent(jobId)}/stop`,
+      { method: "POST" },
     ),
     observeJob: (jobId, signal, onEvent) => observeDurableEvents(transport, jobId, signal, onEvent),
   };

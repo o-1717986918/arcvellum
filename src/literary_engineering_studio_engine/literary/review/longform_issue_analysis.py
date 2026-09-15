@@ -6,6 +6,7 @@ from pathlib import Path
 
 from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
 from ..scene.promotion.historical import validate_historical_promotion
+from ..scene.promotion.historical_readiness import historical_scene_readiness
 from .longform_models import LongformIssue, LongformSceneRecord
 
 
@@ -138,6 +139,9 @@ def _readiness_issue(scene: LongformSceneRecord) -> LongformIssue | None:
 
 
 def _context_issues(root: Path, scene: LongformSceneRecord) -> list[LongformIssue]:
+    readiness = historical_scene_readiness(root, scene.scene_id)
+    if readiness is not None and readiness[0] == "ready":
+        return []
     historical = validate_historical_promotion(root, scene.scene_id)
     if historical.passed and historical.current:
         return []

@@ -40,7 +40,7 @@ describe("bounded worker lifecycle", () => {
 		expect(writer.systemPrompt).not.toContain("SKILL.md");
 		const repair = workerProfile("main-creative-agent", "repair");
 		expect(repair.systemPrompt).toContain("incremental-repair Worker");
-		expect(repair.systemPrompt).toContain("operation=append chunks");
+		expect(repair.systemPrompt).toContain("operation=append/continue_writing=true chunks");
 		expect(repair.systemPrompt).toContain("Do not stop after the first target");
 		expect(repair.systemPrompt).not.toContain("FIRST assistant action");
 		expect(repair.digest).not.toBe(writer.digest);

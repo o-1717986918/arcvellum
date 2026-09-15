@@ -6,6 +6,8 @@ from collections.abc import Collection
 import re
 
 from ....foundation.draft_text import count_delivery_chinese_content_chars
+from ...style.anti_ai import style_lint_gate
+from ...style.punctuation import lint_punctuation
 from .contracts import (
     CreativeResult,
     IssueSeverity,
@@ -25,6 +27,19 @@ _PROCESS_TRACE_PATTERNS = (
     re.compile(r"(?:task[_ -]?complete|completion[_ -]?marker|expected_outputs)", re.IGNORECASE),
 )
 
+_HARD_PUNCTUATION_RULES = frozenset(
+    {
+        "ascii-punctuation-in-chinese",
+        "ascii-ellipsis",
+        "ascii-dash",
+        "western-quotes-in-chinese",
+        "corner-quotes-in-horizontal-prose",
+        "punctuation-spacing",
+        "repeated-terminal-punctuation",
+        "repeated-punctuation",
+    }
+)
+
 
 def verify_creative_result(
     brief: SceneBrief,
@@ -32,6 +47,7 @@ def verify_creative_result(
     policy: ScenePolicy,
     *,
     known_refs: Collection[str] = (),
+    quality_profile: dict[str, object] | None = None,
 ) -> VerificationReport:
     """Check machine-verifiable output without making literary judgments."""
 
@@ -72,6 +88,7 @@ def verify_creative_result(
             break
 
     _append_length_issues(issues, brief, body_hanzi)
+    _append_language_issues(issues, prose, quality_profile, scope=brief.scene_id)
     _append_delta_issues(issues, result, known_refs)
     if result.escalation_reasons:
         issues.append(
@@ -177,6 +194,52 @@ def _append_delta_issues(
                     proposal.target_ref,
                 )
             )
+
+
+def _append_language_issues(
+    issues: list[VerificationIssue],
+    prose: str,
+    profile: dict[str, object] | None,
+    *,
+    scope: str,
+) -> None:
+    style = style_lint_gate(prose, profile=profile, scope=scope)
+    for row in style.get("blocking", []):
+        if not isinstance(row, dict):
+            continue
+        issues.append(
+            _issue(
+                f"style-{row.get('rule') or 'lint'}",
+                IssueSeverity.HARD,
+                str(row.get("message") or "prose failed the configured style lint"),
+                str(row.get("sample") or ""),
+            )
+        )
+    for row in style.get("notes", []):
+        if not isinstance(row, dict):
+            continue
+        issues.append(
+            _issue(
+                f"style-{row.get('rule') or 'lint'}",
+                IssueSeverity.WARNING,
+                str(row.get("message") or "prose has a style lint note"),
+                str(row.get("sample") or ""),
+            )
+        )
+    for finding in lint_punctuation(prose, profile=profile, scope=scope):
+        severity = (
+            IssueSeverity.HARD
+            if finding.rule in _HARD_PUNCTUATION_RULES
+            else IssueSeverity.WARNING
+        )
+        issues.append(
+            _issue(
+                f"punctuation-{finding.rule}",
+                severity,
+                finding.message,
+                finding.sample,
+            )
+        )
 
 
 def _issue(

@@ -79,7 +79,20 @@ class LongformPlanningRouteTests(unittest.TestCase):
             self.assertEqual(payload["task_type"], "deterministic-cli")
             self.assertEqual(
                 payload["command"],
-                "python -m literary_engineering_studio_engine word-budget <project> --target-words 500000 --volumes 5 --genre historical-fantasy",
+                'python -m literary_engineering_studio_engine word-budget <project> --target-words 500000 --volumes 5 --genre "historical-fantasy"',
+            )
+            self.assertEqual(
+                payload["prepare_argv"],
+                [
+                    "word-budget",
+                    "<project>",
+                    "--target-words",
+                    "500000",
+                    "--volumes",
+                    "5",
+                    "--genre",
+                    "historical-fantasy",
+                ],
             )
             self.assertEqual(payload["word_count_target"], 500000)
             self.assertIn("plot/word_budget/word_budget.agent_tasks.md", payload["expected_outputs"])
@@ -96,6 +109,32 @@ class LongformPlanningRouteTests(unittest.TestCase):
 
             self.assertEqual(notes, [])
             self.assertTrue(any(error.startswith("story architecture gate:") for error in errors))
+
+    def test_scene_inventory_tasks_keep_identity_and_deficit_semantics_explicit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "plot").mkdir()
+            (root / "project.yaml").write_text("target_length: 1000\n", encoding="utf-8")
+
+            writer = build_task_payload(
+                root,
+                "longform-planning",
+                {"current_step": "scene-inventory-agent-task"},
+            )
+            reviewer = build_task_payload(
+                root,
+                "longform-planning",
+                {"current_step": "scene-inventory-review"},
+            )
+
+            self.assertTrue(
+                any("Never write candidate_sha256" in item for item in writer["hard_constraints"])
+            )
+            self.assertTrue(
+                any("Reserve block" in item for item in reviewer["hard_constraints"])
+            )
+            reviewer_prompt = str(enrich_task_payload(reviewer)["prompt_asset"]["body"])
+            self.assertIn("pre-materialization deficit", reviewer_prompt)
 
 
 if __name__ == "__main__":

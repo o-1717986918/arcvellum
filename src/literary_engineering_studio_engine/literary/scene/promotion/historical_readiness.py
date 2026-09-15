@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -16,6 +17,9 @@ def historical_scene_readiness(
 ) -> tuple[str, tuple[str, ...]] | None:
     """Return sealed readiness, or None when current-policy checks are required."""
 
+    lean = _lean_scene_readiness(root, scene_id)
+    if lean is not None:
+        return lean
     validation = validate_historical_promotion(root, scene_id)
     if not validation.passed or not validation.current:
         return None
@@ -38,6 +42,55 @@ def historical_scene_readiness(
     if conclusion in {"pass_with_notes", "revise_required", "reject"}:
         return "needs_revision", (f"post-promotion static review is {conclusion}",)
     return "blocked", (f"post-promotion static review conclusion is {conclusion}",)
+
+
+def lean_scene_readiness(
+    root: Path,
+    scene_id: str,
+) -> tuple[str, tuple[str, ...]] | None:
+    """Return readiness derived only from a lean-v2 commit receipt."""
+
+    return _lean_scene_readiness(root, scene_id)
+
+
+def _lean_scene_readiness(
+    root: Path,
+    scene_id: str,
+) -> tuple[str, tuple[str, ...]] | None:
+    receipt_path = root / "workflow" / "scene_commits" / f"{scene_id}.json"
+    if not receipt_path.is_file():
+        return None
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "blocked", ("lean scene commit receipt is invalid",)
+    receipt_issue = _lean_receipt_issue(receipt, scene_id)
+    if receipt_issue:
+        return "blocked", (receipt_issue,)
+    draft = root / "drafts" / "scenes" / f"{scene_id}.md"
+    if not draft.is_file():
+        return "needs_draft", ("lean committed draft is missing",)
+    prose = draft.read_text(encoding="utf-8", errors="ignore").rstrip()
+    if not prose:
+        return "needs_draft", ("lean committed draft body is empty",)
+    expected = str(receipt.get("prose_sha256") or "").lower()
+    actual = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+    if not expected or expected != actual:
+        return "blocked", ("lean committed draft digest mismatch",)
+    decision = str(receipt.get("review_decision") or "").lower()
+    if decision == "pass":
+        return "ready", ()
+    if decision in {"revise", "revision_needed"}:
+        return "needs_revision", (f"lean scene review decision is {decision}",)
+    return "blocked", (f"lean scene review decision is {decision or 'missing'}",)
+
+
+def _lean_receipt_issue(receipt: object, scene_id: str) -> str:
+    if not isinstance(receipt, dict) or receipt.get("schema") != "arcvellum/scene-commit/v2":
+        return "lean scene commit receipt has an unsupported schema"
+    if str(receipt.get("scene_id") or "") != scene_id:
+        return "lean scene commit receipt targets another scene"
+    return ""
 
 
 def static_review_evidence(review: Path, draft: Path) -> tuple[str, bool]:
@@ -63,4 +116,8 @@ def static_review_evidence(review: Path, draft: Path) -> tuple[str, bool]:
     return conclusion, exact
 
 
-__all__ = ["historical_scene_readiness", "static_review_evidence"]
+__all__ = [
+    "historical_scene_readiness",
+    "lean_scene_readiness",
+    "static_review_evidence",
+]

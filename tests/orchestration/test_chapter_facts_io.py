@@ -236,6 +236,42 @@ class ChapterFactsIoAdapterTests(unittest.TestCase):
                 },
             )
 
+    def test_scene_level_rhythm_contract_is_a_valid_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _scaffold_project(root)
+            (root / "plot" / "rhythm_plan.json").unlink()
+            (root / "plot" / "chapter_obligations" / "chapter_01.json").unlink()
+            for path, pace in (
+                (root / "scenes" / "scene_0001.yaml", "slow_to_fast"),
+                (root / "scenes" / "scene_0002.yaml", "balanced"),
+            ):
+                path.write_text(
+                    path.read_text(encoding="utf-8")
+                    .replace("narrative_rhythm:\n", f"narrative_rhythm:\n  pace: {pace}\n"),
+                    encoding="utf-8",
+                )
+                path.write_text(
+                    path.read_text(encoding="utf-8")
+                    + "chapter_obligation_id: chapter_01\n"
+                    + "reader_experience:\n  tension_source: 选择正在逼近\n",
+                    encoding="utf-8",
+                )
+
+            facts = load_chapter_planning_facts(root, "chapter_01")
+
+            self.assertEqual(len(facts.rhythm_contract_hash), 64)
+            self.assertTrue(facts.obligation_contract_present)
+            self.assertEqual(facts.scenes[0].pace, "balanced")
+            self.assertEqual(facts.scenes[1].pace, "slow_to_fast")
+            self.assertEqual(
+                chapter_facts_violations(
+                    facts,
+                    mode=ChapterFactsValidationMode.PRODUCTION,
+                ),
+                (),
+            )
+
     def test_missing_chapter_raises(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

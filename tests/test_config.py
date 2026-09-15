@@ -8,6 +8,16 @@ from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, lo
 
 
 class ConfigTests(unittest.TestCase):
+    def test_default_pi_worker_uses_deepseek_v4_flash_for_every_role(self):
+        config = default_config()
+        pi_worker = config["agent_runners"]["pi-worker"]
+
+        self.assertEqual(pi_worker["model"], "deepseek/deepseek-v4-flash")
+        self.assertEqual(
+            set(pi_worker["models"].values()),
+            {"deepseek/deepseek-v4-flash"},
+        )
+
     def test_migrates_untouched_v06_pi_prompt_canary_to_all_pi_tasks_v3(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"

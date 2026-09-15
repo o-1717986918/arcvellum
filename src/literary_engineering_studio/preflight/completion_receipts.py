@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from ..contracts import TaskPackage
 from ..sandbox import SandboxManifest
+from literary_engineering_studio_engine.public.tasking import agent_task_digest
 
 
 LEGACY_AGENT_STATES = {
@@ -42,6 +43,9 @@ def canonicalize_agent_completion_markers(
     for relative in markers:
         contract = contracts.get(relative.replace("\\", "/"), {})
         payload = _receipt_payload(relative, contract)
+        source_task_path = _control_workspace(sandbox) / Path(str(payload["source_task"]))
+        if source_task_path.is_file():
+            payload["task_digest"] = agent_task_digest(source_task_path)
         if _write_if_changed(sandbox, relative, payload, read_object):
             changes.append(
                 {
@@ -111,7 +115,7 @@ def _write_if_changed(
     comparable.pop("completed_at")
     existing_comparable = dict(existing or {})
     existing_comparable.pop("completed_at", None)
-    source_task_path = sandbox.workspace / Path(str(payload["source_task"]))
+    source_task_path = _control_workspace(sandbox) / Path(str(payload["source_task"]))
     receipt_is_fresh = path.is_file() and (
         not source_task_path.is_file()
         or path.stat().st_mtime_ns >= source_task_path.stat().st_mtime_ns
@@ -121,3 +125,7 @@ def _write_if_changed(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return True
+
+
+def _control_workspace(sandbox: SandboxManifest) -> Path:
+    return sandbox.control_workspace or sandbox.workspace

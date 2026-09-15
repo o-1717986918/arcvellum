@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -14,6 +15,7 @@ from literary_engineering_studio.automation.policy import DelegationPolicy, defa
 from literary_engineering_studio.automation.run_loop import ClaimedRunLoop
 from literary_engineering_studio.automation.run_result_contracts import RouteCycle
 from literary_engineering_studio.automation.controller import AutopilotService
+from literary_engineering_studio.automation.support import _pending_scene_dependency
 from literary_engineering_studio.infrastructure.project_scene_transactions import (
     AtomicProjectSceneCommitter,
     ProjectSceneBriefProvider,
@@ -80,6 +82,12 @@ class _AlwaysReviseRuntime(_Runtime):
             "仍需修订",
             ("再次修改",),
         )
+
+
+class _AlwaysChangingRevisionRuntime(_AlwaysReviseRuntime):
+    def revise_scene(self, transaction_id, brief, result, verification, review, *, attempt):
+        self.revisions += 1
+        return self._result("潮" * 310 + f"她完成了第{attempt}轮有效修订。")
 
 
 def _project(root: Path, *, standard_risk: bool = False) -> None:
@@ -165,6 +173,28 @@ def _coordinator(root: Path, runtime: _Runtime):
 
 
 class LeanAutopilotLoopTests(unittest.TestCase):
+    def test_export_scene_dependency_accepts_exact_lean_commit_receipts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _project(root)
+            prose = "月台的灯亮了。"
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text(prose + "\n", encoding="utf-8")
+            (root / "workflow" / "scene_commits" / "scene_0001.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "arcvellum/scene-commit/v2",
+                        "scene_id": "scene_0001",
+                        "prose_sha256": hashlib.sha256(prose.encode("utf-8")).hexdigest(),
+                        "review_decision": "pass",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertFalse(_pending_scene_dependency(root))
+
     def test_policy_defaults_to_strict_and_accepts_explicit_lean_mode(self):
         self.assertEqual(default_policy()["literary_kernel"], "strict-v1")
         policy = normalize_policy(
@@ -229,7 +259,28 @@ class LeanAutopilotLoopTests(unittest.TestCase):
             self.assertEqual(runtime.reviews, 2)
             self.assertEqual(actions[-1], "committed")
 
-    def test_revision_budget_stops_before_a_second_model_revision(self):
+    def test_revision_count_does_not_stop_effective_model_revisions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _project(root, standard_risk=True)
+            runtime = _AlwaysChangingRevisionRuntime()
+            coordinator = _coordinator(root, runtime)
+
+            final = None
+            actions = []
+            for _ in range(16):
+                final = coordinator.advance_one(
+                    mode=SceneExecutionMode.STANDARD,
+                    steward_approved=False,
+                )
+                actions.append(final.action)
+
+            self.assertIsNotNone(final)
+            self.assertFalse(final.blocked)
+            self.assertGreaterEqual(runtime.revisions, 4)
+            self.assertNotIn("blocked", actions)
+
+    def test_identical_revision_stops_as_no_progress_not_as_a_count_limit(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _project(root, standard_risk=True)
@@ -247,8 +298,8 @@ class LeanAutopilotLoopTests(unittest.TestCase):
 
             self.assertIsNotNone(final)
             self.assertTrue(final.blocked)
-            self.assertIn("budget is exhausted", final.message)
-            self.assertEqual(runtime.revisions, 1)
+            self.assertIn("no observable change", final.message)
+            self.assertEqual(runtime.revisions, 2)
 
     def test_claimed_loop_dispatches_only_explicit_lean_scene_route(self):
         host = MagicMock()
@@ -339,6 +390,28 @@ class LeanAutopilotLoopTests(unittest.TestCase):
             after_ready = store.read_autopilot_run(run["run_id"])
             self.assertEqual(after_ready["route_index"], 5)
             self.assertEqual(after_ready["current_task_id"], "")
+
+            store.update_autopilot_run(run["run_id"], route_index=6)
+            steps.values = [LeanSceneStep("route-ready", route_ready=True)]
+            dependency_cycle = RouteCycle(
+                route_index=6,
+                planned_route="export-and-release",
+                route="scene-development",
+                dependency_route=True,
+                owner="autopilot:test",
+                dependency_kind="scene-closure",
+                resume_route_index=5,
+            )
+            self.assertFalse(
+                service._advance_lean_scene(
+                    run["run_id"],
+                    project,
+                    policy,
+                    dependency_cycle,
+                )
+            )
+            after_dependency = store.read_autopilot_run(run["run_id"])
+            self.assertEqual(after_dependency["route_index"], 5)
 
 
 if __name__ == "__main__":

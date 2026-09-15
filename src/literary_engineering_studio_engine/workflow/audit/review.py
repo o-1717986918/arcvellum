@@ -6,6 +6,10 @@ from pathlib import Path
 from literary_engineering_studio_engine.prompting.agents.schema import validate_payload
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import agent_task_completion_status
 from ...literary.review.longform_contract import longform_audit_gate_errors
+from ...literary.review.project_review_semantics import (
+    canon_review_is_clean,
+    committee_review_is_clean,
+)
 from literary_engineering_studio_engine.workflow.audit.common import _add_gate, _read_json
 def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> None:
     canon_lint = root / "reviews" / "canon_lint.json"
@@ -26,20 +30,12 @@ def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> No
     canon_review = root / "reviews" / "agent" / "canon_review.json"
     canon_payload = _read_json(canon_review)
     canon_schema_errors, _canon_warnings = validate_payload(canon_payload, "canon_review.v1") if canon_payload else ([{"path": "$", "message": "missing"}], [])
-    canon_blocking = canon_payload.get("blocking_issues") if isinstance(canon_payload.get("blocking_issues"), list) else []
-    canon_warnings = canon_payload.get("warnings") if isinstance(canon_payload.get("warnings"), list) else []
-    unresolved = canon_payload.get("unresolved_facts") if isinstance(canon_payload.get("unresolved_facts"), list) else []
-    timeline = canon_payload.get("timeline_risks") if isinstance(canon_payload.get("timeline_risks"), list) else []
     canon_clean = (
         canon_review.exists()
         and (root / "reviews" / "agent" / "canon_review.md").exists()
         and canon_completion.get("complete") is True
         and not canon_schema_errors
-        and canon_payload.get("conclusion") == "pass"
-        and not canon_blocking
-        and not canon_warnings
-        and not unresolved
-        and not timeline
+        and canon_review_is_clean(canon_payload)
     )
     _add_gate(
         gates,
@@ -47,7 +43,7 @@ def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> No
         canon_clean,
         "blocking",
         "platform-agent canon review clean pass",
-        "canon_review.v1 未 clean pass：需要 sidecar completion、schema pass、conclusion=pass，且 blocking/warnings/unresolved_facts/timeline_risks 全空。",
+        "canon_review.v1 未形成干净结论：需要 sidecar completion、schema pass、pass/pass_with_notes，且 blocking/warnings/unresolved_facts/timeline_risks 全空。",
     )
 
     longform = root / "reviews" / "longform" / "longform_audit.json"
@@ -67,16 +63,12 @@ def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> No
     committee = root / "reviews" / "agent" / "committee_project-final-audit.json"
     committee_payload = _read_json(committee)
     committee_schema_errors, _committee_warnings = validate_payload(committee_payload, "committee_review.v1") if committee_payload else ([{"path": "$", "message": "missing"}], [])
-    action_items = committee_payload.get("action_items") if isinstance(committee_payload.get("action_items"), list) else []
-    disagreements = committee_payload.get("disagreements") if isinstance(committee_payload.get("disagreements"), list) else []
     committee_clean = (
         committee.exists()
         and committee.with_suffix(".md").exists()
         and committee_completion.get("complete") is True
         and not committee_schema_errors
-        and committee_payload.get("final_recommendation") == "approve"
-        and not action_items
-        and not disagreements
+        and committee_review_is_clean(committee_payload)
     )
     _add_gate(
         gates,
@@ -84,7 +76,7 @@ def _add_review_audit_route_gates(gates: list[dict[str, str]], root: Path) -> No
         committee_clean,
         "blocking",
         "committee approved with no open action items",
-        "committee_project-final-audit 未通过：需要 sidecar completion、schema pass、final_recommendation=approve，且 action_items/disagreements 全空。",
+        "committee_project-final-audit 未通过：需要 sidecar completion、schema pass、approve/approve_with_notes，且 action_items/disagreements 全空。",
     )
 
 

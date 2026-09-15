@@ -176,6 +176,8 @@ def prepare_longform_review(
             "Reviewer session must differ from the Writer identity already locked in the JSON template.",
             "The JSON verdict is authoritative. The Markdown report explains the judgment to users and cannot override JSON.",
             "Use revise whenever a required change remains; do not hide required work in a passing note.",
+            "For scene inventory, totals and chapter_budgets are acceptance targets; scene_inventory_binding describes the pre-materialization project deficit that caused this candidate task.",
+            "Studio owns the authoritative candidate digest. An embedded self-reported digest is content to remove with revise, never proof that the task-bound review identity is stale.",
         ],
     )
     return LongformReviewPreparation(
@@ -387,7 +389,9 @@ def _review_instruction(spec: LongformReviewSpec, digest: str) -> str:
         "Do not edit the candidate. The JSON must use status=complete and verdict=pass/revise/block. "
         "A pass requires no required_changes; revise/block requires concrete required_changes. "
         f"Check every declared dimension: {dimensions}. Cite exact project paths in evidence_paths and explain the judgment in summary. "
-        "Machine-owned candidate identity, digest, writer identity, reviewer identity, and schema are normalized by Studio; do not invent them."
+        "Machine-owned candidate identity, digest, writer identity, reviewer identity, and schema are normalized by Studio; do not invent them. "
+        "Use revise for any defect repairable in the declared candidate; reserve block for an irreconcilable user, canon, or budget conflict outside this task's repair scope. "
+        "For scene inventory, compare rows against totals and chapter_budgets. The scene_inventory_binding deficit records the formal project before materialization and does not invalidate a reconciled candidate."
     )
 
 

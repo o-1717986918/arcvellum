@@ -131,8 +131,8 @@ def revision_evidence_requirement(action_ids: list[str]) -> str:
 def worker_managed_revision_evidence_requirement(action_ids: list[str]) -> str:
     listed = ", ".join(f"`{item}`" for item in action_ids) if action_ids else "当前审批理由"
     return (
-        "先完成候选资产和候选报告的实质性修改。不要改写 review JSON、review Markdown 或 completion receipt；"
-        "Studio Worker 会在检测到候选摘要变化后，将审批理由写入 applied_revision_actions、"
+        "只对候选 JSON 完成实质性修改。不要改写候选报告、review JSON、review Markdown 或 completion receipt；"
+        "Studio Worker 会在检测到候选摘要变化后，将待修订动作写入 applied_revision_actions、"
         "设置 review status 为 recheck_required，并重置独立复审回执。"
         f"本轮候选修改必须可追溯地回应：{listed}。"
     )

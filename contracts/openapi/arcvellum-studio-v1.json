@@ -733,6 +733,7 @@
       "ProjectAgentSessionRequest": {
         "properties": {
           "project_root": {
+            "default": "",
             "title": "Project Root",
             "type": "string"
           },
@@ -742,9 +743,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "project_root"
-        ],
         "title": "ProjectAgentSessionRequest",
         "type": "object"
       },
@@ -1381,7 +1379,7 @@
   },
   "info": {
     "title": "ArcVellum",
-    "version": "0.99.5"
+    "version": "0.99.6"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -4706,6 +4704,43 @@
         "summary": "Stream Turn Events"
       }
     },
+    "/project-agent/jobs/{job_id}/stop": {
+      "post": {
+        "operationId": "stop_turn_project_agent_jobs__job_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Turn"
+      }
+    },
     "/project-agent/sessions": {
       "get": {
         "operationId": "list_sessions_project_agent_sessions_get",
@@ -4713,8 +4748,9 @@
           {
             "in": "query",
             "name": "project_root",
-            "required": true,
+            "required": false,
             "schema": {
+              "default": "",
               "title": "Project Root",
               "type": "string"
             }

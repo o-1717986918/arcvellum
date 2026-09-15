@@ -243,6 +243,38 @@ class LeanKernelV2TransactionServiceTests(unittest.TestCase):
         self.assertEqual(len(commits.applied), 1)
         self.assertEqual(commits.requests, 2)
 
+    def test_revision_count_never_exhausts_the_transaction(self) -> None:
+        critic = _Critic(ReviewDecision.REVISE)
+        service = self._service(SceneRiskLevel.STANDARD, critic=critic)
+        transaction = service.prepare(self.root, "scene_0001")
+        service.create(transaction.transaction_id)
+        service.verify(transaction.transaction_id)
+        service.review_if_required(transaction.transaction_id)
+        current = transaction
+        for attempt in range(1, 6):
+            revised = CreativeResult(
+                prose=f"雨刚停。第{attempt}轮修订后，他把车票递过去，随后登上末班车。",
+                decision_summary=f"第{attempt}轮修订落实离乡决定。",
+                scene_delta=SceneDelta(next_handoff=("有人叫出他的旧名",)),
+            )
+            current = service.accept_revision(transaction.transaction_id, revised)
+            service.verify(transaction.transaction_id)
+            current = service.review_if_required(transaction.transaction_id)
+
+        self.assertEqual(current.status, SceneTransactionStatus.REVISION_NEEDED)
+        self.assertEqual(current.revision_attempts, 5)
+
+    def test_identical_revision_is_rejected_as_no_progress(self) -> None:
+        critic = _Critic(ReviewDecision.REVISE)
+        service = self._service(SceneRiskLevel.STANDARD, critic=critic)
+        transaction = service.prepare(self.root, "scene_0001")
+        created = service.create(transaction.transaction_id)
+        service.verify(transaction.transaction_id)
+        service.review_if_required(transaction.transaction_id)
+
+        with self.assertRaisesRegex(ValueError, "no observable change"):
+            service.accept_revision(transaction.transaction_id, created.creative_result)
+
     def test_sqlite_round_trip_preserves_nested_contracts_and_version(self) -> None:
         service = self._service(SceneRiskLevel.STANDARD, critic=_Critic())
         transaction = service.prepare(self.root, "scene_0001")

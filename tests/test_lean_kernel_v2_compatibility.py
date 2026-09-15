@@ -10,6 +10,7 @@ import unittest
 
 from literary_engineering_studio.automation.controller import AutopilotService
 from literary_engineering_studio.application.scene_transaction_cli import (
+    _remaining_steps,
     run_scene_transaction_command,
 )
 from literary_engineering_studio.compatibility.literary_kernel import (
@@ -19,9 +20,18 @@ from literary_engineering_studio.compatibility.literary_kernel import (
 )
 from literary_engineering_studio.persistence.job_store import JobStore
 from tests.test_lean_kernel_v2_autopilot_loop import _project
+from literary_engineering_studio_engine.public.literary import SceneTransactionStatus
 
 
 class LeanKernelCompatibilityTests(unittest.TestCase):
+    def test_cli_run_step_budget_is_an_integer_and_stops_committed_work(self):
+        active = argparse.Namespace(status=SceneTransactionStatus.PREPARED)
+        committed = argparse.Namespace(status=SceneTransactionStatus.COMMITTED)
+
+        self.assertEqual(_remaining_steps(active, 12), 12)
+        self.assertEqual(_remaining_steps(active, 100), 32)
+        self.assertEqual(_remaining_steps(committed, 12), 0)
+
     def test_manifest_keeps_lean_preview_behind_literary_gate(self):
         manifest = kernel_compatibility_manifest()
 

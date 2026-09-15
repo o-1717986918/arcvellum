@@ -132,7 +132,8 @@ def _run(args: Any, config: dict[str, object], project: Path, repository: Any) -
         if step.committed or step.blocked or step.waiting_human:
             break
     _print_json({"status": transaction.status.value, "steps": steps, "transaction": transaction.to_dict()})
-    return 0 if transaction.status is not SceneTransactionStatus.BLOCKED else 1
+    reported_block = bool(steps and steps[-1].get("blocked"))
+    return 1 if reported_block or transaction.status is SceneTransactionStatus.BLOCKED else 0
 
 
 def _runtime(config: dict[str, object], project: Path, repository: Any) -> Any:
@@ -144,10 +145,10 @@ def _runtime(config: dict[str, object], project: Path, repository: Any) -> Any:
     )
 
 
-def _remaining_steps(transaction: Any, maximum: int) -> range:
+def _remaining_steps(transaction: Any, maximum: int) -> int:
     if transaction.status is SceneTransactionStatus.COMMITTED:
-        return range(0)
-    return range(max(1, min(32, int(maximum))))
+        return 0
+    return max(1, min(32, int(maximum)))
 
 
 def _project_root(value: str) -> Path:

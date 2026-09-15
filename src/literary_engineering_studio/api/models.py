@@ -178,7 +178,7 @@ class AdvisorSessionRequest(BaseModel):
 
 
 class ProjectAgentSessionRequest(BaseModel):
-    project_root: str
+    project_root: str = ""
     title: str = "项目 Agent"
 
 

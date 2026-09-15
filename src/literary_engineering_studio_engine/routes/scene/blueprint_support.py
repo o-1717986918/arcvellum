@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from ...literary.assets.character_identity import formal_character_promotion_manifests
+from ...literary.planning.review import all_planning_review_evidence_paths
 from ...literary.scene.promotion.context_archive import context_archive_output_paths
 from ...literary.scene.promotion.historical_context import (
     historical_revision_candidate_source_paths,
@@ -85,6 +87,44 @@ def reader_obligation_outputs(chapter_id: str) -> list[str]:
     ]
 
 
+def formal_character_sources(root: Path) -> list[str]:
+    return [relative_path(path, root) for path in formal_character_promotion_manifests(root)]
+
+
+def longform_budget_evidence_sources(root: Path) -> list[str]:
+    return [
+        "plot/word_budget/word_budget.agent_tasks.md",
+        "plot/word_budget/word_budget.agent_completion.json",
+        "plot/word_budget/scene_inventory_expansion.agent_tasks.md",
+        "plot/word_budget/scene_inventory_expansion.agent_completion.json",
+        "plot/chapter_obligations/chapter_obligations.agent_tasks.md",
+        "plot/chapter_obligations/chapter_obligations.agent_completion.json",
+        "plot/candidates/outlines/word_budget_expansion.md",
+        "plot/candidates/scenes/word_budget_scene_inventory.md",
+        "plot/candidates/chapters/chapter_obligation_plan.md",
+        *all_planning_review_evidence_paths(root),
+    ]
+
+
+def scene_runtime_sources(
+    context_sources: list[str],
+    formal_sources: list[str],
+    context: str,
+    context_trace: str,
+    chapter_sources: list[str],
+    budget_sources: list[str],
+) -> list[str]:
+    return list(dict.fromkeys([
+        *context_sources,
+        *formal_sources,
+        "scenes",
+        context,
+        context_trace,
+        *chapter_sources,
+        *budget_sources,
+    ]))
+
+
 def promotion_archive_outputs(
     root: Path,
     scene_id: str,
@@ -132,11 +172,14 @@ def select_blueprint(
 
 __all__ = [
     "candidate_markdown",
+    "formal_character_sources",
     "legacy_revision_migration_outputs",
+    "longform_budget_evidence_sources",
     "matching_revision_choice_sources",
     "promotion_archive_outputs",
     "promotion_historical_sources",
     "reader_obligation_outputs",
+    "scene_runtime_sources",
     "select_blueprint",
     "state_patch_character_files",
 ]

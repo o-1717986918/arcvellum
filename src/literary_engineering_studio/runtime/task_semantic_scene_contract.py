@@ -62,6 +62,13 @@ def scene_revision_contract(
     )
     if not path:
         return {}
+    source_path = str(task.payload.get("revision_source") or "").replace("\\", "/").strip()
+    candidate_path = str(task.payload.get("candidate") or "").replace("\\", "/").strip()
+    if not candidate_path:
+        candidate_path = next(
+            (item for item in task.expected_outputs if item.endswith("_revision.md")),
+            "",
+        )
     required_fields = [
         "revision_actions_applied", "warnings_addressed", "style_notes_addressed",
         "style_adherence_addressed", "anti_evasion_rows", "retained_transition_proofs",
@@ -71,6 +78,11 @@ def scene_revision_contract(
         "path": path,
         "schema_name": "scene-revision/v1",
         "revision_kind": "exact-source",
+        "source_binding": {
+            "source_path": source_path,
+            "candidate_path": candidate_path,
+            "excerpt_policy": "exact-substring",
+        },
         "required_fields": required_fields,
         "field_types": {
             "revision_actions_applied": "list",
@@ -106,7 +118,11 @@ def scene_revision_contract(
             "anti_evasion_protocol_applied", "ready_for_review", "generated_by", "provider",
             "formal_contract_revision", "writer_session_id",
         ],
-        "locked_values": {"scene_id": scene_id},
+        "locked_values": {
+            "scene_id": scene_id,
+            "source_candidate": source_path,
+            "candidate": candidate_path,
+        },
     }
 
 

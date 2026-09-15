@@ -8,6 +8,10 @@ from literary_engineering_studio_engine.literary.assets.canon.evolver import can
 from ..literary.assets.canon.contracts import CANON_LINT_CONTRACT_REVISION
 from ..literary.review.longform_contract import longform_audit_gate_errors
 from ..literary.review.project_targets import project_review_repair_target_issues
+from ..literary.review.project_review_semantics import (
+    canon_review_is_clean,
+    committee_review_is_clean,
+)
 from .state_common import _file_step, _read_json, _rel
 def _review_audit_state(root: Path) -> dict[str, object]:
     canon_lint_json = root / "reviews" / "canon_lint.json"
@@ -304,7 +308,7 @@ def _canon_review_pass_step(root: Path, json_path: Path) -> dict[str, object]:
     warnings = payload.get("warnings") if isinstance(payload.get("warnings"), list) else []
     unresolved = payload.get("unresolved_facts") if isinstance(payload.get("unresolved_facts"), list) else []
     timeline = payload.get("timeline_risks") if isinstance(payload.get("timeline_risks"), list) else []
-    passed = conclusion == "pass" and not blocking and not warnings and not unresolved and not timeline
+    passed = canon_review_is_clean(payload)
     message = f"conclusion={conclusion or 'missing'}; blocking={len(blocking)}; warnings={len(warnings)}; unresolved={len(unresolved)}; timeline={len(timeline)}"
     return {
         "key": "canon-review-pass",
@@ -336,7 +340,7 @@ def _committee_pass_step(root: Path, json_path: Path) -> dict[str, object]:
     recommendation = str(payload.get("final_recommendation") or "").strip().lower()
     action_items = payload.get("action_items") if isinstance(payload.get("action_items"), list) else []
     disagreements = payload.get("disagreements") if isinstance(payload.get("disagreements"), list) else []
-    passed = recommendation == "approve" and not action_items and not disagreements
+    passed = committee_review_is_clean(payload)
     return {
         "key": "committee-pass",
         "status": "pass" if passed else recommendation or "missing",

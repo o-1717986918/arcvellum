@@ -63,6 +63,14 @@ class CreativeQualityProfileTests(unittest.TestCase):
         self.assertEqual(gate["status"], "blocking")
         self.assertEqual(gate["blocking"][0]["rule"], "custom-banned-phrase")
 
+    def test_contrast_split_by_dialogue_attribution_is_detected(self):
+        gate = style_lint_gate("事故不是失效。”赵澄说，“是有人关掉了联锁。")
+
+        self.assertEqual(gate["status"], "blocking")
+        self.assertTrue(
+            any(item["rule"] == "mechanical-contrast-frame" for item in gate["blocking"])
+        )
+
     def test_candidate_language_gate_combines_punctuation_and_style_evidence(self):
         profile = default_creative_quality_profile()
         text = "\n".join([f"——第{index}项不是误差，而是既定结果。" for index in range(20)])

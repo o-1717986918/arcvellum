@@ -101,7 +101,11 @@ def _validate_scene_inventory_contract(
     issues: list[PreflightIssue],
 ) -> None:
     current_state = str(task.current_state or task.payload.get("current_state") or "")
-    if current_state not in {"scene-inventory-agent-task", "scene-inventory-review"}:
+    if current_state not in {
+        "scene-inventory-agent-task",
+        "scene-inventory-revision",
+        "scene-inventory-review",
+    }:
         return
     relative = "plot/candidates/scenes/word_budget_scene_inventory.md"
     path = sandbox.workspace / relative
@@ -116,6 +120,11 @@ def _validate_scene_inventory_contract(
         path.read_text(encoding="utf-8", errors="replace"),
         budget=budget if isinstance(budget, dict) else {},
     )
+    if current_state == "scene-inventory-review":
+        # The candidate is immutable source evidence during independent review.
+        # Its authoring contract was checked when it entered the project; review
+        # output validation must not ask the Reviewer to edit a source artifact.
+        return
     if not messages:
         return
     issues.append(

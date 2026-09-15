@@ -256,7 +256,7 @@ export function classifyProviderFailure(error: unknown, httpStatus = 0): Provide
 	if (/schema|validation|invalid output|tool arguments/.test(normalized)) return failure("validation_failure", message, false);
 	if (
 		httpStatus === 408 || httpStatus === 409 || httpStatus === 425 || httpStatus === 429 || httpStatus >= 500
-		|| /timed? out|timeout|econnreset|econnrefused|enotfound|network|socket|temporar|rate limit|overloaded/.test(normalized)
+		|| /timed? out|timeout|terminated|econnreset|econnrefused|enotfound|network|socket|temporar|rate limit|overloaded/.test(normalized)
 	) return failure("transient_network", message || `provider returned HTTP ${httpStatus}`, true);
 	if (httpStatus === 400 || httpStatus === 404 || /model .*not found|unsupported model|context length/.test(normalized)) {
 		return failure("model_error", message || `provider returned HTTP ${httpStatus}`, false);

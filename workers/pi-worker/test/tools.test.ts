@@ -32,6 +32,77 @@ describe("local output validation", () => {
 		expect((await validateOutputs(context(), root)).passed).toBe(true);
 	});
 
+	it("enforces the bound Chinese prose length before Studio writeback", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-prose-length-"));
+		roots.push(root);
+		const path = "drafts/revisions/scene_0001_revision.md";
+		await mkdir(join(root, "drafts", "revisions"), { recursive: true });
+		await writeFile(join(root, path), "这是一段明显超过上限的中文修订正文。", "utf8");
+		const taskContext: TaskContext = {
+			...context(),
+			currentState: "candidate-revision",
+			expectedOutputs: [path],
+			agentOwnedOutputs: [{ path, kind: "agent-authored", format: "markdown", schemaName: "" }],
+			writablePaths: [path],
+			wordCount: { target: 8, minimum: 6, maximum: 10 },
+			semanticOutputContract: {
+				source_binding: { candidate_path: path },
+			},
+		};
+
+		const result = await validateOutputs(taskContext, root);
+
+		expect(result.passed).toBe(false);
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			path,
+			code: "prose_above_word_count_maximum",
+			message: expect.stringContaining("above max_chinese_chars=10"),
+		}));
+	});
+
+	it("rejects revision evidence excerpts absent from the exact source", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-revision-source-"));
+		roots.push(root);
+		const sourcePath = "drafts/candidates/scene_0001-platform-agent.md";
+		const candidatePath = "drafts/revisions/scene_0001_revision.md";
+		const manifestPath = "drafts/revisions/scene_0001_revision.json";
+		await mkdir(join(root, "drafts", "candidates"), { recursive: true });
+		await mkdir(join(root, "drafts", "revisions"), { recursive: true });
+		await writeFile(join(root, sourcePath), "原文只有这一句。", "utf8");
+		await writeFile(join(root, candidatePath), "修订正文也只有这一句。", "utf8");
+		await writeFile(join(root, manifestPath), JSON.stringify({
+			anti_evasion_rows: [{
+				source_excerpt: "模型虚构的原句",
+				revised_excerpt: "修订正文也只有这一句。",
+			}],
+		}), "utf8");
+		const taskContext: TaskContext = {
+			...context(),
+			currentState: "candidate-revision",
+			expectedOutputs: [candidatePath, manifestPath],
+			agentOwnedOutputs: [
+				{ path: candidatePath, kind: "agent-authored", format: "markdown", schemaName: "" },
+				{ path: manifestPath, kind: "agent-authored", format: "json", schemaName: "" },
+			],
+			writablePaths: [candidatePath, manifestPath],
+			semanticOutputContract: {
+				path: manifestPath,
+				source_binding: {
+					source_path: sourcePath,
+					candidate_path: candidatePath,
+				},
+			},
+		};
+
+		const result = await validateOutputs(taskContext, root, manifestPath);
+
+		expect(result.passed).toBe(false);
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: "revision_source_excerpt_mismatch",
+			message: expect.stringContaining("remove unsupported rows"),
+		}));
+	});
+
 	it("reports missing and mistyped model-owned semantic fields locally", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-semantic-"));
 		roots.push(root);
@@ -74,6 +145,51 @@ describe("local output validation", () => {
 		await writeFile(join(root, "out", "review.md"), "# Review\n", "utf8");
 
 		expect((await validateOutputs(semanticContext(), root)).passed).toBe(true);
+	});
+
+	it("enforces conditional shape fields only when their predicate matches", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-conditional-semantic-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		const taskContext: TaskContext = {
+			...context(),
+			agentOwnedOutputs: [
+				{ path: "out/candidate.json", kind: "agent-authored", format: "json", schemaName: "" },
+			],
+			writablePaths: ["out/candidate.json"],
+			semanticOutputContract: {
+				path: "out/candidate.json",
+				required_fields: ["canon_writeback"],
+				model_owned_fields: ["canon_writeback"],
+				field_types: { canon_writeback: "dict" },
+				object_shapes: {
+					canon_writeback: {
+						canon_change: "true | false | unknown",
+						no_canon_change_reason: "required non-empty str when canon_change=false",
+						candidate_patch: "optional project-relative str",
+					},
+				},
+			},
+		};
+
+		await writeFile(join(root, "out", "candidate.json"), JSON.stringify({
+			canon_writeback: { canon_change: true },
+		}), "utf8");
+		expect((await validateOutputs(taskContext, root)).passed).toBe(true);
+
+		await writeFile(join(root, "out", "candidate.json"), JSON.stringify({
+			canon_writeback: { canon_change: false },
+		}), "utf8");
+		const missingReason = await validateOutputs(taskContext, root);
+		expect(missingReason.passed).toBe(false);
+		expect(missingReason.issues).toEqual(expect.arrayContaining([
+			expect.objectContaining({ code: "semantic_missing_field", message: expect.stringContaining("no_canon_change_reason") }),
+		]));
+
+		await writeFile(join(root, "out", "candidate.json"), JSON.stringify({
+			canon_writeback: { canon_change: false, no_canon_change_reason: "No durable canon changed." },
+		}), "utf8");
+		expect((await validateOutputs(taskContext, root)).passed).toBe(true);
 	});
 
 	it("distinguishes an existing scaffold from a current Worker submission", async () => {
@@ -132,7 +248,7 @@ describe("local output validation", () => {
 		const first = await write?.execute("call-1", {
 			path: "out/long-plan.md",
 			operation: "replace",
-			final: false,
+			continue_writing: true,
 			content: "# Plan\n\nPart one.\n",
 		});
 		expect(workerState.writtenPaths.has("out/long-plan.md")).toBe(false);
@@ -141,13 +257,13 @@ describe("local output validation", () => {
 		await write?.execute("call-2", {
 			path: "out/long-plan.md",
 			operation: "append",
-			final: false,
+			continue_writing: true,
 			content: "\nPart two.\n",
 		});
 		await write?.execute("call-3", {
 			path: "out/long-plan.md",
 			operation: "append",
-			final: true,
+			continue_writing: false,
 			content: "\nPart three.\n",
 		});
 
@@ -155,6 +271,207 @@ describe("local output validation", () => {
 			.toBe("# Plan\n\nPart one.\n\nPart two.\n\nPart three.\n");
 		expect(workerState.writtenPaths.has("out/long-plan.md")).toBe(true);
 		expect(workerState.lastValidation.passed).toBe(true);
+	});
+
+	it("treats provider-populated false defaults as a compact final write", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-provider-final-default-"));
+		roots.push(root);
+		const taskContext = {
+			...context(),
+			expectedOutputs: ["out/review.md"],
+			agentOwnedOutputs: [{ path: "out/review.md", kind: "agent-authored", format: "markdown", schemaName: "" }],
+			writablePaths: ["out/review.md"],
+		};
+		const workerState = state();
+		const write = createWorkerTools(taskContext, options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call", {
+			path: "out/review.md",
+			operation: "replace",
+			final: false,
+			continue_writing: false,
+			content: "# Review\n",
+		});
+
+		expect(workerState.writtenPaths.has("out/review.md")).toBe(true);
+		expect(workerState.lastValidation.passed).toBe(true);
+	});
+
+	it("allows an unfinished text artifact to be finalized without adding content", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-empty-finalizer-"));
+		roots.push(root);
+		const taskContext = {
+			...context(),
+			expectedOutputs: ["out/prose.md"],
+			agentOwnedOutputs: [{ path: "out/prose.md", kind: "agent-authored", format: "markdown", schemaName: "" }],
+			writablePaths: ["out/prose.md"],
+		};
+		const workerState = state();
+		const write = createWorkerTools(taskContext, options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call-1", {
+			path: "out/prose.md",
+			operation: "replace",
+			final: false,
+			content: "Complete prose already emitted.",
+		});
+		await write?.execute("call-2", {
+			path: "out/prose.md",
+			operation: "append",
+			final: true,
+			content: "",
+		});
+
+		expect(await readFile(join(root, "out", "prose.md"), "utf8"))
+			.toBe("Complete prose already emitted.");
+		expect(workerState.writtenPaths.has("out/prose.md")).toBe(true);
+		expect(workerState.lastValidation.passed).toBe(true);
+	});
+
+	it("repairs a small prose overage with one exact fragment replacement", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-fragment-repair-"));
+		roots.push(root);
+		const path = "drafts/revisions/scene_0001_revision.md";
+		const taskContext: TaskContext = {
+			...context(),
+			currentState: "candidate-revision",
+			expectedOutputs: [path],
+			agentOwnedOutputs: [{ path, kind: "agent-authored", format: "markdown", schemaName: "" }],
+			writablePaths: [path],
+			wordCount: { target: 8, minimum: 6, maximum: 10 },
+			semanticOutputContract: { source_binding: { candidate_path: path } },
+		};
+		const workerState = state();
+		const write = createWorkerTools(taskContext, options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		const first = await write?.execute("call-1", {
+			path,
+			operation: "replace",
+			final: true,
+			content: "甲乙丙丁戊己庚辛壬癸子丑",
+		});
+		expect(JSON.parse(first?.content[0]?.text ?? "{}").validation.issues)
+			.toContainEqual(expect.objectContaining({ code: "prose_above_word_count_maximum" }));
+		await expect(write?.execute("call-full-rewrite", {
+			path,
+			operation: "replace",
+			content: "甲乙丙丁戊己庚辛壬癸子",
+		})).rejects.toThrow("use operation=replace_fragment");
+		await expect(write?.execute("call-too-small", {
+			path,
+			operation: "replace_fragment",
+			final: false,
+			find: "丑",
+			replacement: "",
+		})).rejects.toThrow("must make substantial progress on the current prose overage");
+		expect(await readFile(join(root, path), "utf8")).toBe("甲乙丙丁戊己庚辛壬癸子丑");
+
+		const repaired = await write?.execute("call-2", {
+			path,
+			operation: "replace_fragment",
+			final: false,
+			find: "子丑",
+			replacement: "",
+		});
+		const payload = JSON.parse(repaired?.content[0]?.text ?? "{}");
+		expect(await readFile(join(root, path), "utf8")).toBe("甲乙丙丁戊己庚辛壬癸");
+		expect(payload.validation.passed).toBe(true);
+		expect(payload.message).toContain("complete_task");
+	});
+
+	it("allows a materially shorter whole-prose replacement before fragment repair", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-large-prose-repair-"));
+		roots.push(root);
+		const path = "drafts/revisions/scene_0001_revision.md";
+		const taskContext: TaskContext = {
+			...context(),
+			currentState: "candidate-revision",
+			expectedOutputs: [path],
+			agentOwnedOutputs: [{ path, kind: "agent-authored", format: "markdown", schemaName: "" }],
+			writablePaths: [path],
+			wordCount: { target: 100, minimum: 90, maximum: 100 },
+			semanticOutputContract: { source_binding: { candidate_path: path } },
+		};
+		const workerState = state();
+		const write = createWorkerTools(taskContext, options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call-1", {
+			path,
+			operation: "replace",
+			content: "甲".repeat(220),
+		});
+		const repaired = await write?.execute("call-2", {
+			path,
+			operation: "replace",
+			content: "甲".repeat(130),
+		});
+
+		const payload = JSON.parse(repaired?.content[0]?.text ?? "{}");
+		expect(await readFile(join(root, path), "utf8")).toBe("甲".repeat(130));
+		expect(payload.validation.issues).toContainEqual(expect.objectContaining({
+			code: "prose_above_word_count_maximum",
+		}));
+	});
+
+	it("accepts a coherent finishing trim when prose is modestly above its maximum", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-finishing-trim-"));
+		roots.push(root);
+		const path = "drafts/revisions/scene_0001_revision.md";
+		const taskContext: TaskContext = {
+			...context(),
+			currentState: "candidate-revision",
+			expectedOutputs: [path],
+			agentOwnedOutputs: [{ path, kind: "agent-authored", format: "markdown", schemaName: "" }],
+			writablePaths: [path],
+			wordCount: { target: 100, minimum: 90, maximum: 100 },
+			semanticOutputContract: { source_binding: { candidate_path: path } },
+		};
+		const workerState = state();
+		const write = createWorkerTools(taskContext, options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call-1", {
+			path,
+			operation: "replace",
+			content: `${"甲".repeat(164)}${"乙".repeat(13)}`,
+		});
+		const repaired = await write?.execute("call-2", {
+			path,
+			operation: "replace_fragment",
+			find: "乙".repeat(13),
+			replacement: "乙",
+		});
+
+		const payload = JSON.parse(repaired?.content[0]?.text ?? "{}");
+		expect(await readFile(join(root, path), "utf8").then((text) => text.length)).toBe(165);
+		expect(payload.validation.issues).toContainEqual(expect.objectContaining({
+			code: "prose_above_word_count_maximum",
+		}));
+	});
+
+	it("locks a valid submitted output and directs the Worker to the next artifact", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-output-lock-"));
+		roots.push(root);
+		const workerState = state();
+		const write = createWorkerTools(context(), options(root), workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		const first = await write?.execute("call-1", {
+			path: "out/review.json",
+			json: {},
+		});
+		const payload = JSON.parse(first?.content[0]?.text ?? "{}");
+		expect(payload.message).toContain("accepted and locked");
+		expect(payload.next_output).toBe("out/review.md");
+
+		await expect(write?.execute("call-2", {
+			path: "out/review.json",
+			content: "{}\n",
+		})).rejects.toThrow("output already passes local validation");
 	});
 
 	it("rejects append when no unfinished artifact owns the target", async () => {
@@ -244,6 +561,69 @@ describe("local output validation", () => {
 		const payload = JSON.parse(await readFile(join(root, "out", "review.json"), "utf8"));
 		expect(payload.longField).toBe(longField);
 		expect(workerState.writtenPaths.has("out/review.json")).toBe(true);
+	});
+
+	it("patches one existing JSON repair target without regenerating the document", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-json-patch-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), JSON.stringify({
+			status: "revise_required",
+			revision_actions: [
+				{ id: "R1", target: "candidate.json" },
+				{ id: "R2", target: "review.md" },
+			],
+			preserved: { evidence: "keep" },
+		}, null, 2), "utf8");
+		const workerState = state();
+		const repairOptions = {
+			...options(root),
+			mode: "repair" as const,
+			repairTargets: ["out/review.json"],
+		};
+		const write = createWorkerTools(context(), repairOptions, workerState, () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+
+		await write?.execute("call", {
+			path: "out/review.json",
+			operation: "patch_json",
+			patches: [{ op: "remove", selector: "revision_actions[1]" }],
+		});
+
+		const payload = JSON.parse(await readFile(join(root, "out", "review.json"), "utf8"));
+		expect(payload.revision_actions).toEqual([{ id: "R1", target: "candidate.json" }]);
+		expect(payload.preserved).toEqual({ evidence: "keep" });
+		expect(workerState.writtenPaths.has("out/review.json")).toBe(true);
+	});
+
+	it("limits JSON patches to declared repair targets and safe existing selectors", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-worker-json-patch-policy-"));
+		roots.push(root);
+		await mkdir(join(root, "out"), { recursive: true });
+		await writeFile(join(root, "out", "review.json"), '{"status":"revise_required"}\n', "utf8");
+		const normalWrite = createWorkerTools(context(), options(root), state(), () => undefined)
+			.find((tool) => tool.name === "write_expected_output");
+		await expect(normalWrite?.execute("call", {
+			path: "out/review.json",
+			operation: "patch_json",
+			patches: [{ op: "replace", selector: "status", value: "pass" }],
+		})).rejects.toThrow("only during a bounded repair run");
+
+		const repairWrite = createWorkerTools(context(), {
+			...options(root),
+			mode: "repair",
+			repairTargets: ["out/review.json"],
+		}, state(), () => undefined).find((tool) => tool.name === "write_expected_output");
+		await expect(repairWrite?.execute("call", {
+			path: "out/review.json",
+			operation: "patch_json",
+			patches: [{ op: "replace", selector: "missing.value", value: "pass" }],
+		})).rejects.toThrow("selector is absent");
+		await expect(repairWrite?.execute("call", {
+			path: "out/review.json",
+			operation: "patch_json",
+			patches: [{ op: "replace", selector: "__proto__.polluted", value: true }],
+		})).rejects.toThrow("forbidden key");
 	});
 
 	it("normalizes provider null placeholders and uniquely infers omitted paths", async () => {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 
@@ -30,6 +31,35 @@ def formal_character_aliases(project_root: Path) -> set[str]:
     return aliases
 
 
+def formal_character_promotion_manifests(project_root: Path) -> tuple[Path, ...]:
+    """Return promotion receipts required to resolve formal character aliases."""
+
+    root = project_root.resolve()
+    promotions = root / "workflow" / "asset_promotions"
+    if not promotions.is_dir():
+        return ()
+    paths: list[Path] = []
+    for path in sorted(promotions.glob("*_promotion.json")):
+        payload = _promotion_payload(path)
+        asset_type = str(payload.get("asset_type") or "").strip().lower()
+        candidate_id = str(payload.get("candidate_id") or "").strip()
+        if asset_type:
+            if asset_type != "character":
+                continue
+            if str(payload.get("status") or "").strip().lower() != "promoted":
+                continue
+            outputs = payload.get("outputs")
+            if not isinstance(outputs, list) or not any(
+                str(item).replace("\\", "/").startswith("characters/")
+                for item in outputs
+            ):
+                continue
+        elif not _legacy_character_candidate_id(candidate_id):
+            continue
+        paths.append(path)
+    return tuple(paths)
+
+
 def is_formal_character(project_root: Path, identity: str) -> bool:
     normalized = str(identity or "").strip()
     if not normalized:
@@ -52,19 +82,11 @@ def read_character_text(path: Path) -> str:
 
 
 def _append_promoted_aliases(root: Path, aliases: set[str]) -> None:
-    promotions = root / "workflow" / "asset_promotions"
-    if not promotions.is_dir():
-        return
-    for path in promotions.glob("*_promotion.json"):
-        text = read_character_text(path)
-        candidate_id = character_field_value(text, "candidate_id")
+    for path in formal_character_promotion_manifests(root):
+        payload = _promotion_payload(path)
+        candidate_id = str(payload.get("candidate_id") or "").strip()
         if not candidate_id:
-            match = re.search(r'"candidate_id"\s*:\s*"([^"]+)"', text)
-            candidate_id = (
-                match.group(1).strip()
-                if match
-                else path.stem.removesuffix("_promotion")
-            )
+            candidate_id = path.stem.removesuffix("_promotion")
         _add_alias(aliases, candidate_id)
         if "protagonist" in candidate_id.lower():
             _add_alias(aliases, "主角")
@@ -72,6 +94,21 @@ def _append_promoted_aliases(root: Path, aliases: set[str]) -> None:
         match = re.match(r"scene-\d+-(.+)", candidate_id)
         if match:
             _add_alias(aliases, match.group(1))
+
+
+def _promotion_payload(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _legacy_character_candidate_id(candidate_id: str) -> bool:
+    normalized = candidate_id.strip().lower()
+    return "protagonist" in normalized or bool(
+        re.match(r"scene-\d+-.+", candidate_id.strip())
+    )
 
 
 def _list_value(text: str, key: str) -> list[str]:
@@ -127,6 +164,7 @@ __all__ = [
     "character_field_value",
     "character_slug",
     "formal_character_aliases",
+    "formal_character_promotion_manifests",
     "is_formal_character",
     "read_character_text",
 ]

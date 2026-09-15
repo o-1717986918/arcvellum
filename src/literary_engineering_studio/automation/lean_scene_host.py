@@ -115,6 +115,8 @@ class LeanSceneAutopilotHost:
         project: Path,
         policy: DelegationPolicy,
         coordinator: LeanSceneRunCoordinator,
+        *,
+        ready_route_index: int | None = None,
     ) -> bool:
         run = self._runs.read_autopilot_run(run_id)
         self._validate_runtime(run)
@@ -130,7 +132,12 @@ class LeanSceneAutopilotHost:
         finally:
             self._release(project, owner)
         self._record_step(run_id, step)
-        return self._apply_step(run_id, run, step)
+        return self._apply_step(
+            run_id,
+            run,
+            step,
+            ready_route_index=ready_route_index,
+        )
 
     def _validate_runtime(self, run: dict[str, Any]) -> None:
         if str(run.get("runtime") or "") != "pi-worker":
@@ -158,11 +165,22 @@ class LeanSceneAutopilotHost:
             },
         )
 
-    def _apply_step(self, run_id: str, run: dict[str, Any], step: Any) -> bool:
+    def _apply_step(
+        self,
+        run_id: str,
+        run: dict[str, Any],
+        step: Any,
+        *,
+        ready_route_index: int | None = None,
+    ) -> bool:
         if step.route_ready:
             self._runs.update_autopilot_run(
                 run_id,
-                route_index=int(run.get("route_index") or 0) + 1,
+                route_index=(
+                    ready_route_index
+                    if ready_route_index is not None
+                    else int(run.get("route_index") or 0) + 1
+                ),
                 current_task_id="",
             )
             return False

@@ -505,6 +505,14 @@ class PromptProgramV3Tests(unittest.TestCase):
         self.assertIn("source_candidate_sha256", contract["studio_owned_fields"])
         self.assertNotIn("candidate_sha256", contract["required_fields"])
         self.assertNotIn("anti_evasion_not_applicable_reason", contract["required_fields"])
+        self.assertEqual(
+            contract["source_binding"],
+            {
+                "source_path": "drafts/candidates/scene_0001-platform-agent.md",
+                "candidate_path": "drafts/revisions/scene_0001_revision.md",
+                "excerpt_policy": "exact-substring",
+            },
+        )
 
     def test_versioned_revision_contract_keeps_semantic_fields_visible(self):
         root = Path("C:/fixture")

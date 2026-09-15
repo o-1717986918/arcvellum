@@ -13,15 +13,15 @@ from .application_info import build_application_info, build_diagnostic_report, b
 from .application.container import ApplicationContainer
 from .application.strategy_projection import strategy_projection as _strategy_projection, typed_plan_events as _typed_plan_events
 from .api.dependencies import archaeology_router_dependencies, style_lab_dependencies
+from .api.project_agent_composition import build_project_agent_service, register_project_agent_router
+from .api.quality_composition import register_quality_router
 from .api.common import friendly_error as _friendly_error, frontend_file as _frontend_file
 from .api.models import (
     WorkerRequest,
 )
 from .api.streaming import (
-    numeric_resume_cursor as _numeric_resume_cursor,
     sse as _sse,
     stream_read_model as _stream_read_model,
-    stream_terminal as _stream_terminal,
     visible_delta_chunks as _visible_delta_chunks,
 )
 from .api.routers.application import ApplicationRouterDependencies, build_application_router
@@ -30,7 +30,6 @@ from .api.routers.archaeology import build_archaeology_router
 from .api.routers.runners import RunnerRouterDependencies, build_runner_router
 from .api.routers.pi_worker import build_pi_worker_router
 from .api.routers.projects import ProjectRouterDependencies, build_project_router
-from .api.routers.quality import QualityRouterDependencies, build_quality_router
 from .api.routers.advisor import AdvisorRouterDependencies, build_advisor_router
 from .api.routers.automation import AutomationRouterDependencies, build_automation_router
 from .api.routers.creative_live import CreativeLiveRouterDependencies, build_creative_live_router
@@ -41,12 +40,11 @@ from .api.routers.delivery import DeliveryRouterDependencies, build_delivery_rou
 from .api.routers.style_lab import build_style_lab_router
 from .api.routers.strategy import StrategyRouterDependencies, build_strategy_router
 from .api.routers.project_details import ProjectDetailRouterDependencies, build_project_detail_router
-from .api.routers.project_agent import ProjectAgentRouterDependencies, build_project_agent_router
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
 from .agent_observability import build_agent_observability
 from .api_read_models import ProjectReadModels
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
-from .advisor_personas import active_persona, persona_catalog, save_custom_persona, select_persona
+from .advisor_personas import persona_catalog, save_custom_persona, select_persona
 from .config import default_projects_root, save_config
 from .core_read_models import build_activity, build_dashboard, build_task_summary, current_choices
 from .core_read_models import record_choice, record_ui_note, save_display_field
@@ -80,19 +78,10 @@ from .project_manager import (
     register_project,
     validate_project_location,
 )
-from .project_agent import ProjectAgentService
-from .project_agent.actions import dependencies_from_actions
-from .project_agent.read_models import dependencies_from_read_models
 from .reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
 from .supervisor import project_lock_key
 from .worker import AgentWorker
-from literary_engineering_studio_engine.public.literary import style_lint_gate
-from literary_engineering_studio_engine.public.literary import (
-    load_creative_quality_profile,
-    save_creative_quality_profile,
-)
-from literary_engineering_studio_engine.public.literary import lint_punctuation
-from literary_engineering_studio_engine.public.literary import load_rhythm_plan, save_rhythm_plan
+from literary_engineering_studio_engine.public.literary import load_creative_quality_profile
 
 def _register_strategy_router(app, config) -> None:
     app.include_router(
@@ -269,51 +258,14 @@ def create_app(
             WorkerRequest(**request),
         ),
     )
-    project_agent = ProjectAgentService(
+    project_agent = build_project_agent_service(
         config,
-        sessions=lifecycle.persistence.sessions,
-        jobs=lifecycle.persistence.worker,
-        dependencies=dependencies_from_read_models(
-            read_models,
-            choices=lambda root: current_choices(
-                config,
-                root,
-                dashboard=read_models.dashboard(root).get("dashboard"),
-            ),
-            quality=lambda root: load_creative_quality_profile(root),
-            rhythm=lambda root: load_rhythm_plan(root),
-            style_mounts=lambda root: style_mounts.status(root),
-            archive_candidates=lambda root: archive_dependencies.candidates.list(root),
-        ),
-        actions=dependencies_from_actions(
-            record_direction=record_direction,
-            autopilot=autopilot,
-            config=config,
-            current_choices=lambda settings, root: current_choices(
-                settings,
-                root,
-                dashboard=read_models.dashboard(root).get("dashboard"),
-            ),
-            record_choice=lambda settings, root, payload: record_choice(
-                settings,
-                root,
-                payload,
-                style_mount_service=style_mounts,
-            ),
-            save_quality=save_creative_quality_profile,
-            save_rhythm=save_rhythm_plan,
-            style_mounts=style_mounts,
-            candidate_promotions=archive_dependencies.candidates,
-            launch_worker=lambda request: launch_worker(
-                worker_dependencies,
-                WorkerRequest(**request),
-            ),
-            invalidate_project=read_models.invalidate,
-        ),
-        persona_loader=lambda root: active_persona(
-            Path(str(config.get("application", {}).get("data_root") or ".")),
-            root,
-        ),
+        lifecycle=lifecycle,
+        autopilot=autopilot,
+        style_mounts=style_mounts,
+        read_models=read_models,
+        archive_dependencies=archive_dependencies,
+        worker_dependencies=worker_dependencies,
     )
     app.state.project_agent = project_agent
 
@@ -358,31 +310,8 @@ def create_app(
     )
     app.include_router(build_pi_worker_router(config))
     app.include_router(build_project_router(_project_router_dependencies(config)))
-    app.include_router(
-        build_project_agent_router(
-            ProjectAgentRouterDependencies(
-                service=project_agent,
-                jobs=lifecycle.persistence.worker,
-                sse=_sse,
-                numeric_resume_cursor=_numeric_resume_cursor,
-                stream_terminal=_stream_terminal,
-            )
-        )
-    )
-
-    app.include_router(
-        build_quality_router(
-            QualityRouterDependencies(
-                load_creative_quality_profile=lambda root: load_creative_quality_profile(root),
-                save_creative_quality_profile=lambda *args, **kwargs: save_creative_quality_profile(*args, **kwargs),
-                style_lint_gate=lambda *args, **kwargs: style_lint_gate(*args, **kwargs),
-                lint_punctuation=lambda *args, **kwargs: lint_punctuation(*args, **kwargs),
-                load_rhythm_plan=lambda root: load_rhythm_plan(root),
-                save_rhythm_plan=lambda *args, **kwargs: save_rhythm_plan(*args, **kwargs),
-                invalidate_project=read_models.invalidate,
-            )
-        )
-    )
+    register_project_agent_router(app, project_agent, lifecycle.persistence.worker)
+    register_quality_router(app, read_models)
 
     _register_strategy_router(app, config)
 

@@ -1,6 +1,9 @@
 import unittest
+from pathlib import Path
+import tempfile
 
 from literary_engineering_studio.project_agent.read_models import dependencies_from_read_models
+from literary_engineering_studio.project_agent.scope import work_id_for_root
 
 
 class _ReadModels:
@@ -69,6 +72,46 @@ class ProjectAgentReadModelTests(unittest.TestCase):
         self.assertEqual(all_controls["style"]["status"], "active")
         self.assertEqual(all_controls["archive"]["candidates"][0]["candidate_id"], "character-lin-che")
         self.assertFalse(all_controls["delivery"]["ready"])
+
+    def test_workspace_catalog_uses_stable_ids_and_resolves_only_registered_works(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            for project in (first, second):
+                project.joinpath("project.yaml").write_text("title: test\n", encoding="utf-8")
+            catalog = {
+                "current_project": str(first),
+                "projects": [
+                    {"path": str(first), "title": "第一部", "status": "writing"},
+                    {"path": str(second), "title": "第二部", "status": "planning"},
+                ],
+            }
+            dependencies = dependencies_from_read_models(_ReadModels(), project_catalog=lambda: catalog)
+
+            result = dependencies.workspace_catalog(root, {})
+            resolved = dependencies.resolve_project(root, {"work_id": work_id_for_root(second)})
+
+            self.assertEqual(result["count"], 2)
+            self.assertEqual(result["current_work_id"], work_id_for_root(first))
+            self.assertNotIn("path", result["works"][0])
+            self.assertEqual(resolved, second.resolve())
+            with self.assertRaisesRegex(ValueError, "unknown or unregistered"):
+                dependencies.resolve_project(root, {"work_id": "work-0000000000000000"})
+
+    def test_diagnose_identifies_pending_decision_before_recovery(self):
+        dependencies = dependencies_from_read_models(
+            _ReadModels(),
+            choices=lambda _root: {"choices": [{"choice_id": "choice-1"}]},
+        )
+
+        result = dependencies.project_diagnose(_root(), {})
+
+        self.assertEqual(result["classification"], "decision_required")
+        self.assertFalse(result["recoverable"])
+        self.assertEqual(result["recommended_tool"], "project_decision_resolve")
 
 
 def _root():

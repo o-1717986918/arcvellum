@@ -72,6 +72,34 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(len(calls), 2)
 
+    def test_dispatcher_resolves_a_registered_cross_work_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            (first / "project.yaml").write_text("title: First\n", encoding="utf-8")
+            (second / "project.yaml").write_text("title: Second\n", encoding="utf-8")
+            seen = []
+            dependencies = ProjectAgentDependencies(
+                project_overview=lambda target, _args: seen.append(target) or {"title": target.name},
+                project_search=lambda _root, _args: {},
+                creation_observe=lambda _root, _args: {},
+                resolve_project=lambda _anchor, args: second if args.get("work_id") == "work-second" else first,
+            )
+            dispatcher = ProjectAgentToolDispatcher(first, dependencies)
+
+            result = dispatcher(ProjectAgentToolCall(
+                "request-cross-work",
+                "turn-1",
+                "project_overview",
+                {"work_id": "work-second"},
+            ))
+
+            self.assertEqual(result["title"], "second")
+            self.assertEqual(seen, [second.resolve()])
+
     def test_dispatches_one_allowed_tool_and_reaps_the_process(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

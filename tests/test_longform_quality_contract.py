@@ -89,6 +89,46 @@ class LongformQualityContractTests(unittest.TestCase):
                 {item["path"] for item in after["files"]},
             )
 
+    def test_longform_snapshot_and_sandbox_include_lean_scene_commits(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            self._write_representative_longform_inputs(project)
+            self._write(
+                project / "workflow" / "scene_commits" / "scene_0001.json",
+                '{"schema":"arcvellum/scene-commit/v2","scene_id":"scene_0001"}\n',
+            )
+            task_markdown = project / "workflow" / "tasks" / "longform.agent_tasks.md"
+            self._write(task_markdown, "# deterministic longform audit\n")
+            blueprint = review_audit_blueprint_for_state(
+                project,
+                "longform-audit-file",
+                "run longform audit",
+            )
+            task = TaskPackage(
+                project_root=project,
+                task_json_path=project / "workflow" / "tasks" / "longform.task.json",
+                task_markdown_path=task_markdown,
+                payload={
+                    "task_id": "review-and-audit-project-review-longform-audit-file",
+                    "route": "review-and-audit",
+                    "current_state": "longform-audit-file",
+                    **blueprint,
+                },
+            )
+
+            sandbox = stage_task(
+                task,
+                root / "runs",
+                runtime="deterministic-engine",
+                materialize_agent_view=False,
+            )
+
+            relative = "workflow/scene_commits/scene_0001.json"
+            self.assertIn("workflow/scene_commits", blueprint["source_paths"])
+            self.assertTrue((sandbox.control_workspace / relative).is_file())
+            self.assertIn(relative, {item["path"] for item in longform_input_snapshot(project)["files"]})
+
     def test_publish_blueprint_stages_its_canon_and_export_read_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -236,6 +276,7 @@ class LongformQualityContractTests(unittest.TestCase):
                 "chapter-workspace",
                 "build chapter workspace",
             )
+            self.assertIn("workflow/scene_commits", blueprint["source_paths"])
             task = TaskPackage(
                 project_root=project,
                 task_json_path=project / "workflow" / "tasks" / "chapter.task.json",
@@ -334,6 +375,20 @@ class LongformQualityContractTests(unittest.TestCase):
             after = longform_input_snapshot(root)
 
             self.assertEqual(after, before)
+
+    def test_chapter_workspace_projection_does_not_stale_literary_audit_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._write_representative_longform_inputs(root)
+            before = longform_input_snapshot(root)
+            self._write(
+                root / "plot/chapters/chapter_0002.json",
+                '{"schema":"literary-engineering-workbench/chapter-workspace/v1"}\n',
+            )
+            after = longform_input_snapshot(root)
+
+            self.assertEqual(after, before)
+            self.assertIn("plot/chapters", LONGFORM_AUDIT_SOURCE_PATHS)
 
     def test_historical_promotion_prevents_future_canon_from_invalidating_scene_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

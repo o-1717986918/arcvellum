@@ -1349,6 +1349,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/project-agent/jobs/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Turn */
+        post: operations["stop_turn_project_agent_jobs__job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/project-agent/sessions": {
         parameters: {
             query?: never;
@@ -2889,7 +2906,10 @@ export interface components {
         };
         /** ProjectAgentSessionRequest */
         ProjectAgentSessionRequest: {
-            /** Project Root */
+            /**
+             * Project Root
+             * @default
+             */
             project_root: string;
             /**
              * Title
@@ -5753,10 +5773,41 @@ export interface operations {
             };
         };
     };
+    stop_turn_project_agent_jobs__job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_sessions_project_agent_sessions_get: {
         parameters: {
-            query: {
-                project_root: string;
+            query?: {
+                project_root?: string;
                 limit?: number;
             };
             header?: never;

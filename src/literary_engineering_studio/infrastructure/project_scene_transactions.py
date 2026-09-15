@@ -303,13 +303,32 @@ def _rhythm_directive(mapping: dict[str, Any], fallback: dict[str, Any]) -> Rhyt
 def _risk_facts(scene_id: str, mapping: dict[str, Any]) -> SceneRiskFacts:
     rhythm = mapping.get("narrative_rhythm")
     curve = rhythm.get("tension_curve") if isinstance(rhythm, dict) else {}
+    output = mapping.get("output_state")
+    output = output if isinstance(output, dict) else {}
     peak = _integer(curve.get("peak")) if isinstance(curve, dict) else 0
     climax = _integer(mapping.get("climax_weight")) or (4 if peak >= 5 else 2 if peak == 4 else 0)
     return SceneRiskFacts(
         scene_id=scene_id,
-        canon_change=_integer(mapping.get("canon_change")),
-        character_state_change=_integer(mapping.get("character_state_change")),
-        new_asset_risk=_integer(mapping.get("new_asset_risk")),
+        canon_change=max(
+            _integer(mapping.get("canon_change")),
+            int(_has_content(output.get("new_facts"))),
+        ),
+        character_state_change=max(
+            _integer(mapping.get("character_state_change")),
+            int(
+                _has_content(output.get("character_changes"))
+                or _has_content(output.get("relationship_changes"))
+            ),
+        ),
+        new_asset_risk=max(
+            _integer(mapping.get("new_asset_risk")),
+            int(
+                any(
+                    _has_content(output.get(key))
+                    for key in ("new_assets", "new_characters", "new_locations", "new_organizations")
+                )
+            ),
+        ),
         branch_ambiguity=_integer(mapping.get("branch_ambiguity")),
         climax_weight=climax,
         continuity_debt=_integer(mapping.get("continuity_debt")),
@@ -355,6 +374,14 @@ def _integer(value: Any) -> int:
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _has_content(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(str(key).strip() or str(item).strip() for key, item in value.items())
+    if isinstance(value, (list, tuple, set)):
+        return any(str(item).strip() for item in value)
+    return bool(str(value or "").strip())
 
 
 def _rel(path: Path, root: Path) -> str:

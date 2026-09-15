@@ -62,7 +62,7 @@ function relativeDate(value: string): string {
       <button class="active" @click="emit('conversation')"><Bot :size="15" />Agent</button>
       <RouterLink data-tour-id="orrery" :to="hasProject ? '/overview' : '/agent?workspace=projects'" :aria-disabled="!hasProject"><Orbit :size="15" />星仪</RouterLink>
     </div>
-    <button class="pa-new-thread" :disabled="disabled || !hasProject" @click="emit('create')"><MessageSquarePlus :size="16" />新对话</button>
+    <button class="pa-new-thread" :disabled="disabled" @click="emit('create')"><MessageSquarePlus :size="16" />新对话</button>
     <label class="pa-thread-search"><Search :size="14" /><input v-model="query" placeholder="搜索会话" /></label>
 
     <div class="pa-thread-section-label">最近对话</div>
@@ -96,7 +96,7 @@ function relativeDate(value: string): string {
     </div>
 
     <div class="pa-project-chip" data-tour-id="project">
-      <span>{{ hasProject ? projectTitle.slice(0, 1) : '＋' }}</span><div><strong>{{ hasProject ? projectTitle : '尚未选择作品' }}</strong><small>{{ hasProject ? (projectProgress == null ? '正在读取进度' : `全书 ${Math.round(projectProgress)}%`) : '从作品库开始' }}</small></div>
+      <span>{{ hasProject ? projectTitle.slice(0, 1) : '＋' }}</span><div><strong>{{ hasProject ? projectTitle : '作品库总控' }}</strong><small>{{ hasProject ? (projectProgress == null ? '正在读取进度' : `全书 ${Math.round(projectProgress)}%`) : '可以让 Agent 建立作品' }}</small></div>
     </div>
   </aside>
 </template>

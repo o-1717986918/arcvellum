@@ -122,6 +122,67 @@ def _project_revision_task(root: Path, count: int = 8) -> TaskPackage:
     return TaskPackage(root, root / "task.json", root / "task.md", payload)
 
 
+def _prose_task(root: Path) -> TaskPackage:
+    payload = {
+        "task_id": "scene-development-scene-0001-candidate-generation-provenance",
+        "route": "scene-development",
+        "current_state": "candidate-generation-provenance",
+        "task_type": "main-platform-agent-prose",
+        "execution_policy": "agent-required",
+        "agent_role": "main-creative-agent",
+        "runtime_capabilities_required": [],
+        "human_gate": {"required": False, "reasons": [], "source": "test"},
+        "expected_outputs": [
+            "drafts/candidates/scene_0001-platform-agent.md",
+            "drafts/candidates/scene_0001-platform-agent.json",
+        ],
+        "output_contracts": [
+            {
+                "path": "drafts/candidates/scene_0001-platform-agent.md",
+                "kind": "agent-authored",
+                "writeback_policy": "preview-required",
+            },
+            {
+                "path": "drafts/candidates/scene_0001-platform-agent.json",
+                "kind": "agent-authored",
+                "writeback_policy": "preview-required",
+            },
+        ],
+    }
+    return TaskPackage(root, root / "task.json", root / "task.md", payload)
+
+
+def _scene_revision_task(root: Path) -> TaskPackage:
+    payload = {
+        "task_id": "scene-development-scene-0001-candidate-revision",
+        "route": "scene-development",
+        "current_state": "candidate-revision",
+        "task_type": "platform-agent-revision",
+        "execution_policy": "agent-required",
+        "agent_role": "main-creative-agent",
+        "runtime_capabilities_required": [],
+        "human_gate": {"required": False, "reasons": [], "source": "test"},
+        "expected_outputs": [
+            "drafts/revisions/scene_0001_revision.md",
+            "drafts/revisions/scene_0001_revision_report.md",
+            "drafts/revisions/scene_0001_revision.json",
+        ],
+        "output_contracts": [
+            {
+                "path": path,
+                "kind": "agent-authored",
+                "writeback_policy": "preview-required",
+            }
+            for path in (
+                "drafts/revisions/scene_0001_revision.md",
+                "drafts/revisions/scene_0001_revision_report.md",
+                "drafts/revisions/scene_0001_revision.json",
+            )
+        ],
+    }
+    return TaskPackage(root, root / "task.json", root / "task.md", payload)
+
+
 class WorkerExecutionProfileTests(unittest.TestCase):
     def test_shadow_profile_is_persisted_before_runtime_capabilities_are_known(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -293,6 +354,84 @@ class WorkerExecutionProfileTests(unittest.TestCase):
         self.assertGreaterEqual(kwargs["max_tool_calls"], 18)
         self.assertGreaterEqual(
             kwargs["reasoning_budget"]["max_provider_requests"], 18
+        )
+
+    def test_pi_prose_budget_can_commit_text_and_semantic_receipt(self):
+        settings = {
+            "timeout_seconds": 1800,
+            "max_repair_attempts": 2,
+            "execution_profile": {
+                "enforcement": {"enabled": True, "task_kinds": ["prose"]}
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _prose_task(root)
+            sandbox = _sandbox(root)
+            observer = _Observer()
+            profile, timeout = activate_execution_profile(
+                task,
+                sandbox,
+                worker_config=settings,
+                runtime_id="pi-worker",
+                runtime=_PiWorkerRuntime(),
+                observer=observer,
+            )
+            kwargs = build_runtime_kwargs(
+                task,
+                sandbox,
+                runtime_id="pi-worker",
+                timeout=timeout,
+                profile=profile,
+                worker_config=settings,
+                observer=observer,
+                cancel_event=threading.Event(),
+                writeback=_Writeback(),
+            )
+
+        self.assertGreaterEqual(kwargs["max_turns"], 5)
+        self.assertGreaterEqual(kwargs["max_tool_calls"], 6)
+        self.assertGreaterEqual(
+            kwargs["reasoning_budget"]["max_provider_requests"], 5
+        )
+
+    def test_fresh_pi_scene_revision_reserves_one_measured_correction(self):
+        settings = {
+            "timeout_seconds": 1800,
+            "max_repair_attempts": 2,
+            "execution_profile": {
+                "enforcement": {"enabled": True, "task_kinds": ["prose"]}
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = _scene_revision_task(root)
+            sandbox = _sandbox(root)
+            profile, timeout = activate_execution_profile(
+                task,
+                sandbox,
+                worker_config=settings,
+                runtime_id="pi-worker",
+                runtime=_PiWorkerRuntime(),
+                observer=_Observer(),
+            )
+            kwargs = build_runtime_kwargs(
+                task,
+                sandbox,
+                runtime_id="pi-worker",
+                timeout=timeout,
+                profile=profile,
+                worker_config=settings,
+                observer=_Observer(),
+                cancel_event=threading.Event(),
+                writeback=_Writeback(),
+            )
+
+        self.assertGreaterEqual(kwargs["max_turns"], 10)
+        self.assertGreaterEqual(kwargs["max_tool_calls"], 11)
+        self.assertGreaterEqual(kwargs["max_repairs"], 4)
+        self.assertGreaterEqual(
+            kwargs["reasoning_budget"]["max_provider_requests"], 10
         )
 
 
