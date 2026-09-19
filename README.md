@@ -1,282 +1,143 @@
 # ArcVellum
 
-> 面向长篇虚构创作的文学工程工作室：让 Agent 创作，让系统记忆，让人始终掌握作品方向。
+> 给长篇文学创作一个能持续工作、记住作品、交付成书的本地工作室。
 
-[![Release](https://img.shields.io/github/v/release/o-1717986918/arcvellum?display_name=tag&sort=semver)](https://github.com/o-1717986918/arcvellum/releases)
+[![Latest release](https://img.shields.io/github/v/release/o-1717986918/arcvellum?display_name=tag&sort=semver)](https://github.com/o-1717986918/arcvellum/releases/latest)
 [![License](https://img.shields.io/github/license/o-1717986918/arcvellum)](LICENSE)
-[![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-2d7465)](https://github.com/o-1717986918/arcvellum/releases)
-[![macOS Preview](https://img.shields.io/badge/macOS-unsigned%20preview-b8954b)](https://github.com/o-1717986918/arcvellum/releases)
+[![Windows](https://img.shields.io/badge/Windows-x64-2d7465)](https://github.com/o-1717986918/arcvellum/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-unsigned%20preview-b8954b)](https://github.com/o-1717986918/arcvellum/releases/latest)
 
-ArcVellum 是一款面向小说、剧本与伪记录作品的本地 Agent 创作平台。它不把长篇创作当成一段越滚越长的聊天记录，而是把人物、世界观、场景、文风、字数预算、审查证据和正式正文维护成一个可持续推进的文学项目。
+ArcVellum 面向小说及其他长篇虚构作品。你可以与项目 Agent 讨论方向，也可以交给它一个长期目标，例如“创建一部三章的悬疑小说，写到可交付”。它负责建立项目、调用创作流程、观察后台进度，并在完成或遇到阻断后回到同一段对话汇报。你仍能随时阅读已完成正文，查看人物与世界设定、创作现场和交付文件。
 
-它要解决的不是“让 AI 多写一点”，而是“让几十万字之后的作品，仍然记得自己为什么这样写”。
+长篇创作的困难往往出现在第一段精彩文本之后：人物前后矛盾，情节库存撑不起目标篇幅，文风漂移，审查意见没有落实，最终文件混入工作记录。ArcVellum 把这些问题放进同一个可恢复的文学项目，而不只放进模型的聊天上下文。
 
-![ArcVellum v0.99.3 叙事星仪](docs/images/arcvellum-orrery-v0993.png)
+**当前版本：v0.99.6 Beta。** [下载 Windows 安装包](https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.6) · [阅读发行说明](docs/releases/v0.99.6.md) · [查看验证记录](docs/releases/v0.99.6-verification.md)
 
-## 写作者能得到什么
+## 从一句话开始
 
-### 写一部作品，而不是攒一堆生成结果
+1. 安装 Windows x64 版本并打开 ArcVellum。安装包已包含应用服务、文学内核和 Pi Worker，不要求另外安装 Python、Node.js、OpenCode 或浏览器。
+2. 在 **设置 → 连接与模型** 配置你自己的模型服务与凭证。ArcVellum 不附赠模型额度；连接云端服务时，任务所需的作品资料会发送给你选定的服务商。
+3. 在项目 Agent 对话中描述作品方向。它可以创建作品、维护创作约束、启动长期目标，也可以先与你讨论人物、结构、节奏和文风。
+4. 用顶部 **Agent / 星仪** 切换对话与空间视图；从工作区打开正文长卷、创作现场、作品档案、文风成果、质量与节奏、Agent 观测和交付状态。
 
-多数 AI 写作工具能写出一段不错的场景；真正困难的是写到十章、五十章甚至数百个场景之后，人物还能不能自洽，伏笔还能不能兑现，篇幅会不会坍缩，模型会不会偷偷跳过本该发生的推演与审查。
+新安装或空作品库会提供随包的只读演示项目，便于先了解界面。个人作品默认位于 `Documents/ArcVellum/Works`，可以在应用中更改作品库位置。
 
-ArcVellum 为个人创作者提供了一张长期创作的工作台：
+### 写作时能看到什么
 
-- **作品会记得。** 世界规则、人物履历、秘密、关系、地点、场景状态与背景故事都是正式资料，而不是散落在聊天记录里的“上下文”。
-- **故事有形状。** 字数预算、场景功能、叙事节奏、读者问题、承诺与兑现、场景衔接都会进入规划、生成与审查。
-- **流程不靠自觉。** 角色推演、分支比较、编剧态、审查、修订、晋升、状态演化是有证据的正式环节，而不是一段 Prompt 里的可选建议。
-- **正文可以随时阅读。** 已晋升正文会自动汇集成一部可搜索、可书签、可连续阅读的作品；推进创作与读小说不再是两件割裂的事。
-- **控制不必像写代码。** 你可以在可视化界面、自然语言顾问和决策卡之间切换。你负责方向、判断与品味，系统负责记忆、任务和约束。
-
-ArcVellum 适合在意连续性、人物后果、文风、节奏，以及“这真的是同一部作品吗”这一问题的创作者。
-
-## 一眼看见作品正在长成什么
-
-### 叙事星仪 Narrative Orrery
-
-ArcVellum 的中心不是普通仪表盘，而是一片可平移、缩放、聚焦的 2.5D 叙事场域。章节锚点、场景簇、人物联系、候选分支、Canon 压力、审查债务、字数增长与当前任务，都会由真实项目状态投影为可阅读的故事脉络。
-
-星仪可在工作台与全视口沉浸模式之间切换。推进、决策、规则、节奏、项目健康度和正文等仪器窗围绕场域工作，支持多开、拖动、缩放、折叠与复位。主题、动效强度、伪 3D 纵深与渲染质量都由用户掌控；它不是装饰性星空，而是作品结构的可视化观察面。
-
-### 一本会随创作生长的书
-
-通过门禁的场景会自动进入正式正文阅读器。阅读器支持连续/分章模式、全文搜索、目录、书签、阅读位置恢复、字号、行距、日夜主题与全屏。创作继续推进时，新晋升的正文会温和提示，不会把读者从当前页强行拽走。
-
-![ArcVellum v0.99.3 正文阅读器](docs/images/arcvellum-reader-v0993.png)
-
-### 看见 Agent 正在写什么
-
-v0.99.4 新增“创作现场”。正文候选会在 Pi Worker 写入正式文件之前以临时预览呈现，随后沿着候选写入、确定性预检、语义审读、修订和正式晋升逐级变化。左侧说明当前文学任务与产物身份，中间持续显示候选文本，右侧汇集审查证据、可见 Agent 会话、工具活动和修订差异。
-
-这条实时链与正式项目权力严格分开：断线只影响观察，不影响 Worker；临时候选不会进入阅读器、导出、Canon 或人物状态；重连会依靠事件游标与完整快照恢复，而不会要求模型重新生成内容。
-
-![ArcVellum v0.99.4 创作现场](docs/images/arcvellum-creative-live-v0994.png)
-
-### 一位能把长任务做完的项目 Agent
-
-项目 Agent 可以用自然语言讨论人物、结构、节奏和文风，也可以创建作品、记录方向、管理创作配置、处理项目决定，并把“完成这部作品”交给后台持续执行。长期目标运行时，对话会持续显示真实进度；作品完成或遇到阻断后，同一轮对话会自动恢复，核验项目证据并给出结果，无需用户再发一句“检查完成了吗”。
-
-项目 Agent 通过有界领域工具管理整个作品库，不直接编辑项目文件。Autopilot 在内部负责长时间循环、租约和恢复，Lean v2 内核维护正文、审查、Canon 与交付事实，Pi Worker 完成具体文学任务。等待后台创作时不会保留空闲模型进程。
-
-## ArcVellum 与普通 AI 写作工具的差别
-
-| 常见做法 | ArcVellum 的做法 |
+| 工作区 | 用途 |
 | --- | --- |
-| 一条超长 Prompt 加一段持续聊天 | 维护一套有明确事实来源的文学项目资产 |
-| 模型自己判断哪些步骤值得做 | CLI 状态机签发下一项允许执行的任务 |
-| 同一个模型写完又自己说“没问题” | 确定性 Lint、证据校验、审查任务与正文晋升门禁共同把关 |
-| 决策和产物埋在不可追溯的聊天里 | 分支、选择、状态变化、审查和失败都有可查证记录 |
-| 单场景成功却可能毁掉整本书 | Canon、人物状态、读者承诺、节奏与字数预算一起检查 |
-| 工具一多，普通作者无从下手 | 桌面端把复杂状态包装成可读的项目面板、选择和正文 |
+| **项目 Agent** | 跨作品对话、创建作品、记录方向、调整规则、交付长期目标，以及在目标结束后复核结果。 |
+| **叙事星仪** | 在可平移、缩放的空间视图里观察章节、场景和作品关系；它是作品状态的另一种入口。 |
+| **正文长卷** | 只阅读已正式提交的正文；目录、搜索与阅读位置服务于持续阅读。 |
+| **创作现场 / Agent 观测** | 查看当前任务、候选文本、审查与修订事件。候选预览不等于正式正文。 |
+| **作品档案 / 文风工作台** | 查看和管理人物、世界、项目资料、语料、文风版本与挂载。 |
+| **交付中心** | 检查正式交付状态，取得过滤了流程痕迹的 Markdown 和 DOCX。 |
 
-## 核心架构：让 Agent 创作，让系统守住作品
+工作区是对同一文学项目的不同查看方式，不要求作者学习内部文件路径或逐条操作 CLI。
 
-ArcVellum 将**创作智能**与**项目权力**分开。模型可以推演、写作、审查与提出建议；它不能静默改写项目事实、伪造流程产物，或自行跨越创作路线。
+## 它如何持续完成一部作品
 
 ```mermaid
 flowchart LR
-    Writer["创作者\n方向、选择、批准"] --> Studio["ArcVellum Studio\nTauri 桌面端 + Vue 客户端"]
-    Studio --> API["本地应用服务\nFastAPI、SSE、项目读模型"]
-    API --> Engine["文学工程内核\nCLI 状态机 + 正式门禁"]
-
-    Engine --> Package["任务包\n允许资料、预期产物、约束"]
-    Package --> Sandbox["隔离任务工作区"]
-    Sandbox --> Runtime["Agent Runtime\n内置 Pi Worker / 可选外部适配器"]
-    Runtime --> Preflight["预检\nSchema、溯源、Lint、差异"]
-    Preflight --> Engine
-
-    Engine --> Project["项目资产\nCanon、人物、场景、账本、草稿"]
-    API --> Orrery["Narrative Orrery\n实时叙事观测"]
-    API --> Reader["正文阅读器\n仅展示已晋升内容"]
-    Engine --> Delivery["正式交付\n清洁 Markdown、DOCX、交付证据"]
+    U["创作者<br/>方向与反馈"] --> A["项目 Agent<br/>对话、领域工具、长期目标"]
+    A --> S["Studio 服务<br/>作品库、策略、运行与恢复"]
+    S --> P["Autopilot<br/>后台持续推进"]
+    P --> E["文学内核<br/>规划、场景事务、章节检查"]
+    E --> W["Pi Worker<br/>创作与语义判断"]
+    W --> V["验证与正式写回<br/>正文、人物、Canon、交付证据"]
+    V --> R["阅读器 / 星仪 / 创作现场"]
+    R --> U
 ```
 
-### 四条架构原则
+### 项目 Agent：对话和管理作品
 
-1. **CLI 是唯一权威。** 正式路线不是一份待办清单，而是状态机。它决定下一项可执行任务，并验证推进所需证据。
-2. **Agent 只能在任务范围内工作。** 每个任务包都声明允许读取的资料和允许产出的文件。Agent 在沙箱里工作，只有通过预检的结果才能写回正式项目。
-3. **创作候选与项目事实必须分层。** 正文候选、Canon 提案、人物状态补丁与已晋升正文不是同一种东西，各自拥有不同的来源、审查和写回规则。
-4. **界面只展示真实状态。** 星仪、决策中心、阅读器、任务面板与进度条都投影自同一份受内核验证的项目状态，而不是演示数据。
+项目 Agent 使用内置 Pi Runtime 与模型对话。它可以搜索作品库、读取进度、诊断停滞，并通过有类型的领域工具创建作品、记录方向、更新质量和节奏设置、挂载文风、处理决策或启动长期目标。它不能凭一句话直接改写任意项目文件；真正的创作、审查、晋升与发布仍由对应服务完成。
 
-## v0.99.6 技术基线
+长期目标交给后台后，**同一轮对话保持可观察**：界面显示有意义的进度变化，而等待期间不占用一个空闲的模型推理进程。目标完成、暂停或失败时，项目 Agent 会继续这一轮对话，读取真实证据，能在既有权限内修复时尝试恢复，然后报告结果。关闭对话观察不会暗中取消后台创作。
 
-| 能力 | 当前实现 |
-| --- | --- |
-| 正式文学路线 | 7 条：长篇规划、场景开发、来源导入、文风工程、人物与世界资产、审查审计、导出发布 |
-| 内置 Agent | Pi Worker，随桌面包提供固定 Node 运行时；通用 Runtime SPI 保留外部执行器扩展能力 |
-| Agent 边界 | 双工作区、白名单资料、声明输出、确定性预检、事务写回与有限修复 |
-| 提示词工程 | Prompt v3 按 structured / planning / prose / review / style 等 Recipe 编译任务 |
-| 文学求解 | 字数预算、场景功能、角色推演、分支选择、节奏与衔接、Review CI、状态与 Canon 写回 |
-| 只读产品投影 | Narrative Projection 为星仪、正文、决策、档案和 Agent 运行中心提供统一状态 |
-| 创作可观测性 | Creative Live Event、项目级 SSE、候选正文快照、会话、Review、Diff 与用量投影 |
-| 长任务对话 | Project Agent 委托 Autopilot 后保持同一会话任务，流式观察进度，终态自动复核与回复 |
-| 连续验证样本 | 两章六场、30,080 个中文内容字符，完成审查、晋升、状态、Canon 与连续性闭环 |
-| 当前阶段 | Beta，继续积累多题材长篇、无人值守恢复、干净机器安装和 macOS 签名证据 |
+### Pi Worker：负责文学内容
 
-Pi Worker 继续采用“薄领域内核、强确定性宿主、量化后扩张”的专业化路线。正文提示示例由 189,908 字符降至 29,218 字符；现有结构化任务 A/B 样本中，总 Token 下降约 31%，成本下降约 28%，时长下降约 17%。审查任务总 Token 下降约 16%，时延仍需结合 Provider 往返与工具调用继续优化。完整决策与继续投资门槛见 [Pi Worker 专业化成本收益决策](docs/architecture/pi-worker-specialization-cost-benefit-decision.md)。
+内置 Pi Worker 承担正文、规划候选与语义审查等需要模型判断的工作。系统给它当前任务所需的作品资料、约束和产物边界；Python 服务负责进程、工作区、验证与写回。普通安装版不依赖 OpenCode，外部 Agent 适配能力保留为扩展接口。
 
-![ArcVellum v0.99.3 Agent 运行中心](docs/images/arcvellum-agent-runtime-v0993.png)
+### 文学内核：保留事实，减少手续
 
-这使 ArcVellum 能同时保留文学创作的自由度与大型项目应有的约束力。
+ArcVellum 当前同时维护两种场景路径：
 
-从 v0.96.2 开始，场景任务还可以携带受 Schema 约束的创作策略：推演深度、分支数量、叙事距离、字数目标、修订方式和回退策略都能随作品需要调整；强制门禁仍由系统注入，Agent 可以改变创作路径，不能删除文学工程底线。策略变化通过带版本与指纹的计划补丁进入任务图，便于复查、失效检测和后续恢复。
+- **`lean-v2`** 将单个场景作为创作事务，集中完成生成、必要的验证与语义审查、修订和提交；章节检查点处理跨场景问题。项目 Agent 启动的长期目标使用这条路径，目前它仍是预览能力，需要继续积累同模型盲评与多题材长篇证据。
+- **`strict-v1`** 保留原有细粒度任务协议与历史项目兼容。一般新建项目的初始内核仍由兼容清单决定；当前清单尚未将 `lean-v2` 设为所有项目的默认值。
 
-## 一条可复查的创作路线
+两个路径都保留正式事实写回、来源记录和交付检查。Lean v2 减少了创作过程中的重复产物与模型往返，同时保留不可逆写回边界。关于取舍与迁移，见 [Lean v2 设计](docs/architecture/arcvellum-lean-literary-kernel-v2-design.md)。
 
-具体任务会随项目而变，但单个场景的正式开发遵循一条稳定的契约：
+## 长篇文学工程具体管理什么
 
-```mermaid
-flowchart LR
-    A["规划\n大纲、场景库存、字数预算"] --> B["上下文\nCanon、人物状态、读者契约"]
-    B --> C["推演\n角色扮演与世界后果"]
-    C --> D["决策\n比较分支并记录选择"]
-    D --> E["编剧态\n功能、节奏、衔接与正文约束"]
-    E --> F["草稿\nAgent 生成正文候选"]
-    F --> G["审查 + Lint\n文风、Canon、连续性、读者效果"]
-    G --> H["修订或晋升\n内容指纹保护"]
-    H --> I["演化\n状态、Canon 候选、连续性账本"]
-    I --> J["审计与交付\n章节、长篇、导出检查"]
-```
+- **作品记忆：** 人物背景、关系、世界规则、场景事实与 Canon 在项目中持续保存，供后续创作读取。
+- **篇幅与结构：** 字数目标、章节和场景库存用于判断剧情量是否足以支撑目标篇幅；场景软预算与章节检查点共同管理详略。
+- **文学判断：** 场景功能、叙事节奏、前后衔接、读者问题与承诺、人物选择和文风进入生成及审读环节，复杂程度随路径与风险而变化。
+- **正文身份：** 候选、修订、正式提交和导出各有不同状态。阅读器与正式交付只取已经提交的内容。
+- **可恢复运行：** 后台任务、事件与提交回执记录实际进度；停顿时可以定位到作品和任务，不必把整部作品重新交给模型。
 
-### 创作过程中会实际检查什么
+这些机制是辅助创作的工具。它们不能保证一部作品的文学价值，也不能代替作者对主题、素材权利和最终发表的判断。
 
-- **篇幅与剧情库存：** 汉字目标会从全书映射到卷、章和场景。短篇幅的大纲不能靠硬拉长句子来伪装成一部长篇。
-- **叙事节奏：** 场景功能、速度、密度、转向、叙述距离、前场压力、后场钩子和读者效果会进入编剧态与 Review。
-- **连续性：** Canon 规则、禁止变化、人物的 belief/desire/fear/background story、关系与状态变化保持显式。
-- **读者体验：** 问题、承诺、暂扣、兑现、张力和章节结尾策略会被记录，避免场景像互不相干的短视频。
-- **文风与反 AI 腔：** 已挂载文风在生成前就进入约束。确定性 Style Lint 与语义审查共同检查机械对照、标点误用和其他项目规则。
-- **证据链：** 候选稿、Review、修订、晋升和交付由内容指纹关联，避免“审查的是 A，最后发布的是 B”。
+## 当前验证与边界
 
-## 技术路线
+v0.99.6 已完成 Windows 生产构建与签名更新包发布；同一标签的 CI 还生成 macOS Apple Silicon 和 Intel **未签名预览包**。macOS 包尚未经过 Developer ID 签名和 Apple notarization，暂不按普通用户稳定版介绍。
 
-ArcVellum 是一套本地优先、可打包、可测试的桌面应用与文学工程内核。
+真实端到端样本中，项目 Agent 曾驱动一个 `full_auto`、`lean-v2` 项目从创作目标推进到一场正文正式提交和整书 Markdown/DOCX 交付；该样本完成 91 项后台任务，最终无失败和待处理决策。[验收证据](docs/verification/arcvellum-project-agent-e2e-2026-09-15.md)记录了运行、场景提交与发布清单。这是**单场景链路证明**，还不能代表多题材、几十万字作品都已稳定完成。
 
-| 层级 | 技术 | 职责 |
+发布验证还包括 1449 项 Python 测试通过（1 项因当前 Windows 符号链接环境跳过）、219 项 Vue 测试、102 项 Pi Worker 测试，以及 Prompt Registry、提示词评估、架构审计和版本同步检查。[详细结果](docs/releases/v0.99.6-verification.md)。
+
+目前仍需积累的证据包括：长期无人值守恢复、不同模型与题材的文学质量、完整 Windows 安装/升级矩阵，以及正式签名的 macOS 发行流程。项目处于 Beta，重要作品建议自行保留备份并定期检查正式交付文件。
+
+## 技术结构
+
+| 层 | 主要技术 | 所有权 |
 | --- | --- | --- |
-| 桌面壳 | Tauri + Rust | Windows 安装包、自动更新、本地进程生命周期、安全桥接 |
-| 产品界面 | Vue 3 + TypeScript + Vite | 星仪、阅读器、决策、设置与流式项目视图 |
-| 应用服务 | FastAPI + SSE | 本地认证 API、实时读模型、事件流与项目控制 |
-| 文学工程内核 | Python CLI | 路线状态机、任务包、Schema、门禁、审计与交付准备 |
-| Agent Runtime | 内置 Pi Worker + 通用 Runtime SPI | 受控文学任务执行、权限隔离、独立主创与审查 Profile |
-| 模型连接 | Pi Provider Catalog | 常用厂商预设、按角色持久选模、OpenAI 兼容自定义端点 |
-| 项目格式 | 人类可读文件 + 账本 | Canon、人物、场景、Review 和交付物的长期保存 |
-| 交付 | Markdown/DOCX 管线 | 过滤流程痕迹后的完整作品输出 |
+| 桌面应用 | Tauri 2、Rust | 窗口、打包、自动更新、桌面进程生命周期。 |
+| 产品界面 | Vue 3、TypeScript、Vite、PixiJS | 项目 Agent 工作区、叙事星仪、阅读器、档案与创作现场。 |
+| 本地服务 | Python、FastAPI、SSE、SQLite | 作品库、领域工具、后台运行、事件流与持久化。 |
+| 文学内核 | `literary_engineering_studio_engine` | 项目契约、场景事务、兼容路线、验证、审计与交付规则。 |
+| Agent Runtime | 内置 Pi Worker | 模型交互与受控文学任务执行。 |
 
-### 模型连接不锁定厂商
+仓库中的独立 Skill 不是 ArcVellum 的运行依赖；文学内核已随 Studio 一起打包。开发定位可先看 [模块目录](docs/architecture/module-catalog.md) 和 [故障定位索引](docs/architecture/troubleshooting-module-index.md)，再进入对应模块。历史架构文档保留了方案形成过程，应以当前源码、兼容清单和发行验证作为版本事实。
 
-内置 Pi Worker 提供 DeepSeek、智谱 AI、阿里云百炼、Moonshot、MiniMax、SiliconFlow、OpenAI、Anthropic、Google、OpenRouter、Groq 等常用预设，也支持自定义 OpenAI-compatible 接口。其他执行器通过通用 Runtime SPI 扩展，不进入普通安装包的默认依赖。
+## 本地开发
 
-模型选择按角色持久保存。切换模型时，未来的空闲 Worker 会更新为新选择，正在运行的任务不会被粗暴中断。凭证由 Runner 的认证机制管理，不进入项目文件、任务包、普通日志或 Studio 常规配置。
-
-## 安装后即可开始
-
-### Windows 桌面端
-
-1. 前往 [Releases](https://github.com/o-1717986918/arcvellum/releases) 下载最新 Windows x64 安装程序。
-2. 启动 ArcVellum。默认作品库为 `Documents/ArcVellum/Works`，也可在设置中调整。
-3. 打开 **设置 -> 连接与模型**，连接模型服务并为不同角色选择模型。
-4. 新建作品，写下创作大方向与约束，再选择协作、监督自动或全自动推进方式。
-5. 通过星仪理解项目，通过阅读器阅读已晋升正文，通过“交付”导出完整作品。
-
-安装包包含本地应用服务、文学工程内核、Pi Worker 及其固定 Node 运行时；无需预先安装 Python、Node.js、Rust、浏览器、OpenCode 或其他 Agent 平台。模型推理仍需要用户自行选择并授权的模型服务或本地端点。
-
-### macOS 预览包
-
-CI 同时构建 Apple Silicon 与 Intel 两种 DMG。当前资产明确标记为 `unsigned-preview`，用于验证架构、界面和本地运行链；在完成 Developer ID 签名与 Apple notarization 之前，它不等同于面向普通用户的正式 macOS 稳定版。
-
-### 自动更新
-
-ArcVellum 的 Windows Release 包含安装包、Tauri 更新验签文件、校验和以及 `latest.json` 更新清单。已安装版本可通过应用内检查更新完成正常升级。最新版本以 Releases 页面为准。
-
-## 开发者入口
+需要 Python 3.10+、Node.js/npm、Rust/Tauri 所需的系统构建工具。安装源码依赖：
 
 ```powershell
 git clone https://github.com/o-1717986918/arcvellum.git
 cd arcvellum
 python -m pip install -e ".[api,test]"
 npm ci
-python -m literary_engineering_studio serve --port 8791
+npm run pi-worker:install
+npm run pi-worker:build
 ```
 
-Vue 热更新开发：
+分别启动本地服务与前端热更新：
+
+```powershell
+python -m literary_engineering_studio serve --port 8791
+```
 
 ```powershell
 npm run client:dev
 ```
 
-### 仓库地图
+开发页面位于 `http://127.0.0.1:5173/ui/`。本地构建、发布签名及平台要求见 [发布指南](docs/releases/RELEASING.md)。
 
-| 路径 | 用途 |
-| --- | --- |
-| `src/literary_engineering_studio/` | 应用服务、Runtime、CLI 集成与产品模块 |
-| `client/` | Vue 客户端与叙事星仪渲染器 |
-| `desktop/` | Tauri 桌面壳、更新器与安全桌面桥接 |
-| `protocol/` | 正式工作流共享的任务与项目契约 |
-| `tests/` | 内核、API、Runtime、预检与集成测试 |
-| `docs/architecture/` | 内核审查、双工作区与模块边界说明 |
-| `docs/roadmap/` | 当前开发目标、长期产品路线与执行指导 |
-| `docs/releases/` | 版本记录与签名发布流程 |
-| `packaging/` | Windows 打包与更新清单脚本 |
-
-长期目标与分阶段实施方案见
-[ArcVellum v0.96 - v1.0 长期产品与 Runtime 路线图](docs/roadmap/arcvellum-post-v0.95.3-long-horizon-product-and-runtime-roadmap.md)。
-
-### 验证命令
+常用验证：
 
 ```powershell
 ./scripts/run_tests.ps1 -v
-python -m compileall -q src
-python -m literary_engineering_studio_engine prompt-registry-validate --json
+python scripts/architecture_audit.py
+python scripts/generate_module_map.py --check
 npm run client:test
+npm run pi-worker:check
 npm run client:build
-cd desktop/src-tauri
-cargo check --locked
 ```
 
-本地构建 Windows 候选包：
+## 数据、模型与责任
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_desktop.ps1 -SkipPythonInstall -SkipNodeInstall
-```
+作品文件与运行记录优先保存在本机；本地服务默认监听 `127.0.0.1`。接入云端模型时，完成任务所需的提示词和作品上下文仍会发送给该服务商，具体处理方式取决于其条款。凭证不应写进作品项目或提交到 Git。使用第三方文本、作者文风和生成作品时，请确认相应权利与发表责任。
 
-## 安全、边界与责任
-
-- 本地服务默认只监听 `127.0.0.1`；桌面端通过启动令牌建立已认证会话。
-- Agent Runner 按能力隔离并在任务沙箱中执行，越出 `expected_outputs` 的文件不能晋升到正式项目。
-- 顾问与自动创作管家只通过只读项目投影工作；人工选择、策略、审批、写回、失败和发布身份都可审计。
-- 凭证与项目资产隔离。诊断报告会过滤凭证、正文全文与完整本地路径。
-- ArcVellum 不会授予用户对输入素材、模仿对象或最终发布的权利。创作者应自行遵守素材权利、模型服务条款与发布责任。
-
-## 项目状态与 v1.0 方向
-
-ArcVellum 目前处于 **Beta**：Windows 桌面端、带验签的自动更新、本地 Agent Runtime、正式文学工作流门禁、受约束的场景策略计划、2.5D 叙事星仪、正文阅读与清洁导出均已可用。v0.99.0 完成应用层、Runtime、文学内核、持久化、事件与 Vue 功能端口的接口化收敛，并以普通用户的 `full_auto` 路径完成一部两章六场、30080 个中文内容字符的正式作品；六场正文均经独立审查、晋升、状态、Canon 与连续性写回，四条发布路线最终保持零阻断。
-
-走向 v1.0 的重点不是继续堆功能，而是积累证据：更多题材的长期项目样本、无人值守恢复验证、Windows 10/11 干净环境下的安装/覆盖升级矩阵、更强的模型连接诊断，以及在真实稿件上的创作质量评估。
-
-推荐阅读：
-
-- [当前内核审查](docs/architecture/current-core-review.md)
-- [双工作区 Agent Runtime](docs/architecture/dual-workspace-agent-runtime.md)
-- [Pi Worker 专业化成本收益决策](docs/architecture/pi-worker-specialization-cost-benefit-decision.md)
-- [模块目录](docs/architecture/module-catalog.md)
-- [Agent 面向接口开发标准](docs/architecture/agent-interface-development-standard.md)
-- [模块边界](docs/architecture/module-boundaries.md)
-- [发布与签名指南](docs/releases/RELEASING.md)
-- [v0.99.6 发行说明](docs/releases/v0.99.6.md)
-- [v0.99.6 发布验证记录](docs/releases/v0.99.6-verification.md)
-- [v0.99.0 发行说明](docs/releases/v0.99.0.md)
-- [v0.98.0 发行说明](docs/releases/v0.98.0.md)
-- [v0.97.4 发行说明](docs/releases/v0.97.4.md)
-- [v0.97.2 发行说明](docs/releases/v0.97.2.md)
-- [v0.97.1 发行说明](docs/releases/v0.97.1.md)
-- [v0.97.0 发行说明](docs/releases/v0.97.0.md)
-- [v0.96.4 发行说明](docs/releases/v0.96.4.md)
-- [v0.96.3 发行说明](docs/releases/v0.96.3.md)
-- [v0.96.2 发行说明](docs/releases/v0.96.2.md)
-- [v0.96.1 发行说明](docs/releases/v0.96.1.md)
-- [v0.96.0 发行说明](docs/releases/v0.96.0.md)
-- [贡献指南](CONTRIBUTING.md)
-- [安全策略](SECURITY.md)
-
-## License
-
-[MIT](LICENSE)
+贡献前请阅读 [贡献指南](CONTRIBUTING.md)；报告安全问题请使用 [安全策略](SECURITY.md)。项目采用 [MIT License](LICENSE)。
