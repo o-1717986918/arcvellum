@@ -247,6 +247,15 @@ function pathValue(key: string): string {
     </section>
 
     <div class="settings-grid">
+      <section class="settings-section connection-form-section">
+        <header><span class="section-icon iris"><KeyRound :size="18" /></span><div><h2>先连接模型服务</h2><p>选择服务并填写密钥，即可开始和 ArcVellum 对话。</p></div></header>
+        <form @submit.prevent="connectProvider">
+          <label class="field"><span>服务</span><select v-model="credential.provider_id"><optgroup v-for="group in presetGroups" :key="group.label" :label="group.label"><option v-for="preset in group.items" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup></select></label>
+          <label class="field"><span>API 密钥</span><input v-model="credential.credential" required type="password" autocomplete="new-password" placeholder="输入后不会再次显示" /></label>
+          <button class="primary-button wide" :disabled="busy || !credential.credential"><KeyRound :size="16" />建立连接</button>
+        </form>
+        <p class="privacy-note"><Settings :size="15" />密钥只保存在本机凭证库，不进入作品、界面和普通日志。</p>
+      </section>
       <section class="settings-section">
         <header><span class="section-icon"><WandSparkles :size="18" /></span><div><h2>按工作选择模型</h2><p>高质量正文、快速对话和异常判断可以各用合适的模型。</p></div></header>
         <div class="role-model-list">
@@ -273,15 +282,6 @@ function pathValue(key: string): string {
         </div>
       </section>
 
-      <section class="settings-section connection-form-section">
-        <header><span class="section-icon iris"><KeyRound :size="18" /></span><div><h2>连接模型服务</h2><p>常用服务直接连接；密钥只写入本机 Pi Worker 凭证库，不进入作品与普通配置。</p></div></header>
-        <form @submit.prevent="connectProvider">
-          <label class="field"><span>服务</span><select v-model="credential.provider_id"><optgroup v-for="group in presetGroups" :key="group.label" :label="group.label"><option v-for="preset in group.items" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup></select></label>
-          <label class="field"><span>API 密钥</span><input v-model="credential.credential" required type="password" autocomplete="new-password" placeholder="输入后不会再次显示" /></label>
-          <button class="primary-button wide" :disabled="busy || !credential.credential"><KeyRound :size="16" />建立连接</button>
-        </form>
-        <p class="privacy-note"><Settings :size="15" />接口地址与模型名称会保存在本机，以便重启后保持选择；界面、普通日志和作品文件都不会回显密钥原文。</p>
-      </section>
     </div>
 
     <section class="bootstrap-status-panel">

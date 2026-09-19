@@ -62,6 +62,9 @@ export class NarrativeParallaxRenderer {
   private contextLostListener: (() => void) | null = null;
   private lastViewport = "";
   private nextAnchorAt = 0;
+  private nextAmbientAt = 0;
+  private ambientMotionAvailable = false;
+  private lastInteractionAt = 0;
   private palette: ScenePalette = DEFAULT_PALETTE;
   private elapsed = 0;
   private relationLayers: RelationLayers | null = null;
@@ -69,6 +72,11 @@ export class NarrativeParallaxRenderer {
   private view: ParallaxView = { ...DEFAULT_PARALLAX_VIEW };
   private viewRefreshQueued = false;
   private detachOrbitInteraction: () => void;
+
+  private readonly wakeRenderer = () => {
+    this.lastInteractionAt = performance.now();
+    if (document.visibilityState === "visible") this.app.ticker.start();
+  };
 
   private readonly handleContextLost = (event: Event) => {
     event.preventDefault();
@@ -78,6 +86,16 @@ export class NarrativeParallaxRenderer {
 
   private readonly handleContextRestored = () => {
     if (this.projection && this.layout) this.update(this.projection, this.layout);
+  };
+
+  private readonly handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") this.app.ticker.stop();
+    else {
+      this.lastViewport = "";
+      this.lastInteractionAt = performance.now();
+      this.app.ticker.start();
+      this.emitAnchors(true);
+    }
   };
 
   private constructor(
@@ -94,6 +112,7 @@ export class NarrativeParallaxRenderer {
       cancelAnimation: () => { this.animation = null; },
       updateView: (view, pivot) => {
         this.view = view;
+        this.lastInteractionAt = performance.now();
         this.queueViewRefresh(pivot);
       },
     });
@@ -124,6 +143,8 @@ export class NarrativeParallaxRenderer {
     app.canvas.className = "narrative-parallax-canvas";
     app.canvas.addEventListener("webglcontextlost", instance.handleContextLost, false);
     app.canvas.addEventListener("webglcontextrestored", instance.handleContextRestored, false);
+    app.canvas.addEventListener("pointerdown", instance.wakeRenderer);
+    app.canvas.addEventListener("wheel", instance.wakeRenderer);
     host.append(app.canvas);
     // The sky is a screen-space mesh, deliberately outside the moving narrative
     // viewport. Scene noise therefore cannot drift with story nodes.
@@ -139,6 +160,8 @@ export class NarrativeParallaxRenderer {
     viewport.on("drag-start", () => { instance.animation = null; });
     viewport.addChild(instance.far, instance.mid, instance.near);
     app.ticker.add((ticker) => instance.tick(ticker.deltaMS));
+    document.addEventListener("visibilitychange", instance.handleVisibilityChange);
+    instance.handleVisibilityChange();
     return instance;
   }
 
@@ -155,10 +178,12 @@ export class NarrativeParallaxRenderer {
     this.viewport.resize(width, height, WORLD_WIDTH, WORLD_HEIGHT);
     this.sky.resize(width, height);
     this.emitAnchors(true);
+    if (!this.app.ticker.started && document.visibilityState === "visible") this.app.render();
   }
 
   update(projection: SpatialNarrativeProjection, layout: SpatialLayout): void {
     this.projection = projection;
+    this.ambientMotionAvailable = hasAmbientNodeMotion(projection.nodes);
     this.layout = layout;
     this.experience = readStageExperience();
     this.palette = readPalette(this.host);
@@ -181,6 +206,7 @@ export class NarrativeParallaxRenderer {
       projectPoint: (point) => this.projectPoint(point),
     });
     this.emitAnchors(true);
+    if (!this.app.ticker.started && document.visibilityState === "visible") this.app.render();
   }
 
   fit(): void {
@@ -269,8 +295,11 @@ export class NarrativeParallaxRenderer {
   }
 
   dispose(): void {
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     this.app.canvas.removeEventListener("webglcontextlost", this.handleContextLost);
     this.app.canvas.removeEventListener("webglcontextrestored", this.handleContextRestored);
+    this.app.canvas.removeEventListener("pointerdown", this.wakeRenderer);
+    this.app.canvas.removeEventListener("wheel", this.wakeRenderer);
     this.detachOrbitInteraction();
     this.viewport.destroy({ children: true });
     this.app.destroy(true, { children: true });
@@ -299,15 +328,25 @@ export class NarrativeParallaxRenderer {
     );
     syncRelationLod(this.relationLayers, this.viewport.scale.x, Boolean(this.focusedNodeId));
     const revision = `${this.viewport.x.toFixed(1)}:${this.viewport.y.toFixed(1)}:${this.viewport.scale.x.toFixed(3)}`;
-    const ambientMotion = this.effectiveMotion() === "full"
-      && Boolean(this.projection && hasAmbientNodeMotion(this.projection.nodes));
-    if (revision !== this.lastViewport || ambientMotion) {
+    const ambientDue = this.ambientMotionAvailable && this.effectiveMotion() === "full"
+      && this.elapsed >= this.nextAmbientAt;
+    if (revision !== this.lastViewport || ambientDue) {
+      if (ambientDue) this.nextAmbientAt = this.elapsed + 250;
+      const cameraMoved = revision !== this.lastViewport;
       this.lastViewport = revision;
+      if (cameraMoved) this.lastInteractionAt = performance.now();
       this.emitAnchors();
+    }
+    const idleFor = performance.now() - this.lastInteractionAt;
+    this.app.ticker.maxFPS = this.animation || idleFor < 750 ? 60 : 24;
+    if (this.projection && this.projection.nodes.length > 250 && !this.animation && idleFor > 900) {
+      this.app.ticker.stop();
+      this.app.render();
     }
   }
 
   private animateTo(x: number, y: number, scale: number, duration: number): void {
+    this.wakeRenderer();
     const motion = this.effectiveMotion();
     if (motion === "still") {
       this.viewport.moveCenter(x, y);
@@ -452,6 +491,7 @@ export class NarrativeParallaxRenderer {
 
   private updateViewAround(pivot: WorldPoint | null): void {
     if (!this.projection || !this.layout) return;
+    this.wakeRenderer();
     this.update(this.projection, this.layout);
     if (pivot) {
       const projected = this.projectPoint(pivot);

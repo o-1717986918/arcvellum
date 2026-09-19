@@ -55,6 +55,42 @@ test("left drag rotates empty sky while typographic nodes remain selectable", as
   await expect(canvas).toHaveCount(1);
 });
 
+test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ page }) => {
+  await openVisualProject(page, visualProjectRoot(1000));
+  await page.locator(".orrery-signal-mode button", { hasText: "全部" }).dispatchEvent("click");
+  await page.locator(".orrery-v3-levels button", { hasText: "章节" }).dispatchEvent("click");
+  await expect.poll(() => visibleNodeCount(page), { timeout: 60_000 }).toBeGreaterThanOrEqual(1000);
+  const stage = page.locator(".orrery-v3-stage");
+  const box = await stage.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+  await page.waitForTimeout(1300);
+  const before = await nodeCenters(page, 4);
+  const center = await stage.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    for (const x of [0.22, 0.15, 0.78, 0.85]) {
+      for (const y of [0.52, 0.35, 0.7]) {
+        const point = { x: bounds.x + bounds.width * x, y: bounds.y + bounds.height * y };
+        if (document.elementFromPoint(point.x, point.y) instanceof HTMLCanvasElement) return point;
+      }
+    }
+    return null;
+  });
+  expect(center).not.toBeNull();
+  if (!center) return;
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.wheel(0, -480);
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(center.x + 180, center.y + 110, { steps: 12 });
+  await page.mouse.up({ button: "middle" });
+  await page.waitForTimeout(250);
+  const delta = relativeGeometryDelta(before, await nodeCenters(page, 4));
+  expect(delta).toBeGreaterThan(1.5);
+  await expect(stage).toBeVisible();
+  await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1, { timeout: 120_000 });
+  expect((await canvasPixelEvidence(page)).variance).toBeGreaterThan(20);
+});
+
 for (const sceneCount of VISUAL_SIZES) {
   test(`${sceneCount} scenes keep the default field and semantic focus modes visually reachable`, async ({ page }, testInfo) => {
     testInfo.setTimeout(sceneCount >= 1000 ? 480_000 : 300_000);
@@ -62,13 +98,13 @@ for (const sceneCount of VISUAL_SIZES) {
     const fixture = visualFixtureMetadata(sceneCount);
     await expect(page.locator('select[aria-label="选择整体观测主题"]')).toHaveCount(0);
     await expect(page.locator('select[aria-label="选择星仪背景材质"]')).toHaveCount(0);
-    await expect(page.locator(".overview-view")).toHaveAttribute("data-orrery-background", "mineral");
+    await expect(page.locator(".overview-view")).toHaveAttribute("data-orrery-background", "daylight");
     const focusLevels = sceneCount >= 1000 ? (["book"] as const) : FOCUS_LEVELS;
     for (const focus of focusLevels) {
       await setFocus(page, focus);
       await verifySemanticField(page, fixture, focus);
       if (sceneCount < 1000 || focus === "book") {
-        await captureVisualEvidence(page, testInfo, `${sceneCount}-moss-${focus}.png`);
+        await captureVisualEvidence(page, testInfo, `${sceneCount}-daylight-${focus}.png`);
       }
     }
   });
@@ -80,11 +116,11 @@ test("SSE projection updates preserve focus and open instruments", async ({ page
   await page.locator(".orrery-v3-levels button", { hasText: "场景" }).dispatchEvent("click");
   await expect(page.locator(".orrery-v3-heading p")).toContainText("场景焦点");
   await page.locator(".orrery-signal-mode button", { hasText: "全部" }).dispatchEvent("click");
-  await page.locator('button[title="查看 Agent 任务与会话"]').dispatchEvent("click");
+  await page.locator('button[title="推进当前作品"]').dispatchEvent("click");
   await page.locator('button[title="查看创作规则与节奏"]').dispatchEvent("click");
-  await expect(page.locator('.spatial-window[data-kind="agent"]')).toBeVisible();
+  await expect(page.locator('.spatial-window[data-kind="progress"]')).toBeVisible();
   await expect(page.locator('.spatial-window[data-kind="rules"]')).toBeVisible();
-  const agentWindowId = await page.locator('.spatial-window[data-kind="agent"]').getAttribute("data-spatial-window-id");
+  const progressWindowId = await page.locator('.spatial-window[data-kind="progress"]').getAttribute("data-spatial-window-id");
   const rulesWindowId = await page.locator('.spatial-window[data-kind="rules"]').getAttribute("data-spatial-window-id");
 
   const before = await visibleNodeCount(page);
@@ -92,7 +128,7 @@ test("SSE projection updates preserve focus and open instruments", async ({ page
     addFixtureScene(projectRoot, 101);
     await expect.poll(() => visibleNodeCount(page), { timeout: 20_000 }).toBeGreaterThan(before);
     await expect(page.locator(".orrery-v3-heading p")).toContainText("场景焦点");
-    await expect(page.locator(`[data-spatial-window-id="${agentWindowId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-spatial-window-id="${progressWindowId}"]`)).toBeVisible();
     await expect(page.locator(`[data-spatial-window-id="${rulesWindowId}"]`)).toBeVisible();
   } finally {
     removeFixtureScene(projectRoot, 101);
@@ -111,38 +147,14 @@ test("reduced motion preserves every exploration control", async ({ page }) => {
   await expect(page.locator(".orrery-heat-legend")).toContainText("叙事呼吸");
 });
 
-test("advisor remains a phone-like floating conversation over the Orrery", async ({ page }, testInfo) => {
+test("the Orrery returns to the conversation instead of duplicating an advisor dock", async ({ page }) => {
   await openVisualProject(page, visualProjectRoot(100));
-  await page.locator(".advisor-orb").click();
-  const dock = page.locator(".advisor-dock");
-  await expect(dock).toBeVisible();
-  const bounds = await dock.boundingBox();
-  expect(bounds).not.toBeNull();
-  expect(bounds?.width).toBeGreaterThanOrEqual(336);
-  expect(bounds?.height).toBeGreaterThanOrEqual(460);
-  expect((bounds?.height || 1) / (bounds?.width || 1)).toBeGreaterThan(1.45);
+  await expect(page.locator(".advisor-orb")).toHaveCount(0);
   await expect(page.locator(".orrery-v3-stage")).toBeVisible();
-  await captureVisualEvidence(page, testInfo, "advisor-over-orrery.png");
-});
-
-test("one-thousand-scene field remains pannable and pointer-zoomable", async ({ page }) => {
-  await openVisualProject(page, visualProjectRoot(1000));
-  await page.locator(".orrery-signal-mode button", { hasText: "全部" }).dispatchEvent("click");
-  await page.locator(".orrery-v3-levels button", { hasText: "章节" }).dispatchEvent("click");
-  await expect.poll(() => visibleNodeCount(page), { timeout: 60_000 }).toBeGreaterThanOrEqual(1000);
-  const stage = page.locator(".orrery-v3-stage");
-  const box = await stage.boundingBox();
-  expect(box).not.toBeNull();
-  if (!box) return;
-  const center = { x: box.x + box.width * 0.5, y: box.y + box.height * 0.55 };
-  await page.mouse.move(center.x, center.y);
-  await page.mouse.wheel(0, -480);
-  await page.mouse.down({ button: "middle" });
-  await page.mouse.move(center.x + 180, center.y + 110, { steps: 12 });
-  await page.mouse.up({ button: "middle" });
-  await expect(stage).toBeVisible();
-  await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1, { timeout: 120_000 });
-  expect((await canvasPixelEvidence(page)).variance).toBeGreaterThan(20);
+  const returnLink = page.getByRole("link", { name: "返回作品对话" });
+  await expect(returnLink).toBeVisible();
+  await returnLink.click();
+  await expect(page).toHaveURL(/#\/agent/);
 });
 
 async function openVisualProject(page: Page, projectRoot: string): Promise<void> {
@@ -154,6 +166,7 @@ async function openVisualProject(page: Page, projectRoot: string): Promise<void>
   await page.goto("#/overview");
   const largeScaleTimeout = projectRoot.endsWith("scenes-1000") ? 60_000 : 30_000;
   await expect(page.locator(".orrery-v3-stage")).toBeVisible({ timeout: largeScaleTimeout });
+  await expect(page.locator(".startup-scene")).toHaveCount(0, { timeout: largeScaleTimeout });
   await expect(page.locator(".orrery-v3-heading h1")).toContainText("星仪规模验收作品");
   await expect(page.locator(".narrative-parallax-stage canvas")).toHaveCount(1);
 }

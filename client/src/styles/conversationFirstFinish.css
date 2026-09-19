@@ -1,0 +1,149 @@
+/* The two reading surfaces share a quiet palette; the spatial scene keeps its own depth. */
+.pa-shell.pa-utility-workspace,
+.pa-shell.pa-no-project { grid-template-columns: 248px minmax(0, 1fr); }
+.pa-shell.pa-workspace-active:not(.pa-workspace-fullscreen) { grid-template-columns: 248px minmax(0, 1fr); }
+.pa-shell.pa-workspace-fullscreen { grid-template-columns: minmax(0, 1fr); }
+.pa-subworkspace[data-workspace="settings"] .settings-grid { grid-template-columns: minmax(280px, .82fr) minmax(420px, 1.18fr); }
+
+.overview-view.spatial-active {
+  --orrery-deep: #edf3f0;
+  --orrery-label: #263c35;
+  --orrery-line: #769c8c;
+  --orrery-core: #28735f;
+  --orrery-canon: #927141;
+  --orrery-branch: #75618c;
+  --orrery-warning: #b85845;
+  --orrery-shadow: #8ba39a;
+}
+.overview-view.spatial-active .orrery-hero { background-image: none; }
+.overview-view.spatial-active .orrery-v3 {
+  --spatial-glass: rgba(248, 250, 247, .87);
+  --spatial-glass-deep: rgba(248, 250, 247, .93);
+  --spatial-hairline: rgba(70, 101, 88, .23);
+  background: linear-gradient(155deg, #eef3f0 0%, #f8f8f3 52%, #e4eeeb 100%);
+}
+.overview-view.spatial-active .orrery-v3::before { opacity: .14; }
+.overview-view.spatial-active .orrery-v3-stage::after { opacity: .08; mix-blend-mode: multiply; }
+.overview-view.spatial-active .orrery-v3-heading h1,
+.overview-view.spatial-active .orrery-v3-heading p,
+.overview-view.spatial-active .orrery-v3-heading dd { color: var(--orrery-label); }
+.overview-view.spatial-active .orrery-v3-heading p,
+.overview-view.spatial-active .orrery-v3-heading dt { opacity: .7; }
+.overview-view.spatial-active :is(.orrery-v3-controls label, .orrery-v3-levels, .orrery-signal-mode, .orrery-v3-icon) {
+  color: var(--orrery-label);
+  background: rgba(248, 250, 247, .88);
+  border: 1px solid var(--spatial-hairline);
+  box-shadow: 0 6px 24px rgba(37, 65, 51, .09);
+}
+.overview-view.spatial-active :is(.orrery-v3-levels button, .orrery-v3-controls select, .orrery-v3-controls label, .orrery-v3-icon) { color: var(--orrery-label); }
+.overview-view.spatial-active :is(.orrery-v3-levels button.active, .orrery-v3-instrument-dock button.active) {
+  color: #f8faf7;
+  background: var(--orrery-core);
+}
+.overview-view.spatial-active .orrery-v3-icon:hover { color: var(--orrery-core); background: #fff; }
+.overview-view.spatial-active .orrery-v3-instrument-dock,
+.overview-view.spatial-active .orrery-v3-reader-entry,
+.overview-view.spatial-active .orrery-v3-progress-spindle,
+.overview-view.spatial-active .orrery-v3-delivery-beacon {
+  color: var(--orrery-label);
+  background: rgba(248, 250, 247, .88);
+  border-color: var(--spatial-hairline);
+  box-shadow: 0 8px 28px rgba(37, 65, 51, .1);
+}
+.overview-view.spatial-active .orrery-v3-instrument-dock button,
+.overview-view.spatial-active .orrery-v3-reader-entry strong,
+.overview-view.spatial-active .orrery-v3-progress-spindle strong { color: var(--orrery-label); }
+.overview-view.spatial-active .orrery-v3-instrument-dock button.active { color: #fff; }
+.overview-view.spatial-active .orrery-v3-reader-entry small,
+.overview-view.spatial-active .orrery-v3-progress-spindle small { color: #667d72; }
+.overview-view.spatial-active .orrery-v3-node .node-title {
+  color: #233b34;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .9);
+}
+.overview-view.spatial-active .orrery-v3-node .node-kicker { color: color-mix(in srgb, var(--type-star) 82%, #263c35); }
+.overview-view.spatial-active .orrery-v3-node .node-luminary i {
+  background: color-mix(in srgb, var(--type-star) 80%, #fff);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .8), 0 0 13px color-mix(in srgb, var(--type-star) 38%, transparent);
+}
+.overview-view.spatial-active .orrery-v3-node.typographic:is(:hover, .selected, .focused, .navigating) {
+  background: rgba(255, 255, 255, .91);
+  box-shadow: 0 9px 28px rgba(39, 71, 54, .14);
+}
+.overview-view.spatial-active .narrative-spine-glow { opacity: .22; }
+.overview-view.spatial-active .narrative-spine-track { opacity: 1; }
+.overview-view.spatial-active .narrative-spine-segment[data-completion="planned"] { opacity: .5; }
+.overview-view.spatial-active .narrative-evidence-flow:not(.muted) { opacity: .78; }
+.overview-view.spatial-active .narrative-local-flow:not(.muted) { opacity: .63; }
+.overview-view.spatial-active .orrery-v3-node.typographic[data-completion="active"]:not(.selected) .node-luminary i { animation: none; }
+
+/* Creative Live uses one readable editorial surface from both Agent and Orrery. */
+.creative-live-view { color: #263831; background: #f4f6f2 !important; }
+.spatial-window[data-kind="observatory"] .spatial-window-scroll { display: flex; min-height: 0; padding: 0; overflow: hidden; }
+.spatial-window[data-kind="observatory"] .creative-workspace-host { min-height: 0; flex: 1; overflow: hidden; }
+.spatial-window[data-kind="observatory"] .creative-live-view { min-height: 0; height: 100%; }
+.pa-subworkspace-scroll:has(.creative-live-view) { overflow: hidden; scrollbar-gutter: auto; }
+.pa-subworkspace .creative-live-view { width: 100%; min-height: 0; height: 100%; }
+.creative-live-view .creative-live-dock {
+  --live-panel: #f8faf7;
+  --live-panel-deep: #fff;
+  --live-line: #d6dfd8;
+  --live-ink: #263831;
+  --live-muted: #536b5f;
+  --live-signal: #28735f;
+  background: #f8faf7;
+  min-height: 0;
+}
+.creative-live-view .creative-live-dock[data-status="active"] { --live-signal: #28735f; }
+.creative-live-view .creative-live-dock[data-status="blocked"] { --live-signal: #b85845; }
+.creative-live-view :is(.creative-live-left, .creative-live-right, .creative-live-heading, .creative-task-card) { background: #f3f6f2; }
+.creative-live-view .scene-transaction-pulse { background: #e8f1ec; }
+.creative-live-view :is(.creative-transcript, .revision-diff-scroll, .observatory-diagnostics) {
+  color: var(--live-ink);
+  background: #fff;
+  border-color: var(--live-line);
+}
+.creative-live-view .creative-live-heading { background: #eef3ed; }
+.creative-live-view .creative-task-card { background: #eaf1eb; }
+.creative-live-view .creative-task-card :is(small, details),
+.creative-live-view .creative-identity-rail li,
+.creative-live-view .creative-review-rail li small,
+.creative-live-view .creative-live-footer,
+.creative-live-view .observatory-diagnostics > summary,
+.creative-live-view .creative-context-summary > summary,
+.creative-live-view .creative-technical-identity > summary { color: #536b5f; }
+.creative-live-view .creative-technical-identity code,
+.creative-live-view .creative-task-card details small { color: #40594c; background: #e8eee9; }
+.creative-live-view .identity-mark { background: #e0ede5; border-color: #b9cfc0; }
+.creative-live-view .scene-transaction-pulse li { color: #536b5f; }
+.creative-live-view .scene-transaction-pulse li i { background: #f8faf7; border-color: #95b09e; }
+.creative-live-view .manuscript-live-badge { color: #40594c; border-color: #a9c3b3; }
+.creative-live-view .revision-diff-scroll p.added { color: #21654f; background: #e6f1e9; }
+.creative-live-view .revision-diff-scroll p.removed { color: #a33f33; background: #fbece8; }
+.creative-live-view .revision-diff-scroll p.context { color: #536b5f; }
+.creative-live-view .live-manuscript-scroll .safe-markdown-document { color: #263831; font-size: 15px; line-height: 1.9; }
+.creative-live-view .live-manuscript-scroll .safe-markdown-document :is(h1, h2, h3) { color: #19392d; }
+.creative-live-view .creative-live-grid { grid-template-columns: minmax(190px, .7fr) minmax(360px, 1.65fr) minmax(220px, .85fr); }
+.creative-live-view .creative-task-card > strong { font-size: 14px; }
+.creative-live-view :is(.creative-artifact-list > header, .creative-review-rail > header, .creative-identity-rail > header) { font-size: 12px; }
+.creative-live-view :is(.creative-live-title p, .creative-task-card p, .creative-task-card small, .creative-task-card details,
+  .creative-artifact-list button strong, .creative-artifact-list button small, .creative-identity-rail li,
+  .creative-live-tabs button, .creative-review-rail li strong, .creative-review-rail li p,
+  .creative-review-rail li small, .creative-tool-list li, .creative-live-footer,
+  .scene-transaction-pulse li, .scene-transaction-copy small, .creative-live-empty span,
+  .creative-session-panel, .creative-context-summary, .creative-execution-timeline,
+  .creative-live-runtime, .live-manuscript header p) { font-size: 11px; line-height: 1.5; }
+@media (max-width: 1180px) {
+  .pa-shell:not(.pa-workspace-fullscreen):not(.pa-utility-workspace):not(.pa-no-project) { grid-template-columns: 232px minmax(0, 1fr); }
+}
+@media (max-width: 920px) {
+  .pa-shell { display: block; }
+  .pa-subworkspace[data-workspace="settings"] .settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .creative-live-view .creative-live-grid { display: block; overflow-y: auto; }
+}
+@media (max-width: 680px) {
+  .pa-workbench-head { gap: 5px; padding-inline: 9px; }
+  .pa-workbench-head .pa-agent-avatar { display: none; }
+  .pa-workbench-head .pa-conversation-title { min-width: 0; flex: 1; }
+  .pa-workbench-head .pa-orrery-entry { flex: 0 0 32px; width: 32px; min-height: 31px; justify-content: center; padding: 0; }
+  .pa-workbench-head .pa-icon-button { width: 29px; height: 29px; }
+}

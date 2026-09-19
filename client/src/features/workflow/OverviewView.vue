@@ -10,11 +10,8 @@ import { asList } from "@/services/presentation";
 import {
   applyOrreryExperience,
   normalizeInstrumentVisibility,
-  normalizeOrreryBackground,
   resetOrreryColorIdentity,
-  type OrreryBackground,
 } from "@/services/orreryPreferences";
-import { loadOrreryBackground } from "@/services/orreryAssets";
 import { useAppStore } from "@/stores/app";
 import { useHumanChoicesStore } from "@/stores/humanChoices";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
@@ -34,10 +31,7 @@ const {
 } = storeToRefs(humanChoices);
 
 const working = ref(false);
-const background = ref<OrreryBackground>(normalizeOrreryBackground(localStorage.getItem("arcvellum.orreryBackground")));
-const backgroundImage = ref("");
 const instrumentsVisible = ref(normalizeInstrumentVisibility(localStorage.getItem("arcvellum.orreryInstruments")));
-const heroStyle = computed(() => ({ "--orrery-background-image": backgroundImage.value ? `url("${backgroundImage.value}")` : "none" }));
 const dashboard = computed(() => (store.dashboard || null) as Record<string, unknown> | null);
 const nextActions = computed(() => asList<Record<string, unknown>>(dashboard.value?.next_actions));
 const firstAction = computed(() => nextActions.value[0] || null);
@@ -46,8 +40,8 @@ const activeRun = computed(() => {
   return run && ["running", "paused", "blocked", "failed"].includes(run.status) ? run : null;
 });
 const workspaceQueryKinds = new Set<Exclude<SpatialWindowKind, "node">>([
-  "progress", "agent", "reader", "decisions", "rules", "health", "delivery",
-  "archive", "style", "quality", "strategy", "observatory", "archaeology",
+  "progress", "reader", "decisions", "rules", "health", "delivery",
+  "archive", "style", "quality", "observatory", "archaeology",
 ]);
 
 onMounted(async () => {
@@ -55,24 +49,13 @@ onMounted(async () => {
   applyOrreryExperience({ theme: "moss" });
   localStorage.setItem("arcvellum.orreryMode", "immersive");
   document.documentElement.classList.add("orrery-immersive");
+  openWorkspaceQuery(route.query.workspace);
   await store.refreshWorkspace();
   await loadChoices();
-  openWorkspaceQuery(route.query.workspace);
 });
 
 onBeforeUnmount(() => document.documentElement.classList.remove("orrery-immersive"));
 
-watch(background, async (value, _previous, onCleanup) => {
-  let active = true;
-  onCleanup(() => { active = false; });
-  backgroundImage.value = "";
-  try {
-    const source = await loadOrreryBackground(value);
-    if (active) backgroundImage.value = source;
-  } catch {
-    if (active) backgroundImage.value = "";
-  }
-}, { immediate: true });
 watch(instrumentsVisible, (value) => localStorage.setItem("arcvellum.orreryInstruments", value ? "visible" : "hidden"));
 watch(
   [() => route.query.workspace, () => store.currentProjectPath],
@@ -85,7 +68,8 @@ watch(
 );
 
 function openWorkspaceQuery(value: unknown): void {
-  const kind = String(Array.isArray(value) ? value[0] : value || "");
+  const requested = String(Array.isArray(value) ? value[0] : value || "");
+  const kind = requested === "strategy" ? "archive" : requested;
   if (!workspaceQueryKinds.has(kind as Exclude<SpatialWindowKind, "node">)) return;
   spatialWindows.openInstrument(kind as Exclude<SpatialWindowKind, "node">);
   if (kind === "reader") spatialWindows.setReaderMode("immersive");
@@ -167,8 +151,8 @@ function advanceSpatialRun(): void {
 </script>
 
 <template>
-  <div class="overview-view is-immersive spatial-active" :class="{ 'instruments-hidden': !instrumentsVisible }" :data-orrery-background="background" data-orrery-engine="spatial">
-    <section class="orrery-hero" :style="heroStyle">
+  <div class="overview-view is-immersive spatial-active" :class="{ 'instruments-hidden': !instrumentsVisible }" data-orrery-background="daylight" data-orrery-engine="spatial">
+    <section class="orrery-hero">
       <WorkspaceOrreryHost
         :dashboard="dashboard"
         :immersive="true"
@@ -179,7 +163,7 @@ function advanceSpatialRun(): void {
       />
 
       <div class="orrery-view-tools" aria-label="叙事星仪外观">
-        <RouterLink class="orrery-icon" to="/agent" title="打开项目 Agent"><Bot :size="16" /></RouterLink>
+        <RouterLink class="orrery-icon" :to="{ name: 'project-agent', query: route.query.session ? { session: route.query.session } : {} }" title="返回作品对话"><Bot :size="16" /></RouterLink>
         <button class="orrery-icon" :title="instrumentsVisible ? '暂隐边缘工作台' : '显示边缘工作台'" @click="instrumentsVisible = !instrumentsVisible">
           <EyeOff v-if="instrumentsVisible" :size="16" /><Eye v-else :size="16" />
         </button>

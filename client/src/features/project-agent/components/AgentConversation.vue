@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import { Bot, BookOpenText, CircleDashed, Search, Waypoints } from "lucide-vue-next";
+import { ArrowUpRight, Bot, BookOpenText, CircleDashed, Radio, Search, Waypoints } from "lucide-vue-next";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import AgentActionGroup from "@/features/project-agent/components/AgentActionGroup.vue";
 import type { ProjectAgentMessage, ProjectAgentTurnActivity } from "@/features/project-agent/types";
@@ -10,8 +10,12 @@ const props = defineProps<{
   activity: ProjectAgentTurnActivity | null;
   loading: boolean;
   omittedCount: number;
+  hasSession?: boolean;
+  creativeStatus?: string;
+  creativeTask?: string;
+  creativePhase?: "active" | "waiting" | "attention" | null;
 }>();
-const emit = defineEmits<{ starter: [message: string] }>();
+const emit = defineEmits<{ starter: [message: string]; newConversation: []; openLive: [] }>();
 const scroller = ref<HTMLElement | null>(null);
 
 watch(
@@ -34,9 +38,10 @@ function messageText(message: ProjectAgentMessage): string {
       <p v-if="omittedCount" class="pa-history-note">较早的 {{ omittedCount }} 条消息已收起，完整记录仍保存在当前会话中。</p>
       <section v-if="!messages.length && !loading" class="pa-welcome">
         <span class="pa-welcome-mark"><Bot :size="24" /></span>
-        <h1>和整个作品库交谈。</h1>
-        <p>我可以建立和管理作品、查阅正文与资料，也能接下长期创作目标，在你离开当前对话后持续推进并处理途中问题。</p>
-        <div class="pa-starters">
+        <h1>{{ hasSession ? '从这部作品继续。' : '选择一部作品，开始交谈。' }}</h1>
+        <p>{{ hasSession ? '我可以查阅正文与资料，也能接下长期创作目标，在你离开当前对话后持续推进。' : '每段对话属于一部作品。你可以选择已有作品，也可以先建立一部新作品。' }}</p>
+        <button v-if="!hasSession" class="pa-welcome-create" @click="emit('newConversation')">选择作品并新建对话 <ArrowUpRight :size="16" /></button>
+        <div v-else class="pa-starters">
           <button @click="emit('starter', '结合当前作品状态，告诉我现在最值得关注的创作问题。')"><Waypoints :size="16" /><span><strong>现在最值得关注什么？</strong><small>从进度和作品结构中判断</small></span></button>
           <button @click="emit('starter', '把当前作品设为长期目标，持续创作、审查并推进，直到满足正式交付条件。')"><CircleDashed :size="16" /><span><strong>持续完成到交付</strong><small>启动可恢复的长期目标</small></span></button>
           <button @click="emit('starter', '请在现有正文和项目资料中查找最重要的未解决问题。')"><Search :size="16" /><span><strong>作品还留下哪些问题？</strong><small>检索正文和项目档案</small></span></button>
@@ -56,6 +61,12 @@ function messageText(message: ProjectAgentMessage): string {
           <div v-else class="pa-thinking"><i></i><i></i><i></i><span>正在阅读作品并形成回答</span></div>
         </article>
       </template>
+
+      <button v-if="hasSession && creativePhase" class="pa-creative-live-card" :class="creativePhase" @click="emit('openLive')">
+        <span class="pa-live-indicator"><Radio :size="17" /></span>
+        <span><small>{{ creativePhase === 'active' ? '创作正在进行' : creativePhase === 'waiting' ? '创作等待继续' : '创作需要处理' }}</small><strong>{{ creativeStatus || creativeTask || '查看作品创作状态' }}</strong><em>{{ creativePhase === 'active' ? (creativeTask || '查看创作中的正文、审查与修订') : '打开创作现场，查看原因和继续方式' }}</em></span>
+        <ArrowUpRight :size="16" />
+      </button>
 
       <AgentActionGroup v-if="activity" :activity="activity" />
     </div>

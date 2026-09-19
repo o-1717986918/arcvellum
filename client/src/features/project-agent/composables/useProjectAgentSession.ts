@@ -16,8 +16,10 @@ import {
 interface ProjectAgentSessionOptions {
   projectRoot: Readonly<Ref<string>>;
   projectTitle: Readonly<Ref<string>>;
+  projectRoots?: Readonly<Ref<string[]>>;
   client?: ProjectAgentClient;
   onError?: (cause: unknown, fallback: string) => void;
+  onSessionOpened?: (session: ProjectAgentSession) => void | Promise<void>;
   onToolFinished?: (name: string, ok: boolean) => void | Promise<void>;
   afterRender?: () => void | Promise<void>;
   flushDelayMs?: number;
@@ -47,14 +49,18 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   let deltaBuffer = "";
   let deltaTimer = 0;
 
-  async function load(): Promise<ProjectAgentSession | null> {
+  async function load(preferredSessionId = ""): Promise<ProjectAgentSession | null> {
     if (loading.value) return session.value;
     loading.value = true;
     try {
-      const response = await client.listSessions(options.projectRoot.value);
-      sessions.value = response.items || [];
-      if (sessions.value[0]) return await openSession(sessions.value[0].session_id);
-      return await createSession();
+      const roots = [...new Set(["", ...(options.projectRoots?.value || []), options.projectRoot.value])];
+      const results = await Promise.allSettled(roots.map((root) => client.listSessions(root)));
+      sessions.value = results.flatMap((result) => result.status === "fulfilled" ? result.value.items || [] : [])
+        .filter((item, index, items) => items.findIndex((candidate) => candidate.session_id === item.session_id) === index)
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+      if (results.every((result) => result.status === "rejected")) throw (results[0] as PromiseRejectedResult).reason;
+      const first = sessions.value.find((item) => item.session_id === preferredSessionId) || sessions.value[0];
+      return first ? await openSession(first.session_id) : null;
     } catch (cause) {
       options.onError?.(cause, "项目 Agent 暂时无法读取会话。");
       return null;
@@ -63,16 +69,17 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     }
   }
 
-  async function createSession(): Promise<ProjectAgentSession | null> {
+  async function createSession(root = options.projectRoot.value, title = `${options.projectTitle.value}创作会话`): Promise<ProjectAgentSession | null> {
     if (sending.value || creating.value) return null;
     creating.value = true;
     try {
       const created = await client.createSession(
-        options.projectRoot.value,
-        `${options.projectTitle.value}创作会话`,
+        root,
+        title,
       );
       sessions.value = [sessionSummary(created), ...sessions.value.filter((item) => item.session_id !== created.session_id)];
       session.value = created;
+      await options.onSessionOpened?.(created);
       transientMessages.value = [];
       activity.value = null;
       await notifyRendered();
@@ -89,6 +96,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     if (!sessionId || sending.value) return session.value;
     try {
       session.value = await client.readSession(sessionId);
+      await options.onSessionOpened?.(session.value);
       transientMessages.value = [];
       activity.value = null;
       await notifyRendered();
@@ -103,7 +111,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   async function ask(message: string): Promise<void> {
     const value = message.trim();
     if (!value || sending.value) return;
-    const active = session.value || await load();
+    const active = session.value;
     if (!active) return;
     sending.value = true;
     resetDelta();
@@ -297,11 +305,11 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     void notifyRendered();
   }
 
-  function reset(): void {
+  function reset(preserveSessions = false): void {
     eventController?.abort();
     eventController = null;
     observedJobId = "";
-    sessions.value = [];
+    if (!preserveSessions) sessions.value = [];
     session.value = null;
     transientMessages.value = [];
     activity.value = null;

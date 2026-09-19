@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { ArrowLeft, BookOpenText, BookPlus, ChevronDown, Clock3, Focus, Layers3, List, Maximize2, Network, RotateCcw, Settings2 } from "lucide-vue-next";
-import { useRouter } from "vue-router";
+import { ArrowLeft, Clock3, Focus, Layers3, List, Maximize2, Network, RotateCcw } from "lucide-vue-next";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
 import NarrativeSpineLayer from "@/features/orrery/NarrativeSpineLayer.vue";
@@ -39,7 +38,6 @@ const props = defineProps<{ dashboard: Record<string, unknown> | null; immersive
 
 const emit = defineEmits<{ advance: []; inspectTask: []; openReader: []; choose: [choice: Record<string, unknown>] }>();
 const app = useAppStore();
-const router = useRouter();
 const spatial = useSpatialProjectionStore();
 const windows = useSpatialWindowsStore();
 const humanChoices = useHumanChoicesStore();
@@ -50,7 +48,6 @@ const listMode = ref(false);
 const anchors = ref<Record<string, { x: number; y: number; visible: boolean; scale: number }>>({});
 const choices = computed(() => humanChoices.choices);
 const healthExpanded = ref(false);
-const projectBandOpen = ref(false);
 const activeCharacterId = ref("");
 const hiddenRelationFamilies = ref<RelationFamily[]>([]);
 const soloRelationFamily = ref<RelationFamily | "">("");
@@ -230,12 +227,6 @@ async function setGrammar(event: Event): Promise<void> {
   stage.value?.openingSegment();
 }
 
-function switchProject(path: string): void {
-  if (!path) return;
-  projectBandOpen.value = false;
-  app.setCurrentProject(path);
-}
-
 function focusNode(nodeId: string): void {
   const node = projection.value?.nodes.find((item) => item.node_id === nodeId);
   if (node) void focusNodeObject(node);
@@ -391,13 +382,6 @@ async function loadChoices(): Promise<void> {
       <div><span>ARC VELLUM / NARRATIVE STAGE</span><h1>{{ app.currentProject?.title || "一部正在形成的作品" }}</h1><p>{{ projection?.accessibility_summary || "正在校准作品的空间结构。" }}</p></div>
       <dl v-if="projection"><div><dt>构型</dt><dd>{{ grammarLabel(projection.spatial_grammar) }}</dd></div><div><dt>正式正文</dt><dd>{{ Number(projection.summary.formal_prose_chars || 0).toLocaleString() }} 字</dd></div></dl>
     </header>
-
-    <div class="orrery-v3-project-band" :class="{ open: projectBandOpen }">
-      <button class="project-band-current" title="切换当前作品" @click="projectBandOpen = !projectBandOpen"><BookOpenText :size="15" /><span><small>当前作品</small><strong>{{ app.currentProject?.title || '选择作品' }}</strong></span><ChevronDown :size="15" /></button>
-      <button class="orrery-v3-icon" title="建立新作品" @click="router.push('/projects')"><BookPlus :size="16" /></button>
-      <button class="orrery-v3-icon" title="应用设置" @click="router.push('/settings')"><Settings2 :size="16" /></button>
-      <div v-if="projectBandOpen" class="project-band-menu"><button v-for="project in app.projects" :key="project.path" :class="{ active: project.path === app.currentProjectPath }" @click="switchProject(project.path)"><span><strong>{{ project.title }}</strong><small>{{ project.genre || project.work_type || '作品' }}</small></span><i>{{ project.path === app.currentProjectPath ? '当前' : '切换' }}</i></button><button class="project-band-create" @click="router.push('/projects')"><BookPlus :size="15" />建立一部新作品</button></div>
-    </div>
 
     <nav class="orrery-v3-controls" aria-label="叙事场域控制">
       <button v-if="spatial.canGoBack" class="orrery-v3-icon" title="返回上一个叙事焦点" aria-label="返回上一个叙事焦点" @click="goBack"><ArrowLeft :size="15" /></button>

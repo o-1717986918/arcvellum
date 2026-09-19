@@ -26,6 +26,8 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
 
   await openCreativeLive(page);
   await expect(page.locator(".creative-live-dock")).toHaveAttribute("data-status", "active");
+  await expect(page.locator(".creative-live-dock")).toHaveCSS("background-color", "rgb(248, 250, 247)");
+  await expect(page.locator(".live-manuscript-scroll .safe-markdown-document")).toHaveCSS("color", "rgb(38, 56, 49)");
   await expect(page.locator(".creative-live-runtime")).toContainText("实时连接");
   await expect(page.locator(".live-manuscript-scroll")).toContainText("那艘本该昨天离港的船");
   await expect(page.locator(".creative-review-rail")).toContainText("确定性预检通过");
@@ -44,6 +46,8 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
   await expect(page.locator(".creative-live-side-scroll")).toHaveCSS("overflow-y", "auto");
   expect(await page.locator(".live-manuscript-scroll").evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
   expect(await page.locator(".creative-live-side-scroll").evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  await page.locator('.spatial-window[data-kind="observatory"] button[title="全屏打开工作台"]').dispatchEvent("click");
+  await expect(page.locator('.spatial-window[data-kind="observatory"]')).toHaveClass(/fullscreen/);
   await capture(page, testInfo, "creative-live-active.png");
 });
 
@@ -57,7 +61,11 @@ async function openCreativeLive(page: Page): Promise<void> {
       if (url.includes("/api/creative-live/stream?")) {
         // Keep one stable open stream. Returning a finite response would make
         // the production reconnect loop repeatedly rebuild the visual fixture.
-        return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ start() {} }), {
+        return Promise.resolve(new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            init?.signal?.addEventListener("abort", () => controller.error(new DOMException("Aborted", "AbortError")), { once: true });
+          },
+        }), {
           status: 200,
           headers: { "Content-Type": "text/event-stream; charset=utf-8" },
         }));
@@ -65,7 +73,9 @@ async function openCreativeLive(page: Page): Promise<void> {
       return nativeFetch(input, init);
     };
   }, projectRoot);
-  await page.goto("#/overview?workspace=observatory", { waitUntil: "domcontentloaded" });
+  await page.goto("#/overview", { waitUntil: "domcontentloaded" });
+  await expect(page.locator(".orrery-creative-live-beacon")).toBeVisible({ timeout: 30_000 });
+  await page.locator(".orrery-creative-live-beacon").dispatchEvent("click");
   await expect(page.locator(".creative-live-dock")).toBeVisible({ timeout: 30_000 });
 }
 

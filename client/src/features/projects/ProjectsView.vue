@@ -98,7 +98,7 @@ async function createProject(): Promise<void> {
     if (!check.valid) throw new Error(check.conflicts.join(" "));
     await store.createProject({ ...createForm });
     localStorage.setItem("arcvellum.createDirectory", createForm.parent_directory);
-    await router.push("/agent");
+    await router.push({ name: "project-agent", query: { new: "1" } });
   } catch (cause) {
     feedback.value = friendlyError(cause, "作品暂时没有建立，请检查保存位置。 ");
   } finally {
@@ -114,7 +114,7 @@ async function openProject(): Promise<void> {
     if (!check.valid) throw new Error(check.conflicts.join(" "));
     await store.openProject(openPath.value);
     localStorage.setItem("arcvellum.openDirectory", openPath.value);
-    await router.push("/agent");
+    await router.push({ name: "project-agent", query: { new: "1" } });
   } catch (cause) {
     feedback.value = friendlyError(cause, "这里没有找到可以打开的 ArcVellum 作品。 ");
   } finally {
@@ -124,7 +124,7 @@ async function openProject(): Promise<void> {
 
 async function continueProject(path: string): Promise<void> {
   store.setCurrentProject(path);
-  await router.push("/agent");
+  await router.push({ name: "project-agent", query: { new: "1" } });
 }
 
 async function openOrInstallDemo(): Promise<void> {
@@ -157,7 +157,7 @@ async function copyDemoForWriting(): Promise<void> {
     });
     await store.loadProjects();
     store.setCurrentProject(response.project.path);
-    await router.push("/agent");
+    await router.push({ name: "project-agent", query: { new: "1" } });
   } catch (cause) {
     feedback.value = friendlyError(cause, "演示作品没有成功复制，请换一个保存位置后重试。 ");
   } finally {

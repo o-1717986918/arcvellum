@@ -25,7 +25,7 @@ describe("useProjectAgentSession", () => {
     const onToolFinished = vi.fn();
     const { wrapper, agent } = mountSession(client, onToolFinished);
 
-    await agent.load();
+    await agent.createSession();
     const pending = agent.ask("项目到哪里了？");
     await flushPromises();
     await vi.waitFor(() => expect(publish).toBeTypeOf("function"));
@@ -79,7 +79,7 @@ describe("useProjectAgentSession", () => {
       }),
     });
     const { wrapper, agent } = mountSession(client);
-    await agent.load();
+    await agent.createSession();
 
     const recovering = agent.recover();
     await vi.waitFor(() => expect(publish).toBeTypeOf("function"));
@@ -120,6 +120,49 @@ describe("useProjectAgentSession", () => {
     expect(agent.messages.value).toHaveLength(80);
     expect(agent.messages.value[0].payload.text).toBe("message-16");
     expect(agent.omittedMessageCount.value).toBe(15);
+    wrapper.unmount();
+  });
+
+  it("lists conversations across works without creating one, then opens its bound work", async () => {
+    const first = session([]);
+    const second = { ...session([]), session_id: "project-agent-2", project_root: "C:/Works/other", title: "另一部作品", updated_at: "2026-09-15T00:00:00Z" };
+    const createSession = vi.fn(async () => first);
+    const listSessions = vi.fn(async (root: string) => ({ items: root === first.project_root ? [first] : root === second.project_root ? [second] : [] }));
+    const onSessionOpened = vi.fn();
+    const client = fakeClient({ createSession, listSessions, readSession: vi.fn(async (id) => id === second.session_id ? second : first) });
+    let agent: ReturnType<typeof useProjectAgentSession> | undefined;
+    const wrapper = mount(defineComponent({
+      setup() {
+        agent = useProjectAgentSession({
+          projectRoot: ref(first.project_root),
+          projectTitle: ref("潮汐之后"),
+          projectRoots: ref([first.project_root, second.project_root]),
+          client,
+          onSessionOpened,
+        });
+        return {};
+      },
+      template: "<div />",
+    }));
+
+    await agent!.load();
+    expect(createSession).not.toHaveBeenCalled();
+    expect(agent!.sessions.value.map((item) => item.session_id)).toEqual([second.session_id, first.session_id]);
+    expect(agent!.session.value?.project_root).toBe(second.project_root);
+    expect(onSessionOpened).toHaveBeenCalledWith(second);
+    wrapper.unmount();
+  });
+
+  it("does not send a starter prompt through an unrelated saved conversation", async () => {
+    const listSessions = vi.fn(async () => ({ items: [] }));
+    const startTurn = vi.fn();
+    const client = fakeClient({ listSessions, startTurn });
+    const { wrapper, agent } = mountSession(client);
+
+    await agent.ask("继续写作");
+
+    expect(listSessions).not.toHaveBeenCalled();
+    expect(startTurn).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });

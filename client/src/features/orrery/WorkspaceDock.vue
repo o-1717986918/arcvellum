@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  Activity,
   Archive,
   BookOpenText,
   Fingerprint,
@@ -12,7 +11,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Telescope,
-  Waypoints,
 } from "lucide-vue-next";
 import { computed } from "vue";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
@@ -26,7 +24,6 @@ const openKinds = computed(() => new Set(windows.windows.filter((item) => !item.
 
 const instruments = [
   { kind: "progress", label: "推进", title: "推进当前作品", icon: Gauge },
-  { kind: "agent", label: "执行", title: "查看 Agent 任务与会话", icon: Activity },
   { kind: "decisions", label: "决策", title: "处理等待你的创作决定", icon: GitBranch },
   { kind: "rules", label: "规则", title: "查看创作规则与节奏", icon: SlidersHorizontal },
   { kind: "delivery", label: "交付", title: "查看交付准备状态与正式文件", icon: PackageCheck },
@@ -35,11 +32,10 @@ const instruments = [
 const workspaces = [
   { kind: "reader", label: "正文", title: "阅读已晋升正文", icon: BookOpenText },
   { kind: "archive", label: "档案", title: "维护人物与世界资产", icon: Archive },
-  { kind: "style", label: "文风", title: "打开文风工坊", icon: Fingerprint },
+  { kind: "style", label: "文风", title: "打开文风工坊（开发中，不完善）", icon: Fingerprint },
   { kind: "quality", label: "质量", title: "调整语言与审查规则", icon: ShieldCheck },
-  { kind: "strategy", label: "策略", title: "查看创作计划与结构", icon: Waypoints },
   { kind: "observatory", label: "现场", title: "打开创作现场", icon: Telescope },
-  { kind: "archaeology", label: "考古", title: "从已有作品反向建立工程", icon: ScanSearch },
+  { kind: "archaeology", label: "考古", title: "从已有作品反向建立工程（开发中，不完善）", icon: ScanSearch },
 ] as const;
 </script>
 

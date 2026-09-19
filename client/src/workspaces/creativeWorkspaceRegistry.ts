@@ -22,7 +22,7 @@ function workspaceComponent(loader: () => Promise<WorkspaceModule>): Component {
 
 export type CreativeWorkspaceKind = Extract<
   SpatialWindowKind,
-  "archive" | "style" | "quality" | "strategy" | "observatory" | "archaeology"
+  "archive" | "style" | "quality" | "observatory" | "archaeology"
 >;
 
 export interface WorkspaceDescriptor {
@@ -74,18 +74,6 @@ const descriptors: WorkspaceDescriptor[] = [
     allowMultiple: false,
     supportsFullscreen: true,
     supportedNodeKinds: ["review", "revision", "draft", "formal-prose", "chapter", "scene"],
-  },
-  {
-    workspaceId: "strategy",
-    title: "创作策略室",
-    shortLabel: "策略",
-    description: "查看全书结构、场景库存、执行计划与自适应编排。",
-    component: workspaceComponent(() => import("@/features/strategy/CreationStrategyView.vue")),
-    defaultSize: { width: 620, height: 540 },
-    minimumSize: { width: 440, height: 380 },
-    allowMultiple: false,
-    supportsFullscreen: true,
-    supportedNodeKinds: ["project", "story-architecture", "word-budget", "volume", "chapter", "event"],
   },
   {
     workspaceId: "observatory",

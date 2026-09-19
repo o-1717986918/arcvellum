@@ -31,11 +31,11 @@ if (missing.length) fail(`desktop asset copy is incomplete: ${missing.join(", ")
 if (sourceAssets.some((name) => name.endsWith(".png"))) fail("PNG assets remain in the production frontend build");
 
 const webpAssets = sourceAssets.filter((name) => name.endsWith(".webp"));
-const expectedVisualAssets = ["narrative-observatory-startup-", "mineral-astrarium-"];
+const expectedVisualAssets = ["narrative-observatory-startup-"];
 const missingVisualAssets = expectedVisualAssets.filter((prefix) => !webpAssets.some((name) => name.startsWith(prefix)));
 if (missingVisualAssets.length) fail(`required default visual assets are missing: ${missingVisualAssets.join(", ")}`);
 if (webpAssets.length !== expectedVisualAssets.length) {
-  fail(`single-theme build must contain exactly ${expectedVisualAssets.length} WebP assets, found ${webpAssets.length}`);
+  fail(`build must contain exactly ${expectedVisualAssets.length} WebP assets, found ${webpAssets.length}`);
 }
 const orreryChunks = sourceAssets.filter((name) => name.startsWith("OrreryWorkbench-") && name.endsWith(".js"));
 if (orreryChunks.length !== 1) fail(`expected one lazy OrreryWorkbench chunk, found ${orreryChunks.length}`);

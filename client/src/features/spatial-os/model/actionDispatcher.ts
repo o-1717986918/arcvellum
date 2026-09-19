@@ -13,7 +13,7 @@ const workspaceAliases: Record<string, Exclude<SpatialWindowKind, "node"> | unde
   archive: "archive",
   style: "style",
   quality: "quality",
-  strategy: "strategy",
+  strategy: "archive",
   decisions: "decisions",
   rules: "rules",
   reader: "reader",

@@ -96,6 +96,22 @@ describe("spatialWindows", () => {
     expect(reader?.size).toEqual({ width: 356, height: 224 });
   });
 
+  it("does not reopen retired strategy and agent panels from saved layouts", () => {
+    localStorage.setItem("arcvellum.spatial-window-layout.v1.project-a%3A%3Aspine", JSON.stringify(
+      ["strategy", "agent", "reader"].map((kind, index) => ({
+        id: `instrument:${kind}`,
+        kind,
+        position: { left: 82 + index * 20, top: 148 },
+        size: { width: 360, height: 240 },
+        collapsed: false,
+        layer: 51 + index,
+      })),
+    ));
+    const store = useSpatialWindowsStore();
+    store.setScope("project-a::spine", [node]);
+    expect(store.windows.map((item) => item.kind)).toEqual(["reader"]);
+  });
+
   it("resizes a window without changing its drag-owned position or violating its compact bounds", () => {
     const store = useSpatialWindowsStore();
     store.openInstrument("decisions");

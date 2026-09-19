@@ -13,5 +13,6 @@ import "./styles/spatialIdentity.css";
 import "./styles/creativeLive.css";
 import "./styles/projectAgent.css";
 import "./styles/agentWorkspaces.css";
+import "./styles/conversationFirstFinish.css";
 
 createApp(App).use(createPinia()).use(router).mount("#app");

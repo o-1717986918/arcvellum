@@ -53,4 +53,10 @@ describe("dispatchConstellationAction", () => {
     expect(dispatchConstellationAction(action({ enabled: false }), node, ports)).toBe(false);
     expect(ports.openWorkspace).not.toHaveBeenCalled();
   });
+
+  it("opens archived structure facts when an older node still requests strategy", () => {
+    const ports = { focus: vi.fn(), openWorkspace: vi.fn(), advance: vi.fn(), read: vi.fn() };
+    expect(dispatchConstellationAction(action({ workspace: "strategy" }), node, ports)).toBe(true);
+    expect(ports.openWorkspace).toHaveBeenCalledWith("archive");
+  });
 });

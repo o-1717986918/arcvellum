@@ -8,8 +8,6 @@ export type ProjectAgentWorkspaceId =
   | "archive"
   | "style"
   | "quality"
-  | "strategy"
-  | "observatory"
   | "archaeology"
   | "delivery"
   | "settings"
@@ -44,7 +42,7 @@ function asyncWorkspace(loader: () => Promise<{ default: Component }>): Componen
   });
 }
 
-function migrated(id: "archive" | "style" | "quality" | "strategy" | "archaeology"): Component {
+function migrated(id: "archive" | "style" | "quality" | "archaeology"): Component {
   const descriptor = creativeWorkspaceRegistry.get(id);
   if (!descriptor) throw new Error(`missing creative workspace: ${id}`);
   return descriptor.component;
@@ -91,7 +89,7 @@ const workspaces: ProjectAgentWorkspaceDescriptor[] = [
     id: "style",
     title: "文风工作台",
     shortLabel: "文风",
-    description: "管理语料、文风版本、评测结果与当前正式挂载。",
+    description: "开发中，不完善。可查看语料、文风版本与当前挂载。",
     component: migrated("style"),
     scope: "project",
     requiresProject: true,
@@ -106,28 +104,10 @@ const workspaces: ProjectAgentWorkspaceDescriptor[] = [
     requiresProject: true,
   },
   {
-    id: "strategy",
-    title: "创作策略",
-    shortLabel: "策略",
-    description: "查看作品结构、场景库存、执行计划与编排状态。",
-    component: migrated("strategy"),
-    scope: "project",
-    requiresProject: true,
-  },
-  {
-    id: "observatory",
-    title: "Agent 观测",
-    shortLabel: "观测",
-    description: "查看当前任务、会话边界、上下文摘要和运行事件。",
-    component: asyncWorkspace(() => import("@/features/observatory/AgentObservatoryView.vue")),
-    scope: "project",
-    requiresProject: true,
-  },
-  {
     id: "archaeology",
     title: "作品考古",
     shortLabel: "考古",
-    description: "从已有文本重建人物、世界、结构和可继续开发的候选资产。",
+    description: "开发中，不完善。可尝试从已有文本重建人物、世界与结构候选。",
     component: migrated("archaeology"),
     scope: "project",
     requiresProject: true,

@@ -57,14 +57,18 @@ watch(
   { immediate: true },
 );
 
-watch(showStartup, (visible) => {
-  if (!visible && window.localStorage.getItem("arcvellum.onboarding-seen") !== "1") showOnboarding.value = true;
-});
+watch(
+  [showStartup, () => store.modelCatalog, () => route.query.workspace],
+  ([visible, catalog, workspace]) => {
+    if (!visible && !workspace && catalog?.providers.some((provider) => provider.connected)
+      && window.localStorage.getItem("arcvellum.onboarding-seen") !== "1") showOnboarding.value = true;
+  },
+);
 
 watch(
   () => store.currentProjectPath,
   (path) => {
-    if (!path && route.name === "overview") void router.push({ name: "project-agent", query: { workspace: "projects" } });
+    if (!path && route.name === "overview") void router.push({ name: "project-agent", query: { new: "1" } });
   },
 );
 

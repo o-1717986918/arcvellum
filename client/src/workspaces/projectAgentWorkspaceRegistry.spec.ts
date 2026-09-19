@@ -10,8 +10,6 @@ describe("projectAgentWorkspaces", () => {
       "archive",
       "style",
       "quality",
-      "strategy",
-      "observatory",
       "archaeology",
       "delivery",
       "settings",
@@ -22,7 +20,7 @@ describe("projectAgentWorkspaces", () => {
   });
 
   it("protects every project-bound showcase entry", () => {
-    const protectedEntries = ["reader", "live", "archive", "style", "quality", "observatory", "delivery"];
+    const protectedEntries = ["reader", "live", "archive", "style", "quality", "delivery"];
     for (const id of protectedEntries) {
       const workspace = projectAgentWorkspaces.get(id);
       expect(workspace, id).toBeDefined();
@@ -32,7 +30,7 @@ describe("projectAgentWorkspaces", () => {
   });
 
   it("separates project-bound tools from application workspaces", () => {
-    expect(projectAgentWorkspaces.forScope("project")).toHaveLength(9);
+    expect(projectAgentWorkspaces.forScope("project")).toHaveLength(7);
     expect(projectAgentWorkspaces.forScope("application").map((item) => item.id)).toEqual([
       "projects",
       "settings",
@@ -48,5 +46,6 @@ describe("projectAgentWorkspaces", () => {
     expect(projectAgentWorkspaces.has("reader")).toBe(true);
     expect(projectAgentWorkspaces.get("reader")?.title).toBe("正文长卷");
     expect(projectAgentWorkspaces.has("debug-console")).toBe(false);
+    expect(projectAgentWorkspaces.has("observatory")).toBe(false);
   });
 });

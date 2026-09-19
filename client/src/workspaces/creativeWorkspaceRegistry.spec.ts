@@ -5,7 +5,7 @@ describe("creativeWorkspaceRegistry", () => {
   it("registers every migrated literary workspace as fullscreen-capable", () => {
     const workspaces = creativeWorkspaceRegistry.all();
     expect(workspaces.map((item) => item.workspaceId)).toEqual([
-      "archive", "style", "quality", "strategy", "observatory", "archaeology",
+      "archive", "style", "quality", "observatory", "archaeology",
     ]);
     expect(workspaces.every((item) => item.supportsFullscreen)).toBe(true);
   });

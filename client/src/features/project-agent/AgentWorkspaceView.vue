@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Bot, PanelLeft, PanelRight, Settings2, SunMoon } from "lucide-vue-next";
+import { Bot, KeyRound, Orbit, PanelLeft, PanelRight, Settings2, SunMoon } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import AgentComposer from "@/features/project-agent/components/AgentComposer.vue";
 import AgentContextInspector from "@/features/project-agent/components/AgentContextInspector.vue";
 import AgentConversation from "@/features/project-agent/components/AgentConversation.vue";
 import AgentSubworkspace from "@/features/project-agent/components/AgentSubworkspace.vue";
 import AgentThreadRail from "@/features/project-agent/components/AgentThreadRail.vue";
+import NewConversationDialog from "@/features/project-agent/components/NewConversationDialog.vue";
 import { useProjectAgentSession } from "@/features/project-agent/composables/useProjectAgentSession";
 import {
   projectAgentWorkspaces,
@@ -20,12 +21,13 @@ const route = useRoute();
 const router = useRouter();
 const railOpen = ref(false);
 const inspectorOpen = ref(false);
+const newConversationOpen = ref(false);
 type AppearanceMode = "system" | "light" | "dark" | "contrast";
 const savedAppearance = localStorage.getItem("arcvellum.projectAgentTheme");
 const appearance = ref<AppearanceMode>(
-  savedAppearance === "light" || savedAppearance === "dark" || savedAppearance === "contrast"
+  savedAppearance === "system" || savedAppearance === "light" || savedAppearance === "dark" || savedAppearance === "contrast"
     ? savedAppearance
-    : "system",
+    : "light",
 );
 const systemDark = ref(false);
 const activeWorkspace = ref<ProjectAgentWorkspaceId | null>(null);
@@ -33,12 +35,24 @@ const workspaceFullscreen = ref(false);
 let colorScheme: MediaQueryList | null = null;
 const projectRoot = computed(() => store.currentProjectPath || "");
 const projectTitle = computed(() => store.currentProject?.title || "作品库");
+const projectRoots = computed(() => store.projects.map((project) => project.path));
+const projectLabels = computed(() => Object.fromEntries(store.projects.map((project) => [project.path, project.title])));
+const sessionProject = computed(() => store.projects.find((project) => project.path === agent.session.value?.project_root) || null);
+const needsModelConnection = computed(() => Boolean(store.modelCatalog && !store.modelCatalog.providers.some((provider) => provider.connected)));
 const workspace = computed(() => projectAgentWorkspaces.get(activeWorkspace.value));
 const applicationWorkspace = computed(() => workspace.value?.scope === "application");
 const dark = computed(() => appearance.value === "dark" || (appearance.value === "system" && systemDark.value));
 const agent = useProjectAgentSession({
   projectRoot,
   projectTitle,
+  projectRoots,
+  onSessionOpened: async (opened) => {
+    const root = store.projects.some((project) => project.path === opened.project_root) ? opened.project_root : "";
+    if (store.currentProjectPath !== root) store.setCurrentProject(root, false);
+    if (route.name === "project-agent" && route.query.session !== opened.session_id) {
+      void router.replace({ name: "project-agent", query: { ...route.query, session: opened.session_id } });
+    }
+  },
   onError: (cause, fallback) => { store.error = friendlyError(cause, fallback); },
   onToolFinished: async (name, ok) => {
     if (ok && name === "project_create") await store.refreshProjectCatalog();
@@ -59,10 +73,21 @@ const currentStage = computed(() => {
 });
 const agentStatus = computed(() => {
   const status = String(store.agentObservability?.status || "idle");
-  if (status === "running") return "主创正在工作";
+  if (status === "active") return "主创正在工作";
   if (status === "stalled") return "创作需要处理";
-  if (status === "failed") return "最近任务未完成";
   return "主创当前待命";
+});
+const creativePhase = computed<"active" | "waiting" | "attention" | null>(() => {
+  const runStatus = store.autopilotStatus?.run?.status;
+  if (runStatus === "running" || store.agentObservability?.status === "active") return "active";
+  if (runStatus === "paused" || runStatus === "blocked") return "waiting";
+  if (runStatus === "failed" || store.agentObservability?.status === "stalled") return "attention";
+  return null;
+});
+const creativeStatus = computed(() => {
+  if (creativePhase.value === "waiting") return "创作已暂停，等待继续";
+  if (creativePhase.value === "attention") return "创作遇到问题，需要处理";
+  return String(store.agentObservability?.activity?.label || currentTask.value || "主创正在处理作品");
 });
 const nextAction = computed(() => {
   const first = asList<Record<string, unknown>>(dashboard.value.next_actions)[0];
@@ -73,7 +98,7 @@ const formalChars = computed(() => Number(store.projectProgress?.formal_chinese_
 const targetChars = computed(() => Number(store.projectProgress?.target_chinese_content_chars || store.currentProject?.target_length || 0));
 const readerUnits = computed(() => Number(store.readerManifest?.unit_count || 0));
 
-onMounted(async () => {
+onMounted(() => {
   colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
   systemDark.value = colorScheme.matches;
   colorScheme.addEventListener("change", updateSystemAppearance);
@@ -81,11 +106,19 @@ onMounted(async () => {
   window.addEventListener("arcvellum:onboarding", returnToConversation);
   window.addEventListener("focus", recoverAgentOnForeground);
   document.addEventListener("visibilitychange", recoverAgentOnForeground);
-  if (projectRoot.value) {
-    await store.refreshWorkspace();
-  }
-  await agent.load();
 });
+
+let initialSessionLoaded = false;
+watch(() => store.initialized, async (ready) => {
+  if (!ready || initialSessionLoaded) return;
+  initialSessionLoaded = true;
+  const initialRoot = projectRoot.value;
+  await agent.load(String(route.query.session || ""));
+  if (projectRoot.value && projectRoot.value === initialRoot) await store.refreshWorkspace();
+  if (!store.modelCatalog) await store.loadModelCatalog().catch(() => undefined);
+  if (needsModelConnection.value && !route.query.workspace) openWorkspace("settings");
+  else if (route.query.new === "1" || (!agent.session.value && !route.query.workspace)) newConversationOpen.value = true;
+}, { immediate: true });
 
 onBeforeUnmount(() => {
   colorScheme?.removeEventListener("change", updateSystemAppearance);
@@ -94,23 +127,64 @@ onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", recoverAgentOnForeground);
 });
 
-watch(projectRoot, async (root) => {
-  agent.reset();
-  if (!root) {
-    closeWorkspace();
-    await agent.load();
+watch([projectRoot, activeWorkspace], async ([root, visibleWorkspace]) => {
+  const boundRoot = agent.session.value?.project_root;
+  if (!visibleWorkspace && boundRoot && root !== boundRoot) {
+    if (agent.sending.value) {
+      store.setCurrentProject(boundRoot, false);
+      return;
+    }
+    agent.reset(true);
+    newConversationOpen.value = true;
+    await router.replace({ name: "project-agent", query: { new: "1" } });
     return;
   }
-  if (activeWorkspace.value === "projects") closeWorkspace();
-  await store.refreshWorkspace();
-  await agent.load();
+  if (root && activeWorkspace.value === "projects" && !agent.session.value) {
+    closeWorkspace();
+    newConversationOpen.value = true;
+  }
+  if (root) await store.refreshWorkspace();
 });
 
 watch(appearance, (value) => localStorage.setItem("arcvellum.projectAgentTheme", value));
+watch(needsModelConnection, (needed, previouslyNeeded) => {
+  if (!needed && previouslyNeeded && activeWorkspace.value === "settings") {
+    closeWorkspace();
+    if (!agent.session.value) newConversationOpen.value = true;
+  }
+});
 watch(() => route.query.workspace, openWorkspaceFromQuery);
+watch(() => route.query.new, (value) => { if (value === "1" && !needsModelConnection.value) newConversationOpen.value = true; });
+watch(() => route.query.session, async (value) => {
+  const id = Array.isArray(value) ? String(value[0] || "") : String(value || "");
+  if (id && id !== agent.session.value?.session_id && !agent.sending.value) await agent.openSession(id);
+});
 
-function selectProject(event: Event): void {
-  store.setCurrentProject((event.target as HTMLSelectElement).value);
+async function createConversation(root: string, title: string): Promise<void> {
+  const created = await agent.createSession(root, `${title}创作会话`);
+  if (created) {
+    newConversationOpen.value = false;
+    closeWorkspace();
+    void router.replace({ name: "project-agent", query: { session: created.session_id } });
+  }
+}
+
+async function openHistorySession(sessionId: string): Promise<void> {
+  if (await agent.openSession(sessionId)) {
+    newConversationOpen.value = false;
+    closeWorkspace();
+    void router.replace({ name: "project-agent", query: { session: sessionId } });
+  }
+}
+
+function openProjectChooser(): void {
+  newConversationOpen.value = false;
+  openWorkspace("projects");
+}
+
+function openOrrery(): void {
+  if (!sessionProject.value) return;
+  void router.push({ name: "overview", query: { session: agent.session.value?.session_id } });
 }
 
 function updateSystemAppearance(event: MediaQueryListEvent): void {
@@ -157,7 +231,6 @@ function closeWorkspace(): void {
   activeWorkspace.value = null;
   syncWorkspaceQuery(null);
   workspaceFullscreen.value = false;
-  if (route.query.workspace) void router.replace({ name: "project-agent" });
 }
 
 function returnToConversation(): void {
@@ -188,13 +261,13 @@ function recoverAgentOnForeground(): void {
       :active-session-id="agent.session.value?.session_id"
       :project-title="projectTitle"
       :project-progress="progress"
-      :has-project="Boolean(projectRoot)"
+      :project-labels="projectLabels"
+      :has-project="Boolean(sessionProject)"
       :active-workspace="activeWorkspace"
       :disabled="agent.sending.value || agent.loading.value || agent.creating.value"
-      @create="agent.createSession"
-      @select="agent.openSession"
+      @create="newConversationOpen = true"
+      @select="openHistorySession"
       @workspace="openWorkspace"
-      @conversation="closeWorkspace"
     />
 
     <main class="pa-workbench">
@@ -203,14 +276,10 @@ function recoverAgentOnForeground(): void {
         <span class="pa-agent-avatar"><Bot :size="16" /></span>
         <div class="pa-conversation-title">
           <strong>{{ workspace?.title || agent.session.value?.title || '项目 Agent' }}</strong>
-          <small>{{ workspace ? workspace.description : (agent.sending.value ? (agent.activity.value?.statusLabel || '正在工作') : '可以继续交谈') }}</small>
+          <small>{{ workspace ? workspace.description : (sessionProject?.title || '先选择作品，开始一段对话') }}</small>
         </div>
-        <label v-if="store.projects.length" class="pa-project-select">
-          <select :value="store.currentProjectPath" aria-label="切换当前作品" @change="selectProject">
-            <option value="">作品库总控</option>
-            <option v-for="project in store.projects" :key="project.path" :value="project.path">{{ project.title }}</option>
-          </select>
-        </label>
+        <button v-if="sessionProject && !workspace" class="pa-orrery-entry" data-tour-id="orrery" @click="openOrrery"><Orbit :size="16" />进入 {{ sessionProject.title }} 的星仪</button>
+        <span v-else class="pa-head-spacer"></span>
         <label class="pa-appearance-select" title="工作台外观">
           <SunMoon :size="16" />
           <select v-model="appearance" aria-label="工作台外观">
@@ -233,16 +302,23 @@ function recoverAgentOnForeground(): void {
         @navigate="openWorkspace"
       />
       <template v-else>
+        <div v-if="needsModelConnection" class="pa-connection-prompt" role="status"><KeyRound :size="18" /><span><strong>先连接模型，再开始创作</strong><small>阅读演示作品无需密钥；发送消息与创作需要你自己的模型服务。</small></span><button @click="openWorkspace('settings')">配置 API Key</button></div>
         <AgentConversation
           :messages="agent.messages.value"
           :activity="agent.activity.value"
           :loading="agent.loading.value"
           :omitted-count="agent.omittedMessageCount.value"
+          :has-session="Boolean(agent.session.value)"
+          :creative-status="creativeStatus"
+          :creative-task="currentTask"
+          :creative-phase="creativePhase"
           @starter="agent.ask"
+          @new-conversation="newConversationOpen = true"
+          @open-live="openWorkspace('live')"
         />
         <AgentComposer
           data-tour-id="advisor"
-          :disabled="agent.loading.value"
+          :disabled="agent.loading.value || !agent.session.value || needsModelConnection"
           :busy="agent.sending.value"
           @send="agent.ask"
           @stop="agent.stop"
@@ -251,7 +327,7 @@ function recoverAgentOnForeground(): void {
     </main>
 
     <AgentContextInspector
-      v-if="projectRoot && !applicationWorkspace"
+      v-if="sessionProject && !workspace"
       :title="projectTitle"
       :premise="store.currentProject?.premise || ''"
       :progress="progress"
@@ -262,7 +338,16 @@ function recoverAgentOnForeground(): void {
       :agent-status="agentStatus"
       :reader-units="readerUnits"
       :next-action="nextAction"
+      :observability="store.agentObservability"
       @workspace="openWorkspace"
+    />
+    <NewConversationDialog
+      v-if="newConversationOpen"
+      :projects="store.projects"
+      :busy="agent.creating.value"
+      @choose="(project) => createConversation(project.path, project.title)"
+      @create-project="openProjectChooser"
+      @close="newConversationOpen = false"
     />
     <button v-if="railOpen || inspectorOpen" class="pa-panel-backdrop" aria-label="关闭侧栏" @click="railOpen = false; inspectorOpen = false"></button>
   </div>

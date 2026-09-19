@@ -24,13 +24,13 @@ export interface StageExperience {
 }
 
 export const DEFAULT_PALETTE: ScenePalette = {
-  core: 0x68b99c,
-  canon: 0xc2a45e,
-  branch: 0x9184ad,
-  warning: 0xd9644d,
-  label: 0xedf4f1,
-  deep: 0x071713,
-  shadow: 0x06130f,
+  core: 0x28735f,
+  canon: 0x927141,
+  branch: 0x75618c,
+  warning: 0xb85845,
+  label: 0x263d35,
+  deep: 0xeff4f1,
+  shadow: 0x8ba39a,
 };
 
 export function readStageExperience(): StageExperience {
@@ -50,7 +50,7 @@ export function rendererResolution(quality: OrreryRenderQuality): number {
   const deviceResolution = window.devicePixelRatio || 1;
   if (quality === "efficient") return 1;
   if (quality === "high") return Math.min(deviceResolution, 2);
-  return Math.min(deviceResolution, 1.5);
+  return Math.min(deviceResolution, 1.25);
 }
 
 export function readPalette(host: HTMLElement): ScenePalette {
@@ -62,7 +62,7 @@ export function readPalette(host: HTMLElement): ScenePalette {
     warning: cssColor(styles.getPropertyValue("--orrery-warning"), DEFAULT_PALETTE.warning),
     label: cssColor(styles.getPropertyValue("--orrery-label"), DEFAULT_PALETTE.label),
     deep: cssColor(styles.getPropertyValue("--orrery-deep"), DEFAULT_PALETTE.deep),
-    shadow: DEFAULT_PALETTE.shadow,
+    shadow: cssColor(styles.getPropertyValue("--orrery-shadow"), DEFAULT_PALETTE.shadow),
   };
 }
 

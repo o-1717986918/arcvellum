@@ -7,10 +7,8 @@ describe("legacy project viewing routes", () => {
     ["/archive", "archive"],
     ["/style", "style"],
     ["/quality", "quality"],
-    ["/strategy", "strategy"],
-    ["/observatory", "live"],
+    ["/strategy", "quality"],
     ["/delivery", "delivery"],
-    ["/projects", "projects"],
     ["/settings", "settings"],
     ["/help", "help"],
     ["/details", "details"],
@@ -19,6 +17,18 @@ describe("legacy project viewing routes", () => {
     await router.push(path);
     expect(router.currentRoute.value.name).toBe("project-agent");
     expect(router.currentRoute.value.query.workspace).toBe(workspace);
+  });
+
+  it("opens the conversation chooser from the old projects route", async () => {
+    await router.push("/projects");
+    expect(router.currentRoute.value.name).toBe("project-agent");
+    expect(router.currentRoute.value.query.new).toBe("1");
+  });
+
+  it("returns the old observatory route to the conversation with its right rail", async () => {
+    await router.push("/observatory");
+    expect(router.currentRoute.value.name).toBe("project-agent");
+    expect(router.currentRoute.value.query.workspace).toBeUndefined();
   });
 
   it("keeps the narrative orrery as a first-class mode", async () => {

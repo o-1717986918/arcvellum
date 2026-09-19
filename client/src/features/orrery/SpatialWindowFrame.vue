@@ -116,7 +116,7 @@ function windowKicker(): string {
     style: "STYLE ATELIER",
     quality: "EDITORIAL REVIEW",
     strategy: "CREATIVE STRATEGY",
-    observatory: "AGENT OBSERVATORY",
+    observatory: "CREATIVE LIVE",
     archaeology: "WORK ARCHAEOLOGY",
   };
   return labels[props.item.kind];

@@ -405,7 +405,7 @@ export const useSpatialWindowsStore = defineStore("spatialWindows", () => {
       const nodeById = new Map(nodes.map((node) => [node.node_id, node]));
       const restored: SpatialWindow[] = [];
       saved.forEach((item) => {
-        if (!isWindowKind(item.kind)) return [];
+        if (!isWindowKind(item.kind) || item.kind === "strategy" || item.kind === "agent") return;
         const size = persistedWindowSize(item);
         if (item.kind === "node") {
           const node = nodeById.get(String(item.node_id || ""));
