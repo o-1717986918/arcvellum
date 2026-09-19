@@ -13,6 +13,14 @@ ArcVellum 面向小说及其他长篇虚构作品。你可以与项目 Agent 讨
 
 **当前版本：v0.99.6 Beta。** [下载 Windows 安装包](https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.6) · [阅读发行说明](docs/releases/v0.99.6.md) · [查看验证记录](docs/releases/v0.99.6-verification.md)
 
+### 界面实拍
+
+以下画面取自 v0.99.6 开发构建，使用隔离的合成演示项目，不含用户作品或私人对话。界面仍在迭代。
+
+![项目 Agent 的对话与作品上下文](docs/images/arcvellum-agent-v0996.png)
+
+![叙事星仪的章节、场景与关系视图](docs/images/arcvellum-orrery-v0996.png)
+
 ## 从一句话开始
 
 1. 安装 Windows x64 版本并打开 ArcVellum。安装包已包含应用服务、文学内核和 Pi Worker，不要求另外安装 Python、Node.js、OpenCode 或浏览器。
