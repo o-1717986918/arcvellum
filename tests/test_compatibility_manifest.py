@@ -11,6 +11,7 @@ from literary_engineering_studio.application.compatibility import (
     compatibility_summary,
     load_compatibility_manifest,
 )
+from literary_engineering_studio import __version__
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +26,7 @@ class CompatibilityManifestTests(unittest.TestCase):
             "arcvellum/compatibility-manifest/v2",
         )
         current = manifest["current_release"]
-        self.assertEqual(current["version"], "0.99.6")
+        self.assertEqual(current["version"], __version__)
         self.assertEqual(
             current["defaults"]["agent_runtime"],
             "pi-worker",
@@ -72,7 +73,7 @@ class CompatibilityManifestTests(unittest.TestCase):
     def test_summary_does_not_expose_a_second_runtime_default(self):
         summary = compatibility_summary()
 
-        self.assertEqual(summary["release_version"], "0.99.6")
+        self.assertEqual(summary["release_version"], __version__)
         self.assertEqual(summary["default_agent_runtime"], "pi-worker")
         self.assertEqual(summary["model_invocation"], "runner-managed")
         self.assertGreater(summary["deprecated_alias_count"], 0)

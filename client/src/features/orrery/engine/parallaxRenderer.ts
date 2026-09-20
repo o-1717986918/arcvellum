@@ -27,6 +27,7 @@ import {
   type StageExperience,
 } from "./renderModel";
 import { drawStageScenery } from "./stageScenery";
+import { projectedPrimaryGroups } from "./primaryGroupFrames";
 
 const WORLD_WIDTH = NARRATIVE_STAGE.width;
 const WORLD_HEIGHT = NARRATIVE_STAGE.height;
@@ -196,7 +197,7 @@ export class NarrativeParallaxRenderer {
       palette: this.palette,
       experience: this.experience,
       frame: this.narrativeFrame(),
-      primaryGroups: (groupSize) => this.projectedPrimaryGroups(groupSize),
+      primaryGroups: (groupSize) => projectedPrimaryGroups(projection, layout, groupSize, (point) => this.projectPoint(point)),
     });
     this.relationLayers = drawNarrativeRelations({
       projection,
@@ -387,42 +388,6 @@ export class NarrativeParallaxRenderer {
     };
   }
 
-  private projectedPrimaryGroups(groupSize: number): NarrativeFrame[] {
-    if (!this.projection || !this.layout) return [];
-    const primary = this.projection.nodes
-      .filter((node) => node.type === "chapter" || node.type === "scene")
-      .sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
-    const chapterGroups = new Map<string, typeof primary>();
-    for (const node of primary) {
-      const chapterId = narrativeClusterId(node);
-      if (!chapterId) continue;
-      const group = chapterGroups.get(chapterId) || [];
-      group.push(node);
-      chapterGroups.set(chapterId, group);
-    }
-    const groups = chapterGroups.size > 1
-      ? [...chapterGroups.values()]
-      : Array.from({ length: Math.ceil(primary.length / Math.max(1, groupSize)) }, (_value, index) => (
-        primary.slice(index * Math.max(1, groupSize), (index + 1) * Math.max(1, groupSize))
-      ));
-    const result: NarrativeFrame[] = [];
-    for (const group of groups) {
-      const points = group
-        .map((node) => this.layout?.points.get(node.node_id))
-        .filter((point): point is WorldPoint => Boolean(point))
-        .map((point) => this.projectPoint(point));
-      const bounds = planeBounds(points);
-      if (!bounds) continue;
-      result.push({
-        centerX: bounds.centerX,
-        centerY: bounds.centerY,
-        width: Math.max(1, bounds.maxX - bounds.minX),
-        height: Math.max(1, bounds.maxY - bounds.minY),
-      });
-    }
-    return result;
-  }
-
   private tideOffset(
     node: SpatialNarrativeProjection["nodes"][number],
     base: { x: number; y: number },
@@ -524,11 +489,4 @@ export class NarrativeParallaxRenderer {
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     );
   }
-}
-
-function narrativeClusterId(node: SpatialNarrativeProjection["nodes"][number]): string {
-  const source = node.type === "chapter"
-    ? String(node.metrics.chapter_id || node.source_id || node.node_id)
-    : String(node.metrics.chapter_id || "");
-  return source.trim().replace(/^chapter:/, "");
 }

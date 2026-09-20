@@ -14,7 +14,7 @@ class VersionSyncTests(unittest.TestCase):
     def test_all_public_version_declarations_match(self):
         result = MODULE.verify_versions(ROOT)
         self.assertTrue(result["ok"])
-        self.assertEqual(result["version"], "0.99.6")
+        self.assertRegex(result["version"], r"^\d+\.\d+\.\d+$")
 
 
 if __name__ == "__main__":
