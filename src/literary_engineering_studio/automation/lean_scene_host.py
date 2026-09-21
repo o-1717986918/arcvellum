@@ -8,6 +8,7 @@ from typing import Any, Callable
 from literary_engineering_studio_engine.public.literary import SceneExecutionMode
 
 from .lean_scene_loop import LeanSceneRunCoordinator
+from ..application.lean_longform_planning import LeanLongformPlanningService
 from .policy import DelegationPolicy
 from ..infrastructure.lean_scene_runtime import build_lean_scene_runtime
 from ..observability.creative_live.scene_transactions import scene_transaction_summary
@@ -105,6 +106,11 @@ class LeanSceneAutopilotHost:
             repository=self._scene_transactions,
             event_sink=lambda event, data: self._emit_event(run_id, event, data),
             transaction_events=_AutopilotSceneEvents(self._emit_event, run_id),
+            planning=LeanLongformPlanningService(
+                self._config,
+                data_root=data_root,
+                event_sink=lambda event, data: self._emit_event(run_id, event, data),
+            ),
         )
         self._coordinators[run_id] = bundle.coordinator
         return bundle.coordinator
@@ -162,6 +168,8 @@ class LeanSceneAutopilotHost:
                 "transaction_id": step.transaction_id,
                 "status": step.transaction_status,
                 "message": step.message,
+                "chapter_id": step.chapter_id,
+                "author_summary": step.author_summary or {},
             },
         )
 

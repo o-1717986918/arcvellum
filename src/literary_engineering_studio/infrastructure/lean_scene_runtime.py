@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..application.scene_transaction import SceneTransactionService, TransactionEventSink
+from ..application.lean_longform_planning import LeanLongformPlanningService
 from ..automation.lean_scene_loop import LeanSceneRunCoordinator
 from ..persistence.scene_transactions import SceneTransactionRepository
 from ..runtimes.pi_scene_transaction import PiSceneTransactionRuntime
@@ -28,6 +29,7 @@ def build_lean_scene_runtime(
     repository: SceneTransactionRepository,
     event_sink: Callable[[str, dict[str, Any]], None] | None = None,
     transaction_events: TransactionEventSink | None = None,
+    planning: LeanLongformPlanningService | None = None,
 ) -> LeanSceneRuntimeBundle:
     project = project_root.expanduser().resolve()
     runtime = PiSceneTransactionRuntime(
@@ -53,6 +55,7 @@ def build_lean_scene_runtime(
             service=service,
             repository=repository,
             revision_runtime=runtime,
+            planning=planning,
         ),
     )
 

@@ -40,7 +40,7 @@ function runStatus(value: string): string {
       <h2>{{ title }}</h2>
       <p>{{ premise || '作品方向会随着创作逐步变得清晰。' }}</p>
       <div class="pa-progress"><i :style="{ width: `${Math.max(0, Math.min(100, progress || 0))}%` }"></i></div>
-      <div class="pa-progress-meta"><span>{{ progress == null ? '等待校准' : `${Math.round(progress)}%` }}</span><span>{{ formalChars.toLocaleString('zh-CN') }} / {{ targetChars.toLocaleString('zh-CN') }} 字</span></div>
+      <div class="pa-progress-meta"><span>{{ progress == null ? '正文待校准' : `正文 ${Math.round(progress)}%` }}</span><span>{{ formalChars.toLocaleString('zh-CN') }} / {{ targetChars.toLocaleString('zh-CN') }} 字</span></div>
     </section>
 
     <section class="pa-observer-section">

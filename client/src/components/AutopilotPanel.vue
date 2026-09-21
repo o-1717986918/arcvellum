@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Bot, CircleCheck, CirclePause, Gauge, GitBranch, Pause, Play, RefreshCw, ShieldAlert, Sparkles, Timer, Wrench } from "lucide-vue-next";
+import { Bot, CircleCheck, CirclePause, Gauge, Pause, Play, RefreshCw, ShieldAlert, Sparkles, Timer, Wrench } from "lucide-vue-next";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { readCreativeRuntime, saveCreativeRuntime, type CreativeRuntime } from "@/services/runtimePreference";
 import { friendlyError, useAppStore } from "@/stores/app";
-import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy, FailureRecoveryAction, LiteraryKernelCompatibility } from "@/types/api";
+import type { AutopilotMode, AutopilotRun, AutopilotStatus, DelegationPolicy, FailureRecoveryAction } from "@/types/api";
 
 const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
 const store = useAppStore();
@@ -13,8 +13,6 @@ const busy = ref(false);
 const authorized = ref(false);
 const selectedMode = ref<AutopilotMode>("collaborative");
 const selectedRuntime = ref<CreativeRuntime>(readCreativeRuntime());
-const kernelCompatibility = ref<LiteraryKernelCompatibility | null>(null);
-const selectedKernel = ref<"strict-v1" | "lean-v2">("strict-v1");
 const selectedSceneMode = ref<"draft" | "standard" | "publication">("standard");
 const authorizationConfirmationRequired = ref(false);
 const modeChangeNotice = ref("");
@@ -86,13 +84,7 @@ async function load(): Promise<void> {
   try {
     snapshot.value = await workflowClient.autopilotStatus(store.currentProjectPath);
     selectedMode.value = snapshot.value.policy.mode || "collaborative";
-    selectedKernel.value = snapshot.value.policy.literary_kernel || "strict-v1";
     selectedSceneMode.value = snapshot.value.policy.scene_execution_mode || "standard";
-    try {
-      kernelCompatibility.value = await workflowClient.literaryKernelCompatibility(store.currentProjectPath);
-    } catch {
-      kernelCompatibility.value = null;
-    }
     if (snapshot.value.run?.runtime === "pi-worker") {
       selectedRuntime.value = snapshot.value.run.runtime;
     }
@@ -167,27 +159,22 @@ function chooseRuntime(value: CreativeRuntime): void {
   selectedRuntime.value = saveCreativeRuntime(value);
 }
 
-async function selectKernel(
-  kernel: "strict-v1" | "lean-v2" = selectedKernel.value,
-  sceneMode: "draft" | "standard" | "publication" = selectedSceneMode.value,
-): Promise<void> {
+async function selectSceneMode(sceneMode: "draft" | "standard" | "publication"): Promise<void> {
   if (!snapshot.value || running.value || busy.value || !store.currentProjectPath) return;
-  const previousKernel = selectedKernel.value;
   const previousMode = selectedSceneMode.value;
-  selectedKernel.value = kernel;
   selectedSceneMode.value = sceneMode;
   busy.value = true;
   try {
-    const saved = await workflowClient.migrateLiteraryKernel(store.currentProjectPath, kernel, sceneMode);
+    const saved = await workflowClient.saveAutopilotPolicy(store.currentProjectPath, {
+      ...snapshot.value.policy,
+      scene_execution_mode: sceneMode,
+    });
     snapshot.value.policy = saved.policy;
     store.setAutopilotStatus({ ...snapshot.value });
-    store.notice = kernel === "lean-v2"
-      ? "已启用精简场景事务预览。可随时切回稳定旧内核。"
-      : "已切回稳定旧内核。现有作品文件不会被改写。";
+    store.notice = "创作校对强度已更新。";
   } catch (cause) {
-    selectedKernel.value = previousKernel;
     selectedSceneMode.value = previousMode;
-    store.error = friendlyError(cause, "暂时无法更改文学内核。");
+    store.error = friendlyError(cause, "暂时无法更改创作校对强度。");
   } finally {
     busy.value = false;
   }
@@ -331,19 +318,14 @@ function routeText(route: string): string {
       <button :class="{ active: selectedRuntime === 'pi-worker' }" :disabled="running || busy" @click="chooseRuntime('pi-worker')"><i></i>内置 Pi 主创</button>
     </div>
 
-    <section v-if="!props.compact" class="literary-kernel-selector" aria-label="文学内核">
+    <section v-if="!props.compact" class="literary-kernel-selector" aria-label="创作校对强度">
       <div class="kernel-heading">
-        <GitBranch :size="16" />
-        <span><strong>场景创作内核</strong><small>决定每个场景采用完整旧流程，还是风险驱动的精简事务</small></span>
-        <em v-if="kernelCompatibility && !kernelCompatibility.manifest.adoption.ready_for_default">精简内核仍在文学盲评期</em>
-      </div>
-      <div class="kernel-options">
-        <button :class="{ active: selectedKernel === 'strict-v1' }" :disabled="running || busy" @click="selectKernel('strict-v1')"><strong>稳定流程</strong><small>保留完整逐步门禁</small></button>
-        <button :class="{ active: selectedKernel === 'lean-v2' }" :disabled="running || busy" @click="selectKernel('lean-v2')"><strong>精简事务</strong><small>减少模型往返，当前为预览</small></button>
+        <Wrench :size="16" />
+        <span><strong>创作校对强度</strong><small>控制正文复核深度，不改变作品文件结构</small></span>
       </div>
       <div class="scene-depth-options" aria-label="场景审查深度">
         <span>审查深度</span>
-        <button v-for="item in ([['draft', '初稿'], ['standard', '标准'], ['publication', '定稿']] as const)" :key="item[0]" :class="{ active: selectedSceneMode === item[0] }" :disabled="running || busy" @click="selectKernel(selectedKernel, item[0])">{{ item[1] }}</button>
+        <button v-for="item in ([['draft', '初稿'], ['standard', '标准'], ['publication', '定稿']] as const)" :key="item[0]" :class="{ active: selectedSceneMode === item[0] }" :disabled="running || busy" @click="selectSceneMode(item[0])">{{ item[1] }}</button>
       </div>
     </section>
 

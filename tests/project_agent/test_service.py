@@ -176,6 +176,16 @@ class ProjectAgentServiceTests(unittest.TestCase):
             self.assertIn("project_record_direction", runtime.requests[0].allowed_tools)
             self.assertIn("不要请求用户批准", runtime.requests[0].system_prompt)
             self.assertIn("lean-v2", runtime.requests[0].system_prompt)
+            self.assertIn("故事实际写到哪里", runtime.requests[0].system_prompt)
+            self.assertIn("continuity_status 为 not_recorded", runtime.requests[0].system_prompt)
+            self.assertIn("completed_beats.actual_prose_tail", runtime.requests[0].system_prompt)
+            self.assertIn("不凭印象补全", runtime.requests[0].system_prompt)
+            self.assertIn("避免连续使用机械", runtime.requests[0].system_prompt)
+            self.assertIn("正在进行", runtime.requests[0].system_prompt)
+            self.assertIn("无正式正文时直接说尚未落笔", runtime.requests[0].system_prompt)
+            self.assertIn("不要声称本次回答会继续盯守", runtime.requests[0].system_prompt)
+            self.assertIn("无关的作品去重、归档或成本治理建议", runtime.requests[0].system_prompt)
+            self.assertIn("stop_after_formal_units", runtime.requests[0].system_prompt)
 
     def test_read_session_exposes_only_its_latest_active_turn(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -308,6 +318,7 @@ class ProjectAgentServiceTests(unittest.TestCase):
             self.assertEqual(result["answer"], "全书已经完成并通过交付复核。")
             self.assertEqual(len(runtime.requests), 2)
             self.assertIn("同一条用户消息", runtime.requests[1].prompt)
+            self.assertIn("主要人物处境", runtime.requests[1].prompt)
             restored = service.read_session(session["session_id"])
             self.assertEqual([item["role"] for item in restored["messages"]], ["user", "assistant"])
             events = [item["event"] for item in store.events_since(result["job_id"])]

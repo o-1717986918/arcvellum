@@ -36,7 +36,7 @@ def _same_execution_policy(run: dict[str, Any], target: dict[str, Any]) -> bool:
     active = normalize_policy(run.get("policy"))
     return all(
         active.get(key) == target.get(key)
-        for key in ("mode", "literary_kernel", "release_policy", "scene_execution_mode")
+        for key in ("mode", "literary_kernel", "release_policy", "scene_execution_mode", "limits")
     )
 
 

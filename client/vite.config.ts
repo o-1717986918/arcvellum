@@ -2,6 +2,9 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
+const apiOrigin = process.env.ARCVELLUM_API_ORIGIN ?? "http://127.0.0.1:8791";
+const clientPort = Number.parseInt(process.env.ARCVELLUM_CLIENT_PORT ?? "5173", 10);
+
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   base: "/ui/",
@@ -16,11 +19,11 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: 5173,
+    port: Number.isFinite(clientPort) ? clientPort : 5173,
     strictPort: true,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8791",
+        target: apiOrigin,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },

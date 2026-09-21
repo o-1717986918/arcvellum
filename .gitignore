@@ -26,6 +26,8 @@ src/literary_engineering_studio_engine/_engine/workflow/
 .tmp-*.log
 studio-*.log
 dev-*.log
+.runtime-dev-*.log
+work/dev-runtime/
 ignored
 .tmp-dev/
 .tmp/

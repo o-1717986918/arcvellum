@@ -110,9 +110,9 @@ def prepare_story_architecture_review(project_root: Path) -> tuple[Path, Path]:
         tasks=[(
             "独立审查故事架构",
             f"作为 Reviewer 读取 `{candidate.relative_to(root).as_posix()}` 和项目硬约束。填写 `{target.relative_to(root).as_posix()}`；它必须引用当前 candidate SHA，status=complete，verdict 只能是 pass/revise/block。\n\n"
-            "Studio Worker 会将 reviewer_session_id 绑定为不同于 Writer 的正式任务身份。批判检查：终局选择是否存在、人物变化是否由事件而非结论支撑、每卷是否承担不可替代职责、长度目标是否有足够因果库存。不得代替 Writer 重写 Candidate。"
+            "Studio Worker 会将 reviewer_session_id 绑定为不同于 Writer 的正式任务身份。批判检查：终局选择是否存在、人物变化是否由事件而非结论支撑、每卷是否承担不可替代职责、因果骨架与目标长度是否大体相称。具体章节与场景库存由后续阶段检验，不得在此要求完整清单。不得代替 Writer 重写 Candidate。"
         )],
-        notes=["Reviewer 不读取 Writer 自我说明；有必须改变的事项必须 verdict=revise，不能用 pass_with_notes。"],
+        notes=["Reviewer 不读取 Writer 自我说明；候选内可修的问题用 revise，必须改变项目级方向的冲突用 block，不能用 pass_with_notes。"],
     )
     return target, sidecar
 

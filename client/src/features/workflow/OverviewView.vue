@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Bot, Eye, EyeOff, X } from "lucide-vue-next";
-import { RouterLink, useRoute } from "vue-router";
+import { X } from "lucide-vue-next";
+import { useRoute } from "vue-router";
 import WorkspaceOrreryHost from "@/components/WorkspaceOrreryHost.vue";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { readCreativeRuntime } from "@/services/runtimePreference";
 import { asList } from "@/services/presentation";
 import {
   applyOrreryExperience,
-  normalizeInstrumentVisibility,
   resetOrreryColorIdentity,
 } from "@/services/orreryPreferences";
 import { useAppStore } from "@/stores/app";
@@ -31,7 +30,6 @@ const {
 } = storeToRefs(humanChoices);
 
 const working = ref(false);
-const instrumentsVisible = ref(normalizeInstrumentVisibility(localStorage.getItem("arcvellum.orreryInstruments")));
 const dashboard = computed(() => (store.dashboard || null) as Record<string, unknown> | null);
 const nextActions = computed(() => asList<Record<string, unknown>>(dashboard.value?.next_actions));
 const firstAction = computed(() => nextActions.value[0] || null);
@@ -56,7 +54,6 @@ onMounted(async () => {
 
 onBeforeUnmount(() => document.documentElement.classList.remove("orrery-immersive"));
 
-watch(instrumentsVisible, (value) => localStorage.setItem("arcvellum.orreryInstruments", value ? "visible" : "hidden"));
 watch(
   [() => route.query.workspace, () => store.currentProjectPath],
   ([workspace, projectRoot]) => {
@@ -151,7 +148,7 @@ function advanceSpatialRun(): void {
 </script>
 
 <template>
-  <div class="overview-view is-immersive spatial-active" :class="{ 'instruments-hidden': !instrumentsVisible }" data-orrery-background="daylight" data-orrery-engine="spatial">
+  <div class="overview-view is-immersive spatial-active" data-orrery-background="daylight" data-orrery-engine="spatial">
     <section class="orrery-hero">
       <WorkspaceOrreryHost
         :dashboard="dashboard"
@@ -162,12 +159,6 @@ function advanceSpatialRun(): void {
         @choose="openChoice"
       />
 
-      <div class="orrery-view-tools" aria-label="叙事星仪外观">
-        <RouterLink class="orrery-icon" :to="{ name: 'project-agent', query: route.query.session ? { session: route.query.session } : {} }" title="返回作品对话"><Bot :size="16" /></RouterLink>
-        <button class="orrery-icon" :title="instrumentsVisible ? '暂隐边缘工作台' : '显示边缘工作台'" @click="instrumentsVisible = !instrumentsVisible">
-          <EyeOff v-if="instrumentsVisible" :size="16" /><Eye v-else :size="16" />
-        </button>
-      </div>
     </section>
 
     <div v-if="selectedChoice" class="choice-dialog-backdrop" @click.self="closeChoice">

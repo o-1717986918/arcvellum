@@ -8,6 +8,7 @@ import AgentConversation from "@/features/project-agent/components/AgentConversa
 import AgentSubworkspace from "@/features/project-agent/components/AgentSubworkspace.vue";
 import AgentThreadRail from "@/features/project-agent/components/AgentThreadRail.vue";
 import NewConversationDialog from "@/features/project-agent/components/NewConversationDialog.vue";
+import CreativeLiveSpatialWindow from "@/components/workspace/CreativeLiveSpatialWindow.vue";
 import { useProjectAgentSession } from "@/features/project-agent/composables/useProjectAgentSession";
 import {
   projectAgentWorkspaces,
@@ -15,6 +16,7 @@ import {
 } from "@/workspaces/projectAgentWorkspaceRegistry";
 import { asList, asRecord, describeWorkflowAction, workflowStepLabel } from "@/services/presentation";
 import { friendlyError, useAppStore } from "@/stores/app";
+import type { SpatialWindow, SpatialWindowPosition, SpatialWindowSize } from "@/types/spatialWindows";
 
 const store = useAppStore();
 const route = useRoute();
@@ -32,12 +34,14 @@ const appearance = ref<AppearanceMode>(
 const systemDark = ref(false);
 const activeWorkspace = ref<ProjectAgentWorkspaceId | null>(null);
 const workspaceFullscreen = ref(false);
+const liveWindow = ref<SpatialWindow | null>(null);
 let colorScheme: MediaQueryList | null = null;
 const projectRoot = computed(() => store.currentProjectPath || "");
 const projectTitle = computed(() => store.currentProject?.title || "作品库");
 const projectRoots = computed(() => store.projects.map((project) => project.path));
 const projectLabels = computed(() => Object.fromEntries(store.projects.map((project) => [project.path, project.title])));
 const sessionProject = computed(() => store.projects.find((project) => project.path === agent.session.value?.project_root) || null);
+const sessionOutsideCatalog = computed(() => Boolean(agent.session.value?.project_root && !sessionProject.value));
 const needsModelConnection = computed(() => Boolean(store.modelCatalog && !store.modelCatalog.providers.some((provider) => provider.connected)));
 const workspace = computed(() => projectAgentWorkspaces.get(activeWorkspace.value));
 const applicationWorkspace = computed(() => workspace.value?.scope === "application");
@@ -93,9 +97,13 @@ const nextAction = computed(() => {
   const first = asList<Record<string, unknown>>(dashboard.value.next_actions)[0];
   return first ? String(first.summary || first.label || describeWorkflowAction(first.command || first.task_id || first.route)) : "";
 });
-const progress = computed(() => store.projectProgress?.overall_percent ?? null);
 const formalChars = computed(() => Number(store.projectProgress?.formal_chinese_content_chars || 0));
 const targetChars = computed(() => Number(store.projectProgress?.target_chinese_content_chars || store.currentProject?.target_length || 0));
+const progress = computed(() => (
+  targetChars.value > 0
+    ? Math.min(100, formalChars.value / targetChars.value * 100)
+    : null
+));
 const readerUnits = computed(() => Number(store.readerManifest?.unit_count || 0));
 
 onMounted(() => {
@@ -113,7 +121,13 @@ watch(() => store.initialized, async (ready) => {
   if (!ready || initialSessionLoaded) return;
   initialSessionLoaded = true;
   const initialRoot = projectRoot.value;
-  await agent.load(String(route.query.session || ""));
+  const creatingNew = route.query.new === "1";
+  const requestedSessionId = creatingNew ? "" : String(route.query.session || "");
+  const opened = await agent.load(requestedSessionId, !creatingNew);
+  if (requestedSessionId && !opened && route.query.session === requestedSessionId) {
+    await router.replace({ name: "project-agent", query: { new: "1" } });
+  }
+  if (route.query.workspace === "live") openWorkspaceFromQuery(route.query.workspace);
   if (projectRoot.value && projectRoot.value === initialRoot) await store.refreshWorkspace();
   if (!store.modelCatalog) await store.loadModelCatalog().catch(() => undefined);
   if (needsModelConnection.value && !route.query.workspace) openWorkspace("settings");
@@ -157,7 +171,17 @@ watch(() => route.query.workspace, openWorkspaceFromQuery);
 watch(() => route.query.new, (value) => { if (value === "1" && !needsModelConnection.value) newConversationOpen.value = true; });
 watch(() => route.query.session, async (value) => {
   const id = Array.isArray(value) ? String(value[0] || "") : String(value || "");
-  if (id && id !== agent.session.value?.session_id && !agent.sending.value) await agent.openSession(id);
+  if (!id || id === agent.session.value?.session_id || agent.sending.value) return;
+  const opened = await agent.openSession(id);
+  if (!opened && route.query.session === id && agent.session.value?.session_id !== id) {
+    const query = { ...route.query };
+    if (agent.session.value) query.session = agent.session.value.session_id;
+    else {
+      delete query.session;
+      query.new = "1";
+    }
+    await router.replace({ name: "project-agent", query });
+  }
 });
 
 async function createConversation(root: string, title: string): Promise<void> {
@@ -193,6 +217,10 @@ function updateSystemAppearance(event: MediaQueryListEvent): void {
 
 function openWorkspaceFromQuery(value: unknown): void {
   const requested = Array.isArray(value) ? String(value[0] || "") : String(value || "");
+  if (requested === "live") {
+    if (openLiveWindow()) syncWorkspaceQuery(null);
+    return;
+  }
   if (projectAgentWorkspaces.has(requested)) {
     openWorkspace(requested);
     return;
@@ -204,6 +232,11 @@ function openWorkspaceFromQuery(value: unknown): void {
 }
 
 function openWorkspace(next: ProjectAgentWorkspaceId): void {
+  if (next === "live") {
+    openLiveWindow();
+    return;
+  }
+  liveWindow.value = null;
   const descriptor = projectAgentWorkspaces.get(next);
   if (!descriptor || (descriptor.requiresProject && !projectRoot.value)) {
     syncWorkspaceQuery("projects");
@@ -215,6 +248,48 @@ function openWorkspace(next: ProjectAgentWorkspaceId): void {
   workspaceFullscreen.value = false;
   railOpen.value = false;
   inspectorOpen.value = false;
+}
+
+function openLiveWindow(): boolean {
+  if (!projectRoot.value) return false;
+  activeWorkspace.value = null;
+  workspaceFullscreen.value = false;
+  syncWorkspaceQuery(null);
+  if (liveWindow.value) {
+    liveWindow.value.collapsed = false;
+    return true;
+  }
+  const size = { width: Math.min(980, Math.max(320, window.innerWidth - 36)), height: Math.min(690, Math.max(420, window.innerHeight - 36)) };
+  liveWindow.value = {
+    id: "agent:creative-live", kind: "observatory", title: "创作现场",
+    position: { left: Math.max(12, Math.round((window.innerWidth - size.width) / 2)), top: Math.max(12, Math.round((window.innerHeight - size.height) / 2)) },
+    size, layer: 70, collapsed: false, workspace_mode: "float",
+  };
+  return true;
+}
+
+function resizeLiveWindow(size: SpatialWindowSize): void {
+  if (!liveWindow.value) return;
+  liveWindow.value.size = {
+    width: Math.max(320, Math.min(size.width, window.innerWidth - 24)),
+    height: Math.max(420, Math.min(size.height, window.innerHeight - 24)),
+  };
+}
+
+function moveLiveWindow(position: SpatialWindowPosition): void {
+  if (liveWindow.value) liveWindow.value.position = position;
+}
+
+function setLiveWindowMode(mode: "float" | "fullscreen"): void {
+  const item = liveWindow.value;
+  if (!item) return;
+  if (mode === "fullscreen") item.workspace_return = { position: { ...item.position }, size: { ...item.size } };
+  else if (item.workspace_return) {
+    item.position = item.workspace_return.position;
+    item.size = item.workspace_return.size;
+    item.workspace_return = undefined;
+  }
+  item.workspace_mode = mode;
 }
 
 function syncWorkspaceQuery(workspace: ProjectAgentWorkspaceId | null): void {
@@ -263,7 +338,7 @@ function recoverAgentOnForeground(): void {
       :project-progress="progress"
       :project-labels="projectLabels"
       :has-project="Boolean(sessionProject)"
-      :active-workspace="activeWorkspace"
+      :active-workspace="liveWindow ? 'live' : activeWorkspace"
       :disabled="agent.sending.value || agent.loading.value || agent.creating.value"
       @create="newConversationOpen = true"
       @select="openHistorySession"
@@ -303,6 +378,7 @@ function recoverAgentOnForeground(): void {
       />
       <template v-else>
         <div v-if="needsModelConnection" class="pa-connection-prompt" role="status"><KeyRound :size="18" /><span><strong>先连接模型，再开始创作</strong><small>阅读演示作品无需密钥；发送消息与创作需要你自己的模型服务。</small></span><button @click="openWorkspace('settings')">配置 API Key</button></div>
+        <div v-if="sessionOutsideCatalog" class="pa-connection-prompt" role="status"><Orbit :size="18" /><span><strong>这段对话未关联当前作品库中的单部作品</strong><small>会话会保留原有范围，不会自动转到当前选中的作品。若原作品已移走，可在作品库中重新导入。</small></span><button @click="openProjectChooser">查看作品库</button></div>
         <AgentConversation
           :messages="agent.messages.value"
           :activity="agent.activity.value"
@@ -314,7 +390,7 @@ function recoverAgentOnForeground(): void {
           :creative-phase="creativePhase"
           @starter="agent.ask"
           @new-conversation="newConversationOpen = true"
-          @open-live="openWorkspace('live')"
+          @open-live="openLiveWindow"
         />
         <AgentComposer
           data-tour-id="advisor"
@@ -348,6 +424,17 @@ function recoverAgentOnForeground(): void {
       @choose="(project) => createConversation(project.path, project.title)"
       @create-project="openProjectChooser"
       @close="newConversationOpen = false"
+    />
+    <CreativeLiveSpatialWindow
+      v-if="liveWindow && projectRoot"
+      class="pa-live-window"
+      :item="liveWindow"
+      @move="moveLiveWindow"
+      @resize="resizeLiveWindow"
+      @close="liveWindow = null"
+      @toggle="liveWindow.collapsed = !liveWindow.collapsed"
+      @reset="liveWindow.position = { left: 24, top: 76 }"
+      @workspace-mode="setLiveWindowMode"
     />
     <button v-if="railOpen || inspectorOpen" class="pa-panel-backdrop" aria-label="关闭侧栏" @click="railOpen = false; inspectorOpen = false"></button>
   </div>

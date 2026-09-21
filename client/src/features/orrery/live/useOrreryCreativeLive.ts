@@ -1,4 +1,4 @@
-import { computed, watch, type ComputedRef } from "vue";
+import { computed, onBeforeUnmount, watch, type ComputedRef } from "vue";
 import { useCreativeLiveStore } from "@/features/creative-live/stores/creativeLive";
 import type { SpatialNarrativeNode } from "@/types/spatial";
 import { preferredLiveFocus } from "./liveCameraHints";
@@ -28,6 +28,7 @@ export function useOrreryCreativeLive(options: OrreryCreativeLiveOptions): Orrer
   watch(options.projectRoot, (root) => {
     if (root) void creativeLive.connect(root);
   }, { immediate: true });
+  onBeforeUnmount(() => creativeLive.disconnect());
 
   function openCreativeLive(): void {
     options.openWorkspace();

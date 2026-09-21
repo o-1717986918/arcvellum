@@ -11,12 +11,28 @@ from literary_engineering_studio_engine.literary.planning.contracts import (
     word_budget_adherence_for_body,
 )
 from literary_engineering_studio_engine.literary.planning.rendering import render_scene_word_budget_contract
-from literary_engineering_studio_engine.literary.planning.service import build_word_budget
+from literary_engineering_studio_engine.literary.planning.service import build_word_budget, calculate_word_budget
 from literary_engineering_studio_engine.foundation.text_counts import CHINESE_CONTENT_COUNT_UNIT
 from unittest.mock import patch
 
 
 class WordBudgetModuleBoundaryTests(unittest.TestCase):
+    def test_calculate_budget_does_not_emit_legacy_task_artifacts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "target_length: 6000\ntarget_chapters: 1\ntarget_scenes: 2\n",
+                encoding="utf-8",
+            )
+
+            payload = calculate_word_budget(root)
+
+            self.assertEqual(payload["totals"]["scene_count"], 2)
+            self.assertEqual(payload["totals"]["target_words"], 6000)
+            self.assertNotIn("standard_chain", payload)
+            self.assertNotIn("generated_at", payload)
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["project.yaml"])
+
     def test_build_keeps_budget_inventory_and_task_artifacts_together(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

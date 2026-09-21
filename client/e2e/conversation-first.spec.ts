@@ -60,4 +60,30 @@ test("a new conversation stays bound to the work selected in the client", async 
   expect(secondSession).not.toBe(firstSession);
   const second = await request.get(`http://127.0.0.1:8791/project-agent/sessions/${secondSession}`);
   expect((await second.json()).project_root).toBe(secondRoot);
+
+  await page.locator(".pa-orrery-entry").click();
+  await expect(page.getByRole("button", { name: "返回对话" })).toBeVisible();
+  await expect(page.locator(".orrery-v3-instrument-dock")).toHaveCount(0);
+  await page.getByRole("button", { name: "返回对话" }).click();
+  await expect(page.locator(".pa-conversation-title")).toContainText("视觉样本 300");
+  expect(new URL(page.url()).hash).toContain(`session=${secondSession}`);
+});
+
+test("an invalid conversation deep link never falls through to another work", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("arcvellum.startup-seen", "1");
+    localStorage.setItem("arcvellum.onboarding-seen", "1");
+  });
+  await page.route("**/api/model-connections/pi-worker/catalog", async (route) => {
+    await route.fulfill({ json: {
+      ok: true,
+      providers: [{ id: "visual-test", name: "视觉测试", connected: true, default_model: "test-model", auth_methods: [], models: [], model_count: 0 }],
+    } });
+  });
+
+  await page.goto("#/agent?session=project-agent-no-such-session", { waitUntil: "domcontentloaded" });
+
+  await expect(page).toHaveURL(/#\/agent\?new=1/);
+  await expect(page.getByRole("dialog", { name: "这次想写哪部作品？" })).toBeVisible();
+  await expect(page.locator(".pa-orrery-entry")).toHaveCount(0);
 });

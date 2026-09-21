@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+from io import StringIO
 import json
 from pathlib import Path
 import re
 from typing import Any, Iterable
 
 from literary_engineering_studio_engine.public.projects import atomic_write_batch
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 from literary_engineering_studio_engine.public.literary import (
     RhythmDirective,
     SceneCommitPlan,
@@ -25,6 +28,7 @@ from literary_engineering_studio_engine.public.literary import (
     load_scene_facts,
     load_scene_mapping,
     read_character_text,
+    project_committed_scene_delta,
 )
 
 from ..application.scene_transaction import PreparedScene, SceneCommitReceipt
@@ -38,6 +42,7 @@ _CORE_CANON = (
     "canon/timeline.yaml",
     "canon/facts.json",
 )
+_USER_DIRECTIONS = "workflow/studio/user_directions.md"
 
 
 class ProjectSceneBriefProvider:
@@ -77,7 +82,7 @@ class ProjectSceneBriefProvider:
                 profile.reasons,
             ),
             scene_function=_scene_function(mapping, rhythm_entry),
-            canon_constraints=facts.canon_refs,
+            canon_constraints=_canon_constraints(root, mapping),
             incoming_handoff=incoming,
             chapter_obligations=obligations,
             rhythm=_rhythm_directive(mapping, rhythm_entry),
@@ -101,9 +106,8 @@ class AtomicProjectSceneCommitter:
 
     def commit(self, plan: SceneCommitPlan) -> SceneCommitReceipt:
         _scene_path(self._root, plan.scene_id)
-        prose_path = self._root / "drafts" / "scenes" / f"{plan.scene_id}.md"
-        delta_path = self._root / "workflow" / "scene_deltas" / f"{plan.scene_id}.json"
-        receipt_path = self._root / "workflow" / "scene_commits" / f"{plan.scene_id}.json"
+        (prose_path, delta_path, receipt_path, continuity_path,
+         facts_path, timeline_path) = _scene_commit_paths(self._root, plan.scene_id)
         existing = _read_json(receipt_path)
         if existing:
             return _existing_receipt(existing, plan)
@@ -135,27 +139,32 @@ class AtomicProjectSceneCommitter:
                 "delta_sha256": delta_digest,
             }
         )
+        continuity, facts_payload, timeline_payload = project_committed_scene_delta(
+            scene_id=plan.scene_id,
+            transaction_id=plan.transaction_id,
+            delta=plan.scene_delta,
+            current_projection=_read_json(continuity_path),
+            current_facts=_read_json(facts_path),
+            current_timeline=_read_yaml(timeline_path),
+        )
         written_refs = (
             _rel(prose_path, self._root),
             _rel(delta_path, self._root),
+            _rel(continuity_path, self._root),
+            _rel(facts_path, self._root),
+            _rel(timeline_path, self._root),
             _rel(receipt_path, self._root),
         )
-        receipt_payload = {
-            "schema": "arcvellum/scene-commit/v2",
-            "transaction_id": plan.transaction_id,
-            "scene_id": plan.scene_id,
-            "base_revision": plan.base_revision,
-            "committed_revision": committed_revision,
-            "prose_sha256": prose_digest,
-            "delta_sha256": delta_digest,
-            "review_decision": plan.review_decision.value if plan.review_decision else "deferred",
-            "steward_approved": plan.steward_approved,
-            "written_refs": list(written_refs),
-        }
+        receipt_payload = _scene_commit_receipt_payload(
+            plan, committed_revision, prose_digest, delta_digest, written_refs,
+        )
         atomic_write_batch(
             {
                 prose_path: plan.prose.rstrip() + "\n",
                 delta_path: _json_text(delta_payload),
+                continuity_path: _json_text(continuity),
+                facts_path: _json_text(facts_payload),
+                timeline_path: _yaml_text(timeline_payload),
                 receipt_path: _json_text(receipt_payload),
             }
         )
@@ -165,6 +174,39 @@ class AtomicProjectSceneCommitter:
             committed_revision=committed_revision,
             written_refs=written_refs,
         )
+
+
+def _scene_commit_paths(root: Path, scene_id: str) -> tuple[Path, ...]:
+    return (
+        root / "drafts" / "scenes" / f"{scene_id}.md",
+        root / "workflow" / "scene_deltas" / f"{scene_id}.json",
+        root / "workflow" / "scene_commits" / f"{scene_id}.json",
+        root / "workflow" / "continuity" / "current.json",
+        root / "canon" / "facts.json",
+        root / "canon" / "timeline.yaml",
+    )
+
+
+def _scene_commit_receipt_payload(
+    plan: SceneCommitPlan,
+    committed_revision: str,
+    prose_digest: str,
+    delta_digest: str,
+    written_refs: tuple[str, ...],
+) -> dict[str, Any]:
+    return {
+        "schema": "arcvellum/scene-commit/v2",
+        "transaction_id": plan.transaction_id,
+        "scene_id": plan.scene_id,
+        "base_revision": plan.base_revision,
+        "committed_revision": committed_revision,
+        "prose_sha256": prose_digest,
+        "delta_sha256": delta_digest,
+        "review_decision": plan.review_decision.value if plan.review_decision else "deferred",
+        "review_deferred_by_policy": plan.review_deferred_by_policy,
+        "steward_approved": plan.steward_approved,
+        "written_refs": list(written_refs),
+    }
 
 
 def scene_input_revision(root: Path, scene_id: str, source_refs: Iterable[str]) -> str:
@@ -183,7 +225,7 @@ def scene_input_revision(root: Path, scene_id: str, source_refs: Iterable[str]) 
 def known_scene_refs(brief) -> set[str]:
     """Return the prepared semantic namespace accepted by deterministic verify."""
 
-    refs = set(brief.source_refs) | set(brief.canon_constraints) | set(brief.chapter_obligations)
+    refs = set(brief.source_refs) | set(brief.chapter_obligations)
     for participant in brief.participants:
         refs.update(
             {
@@ -203,9 +245,14 @@ def _scene_path(root: Path, scene_id: str) -> Path:
 
 def _source_refs(root: Path, facts: SceneFacts) -> tuple[str, ...]:
     refs: list[str] = [f"scenes/{facts.scene_id}.yaml"]
+    previous = _previous_scene_id(root, facts)
+    if previous and (root / f"drafts/scenes/{previous}.md").is_file():
+        refs.append(f"drafts/scenes/{previous}.md")
+    _append_existing(refs, root, _USER_DIRECTIONS)
     refs.extend(_character_sources(root, facts.participants))
     refs.extend(reference for reference in facts.canon_refs if _safe_file(root, reference))
     refs.extend(reference for reference in _CORE_CANON if (root / reference).is_file())
+    _append_existing(refs, root, "workflow/continuity/current.json")
     refs.extend(_rel(path, root) for path in active_style_evidence_paths(root))
     for reference in (
         "plot/rhythm_plan.json",
@@ -214,7 +261,6 @@ def _source_refs(root: Path, facts: SceneFacts) -> tuple[str, ...]:
     ):
         if reference and (root / reference).is_file():
             refs.append(reference)
-    previous = _previous_scene_id(root, facts)
     if previous:
         for reference in (
             f"workflow/scene_deltas/{previous}.json",
@@ -223,6 +269,27 @@ def _source_refs(root: Path, facts: SceneFacts) -> tuple[str, ...]:
             if (root / reference).is_file():
                 refs.append(reference)
     return tuple(dict.fromkeys(refs))
+
+
+def _append_existing(refs: list[str], root: Path, reference: str) -> None:
+    if (root / reference).is_file():
+        refs.append(reference)
+
+
+def _canon_constraints(root: Path, scene: dict[str, Any]) -> tuple[str, ...]:
+    values: list[str] = []
+    for reference, keys in (
+        ("canon/world_rules.yaml", ("rules", "constraints")),
+        ("canon/forbidden_changes.yaml", ("forbidden_changes",)),
+    ):
+        payload = _read_yaml(root / reference)
+        for key in keys:
+            values.extend(_strings(payload.get(key)))
+    values.extend(_strings(scene.get("revealed_info")))
+    output = scene.get("output_state")
+    if isinstance(output, dict):
+        values.extend(_strings(output.get("new_facts")))
+    return tuple(dict.fromkeys(values))
 
 
 def _character_sources(root: Path, participants: Iterable[str]) -> list[str]:
@@ -364,6 +431,16 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _read_yaml(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        value = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
+    except (OSError, YAMLError) as exc:
+        raise ValueError(f"invalid project YAML: {path}") from exc
+    return value if isinstance(value, dict) else {}
+
+
 def _strings(value: Any) -> tuple[str, ...]:
     values = value if isinstance(value, (list, tuple)) else [value]
     return tuple(str(item).strip() for item in values if str(item or "").strip())
@@ -399,6 +476,15 @@ def _canonical_digest(payload: dict[str, Any]) -> str:
 
 def _json_text(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _yaml_text(payload: dict[str, Any]) -> str:
+    stream = StringIO()
+    writer = YAML()
+    writer.default_flow_style = False
+    writer.allow_unicode = True
+    writer.dump(payload, stream)
+    return stream.getvalue()
 
 
 __all__ = [

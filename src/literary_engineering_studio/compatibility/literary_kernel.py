@@ -64,6 +64,14 @@ def initial_kernel_selection(project_root: Path | str) -> KernelSelection:
             reason="blind literary evidence permits the lean-v2 default",
             ready_for_default=True,
         )
+    if adoption.get("creator_requested_production_default") is True:
+        return KernelSelection(
+            kernel=str(manifest["candidate"]),
+            scene_execution_mode=str(manifest["new_project_mode"]),
+            source="creator-directed-production-default",
+            reason="new Studio projects use the lightweight production kernel; blind quality monitoring remains independent",
+            ready_for_default=False,
+        )
     return KernelSelection(
         kernel=str(manifest["fallback"]),
         scene_execution_mode=str(manifest["new_project_mode"]),

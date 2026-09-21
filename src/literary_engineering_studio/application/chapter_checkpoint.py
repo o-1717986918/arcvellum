@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import asdict
+import hashlib
+import json
 from pathlib import Path
 
 from literary_engineering_studio_engine.public.literary import (
@@ -36,6 +39,8 @@ class ChapterSceneOutcome:
     incoming_handoff: tuple[str, ...]
     scene_delta: SceneDelta
     style_score: float | None = None
+    decision_summary: str = ""
+    participants: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,7 @@ class ChapterCheckpointEvaluation:
     actual_hanzi: int
     issues: tuple[ChapterCheckpointIssue, ...]
     revision_plan: tuple[str, ...]
+    author_summary: dict[str, object]
 
     @property
     def may_continue(self) -> bool:
@@ -105,6 +111,7 @@ class ChapterCheckpointService:
             actual_hanzi=actual,
             issues=tuple(issues),
             revision_plan=tuple(_revision_instruction(item) for item in issues),
+            author_summary=_author_summary(bundle.chapter.chapter_id, ordered),
         )
 
 
@@ -150,7 +157,105 @@ def scene_outcome_from_transaction(
         incoming_handoff=transaction.brief.incoming_handoff,
         scene_delta=transaction.creative_result.scene_delta,
         style_score=style_score,
+        decision_summary=transaction.creative_result.decision_summary,
+        participants=transaction.brief.participants,
     )
+
+
+def checkpoint_path(data_root: Path, project_root: Path, chapter_id: str) -> Path:
+    project_id = hashlib.sha256(str(project_root.resolve()).encode("utf-8")).hexdigest()[:16]
+    return data_root / "lean-kernel" / project_id / "chapter-checkpoints" / f"{chapter_id}.json"
+
+
+def checkpoint_digest(transactions, facts: ChapterPlanningFacts) -> str:
+    revisions = [
+        item.commit_receipt.committed_revision
+        for item in transactions
+        if item is not None and item.commit_receipt is not None
+    ]
+    return checkpoint_digest_from_revisions(revisions, facts)
+
+
+def checkpoint_digest_from_revisions(revisions: list[str], facts: ChapterPlanningFacts) -> str:
+    values = list(revisions)
+    values.append(json.dumps(asdict(facts), ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+    return hashlib.sha256("\n".join(values).encode("utf-8")).hexdigest()
+
+
+def checkpoint_revision_digest_from_revisions(revisions: list[str]) -> str:
+    """Identify the immutable committed prose set independently of replanning."""
+
+    return hashlib.sha256("\n".join(revisions).encode("utf-8")).hexdigest()
+
+
+def _author_summary(
+    chapter_id: str,
+    outcomes: tuple[ChapterSceneOutcome, ...],
+) -> dict[str, object]:
+    changes = [
+        proposal
+        for outcome in outcomes
+        for proposal in outcome.scene_delta.character_changes
+        if proposal.summary.strip()
+    ]
+    promise_updates = [
+        proposal
+        for outcome in outcomes
+        for proposal in outcome.scene_delta.promise_updates
+        if proposal.summary.strip()
+    ]
+    final = outcomes[-1] if outcomes else None
+    resolved, open_threads = _thread_summaries(promise_updates)
+    return {
+        "chapter_id": chapter_id,
+        "irreversible_change": _irreversible_change(final),
+        "character_positions": _character_positions(outcomes, changes),
+        "resolved_threads": resolved,
+        "open_threads": open_threads,
+        "next_pressure": final.scene_delta.next_handoff[0] if final and final.scene_delta.next_handoff else "",
+    }
+
+
+def _character_positions(outcomes, changes) -> list[dict[str, str]]:
+    participants = dict.fromkeys(
+        name for outcome in outcomes for name in outcome.participants if name.strip()
+    )
+    positions: list[dict[str, str]] = []
+    for participant in participants:
+        latest = next(
+            (
+                item for item in reversed(changes)
+                if participant in item.target_ref or participant in item.summary
+            ),
+            None,
+        )
+        positions.append({
+            "character": participant,
+            "position": latest.summary if latest is not None else "本章未记录新的明确立场变化",
+        })
+    return positions
+
+
+def _irreversible_change(final: ChapterSceneOutcome | None) -> str:
+    if final is None:
+        return ""
+    if decision := final.decision_summary.strip():
+        return decision
+    return next(
+        (item.summary for item in reversed(final.scene_delta.proposals()) if item.summary.strip()),
+        str(final.rhythm.get("scene_turn") or ""),
+    )
+
+
+def _thread_summaries(promise_updates) -> tuple[list[str], list[str]]:
+    closed_operations = {
+        "close", "closed", "resolve", "resolved", "payoff", "paid_off", "complete",
+    }
+    resolved = [
+        item.summary for item in promise_updates
+        if item.operation.strip().lower() in closed_operations
+    ]
+    return resolved, [item.summary for item in promise_updates if item.summary not in resolved]
 
 
 def _append_word_issues(
@@ -305,4 +410,8 @@ __all__ = [
     "ProjectPlanBundle",
     "plan_bundle_issues",
     "scene_outcome_from_transaction",
+    "checkpoint_path",
+    "checkpoint_digest",
+    "checkpoint_digest_from_revisions",
+    "checkpoint_revision_digest_from_revisions",
 ]

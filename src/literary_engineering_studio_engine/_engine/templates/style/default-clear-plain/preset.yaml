@@ -8,7 +8,7 @@ description: 以准确动作、具体细节、自然句法和克制情绪呈现�
 scope: project
 priority: highest
 auto_mount_for_new_studio_projects: true
-source_mode: project-original-editorial-synthesis
+source_mode: user-supplied-public-domain-or-original-reference-corpus
 theory_basis:
   - 句法变化服务意义、视角和强调
   - 具体主语与准确动词优先
@@ -19,6 +19,13 @@ prompt_contract:
     - identity-and-boundary
     - instruction-priority
     - positive-style-mechanism
+  scene_execution:
+    - character-drive-and-cost
+    - dominant-expression-channel
+    - narrative-distance-and-rhythm
+    - adjacent-scene-difference
+    - ending-mode
+    - causal-quantitative-detail
   scene_adaptation:
     - transition
     - conflict
@@ -26,8 +33,10 @@ prompt_contract:
     - revelation
     - aftermath
   silent_execution_passes:
-    - fact-causality-viewpoint
-    - function-distance-rhythm
-    - anti-template-punctuation
+    - scene-specific-style-strategy
+    - prose-generation
+    - hard-language-boundary-check
+    - quantitative-detail-semantic-check
   exception_policy: sparse-functional-and-semantically-justified
+  review_boundary: hard-language-rules-rechecked-soft-style-already-generated
   output_boundary: prose-only

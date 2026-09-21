@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.application.project_manager import create_project
+from literary_engineering_studio_engine.foundation.resources import engine_root
 from literary_engineering_studio_engine.literary.style.defaults import (
     DEFAULT_STYLE_ID,
     ensure_default_style_mount,
@@ -15,8 +18,14 @@ from literary_engineering_studio_engine.literary.style.lab import active_project
 from literary_engineering_studio_engine.literary.style.prompt import (
     style_prompt_quality_report,
 )
+from literary_engineering_studio_engine.literary.style.prompt_agent import (
+    _dry_style_prompt,
+)
 from literary_engineering_studio_engine.prompting.style_context import (
     resolve_style_prompt_context,
+)
+from literary_engineering_studio_engine.prompting.platform_task_support import (
+    style_source_paths,
 )
 from literary_engineering_studio_engine.workflow.state import (
     _style_engineering_states,
@@ -24,6 +33,82 @@ from literary_engineering_studio_engine.workflow.state import (
 
 
 class DefaultStylePresetTests(unittest.TestCase):
+    def test_curated_prompt_generates_soft_style_and_preserves_hard_review_rules(self):
+        template_root = (
+            engine_root() / "templates" / "style" / "default-clear-plain"
+        )
+        prompt = (template_root / "prompt.md").read_text(encoding="utf-8")
+        route_prompt = (
+            engine_root()
+            / "templates"
+            / "prompt_assets"
+            / "route.scene-development.prose.generate.v1.md"
+        ).read_text(encoding="utf-8")
+        review_prompt = (
+            engine_root()
+            / "templates"
+            / "prompt_assets"
+            / "route.scene-development.agent-review.v1.md"
+        ).read_text(encoding="utf-8")
+        revision_prompt = (
+            engine_root()
+            / "templates"
+            / "prompt_assets"
+            / "route.scene-development.revision.v1.md"
+        ).read_text(encoding="utf-8")
+
+        quality = style_prompt_quality_report(prompt)
+        generated_prompt = _dry_style_prompt([])["prompt_markdown"]
+        generated_quality = style_prompt_quality_report(str(generated_prompt))
+        self.assertTrue(quality["length_ok"])
+        self.assertTrue(quality["structure_ok"])
+        self.assertTrue(generated_quality["length_ok"])
+        self.assertTrue(generated_quality["structure_ok"])
+        self.assertIn("抽象文风要求必须在初稿中落实", prompt)
+        self.assertIn("机械“不是……而是……”", prompt)
+        self.assertIn("“不再是……而是……”", prompt)
+        self.assertIn("“没有再……而是……”", prompt)
+        self.assertIn("中文正文统一使用全角标点", prompt)
+        self.assertIn("继续接受后续 Style Lint 与 AgentReview 核验", prompt)
+        self.assertIn("精确数字默认不用", prompt)
+        self.assertIn("五项缺一即去掉精度", prompt)
+        self.assertIn("场景合同即使要求倒计时或设备读数", prompt)
+        self.assertIn("无法说明精确值改变谁的选择", prompt)
+        self.assertIn("普通陈设和日常动作不记账", prompt)
+        self.assertIn("一张桌、两把椅子、拧两下、试两回、看几秒、一支手电", prompt)
+        self.assertIn("抽象文风软约束转译为本场", route_prompt)
+        self.assertIn("Style Lint 与 AgentReview 继续核验违禁表达", route_prompt)
+        self.assertIn("动态数值只有在人物需要该精度", route_prompt)
+        self.assertIn("五项必要性条件缺一即去掉精度", route_prompt)
+        self.assertIn("不做批量删除和机械模糊化", route_prompt)
+        self.assertIn("do not invent a numeric density threshold", review_prompt)
+        self.assertIn("routine gesture counts, and incidental object counts", review_prompt)
+        self.assertIn("do not batch-delete digits", revision_prompt)
+        self.assertIn("精确数字默认不用", generated_prompt)
+        self.assertIn("不批量删除，也不机械换成模糊量词", generated_prompt)
+
+        corpus = (template_root / "training-sample.md").read_text(
+            encoding="utf-8"
+        ).strip()
+        blocks = re.split(r"\n{2,}", corpus)
+        self.assertEqual(len(blocks), 25)
+        self.assertEqual(
+            hashlib.sha256(corpus.encode("utf-8")).hexdigest(),
+            "35c5ecf515618fa59677c063d778572f53cd653f7fc302e75cc10ec55b26a03e",
+        )
+        self.assertTrue(corpus.startswith("今天晚上，很好的月光。"))
+        self.assertTrue(corpus.endswith("将人彻底包裹。"))
+        self.assertNotIn("https://", corpus)
+        self.assertNotIn("作者：", corpus)
+        self.assertIn(
+            "陈禾",
+            (template_root / "holdout-sample.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "七号球衣",
+            (template_root / "evaluation-candidate.md").read_text(encoding="utf-8"),
+        )
+
     def test_studio_project_creation_mounts_reviewed_default_through_formal_mount(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -38,6 +123,8 @@ class DefaultStylePresetTests(unittest.TestCase):
                 )
 
             root = Path(project["path"])
+            self.assertFalse(list(root.rglob("*.agent_tasks.md")))
+            self.assertFalse(list(root.rglob("*.agent_completion.json")))
             active = active_project_style(root)
             self.assertEqual(active["style_id"], DEFAULT_STYLE_ID)
             self.assertEqual(active["integrity"]["status"], "pass")
@@ -67,12 +154,55 @@ class DefaultStylePresetTests(unittest.TestCase):
             self.assertGreaterEqual(int(quality["detail_chars"]), 500)
             self.assertLessEqual(int(quality["detail_chars"]), 2500)
 
+            mounted_profile = context.path.parent / "style-profile.md"
+            profile_text = mounted_profile.read_text(encoding="utf-8")
+            corpus_text = (
+                engine_root()
+                / "templates"
+                / "style"
+                / "default-clear-plain"
+                / "training-sample.md"
+            ).read_text(encoding="utf-8").strip()
+            for block in re.split(r"\n{2,}", corpus_text):
+                self.assertIn(block, profile_text)
+            self.assertIn("R01—R07", profile_text)
+            self.assertIn("R17—R25", profile_text)
+            self.assertIn("类型氛围与空间定调", profile_text)
+            self.assertNotIn("类型氛围反例", profile_text)
+            self.assertNotIn("https://", profile_text)
+            self.assertNotIn("作者：", profile_text)
+            self.assertNotIn("版权", profile_text)
+            self.assertIn(
+                mounted_profile.resolve(),
+                {path.resolve() for path in style_source_paths(root)},
+            )
+
             config = json.loads(
                 (root / "style" / "default_style.json").read_text(encoding="utf-8")
             )
             self.assertEqual(config["style_id"], DEFAULT_STYLE_ID)
             self.assertEqual(config["version_id"], active["version_id"])
             self.assertTrue(config["replaceable"])
+
+            session = json.loads(
+                (
+                    root
+                    / "style"
+                    / "atelier"
+                    / "arcvellum"
+                    / "clear-plain-prose"
+                    / "style_session.json"
+                ).read_text(encoding="utf-8")
+            )
+            source_rows = [
+                *session["training_sources"],
+                *session["holdout_sources"],
+            ]
+            self.assertTrue(source_rows)
+            self.assertEqual(
+                [row["rights"]["mode"] for row in source_rows],
+                ["user-supplied", "project-original"],
+            )
 
             self.assertEqual(_style_engineering_states(root), [])
             project_yaml = root / "project.yaml"

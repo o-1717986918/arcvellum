@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ArrowLeft, Clock3, Focus, Layers3, List, Maximize2, Network, RotateCcw } from "lucide-vue-next";
+import { useRoute, useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
 import CharacterThreadRail from "@/features/orrery/CharacterThreadRail.vue";
 import NarrativeSpineLayer from "@/features/orrery/NarrativeSpineLayer.vue";
@@ -12,8 +13,6 @@ import OrreryExplorationLayer from "@/features/orrery/OrreryExplorationLayer.vue
 import OrreryNavigationLayer from "@/features/orrery/OrreryNavigationLayer.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
 import RelationLensBar from "@/features/orrery/RelationLensBar.vue";
-import SpatialWindowLayer from "@/features/orrery/SpatialWindowLayer.vue";
-import WorkspaceDock from "@/features/orrery/WorkspaceDock.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
 import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
 import { useOrreryCreativeLive } from "@/features/orrery/live/useOrreryCreativeLive";
@@ -34,7 +33,11 @@ import { useSpatialProjectionStore } from "@/stores/spatialProjection";
 import { useSpatialWindowsStore } from "@/stores/spatialWindows";
 import type { SpatialGrammar, SpatialNarrativeNode, SpatialNarrativeProjection, SpatialNodeDetail } from "@/types/spatial";
 
+const SpatialWindowLayer = defineAsyncComponent(() => import("@/features/orrery/SpatialWindowLayer.vue"));
+
 const props = defineProps<{ dashboard: Record<string, unknown> | null; immersive?: boolean }>();
+const route = useRoute();
+const router = useRouter();
 
 const emit = defineEmits<{ advance: []; inspectTask: []; openReader: []; choose: [choice: Record<string, unknown>] }>();
 const app = useAppStore();
@@ -61,9 +64,9 @@ const comparedNodeIds = ref<string[]>([]);
 let appliedReaderUnitId = "";
 
 const projection = computed(() => spatial.projection);
-const { creativeLive, liveNodeIds, creativeLiveLabel, openCreativeLive } = useOrreryCreativeLive({
+const { liveNodeIds } = useOrreryCreativeLive({
   projectRoot: () => app.currentProjectPath, nodes: () => projection.value?.nodes || [],
-  openWorkspace: () => windows.openInstrument("observatory"), navigate: navigateNode,
+  openWorkspace: () => openAgentWorkspace("observatory"), navigate: navigateNode,
 });
 const displayProjection = computed(() => projection.value
   ? applyRelationLens(projection.value, { hidden: hiddenRelationFamilies.value, solo: soloRelationFamily.value })
@@ -72,7 +75,6 @@ const layout = computed(() => displayProjection.value
   ? buildSpatialLayout(displayProjection.value.spatial_grammar, displayProjection.value.revision, displayProjection.value.nodes, displayProjection.value.layout_seed, displayProjection.value.layout_hints)
   : null);
 const viewBookmarks = computed(() => exploration.forProject(app.currentProjectPath));
-const deliveryReady = computed(() => String(app.delivery?.status || "") === "ready");
 const prose = computed(() => manuscriptItems((app.library || null) as Record<string, unknown> | null));
 const progress = computed(() => app.projectProgress);
 const overallProgress = computed(() => Number(progress.value?.overall_percent));
@@ -214,6 +216,20 @@ function setLevel(level: "book" | "chapter" | "scene"): void {
 async function goBack(): Promise<void> {
   activeCharacterId.value = "";
   await spatial.goBack();
+}
+
+function returnToConversation(): void {
+  const session = Array.isArray(route.query.session) ? route.query.session[0] : route.query.session;
+  void router.push({ name: "project-agent", query: session ? { session } : {} });
+}
+
+function openAgentWorkspace(kind: string): void {
+  const workspace = ({
+    progress: "live", agent: "live", observatory: "live", decisions: "live",
+    rules: "quality", health: "details", strategy: "archive",
+  } as Record<string, string>)[kind] || kind;
+  const session = Array.isArray(route.query.session) ? route.query.session[0] : route.query.session;
+  void router.push({ name: "project-agent", query: { ...(session ? { session } : {}), workspace } });
 }
 
 async function setGrammar(event: Event): Promise<void> {
@@ -384,6 +400,7 @@ async function loadChoices(): Promise<void> {
     </header>
 
     <nav class="orrery-v3-controls" aria-label="叙事场域控制">
+      <button class="orrery-return-agent" type="button" @click="returnToConversation"><ArrowLeft :size="15" />返回对话</button>
       <button v-if="spatial.canGoBack" class="orrery-v3-icon" title="返回上一个叙事焦点" aria-label="返回上一个叙事焦点" @click="goBack"><ArrowLeft :size="15" /></button>
       <div class="orrery-v3-levels" role="tablist"><button :class="{ active: spatial.level === 'book' }" @click="setLevel('book')">全书</button><button :class="{ active: spatial.level === 'chapter' }" @click="setLevel('chapter')">章节</button><button :class="{ active: spatial.level === 'scene' }" @click="setLevel('scene')">场景</button></div>
       <div class="orrery-v3-levels orrery-signal-mode" role="group" aria-label="星仪信息密度"><button :class="{ active: signalMode === 'narrative' }" title="只显示作品主脉、主要人物和当前创作信号" @click="signalMode = 'narrative'">主脉</button><button :class="{ active: signalMode === 'all' }" title="显示项目中的全部工程事实" @click="signalMode = 'all'">全部</button></div>
@@ -399,7 +416,7 @@ async function loadChoices(): Promise<void> {
     <div v-else-if="spatial.error && !projection" class="orrery-v3-empty error"><strong>暂时无法读取叙事场域</strong><p>{{ spatial.error }}</p><button class="secondary-button" @click="spatial.refresh()">重新连接</button></div>
     <OrreryAccessibleView v-else-if="displayProjection && listMode" :nodes="displayProjection.nodes" :selected-node-id="windows.selectedNodeId" @select="selectNode" />
     <div v-else-if="displayProjection && layout" class="orrery-v3-stage" :class="{ 'is-static-stage': staticStage }">
-      <NarrativeParallaxStage v-if="stageProjection" ref="stage" :projection="stageProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" />
+      <NarrativeParallaxStage v-if="stageProjection" ref="stage" :projection="stageProjection" :layout="layout" :selected-node-id="windows.selectedNodeId" @anchors="anchors = $event" @degraded="staticStage = true" @recovered="staticStage = false" />
       <NarrativeSpineLayer :projection="displayProjection" :anchors="anchors" :visible-node-ids="stageNodeIds" :active-character-id="activeCharacterId" :active-chapter-id="activeChapterId" :live-node-ids="liveNodeIds" />
       <CreativeProgressionLayer v-if="creativeProgression" :progression="creativeProgression" :anchors="anchors" @focus="focusProgressionNode" />
       <OrreryNodeOverlay
@@ -461,22 +478,16 @@ async function loadChoices(): Promise<void> {
         :active-chapter-id="activeChapterId"
         @select="selectCharacter"
       />
-      <button class="orrery-creative-live-beacon" :class="{ active: creativeLive.snapshot?.status === 'active', blocked: creativeLive.snapshot?.status === 'blocked' }" title="打开创作现场并定位正在处理的作品节点" @click="openCreativeLive">
-        <span><i></i>{{ creativeLive.snapshot?.status === 'active' ? 'LIVE' : '现场' }}</span>
-        <strong>{{ creativeLiveLabel }}</strong>
-        <small>{{ creativeLive.activeArtifact?.identity === 'streaming_preview' ? `${creativeLive.activeArtifact.content.length.toLocaleString('zh-CN')} 字符正在形成` : '查看 Agent、正文与审查轨迹' }}</small>
-      </button>
-      <button class="orrery-v3-progress-spindle" :class="{ 'is-calibrated': progress?.status === 'calibrated' }" title="查看作品总体进度" @click="windows.openInstrument('progress')">
+      <div class="orrery-v3-progress-spindle" :class="{ 'is-calibrated': progress?.status === 'calibrated' }" aria-label="作品总体进度">
         <span>WORK IN FORMATION</span>
         <strong>{{ Number.isFinite(overallProgress) ? `${overallProgress.toFixed(1)}%` : '待校准' }}</strong>
         <i><b :style="{ height: `${Math.min(100, Math.max(0, overallProgress || 0))}%` }"></b></i>
         <small>{{ progress?.status === 'calibrated' ? '准备 / 正文 / 交付' : '先设置可靠字数目标' }}</small>
-      </button>
+      </div>
       <div class="orrery-v3-caption"><Maximize2 :size="14" /><span>{{ signalHierarchy?.nodes.length || 0 }} 个{{ signalMode === 'narrative' ? '主干' : '可见' }}节点</span><i></i><span>{{ signalHierarchy?.total || 0 }} 项作品事实</span></div>
     </div>
     <div v-else class="orrery-v3-empty"><i></i><strong>等待作品长出第一段脉络</strong><p>场景、人物或正文出现后，这里会形成可以进入的叙事场域。</p></div>
-    <WorkspaceDock :pending-choices="choices.length" :delivery-ready="deliveryReady" @open="windows.openInstrument" @organize="windows.constrainToViewport" />
     <ChapterRail :chapters="chapterNodes" :selected-node-id="activeChapterRailNodeId" @select="openChapterFromRail" />
-    <SpatialWindowLayer :projection="projection" :dashboard="props.dashboard" :choices="choices" :delivery="app.delivery" :progress="progress" :prose="prose" @advance="emit('advance')" @inspect-task="emit('inspectTask')" @open-reader="emit('openReader')" @read-node="openReaderForNode" @choose="emit('choose', $event)" @focus-node="focusNode" />
+    <SpatialWindowLayer v-if="windows.windows.length" :projection="projection" :dashboard="props.dashboard" :choices="choices" :delivery="app.delivery" :progress="progress" :prose="prose" @advance="emit('advance')" @inspect-task="emit('inspectTask')" @open-reader="emit('openReader')" @read-node="openReaderForNode" @choose="emit('choose', $event)" @focus-node="focusNode" @open-workspace="openAgentWorkspace" />
   </section>
 </template>

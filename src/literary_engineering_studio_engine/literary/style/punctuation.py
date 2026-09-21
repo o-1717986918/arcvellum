@@ -10,6 +10,22 @@ from literary_engineering_studio_engine.literary.review.creative_quality import 
 
 PUNCTUATION_STANDARD_TITLE = "标准中文标点约束"
 
+# Typography correctness is deterministic.  Rhythm findings below are
+# editorial evidence for generation/review and must not silently become a
+# second hard gate just because a profile asks the linter to surface them.
+PUNCTUATION_CORRECTNESS_RULES = frozenset(
+    {
+        "ascii-punctuation-in-chinese",
+        "ascii-ellipsis",
+        "ascii-dash",
+        "western-quotes-in-chinese",
+        "corner-quotes-in-horizontal-prose",
+        "punctuation-spacing",
+        "repeated-terminal-punctuation",
+        "repeated-punctuation",
+    }
+)
+
 PUNCTUATION_STANDARD_PROMPT = """标准中文标点与文学节奏约束：
 
 一、基础排版规则：
@@ -53,6 +69,12 @@ class PunctuationIssue:
     severity: str
     message: str
     sample: str
+
+
+def punctuation_issue_is_hard(issue: PunctuationIssue) -> bool:
+    """Keep typography rules hard and literary rhythm findings advisory."""
+
+    return issue.rule in PUNCTUATION_CORRECTNESS_RULES
 
 
 CHINESE_RANGE = r"\u3400-\u4dbf\u4e00-\u9fff"
@@ -173,17 +195,23 @@ def _lint_literary_punctuation_rhythm(
     staccato_minimum = max(1, int(quality_threshold(profile, "staccato_min_terminals", 8)))
     staccato_ratio = quality_threshold(profile, "staccato_period_ratio", 0.85)
     min_chars_per_terminal = quality_threshold(profile, "min_chars_per_terminal", 14)
+    units = _terminal_units(prose)
+    short_limit = max(1, int(quality_threshold(profile, "short_sentence_chars", 14)))
+    short_run_limit = max(3, int(quality_threshold(profile, "short_sentence_run", 4)))
+    short_run = _first_short_sentence_run(units, short_limit, short_run_limit)
+    global_staccato = False
     if terminal_count >= staccato_minimum and period_count / max(terminal_count, 1) >= staccato_ratio:
         chars_per_terminal = cjk_count / max(terminal_count, 1)
-        if chars_per_terminal < min_chars_per_terminal:
-            issues.append(
-                PunctuationIssue(
-                    "staccato-period-overuse",
-                    "medium",
-                    "句号密度过高，短句切分过碎。请检查是否把同一组动作、感知或心理波动机械拆成多个句号；同一语义链可改用逗号、分号或重写句群。",
-                    _first_paragraph_sample(prose),
-                )
+        global_staccato = chars_per_terminal < min_chars_per_terminal
+    if global_staccato or short_run:
+        issues.append(
+            PunctuationIssue(
+                "staccato-period-overuse",
+                "medium",
+                "句群出现连续短句或句号密度过高，叙述呼吸趋于单一。请确认每个短句都有独立落点；同一动作、感知或因果链应重组为有层次的中长句群。",
+                "。".join(short_run)[:120] if short_run else _first_paragraph_sample(prose),
             )
+        )
 
     for sentence in _terminal_units(prose):
         comma_count = len(re.findall(r"[，、；]", sentence))
@@ -218,26 +246,26 @@ def _lint_literary_punctuation_rhythm(
                 )
             )
 
-    transition_matches = list(
-        re.finditer(r"(?:^|[。！？\n])\s*(但是|可是|然而|不过|于是|所以|因此|然后|接着|突然|与此同时|另一方面)[，,]", prose)
-    )
-    inline_transition_matches = list(re.finditer(r"[，,](但是|可是|然而|不过|于是|所以|因此|然后|接着|突然)[，,]", prose))
-    transition_count = len(transition_matches) + len(inline_transition_matches)
+    issues.extend(_transition_rhythm_issues(prose, unit_count, profile))
+    return issues
+
+
+def _transition_rhythm_issues(prose, unit_count, profile) -> list[PunctuationIssue]:
+    sentence_pattern = r"(?:^|[。！？\n])\s*(但是|可是|然而|不过|于是|所以|因此|然后|接着|突然|与此同时|另一方面)[，,]"
+    inline_pattern = r"[，,](但是|可是|然而|不过|于是|所以|因此|然后|接着|突然)[，,]"
+    matches = [*re.finditer(sentence_pattern, prose), *re.finditer(inline_pattern, prose)]
     transition_limit = quality_threshold(profile, "transition_per_100_units", 4.0)
     transition_minimum = max(1, int(quality_threshold(profile, "transition_minimum_hits", 4)))
-    transition_density = transition_count / unit_count * 100
-    if transition_count >= transition_minimum and transition_density > transition_limit:
-        match = (transition_matches + inline_transition_matches)[0]
-        issues.append(
-            PunctuationIssue(
-                "mechanical-transition-overuse",
-                "medium",
-                "显性转折词使用过密，转折可能显得生硬。优先用人物动作、视线变化、物象回声、信息差和因果推进制造转折，只在逻辑必须点明时使用“但是、然而、于是”等连接词。",
-                _sample(prose, match.start(), match.end()),
-            )
-        )
-
-    return issues
+    transition_density = len(matches) / unit_count * 100
+    if len(matches) < transition_minimum or transition_density <= transition_limit:
+        return []
+    match = matches[0]
+    return [PunctuationIssue(
+        "mechanical-transition-overuse",
+        "medium",
+        "显性转折词使用过密，转折可能显得生硬。优先用人物动作、视线变化、物象回声、信息差和因果推进制造转折，只在逻辑必须点明时使用“但是、然而、于是”等连接词。",
+        _sample(prose, match.start(), match.end()),
+    )]
 
 
 def _apply_profile_modes(
@@ -258,6 +286,21 @@ def _apply_profile_modes(
 
 def _terminal_units(text: str) -> list[str]:
     return [unit for unit in re.split(r"[。！？]", text) if unit.strip()]
+
+
+def _first_short_sentence_run(
+    units: list[str], max_chars: int, minimum_run: int
+) -> list[str]:
+    run: list[str] = []
+    for unit in units:
+        length = len(re.findall(rf"[{CHINESE_RANGE}]", unit))
+        if 0 < length <= max_chars:
+            run.append(unit.strip())
+            if len(run) >= minimum_run:
+                return run
+        else:
+            run = []
+    return []
 
 
 def _strip_markdown_scaffolding(text: str) -> str:

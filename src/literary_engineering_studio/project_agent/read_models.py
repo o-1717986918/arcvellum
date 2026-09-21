@@ -9,6 +9,7 @@ from typing import Any
 
 from .contracts import ProjectAgentDependencies
 from .scope import registered_work_rows, work_id_for_root, work_reference
+from .story_brief import build_story_brief
 
 
 def dependencies_from_read_models(
@@ -58,17 +59,17 @@ def dependencies_from_read_models(
         resolved_anchor = anchor.expanduser().resolve()
         if (resolved_anchor / "project.yaml").is_file() and work_id_for_root(resolved_anchor) in by_id:
             return resolved_anchor
-        current = str(payload.get("current_project") or "").strip()
-        if current and work_id_for_root(current) in by_id:
-            return by_id[work_id_for_root(current)]
-        raise ValueError("Project Agent needs a work_id because no current work is selected")
+        raise ValueError("Project Agent needs a work_id because this conversation is not bound to a registered work")
 
     def overview(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         dashboard = read_models.dashboard(root)
+        library = read_models.library(root)
+        reader = read_models.reader(root)
         return _fit_payload({
             "work_id": work_id_for_root(root),
             "focus": str(arguments.get("focus") or ""),
             "summary": dashboard.get("summary", {}),
+            "story_brief": build_story_brief(library, reader),
             "next_actions": _items(dashboard.get("next_actions"), 12),
             "route_audits": _items(dashboard.get("route_audits"), 12),
             "progress": read_models.progress(root),

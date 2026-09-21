@@ -68,6 +68,7 @@ def default_policy(
         "delegated_decisions": decisions,
         "limits": {
             "max_failures_per_task": 2,
+            "stop_after_formal_units": 0,
         },
         "release_policy": "delegated" if normalized == "full_auto" else "require_user",
     }
@@ -92,6 +93,9 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
     policy["limits"] = {
         "max_failures_per_task": max(
             0, min(10, int(limits["max_failures_per_task"]))
+        ),
+        "stop_after_formal_units": max(
+            0, min(100_000, int(limits.get("stop_after_formal_units") or 0))
         ),
     }
     policy["delegated_routes"] = sorted({str(item) for item in policy["delegated_routes"] if str(item) in ROUTE_ORDER})
@@ -120,6 +124,10 @@ class DelegationPolicy:
     @property
     def scene_execution_mode(self) -> str:
         return str(self.payload["scene_execution_mode"])
+
+    @property
+    def stop_after_formal_units(self) -> int:
+        return int(self.payload["limits"]["stop_after_formal_units"])
 
     def permits(self, route: str, decision_type: str) -> bool:
         if self.mode == "collaborative" or route not in self.payload["delegated_routes"]:

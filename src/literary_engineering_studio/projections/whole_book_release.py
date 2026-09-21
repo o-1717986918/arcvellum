@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 from typing import Any
 
+from literary_engineering_studio_engine.public.projects import atomic_write_text
+
 from literary_engineering_studio_engine.public.literary import (
     export_markdown_to_docx,
     formal_chapter_ids,
@@ -64,31 +66,46 @@ class WholeBookReleaseCoordinator:
             if blocking:
                 raise RuntimeError(f"{route} 仍有 {blocking} 项正式门禁未通过，不能生成全书交付。")
 
-        title = _project_title(root)
-        sections = []
-        for source in sources:
-            body = final_body_from_workbench_text(source.read_text(encoding="utf-8", errors="ignore")).strip()
-            body = SCENE_HEADING.sub("", body).strip()
-            if body:
-                sections.append(body)
-        if not sections:
-            raise RuntimeError("正式章节没有可交付正文。")
-        manuscript = f"# {title}\n\n" + "\n\n".join(sections).strip() + "\n"
-        if TRACE_PATTERN.search(manuscript):
-            raise RuntimeError("全书汇总仍包含工作流痕迹，已停止发布。")
+        return _write_release(
+            root, sources, audits, approved_by=approved_by,
+            autopilot_run_id=autopilot_run_id,
+        )
 
-        release_root = root / "releases" / "whole-book"
-        release_root.mkdir(parents=True, exist_ok=True)
-        markdown = release_root / f"{_safe_name(title)}-complete.md"
-        docx = markdown.with_suffix(".docx")
-        markdown.write_text(manuscript, encoding="utf-8")
-        docx_result = export_markdown_to_docx(markdown, docx, title=title, kind="novel", overwrite=True)
-        if docx_result.inspection_warnings:
-            raise RuntimeError("DOCX 检查未通过：" + "；".join(docx_result.inspection_warnings))
 
-        snapshot = project_hashes(root)
-        snapshot_digest = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode("utf-8")).hexdigest()
-        manifest = {
+def _write_release(
+    root: Path,
+    sources: list[Path],
+    audits: dict[str, Any],
+    *,
+    approved_by: str,
+    autopilot_run_id: str,
+) -> dict[str, Any]:
+
+    title = _project_title(root)
+    sections = []
+    for source in sources:
+        body = final_body_from_workbench_text(source.read_text(encoding="utf-8", errors="ignore")).strip()
+        body = SCENE_HEADING.sub("", body).strip()
+        if body:
+            sections.append(body)
+    if not sections:
+        raise RuntimeError("正式章节没有可交付正文。")
+    manuscript = f"# {title}\n\n" + "\n\n".join(sections).strip() + "\n"
+    if TRACE_PATTERN.search(manuscript):
+        raise RuntimeError("全书汇总仍包含工作流痕迹，已停止发布。")
+
+    release_root = root / "releases" / "whole-book"
+    release_root.mkdir(parents=True, exist_ok=True)
+    markdown = release_root / f"{_safe_name(title)}-complete.md"
+    docx = markdown.with_suffix(".docx")
+    atomic_write_text(markdown, manuscript)
+    docx_result = export_markdown_to_docx(markdown, docx, title=title, kind="novel", overwrite=True)
+    if docx_result.inspection_warnings:
+        raise RuntimeError("DOCX 检查未通过：" + "；".join(docx_result.inspection_warnings))
+
+    snapshot = project_hashes(root)
+    snapshot_digest = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode("utf-8")).hexdigest()
+    manifest = {
             "schema": RELEASE_SCHEMA,
             "status": "released",
             "title": title,
@@ -110,14 +127,12 @@ class WholeBookReleaseCoordinator:
                 "scene_heading_free": not bool(SCENE_HEADING.search(manuscript)),
                 "docx_inspection_warnings": 0,
             },
-        }
-        manifest_path = release_root / "release_manifest.json"
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        report_root = root / "workflow" / "release_reports"
-        report_root.mkdir(parents=True, exist_ok=True)
-        report_path = report_root / "whole-book-release.md"
-        report_path.write_text(_report(manifest), encoding="utf-8")
-        return {"ok": True, "manifest": manifest, "manifest_path": _rel(manifest_path, root), "report_path": _rel(report_path, root)}
+    }
+    manifest_path = release_root / "release_manifest.json"
+    atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    report_path = root / "workflow" / "release_reports" / "whole-book-release.md"
+    atomic_write_text(report_path, _report(manifest))
+    return {"ok": True, "manifest": manifest, "manifest_path": _rel(manifest_path, root), "report_path": _rel(report_path, root)}
 
 
 def _formal_chapter_sources(root: Path) -> list[Path]:

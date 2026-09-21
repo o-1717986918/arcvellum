@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Activity, GitCompareArrows, RefreshCw, Radio, ScrollText, UsersRound } from "lucide-vue-next";
 import { useAppStore } from "@/stores/app";
 import { useCreativeLiveStore } from "../stores/creativeLive";
@@ -11,6 +11,7 @@ import RevisionDiff from "./RevisionDiff.vue";
 import SessionTranscript from "./SessionTranscript.vue";
 import SceneTransactionPulse from "./SceneTransactionPulse.vue";
 import { artifactKindLabel, artifactStatusLabel, artifactTitle } from "../artifactPresentation";
+import { activityTitle, sessionDisplayName } from "../creativePresentation";
 
 const app = useAppStore();
 const live = useCreativeLiveStore();
@@ -23,6 +24,7 @@ const latestActivity = computed(() => {
 });
 
 watch(() => app.currentProjectPath, (root) => { if (root) void live.connect(root); }, { immediate: true });
+onBeforeUnmount(() => live.disconnect());
 
 async function openSessionMode(): Promise<void> {
   sideMode.value = "session";
@@ -90,7 +92,7 @@ async function openRevisionMode(): Promise<void> {
           </template>
           <template v-else-if="sideMode === 'session'">
             <div v-if="sessions.length > 1" class="creative-session-selector">
-              <button v-for="session in sessions" :key="session.session_id" :class="{ active: live.activeSession?.session_id === session.session_id }" @click="live.selectSession(session.session_id)">{{ session.role || 'Agent' }}</button>
+              <button v-for="(session, index) in sessions" :key="session.session_id" :class="{ active: live.activeSession?.session_id === session.session_id }" @click="live.selectSession(session.session_id)">{{ sessionDisplayName(session, index) }}</button>
             </div>
             <SessionTranscript :session="live.activeSession" />
           </template>
@@ -105,7 +107,7 @@ async function openRevisionMode(): Promise<void> {
     </div>
 
     <footer class="creative-live-footer">
-      <span><i></i>{{ latestActivity?.title || '等待创作信号' }}</span>
+      <span><i></i>{{ latestActivity ? activityTitle(latestActivity) : '等待创作信号' }}</span>
       <span>{{ Number(live.snapshot?.usage.total_tokens || 0).toLocaleString('zh-CN') }} Token · ${{ Number(live.snapshot?.usage.cost_usd || 0).toFixed(4) }}</span>
     </footer>
   </section>

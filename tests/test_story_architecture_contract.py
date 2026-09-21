@@ -19,6 +19,8 @@ from literary_engineering_studio_engine.routes.longform.definition import (
     build_task_payload,
     validate_task,
 )
+from literary_engineering_studio_engine.tasking.paths import load_task
+from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload, issue_next_task
 
 
 def _complete_candidate(candidate: Path, *, writer: str = "writer-1") -> dict:
@@ -124,6 +126,42 @@ class StoryArchitectureContractTests(unittest.TestCase):
                 refreshed_payload["candidate_sha256"],
                 hashlib.sha256(candidate.read_bytes()).hexdigest(),
             )
+
+    def test_block_verdict_does_not_dispatch_unfinishable_revision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "plot").mkdir()
+            (root / "project.yaml").write_text("target_length: 500000\n", encoding="utf-8")
+            (root / "plot" / "outline.md").write_text("# outline\n", encoding="utf-8")
+            candidate, candidate_task = prepare_story_architecture(root)
+            _complete_candidate(candidate)
+            write_agent_completion_marker(candidate_task, root=root)
+            review, review_task = prepare_story_architecture_review(root)
+            review_payload = json.loads(review.read_text(encoding="utf-8"))
+            review_payload.update({
+                "status": "complete",
+                "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                "writer_session_id": "writer-1",
+                "reviewer_session_id": "reviewer-2",
+                "verdict": "block",
+                "findings": ["The requested premise conflicts with the fixed project direction."],
+                "required_changes": ["Ask for a new project-level direction."],
+            })
+            review.write_text(json.dumps(review_payload), encoding="utf-8")
+            write_agent_completion_marker(review_task, root=root)
+
+            state = _longform_state(root)
+            self.assertEqual(state["current_step"], "story-architecture-revision")
+            task = build_task_payload(root, "longform-planning", state)
+            self.assertEqual(task["task_type"], "route-diagnostic-boundary")
+            self.assertEqual(task["expected_outputs"], [])
+            self.assertEqual(task["next_allowed_states"], [])
+            self.assertEqual(_enrich_task_payload(task)["execution_policy"], "human-required")
+
+            issued = issue_next_task(root, route="longform-planning")
+            self.assertEqual(issued.current_state, "story-architecture-revision")
+            self.assertEqual(issued.expected_output_count, 0)
+            self.assertEqual(load_task(issued.task_json_path)["execution_policy"], "human-required")
 
 
 if __name__ == "__main__":

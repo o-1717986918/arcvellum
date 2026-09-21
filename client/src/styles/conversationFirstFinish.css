@@ -41,6 +41,9 @@
   background: var(--orrery-core);
 }
 .overview-view.spatial-active .orrery-v3-icon:hover { color: var(--orrery-core); background: #fff; }
+.orrery-return-agent { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 34px; padding: 0 11px; color: #fff; background: #28735f; border: 1px solid #28735f; border-radius: 5px; font-size: 11px; font-weight: 650; white-space: nowrap; box-shadow: 0 4px 14px rgba(40, 115, 95, .2); }
+.orrery-return-agent:hover { background: #205b4c; }
+.orrery-return-agent:focus-visible { outline: 2px solid #263c35; outline-offset: 2px; }
 .overview-view.spatial-active .orrery-v3-instrument-dock,
 .overview-view.spatial-active .orrery-v3-reader-entry,
 .overview-view.spatial-active .orrery-v3-progress-spindle,
@@ -81,6 +84,14 @@
 .spatial-window[data-kind="observatory"] .spatial-window-scroll { display: flex; min-height: 0; padding: 0; overflow: hidden; }
 .spatial-window[data-kind="observatory"] .creative-workspace-host { min-height: 0; flex: 1; overflow: hidden; }
 .spatial-window[data-kind="observatory"] .creative-live-view { min-height: 0; height: 100%; }
+.pa-live-window { --orrery-core: #2f705d; --orrery-ready: #2f705d; --orrery-label: #263831; --orrery-deep: #edf3f0; --spatial-glass: #f8faf7; --spatial-hairline: #bdcec4; --instrument-accent: #2f705d; z-index: 90; container-type: inline-size; color-scheme: light; background: #f8faf7; border-color: #bdcec4; box-shadow: 0 24px 70px rgba(25, 48, 37, .24); }
+.pa-shell .pa-dialog-backdrop { z-index: 120; }
+.pa-live-window .spatial-window-header { background: #eef4ef; }
+.pa-live-window .spatial-window-drag strong { color: #263831; }
+.pa-live-window .spatial-window-actions .orrery-v3-icon { color: #40594c; }
+.pa-live-window .creative-live-dock { min-height: 0; }
+.pa-live-window .creative-live-grid { min-height: 0; }
+@container (max-width: 780px) { .pa-live-window .creative-live-grid { display: block; overflow-y: auto; } }
 .pa-subworkspace-scroll:has(.creative-live-view) { overflow: hidden; scrollbar-gutter: auto; }
 .pa-subworkspace .creative-live-view { width: 100%; min-height: 0; height: 100%; }
 .creative-live-view .creative-live-dock {

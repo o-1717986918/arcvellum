@@ -7,7 +7,7 @@ an API-to-domain dependency cycle.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from ..runtime.runtime_selection import DEFAULT_CREATIVE_RUNTIME
 
@@ -235,7 +235,7 @@ class AutopilotPolicyRequest(BaseModel):
 
 class LiteraryKernelMigrationRequest(BaseModel):
     project_root: str
-    target_kernel: str
+    target_kernel: Literal["lean-v2"]
     scene_execution_mode: str = ""
 
 

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { CheckCircle2, Download, FileText, PackageOpen, RefreshCw, ShieldCheck } from "lucide-vue-next";
 import { deliveryClient } from "@/features/delivery/services/deliveryClient";
+import { deliveryReadiness } from "@/features/delivery/deliveryReadiness";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { asList, displayValue } from "@/services/presentation";
 import { readCreativeRuntime } from "@/services/runtimePreference";
@@ -12,6 +13,17 @@ const preparing = ref(false);
 const message = ref("");
 const ready = computed(() => store.delivery?.status === "ready");
 const blockers = computed(() => asList<Record<string, unknown>>(store.delivery?.blockers));
+const incompleteIntegrityChecks = computed(() => {
+  const parts = asList<Record<string, unknown>>(store.projectProgress?.parts);
+  const integrity = parts.find((part) => part.id === "integrity");
+  return asList<Record<string, unknown>>(integrity?.checks).filter((check) => check.complete !== true).length;
+});
+const readiness = computed(() => deliveryReadiness(
+  Number(store.projectProgress?.formal_chinese_content_chars || 0),
+  Number(store.readerManifest?.unit_count || 0),
+  blockers.value.length,
+  incompleteIntegrityChecks.value,
+));
 
 onMounted(() => store.loadDelivery());
 
@@ -49,9 +61,10 @@ async function prepareDelivery(): Promise<void> {
         <h1>把作品交成可以阅读、保存和发布的文件。</h1>
         <p>只有通过门禁的正式正文会进入交付包。审查记录、设定变更和工作流程会被留在项目中。</p>
         <div class="delivery-actions">
-          <button class="primary-button" :disabled="preparing" @click="prepareDelivery"><PackageOpen :size="17" />{{ preparing ? "正在准备……" : "准备正式交付" }}</button>
+          <button class="primary-button" :disabled="preparing || !readiness.allowed" @click="prepareDelivery"><PackageOpen :size="17" />{{ preparing ? "正在准备……" : readiness.label }}</button>
           <button class="secondary-button" @click="store.loadDelivery"><RefreshCw :size="17" />刷新</button>
         </div>
+        <small class="delivery-readiness-note" :class="{ blocked: !readiness.allowed }">{{ readiness.message }}</small>
         <small v-if="message">{{ message }}</small>
       </div>
       <div class="delivery-seal" :class="{ ready }">

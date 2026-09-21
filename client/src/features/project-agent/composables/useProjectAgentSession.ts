@@ -48,19 +48,24 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   let observedJobId = "";
   let deltaBuffer = "";
   let deltaTimer = 0;
+  let selectionRevision = 0;
 
-  async function load(preferredSessionId = ""): Promise<ProjectAgentSession | null> {
+  async function load(preferredSessionId = "", selectRecent = true): Promise<ProjectAgentSession | null> {
     if (loading.value) return session.value;
     loading.value = true;
+    const revision = selectionRevision;
     try {
       const roots = [...new Set(["", ...(options.projectRoots?.value || []), options.projectRoot.value])];
       const results = await Promise.allSettled(roots.map((root) => client.listSessions(root)));
+      if (revision !== selectionRevision) return session.value;
       sessions.value = results.flatMap((result) => result.status === "fulfilled" ? result.value.items || [] : [])
         .filter((item, index, items) => items.findIndex((candidate) => candidate.session_id === item.session_id) === index)
         .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
-      if (results.every((result) => result.status === "rejected")) throw (results[0] as PromiseRejectedResult).reason;
-      const first = sessions.value.find((item) => item.session_id === preferredSessionId) || sessions.value[0];
-      return first ? await openSession(first.session_id) : null;
+      if (results.every((result) => result.status === "rejected") && !preferredSessionId) {
+        throw (results[0] as PromiseRejectedResult).reason;
+      }
+      const targetId = preferredSessionId || (selectRecent ? sessions.value[0]?.session_id : "");
+      return targetId ? await openSession(targetId) : null;
     } catch (cause) {
       options.onError?.(cause, "项目 Agent 暂时无法读取会话。");
       return null;
@@ -72,11 +77,13 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   async function createSession(root = options.projectRoot.value, title = `${options.projectTitle.value}创作会话`): Promise<ProjectAgentSession | null> {
     if (sending.value || creating.value) return null;
     creating.value = true;
+    const revision = ++selectionRevision;
     try {
       const created = await client.createSession(
         root,
         title,
       );
+      if (revision !== selectionRevision) return null;
       sessions.value = [sessionSummary(created), ...sessions.value.filter((item) => item.session_id !== created.session_id)];
       session.value = created;
       await options.onSessionOpened?.(created);
@@ -93,15 +100,20 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   }
 
   async function openSession(sessionId: string): Promise<ProjectAgentSession | null> {
-    if (!sessionId || sending.value) return session.value;
+    if (!sessionId || sending.value || creating.value) return null;
+    const revision = ++selectionRevision;
     try {
-      session.value = await client.readSession(sessionId);
-      await options.onSessionOpened?.(session.value);
+      const opened = await client.readSession(sessionId);
+      if (revision !== selectionRevision) return null;
+      if (opened.session_id !== sessionId) throw new Error("会话响应与所选对话不一致");
+      session.value = opened;
+      await options.onSessionOpened?.(opened);
+      if (revision !== selectionRevision) return null;
       transientMessages.value = [];
       activity.value = null;
       await notifyRendered();
-      void recoverActiveTurn(session.value.active_turn);
-      return session.value;
+      void recoverActiveTurn(opened.active_turn);
+      return opened;
     } catch (cause) {
       options.onError?.(cause, "暂时无法打开这段对话。");
       return null;
@@ -157,8 +169,11 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
 
   async function recover(): Promise<boolean> {
     if (!session.value || sending.value) return false;
+    const sessionId = session.value.session_id;
+    const revision = selectionRevision;
     try {
-      const restored = await client.readSession(session.value.session_id);
+      const restored = await client.readSession(sessionId);
+      if (revision !== selectionRevision || session.value?.session_id !== sessionId) return false;
       session.value = restored;
       return await recoverActiveTurn(restored.active_turn);
     } catch (cause) {
@@ -229,9 +244,15 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     } else if (value.event === "project_agent.goal.progress") {
       const route = String(data.current_route || "");
       const completed = Number(data.tasks_completed || 0);
+      const chapter = data.chapter_update as Record<string, unknown> | undefined;
+      const authorSummary = chapter?.author_summary as Record<string, unknown> | undefined;
+      const storyChange = String(authorSummary?.irreversible_change || chapter?.message || "");
+      const chapterId = String(chapter?.chapter_id || "");
       patchActivity({
         status: "running",
-        statusLabel: route ? `正在推进${goalRouteLabel(route)} · 已完成 ${completed} 项` : `后台已完成 ${completed} 项`,
+        statusLabel: storyChange
+          ? `${chapterLabel(chapterId)}完成 · ${storyChange}`
+          : route ? `正在推进${goalRouteLabel(route)} · 已完成 ${completed} 项` : `后台已完成 ${completed} 项`,
       });
     } else if (value.event === "project_agent.goal.terminal") {
       const status = String(data.status || "");
@@ -254,6 +275,11 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       patchActivity({ status: "failed", statusLabel: String(data.message || "回答失败") });
     }
     void notifyRendered();
+  }
+
+  function chapterLabel(value: string): string {
+    const match = value.match(/(\d+)$/);
+    return match ? `第 ${Number(match[1])} 章` : "本章";
   }
 
   function consumeAgentEvent(data: Record<string, unknown>): void {
@@ -306,6 +332,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   }
 
   function reset(preserveSessions = false): void {
+    selectionRevision += 1;
     eventController?.abort();
     eventController = null;
     observedJobId = "";

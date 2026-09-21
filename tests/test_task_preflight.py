@@ -108,7 +108,7 @@ class TaskPreflightTests(unittest.TestCase):
 
     def test_candidate_language_gate_blocks_punctuation_before_writeback(self):
         issues: list[PreflightIssue] = []
-        body = "\n".join([f"——第{index}条调度信息已经完成核对。" for index in range(20)])
+        body = "站台上的广播反复提醒乘客核对车次。" * 12 + "管理员说：「立即执行。」"
 
         _validate_candidate_language_gates(
             body,
@@ -120,7 +120,7 @@ class TaskPreflightTests(unittest.TestCase):
 
         punctuation = [item for item in issues if item.code == "candidate-punctuation-lint-blocking"]
         self.assertTrue(punctuation)
-        self.assertTrue(any("dash-overuse" in item.message for item in punctuation))
+        self.assertTrue(any("corner-quotes-in-horizontal-prose" in item.message for item in punctuation))
 
     def test_reader_contract_canonicalizes_machine_fields_and_renders_markdown(self):
         with tempfile.TemporaryDirectory() as temporary:

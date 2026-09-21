@@ -2,6 +2,10 @@
 
 from .brief import build_scene_brief, scene_brief_issues
 from .commit_plan import SceneCommitPlan, build_scene_commit_plan, commit_plan_issues
+from .continuity_projection import (
+    CONTINUITY_PROJECTION_SCHEMA,
+    project_committed_scene_delta,
+)
 from .contracts import (
     ChangeProposal,
     CreativeResult,
@@ -25,6 +29,7 @@ from .verification import verify_creative_result
 
 __all__ = [
     "ChangeProposal",
+    "CONTINUITY_PROJECTION_SCHEMA",
     "CreativeResult",
     "IssueSeverity",
     "LengthTarget",
@@ -45,6 +50,7 @@ __all__ = [
     "build_scene_brief",
     "build_scene_commit_plan",
     "commit_plan_issues",
+    "project_committed_scene_delta",
     "derive_scene_policy",
     "scene_brief_issues",
     "verify_creative_result",

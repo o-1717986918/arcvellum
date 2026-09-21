@@ -400,7 +400,7 @@ export interface LiteraryKernelCompatibility {
   };
   current_kernel: "strict-v1" | "lean-v2";
   scene_execution_mode: "draft" | "standard" | "publication";
-  rollback_target: "strict-v1";
+  rollback_target: string;
 }
 
 export interface FailureRecoveryAction {

@@ -81,6 +81,14 @@ class RunLoopHost(Protocol):
         cycle: RouteCycle | None = None,
     ) -> bool: ...
 
+    def _advance_lean_route(
+        self,
+        run_id: str,
+        project: Path,
+        policy: DelegationPolicy,
+        cycle: RouteCycle,
+    ) -> bool: ...
+
     def _register_no_progress(
         self,
         run_id: str,

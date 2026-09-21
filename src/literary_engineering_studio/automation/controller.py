@@ -9,6 +9,7 @@ from typing import Any
 import uuid
 
 from .decision_delegation import DecisionDelegator
+from .claimed_run import run_claimed
 from .lease_heartbeat import (
     LeaseRenewalResult,
     renew_or_reclaim_lease,
@@ -26,14 +27,14 @@ from .policy import (
     normalize_policy,
 )
 from .policy_service import AutopilotPolicyService
-from .run_loop import ClaimedRunLoop
 from .run_result_contracts import RouteCycle
 from .lean_scene_host import LeanSceneAutopilotHost
+from .lean_route_host import LeanRouteAutopilotHost
+from .lean_release import LeanWholeBookReleaseCoordinator
 from .lean_scene_loop import LeanSceneRunCoordinator
 from .managed_goal import start_managed_goal as _start_managed_goal
 from .release_completion import complete_release
 from .no_progress import register_no_progress
-from .campaign_runtime import CampaignRuntimeCoordinator
 from .runtime_event_routing import (
     route_steward_event,
     route_worker_event,
@@ -112,6 +113,13 @@ class AutopilotService:
             config=config,
             runs=self.runs,
             scene_transactions=self.scene_transactions,
+            execution_coordinator=self.execution_coordinator,
+            emit_event=self._worker_event,
+            pause=self._pause_for,
+        )
+        self._lean_route_host = LeanRouteAutopilotHost(
+            config=config,
+            runs=self.runs,
             execution_coordinator=self.execution_coordinator,
             emit_event=self._worker_event,
             pause=self._pause_for,
@@ -318,52 +326,15 @@ class AutopilotService:
         )
 
     def _run_claimed(self, run_id: str, stop: threading.Event) -> None:
-        run = self.runs.read_autopilot_run(run_id)
-        project = Path(run["project_root"])
-        policy = DelegationPolicy(run["policy"])
-        settings = orchestration_settings(self.config)
-        campaign = (
-            CampaignRuntimeCoordinator(
-                self.runs,
-                project,
-                run_id,
-                max_autonomous_steps=None,
-                checkpoint_interval_steps=(
-                    settings.campaign_checkpoint_interval_steps
-                ),
-            )
-            if settings.enabled and settings.campaign_runtime
-            else None
-        )
+        run_claimed(self, run_id, stop, ROUTE_ORDER, _pending_asset_dependency)
+
+    def _build_steward(self, run_id: str) -> CreativeSteward:
         steward = (
             CreativeSteward(self.config, runtime_pool=self.runtime_pool)
-            if self.runtime_pool is not None
-            else CreativeSteward(self.config)
+            if self.runtime_pool is not None else CreativeSteward(self.config)
         )
-        setattr(
-            steward,
-            "event_sink",
-            lambda event, data: self._steward_event(run_id, event, data),
-        )
-        try:
-            ClaimedRunLoop(
-                self,
-                run_id=run_id,
-                project=project,
-                policy=policy,
-                steward=steward,
-                stop=stop,
-                route_order=ROUTE_ORDER,
-                dependency_probe=_pending_asset_dependency,
-                campaign=campaign,
-            ).run()
-        except Exception as exc:
-            self.runs.update_autopilot_run(run_id, status="blocked", last_error=str(exc), stop_reason="controller-error", finished_at=_now())
-            self.runs.append_autopilot_event(run_id, "autopilot.blocked", {"message": str(exc)})
-        finally:
-            with self._lock:
-                self._stops.pop(run_id, None)
-                self._threads.pop(run_id, None)
+        setattr(steward, "event_sink", lambda event, data: self._steward_event(run_id, event, data))
+        return steward
 
     def _advance_lean_scene(
         self,
@@ -385,6 +356,16 @@ class AutopilotService:
             coordinator,
             ready_route_index=ready_route_index,
         )
+
+    def _advance_lean_route(
+        self,
+        run_id: str,
+        project: Path,
+        policy: DelegationPolicy,
+        cycle: RouteCycle,
+    ) -> bool:
+        del policy
+        return self._lean_route_host.advance(run_id, project, cycle)
 
     def _lean_scene_coordinator(
         self,
@@ -413,7 +394,15 @@ class AutopilotService:
             project=project,
             run=run,
             release_policy=str(policy.payload["release_policy"]),
-            coordinator_factory=WholeBookReleaseCoordinator,
+            coordinator_factory=(
+                LeanWholeBookReleaseCoordinator
+                if policy.literary_kernel == "lean-v2"
+                else WholeBookReleaseCoordinator
+            ),
+            release_route_index=(
+                ROUTE_ORDER.index("export-and-release")
+                if "export-and-release" in ROUTE_ORDER else len(ROUTE_ORDER) - 1
+            ),
         )
 
     def _resolve_proactive_choice(

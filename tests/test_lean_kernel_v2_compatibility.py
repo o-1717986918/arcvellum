@@ -32,11 +32,12 @@ class LeanKernelCompatibilityTests(unittest.TestCase):
         self.assertEqual(_remaining_steps(active, 100), 32)
         self.assertEqual(_remaining_steps(committed, 12), 0)
 
-    def test_manifest_keeps_lean_preview_behind_literary_gate(self):
+    def test_manifest_keeps_historical_kernel_out_of_new_project_controls(self):
         manifest = kernel_compatibility_manifest()
 
         self.assertFalse(manifest["adoption"]["ready_for_default"])
-        self.assertEqual(manifest["kernels"]["lean-v2"]["status"], "preview")
+        self.assertEqual(manifest["kernels"]["lean-v2"]["status"], "production")
+        self.assertFalse(manifest["kernels"]["strict-v1"]["user_selectable"])
         self.assertFalse(manifest["retirement"]["strict-v1"]["deletion_allowed"])
 
     def test_unmarked_project_preserves_strict_route(self):
@@ -58,11 +59,11 @@ class LeanKernelCompatibilityTests(unittest.TestCase):
             marker_payload = json.loads(marker.read_text(encoding="utf-8"))
 
         self.assertEqual(marker_payload["schema"], "arcvellum/studio-project-origin/v1")
-        self.assertEqual(selection.kernel, "strict-v1")
-        self.assertEqual(selection.source, "new-project-evidence-fallback")
+        self.assertEqual(selection.kernel, "lean-v2")
+        self.assertEqual(selection.source, "creator-directed-production-default")
         self.assertFalse(selection.ready_for_default)
 
-    def test_explicit_migration_persists_and_rolls_back(self):
+    def test_explicit_migration_persists_and_rejects_historical_write_mode(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             project = root / "project"
@@ -79,15 +80,17 @@ class LeanKernelCompatibilityTests(unittest.TestCase):
                 scene_execution_mode="publication",
             )
             reloaded = service.policy(project)["policy"]
-            rolled_back = service.migrate_kernel(project, target_kernel="strict-v1")
+            with self.assertRaisesRegex(ValueError, "不接受新的作品写入"):
+                service.migrate_kernel(project, target_kernel="strict-v1")
+            after_rejected = service.policy(project)["policy"]
 
         self.assertEqual(initial["literary_kernel"], "strict-v1")
         self.assertEqual(migrated["previous_kernel"], "strict-v1")
         self.assertEqual(migrated["current_kernel"], "lean-v2")
-        self.assertEqual(migrated["compatibility_status"], "preview")
+        self.assertEqual(migrated["compatibility_status"], "production")
         self.assertEqual(reloaded["literary_kernel"], "lean-v2")
         self.assertEqual(reloaded["scene_execution_mode"], "publication")
-        self.assertEqual(rolled_back["current_kernel"], "strict-v1")
+        self.assertEqual(after_rejected["literary_kernel"], "lean-v2")
 
     def test_cli_prepares_and_reads_the_same_durable_transaction(self):
         with tempfile.TemporaryDirectory() as temporary:

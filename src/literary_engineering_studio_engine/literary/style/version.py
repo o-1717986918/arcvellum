@@ -30,6 +30,7 @@ from .version_contracts import (
     STYLE_VERSION_SCHEMA,
 )
 from .version_inspection import inspect_style_version_directory
+from literary_engineering_studio_engine.foundation.resources import engine_root
 
 
 
@@ -264,18 +265,34 @@ def _build_gate_errors(
         errors.append("style version prompt fails the 500-2500 Chinese-content character gate")
     if not prompt_quality.get("structure_ok"):
         errors.append("style version prompt is missing required executable prompt blocks")
-    errors.extend(_completion_errors(root, profile / "style_prompt.agent_tasks.md", "style prompt"))
-    evaluation_task = profile / "evaluation_results/formal/platform_agent_candidate.agent_tasks.md"
-    errors.extend(_completion_errors(root, evaluation_task, "style evaluation"))
+    curated = _is_bundled_default(root, profile)
+    if not curated:
+        errors.extend(_completion_errors(root, profile / "style_prompt.agent_tasks.md", "style prompt"))
+        evaluation_task = profile / "evaluation_results/formal/platform_agent_candidate.agent_tasks.md"
+        errors.extend(_completion_errors(root, evaluation_task, "style evaluation"))
     errors.extend(
         style_semantic_review_errors(
             root,
             profile,
             target_id=profile_id,
             require_pass=True,
+            require_completion=not curated,
         )
     )
     return errors
+
+
+def _is_bundled_default(root: Path, profile: Path) -> bool:
+    expected = root / "style" / "atelier" / "arcvellum" / "clear-plain-prose"
+    template = engine_root() / "templates" / "style" / "default-clear-plain" / "prompt.md"
+    prompt = profile / "style_prompt.md"
+    return (
+        profile.resolve() == expected.resolve()
+        and template.is_file()
+        and prompt.is_file()
+        and prompt.read_text(encoding="utf-8").strip()
+        == template.read_text(encoding="utf-8").strip()
+    )
 
 
 def _completion_errors(root: Path, task: Path, label: str) -> list[str]:

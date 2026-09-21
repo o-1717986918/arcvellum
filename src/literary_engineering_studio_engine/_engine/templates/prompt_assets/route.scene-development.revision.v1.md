@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.revision.v1
 match: route.scene-development.revision.v1
-version: v1
+version: v3
 route: scene-development
 task_type: main-platform-agent-revision
 title: Scene Revision Exact Prompt Asset
@@ -23,11 +23,13 @@ context_groups:
 hard_constraints:
   - The main platform Agent revises body prose personally.
   - Do not replace a banned contrast with another explicit contrast; use action, fact order, information gap, or direct statement.
+  - When review identifies unsupported numeric precision, rewrite the sentence around action, state change, perceived range, or consequence; do not batch-delete digits or mechanically replace exact values with vague quantifiers.
   - Every unresolved review finding and every pass_with_notes action must cause a concrete prose edit; returning the original candidate unchanged is a failed revision.
   - Compare the revision against the exact input candidate before submission and record where each required change was applied.
   - Preserve canon and candidate-only writeback boundaries.
 style_constraints:
   - Revisions are semantic edits, not regex cleanup.
+  - Preserve a dynamic exact quantity only when it passes every part of the generation prompt's five-part necessity test; uncertainty means remove the precision, and ordinary elapsed time is not later payoff. Technical scenes, countdowns, scene-contract readings, reference-corpus numbers, routine gesture counts, and incidental object counts receive no exemption. Preserve age, date, or rule identifiers only when identification or continuity requires them.
 output_contract:
   - Write only the declared revision candidate, revision report, and revision manifest. Studio preserves the CLI prompt manifest and sidecar, then writes lifecycle evidence after deterministic preflight.
 review_requirements:

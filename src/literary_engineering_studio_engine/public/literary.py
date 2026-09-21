@@ -35,8 +35,20 @@ from ..literary.ingest import (
     validate_reconstruction_candidate,
 )
 from ..literary.ingest.evidence import canonical_digest
-from ..literary.planning.contracts import word_budget_adherence_for_body
-from ..literary.planning.materializer import scene_inventory_contract_issues
+from ..literary.planning.contracts import load_word_budget_summary, word_budget_adherence_for_body
+from ..literary.planning.materializer import (
+    longform_materialization_status,
+    materialize_lean_window,
+    scene_inventory_contract_issues,
+)
+from ..literary.planning.lean_plan import (
+    PLAN_SCHEMA,
+    chapter_obligations,
+    normalize_initial_plan,
+    normalize_scene_window,
+    render_outline,
+)
+from ..literary.planning.service import calculate_word_budget
 from ..literary.planning.length_repair import target_length_repair_pending
 from ..literary.planning.chapter_inventory import (
     formal_chapter_ids,
@@ -84,11 +96,13 @@ from ..literary.scene.transaction import (
     StyleMountRef,
     VerificationIssue,
     VerificationReport,
+    CONTINUITY_PROJECTION_SCHEMA,
     build_scene_brief,
     build_scene_commit_plan,
     derive_scene_policy,
     scene_brief_issues,
     verify_creative_result,
+    project_committed_scene_delta,
 )
 from ..literary.scene.promotion.generation_gate import (
     candidate_generation_gate,
@@ -149,10 +163,12 @@ from ..literary.style.version import (
 )
 
 __all__ = sorted([
+    "PLAN_SCHEMA",
     "ASSET_CANDIDATE_DIRS",
     "ASSET_SCHEMA_NAMES",
     "CanonPatchCandidateIssue",
     "ChangeProposal",
+    "CONTINUITY_PROJECTION_SCHEMA",
     "CreativeResult",
     "DOMAIN_REVIEW_SCHEMA",
     "IDENTITY_RESOLUTION_SCHEMA",
@@ -170,6 +186,13 @@ __all__ = sorted([
     "SceneRisk",
     "SceneRiskLevel",
     "SceneTransactionStatus",
+    "calculate_word_budget",
+    "chapter_obligations",
+    "longform_materialization_status",
+    "materialize_lean_window",
+    "normalize_initial_plan",
+    "normalize_scene_window",
+    "render_outline",
     "StyleMountPriority",
     "StyleMountRef",
     "StyleMountScope",
@@ -226,6 +249,7 @@ __all__ = sorted([
     "list_author_projects",
     "list_style_skills",
     "load_creative_quality_profile",
+    "load_word_budget_summary",
     "load_scene_facts",
     "load_scene_mapping",
     "load_rhythm_plan",
@@ -265,4 +289,5 @@ __all__ = sorted([
     "validate_reconstruction_candidate",
     "word_budget_adherence_for_body",
     "verify_creative_result",
+    "project_committed_scene_delta",
 ])

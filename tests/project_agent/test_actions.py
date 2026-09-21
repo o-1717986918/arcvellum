@@ -74,6 +74,22 @@ class _CandidatePromotions:
 
 
 class ProjectAgentActionTests(unittest.TestCase):
+    def test_historical_formal_work_keeps_its_saved_kernel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir()
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\n", encoding="utf-8",
+            )
+            autopilot = _Autopilot()
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {},
+                autopilot=autopilot,
+            )
+            result = actions.manage_goal(root, {"operation": "start", "objective": "续写这一章"})
+            self.assertEqual(result["run"]["policy"]["literary_kernel"], "strict-v1")
+            self.assertEqual(autopilot.managed_goals[0][1]["literary_kernel"], "strict-v1")
+
     def test_actions_reuse_direction_and_autopilot_services(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -172,9 +188,18 @@ class ProjectAgentActionTests(unittest.TestCase):
             record_direction=lambda project, message, actor: recorded.append((project, message, actor)) or {},
             autopilot=autopilot,
             current_choices=lambda _config, _root: {"choices": []},
+            goal_evidence=lambda _root: {
+                "unit_count": 3,
+                "total_chinese_content_chars": 5281,
+                "units": [{}, {}, {}],
+            },
         )
 
-        started = actions.manage_goal(root, {"operation": "start", "objective": "完成全书并通过交付门禁"})
+        started = actions.manage_goal(root, {
+            "operation": "start",
+            "objective": "完成全书并通过交付门禁",
+            "stop_after_formal_units": 5,
+        })
         autopilot.run = {**autopilot.run, "status": "blocked", "stop_reason": "runtime-failure"}
         recovered = actions.manage_goal(root, {"operation": "recover"})
 
@@ -182,12 +207,19 @@ class ProjectAgentActionTests(unittest.TestCase):
         self.assertEqual(autopilot.current_policy["mode"], "full_auto")
         self.assertEqual(autopilot.current_policy["literary_kernel"], "lean-v2")
         self.assertEqual(autopilot.current_policy["release_policy"], "delegated")
+        self.assertEqual(autopilot.current_policy["limits"]["stop_after_formal_units"], 5)
         self.assertEqual(len(autopilot.managed_goals), 1)
         self.assertEqual(started["run"]["status"], "running")
         self.assertEqual(started["receipt"]["run_id"], "run-1")
         self.assertEqual(started["receipt"]["run_status"], "running")
         self.assertEqual(started["receipt"]["operation"], "goal_start")
         self.assertEqual(recovered["run"]["status"], "running")
+        self.assertEqual(recovered["formal_work"]["unit_count"], 3)
+        self.assertEqual(recovered["formal_work"]["chinese_content_chars"], 5281)
+        self.assertNotEqual(
+            recovered["formal_work"]["unit_count"],
+            int(recovered["run"].get("tasks_completed") or 0),
+        )
 
     def test_long_running_goal_defers_to_pending_literary_decision(self):
         autopilot = _Autopilot()

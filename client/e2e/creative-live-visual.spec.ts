@@ -39,13 +39,29 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
   await expect(page.locator(".creative-identity-rail")).toContainText("内容状态");
   await page.locator(".creative-artifact-list button").filter({ hasText: "第三章 潮线以内" }).click();
   await expect(page.locator(".creative-live-view")).toBeVisible();
-  const workspaceHeight = await page.locator(".creative-workspace-host").evaluate((node) => node.getBoundingClientRect().height);
+  const workspaceHeight = await page.locator(".pa-live-window .spatial-window-scroll").evaluate((node) => node.getBoundingClientRect().height);
   const dockHeight = await page.locator(".creative-live-dock").evaluate((node) => node.getBoundingClientRect().height);
   expect(Math.abs(workspaceHeight - dockHeight)).toBeLessThan(3);
   await expect(page.locator(".live-manuscript-scroll")).toHaveCSS("overflow-y", "auto");
   await expect(page.locator(".creative-live-side-scroll")).toHaveCSS("overflow-y", "auto");
   expect(await page.locator(".live-manuscript-scroll").evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
   expect(await page.locator(".creative-live-side-scroll").evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  const dragHandle = page.locator(".pa-live-window .spatial-window-drag");
+  const beforeDrag = await page.locator(".pa-live-window").boundingBox();
+  const handle = await dragHandle.boundingBox();
+  expect(beforeDrag && handle).toBeTruthy();
+  await page.mouse.move(handle!.x + 28, handle!.y + 18);
+  await page.mouse.down();
+  await page.mouse.move(handle!.x + 75, handle!.y + 48, { steps: 6 });
+  await page.mouse.up();
+  const afterDrag = await page.locator(".pa-live-window").boundingBox();
+  expect(afterDrag!.x).toBeGreaterThan(beforeDrag!.x + 20);
+  await capture(page, testInfo, "creative-live-floating.png");
+  await page.getByRole("button", { name: "新对话" }).click();
+  const chooser = page.getByRole("dialog", { name: "这次想写哪部作品？" });
+  await expect(chooser).toBeVisible();
+  expect(await chooser.evaluate((node) => Number(getComputedStyle(node.parentElement!).zIndex))).toBeGreaterThan(90);
+  await chooser.getByRole("button", { name: "关闭" }).click();
   await page.locator('.spatial-window[data-kind="observatory"] button[title="全屏打开工作台"]').dispatchEvent("click");
   await expect(page.locator('.spatial-window[data-kind="observatory"]')).toHaveClass(/fullscreen/);
   await capture(page, testInfo, "creative-live-active.png");
@@ -73,9 +89,8 @@ async function openCreativeLive(page: Page): Promise<void> {
       return nativeFetch(input, init);
     };
   }, projectRoot);
-  await page.goto("#/overview", { waitUntil: "domcontentloaded" });
-  await expect(page.locator(".orrery-creative-live-beacon")).toBeVisible({ timeout: 30_000 });
-  await page.locator(".orrery-creative-live-beacon").dispatchEvent("click");
+  await page.goto("#/agent?workspace=live", { waitUntil: "domcontentloaded" });
+  await expect(page.locator(".pa-live-window")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".creative-live-dock")).toBeVisible({ timeout: 30_000 });
 }
 

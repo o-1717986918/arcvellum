@@ -98,6 +98,34 @@ describe("application store", () => {
     expect(streamConnections).toHaveLength(1);
   });
 
+  it("does not label an unbound conversation with the bootstrap work", async () => {
+    const original = apiMock.getMockImplementation();
+    apiMock.mockImplementation(async (path: string) => path === "/application/bootstrap"
+      ? { ...bootstrap, project: { path: "C:\\ArcVellum\\Old", title: "旧作品" } }
+      : original?.(path));
+    const { useAppStore } = await import("./app");
+    const store = useAppStore();
+    await store.initialize();
+    store.setCurrentProject("", false);
+
+    expect(store.currentProject).toBeNull();
+  });
+
+  it("clears a remembered project that is absent from the current catalog", async () => {
+    localStorage.setItem("arcvellum.currentProject", "C:\\ArcVellum\\另一份环境的作品");
+    const original = apiMock.getMockImplementation();
+    apiMock.mockImplementation(async (path: string) => path === "/projects"
+      ? { ok: true, current_project: "", projects: [] }
+      : original?.(path));
+    const { useAppStore } = await import("./app");
+    const store = useAppStore();
+
+    await store.initialize();
+
+    expect(store.currentProjectPath).toBe("");
+    expect(localStorage.getItem("arcvellum.currentProject")).toBeNull();
+  });
+
   it("does not let a stale startup stream replace a model selected in settings", async () => {
     const { useAppStore } = await import("./app");
     const store = useAppStore();

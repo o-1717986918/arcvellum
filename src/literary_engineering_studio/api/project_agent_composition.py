@@ -33,6 +33,28 @@ def build_project_agent_service(
     archive_dependencies: Any,
     worker_dependencies: Any,
 ) -> ProjectAgentService:
+    jobs = lifecycle.persistence.worker
+
+    def goal_run_reader(run_id: str) -> dict[str, Any]:
+        run = dict(jobs.read_autopilot_run(run_id))
+        checkpoint = jobs.latest_autopilot_event(run_id, "lean_scene.chapter-checkpoint")
+        if isinstance(checkpoint, dict) and isinstance(checkpoint.get("data"), dict):
+            run["chapter_update"] = dict(checkpoint["data"])
+        attempts: dict[str, int] = {}
+        for event in jobs.autopilot_events_since(run_id, 0, limit=2000):
+            if str(event.get("event") or "") != "scene.revised":
+                continue
+            data = event.get("data") if isinstance(event.get("data"), dict) else {}
+            scene_id = str(data.get("scene_id") or "")
+            if scene_id:
+                attempts[scene_id] = max(attempts.get(scene_id, 0), int(data.get("revision_attempts") or 0))
+        run["revision_summary"] = {
+            "total_attempts": sum(attempts.values()),
+            "scene_count": len(attempts),
+            "max_attempts": max(attempts.values(), default=0),
+        }
+        return run
+
     return ProjectAgentService(
         config,
         sessions=lifecycle.persistence.sessions,
@@ -70,10 +92,12 @@ def build_project_agent_service(
                 parent_directory=str(config.get("application", {}).get("projects_root") or ""),
                 **values,
             ),
+            goal_evidence=lambda root: read_models.reader(root),
         ),
         persona_loader=lambda root: active_persona(
             Path(str(config.get("application", {}).get("data_root") or ".")), root
         ),
+        goal_run_reader=goal_run_reader,
     )
 
 

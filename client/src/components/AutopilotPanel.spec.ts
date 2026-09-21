@@ -112,7 +112,7 @@ describe("AutopilotPanel", () => {
     expect(wrapper.text()).not.toContain("授权需要续期");
   });
 
-  it("persists an explicit lean-kernel preview selection", async () => {
+  it("keeps the historical kernel hidden and persists only the review depth", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const { useAppStore } = await import("@/stores/app");
@@ -120,17 +120,18 @@ describe("AutopilotPanel", () => {
     const wrapper = mount(AutopilotPanel, { global: { plugins: [pinia] } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain("精简内核仍在文学盲评期");
-    const lean = wrapper.findAll("button").find((button) => button.text().includes("精简事务"));
-    await lean?.trigger("click");
+    expect(wrapper.text()).not.toContain("稳定流程");
+    expect(wrapper.text()).not.toContain("精简事务");
+    const publication = wrapper.findAll("button").find((button) => button.text().includes("定稿"));
+    await publication?.trigger("click");
     await flushPromises();
 
-    const migration = apiMock.mock.calls.find((call) => call[0] === "/autopilot/kernel-migrate");
-    expect(migration).toBeTruthy();
-    expect(JSON.parse(String(migration?.[1]?.body || "{}"))).toMatchObject({
-      target_kernel: "lean-v2",
-      scene_execution_mode: "standard",
+    const policyUpdate = apiMock.mock.calls.filter((call) => call[0] === "/autopilot/policy").at(-1);
+    expect(policyUpdate).toBeTruthy();
+    expect(JSON.parse(String(policyUpdate?.[1]?.body || "{}"))).toMatchObject({
+      policy: { scene_execution_mode: "publication" },
     });
+    expect(apiMock.mock.calls.some((call) => call[0] === "/autopilot/kernel-migrate")).toBe(false);
   });
 
   it("labels the counter as formal gate advances rather than finished creative works", async () => {

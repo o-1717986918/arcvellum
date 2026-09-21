@@ -633,7 +633,7 @@ class IncrementalRepairContextTests(unittest.TestCase):
 
             self.assertEqual(payload["regression_guard"]["word_count_min"], 2700)
             self.assertIn("candidate-style-lint-blocking", payload["regression_guard"]["seen_issue_codes"])
-            self.assertIn("每个完整句不超过三个逗号", prepared.prompt)
+            self.assertIn("修订逗号链时重组句法，不按数量机械拆句", prepared.prompt)
             self.assertIn("中文内容字符必须保持在 2700-3300", prepared.prompt)
 
     def test_issue_identity_is_stable_across_attempts(self) -> None:

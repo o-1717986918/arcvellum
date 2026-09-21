@@ -34,6 +34,7 @@ from literary_engineering_studio_engine.public.workflow import (
 )
 
 from ..application.choice_effects import apply_choice_effect
+from .lean_dashboard import build_lean_dashboard
 
 
 # Core read models materialize dashboard files at stable project paths. The
@@ -49,8 +50,15 @@ def install_core_import_path(config: dict[str, Any]) -> Path:
     return Path(module.__file__).resolve().parent
 
 
-def build_dashboard(config: dict[str, Any], project_root: Path) -> dict[str, Any]:
+def build_dashboard(
+    config: dict[str, Any], project_root: Path, *, literary_kernel: str = ""
+) -> dict[str, Any]:
     del config
+    if literary_kernel == "lean-v2" or (
+        not literary_kernel
+        and (project_root / "plot" / "lean_project_plan.json").is_file()
+    ):
+        return build_lean_dashboard(project_root)
     with ENGINE_ACCESS_LOCK:
         payload = project_workflow_dashboard(project_root)
     frontend = payload.get("frontend") if isinstance(payload.get("frontend"), dict) else {}

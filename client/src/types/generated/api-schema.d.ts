@@ -2884,8 +2884,11 @@ export interface components {
              * @default
              */
             scene_execution_mode: string;
-            /** Target Kernel */
-            target_kernel: string;
+            /**
+             * Target Kernel
+             * @constant
+             */
+            target_kernel: "lean-v2";
         };
         /** ModelSelectionRequest */
         ModelSelectionRequest: {

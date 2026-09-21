@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 import re
 
-from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
+from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_batch, atomic_write_text
 from .review import all_planning_reviews_pass
 from .materialization_parser import (
     parse_chapter_obligations,
@@ -74,6 +74,88 @@ def materialize_longform_plan(project_root: Path) -> LongformMaterializationResu
         scenes,
         obligations,
     )
+
+
+def materialize_lean_window(
+    project_root: Path,
+    *,
+    scenes: list[dict[str, object]],
+    obligations: dict[str, dict[str, str]],
+    sources: tuple[Path, ...],
+    outline_text: str,
+) -> LongformMaterializationResult:
+    """Append a validated planning window without legacy review sidecars."""
+    root = project_root.expanduser().resolve()
+    if not scenes:
+        raise ValueError("lean planning window contains no scenes")
+    required = _lean_sources(root, sources)
+    ids = _validated_lean_ids(scenes)
+    source_digest = _source_digest(required)
+    manifest_path = root / "workflow" / "longform_materialization.json"
+    outline = root / "plot" / "outline.md"
+    scene_paths = [root / "scenes" / f"{scene_id}.yaml" for scene_id in ids]
+    prepared = _lean_scene_writes(root, scene_paths, scenes, obligations)
+    if not outline.is_file() and not outline_text.strip():
+        raise ValueError("lean planning requires a nonempty formal outline")
+    existing = _read_json(manifest_path)
+    if (
+        existing.get("source_digest") == source_digest
+        and existing.get("scene_paths") == [_relative(path, root) for path in scene_paths]
+        and not prepared
+        and outline.is_file()
+    ):
+        return _result(root, manifest_path, outline, scene_paths, existing)
+    writes = {path: rendered for path, rendered in prepared}
+    if not outline.is_file():
+        writes[outline] = "# 正式长篇大纲\n\n" + outline_text.strip() + "\n"
+    manifest = _materialization_manifest(
+        root, required, source_digest, outline, scene_paths, scenes,
+        mode="lean-window",
+    )
+    writes[manifest_path] = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+    atomic_write_batch(writes)
+    return _result(root, manifest_path, outline, scene_paths, manifest)
+
+
+def _lean_sources(root: Path, sources: tuple[Path, ...]) -> tuple[Path, ...]:
+    required = tuple(path.resolve() for path in sources)
+    if not required or any(not path.is_relative_to(root) or not path.is_file() for path in required):
+        raise ValueError("lean planning sources must be existing project files")
+    return required
+
+
+def _validated_lean_ids(scenes: list[dict[str, object]]) -> list[str]:
+    ids = [str(scene.get("scene_id") or "") for scene in scenes]
+    if ids != [f"scene_{index:04d}" for index in range(1, len(ids) + 1)]:
+        raise ValueError("lean planning scenes must form one contiguous ordered sequence")
+    return ids
+
+
+def _lean_scene_writes(
+    root: Path,
+    scene_paths: list[Path],
+    scenes: list[dict[str, object]],
+    obligations: dict[str, dict[str, str]],
+) -> list[tuple[Path, str]]:
+    existing_paths = {
+        path for path in (root / "scenes").glob("scene_*.yaml")
+        if not _is_blank_scene_scaffold(path)
+    }
+    if existing_paths - set(scene_paths):
+        raise ValueError("lean planning window omits existing formal scenes")
+    prepared: list[tuple[Path, str]] = []
+    previous: dict[str, object] | None = None
+    for path, scene in zip(scene_paths, scenes):
+        chapter = obligations.get(str(scene.get("chapter_id") or ""), {})
+        rendered = render_scene_yaml(scene, chapter, previous)
+        if path.is_file() and not _is_blank_scene_scaffold(path):
+            conflicts = _scene_conflicts(root, path, scene)
+            if conflicts:
+                raise ValueError("refusing to overwrite a non-scaffold formal scene: " + "; ".join(conflicts))
+        else:
+            prepared.append((path, rendered))
+        previous = scene
+    return prepared
 
 
 def planned_longform_outputs(project_root: Path) -> list[str]:
@@ -240,7 +322,15 @@ def _full_status(
         return False, "missing materialized scenes: " + ", ".join(missing[:8])
     if not (root / str(payload.get("outline_path") or "plot/outline.md")).is_file():
         return False, "missing materialized plot/outline.md"
-    required = _required_inputs(root)
+    if payload.get("materialization_mode") == "lean-window":
+        relatives = payload.get("sources")
+        if not isinstance(relatives, list) or not relatives:
+            return False, "lean planning sources are missing"
+        required = tuple((root / str(item)).resolve() for item in relatives)
+        if any(not path.is_relative_to(root) for path in required):
+            return False, "lean planning source escapes the project"
+    else:
+        required = _required_inputs(root)
     if not all(path.is_file() for path in required):
         return False, "reviewed longform planning inputs are missing"
     if payload.get("source_digest") != _source_digest(required):
@@ -396,6 +486,7 @@ def _now() -> str:
 __all__ = [
     "LongformMaterializationResult",
     "longform_materialization_status",
+    "materialize_lean_window",
     "materialize_longform_plan",
     "planned_longform_outputs",
     "scene_inventory_contract_issues",

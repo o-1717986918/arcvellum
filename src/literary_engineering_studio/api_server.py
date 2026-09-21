@@ -173,7 +173,10 @@ def _project_read_models(config: dict[str, Any], lifecycle: Any, autopilot: Any)
         config,
         lifecycle,
         autopilot,
-        dashboard_builder=lambda root: build_dashboard(config, root),
+        dashboard_builder=lambda root: build_dashboard(
+            config, root,
+            literary_kernel=str(autopilot.policy(root)["policy"]["literary_kernel"]),
+        ),
     )
 
 
@@ -387,7 +390,7 @@ def create_app(
         build_archive_router(archive_dependencies)
     )
 
-    app.include_router(build_archaeology_router(archaeology_router_dependencies()))
+    app.include_router(build_archaeology_router(archaeology_router_dependencies(kernel_for=lambda root: str(autopilot.policy(root)["policy"]["literary_kernel"]))))
 
     app.include_router(
         build_library_router(

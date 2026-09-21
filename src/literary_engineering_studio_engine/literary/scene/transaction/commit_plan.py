@@ -23,6 +23,7 @@ class SceneCommitPlan:
     scene_delta: SceneDelta
     review_decision: ReviewDecision | None
     steward_approved: bool
+    review_deferred_by_policy: bool = False
 
 
 def commit_plan_issues(
@@ -80,6 +81,11 @@ def build_scene_commit_plan(
         scene_delta=result.scene_delta,
         review_decision=review.decision if review is not None else None,
         steward_approved=steward_approved,
+        review_deferred_by_policy=(
+            review is None
+            and policy.defer_semantic_review_to_chapter
+            and not policy.independent_review_required
+        ),
     )
 
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import re
 
 from literary_engineering_studio_engine.literary.review.creative_quality import apply_rule_mode, quality_rule_mode, quality_threshold
+from .anti_ai_similarity import simile_dependency_finding
 
 
 ANTI_EVASION_REVISION_PROTOCOL = """## 修订反规避协议
@@ -27,22 +28,22 @@ ANTI_EVASION_SHORT_RULE = (
 
 ANTI_AI_STYLE_PROMPT = """## 降低 AI 腔与朴素叙述约束
 
-- 生硬对照句式一律禁用：不使用“不是……而是……”“并非……而是……”“与其说……不如说……”“不是……不是……而是……”，也不使用“不是……——是……”“不是……。是……”“不是……，是……”等用标点替代“而是”的变体。此类结构不判断为合理修辞；请改为动作、事实顺序、信息差或直接陈述。
+- 生硬对照句式一律禁用：不使用“不是……而是……”“不再是……而是……”“没有再……而是……”“并非……而是……”“与其说……不如说……”“不是……不是……而是……”，也不使用“不是……——是……”“不是……。是……”“不是……，是……”等用标点替代“而是”的变体。此类结构不判断为合理修辞；请改为动作、事实顺序、信息差或直接陈述。
 - 禁止换皮转折：不使用“并不是……只是……”“倒不是……只是……”“不是说……只是……”“看似……其实……”“表面上……实则……”“没有……只是……”“也不……也不……只是……”等同功能替代。修订时若保留任何显式转折，必须给出负担证明，并默认从“不合理”开始挑刺。
 - 叙述标准是“给朋友讲一件事”或“日记里会不会这样写”。过场一句话交代，不恋战；高潮可以多写几句，但细写不等于堆形容词、器官反应或华丽比喻。
 - 器官轮岗、AI 高频套话、万能占位和比喻依赖按密度控制：单个孤例可作为低级复核信号，但总量原则上不超过叙事单元的 2%；超过阈值必须修订。
 - 不用器官轮岗表现情绪：不要轮流写嘴角、眼底、指尖、脊背、胸口、喉咙、胃部。情绪优先通过选择、停顿、动作后果、说话方式和准确细节呈现。
 - 不用 AI 高频套话、万能占位和比喻依赖：少用“有什么东西……”“某种说不清的东西”“像被什么东西……”“仿佛有一只无形的手”等空泛表达。
 - 破折号不能制造文学感。正式正文原则上不用“——”做转折、插入或强调；孤立出现需逐句语义复核，超过 2% 密度或替代转折时必须修订。
-- 一句话尽量少用逗号；若一句话超过三个逗号，通常应拆句或重写。一个意思说完就换行，不要用长逗号链拖成满分作文腔。
+- 逗号服务尚未完成的动作、观察或因果关系。逗号较多时先检查句内层级，只有关系松散、并列过多或语义重复才重组；不要按数量机械拆成密集短句。常规叙述以中等长度句为主，短句留给真实落点。
 - 不做景物强制同步：人物情绪变化时，风、雨、灯、夜色不要恰好配合情绪变化。
-- 不要重复渲染同一情绪。同一件事说一遍即可，保留人味和准确细节，不用三个形容词或三个比喻撑篇幅。
+- 不要重复渲染同一情绪。同一件事说一遍即可，保留人味和准确细节，不用三个形容词或三个比喻撑篇幅。精确数字默认不用，五项必要性条件缺一即去掉精度，拿不准也按不必要处理；普通时间流逝不算兑现。技术、灾难、悬疑、倒计时、场景合同中的设备读数和参考语料都不能豁免。年龄、日期和规则编号也只在身份或连续性确有需要时出现。量词中的数词同样须过五项；电话、灯闪、普通陈设和日常动作不计件、计次或计秒，应改写为陈设状态、动作受阻、反复无果、停顿或取用结果。成稿前逐项扫描数词并作语义重写，不批量删数字或机械换成模糊量词。
 - 禁止用正则或批量脚本对正文做语义级“去 AI 腔”改写。脚本只能提示风险或做安全排版规范化；删除“不是”、改写“不是 A——是 B”、替换心理判断等操作必须由 ArcVellum Worker 逐句语义复核。"""
 
 ANTI_AI_STYLE_SHORT_RULE = (
-    "降低 AI 腔：禁用“不是……而是……”及“不是……——是”等生硬对照，不判断为合理修辞；"
+    "降低 AI 腔：禁用“不是……而是……”“不再是……而是……”“没有再……而是……”及“不是……——是”等生硬对照，不判断为合理修辞；"
     "禁用“并不是……只是……”“看似……其实……”等换皮转折；"
-    "破折号、器官轮岗、万能占位、比喻依赖和景物强制同步按 2% 左右密度门禁控制。"
+    "破折号、器官轮岗、万能占位、比喻依赖和景物强制同步按 2% 左右密度门禁控制；精确数字默认不用，五项必要性条件缺一即去精度，技术、倒计时、场景合同和参考语料都不豁免，普通陈设与日常动作也不计件、计次或计秒。"
     "按朋友讲事/日记标准写，过场简写，高潮靠准确细节，不得用脚本批量删除否定或做语义改写。"
 )
 
@@ -314,6 +315,8 @@ def _phrase_hits(text: str, custom_phrases: list[object]) -> list[str]:
 def _contrast_frame_issues(text: str) -> list[AIStyleIssue]:
     patterns = [
         r"不是[^。！？!?；;\n]{1,50}?而是",
+        r"不再是[^。！？!?；;\n]{1,50}?而是",
+        r"没有再[^。！？!?；;\n]{1,50}?而是",
         r"不是[^。！？!?；;\n]{1,50}?——\s*是",
         r"不是[^。！？!?；;\n]{1,50}?[，,]\s*是",
         r"不是[^。！？!?；;\n]{1,50}?。\s*是",
@@ -332,7 +335,7 @@ def _contrast_frame_issues(text: str) -> list[AIStyleIssue]:
         AIStyleIssue(
             "mechanical-contrast-frame",
             "medium",
-            "发现生硬对照句式。此类“不是……而是……”及其破折号/句号变体不判断为合理修辞；请改为动作、事实顺序、信息差或直接陈述。不得用脚本直接删除“不是”导致语义反转。",
+            "发现生硬对照句式。此类“不是……而是……”“不再是……而是……”“没有再……而是……”及其破折号/句号变体不判断为合理修辞；请改为动作、事实顺序、信息差或直接陈述。不得用脚本直接删除否定词导致语义反转。",
             _sample(text, hits[0]),
         )
     ]
@@ -389,12 +392,17 @@ def _sentence_shape_issues(
     comma_overload_count = 0
     for sentence in re.split(r"[。！？!?\n]", text):
         comma_limit = int(quality_threshold(profile, "commas_per_sentence", 3))
-        if sentence.count("，") + sentence.count(",") > comma_limit:
+        comma_count = sentence.count("，") + sentence.count(",")
+        sentence_cjk = len(re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff]", sentence))
+        min_chars = int(quality_threshold(profile, "comma_overload_min_chars", 56))
+        if comma_count > comma_limit and (
+            sentence_cjk >= min_chars or comma_count > comma_limit + 2
+        ):
             issues.append(
                 AIStyleIssue(
                     "comma-overload-in-sentence",
                     "medium",
-                    f"一句话超过 {comma_limit} 个逗号，容易形成拖长的作文腔。请拆句、换行或删掉重复渲染。",
+                    f"较长句包含超过 {comma_limit} 个逗号，句内层级可能松散。请先重组动作、观察或因果层级；只有语义已经结束时才断句，不要机械拆成同构短句。",
                     sentence.strip()[:100],
                 )
             )
@@ -425,21 +433,10 @@ def _sentence_shape_issues(
                 )
             )
             break
-    simile_count = len(re.findall(r"(?:好像|仿佛|如同|像是|像[^。！？\n]{1,18}(?:一样|似的))", text))
-    simile_minimum = max(1, int(quality_threshold(profile, "simile_minimum_hits", 2)))
-    if simile_count >= simile_minimum:
-        severity, density_note = _soft_density_verdict(
-            simile_count,
-            text,
-            profile,
-            threshold_key="simile_per_100_units",
-        )
+    if finding := simile_dependency_finding(text, profile, _soft_density_verdict):
         issues.append(
             AIStyleIssue(
-                "simile-dependency",
-                severity,
-                "比喻依赖偏高。"
-                f"此类表达按约 2% 密度门禁处理，{density_note}；朴素叙述优先使用准确事实和动作，不靠“好像/仿佛/像……一样”撑情绪。",
+                finding[0], finding[1], finding[2],
                 _first_present_sample(text, ["好像", "仿佛", "如同", "像"]),
             )
         )

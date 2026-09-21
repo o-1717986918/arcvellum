@@ -303,7 +303,7 @@ class AutopilotTests(unittest.TestCase):
         })
         self.assertEqual(
             normalized["limits"],
-            {"max_failures_per_task": 2},
+            {"max_failures_per_task": 2, "stop_after_formal_units": 0},
         )
         self.assertNotIn("expires_at", normalized)
         self.assertNotIn("max_consecutive_revisions", normalized["limits"])
@@ -724,7 +724,7 @@ class AutopilotTests(unittest.TestCase):
             resumed_policy = store.read_autopilot_run(run["run_id"])["policy"]
             self.assertEqual(
                 resumed_policy["limits"],
-                {"max_failures_per_task": 2},
+                {"max_failures_per_task": 2, "stop_after_formal_units": 0},
             )
             self.assertNotIn("expires_at", resumed_policy)
             self.assertEqual(result["run"]["run_id"], run["run_id"])

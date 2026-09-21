@@ -169,6 +169,7 @@ def style_semantic_review_errors(
     *,
     target_id: str,
     require_pass: bool,
+    require_completion: bool = True,
 ) -> list[str]:
     root = project_root.resolve()
     profile = profile_dir.resolve()
@@ -184,7 +185,8 @@ def style_semantic_review_errors(
         errors.append("style semantic review is stale for current evidence digests")
     errors.extend(_review_shape_errors(payload, target_id))
     errors.extend(_review_report_errors(root, paths, payload))
-    errors.extend(_review_completion_errors(root, paths))
+    if require_completion:
+        errors.extend(_review_completion_errors(root, paths))
     errors.extend(_review_verdict_errors(payload, require_pass=require_pass))
     return errors
 

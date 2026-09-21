@@ -5,18 +5,19 @@
   "fallback": "strict-v1",
   "new_project_mode": "standard",
   "adoption": {
-    "decision": "pending-literary-evidence",
+    "decision": "production-default-quality-monitoring",
     "ready_for_default": false,
+    "creator_requested_production_default": true,
     "required_evidence": "same-model blind literary noninferiority"
   },
   "kernels": {
     "strict-v1": {
-      "status": "supported",
-      "user_selectable": true,
+      "status": "historical-compatibility",
+      "user_selectable": false,
       "required_runtime": "any-supported"
     },
     "lean-v2": {
-      "status": "preview",
+      "status": "production",
       "user_selectable": true,
       "required_runtime": "pi-worker"
     }

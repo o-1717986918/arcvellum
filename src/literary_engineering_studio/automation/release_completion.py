@@ -23,6 +23,7 @@ def complete_release(
     run: dict[str, Any],
     release_policy: str,
     coordinator_factory: Callable[[dict[str, Any]], Any] = WholeBookReleaseCoordinator,
+    release_route_index: int = 6,
 ) -> bool:
     if release_policy != "delegated":
         pause(run_id, "release-approval-required", "全书已经完成正式路线，等待你批准最终交付。")
@@ -36,7 +37,7 @@ def complete_release(
     except MissingFormalChapterSources:
         runs.update_autopilot_run(
             run_id,
-            route_index=6,
+            route_index=release_route_index,
             current_route="export-and-release",
             current_task_id="",
             status="running",

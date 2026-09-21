@@ -19,6 +19,7 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
   const sessionContexts = ref<Record<string, CreativeContextSummary | null>>({});
   let selectionPinned = false;
   let connection: EventStreamConnection | null = null;
+  let connectionGeneration = 0;
   let frame = 0;
   let pendingEvents: Parameters<typeof applyCreativeEvent>[1][] = [];
 
@@ -33,13 +34,16 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
     if (!root) return;
     if (!force && projectRoot.value === root && connection) return;
     disconnect();
+    const generation = connectionGeneration;
     projectRoot.value = root;
     selectionPinned = false;
     sessionContexts.value = {};
     loading.value = true;
     error.value = "";
     try {
-      applySnapshot(await creativeLiveClient.snapshot(root));
+      const initial = await creativeLiveClient.snapshot(root);
+      if (generation !== connectionGeneration) return;
+      applySnapshot(initial);
       connection = creativeLiveClient.observe(root, applySnapshot, (event) => {
         if (projectRoot.value !== root || !snapshot.value) return;
         pendingEvents.push(event);
@@ -50,9 +54,9 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
       });
       connected.value = true;
     } catch (cause) {
-      error.value = friendlyError(cause, "创作现场暂时不可用。");
+      if (generation === connectionGeneration) error.value = friendlyError(cause, "创作现场暂时不可用。");
     } finally {
-      loading.value = false;
+      if (generation === connectionGeneration) loading.value = false;
     }
   }
 
@@ -116,6 +120,7 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
   }
 
   function disconnect(): void {
+    connectionGeneration += 1;
     connection?.close();
     connection = null;
     if (frame) window.cancelAnimationFrame(frame);

@@ -17,7 +17,8 @@ from ..runtime.worker import WorkerRunResult
 from .campaign_runtime import CampaignRuntimeCoordinator
 from .policy import DelegationPolicy
 from .route_dependencies import resolve_route_cycle
-from .run_result_handler import ClaimedRunResultHandler, RouteCycle, RunLoopHost
+from .run_result_contracts import RouteCycle
+from .run_result_handler import ClaimedRunResultHandler, RunLoopHost
 from .support import _pending_scene_dependency, _pending_target_length_dependency
 
 
@@ -31,7 +32,7 @@ class ClaimedRunLoop:
         run_id: str,
         project: Path,
         policy: DelegationPolicy,
-        steward: CreativeSteward,
+        steward: CreativeSteward | None,
         stop: threading.Event,
         route_order: tuple[str, ...],
         dependency_probe: Callable[[Path], bool],
@@ -50,21 +51,26 @@ class ClaimedRunLoop:
         self.repair_probe = repair_probe or _pending_target_length_dependency
         self.scene_probe = scene_probe or _pending_scene_dependency
         self.campaign = campaign
-        self.results = ClaimedRunResultHandler(
-            host,
-            run_id=run_id,
-            project=project,
-            policy=policy,
-            steward=steward,
-            stop=stop,
-            dependency_probe=dependency_probe,
-            repair_probe=self.repair_probe,
-            scene_probe=self.scene_probe,
-            campaign=campaign,
+        self.results = (
+            ClaimedRunResultHandler(
+                host,
+                run_id=run_id,
+                project=project,
+                policy=policy,
+                steward=steward,
+                stop=stop,
+                dependency_probe=dependency_probe,
+                repair_probe=self.repair_probe,
+                scene_probe=self.scene_probe,
+                campaign=campaign,
+            )
+            if policy.literary_kernel != "lean-v2" else None
         )
 
     def run(self) -> None:
         while not self.stop.is_set():
+            if self._formal_unit_limit_stopped():
+                return
             run = self.host.runs.read_autopilot_run(self.run_id)
             if self._campaign_stopped(run):
                 return
@@ -80,20 +86,21 @@ class ClaimedRunLoop:
                 continue
 
             cycle = self._enter_route(run, route_index)
-            if self._proactive_choice_stopped(cycle):
-                return
-            if (
-                cycle.route == "scene-development"
-                and self.policy.literary_kernel == "lean-v2"
-            ):
-                if self.host._advance_lean_scene(
-                    self.run_id,
-                    self.project,
-                    self.policy,
-                    cycle,
-                ):
+            if self.policy.literary_kernel == "lean-v2":
+                if cycle.route == "scene-development":
+                    stopped = self.host._advance_lean_scene(
+                        self.run_id, self.project, self.policy, cycle,
+                    )
+                else:
+                    stopped = self.host._advance_lean_route(
+                        self.run_id, self.project, self.policy, cycle,
+                    )
+                if stopped:
                     return
                 continue
+            if self._proactive_choice_stopped(cycle):
+                return
+            assert self.results is not None
             progress_before, _ = self.results.progress_identity()
             result = self._execute_worker(run, cycle)
             if result is None:
@@ -101,6 +108,20 @@ class ClaimedRunLoop:
             result = self.results.recover_runtime_failure(result, cycle)
             if self.results.handle(run, cycle, result, progress_before):
                 return
+
+    def _formal_unit_limit_stopped(self) -> bool:
+        limit = self.policy.stop_after_formal_units
+        if not limit:
+            return False
+        committed = len(tuple((self.project / "workflow" / "scene_commits").glob("*.json")))
+        if committed < limit:
+            return False
+        self.host._pause_for(
+            self.run_id,
+            "goal-scope-complete",
+            f"已达到长期目标的正式单元检查点：{committed}/{limit}。",
+        )
+        return True
 
     def _campaign_stopped(self, run: dict[str, Any]) -> bool:
         if self.campaign is None:
@@ -118,16 +139,25 @@ class ClaimedRunLoop:
         return True
 
     def _enter_route(self, run: dict[str, Any], route_index: int) -> RouteCycle:
-        cycle = resolve_route_cycle(
-            self.project,
-            self.route_order,
-            route_index,
-            asset_probe=self.dependency_probe,
-            length_repair_probe=self.repair_probe,
-            scene_probe=self.scene_probe,
-            owner=f"autopilot:{self.run_id}",
+        if self.policy.literary_kernel == "lean-v2":
+            route = self.route_order[route_index]
+            cycle = RouteCycle(
+                route_index, route, route, False, f"autopilot:{self.run_id}",
+            )
+        else:
+            cycle = resolve_route_cycle(
+                self.project,
+                self.route_order,
+                route_index,
+                asset_probe=self.dependency_probe,
+                length_repair_probe=self.repair_probe,
+                scene_probe=self.scene_probe,
+                owner=f"autopilot:{self.run_id}",
+            )
+        dependency_kind = (
+            self._completed_export_dependency(run, cycle)
+            if self.policy.literary_kernel != "lean-v2" else ""
         )
-        dependency_kind = self._completed_export_dependency(run, cycle)
         if dependency_kind:
             route_index = self.route_order.index("review-and-audit")
             cycle = resolve_route_cycle(
@@ -188,6 +218,7 @@ class ClaimedRunLoop:
         )
 
     def _proactive_choice_stopped(self, cycle: RouteCycle) -> bool:
+        assert self.steward is not None
         handled = self.host._resolve_proactive_choice(
             self.run_id,
             self.project,

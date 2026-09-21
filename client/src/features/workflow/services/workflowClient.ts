@@ -7,7 +7,6 @@ import type {
   DashboardResponse,
   DelegationPolicy,
   HumanChoiceReceipt,
-  LiteraryKernelCompatibility,
 } from "@/types/api";
 
 export interface WorkspaceSnapshot {
@@ -55,24 +54,6 @@ export function createWorkflowClient(transport: ApiTransport = featureTransport)
     saveAutopilotPolicy: (projectRoot: string, policy: DelegationPolicy) => transport.request<{ policy: DelegationPolicy; run?: AutopilotRun }>(
       "/autopilot/policy",
       { method: "PUT", body: JSON.stringify({ project_root: projectRoot, policy }) },
-    ),
-    literaryKernelCompatibility: (projectRoot: string) => transport.request<LiteraryKernelCompatibility>(
-      `/autopilot/kernel-compatibility?${q({ project_root: projectRoot })}`,
-    ),
-    migrateLiteraryKernel: (
-      projectRoot: string,
-      targetKernel: "strict-v1" | "lean-v2",
-      sceneExecutionMode: "draft" | "standard" | "publication",
-    ) => transport.request<{ policy: DelegationPolicy; current_kernel: string; compatibility_status: string }>(
-      "/autopilot/kernel-migrate",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          project_root: projectRoot,
-          target_kernel: targetKernel,
-          scene_execution_mode: sceneExecutionMode,
-        }),
-      },
     ),
     startAutopilot: (payload: Record<string, unknown>) => transport.request<{ run: AutopilotRun }>(
       "/autopilot/start",

@@ -11,7 +11,7 @@ from literary_engineering_studio_engine.literary.scene.state.new_character_regis
 from literary_engineering_studio_engine.literary.planning.narrative_rhythm import narrative_rhythm_contract
 from literary_engineering_studio_engine.literary.review.reader_experience import reader_experience_adherence_for_body
 from ...style.anti_ai import style_lint_gate
-from ...style.punctuation import lint_punctuation
+from ...style.punctuation import lint_punctuation, punctuation_issue_is_hard
 from .gate_support import (
     candidate_body,
     canon_change_value,
@@ -35,6 +35,7 @@ def candidate_language_gate(
 ) -> dict[str, object]:
     """Return the Engine-owned language-quality gate for a prose candidate."""
 
+    punctuation_issues = lint_punctuation(body, profile=profile, scope=scope)
     punctuation = [
         {
             "rule": issue.rule,
@@ -42,13 +43,13 @@ def candidate_language_gate(
             "message": issue.message,
             "sample": issue.sample,
         }
-        for issue in lint_punctuation(body, profile=profile, scope=scope)
-        if issue.severity.strip().lower() not in {"", "low"}
+        for issue in punctuation_issues
     ]
     style = style_lint_gate(body, profile=profile, scope=scope)
     blocking = [
         {"category": "punctuation", **item}
-        for item in punctuation
+        for issue, item in zip(punctuation_issues, punctuation)
+        if punctuation_issue_is_hard(issue)
     ]
     style_rows = style.get("blocking")
     if isinstance(style_rows, list):

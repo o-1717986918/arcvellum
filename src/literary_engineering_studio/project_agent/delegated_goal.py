@@ -96,7 +96,7 @@ class DelegatedGoalObserver:
 def goal_snapshot(run: Mapping[str, Any]) -> dict[str, Any]:
     """Expose useful progress without leaking a full internal run record."""
 
-    return {
+    snapshot = {
         "run_id": str(run.get("run_id") or ""),
         "status": str(run.get("status") or ""),
         "current_route": str(run.get("current_route") or ""),
@@ -105,6 +105,32 @@ def goal_snapshot(run: Mapping[str, Any]) -> dict[str, Any]:
         "failures": int(run.get("failures") or 0),
         "stop_reason": str(run.get("stop_reason") or ""),
         "last_error": str(run.get("last_error") or "")[:1000],
+    }
+    if chapter := _chapter_update(run.get("chapter_update")):
+        snapshot["chapter_update"] = chapter
+    if revisions := _revision_summary(run.get("revision_summary")):
+        snapshot["revision_summary"] = revisions
+    return snapshot
+
+
+def _chapter_update(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    author = value.get("author_summary")
+    return {
+        "chapter_id": str(value.get("chapter_id") or ""),
+        "message": str(value.get("message") or "")[:600],
+        "author_summary": dict(author) if isinstance(author, Mapping) else {},
+    }
+
+
+def _revision_summary(value: Any) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        "total_attempts": int(value.get("total_attempts") or 0),
+        "scene_count": int(value.get("scene_count") or 0),
+        "max_attempts": int(value.get("max_attempts") or 0),
     }
 
 

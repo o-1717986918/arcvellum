@@ -5,14 +5,12 @@ import { cameraPoseAt, cameraTransitionDuration, type CameraPose } from "@/featu
 import { copyParallaxView, DEFAULT_PARALLAX_VIEW, fittedCameraFrame, isSameParallaxView, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import { resolveOrreryMotion } from "@/services/orreryPreferences";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
-
 const props = defineProps<{
   projection: SpatialNarrativeProjection;
   layout: SpatialLayout;
   selectedNodeId?: string;
 }>();
-const emit = defineEmits<{ anchors: [value: Record<string, StageAnchor>]; degraded: [] }>();
-
+const emit = defineEmits<{ anchors: [value: Record<string, StageAnchor>]; degraded: []; recovered: [] }>();
 const host = ref<HTMLElement | null>(null);
 let renderer: NarrativeParallaxRenderer | null = null;
 let resizeObserver: ResizeObserver | null = null;
@@ -23,56 +21,61 @@ const staticProjection = ref(false);
 const staticCamera = { x: 0, y: 0, scale: 0.78 };
 let staticCameraReady = false;
 let staticCameraAnimation = 0;
+let staticAnchorFrame = 0;
 let staticDrag: { pointerId: number; clientX: number; clientY: number; x: number; y: number } | null = null;
 const staticView: ParallaxView = { ...DEFAULT_PARALLAX_VIEW };
 let staticOrbit: { pointerId: number; clientX: number; clientY: number; view: ParallaxView; pivot: WorldPoint | null } | null = null;
-
 const selectedPoint = computed<WorldPoint | null>(() => props.selectedNodeId ? props.layout.points.get(props.selectedNodeId) || null : null);
-
 async function mountRenderer(): Promise<void> {
   await nextTick();
   const target = host.value;
   if (!target) return;
   const generation = ++rendererGeneration;
-  let nextRenderer: NarrativeParallaxRenderer;
+  let waitTimer = 0;
   const rendererPromise = NarrativeParallaxRenderer.create(target);
+  waitTimer = window.setTimeout(() => {
+    if (generation !== rendererGeneration || renderer || !host.value) return;
+    staticProjection.value = true;
+    resetStaticCamera();
+    emitStaticAnchors();
+    emit("degraded");
+  }, 1600);
+  let nextRenderer: NarrativeParallaxRenderer;
   try {
-    nextRenderer = await Promise.race([
-      rendererPromise,
-      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("renderer-init-timeout")), 1600)),
-    ]);
+    nextRenderer = await rendererPromise;
   } catch {
-    // A spatial workbench must remain legible on remote desktop sessions,
-    // old integrated GPUs and headless visual checks. The DOM overlay is the
-    // authoritative interaction layer, so it receives a deterministic 2.5D
-    // projection instead of disappearing with the WebGL atmosphere.
+    window.clearTimeout(waitTimer);
+    if (generation !== rendererGeneration || target !== host.value) return;
     staticProjection.value = true;
     renderer?.dispose();
     renderer = null;
-    // Pixi may finish creating after the deadline. It is no longer the active
-    // renderer, so release it immediately rather than leaving a late canvas
-    // above the deterministic DOM projection.
-    void rendererPromise.then((lateRenderer) => lateRenderer.dispose()).catch(() => undefined);
     resetStaticCamera();
     emitStaticAnchors();
     emit("degraded");
     return;
   }
+  window.clearTimeout(waitTimer);
   if (generation !== rendererGeneration || target !== host.value) {
     nextRenderer.dispose();
     return;
   }
   staticProjection.value = false;
+  emit("recovered");
   renderer?.dispose();
   renderer = nextRenderer;
-  renderer.onAnchors((anchors) => emit("anchors", anchors));
-    renderer.onContextLost(() => {
-    renderer?.dispose();
-      renderer = null;
-      staticProjection.value = true;
-      resetStaticCamera();
-      emitStaticAnchors();
+  renderer.onAnchors((anchors) => {
+    if (!staticProjection.value) emit("anchors", anchors);
+  });
+  renderer.onContextLost(() => {
+    staticProjection.value = true;
+    resetStaticCamera();
+    emitStaticAnchors();
     emit("degraded");
+  });
+  renderer.onContextRestored(() => {
+    staticProjection.value = false;
+    renderer?.fit();
+    emit("recovered");
   });
   const rect = target.getBoundingClientRect();
   renderer.resize(rect.width, rect.height);
@@ -83,8 +86,8 @@ async function mountRenderer(): Promise<void> {
   renderer.fit();
 }
 
-onMounted(async () => {
-  await mountRenderer();
+onMounted(() => {
+  void mountRenderer();
   if (!host.value) return;
   resizeObserver = new ResizeObserver(() => {
     if (!host.value) return;
@@ -114,6 +117,7 @@ onBeforeUnmount(() => {
   themeObserver?.disconnect();
   rendererGeneration += 1;
   cancelStaticCameraAnimation();
+  if (staticAnchorFrame) window.cancelAnimationFrame(staticAnchorFrame);
   renderer?.dispose();
   renderer = null;
 });
@@ -163,6 +167,7 @@ function emitStaticAnchors(): void {
     .filter((node) => node.type === "chapter" || node.type === "scene")
     .sort((left, right) => left.order - right.order || left.node_id.localeCompare(right.node_id));
   const primaryIndex = new Map(primary.map((node, index) => [node.node_id, index]));
+  const origin = props.layout.points.get(primary[0]?.node_id || "") || { x: 0, y: 0, z: 0 };
   const anchors: Record<string, StageAnchor> = {};
   const worlds = staticWorldPoints(primary);
   if (!staticCameraReady) initializeStaticCamera(primary, worlds, rect);
@@ -187,9 +192,18 @@ function emitStaticAnchors(): void {
       x: parentPoint.x + side * typeOffset + (hashNode(`${node.node_id}:x`) % 31) - 15,
       y: parentPoint.y + elevation + (hashNode(`${node.node_id}:y`) % 29) - 14,
     };
-    anchors[node.node_id] = staticScreenAnchor(world, rect, node.type === "task" || node.type === "review" ? 0.82 : 0.9);
+    const laidOut = props.layout.points.get(node.node_id);
+    anchors[node.node_id] = staticScreenAnchor(laidOut ? staticWorldPoint(laidOut, origin) : world, rect, node.type === "task" || node.type === "review" ? 0.82 : 0.9);
   }
   emit("anchors", anchors);
+}
+
+function queueStaticAnchors(): void {
+  if (staticAnchorFrame) return;
+  staticAnchorFrame = window.requestAnimationFrame(() => {
+    staticAnchorFrame = 0;
+    if (staticProjection.value) emitStaticAnchors();
+  });
 }
 
 function staticWorldPoints(primary: SpatialNarrativeProjection["nodes"]): Map<string, { x: number; y: number }> {
@@ -261,7 +275,7 @@ watch(selectedPoint, (point) => {
 });
 
 function fit(): void {
-  if (renderer) {
+  if (renderer && !staticProjection.value) {
     renderer.fit();
     return;
   }
@@ -269,7 +283,7 @@ function fit(): void {
 }
 
 function openingSegment(): void {
-  if (renderer) {
+  if (renderer && !staticProjection.value) {
     renderer.update(props.projection, props.layout);
     renderer.showOpeningSegment();
     return;
@@ -281,7 +295,7 @@ function openingSegment(): void {
 }
 
 function focus(point: WorldPoint, nodeId = ""): void {
-  if (renderer) {
+  if (renderer && !staticProjection.value) {
     renderer.focus(point, 0.8, nodeId);
     return;
   }
@@ -290,7 +304,7 @@ function focus(point: WorldPoint, nodeId = ""): void {
 
 function focusCluster(points: WorldPoint[], nodeId = ""): void {
   if (!points.length) return;
-  if (renderer) {
+  if (renderer && !staticProjection.value) {
     renderer.focusCluster(points, nodeId);
     return;
   }
@@ -364,13 +378,13 @@ function moveStaticDrag(event: PointerEvent): void {
     const nextView = parallaxViewFromDrag(staticOrbit.view, event.clientX - staticOrbit.clientX, event.clientY - staticOrbit.clientY);
     copyParallaxView(staticView, nextView);
     recenterStaticView(staticOrbit.pivot);
-    emitStaticAnchors();
+    queueStaticAnchors();
     return;
   }
   if (!staticDrag || staticDrag.pointerId !== event.pointerId) return;
   staticCamera.x = staticDrag.x - (event.clientX - staticDrag.clientX) / staticCamera.scale;
   staticCamera.y = staticDrag.y - (event.clientY - staticDrag.clientY) / staticCamera.scale;
-  emitStaticAnchors();
+  queueStaticAnchors();
 }
 
 function stopStaticDrag(event: PointerEvent): void {
@@ -396,11 +410,11 @@ function zoomStatic(event: WheelEvent): void {
   staticCamera.scale = Math.max(0.08, Math.min(1.7, staticCamera.scale * factor));
   staticCamera.x = worldX - localX / staticCamera.scale;
   staticCamera.y = worldY - localY / staticCamera.scale;
-  emitStaticAnchors();
+  queueStaticAnchors();
 }
 
 function resetView(): void {
-  if (renderer) {
+  if (renderer && !staticProjection.value) {
     renderer.resetView();
     return;
   }

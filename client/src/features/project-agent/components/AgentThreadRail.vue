@@ -9,6 +9,7 @@ import {
   Info,
   MessageSquarePlus,
   Palette,
+  Radio,
   ScanSearch,
   Search,
   Settings2,
@@ -33,12 +34,23 @@ const emit = defineEmits<{
   workspace: [workspace: ProjectAgentWorkspaceId];
 }>();
 const query = ref("");
+const showAllSessions = ref(false);
+const defaultSessionLimit = 8;
 const filteredSessions = computed(() => {
   const value = query.value.trim().toLowerCase();
   return value ? props.sessions.filter((item) =>
     item.title.toLowerCase().includes(value) || (props.projectLabels?.[item.project_root] || "").toLowerCase().includes(value),
   ) : props.sessions;
 });
+const visibleSessions = computed(() => {
+  if (query.value.trim() || showAllSessions.value || filteredSessions.value.length <= defaultSessionLimit) {
+    return filteredSessions.value;
+  }
+  const recent = filteredSessions.value.slice(0, defaultSessionLimit);
+  const active = filteredSessions.value.find((item) => item.session_id === props.activeSessionId);
+  return active && !recent.some((item) => item.session_id === active.session_id) ? [...recent, active] : recent;
+});
+const hiddenSessionCount = computed(() => filteredSessions.value.length - visibleSessions.value.length);
 
 function relativeDate(value: string): string {
   const time = new Date(value).getTime();
@@ -58,15 +70,18 @@ function relativeDate(value: string): string {
 
     <div class="pa-thread-section-label">最近对话</div>
     <div class="pa-thread-list">
-      <button v-for="item in filteredSessions" :key="item.session_id" :class="{ active: item.session_id === activeSessionId }" :disabled="disabled" @click="emit('select', item.session_id)">
+      <button v-for="item in visibleSessions" :key="item.session_id" :class="{ active: item.session_id === activeSessionId }" :disabled="disabled" @click="emit('select', item.session_id)">
         <span class="pa-thread-dot"></span><span><strong>{{ item.title }}</strong><small>{{ projectLabels?.[item.project_root] || '作品库会话' }} · {{ relativeDate(item.updated_at) }}</small></span>
       </button>
       <p v-if="!filteredSessions.length" class="pa-thread-empty">还没有项目对话。</p>
+      <button v-if="hiddenSessionCount > 0" class="pa-thread-more" type="button" @click="showAllSessions = true">显示其余 {{ hiddenSessionCount }} 个对话</button>
+      <button v-else-if="showAllSessions && !query.trim() && filteredSessions.length > defaultSessionLimit" class="pa-thread-more" type="button" @click="showAllSessions = false">收起历史对话</button>
     </div>
 
     <div class="pa-workspace-links">
       <span>查看作品</span>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'reader' }" @click="emit('workspace', 'reader')"><BookOpenText :size="14" />正文长卷</button>
+      <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'live' }" @click="emit('workspace', 'live')"><Radio :size="14" />创作现场</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'archive' }" @click="emit('workspace', 'archive')"><Archive :size="14" />作品档案</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'style' }" @click="emit('workspace', 'style')"><Palette :size="14" /><span>文风成果<small class="pa-feature-note">开发中，不完善</small></span></button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'quality' }" @click="emit('workspace', 'quality')"><Boxes :size="14" />质量与节奏</button>
@@ -83,7 +98,7 @@ function relativeDate(value: string): string {
     </div>
 
     <div class="pa-project-chip" data-tour-id="project">
-      <span>{{ hasProject ? projectTitle.slice(0, 1) : '＋' }}</span><div><strong>{{ hasProject ? projectTitle : '作品库总控' }}</strong><small>{{ hasProject ? (projectProgress == null ? '正在读取进度' : `全书 ${Math.round(projectProgress)}%`) : '可以让 Agent 建立作品' }}</small></div>
+      <span>{{ hasProject ? projectTitle.slice(0, 1) : '＋' }}</span><div><strong>{{ hasProject ? projectTitle : '作品库总控' }}</strong><small>{{ hasProject ? (projectProgress == null ? '正在读取正文进度' : `正文 ${Math.round(projectProgress)}%`) : '可以让 Agent 建立作品' }}</small></div>
     </div>
   </aside>
 </template>

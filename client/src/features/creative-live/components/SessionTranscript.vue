@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { Bot, Braces, TerminalSquare } from "lucide-vue-next";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import type { CreativeSession } from "../types";
+import { sessionDisplayName, transcriptPresentation } from "../creativePresentation";
 
-defineProps<{ session?: CreativeSession | null }>();
+const props = defineProps<{ session?: CreativeSession | null }>();
+const presentation = computed(() => transcriptPresentation(props.session?.transcript));
 
 function toolLabel(value?: string): string {
   return ({
@@ -19,7 +22,7 @@ function toolLabel(value?: string): string {
 <template>
   <section class="creative-session-panel">
     <header>
-      <div><span>Agent 会话</span><strong>{{ session?.role || '等待主创 Agent' }}</strong></div>
+      <div><span>Agent 会话</span><strong>{{ sessionDisplayName(session) }}</strong></div>
       <i :class="{ live: session?.status === 'running' }">{{ session?.status === 'running' ? 'LIVE' : session?.status || 'IDLE' }}</i>
     </header>
     <dl v-if="session" class="creative-session-facts">
@@ -27,7 +30,11 @@ function toolLabel(value?: string): string {
       <div><dt>模型</dt><dd>{{ session.model || '由执行器管理' }}</dd></div>
       <div><dt>路线</dt><dd>{{ session.route || '等待路线' }}</dd></div>
     </dl>
-    <div v-if="session?.transcript" class="creative-transcript"><SafeMarkdown :source="session.transcript" variant="chat" /></div>
+    <div v-if="session?.transcript" class="creative-transcript"><SafeMarkdown :source="presentation.source" variant="chat" /></div>
+    <details v-if="presentation.structured" class="creative-transcript-raw">
+      <summary>查看机器校验原文</summary>
+      <pre>{{ presentation.raw }}</pre>
+    </details>
     <div v-else class="creative-live-empty compact"><Bot :size="21" /><p>Agent 的可见说明会在这里流式出现。</p></div>
     <section v-if="session?.tools?.length" class="creative-tool-list">
       <header><TerminalSquare :size="13" /><strong>最近工具活动</strong></header>

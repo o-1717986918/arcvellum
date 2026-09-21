@@ -125,18 +125,20 @@ describe("spatialWindows", () => {
     expect(store.windows.find((item) => item.id === id)?.size.width).toBeGreaterThanOrEqual(300);
   });
 
-  it("restores a project-local instrument layout without writing into project facts", () => {
+  it("restores a project-local reader layout without reviving duplicate management panels", () => {
     const first = useSpatialWindowsStore();
     first.setScope("project-a::spine", [node]);
+    first.openInstrument("reader");
     first.openInstrument("rules");
-    first.updatePosition("instrument:rules", { left: 236, top: 184 });
+    first.updatePosition("instrument:reader", { left: 236, top: 184 });
 
     setActivePinia(createPinia());
     const second = useSpatialWindowsStore();
     second.setScope("project-a::spine", [node]);
-    const restored = second.windows.find((item) => item.id === "instrument:rules");
+    const restored = second.windows.find((item) => item.id === "instrument:reader");
     expect(restored?.position).toEqual({ left: 236, top: 184 });
-    expect(localStorage.getItem("arcvellum.spatial-window-layout.v1.project-a%3A%3Aspine")).toContain("instrument:rules");
+    expect(second.windows.some((item) => item.kind === "rules")).toBe(false);
+    expect(localStorage.getItem("arcvellum.spatial-window-layout.v1.project-a%3A%3Aspine")).toContain("instrument:reader");
   });
 
   it("keeps a fresh node window attached to its scene until the user drags it", () => {

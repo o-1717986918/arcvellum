@@ -20,6 +20,7 @@ from literary_engineering_studio.runtimes.pi_scene_transaction import (
     creative_result_from_payload,
     render_scene_create_prompt,
     render_scene_revision_prompt,
+    render_scene_review_prompt,
 )
 from literary_engineering_studio_engine.literary.scene.transaction import (
     ChangeProposal,
@@ -101,6 +102,45 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertNotIn("task-submit", prompt)
         self.assertNotIn("expected_outputs", prompt)
         self.assertIn("SceneBrief", prompt)
+        self.assertIn("canon_constraints", prompt)
+        self.assertIn("不得用登记 new_asset_candidates 绕过", prompt)
+        self.assertIn("逐字沿用其中已确定的人名、日期、年份、数量和时间差", prompt)
+        self.assertIn("保留差值不代表可以改动构成差值的绝对值", prompt)
+        self.assertIn("核对—追问—停顿—留悬念", prompt)
+        self.assertIn("未列入 participants 的主要人物不得登场", prompt)
+        self.assertIn("不得重演首次见面", prompt)
+        self.assertIn("不同人物按各自欲望", prompt)
+        self.assertIn("选择代价显影", prompt)
+        self.assertIn("新增精确数字默认不用", prompt)
+        self.assertIn("只有以下五项同时成立", prompt)
+        self.assertIn("不得批量删数字或机械换成模糊量词", prompt)
+        self.assertIn("仪表读数、倒计时、时长、距离、尺寸、次数、编号、比例和轮次没有题材豁免", prompt)
+        self.assertIn("不得把普通陈设或日常动作写成账目", prompt)
+        self.assertIn("一张桌、两把椅子、拧两下、试两回、敲两下、看几秒、一支手电", prompt)
+        self.assertIn("读起来具体、有画面或显得专业，都不能替代五项因果证明", prompt)
+        self.assertGreater(prompt.rfind("## Final Prose Pass"), prompt.rfind("## Output"))
+
+    def test_review_treats_hard_continuity_conflicts_as_revision(self) -> None:
+        result = CreativeResult("第一版正文。", "初稿", SceneDelta())
+        prompt = render_scene_review_prompt(
+            _brief(), result, VerificationReport("scene_0001", 6), revision_attempts=3
+        )
+
+        self.assertIn("必须判 revise", prompt)
+        self.assertIn("指出冲突两端", prompt)
+        self.assertIn("绝对测量值与差值", prompt)
+        self.assertIn("软字数偏差只作建议，不得单独退回", prompt)
+        self.assertIn("重复结构及可保留的有效内容", prompt)
+        self.assertIn("共享调查题材", prompt)
+        self.assertIn("最小指令", prompt)
+        self.assertIn("当前场 scene_goal", prompt)
+        self.assertIn("三个以上关键节拍", prompt)
+        self.assertIn("本场已完成 3 轮返修", prompt)
+        self.assertIn("孤立句式、局部动作相似或可选润色一律判 pass", prompt)
+        self.assertIn("须引用具体片段判 revise", prompt)
+        self.assertIn("不要按数字密度或数量阈值裁决", prompt)
+        self.assertIn("任何一处明显不满足五项条件", prompt)
+        self.assertGreater(prompt.rfind("## Quantitative Detail Review"), prompt.rfind("## Relevant Sources"))
 
     def test_parser_rejects_studio_owned_metadata(self) -> None:
         with self.assertRaisesRegex(ValueError, "Studio-owned"):
@@ -167,6 +207,11 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("Existing SceneDelta", revision)
         self.assertIn("invented-id", revision)
         self.assertIn("不得保留空对象", revision)
+        self.assertIn("不得在修复一个问题时重新引入已消失的冲突", revision)
+        self.assertIn("不得用 new_asset_candidates 绕过", revision)
+        self.assertIn("新增精确数字默认不用", revision)
+        self.assertIn("任一项不成立", revision)
+        self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
 
     def test_runtime_inlines_only_project_local_sources_and_caches_result(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

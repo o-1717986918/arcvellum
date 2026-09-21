@@ -53,6 +53,7 @@ def ingest_existing_work(
     chunk_size: int = 6000,
     rights_declaration: str = "",
     overwrite: bool = False,
+    emit_legacy_tasks: bool = True,
 ) -> SourceIngestResult:
     """Preserve sources and write a candidate-only reverse extraction task."""
 
@@ -83,6 +84,7 @@ def ingest_existing_work(
             mode=mode,
             chunk_size=chunk_size,
             rights_declaration=rights_declaration,
+            emit_legacy_tasks=emit_legacy_tasks,
         ),
     )
     return _ingest_result(
@@ -143,6 +145,7 @@ def _stage_import(
     mode: str,
     chunk_size: int,
     rights_declaration: str,
+    emit_legacy_tasks: bool,
 ) -> dict[str, object]:
     _ensure_candidate_dirs(root)
     logical_import = f"sources/imports/{work_id}"
@@ -169,31 +172,31 @@ def _stage_import(
         candidate_outputs=candidate_outputs,
         logical_import=logical_import,
     )
-    _write_json_file(staging_dir / "source_manifest.json", manifest)
-    chunk_tasks = write_chunk_extraction_tasks(
-        root=root,
-        staging_dir=staging_dir,
-        manifest=manifest,
-    )
-    write_reconstruction_tasks(
-        root=root,
-        import_dir=staging_dir,
-        logical_import_dir=root / logical_import,
-        manifest=manifest,
-    )
-    _write_staged_guidance(
-        root=root,
-        staging_dir=staging_dir,
-        manifest=manifest,
-        staged=staged,
-        logical_manifest=logical_manifest,
-        logical_report=logical_report,
-        logical_evidence=logical_evidence,
-        candidate_outputs=candidate_outputs,
-        mode=mode,
-        work_id=work_id,
-        logical_import=logical_import,
-    )
+    if emit_legacy_tasks:
+        _write_json_file(staging_dir / "source_manifest.json", manifest)
+        chunk_tasks = write_chunk_extraction_tasks(
+            root=root, staging_dir=staging_dir, manifest=manifest,
+        )
+        write_reconstruction_tasks(
+            root=root, import_dir=staging_dir,
+            logical_import_dir=root / logical_import, manifest=manifest,
+        )
+        _write_staged_guidance(
+            root=root, staging_dir=staging_dir, manifest=manifest,
+            staged=staged, logical_manifest=logical_manifest,
+            logical_report=logical_report, logical_evidence=logical_evidence,
+            candidate_outputs=candidate_outputs, mode=mode,
+            work_id=work_id, logical_import=logical_import,
+        )
+    else:
+        manifest.pop("archaeology", None)
+        manifest["execution_mode"] = "lean-evidence"
+        _write_json_file(staging_dir / "source_manifest.json", manifest)
+        (staging_dir / "source_ingest.md").write_text(
+            f"# {staged.title}\n\n来源模式：{mode}\n文本与分块已保全，后续规划可引用来源证据。\n",
+            encoding="utf-8",
+        )
+        chunk_tasks = []
     return {
         "source_count": staged.source_count,
         "chunk_count": staged.chunk_count,

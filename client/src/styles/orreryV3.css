@@ -430,3 +430,10 @@ html[data-arcvellum-motion="reduced"] .narrative-spine-signal, html[data-arcvell
 .orrery-v3-node.overview .node-copy { display: none; }
 @media (prefers-reduced-motion: reduce) { .creative-progression-link { animation: none; } }
 html[data-arcvellum-motion="reduced"] .creative-progression-link, html[data-arcvellum-motion="still"] .creative-progression-link { animation: none; }
+@media (max-width: 680px) {
+  .creative-progression-stage { grid-template-columns: 19px minmax(0, 1fr); min-width: 104px; max-width: 132px; gap: 5px; padding-right: 6px; }
+  .creative-progression-copy small { display: none; }
+  .creative-progression-copy strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .creative-progression-orbit { width: 18px; height: 18px; }
+  .orrery-v3-progress-spindle { top: auto; right: 10px; bottom: 68px; }
+}

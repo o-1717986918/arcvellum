@@ -28,6 +28,26 @@ const emit = defineEmits<{ select: [node: SpatialNarrativeNode]; focus: [node: S
 const visible = computed(() => props.nodes
   .filter((node) => Boolean(props.anchors[node.node_id]?.visible))
   .sort((left, right) => nodePriority(right) - nodePriority(left)));
+const visibleSceneCount = computed(() => visible.value.filter((node) => (node.creative_kind || node.type) === "scene").length);
+const motionByNode = computed(() => {
+  const index = new Map<string, NonNullable<SpatialNarrativeProjection["motion_events"]>[number]>();
+  for (const event of props.motionEvents || []) if (!index.has(event.node_id)) index.set(event.node_id, event);
+  return index;
+});
+const activityByNode = computed(() => {
+  const index = new Map<string, NonNullable<SpatialNarrativeProjection["activities"]>[number]>();
+  for (const activity of props.activities || []) if (!index.has(activity.target)) index.set(activity.target, activity);
+  return index;
+});
+const forcedNodeSet = computed(() => new Set(props.forcedNodeIds || []));
+const comparedNodeSet = computed(() => new Set(props.comparedNodeIds || []));
+const liveNodeSet = computed(() => new Set(props.liveNodeIds || []));
+const ICONS: Record<string, Component> = {
+  chapter: BookMarked, scene: Clapperboard, character: UserRound, branch: GitFork,
+  review: BadgeCheck, canon: Landmark, promise: Sparkles, "reader-question": CircleHelp,
+  project: Orbit, "story-architecture": Waypoints, "word-budget": Scale, style: Fingerprint,
+  world: Landmark, location: MapPinned, draft: FilePenLine, "formal-prose": BookOpenText,
+};
 
 const labeledNodeIds = computed(() => {
   const accepted = new Set<string>();
@@ -60,15 +80,14 @@ function nodePriority(node: SpatialNarrativeNode): number {
 }
 
 function isPinned(node: SpatialNarrativeNode): boolean {
-  const sceneCount = visible.value.filter((item) => (item.creative_kind || item.type) === "scene").length;
   return node.node_id === props.selectedNodeId
     || node.node_id === props.focusNodeId
     || node.node_id === props.navigationNodeId
-    || Boolean(props.forcedNodeIds?.includes(node.node_id))
+    || forcedNodeSet.value.has(node.node_id)
     || node.status === "current"
     || node.status === "blocked"
     || node.type === "chapter"
-    || (node.type === "scene" && sceneCount <= 28);
+    || (node.type === "scene" && visibleSceneCount.value <= 28);
 }
 
 function isTypographic(node: SpatialNarrativeNode): boolean {
@@ -181,35 +200,17 @@ function nodeMetaFor(node: SpatialNarrativeNode): string {
 }
 
 function iconFor(node: SpatialNarrativeNode): Component {
-  const icons: Record<string, Component> = {
-    chapter: BookMarked,
-    scene: Clapperboard,
-    character: UserRound,
-    branch: GitFork,
-    review: BadgeCheck,
-    canon: Landmark,
-    promise: Sparkles,
-    "reader-question": CircleHelp,
-    project: Orbit,
-    "story-architecture": Waypoints,
-    "word-budget": Scale,
-    style: Fingerprint,
-    world: Landmark,
-    location: MapPinned,
-    draft: FilePenLine,
-    "formal-prose": BookOpenText,
-  };
-  return icons[node.type] || Orbit;
+  return ICONS[node.type] || Orbit;
 }
 
 function motionClass(node: SpatialNarrativeNode): Record<string, boolean> {
-  const event = props.motionEvents?.find((item) => item.node_id === node.node_id);
+  const event = motionByNode.value.get(node.node_id);
   if (!event) return {};
   return { [`motion-${event.type}`]: true };
 }
 
 function activityClass(node: SpatialNarrativeNode): Record<string, boolean> {
-  const activity = props.activities?.find((item) => item.target === node.source_id || item.target === node.node_id);
+  const activity = activityByNode.value.get(node.source_id) || activityByNode.value.get(node.node_id);
   if (!activity) return {};
   return {
     "activity-running": ["active", "running"].includes(activity.status),
@@ -221,7 +222,7 @@ function overviewClass(node: SpatialNarrativeNode): Record<string, boolean> {
   // Nodes remain rendered and keyboard-accessible in the global overview.
   // Only text below the legibility threshold is suppressed; it returns as the
   // camera enters a readable local segment.
-  const forced = Boolean(props.showAllLabels || props.forcedNodeIds?.includes(node.node_id) || node.node_id === props.navigationNodeId);
+  const forced = Boolean(props.showAllLabels || forcedNodeSet.value.has(node.node_id) || node.node_id === props.navigationNodeId);
   return {
     overview: isOverview(node) && !forced,
     "forced-label": forced,
@@ -245,7 +246,7 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       v-for="node in visible"
       :key="node.node_id"
       class="orrery-v3-node"
-      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeIds?.includes(node.node_id), 'heat-active': Boolean(heatLens), 'creative-live-active': liveNodeIds?.includes(node.node_id), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
+      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeSet.has(node.node_id), 'heat-active': Boolean(heatLens), 'creative-live-active': liveNodeSet.has(node.node_id), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
       :data-status="node.status"
       :data-lod="lodFor(node)"
       :data-completion="node.completion_state"

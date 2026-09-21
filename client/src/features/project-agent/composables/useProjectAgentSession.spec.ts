@@ -43,6 +43,15 @@ describe("useProjectAgentSession", () => {
     expect(agent.activity.value?.statusLabel).toBe("后台正在持续完成长期目标");
     publish?.({ event: "project_agent.goal.progress", cursor: 7, data: { current_route: "scene-development", tasks_completed: 4 } });
     expect(agent.activity.value?.statusLabel).toBe("正在推进正文创作 · 已完成 4 项");
+    publish?.({ event: "project_agent.goal.progress", cursor: 7, data: {
+      current_route: "scene-development",
+      tasks_completed: 5,
+      chapter_update: {
+        chapter_id: "chapter_0001",
+        author_summary: { irreversible_change: "林澈决定公开那封信" },
+      },
+    } });
+    expect(agent.activity.value?.statusLabel).toBe("第 1 章完成 · 林澈决定公开那封信");
     publish?.({ event: "project_agent.goal.terminal", cursor: 8, data: { status: "complete" } });
     expect(agent.activity.value?.statusLabel).toBe("长期目标已完成，正在复核交付");
     publish?.({ event: "project_agent.goal.followup.started", cursor: 9, data: {} });
@@ -150,6 +159,82 @@ describe("useProjectAgentSession", () => {
     expect(agent!.sessions.value.map((item) => item.session_id)).toEqual([second.session_id, first.session_id]);
     expect(agent!.session.value?.project_root).toBe(second.project_root);
     expect(onSessionOpened).toHaveBeenCalledWith(second);
+    wrapper.unmount();
+  });
+
+  it("opens an explicitly requested older conversation even when it is absent from the recent list", async () => {
+    const recent = session([]);
+    const older = { ...session([]), session_id: "project-agent-older", project_root: "C:/Works/older", title: "旧作品会话" };
+    const readSession = vi.fn(async (id: string) => id === older.session_id ? older : recent);
+    const client = fakeClient({
+      listSessions: vi.fn(async () => ({ items: [recent] })),
+      readSession,
+    });
+    const { wrapper, agent } = mountSession(client);
+
+    await agent.load(older.session_id);
+
+    expect(readSession).toHaveBeenCalledWith(older.session_id);
+    expect(agent.session.value?.session_id).toBe(older.session_id);
+    expect(agent.session.value?.project_root).toBe(older.project_root);
+    wrapper.unmount();
+  });
+
+  it("lists history without binding an old work behind the new-conversation chooser", async () => {
+    const recent = session([]);
+    const client = fakeClient({
+      listSessions: vi.fn(async () => ({ items: [recent] })),
+      readSession: vi.fn(async () => recent),
+    });
+    const { wrapper, agent } = mountSession(client);
+
+    await agent.load("", false);
+
+    expect(agent.sessions.value).toHaveLength(1);
+    expect(agent.session.value).toBeNull();
+    expect(client.readSession).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("keeps the last selected conversation when earlier reads finish late", async () => {
+    const first = session([]);
+    const second = { ...session([]), session_id: "project-agent-2", project_root: "C:/Works/other" };
+    let resolveFirst!: (value: ProjectAgentSession) => void;
+    let resolveSecond!: (value: ProjectAgentSession) => void;
+    const readSession = vi.fn((id: string) => new Promise<ProjectAgentSession>((resolve) => {
+      if (id === first.session_id) resolveFirst = resolve;
+      else resolveSecond = resolve;
+    }));
+    const { wrapper, agent } = mountSession(fakeClient({ readSession }));
+
+    const openingFirst = agent.openSession(first.session_id);
+    const openingSecond = agent.openSession(second.session_id);
+    resolveSecond(second);
+    await openingSecond;
+    resolveFirst(first);
+    await openingFirst;
+
+    expect(agent.session.value?.session_id).toBe(second.session_id);
+    expect(agent.session.value?.project_root).toBe(second.project_root);
+    wrapper.unmount();
+  });
+
+  it("does not replace a newly created conversation with a late history list", async () => {
+    const created = { ...session([]), session_id: "project-agent-new" };
+    const resolveLists: Array<(value: { items: ProjectAgentSession[] }) => void> = [];
+    const client = fakeClient({
+      listSessions: vi.fn(() => new Promise<{ items: ProjectAgentSession[] }>((resolve) => { resolveLists.push(resolve); })),
+      createSession: vi.fn(async () => created),
+    });
+    const { wrapper, agent } = mountSession(client);
+
+    const loading = agent.load("", false);
+    await agent.createSession();
+    resolveLists.forEach((resolve) => resolve({ items: [session([])] }));
+    await loading;
+
+    expect(agent.session.value?.session_id).toBe(created.session_id);
+    expect(agent.sessions.value.map((item) => item.session_id)).toEqual([created.session_id]);
     wrapper.unmount();
   });
 

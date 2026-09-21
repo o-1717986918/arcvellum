@@ -185,6 +185,7 @@ describe("Project Agent bridge protocol", () => {
 				work_id: workId,
 				operation: "start",
 				objective: "完成两章并形成可交付正文",
+				stop_after_formal_units: 2,
 			}), { stopReason: "toolUse" }),
 			fauxAssistantMessage("长期目标已经开始，后台会持续推进。"),
 		]);
@@ -214,7 +215,11 @@ describe("Project Agent bridge protocol", () => {
 
 		expect(result.status).toBe("completed");
 		expect(calls.map((item) => item.name)).toEqual(["workspace_catalog", "project_goal_manage"]);
-		expect(calls[1].arguments).toMatchObject({ work_id: workId, operation: "start" });
+		expect(calls[1].arguments).toMatchObject({
+			work_id: workId,
+			operation: "start",
+			stop_after_formal_units: 2,
+		});
 	});
 
 	it("fails closed for a mismatched tool result", async () => {

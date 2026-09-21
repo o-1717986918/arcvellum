@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { StageAnchor } from "@/features/orrery/engine/parallaxRenderer";
+import { creativeProgressionPositions } from "@/features/orrery/layout/creativeProgressionLayout";
 import type { CreativeProgressionModel, CreativeProgressionStage } from "@/features/orrery/model/creativeProgression";
 
 const props = defineProps<{
@@ -8,6 +9,23 @@ const props = defineProps<{
   anchors: Record<string, StageAnchor>;
 }>();
 const emit = defineEmits<{ focus: [nodeId: string] }>();
+const layerElement = ref<HTMLElement | null>(null);
+const stageWidth = ref(1024);
+let resizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  const updateWidth = () => {
+    const width = layerElement.value?.getBoundingClientRect().width;
+    if (width) stageWidth.value = width;
+  };
+  updateWidth();
+  if (typeof ResizeObserver !== "undefined" && layerElement.value) {
+    resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(layerElement.value);
+  }
+});
+
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 const stagePoints = computed(() => {
   const provisional = props.progression.stages.map((stage) => {
@@ -22,16 +40,12 @@ const stagePoints = computed(() => {
   const available = provisional.filter((point): point is typeof point & { x: number; y: number } => point.x !== null && point.y !== null);
   const centerX = available.length ? available.reduce((sum, point) => sum + point.x, 0) / available.length : 420;
   const centerY = available.length ? available.reduce((sum, point) => sum + point.y, 0) / available.length : 260;
-  const spread = Math.max(126, Math.min(174, window.innerWidth * 0.105));
-  const middle = (provisional.length - 1) / 2;
-  const routeCenterX = Math.max(360, Math.min(window.innerWidth - 320, centerX));
-  const routeY = Math.max(82, Math.min(148, centerY - 190));
+  const positions = creativeProgressionPositions(provisional.length, stageWidth.value, centerX, centerY);
   return provisional.map((point, index) => {
-    const arcOffset = index - middle;
     return {
       stage: point.stage,
-      x: routeCenterX + arcOffset * spread,
-      y: routeY + Math.cos(arcOffset * .8) * 14,
+      x: positions[index].x,
+      y: positions[index].y,
       visible: point.visible || point.x === null,
     };
   });
@@ -57,7 +71,7 @@ function focusStage(stage: CreativeProgressionStage): void {
 </script>
 
 <template>
-  <div class="creative-progression-layer" aria-label="创作进阶星链">
+  <div ref="layerElement" class="creative-progression-layer" aria-label="创作进阶星链">
     <svg class="creative-progression-links" aria-hidden="true">
       <defs>
         <linearGradient id="creative-progression-flow" x1="0" x2="1" y1="0" y2="0">

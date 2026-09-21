@@ -20,7 +20,7 @@ import { asList, asRecord, describeGate, labelFor } from "@/services/presentatio
 import { readCreativeRuntime } from "@/services/runtimePreference";
 
 const props = defineProps<{ projection: SpatialNarrativeProjection | null; dashboard: Record<string, unknown> | null; choices: Record<string, unknown>[]; delivery: Record<string, unknown> | null; progress: ProjectProgress | null; prose: Record<string, unknown>[] }>();
-const emit = defineEmits<{ advance: []; inspectTask: []; openReader: []; readNode: [node: SpatialNarrativeProjection["nodes"][number]]; focusNode: [nodeId: string]; choose: [choice: Record<string, unknown>] }>();
+const emit = defineEmits<{ advance: []; inspectTask: []; openReader: []; readNode: [node: SpatialNarrativeProjection["nodes"][number]]; focusNode: [nodeId: string]; choose: [choice: Record<string, unknown>]; openWorkspace: [kind: Exclude<SpatialWindowKind, "node">] }>();
 const windows = useSpatialWindowsStore();
 const app = useAppStore();
 const formalChars = computed(() => Number(props.projection?.summary.formal_prose_chars || 0));
@@ -184,7 +184,13 @@ function relationLabel(type: string): string {
 function runNodeAction(action: NodeActionDescriptor, node: SpatialNarrativeNode): void {
   dispatchConstellationAction(action, node, {
     focus: (nodeId) => emit("focusNode", nodeId),
-    openWorkspace: (kind) => windows.openInstrument(kind),
+    openWorkspace: (kind) => {
+      if (kind === "reader") {
+        windows.openInstrument("reader");
+        return;
+      }
+      emit("openWorkspace", kind);
+    },
     advance: () => emit("advance"),
     read: (target) => emit("readNode", target),
   });

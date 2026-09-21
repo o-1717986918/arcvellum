@@ -365,6 +365,7 @@ function projectToolDefinition(name: string): {
 				Type.Literal("start"), Type.Literal("pause"), Type.Literal("resume"), Type.Literal("recover"),
 			]),
 			objective: Type.Optional(Type.String({ maxLength: 8000 })),
+			stop_after_formal_units: Type.Optional(Type.Integer({ minimum: 0, maximum: 100000 })),
 		}),
 	};
 	throw new Error(`unsupported Project Agent tool: ${name}`);

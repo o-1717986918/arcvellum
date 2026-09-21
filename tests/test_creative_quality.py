@@ -71,20 +71,37 @@ class CreativeQualityProfileTests(unittest.TestCase):
             any(item["rule"] == "mechanical-contrast-frame" for item in gate["blocking"])
         )
 
+    def test_not_anymore_contrast_variant_is_detected(self):
+        gate = style_lint_gate("载体上的灰色灯亮起来，不再是等待，而是读取。")
+
+        self.assertEqual(gate["status"], "blocking")
+        self.assertTrue(
+            any(item["rule"] == "mechanical-contrast-frame" for item in gate["blocking"])
+        )
+
+    def test_did_not_continue_contrast_variant_is_detected(self):
+        gate = style_lint_gate("他没有再往终端上推，而是拉开抽屉取出短接缆。")
+
+        self.assertEqual(gate["status"], "blocking")
+        self.assertTrue(
+            any(item["rule"] == "mechanical-contrast-frame" for item in gate["blocking"])
+        )
+
     def test_candidate_language_gate_combines_punctuation_and_style_evidence(self):
         profile = default_creative_quality_profile()
-        text = "\n".join([f"——第{index}项不是误差，而是既定结果。" for index in range(20)])
+        text = "\n".join([f"『第{index}项不是误差，而是既定结果。』" for index in range(20)])
 
         gate = candidate_language_gate(text, profile=profile, scope="scene_0001")
 
         self.assertEqual(gate["status"], "blocking")
         categories = {item["category"] for item in gate["blocking"]}
         self.assertEqual(categories, {"punctuation", "style"})
-        self.assertTrue(any(item["rule"] == "dash-overuse" for item in gate["blocking"]))
+        self.assertTrue(any(item["rule"] == "corner-quotes-in-horizontal-prose" for item in gate["blocking"]))
         self.assertTrue(any(item["rule"] == "mechanical-contrast-frame" for item in gate["blocking"]))
 
     def test_comma_overload_reports_multiple_sentences_in_one_repair_batch(self):
         profile = default_creative_quality_profile()
+        profile["thresholds"]["comma_overload_min_chars"] = 20
         text = (
             "他核对名单，又检查封条，还问了值班人，记下交接时间，最后把记录压在桌角。"
             "她关上窗户，收起钥匙，清点文件，记下时间，再去通知门外的人。"
@@ -99,6 +116,32 @@ class CreativeQualityProfileTests(unittest.TestCase):
         message = style_lint_gate_message(gate, max_items=12)
         self.assertIn("他核对名单", message)
         self.assertIn("她关上窗户", message)
+
+    def test_layered_medium_sentence_is_not_split_only_for_four_commas(self):
+        profile = default_creative_quality_profile()
+        text = "他推开门，看见灯还亮着，又把窗帘拉开，便将钥匙放回桌面，等里面的人先说话。"
+
+        gate = style_lint_gate(text, profile=profile)
+
+        self.assertFalse(
+            any(
+                item["rule"] == "comma-overload-in-sentence"
+                for item in gate["blocking"]
+            )
+        )
+
+    def test_local_short_sentence_run_is_reported_even_when_global_average_is_safe(self):
+        profile = default_creative_quality_profile()
+        text = (
+            "他沿着河岸走了很久，直到远处的灯在雾里连成一条缓慢移动的线。"
+            "岸边堆着白天卸下的旧木料，潮气沿着断裂的纹路慢慢往里渗。"
+            "门开了。人没来。灯还亮。水在响。"
+            "他把湿透的信放到桌上，等纸上的字迹一点点重新显出来。"
+        )
+
+        issues = lint_punctuation(text, profile=profile)
+
+        self.assertTrue(any(item.rule == "staccato-period-overuse" for item in issues))
 
     def test_scene_preflight_preserves_each_style_finding_as_a_repair_issue(self):
         lint = {

@@ -9,15 +9,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker, write_agent_tasks
 from literary_engineering_studio_engine.foundation.resources import engine_root
 from literary_engineering_studio_engine.foundation.schema_aliases import STYLE_EVAL_SCHEMA
 from .lab import active_project_style
 from .mount import mount_style_profile_version
-from .review import (
-    prepare_style_semantic_review,
-    style_review_machine_values,
-)
+from .review import style_review_machine_values, style_review_paths
+from .text import source_content_digest
 from .version import build_style_profile_version
 
 
@@ -130,11 +127,18 @@ def _materialize_curated_profile(root: Path) -> Path:
     profile_text = _template_text(template / "profile.md")
     preset_text = _template_text(template / "preset.yaml")
 
-    training = corpus / "0001-arcvellum-editorial-training.md"
+    training = corpus / "0001-user-reference-corpus.md"
     holdout = holdout_dir / "0001-arcvellum-editorial-holdout.md"
     training.write_text(training_text + "\n", encoding="utf-8")
     holdout.write_text(holdout_text + "\n", encoding="utf-8")
-    (profile / "style-profile.md").write_text(profile_text + "\n", encoding="utf-8")
+    (profile / "style-profile.md").write_text(
+        profile_text
+        + "\n\n## 完整参考语料\n\n"
+        + "以下二十五个单元按 R01—R25 的顺序完整保留；先按上文索引选择机制，再读对应单元。\n\n"
+        + training_text
+        + "\n",
+        encoding="utf-8",
+    )
     (profile / "style_prompt.md").write_text(prompt_text + "\n", encoding="utf-8")
     (profile / "preset.yaml").write_text(preset_text + "\n", encoding="utf-8")
     (profile / "style_metrics.json").write_text(
@@ -157,42 +161,14 @@ def _materialize_curated_profile(root: Path) -> Path:
                 "writer_session_id": "studio:writer:curated-default-style",
                 "provider": "arcvellum-editorial-curation",
                 "preset_id": DEFAULT_STYLE_PRESET_ID,
-                "source": "bundled-project-original",
+                "source": "bundled-user-reference-corpus-plus-original-editorial-synthesis",
             }
         ),
         encoding="utf-8",
     )
-    _complete_prompt_task(root, profile)
     _materialize_evaluation(root, profile, holdout, candidate_text)
     _complete_semantic_review(root, profile)
     return profile
-
-
-def _complete_prompt_task(root: Path, profile: Path) -> None:
-    task = profile / "style_prompt.agent_tasks.md"
-    write_agent_tasks(
-        task,
-        title="内置清简叙事提示词策展",
-        root=root,
-        source_paths=[
-            profile / "style-profile.md",
-            profile / "style_metrics.json",
-            profile / "preset.yaml",
-        ],
-        tasks=[
-            (
-                "核验内置提示词",
-                "核验 prompt 覆盖叙述距离、句法节奏、标点、意象、心理行为、对白、AI 腔控制和输出自检。",
-            )
-        ],
-        notes=["这是随版本发布并经编辑策展的项目原创默认资产。"],
-    )
-    write_agent_completion_marker(
-        task,
-        root=root,
-        handled_by="arcvellum-editorial-curation",
-        notes=["Bundled default prompt accepted by project editorial review."],
-    )
 
 
 def _materialize_evaluation(
@@ -204,25 +180,6 @@ def _materialize_evaluation(
     evaluation = profile / "evaluation_results" / "formal"
     candidate = evaluation / "platform_agent_candidate.md"
     candidate.write_text(candidate_text + "\n", encoding="utf-8")
-    task = evaluation / "platform_agent_candidate.agent_tasks.md"
-    write_agent_tasks(
-        task,
-        title="内置清简叙事评测候选",
-        root=root,
-        source_paths=[profile / "style_prompt.md", root / "project.yaml"],
-        tasks=[
-            (
-                "核验独立候选",
-                "确认候选遵守清晰、具体、克制和自然节奏，并且没有复制 holdout 表达。",
-            )
-        ],
-        notes=["评测候选与 holdout 分离；本默认资产不追求特定作者相似度。"],
-    )
-    write_agent_completion_marker(
-        task,
-        root=root,
-        handled_by="arcvellum-default-style-evaluator",
-    )
     prompt = profile / "style_prompt.md"
     reference_sha = _sha256(holdout)
     generation = {
@@ -267,11 +224,7 @@ def _materialize_evaluation(
 
 
 def _complete_semantic_review(root: Path, profile: Path) -> None:
-    paths = prepare_style_semantic_review(
-        root,
-        profile,
-        target_id=DEFAULT_STYLE_TARGET_ID,
-    )
+    paths = style_review_paths(profile)
     paths.review_markdown.write_text(
         "# 文风工程独立语义审查\n\n"
         "- 结论：`pass`\n\n"
@@ -279,28 +232,25 @@ def _complete_semantic_review(root: Path, profile: Path) -> None:
         "提示词把清楚、流畅、朴素落实为可执行的叙述距离、句法、细节、标点和行为因果规则。\n\n"
         "## 有效性与文学可用性\n\n"
         "正向生成机制明确，禁区数量受控，适合作为可被题材文风替换的中文基础层。\n\n"
-        "## 原创性边界\n\n"
-        "资产由项目原创编写，不复现任何单一作者的表达指纹。\n\n"
+        "## 来源与复用边界\n\n"
+        "提示词、留出样例和评测候选由项目原创编写；训练语料是用户提供并声明为公版或原创的完整参考集。模型面向的语料不混入来源和权利说明，只按叙事机制分类使用。\n\n"
         "## 证据限制\n\n"
         "本评测验证通用文学可用性，不主张特定作者相似度或覆盖所有题材。\n",
         encoding="utf-8",
     )
-    review = json.loads(paths.review_json.read_text(encoding="utf-8"))
-    review.update(
-        {
+    review = {
             "status": "complete",
             "verdict": "pass",
             "summary": "默认文风可执行、低复制风险，并为题材化替换保留空间。",
             "findings": [],
             "required_changes": [],
             "effectiveness_assessment": "正向机制覆盖清晰度、细节选择、叙述距离、句法节奏与行为因果。",
-            "copy_risk_assessment": "项目原创提示词和样例不依赖特定作者连续表达。",
+            "copy_risk_assessment": "完整语料只作叙事机制证据，并明确禁止拼贴、续写、复用专名或连续表达。",
             "evidence_limitations": [
                 "未对单一作者相似度进行训练或主张。",
                 "具体题材仍应由用户挂载更合适的项目文风。",
             ],
         }
-    )
     review.update(
         style_review_machine_values(
             root,
@@ -310,11 +260,6 @@ def _complete_semantic_review(root: Path, profile: Path) -> None:
         )
     )
     paths.review_json.write_text(_json_text(review), encoding="utf-8")
-    write_agent_completion_marker(
-        paths.task,
-        root=root,
-        handled_by="arcvellum-independent-editorial-review",
-    )
 
 
 def _style_session(training: Path, holdout: Path, profile: Path) -> dict[str, object]:
@@ -343,15 +288,24 @@ def _style_session(training: Path, holdout: Path, profile: Path) -> dict[str, ob
 
 
 def _source_row(group: str, path: Path, text: str, profile: Path) -> dict[str, object]:
+    training = group == "training"
     return {
-        "identity": f"arcvellum-{group}/project-original",
-        "work_id": f"arcvellum-{group}",
-        "source_id": "project-original",
-        "content_sha256": _text_sha(text),
+        "identity": (
+            "user-reference/public-domain-or-original-corpus"
+            if training
+            else "arcvellum-holdout/project-original"
+        ),
+        "work_id": "user-reference-corpus" if training else "arcvellum-holdout",
+        "source_id": "user-supplied-reference-corpus" if training else "project-original",
+        "content_sha256": source_content_digest(text),
         "path": path.relative_to(profile).as_posix(),
         "rights": {
-            "mode": "project-original",
-            "declaration": "Original ArcVellum editorial sample bundled for the default style preset.",
+            "mode": "user-supplied" if training else "project-original",
+            "declaration": (
+                "User supplied the corpus and declared its contents public-domain or original; provenance is kept outside model-facing prose."
+                if training
+                else "Original ArcVellum editorial holdout, kept outside generation context."
+            ),
         },
     }
 
@@ -387,7 +341,7 @@ def _corpus_manifest(training: Path, holdout: Path, profile: Path) -> str:
     return (
         "schema: arcvellum/builtin-style-corpus/v1\n"
         f"preset_id: {DEFAULT_STYLE_PRESET_ID}\n"
-        "source_mode: project-original\n"
+        "source_mode: user-supplied-public-domain-or-original\n"
         "training:\n"
         f"  - path: {training.relative_to(profile).as_posix()}\n"
         f"    sha256: {_sha256(training)}\n"

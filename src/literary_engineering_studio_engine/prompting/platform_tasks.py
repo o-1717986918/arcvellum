@@ -314,7 +314,7 @@ def write_platform_scene_generation_task(
             ),
             (
                 "执行生成前文风标准",
-                """在写候选正文前，先核对 prompt manifest 顶层与 generation_standards 中的 style_mount_snapshot 完全一致，再依据这个 exact style_id/version_id/content_hash/prompt_sha256/digest 对应的 style prompt 建立本场景文风执行策略：叙述距离、句法/段落节奏、意象/感官系统、心理呈现、对白密度与语气、标点停顿节奏。不得自行改读另一个文风版本。该策略只用于指导写作，不得作为分析、自检表或工作流痕迹写入候选正文。""",
+                """在写候选正文前，先核对 prompt manifest 顶层与 generation_standards 中的 style_mount_snapshot 完全一致，再依据这个 exact style_id/version_id/content_hash/prompt_sha256/digest 对应的 style prompt 建立本场景文风执行策略。策略必须从现有 scene、character、reader experience、narrative rhythm、scene bridge 和相邻场景上下文中确定：本场由谁的欲望与代价驱动；以行动、对白、感知、判断或环境中的哪一种材料为主；采用什么叙述距离与句法/段落节奏；怎样区别于邻场的动作链和信息进入方式；结尾落在决定、关系变化、事实后果、认识修正还是未完成动作。随后直接按策略生成，不得自行改读另一个文风版本，也不得把策略作为分析、自检表、风格卡或工作流痕迹写入候选正文。违禁表达、反规避和中文标点仍须在生成时执行，并接受后续 Style Lint 与 AgentReview 核验；抽象软约束不得留给审查阶段统一润色。""",
             ),
             (
                 "执行生成前字数预算标准",

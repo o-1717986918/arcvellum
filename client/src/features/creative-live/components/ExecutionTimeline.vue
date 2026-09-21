@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Activity } from "lucide-vue-next";
 import type { CreativeActivity } from "../types";
+import { activityMessage, activityTitle, hasTechnicalDetail } from "../creativePresentation";
 
 defineProps<{ items?: CreativeActivity[] }>();
 
@@ -15,7 +16,7 @@ function eventTime(value: string): string {
     <header><Activity :size="13" /><strong>推进轨迹</strong></header>
     <ol v-if="items?.length">
       <li v-for="item in items.slice(-6).reverse()" :key="item.event_id">
-        <i></i><div><strong>{{ item.title || '创作状态更新' }}</strong><small>{{ item.message || '作品继续推进。' }}</small></div><time>{{ eventTime(item.at) }}</time>
+        <i></i><div><strong>{{ activityTitle(item) }}</strong><small>{{ activityMessage(item) }}</small><details v-if="hasTechnicalDetail(item)"><summary>查看技术详情</summary><code>{{ item.message }}</code></details></div><time>{{ eventTime(item.at) }}</time>
       </li>
     </ol>
     <p v-else>领取创作任务后，这里会出现真实的推进记录。</p>

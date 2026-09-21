@@ -81,7 +81,7 @@ def build_agent_style_prompt(
 def _system_prompt() -> str:
     return f"""You are a literary style prompt engineering agent.
 
-Convert style profile evidence into an LLM-facing style constraint prompt. The output must be JSON using style_prompt.v1, and `prompt_markdown` must be directly usable as a generation prompt. {STYLE_PROMPT_LENGTH_RULE} {STYLE_PROMPT_QUALITY_RULE} Use a core-ban plus density-gate model: mechanical contrast frames are not reasonable rhetoric and must not be authorized as reusable sentence templates; extract their narrative function instead. Cliche phrase families, organ-rotation, generic placeholders, simile dependency, and dash-heavy cadence are soft-density risks with an approximately 2% narrative-unit threshold."""
+Convert style profile evidence into an LLM-facing style constraint prompt. The output must be JSON using style_prompt.v1, and `prompt_markdown` must be directly usable as a generation prompt. {STYLE_PROMPT_LENGTH_RULE} {STYLE_PROMPT_QUALITY_RULE} Use a core-ban plus density-gate model: mechanical contrast frames are not reasonable rhetoric and must not be authorized as reusable sentence templates; extract their narrative function instead. Cliche phrase families, organ-rotation, generic placeholders, simile dependency, and dash-heavy cadence are soft-density risks with an approximately 2% narrative-unit threshold. Treat exact quantities separately. Default dynamic quantities to omission and preserve one only when the character needs that precision, it changes the immediate choice, fuzzing it would break causality, the story later verifies or pays off that exact value, and the same pressure has not already been quantified. Missing one test or uncertainty means remove the precision; ordinary elapsed time is not payoff. Technical scenes, countdowns, scene-contract readings, and reference-corpus numbers receive no exemption. Preserve age, date, and rule identifiers only when identification or continuity requires them. Express this as a semantic generation rule, never as a digit count, regex, or numeric-density gate."""
 
 
 def _user_prompt(profile_path: Path, metrics_path: Path, manifest_path: Path) -> str:
@@ -135,14 +135,18 @@ def _dry_style_prompt(source_paths: list[str]) -> dict[str, object]:
 
 ## 降低 AI 腔约束
 
-机械“不是……而是……”及“不是……——是……”等变体是核心禁区，不判断为合理修辞。若 profile 证据显示作者常做否定纠偏，只提取其认知二分、信息反转、讽刺顿挫或叙述者纠偏功能，落笔时改为动作、事实顺序、信息差或直接陈述。器官轮岗、万能占位、比喻依赖、抽象总结、模板转折和景物强制同步按约 2% 叙事单元密度门禁控制，孤立出现需复核，密集出现必须修订。不要反复写“他知道、她明白、他意识到”；把认知变化转化为选择、停顿、回避、误判、语气和潜台词。转折来自因果、场景物理变化、目标冲突或伏笔回响。结尾落在动作结果、关系变化、信息揭示或悬念上。
+机械“不是……而是……”“不再是……而是……”“没有再……而是……”及“不是……——是……”等变体是核心禁区，不判断为合理修辞。若 profile 证据显示作者常做否定纠偏，只提取其认知二分、信息反转、讽刺顿挫或叙述者纠偏功能，落笔时改为动作、事实顺序、信息差或直接陈述。器官轮岗、万能占位、比喻依赖、抽象总结、模板转折和景物强制同步按约 2% 叙事单元密度门禁控制，孤立出现需复核，密集出现必须修订。不要反复写“他知道、她明白、他意识到”；把认知变化转化为选择、停顿、回避、误判、语气和潜台词。转折来自因果、场景物理变化、目标冲突或伏笔回响。结尾落在动作结果、关系变化、信息揭示或悬念上。
+
+## 数字与量化细节
+
+精确数字默认不用，五项缺一即去掉精度，拿不准也按不必要处理。动态数值只有在人物确需精度、数值改变当前选择、模糊会破坏因果、后文按该值验证或兑现且同一压力尚未量化时保留；普通时间流逝不算兑现。年龄、日期、规则编号只在身份或连续性确有需要时保留。技术、灾难、悬疑、倒计时、场景合同中的设备读数和参考语料数字都不能豁免。量词中的数词同样须过五项；电话、灯闪、普通陈设和日常动作不计件、计次或计秒，应改写为陈设状态、动作受阻、反复无果、停顿或取用结果。交稿前扫描阿拉伯数字、中文数词和序数；不能说明它改变谁的选择，就围绕动作、状态变化、人物可感范围或后果逐句重写，不批量删除，也不机械换成模糊量词。
 
 ## 禁止倾向
 
 - 不摘抄连续原文。
 - 不把风格简化为高频词堆叠。
 - 不把候选事实写成已确认事实。
-- 不用密集句号、长逗号链、机械“不是……而是……”或破折号堆叠伪装文学性。
+- 不用密集句号、长逗号链、机械“不是……而是……”“不再是……而是……”“没有再……而是……”或破折号堆叠伪装文学性。
 - 不把“不是 A——是 B”式否定纠偏结构交给脚本批量删除；语义改写必须逐句复核。
 - 不用 AI 腔、对称排比或抽象总结制造廉价文学感。
 - 不为了贴近文风牺牲可读性、人物逻辑和剧情因果。
@@ -153,14 +157,15 @@ def _dry_style_prompt(source_paths: list[str]) -> dict[str, object]:
 - 是否把句法、标点、段落推进和意象调度落实成可执行约束。
 - 是否让意象服务主题和人物状态。
 - 是否避免 AI 腔、机械对照句式、破折号转折变体，并让解释性心理标签、器官轮岗、万能占位、比喻依赖和金句化收束低于约 2% 密度门禁。
+- 是否只保留有选择、连续性、辨认或后续兑现功能的精确数字，并对其余量化表达作了语义重写。
 - 是否避免过短导致约束不足，或过长导致模型抓不住优先级。
 - 是否保留人工确认点。
 """
     return {
         "schema": "literary-engineering-workbench/style-prompt-agent/v1",
         "prompt_markdown": prompt,
-        "constraints": ["叙述距离", "句法节奏", "意象调度", "心理呈现", "对白动作"],
-        "avoid": ["原文摘抄", "高频词机械堆叠", "候选事实冒充 canon"],
+        "constraints": ["叙述距离", "句法节奏", "意象调度", "心理呈现", "对白动作", "量化细节"],
+        "avoid": ["原文摘抄", "高频词机械堆叠", "候选事实冒充 canon", "装饰性精确数字"],
         "source_paths": source_paths,
         "evaluation_plan": ["back-translation", "outline-expansion", "blind-review"],
         "risk_notes": ["dry-run prompt is a contract sample; use http-chat for model-authored refinement."],

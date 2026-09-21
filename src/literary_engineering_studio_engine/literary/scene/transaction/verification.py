@@ -7,7 +7,7 @@ import re
 
 from ....foundation.draft_text import count_delivery_chinese_content_chars
 from ...style.anti_ai import style_lint_gate
-from ...style.punctuation import lint_punctuation
+from ...style.punctuation import lint_punctuation, punctuation_issue_is_hard
 from .contracts import (
     CreativeResult,
     IssueSeverity,
@@ -26,20 +26,6 @@ _PROCESS_TRACE_PATTERNS = (
     ),
     re.compile(r"(?:task[_ -]?complete|completion[_ -]?marker|expected_outputs)", re.IGNORECASE),
 )
-
-_HARD_PUNCTUATION_RULES = frozenset(
-    {
-        "ascii-punctuation-in-chinese",
-        "ascii-ellipsis",
-        "ascii-dash",
-        "western-quotes-in-chinese",
-        "corner-quotes-in-horizontal-prose",
-        "punctuation-spacing",
-        "repeated-terminal-punctuation",
-        "repeated-punctuation",
-    }
-)
-
 
 def verify_creative_result(
     brief: SceneBrief,
@@ -229,7 +215,7 @@ def _append_language_issues(
     for finding in lint_punctuation(prose, profile=profile, scope=scope):
         severity = (
             IssueSeverity.HARD
-            if finding.rule in _HARD_PUNCTUATION_RULES
+            if punctuation_issue_is_hard(finding)
             else IssueSeverity.WARNING
         )
         issues.append(

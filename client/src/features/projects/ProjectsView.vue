@@ -7,6 +7,7 @@ import { DesktopBridge } from "@/services/desktopBridge";
 import { friendlyError, useAppStore } from "@/stores/app";
 import { labelFor } from "@/services/presentation";
 import type { DemoBundleSummary } from "@/types/api";
+import { TARGET_LENGTH_MIN, TARGET_LENGTH_STEP } from "./projectCreation";
 
 const store = useAppStore();
 const router = useRouter();
@@ -216,7 +217,7 @@ async function copyDemoForWriting(): Promise<void> {
               <option value="novel">长篇小说</option><option value="script">剧本</option><option value="pseudo-record">伪记录</option>
             </select>
           </label>
-          <label class="field"><span>目标规模 · {{ targetLabel }}</span><input v-model.number="createForm.target_length" type="number" min="1000" step="10000" /></label>
+          <label class="field"><span>目标规模 · {{ targetLabel }}</span><input v-model.number="createForm.target_length" type="number" :min="TARGET_LENGTH_MIN" :step="TARGET_LENGTH_STEP" /></label>
         </div>
         <div class="field-row">
           <label class="field"><span>目标章数（可选）</span><input v-model.number="createForm.target_chapters" type="number" min="0" step="1" placeholder="自动规划" /></label>

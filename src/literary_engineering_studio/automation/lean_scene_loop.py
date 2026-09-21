@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import hashlib
 import json
 from pathlib import Path
 from typing import Protocol
@@ -22,6 +21,9 @@ from literary_engineering_studio_engine.public.literary import (
 from ..application.chapter_checkpoint import (
     ChapterCheckpointService,
     ProjectPlanBundle,
+    checkpoint_digest,
+    checkpoint_revision_digest_from_revisions,
+    checkpoint_path,
     scene_outcome_from_transaction,
 )
 from ..application.scene_transaction import SceneTransactionService
@@ -42,6 +44,10 @@ class RevisionRuntime(Protocol):
     ) -> CreativeResult: ...
 
 
+class RollingPlanner(Protocol):
+    def expand_next_window(self, project_root: Path) -> bool: ...
+
+
 @dataclass(frozen=True)
 class LeanSceneStep:
     action: str
@@ -53,6 +59,8 @@ class LeanSceneStep:
     route_ready: bool = False
     waiting_human: bool = False
     blocked: bool = False
+    chapter_id: str = ""
+    author_summary: dict[str, object] | None = None
 
 
 class LeanSceneRunCoordinator:
@@ -65,6 +73,7 @@ class LeanSceneRunCoordinator:
         repository,
         revision_runtime: RevisionRuntime,
         checkpoints: ChapterCheckpointService | None = None,
+        planning: RollingPlanner | None = None,
     ) -> None:
         self.project = project_root.expanduser().resolve()
         self.data_root = data_root.expanduser().resolve()
@@ -72,6 +81,7 @@ class LeanSceneRunCoordinator:
         self.repository = repository
         self.revision_runtime = revision_runtime
         self.checkpoints = checkpoints or ChapterCheckpointService()
+        self.planning = planning
 
     def advance_one(
         self,
@@ -84,6 +94,8 @@ class LeanSceneRunCoordinator:
             return checkpoint
         scene_id = self._next_scene_id()
         if not scene_id:
+            if self.planning is not None and self.planning.expand_next_window(self.project):
+                return LeanSceneStep("planning-window", message="next chapter scene window prepared")
             return LeanSceneStep("route-ready", route_ready=True, message="all scenes committed")
         transaction = self.repository.latest_for_scene(str(self.project), scene_id)
         if transaction is None:
@@ -189,69 +201,93 @@ class LeanSceneRunCoordinator:
         return tuple(scene_id for _, scene_id in sorted(rows, key=lambda item: (item[0], item[1])))
 
     def _next_chapter_checkpoint(self) -> LeanSceneStep | None:
+        for chapter_id, scene_ids in self._chapter_scene_ids().items():
+            transactions = self._committed_chapter_transactions(scene_ids)
+            if transactions is None:
+                continue
+            facts = load_chapter_planning_facts(self.project, chapter_id)
+            revisions = [
+                item.commit_receipt.committed_revision
+                for item in transactions
+                if item is not None and item.commit_receipt is not None
+            ]
+            revision_digest = checkpoint_revision_digest_from_revisions(revisions)
+            digest = checkpoint_digest(transactions, facts)
+            target = checkpoint_path(self.data_root, self.project, chapter_id)
+            current = _read_json(target)
+            if current.get("committed_revision_digest") == revision_digest:
+                if current.get("status") == "revision-required":
+                    return self._existing_blocked_checkpoint(chapter_id, current)
+                continue
+            return self._evaluate_chapter_checkpoint(
+                chapter_id, facts, transactions, target, digest, revision_digest,
+            )
+        return None
+
+    def _chapter_scene_ids(self) -> dict[str, list[str]]:
         chapters: dict[str, list[str]] = {}
         for scene_id in self._ordered_scene_ids():
             facts = load_scene_facts(self.project / "scenes" / f"{scene_id}.yaml")
             chapters.setdefault(facts.chapter_id or "unassigned", []).append(scene_id)
-        for chapter_id, scene_ids in chapters.items():
-            transactions = [
-                self.repository.latest_for_scene(str(self.project), item)
-                for item in scene_ids
-            ]
-            if not transactions or any(
-                item is None or item.status is not SceneTransactionStatus.COMMITTED
-                for item in transactions
-            ):
-                continue
-            facts = load_chapter_planning_facts(self.project, chapter_id)
-            digest = _checkpoint_digest(transactions, facts)
-            target = self._checkpoint_path(chapter_id)
-            current = _read_json(target)
-            if current.get("input_digest") == digest:
-                if current.get("status") == "revision-required":
-                    return LeanSceneStep(
-                        "chapter-blocked",
-                        message=str(current.get("summary") or "chapter checkpoint requires revision"),
-                        blocked=True,
-                    )
-                continue
-            bundle = ProjectPlanBundle(
-                chapter=facts,
-                story_spine_ref="plot/story_architecture.candidate.json",
-                word_budget_ref="plot/word_budget/word_budget.json",
-                scene_inventory_ref="plot/candidates/scenes/word_budget_scene_inventory.md",
-                obligation_ref=f"plot/chapter_obligations/{chapter_id}.json",
-            )
-            outcomes = tuple(
-                scene_outcome_from_transaction(
-                    item,
-                    rhythm=self._chapter_rhythm(item),
-                )
-                for item in transactions
-                if item is not None
-            )
-            evaluation = self.checkpoints.evaluate(bundle, outcomes)
-            summary = (
-                evaluation.revision_plan[0]
-                if evaluation.revision_plan
-                else "chapter checkpoint passed"
-            )
-            payload = {
-                "schema": "arcvellum/chapter-checkpoint/v2",
-                "input_digest": digest,
-                **asdict(evaluation),
-                "summary": summary,
-            }
-            atomic_write_text(
-                target,
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            )
-            return LeanSceneStep(
-                "chapter-checkpoint",
-                message=summary,
-                blocked=not evaluation.may_continue,
-            )
-        return None
+        return chapters
+
+    def _committed_chapter_transactions(self, scene_ids: list[str]):
+        transactions = [
+            self.repository.latest_for_scene(str(self.project), scene_id)
+            for scene_id in scene_ids
+        ]
+        if not transactions or any(
+            item is None or item.status is not SceneTransactionStatus.COMMITTED
+            for item in transactions
+        ):
+            return None
+        return transactions
+
+    @staticmethod
+    def _existing_blocked_checkpoint(chapter_id: str, current: dict[str, object]) -> LeanSceneStep:
+        summary = current.get("author_summary")
+        return LeanSceneStep(
+            "chapter-blocked",
+            message=str(current.get("summary") or "chapter checkpoint requires revision"),
+            blocked=True,
+            chapter_id=chapter_id,
+            author_summary=summary if isinstance(summary, dict) else None,
+        )
+
+    def _evaluate_chapter_checkpoint(
+        self, chapter_id, facts, transactions, target, digest, revision_digest,
+    ) -> LeanSceneStep:
+        bundle = ProjectPlanBundle(
+            chapter=facts,
+            story_spine_ref="plot/story_architecture.candidate.json",
+            word_budget_ref="plot/word_budget/word_budget.json",
+            scene_inventory_ref="plot/candidates/scenes/word_budget_scene_inventory.md",
+            obligation_ref=f"plot/chapter_obligations/{chapter_id}.json",
+        )
+        outcomes = tuple(
+            scene_outcome_from_transaction(item, rhythm=self._chapter_rhythm(item))
+            for item in transactions
+            if item is not None
+        )
+        evaluation = self.checkpoints.evaluate(bundle, outcomes)
+        summary = evaluation.revision_plan[0] if evaluation.revision_plan else str(
+            evaluation.author_summary.get("irreversible_change") or "本章已完成并通过检查点"
+        )
+        payload = {
+            "schema": "arcvellum/chapter-checkpoint/v2",
+            "input_digest": digest,
+            "committed_revision_digest": revision_digest,
+            **asdict(evaluation),
+            "summary": summary,
+        }
+        atomic_write_text(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        return LeanSceneStep(
+            "chapter-checkpoint",
+            message=summary,
+            blocked=not evaluation.may_continue,
+            chapter_id=chapter_id,
+            author_summary=evaluation.author_summary,
+        )
 
     def _chapter_rhythm(self, transaction) -> dict[str, object]:
         mapping = load_scene_mapping(
@@ -268,16 +304,6 @@ class LeanSceneRunCoordinator:
             "reader_effect": transaction.brief.rhythm.reader_effect,
             "tension_curve": dict(curve) if isinstance(curve, dict) else {},
         }
-
-    def _checkpoint_path(self, chapter_id: str) -> Path:
-        project_id = hashlib.sha256(str(self.project).encode("utf-8")).hexdigest()[:16]
-        return (
-            self.data_root
-            / "lean-kernel"
-            / project_id
-            / "chapter-checkpoints"
-            / f"{chapter_id}.json"
-        )
 
     @staticmethod
     def _step(action, transaction, *, committed: bool = False) -> LeanSceneStep:
@@ -300,18 +326,6 @@ class LeanSceneRunCoordinator:
             message=message,
             blocked=True,
         )
-
-
-def _checkpoint_digest(transactions, facts) -> str:
-    values = [
-        item.commit_receipt.committed_revision
-        for item in transactions
-        if item is not None and item.commit_receipt is not None
-    ]
-    values.append(
-        json.dumps(asdict(facts), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    )
-    return hashlib.sha256("\n".join(values).encode("utf-8")).hexdigest()
 
 
 def _read_json(path: Path) -> dict:

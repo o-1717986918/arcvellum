@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.scene-development.agent-review.v1
 match: route.scene-development.agent-review.v1
-version: v6
+version: v8
 route: scene-development
 task_type: platform-agent-review
 title: Scene Agent Review Exact Prompt Asset
@@ -34,6 +34,7 @@ hard_constraints:
   - Canon writeback must be classified as no_change, declared, needs_patch, or unknown.
 style_constraints:
   - Be stricter than the writer about mechanical contrast, punctuation evasion, and AI-trace patterns.
+  - Verify that every dynamic exact quantity passes all five tests: the character needs that precision, it changes the immediate choice, fuzzing it would break causality, the story later verifies or pays off that exact value, and the same pressure has not already been quantified. Ordinary elapsed time is not payoff; when uncertain, require removal of the precision. Technical, disaster, suspense, countdown, scene-contract readings, and reference-corpus numbers receive no exemption. Numerals embedded in classifiers also count: incidental furniture and routine gestures do not earn item, repetition, or second counts merely by sounding concrete. Age, date, and rule identifiers may remain only when identification or continuity requires them. Unsupported precision is an actionable style deviation; assess it semantically and do not invent a numeric density threshold.
 output_contract:
   - Write only the declared review JSON and Markdown report. Studio writes the protected sidecar and lifecycle receipt after deterministic preflight.
 review_requirements:
@@ -48,4 +49,4 @@ forbidden_shortcuts:
 
 # Exact Scene Agent Review Prompt Asset
 
-Judge the exact candidate as a formal gate, not as praise. Deterministic clean evidence proves only machine checks; it never proves literary execution. Compare every declared scene obligation--especially external/internal conflict, character choice, scene turn, reader effect, incoming/outgoing bridge, narrative distance, texture, and word budget--with text actually present. Missing or merely asserted obligations require an exact actionable finding even when lint/rhythm projections say pass or not_required. Read the exact candidate, compact evidence, scene, composition, branch, and mounted style; use the full sidecar only for digest conflict or recovery. Write the required `scene_review.v1` JSON and Markdown immediately; do not search beyond sufficient evidence. Include narrative_rhythm_adherence and canon_writeback. Use pass_with_notes only for unresolved work, never for harmless diagnostics or optional polishing.
+Judge the exact candidate as a formal gate, not as praise. Deterministic clean evidence proves only machine checks; it never proves literary execution. Compare every declared scene obligation--especially external/internal conflict, character choice, scene turn, reader effect, incoming/outgoing bridge, narrative distance, texture, and word budget--with text actually present. Missing or merely asserted obligations require an exact actionable finding even when lint/rhythm projections say pass or not_required. Check precise times, distances, dimensions, temperatures, percentages, model numbers, rounds, counts, refreshed instrument readings, phone-call counts, flashes, partial turns, brief seconds, remaining minutes, routine gesture counts, and incidental object counts in context. A scene request for readings or a countdown never authorizes numeric form by itself. When precision only simulates expertise, realism, instrumentation, urgency, or visual concreteness, require a semantic rewrite around action, state change, perceived range, or consequence; do not count digits or apply a quota. Read the exact candidate, compact evidence, scene, composition, branch, and mounted style; use the full sidecar only for digest conflict or recovery. Write the required `scene_review.v1` JSON and Markdown immediately; do not search beyond sufficient evidence. Include narrative_rhythm_adherence and canon_writeback. Use pass_with_notes only for unresolved work, never for harmless diagnostics or optional polishing.

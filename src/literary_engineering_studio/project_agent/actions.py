@@ -3,19 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from hashlib import sha256
-import json
 from pathlib import Path
 from typing import Any
 
 from ..application.failures import present_run
+from .action_receipts import action_receipt, goal_result
 from .contracts import ProjectAgentActionDependencies
 from .scope import work_reference
 
 
 RecordDirection = Callable[..., dict[str, Any]]
-
-
 def dependencies_from_actions(
     *,
     record_direction: RecordDirection,
@@ -30,6 +27,7 @@ def dependencies_from_actions(
     launch_worker: Callable[[dict[str, str]], dict[str, Any]] | None = None,
     invalidate_project: Callable[[Path, str], Any] | None = None,
     create_project: Callable[..., dict[str, Any]] | None = None,
+    goal_evidence: Callable[[Path], Mapping[str, Any]] | None = None,
 ) -> ProjectAgentActionDependencies:
     settings = config or {}
 
@@ -44,7 +42,7 @@ def dependencies_from_actions(
             "operation": "record_direction",
             "record": record,
             "digest": str(result.get("digest") or ""),
-            "receipt": _receipt("record_direction", record),
+            "receipt": action_receipt("record_direction", record),
         }
 
     def control_creation(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -52,10 +50,7 @@ def dependencies_from_actions(
         if operation not in {"start", "pause", "resume"}:
             raise ValueError("creation_control operation must be start, pause, or resume")
         if operation == "start":
-            policy = autopilot.policy(root).get("policy", {})
-            if str(policy.get("literary_kernel") or "") != "lean-v2":
-                autopilot.migrate_kernel(root, target_kernel="lean-v2")
-            run = autopilot.start(root)
+            run = _start_creation(root, autopilot)
         else:
             status = autopilot.status(root)
             active = status.get("run") if isinstance(status.get("run"), dict) else {}
@@ -77,7 +72,7 @@ def dependencies_from_actions(
                 or ""
             ),
             "run": presented,
-            "receipt": _receipt(f"creation_{operation}", presented),
+            "receipt": action_receipt(f"creation_{operation}", presented),
         }
 
     def resolve_decision(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -105,7 +100,7 @@ def dependencies_from_actions(
             "operation": "update_quality",
             "profile": saved,
             "effect": "future-candidates",
-            "receipt": _receipt("update_quality", saved),
+            "receipt": action_receipt("update_quality", saved),
         }
 
     def update_rhythm(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -128,7 +123,7 @@ def dependencies_from_actions(
             "operation": "update_rhythm",
             "plan": saved,
             "effect": "future-candidates",
-            "receipt": _receipt("update_rhythm", saved),
+            "receipt": action_receipt("update_rhythm", saved),
         }
 
     def mount_style(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -157,7 +152,7 @@ def dependencies_from_actions(
             "version_id": identity["version_id"],
             "status": result.get("status"),
             "impact": result.get("impact") or {},
-            "receipt": _receipt("mount_style", result),
+            "receipt": action_receipt("mount_style", result),
         }
 
     def promote_asset(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -179,7 +174,7 @@ def dependencies_from_actions(
             "candidate_id": candidate_id,
             "job_id": str(job.get("job_id") or ""),
             "status": str(job.get("status") or "queued"),
-            "receipt": _receipt("promote_asset", job),
+            "receipt": action_receipt("promote_asset", job),
         }
 
     def create_work(_root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -203,11 +198,11 @@ def dependencies_from_actions(
             "ok": True,
             "operation": "create_project",
             "work": reference,
-            "receipt": _receipt("create_project", reference),
+            "receipt": action_receipt("create_project", reference),
         }
 
     def manage_goal(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
-        return _manage_goal(
+        result = _manage_goal(
             root,
             arguments,
             record_direction=record_direction,
@@ -215,6 +210,18 @@ def dependencies_from_actions(
             current_choices=current_choices,
             settings=settings,
         )
+        if result.get("ok") is not True or goal_evidence is None:
+            return result
+        reader = goal_evidence(root)
+        units = reader.get("units") if isinstance(reader.get("units"), list) else []
+        return {
+            **result,
+            "formal_work": {
+                "source": "reader-manifest",
+                "unit_count": int(reader.get("unit_count") or len(units)),
+                "chinese_content_chars": int(reader.get("total_chinese_content_chars") or 0),
+            },
+        }
 
     return ProjectAgentActionDependencies(
         save_direction,
@@ -266,7 +273,17 @@ def _resolve_decision(
         "consumed": bool(result.get("consumed")),
         "effect": result.get("effect") or {},
     }
-    return {**value, "receipt": _receipt("resolve_decision", result)}
+    return {**value, "receipt": action_receipt("resolve_decision", result)}
+
+
+def _start_creation(root: Path, autopilot: Any) -> dict[str, Any]:
+    kernel = str(autopilot.policy(root).get("policy", {}).get("literary_kernel") or "")
+    historical = _has_unmigrated_formal_work(root)
+    if kernel == "lean-v2" and historical:
+        raise ValueError("历史正式正文尚未转换为轻事务回执；请先完成作品迁移，不能直接按轻内核续跑。")
+    if kernel != "lean-v2" and not historical:
+        autopilot.migrate_kernel(root, target_kernel="lean-v2")
+    return autopilot.start(root)
 
 
 def _find_pending_choice(available: Mapping[str, Any], choice_id: str) -> dict[str, Any]:
@@ -288,25 +305,6 @@ def _decision_option_ids(choice: Mapping[str, Any]) -> set[str]:
     }
 
 
-def _goal_result(root: Path, operation: str, run: Mapping[str, Any], status: str) -> dict[str, Any]:
-    presented = present_run(dict(run))
-    value = {
-        "ok": True,
-        "operation": f"goal_{operation}",
-        "status": status,
-        "work_id": work_reference(root)["work_id"],
-        "run": presented,
-    }
-    receipt: dict[str, Any] = _receipt(f"goal_{operation}", value)
-    receipt.update(
-        run_id=str(presented.get("run_id") or ""),
-        run_status=str(presented.get("status") or ""),
-        work_id=str(value["work_id"]),
-        goal_status=status,
-    )
-    return {**value, "receipt": receipt}
-
-
 def _manage_goal(
     root: Path,
     arguments: Mapping[str, Any],
@@ -321,7 +319,15 @@ def _manage_goal(
         raise ValueError("project_goal_manage operation must be start, pause, resume, or recover")
     objective = str(arguments.get("objective") or "").strip()
     if operation == "start":
-        return _start_goal(root, objective, record_direction, autopilot)
+        return _start_goal(
+            root,
+            objective,
+            record_direction,
+            autopilot,
+            stop_after_formal_units=max(
+                0, int(arguments.get("stop_after_formal_units") or 0)
+            ),
+        )
     return _continue_goal(
         root,
         operation,
@@ -338,16 +344,27 @@ def _start_goal(
     objective: str,
     record_direction: RecordDirection,
     autopilot: Any,
+    *,
+    stop_after_formal_units: int = 0,
 ) -> Mapping[str, Any]:
     if not objective:
         raise ValueError("project_goal_manage start requires an objective")
     record_direction(root, f"长期创作目标：{objective}", actor="project-agent")
     current = autopilot.policy(root).get("policy", {})
+    if str(current.get("literary_kernel") or "") == "lean-v2" and _has_unmigrated_formal_work(root):
+        raise ValueError("历史正式正文尚未转换为轻事务回执；请先完成作品迁移，不能直接按轻内核续跑。")
+    kernel = (
+        "strict-v1"
+        if _has_unmigrated_formal_work(root)
+        and str(current.get("literary_kernel") or "") != "lean-v2"
+        else "lean-v2"
+    )
     goal_policy = {
         "mode": "full_auto",
-        "literary_kernel": "lean-v2",
+        "literary_kernel": kernel,
         "scene_execution_mode": str(current.get("scene_execution_mode") or "standard"),
         "release_policy": "delegated",
+        "limits": {"stop_after_formal_units": stop_after_formal_units},
     }
     start_goal = getattr(autopilot, "start_managed_goal", None)
     if callable(start_goal):
@@ -355,7 +372,7 @@ def _start_goal(
     else:
         autopilot.save_policy(root, goal_policy)
         run = autopilot.start(root)
-    return _goal_result(root, "start", run, "accepted")
+    return goal_result(root, "start", run, "accepted")
 
 
 def _continue_goal(
@@ -377,19 +394,19 @@ def _continue_goal(
         raise ValueError("project_goal_manage requires an existing long-running goal")
     if operation == "pause":
         paused = autopilot.pause(run_id, reason="project-agent-goal-paused")
-        return _goal_result(root, operation, paused, "accepted")
+        return goal_result(root, operation, paused, "accepted")
     run_status = str(run.get("status") or "")
     if run_status == "complete":
-        return _goal_result(root, operation, run, "already_complete")
+        return goal_result(root, operation, run, "already_complete")
     if run_status == "running":
-        return _goal_result(root, operation, run, "already_running")
+        return goal_result(root, operation, run, "already_running")
     if not _is_managed_goal(run):
         return _non_goal_result(root, operation, objective, record_direction, autopilot)
     pending = _pending_choices(settings, root, current_choices) if operation == "recover" else []
     if pending:
         return _decision_required_result(root, pending)
     resumed = autopilot.resume(run_id, authorized=True)
-    return _goal_result(root, operation, resumed, "accepted")
+    return goal_result(root, operation, resumed, "accepted")
 
 
 def _non_goal_result(
@@ -443,9 +460,23 @@ def _is_managed_goal(run: Mapping[str, Any]) -> bool:
     policy = run.get("policy") if isinstance(run.get("policy"), Mapping) else {}
     return (
         str(policy.get("mode") or run.get("mode") or "") == "full_auto"
-        and str(policy.get("literary_kernel") or "") == "lean-v2"
+        and str(policy.get("literary_kernel") or "") in {"lean-v2", "strict-v1"}
         and str(policy.get("release_policy") or "") == "delegated"
     )
+
+
+def _has_unmigrated_formal_work(root: Path) -> bool:
+    receipts = root / "workflow" / "scene_commits"
+    for draft in (root / "drafts" / "scenes").glob("*.md"):
+        if not (receipts / f"{draft.stem}.json").is_file():
+            return True
+    if (root / "plot" / "lean_project_plan.json").is_file():
+        return False
+    for scene in (root / "scenes").glob("scene_*.yaml"):
+        for line in scene.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if line.startswith("scene_id:") and line.partition(":")[2].strip().strip("\"'"):
+                return True
+    return False
 
 
 def _resume_after_decision(autopilot: Any, root: Path, result: Mapping[str, Any]) -> None:
@@ -459,14 +490,6 @@ def _resume_after_decision(autopilot: Any, root: Path, result: Mapping[str, Any]
         "lean-scene-approval-required",
     }:
         autopilot.resume(str(run.get("run_id") or ""), authorized=True)
-
-
-def _receipt(operation: str, value: Mapping[str, Any]) -> dict[str, str]:
-    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
-    return {
-        "operation": operation,
-        "token": sha256(payload.encode("utf-8")).hexdigest()[:20],
-    }
 
 
 __all__ = ["dependencies_from_actions"]

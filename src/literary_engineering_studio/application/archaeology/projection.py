@@ -42,6 +42,7 @@ def project_archaeology_workbench(
     if not manifest:
         raise FileNotFoundError(f"Project Archaeology import not found: {work_id}")
     state = _workflow_states(root).get(work_id, {})
+    lean_evidence = manifest.get("execution_mode") == "lean-evidence"
     paths = reconstruction_paths(import_dir.relative_to(root))
     aggregate = _read_relative(root, _aggregate_path(manifest))
     resolution = _read_relative(root, paths["resolution"])
@@ -53,8 +54,8 @@ def project_archaeology_workbench(
         "work_id": work_id,
         "title": str(manifest.get("title") or work_id),
         "mode": _mode_projection(str(manifest.get("mode") or "")),
-        "status": _state_projection(state),
-        "journey": _journey(import_dir, manifest, state, paths),
+        "status": _lean_state() if lean_evidence else _state_projection(state),
+        "journey": _lean_journey(manifest) if lean_evidence else _journey(import_dir, manifest, state, paths),
         "sources": _source_projection(manifest),
         "segmentation": _segmentation_projection(manifest),
         "entities": _entity_projection(aggregate, resolution),
@@ -80,7 +81,7 @@ def _catalog_item(
         "mode": _mode_projection(str(manifest.get("mode") or "")),
         "source_count": int(manifest.get("source_count") or 0),
         "chunk_count": len(manifest.get("chunks") or []),
-        "status": _state_projection(state),
+        "status": _lean_state() if manifest.get("execution_mode") == "lean-evidence" else _state_projection(state),
         "recovery": _import_recovery_projection(root, import_dir.name),
     }
 
@@ -348,12 +349,36 @@ def _state_projection(state: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _lean_state() -> dict[str, object]:
+    return {
+        "status": "ready",
+        "current_step": "source-evidence",
+        "next_action": "继续创作时会引用已保全的来源片段。",
+        "message": "来源原文已保全；没有待执行的旧式提取任务。",
+        "chunk_id": "",
+    }
+
+
+def _lean_journey(manifest: dict[str, object]) -> list[dict[str, object]]:
+    return [
+        {"id": "source", "label": "原文保全", "status": "complete", "count": int(manifest.get("source_count") or 0)},
+        {"id": "segments", "label": "证据分块", "status": "complete", "count": len(manifest.get("chunks") or [])},
+        {"id": "planning", "label": "创作时引用", "status": "ready", "count": 0},
+    ]
+
+
 def _mode_projection(mode: str) -> dict[str, str]:
     presentation = MODE_PRESENTATION.get(mode, {"label": mode, "intent": ""})
     return {"id": mode, **presentation}
 
 
 def _workflow_states(root: Path) -> dict[str, dict[str, object]]:
+    legacy_imports = [
+        path for path in _import_dirs(root)
+        if _read_json(path / "source_manifest.json").get("execution_mode") != "lean-evidence"
+    ]
+    if not legacy_imports:
+        return {}
     result = build_workflow_state(root, route="source-ingest")
     payload = _read_json(result.json_path)
     return {

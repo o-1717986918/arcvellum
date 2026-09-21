@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 
 from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_text
+from .lean_plan import normalize_rhythm_role
 from .materialization_parser import number
 
 
@@ -141,9 +142,15 @@ def render_scene_yaml(
         "function": yaml_text(scene["function"]),
         "information": json.dumps(information, ensure_ascii=False),
         "reader_question": yaml_text(chapter.get("reader_question", "")),
-        "promised_reward": yaml_text(chapter.get("promised_reward", "")),
+        # Chapter promises remain visible through chapter_ending_policy and the
+        # obligation asset.  The per-scene reader contract must describe only
+        # the event assigned to this scene; copying the whole chapter payoff
+        # here lets an earlier scene consume a later scene's unique turn.
+        "promised_reward": yaml_text(scene.get("obligation", "")),
         "withheld": json.dumps(_split_items(chapter.get("withheld_information", "")), ensure_ascii=False),
-        "payoff_or_delay": yaml_text(chapter.get("payoff_or_delay", "")),
+        "payoff_or_delay": yaml_text(
+            scene.get("consequence") or scene.get("setup_payoff_role", "")
+        ),
         "setup_payoff_role": yaml_text(scene["setup_payoff_role"]),
         "information_release": yaml_text(scene["information_release"]),
         "anti_summary_requirement": yaml_text(chapter.get("anti_summary_requirement", "")),
@@ -190,16 +197,7 @@ def repair_generated_rhythm_contracts(
 
 
 def rhythm_role(value: str, function: str) -> str:
-    normalized = value.strip().lower()
-    if normalized in {
-        "setup", "escalation", "climax", "payoff", "aftermath", "bridge", "transition"
-    }:
-        return normalized
-    if "consequence" in function.lower():
-        return "aftermath"
-    if "relationship" in function.lower():
-        return "bridge"
-    return "escalation"
+    return normalize_rhythm_role(value, function)
 
 
 def pace_for(role: str) -> str:

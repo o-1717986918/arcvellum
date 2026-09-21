@@ -49,9 +49,12 @@ export const useAppStore = defineStore("app", () => {
   let workspaceRefreshRoot = "";
   let modelCatalogAuthoritative = false;
 
-  const currentProject = computed(
-    () => projects.value.find((item) => item.path === currentProjectPath.value) || bootstrap.value?.project || null,
-  );
+  const currentProject = computed(() => {
+    const path = currentProjectPath.value;
+    if (!path) return null;
+    return projects.value.find((item) => item.path === path)
+      || (bootstrap.value?.project?.path === path ? bootstrap.value.project : null);
+  });
   const hasProject = computed(() => Boolean(currentProjectPath.value));
 
   async function initialize(): Promise<void> {
@@ -78,7 +81,7 @@ export const useAppStore = defineStore("app", () => {
     const response = await refreshProjectCatalog();
     const remembered = projects.value.some((item) => item.path === currentProjectPath.value);
     const preferred = remembered ? currentProjectPath.value : response.current_project || response.projects[0]?.path || "";
-    if (preferred) setCurrentProject(preferred, false);
+    setCurrentProject(preferred, false);
   }
 
   async function refreshProjectCatalog(): Promise<ProjectsResponse> {
@@ -89,7 +92,8 @@ export const useAppStore = defineStore("app", () => {
 
   function setCurrentProject(path: string, refresh = true): void {
     currentProjectPath.value = path;
-    localStorage.setItem("arcvellum.currentProject", path);
+    if (path) localStorage.setItem("arcvellum.currentProject", path);
+    else localStorage.removeItem("arcvellum.currentProject");
     stopProjectStreams();
     dashboard.value = null;
     library.value = null;

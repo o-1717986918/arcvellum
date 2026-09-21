@@ -333,6 +333,7 @@
 .delivery-actions { display: flex; gap: 9px; margin-top: 22px; }
 .delivery-hero .secondary-button { color: #dce8e4; background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.15); }
 .delivery-hero small { display: block; margin-top: 10px; color: #9fb3ac; }
+.delivery-readiness-note.blocked { color: color-mix(in srgb, var(--cinnabar-600) 82%, #fff); }
 .delivery-seal { display: grid; place-items: center; width: 154px; height: 154px; justify-self: center; color: #a1b5ae; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: inset 0 0 0 7px rgba(255,255,255,.025); }
 .delivery-seal.ready { color: #8fc5b3; border-color: rgba(90,159,136,.65); }
 .delivery-seal strong { font-family: var(--font-display); font-size: 18px; }

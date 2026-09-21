@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from literary_engineering_studio.application.scene_transaction import SceneTransactionService
 from literary_engineering_studio.automation.lean_scene_loop import LeanSceneRunCoordinator
@@ -34,6 +34,7 @@ from literary_engineering_studio_engine.literary.scene.transaction import (
     SceneDelta,
     SceneExecutionMode,
 )
+from literary_engineering_studio_engine.public.literary import lean_scene_readiness
 
 
 class _Runtime:
@@ -173,6 +174,26 @@ def _coordinator(root: Path, runtime: _Runtime):
 
 
 class LeanAutopilotLoopTests(unittest.TestCase):
+    def test_lean_claimed_run_does_not_create_legacy_steward(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "work"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: Smoke\n", encoding="utf-8")
+            store = JobStore(root / "studio.sqlite3")
+            policy = default_policy("full_auto", literary_kernel="lean-v2")
+            run = store.create_autopilot_run(
+                str(project), mode="full_auto", runtime="pi-worker", policy=policy,
+            )
+            service = AutopilotService({"application": {"data_root": str(root)}}, store)
+            service._advance_lean_route = MagicMock(return_value=True)
+            with patch(
+                "literary_engineering_studio.automation.controller.CreativeSteward",
+                side_effect=AssertionError("legacy steward called"),
+            ):
+                service._run_claimed(run["run_id"], threading.Event())
+            service._advance_lean_route.assert_called_once()
+
     def test_export_scene_dependency_accepts_exact_lean_commit_receipts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -197,15 +218,47 @@ class LeanAutopilotLoopTests(unittest.TestCase):
 
     def test_policy_defaults_to_strict_and_accepts_explicit_lean_mode(self):
         self.assertEqual(default_policy()["literary_kernel"], "strict-v1")
+        self.assertEqual(default_policy()["limits"]["stop_after_formal_units"], 0)
         policy = normalize_policy(
             {
                 "mode": "full_auto",
                 "literary_kernel": "lean-v2",
                 "scene_execution_mode": "draft",
+                "limits": {"stop_after_formal_units": 2},
             }
         )
         self.assertEqual(DelegationPolicy(policy).literary_kernel, "lean-v2")
         self.assertEqual(DelegationPolicy(policy).scene_execution_mode, "draft")
+        self.assertEqual(DelegationPolicy(policy).stop_after_formal_units, 2)
+
+    def test_claimed_loop_pauses_before_starting_work_past_formal_unit_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            commits = project / "workflow" / "scene_commits"
+            commits.mkdir(parents=True)
+            (commits / "scene_0001.json").write_text("{}\n", encoding="utf-8")
+            host = MagicMock()
+            policy_value = default_policy("full_auto", literary_kernel="lean-v2")
+            policy_value["limits"]["stop_after_formal_units"] = 1
+
+            ClaimedRunLoop(
+                host,
+                run_id="lean-checkpoint",
+                project=project,
+                policy=DelegationPolicy(policy_value),
+                steward=None,
+                stop=threading.Event(),
+                route_order=("scene-development",),
+                dependency_probe=lambda _project: False,
+            ).run()
+
+            host._pause_for.assert_called_once_with(
+                "lean-checkpoint",
+                "goal-scope-complete",
+                "已达到长期目标的正式单元检查点：1/1。",
+            )
+            host.runs.read_autopilot_run.assert_not_called()
+            host._advance_lean_scene.assert_not_called()
 
     def test_low_risk_scene_reaches_commit_and_chapter_checkpoint(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -231,6 +284,7 @@ class LeanAutopilotLoopTests(unittest.TestCase):
             self.assertEqual(runtime.creates, 1)
             self.assertEqual(runtime.reviews, 0)
             self.assertTrue((root / "drafts/scenes/scene_0001.md").is_file())
+            self.assertEqual(lean_scene_readiness(root, "scene_0001"), ("ready", ()))
             self.assertEqual(
                 len(list((root / ".studio").rglob("chapter_01.json"))),
                 1,
@@ -333,6 +387,67 @@ class LeanAutopilotLoopTests(unittest.TestCase):
         loop.run()
 
         host._advance_lean_scene.assert_called_once()
+        host._worker.assert_not_called()
+
+    def test_claimed_loop_dispatches_every_lean_route_without_legacy_worker(self):
+        host = MagicMock()
+        state = {"route_index": 0, "current_route": ""}
+        host.runs.read_autopilot_run.side_effect = lambda _run_id: dict(state)
+        routes = (
+            "source-ingest", "longform-planning", "style-engineering",
+            "character-and-world-assets", "scene-development",
+            "review-and-audit", "export-and-release",
+        )
+
+        def advance_route(_run_id, _project, _policy, cycle):
+            state["route_index"] = cycle.route_index + 1
+            return False
+
+        def advance_scene(_run_id, _project, _policy, cycle):
+            state["route_index"] = cycle.route_index + 1
+            return False
+
+        host._advance_lean_route.side_effect = advance_route
+        host._advance_lean_scene.side_effect = advance_scene
+        host._complete_release.return_value = True
+        policy_value = default_policy("full_auto")
+        policy_value["literary_kernel"] = "lean-v2"
+        ClaimedRunLoop(
+            host, run_id="lean-book", project=Path("project"),
+            policy=DelegationPolicy(policy_value), steward=MagicMock(),
+            stop=threading.Event(), route_order=routes,
+            dependency_probe=lambda _project: False,
+        ).run()
+
+        self.assertEqual(host._advance_lean_route.call_count, 6)
+        host._advance_lean_scene.assert_called_once()
+        host._complete_release.assert_called_once()
+        host._worker.assert_not_called()
+        host._resolve_proactive_choice.assert_not_called()
+
+    def test_legacy_task_id_cannot_reenter_dependency_resolver_on_lean_route(self):
+        host = MagicMock()
+        run = {
+            "route_index": 6,
+            "current_route": "scene-development",
+            "current_task_id": "scene-development-old-task",
+        }
+        host.runs.read_autopilot_run.return_value = run
+        host._advance_lean_route.return_value = True
+        policy_value = default_policy("full_auto")
+        policy_value["literary_kernel"] = "lean-v2"
+        ClaimedRunLoop(
+            host, run_id="lean-resume", project=Path("project"),
+            policy=DelegationPolicy(policy_value), steward=MagicMock(),
+            stop=threading.Event(),
+            route_order=(
+                "source-ingest", "longform-planning", "style-engineering",
+                "character-and-world-assets", "scene-development",
+                "review-and-audit", "export-and-release",
+            ),
+            dependency_probe=lambda _project: False,
+        ).run()
+        self.assertEqual(host._advance_lean_route.call_args.args[3].route, "export-and-release")
         host._worker.assert_not_called()
 
     def test_autopilot_host_records_commit_and_advances_ready_route(self):

@@ -22,7 +22,8 @@ def regression_guard(
         "word_count_min": _safe_int(payload.get("word_count_min")),
         "word_count_max": _safe_int(payload.get("word_count_max")),
         "style_rules": [
-            "每个完整句不超过三个逗号",
+            "逗号按语义层级使用；修订逗号链时重组句法，不按数量机械拆句",
+            "中等长度句承担主要叙述；连续短句只用于有意的压力、落点或转向",
             "不用破折号或生硬对照句式承接转折",
             "避免抽象总结词堆积，以动作、信息和选择承载新增篇幅",
         ] if active else [],

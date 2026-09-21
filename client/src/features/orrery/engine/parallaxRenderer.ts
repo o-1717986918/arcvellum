@@ -28,11 +28,9 @@ import {
 } from "./renderModel";
 import { drawStageScenery } from "./stageScenery";
 import { projectedPrimaryGroups } from "./primaryGroupFrames";
-
 const WORLD_WIDTH = NARRATIVE_STAGE.width;
 const WORLD_HEIGHT = NARRATIVE_STAGE.height;
 const ORIGIN = NARRATIVE_STAGE.origin;
-
 // Narrative facts and DOM labels stay on the work plane. Only atmosphere
 // receives differential motion, so a pan never separates a node from its label.
 const LAYER_DEPTH: Record<OrreryDepth, { far: number; mid: number; near: number }> = {
@@ -42,14 +40,12 @@ const LAYER_DEPTH: Record<OrreryDepth, { far: number; mid: number; near: number 
   balanced: { far: 0.64, mid: 1, near: 1.09 },
   flat: { far: 1, mid: 1, near: 1 },
 };
-
 export interface StageAnchor {
   x: number;
   y: number;
   visible: boolean;
   scale: number;
 }
-
 /** Coordinates the Pixi stage, camera and DOM anchor projection. */
 export class NarrativeParallaxRenderer {
   private readonly far = new Container();
@@ -61,9 +57,14 @@ export class NarrativeParallaxRenderer {
   private animation: CameraAnimation | null = null;
   private anchorListener: ((anchors: Record<string, StageAnchor>) => void) | null = null;
   private contextLostListener: (() => void) | null = null;
+  private contextRestoredListener: (() => void) | null = null;
   private lastViewport = "";
   private nextAnchorAt = 0;
   private nextAmbientAt = 0;
+  private denseScene = false;
+  private nodeById = new Map<string, SpatialNarrativeProjection["nodes"][number]>();
+  private viewportWidth = 0;
+  private viewportHeight = 0;
   private ambientMotionAvailable = false;
   private lastInteractionAt = 0;
   private palette: ScenePalette = DEFAULT_PALETTE;
@@ -73,22 +74,20 @@ export class NarrativeParallaxRenderer {
   private view: ParallaxView = { ...DEFAULT_PARALLAX_VIEW };
   private viewRefreshQueued = false;
   private detachOrbitInteraction: () => void;
-
   private readonly wakeRenderer = () => {
     this.lastInteractionAt = performance.now();
     if (document.visibilityState === "visible") this.app.ticker.start();
   };
-
   private readonly handleContextLost = (event: Event) => {
     event.preventDefault();
     this.animation = null;
     this.contextLostListener?.();
   };
-
   private readonly handleContextRestored = () => {
     if (this.projection && this.layout) this.update(this.projection, this.layout);
+    this.wakeRenderer();
+    this.contextRestoredListener?.();
   };
-
   private readonly handleVisibilityChange = () => {
     if (document.visibilityState === "hidden") this.app.ticker.stop();
     else {
@@ -98,7 +97,6 @@ export class NarrativeParallaxRenderer {
       this.emitAnchors(true);
     }
   };
-
   private constructor(
     private readonly host: HTMLElement,
     private readonly viewport: Viewport,
@@ -118,7 +116,6 @@ export class NarrativeParallaxRenderer {
       },
     });
   }
-
   static async create(host: HTMLElement): Promise<NarrativeParallaxRenderer> {
     const experience = readStageExperience();
     const app = new Application();
@@ -165,7 +162,6 @@ export class NarrativeParallaxRenderer {
     instance.handleVisibilityChange();
     return instance;
   }
-
   onAnchors(listener: (anchors: Record<string, StageAnchor>) => void): void {
     this.anchorListener = listener;
   }
@@ -174,8 +170,14 @@ export class NarrativeParallaxRenderer {
     this.contextLostListener = listener;
   }
 
+  onContextRestored(listener: () => void): void {
+    this.contextRestoredListener = listener;
+  }
+
   resize(width: number, height: number): void {
-    if (!width || !height) return;
+    if (!width || !height || (width === this.viewportWidth && height === this.viewportHeight)) return;
+    this.viewportWidth = width;
+    this.viewportHeight = height;
     this.viewport.resize(width, height, WORLD_WIDTH, WORLD_HEIGHT);
     this.sky.resize(width, height);
     this.emitAnchors(true);
@@ -184,11 +186,13 @@ export class NarrativeParallaxRenderer {
 
   update(projection: SpatialNarrativeProjection, layout: SpatialLayout): void {
     this.projection = projection;
+    this.nodeById = new Map(projection.nodes.map((node) => [node.node_id, node]));
+    this.denseScene = projection.nodes.length > 400;
     this.ambientMotionAvailable = hasAmbientNodeMotion(projection.nodes);
     this.layout = layout;
     this.experience = readStageExperience();
     this.palette = readPalette(this.host);
-    this.sky.setQuality(this.experience.quality !== "efficient");
+    this.sky.setQuality(!this.denseScene && this.experience.quality !== "efficient");
     this.clearLayers();
     drawStageScenery({
       layers: { far: this.far, mid: this.mid, near: this.near },
@@ -306,6 +310,7 @@ export class NarrativeParallaxRenderer {
     this.app.destroy(true, { children: true });
     this.anchorListener = null;
     this.contextLostListener = null;
+    this.contextRestoredListener = null;
   }
 
   private tick(deltaMs: number): void {
@@ -339,8 +344,11 @@ export class NarrativeParallaxRenderer {
       this.emitAnchors();
     }
     const idleFor = performance.now() - this.lastInteractionAt;
-    this.app.ticker.maxFPS = this.animation || idleFor < 750 ? 60 : 24;
-    if (this.projection && this.projection.nodes.length > 250 && !this.animation && idleFor > 900) {
+    this.app.ticker.maxFPS = this.animation || idleFor < 750
+      ? (this.denseScene ? 30 : 60)
+      : (this.denseScene ? 8 : this.experience.quality === "high" ? 24 : 12);
+    if (this.projection && this.projection.nodes.length > 250 && !this.animation && idleFor > 900
+      && this.effectiveMotion() !== "full") {
       this.app.ticker.stop();
       this.app.render();
     }
@@ -415,14 +423,14 @@ export class NarrativeParallaxRenderer {
     if (!this.anchorListener || !this.layout) return;
     const now = Date.now();
     if (!force && now < this.nextAnchorAt) return;
-    this.nextAnchorAt = now + 42;
+    this.nextAnchorAt = now + (this.denseScene ? 80 : 42);
     const rect = this.host.getBoundingClientRect();
     const anchors: Record<string, StageAnchor> = {};
-    const nodes = new Map(this.projection?.nodes.map((node) => [node.node_id, node]) || []);
+    const animateNodes = this.ambientMotionAvailable && this.effectiveMotion() === "full";
     for (const [nodeId, point] of this.layout.points) {
       const scene = this.projectPoint(point);
-      const node = nodes.get(nodeId);
-      const drift = node && this.effectiveMotion() === "full"
+      const node = this.nodeById.get(nodeId);
+      const drift = node && animateNodes
         ? ambientNodeOffset(node, this.elapsed / 1000)
         : { x: 0, y: 0 };
       const tide = node ? this.tideOffset(node, scene) : { x: 0, y: 0 };

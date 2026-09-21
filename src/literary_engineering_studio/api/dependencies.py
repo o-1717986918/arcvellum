@@ -17,8 +17,14 @@ from .routers.archaeology import ArchaeologyRouterDependencies
 from .routers.style_lab import StyleLabRouterDependencies
 
 
-def archaeology_router_dependencies() -> ArchaeologyRouterDependencies:
-    application = ArchaeologyApplicationService()
+def archaeology_router_dependencies(
+    kernel_for: Callable[[Path], str] | None = None,
+) -> ArchaeologyRouterDependencies:
+    from ..application.archaeology.import_service import ArchaeologyImportService
+
+    application = ArchaeologyApplicationService(
+        ArchaeologyImportService(kernel_for=kernel_for)
+    )
     return ArchaeologyRouterDependencies(
         options=application.options,
         catalog=application.catalog,

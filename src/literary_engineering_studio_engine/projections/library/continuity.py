@@ -19,6 +19,18 @@ from .common import (
 def _continuity_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:
     """Expose applied reader-question and promise/payoff ledgers as read-only records."""
 
+    projection_path = root / "workflow" / "continuity" / "current.json"
+    projection = read_json_file(projection_path)
+    return [
+        *_ledger_continuity_items(root, overrides),
+        *_projected_continuity_items(projection_path, projection, overrides),
+        *_identity_conflict_items(projection_path, projection, overrides),
+    ]
+
+
+def _ledger_continuity_items(
+    root: Path, overrides: dict[str, object],
+) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
     sources = [
         (root / "plot" / "reader_questions" / "ledger.json", "reader_questions", "读者问题账本", "reader_questions"),
@@ -30,27 +42,110 @@ def _continuity_items(root: Path, overrides: dict[str, object]) -> list[dict[str
         for index, value in enumerate(values[:160], start=1):
             if not isinstance(value, dict):
                 continue
-            record_id = str(value.get("id") or value.get("question_id") or value.get("promise_id") or f"{kind}_{index}")
-            status = str(value.get("status") or "open")
-            content = str(value.get("content") or value.get("summary") or value.get("question") or value.get("promise") or "尚未提供可读内容。")
-            item = {
-                "kind": "continuity",
-                "id": f"{kind}__{record_id}",
-                "title": content,
-                "subtitle": title,
-                "path": _rel(path, root),
-                "status": status,
-                "badges": ["读者问题" if kind == "reader_questions" else "承诺/兑现", status],
-                "excerpt": content,
-                "facts": [
-                    {"label": "状态", "value": status},
-                    {"label": "首次出现", "value": value.get("introduced_at") or value.get("created_at") or "未记录"},
-                    {"label": "最近推进", "value": value.get("last_advanced_at") or "未记录"},
-                    {"label": "预期兑现", "value": value.get("due_window") or value.get("target_window") or "未记录"},
-                    {"label": "正文证据", "value": _display_list_value(value.get("evidence")) or "未记录"},
-                ],
-            }
+            item = _ledger_continuity_item(root, path, title, kind, index, value)
             items.append(_apply_overrides(item, overrides))
+    return items
+
+
+def _ledger_continuity_item(root, path, title, kind, index, value) -> dict[str, object]:
+    record_id = str(_first_value(value, ("id", "question_id", "promise_id"), f"{kind}_{index}"))
+    status = str(value.get("status") or "open")
+    content = str(_first_value(value, ("content", "summary", "question", "promise"), "尚未提供可读内容。"))
+    return {
+        "kind": "continuity",
+        "id": f"{kind}__{record_id}",
+        "title": content,
+        "subtitle": title,
+        "path": _rel(path, root),
+        "status": status,
+        "badges": ["读者问题" if kind == "reader_questions" else "承诺/兑现", status],
+        "excerpt": content,
+        "facts": [
+            {"label": "状态", "value": status},
+            {"label": "首次出现", "value": _first_value(value, ("introduced_at", "created_at"), "未记录")},
+            {"label": "最近推进", "value": value.get("last_advanced_at") or "未记录"},
+            {"label": "预期兑现", "value": _first_value(value, ("due_window", "target_window"), "未记录")},
+            {"label": "正文证据", "value": _display_list_value(value.get("evidence")) or "未记录"},
+        ],
+    }
+
+
+def _first_value(value, keys, fallback):
+    for key in keys:
+        if result := value.get(key):
+            return result
+    return fallback
+
+
+def _projected_continuity_items(
+    projection_path: Path,
+    projection: dict[str, object],
+    overrides: dict[str, object],
+) -> list[dict[str, object]]:
+    projected = projection.get("entries") if isinstance(projection.get("entries"), list) else []
+    labels = {
+        "character_change": "人物状态变化",
+        "canon_candidate": "Canon 候选",
+        "continuity_change": "连续性变化",
+        "promise_update": "承诺推进",
+        "reader_question_update": "读者问题推进",
+        "new_asset_candidate": "新资产身份候选",
+    }
+    open_kinds = {"promise_update", "reader_question_update", "new_asset_candidate"}
+    items: list[dict[str, object]] = []
+    for index, value in enumerate(projected[:240], start=1):
+        if not isinstance(value, dict):
+            continue
+        kind = str(value.get("kind") or "continuity_change")
+        summary = str(value.get("summary") or "尚未提供可读内容。")
+        status = "open" if kind in open_kinds else "recorded"
+        item = {
+            "kind": "continuity",
+            "continuity_kind": kind,
+            "id": str(value.get("entry_id") or f"scene_delta_{index}"),
+            "title": summary,
+            "subtitle": labels.get(kind, "场景提交变化"),
+            "path": _rel(projection_path, root),
+            "status": status,
+            "badges": [labels.get(kind, kind), status],
+            "excerpt": summary,
+            "facts": [
+                {"label": "目标", "value": value.get("target_ref") or "未记录"},
+                {"label": "来源场景", "value": value.get("scene_id") or "未记录"},
+                {"label": "证据", "value": value.get("evidence") or "未记录"},
+            ],
+        }
+        items.append(_apply_overrides(item, overrides))
+    return items
+
+
+def _identity_conflict_items(
+    projection_path: Path,
+    projection: dict[str, object],
+    overrides: dict[str, object],
+) -> list[dict[str, object]]:
+    conflicts = projection.get("identity_conflicts") if isinstance(projection.get("identity_conflicts"), list) else []
+    items: list[dict[str, object]] = []
+    for index, value in enumerate(conflicts[:80], start=1):
+        if not isinstance(value, dict):
+            continue
+        target = str(value.get("target_ref") or "未命名身份")
+        item = {
+            "kind": "continuity",
+            "continuity_kind": "identity_conflict",
+            "id": f"identity_conflict_{index}",
+            "title": f"{target} 存在身份描述冲突",
+            "subtitle": "身份连续性待消歧",
+            "path": _rel(projection_path, root),
+            "status": "needs_identity_resolution",
+            "badges": ["身份冲突", "需消歧"],
+            "excerpt": _display_list_value(value.get("summaries")) or "同一身份引用出现了多个描述。",
+            "facts": [
+                {"label": "身份引用", "value": target},
+                {"label": "涉及场景", "value": _display_list_value(value.get("scene_ids")) or "未记录"},
+            ],
+        }
+        items.append(_apply_overrides(item, overrides))
     return items
 
 def _decision_items(root: Path, overrides: dict[str, object]) -> list[dict[str, object]]:

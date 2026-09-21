@@ -80,6 +80,8 @@ def _lean_scene_readiness(
     decision = str(receipt.get("review_decision") or "").lower()
     if decision == "pass":
         return "ready", ()
+    if decision == "deferred" and receipt.get("review_deferred_by_policy") is True:
+        return "ready", ()
     if decision in {"revise", "revision_needed"}:
         return "needs_revision", (f"lean scene review decision is {decision}",)
     return "blocked", (f"lean scene review decision is {decision or 'missing'}",)

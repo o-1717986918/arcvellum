@@ -5,6 +5,7 @@ import unittest
 
 from literary_engineering_studio_engine.literary.planning.materializer import (
     longform_materialization_status,
+    materialize_lean_window,
     materialize_longform_plan,
     planned_longform_outputs,
 )
@@ -15,6 +16,111 @@ from tests.longform_planning_support import (
 
 
 class LongformMaterializerTests(unittest.TestCase):
+
+    def test_lean_window_appends_without_legacy_reviews_or_overwriting_existing_scene(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "plot" / "lean_project_plan.json"
+            source.parent.mkdir(parents=True)
+            source.write_text('{"revision":1}', encoding="utf-8")
+            first = self._lean_scene(1, "chapter_0001")
+            initial = materialize_lean_window(
+                root,
+                scenes=[first],
+                obligations={},
+                sources=(source,),
+                outline_text="第一章提出问题，第二章改变代价。",
+            )
+            scene_path = initial.scene_paths[0]
+            original = scene_path.read_text(encoding="utf-8")
+            source.write_text('{"revision":2}', encoding="utf-8")
+            result = materialize_lean_window(
+                root,
+                scenes=[first, self._lean_scene(2, "chapter_0002")],
+                obligations={},
+                sources=(source,),
+                outline_text="新的章级安排不覆盖正式正文。",
+            )
+
+            self.assertEqual(len(result.scene_paths), 2)
+            self.assertEqual(scene_path.read_text(encoding="utf-8"), original)
+            self.assertTrue(longform_materialization_status(root)[0])
+            self.assertFalse((root / "reviews").exists())
+            self.assertEqual(
+                json.loads(result.manifest_path.read_text(encoding="utf-8"))["materialization_mode"],
+                "lean-window",
+            )
+
+    def test_lean_window_rejects_conflict_without_writing_new_scene(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "plot" / "lean_project_plan.json"
+            source.parent.mkdir(parents=True)
+            source.write_text("{}", encoding="utf-8")
+            first = self._lean_scene(1, "chapter_0001")
+            materialize_lean_window(root, scenes=[first], obligations={}, sources=(source,), outline_text="大纲")
+            scene_path = root / "scenes" / "scene_0001.yaml"
+            scene_path.write_text(
+                scene_path.read_text(encoding="utf-8").replace("word_count_target: 1000", "word_count_target: 999"),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
+                materialize_lean_window(
+                    root,
+                    scenes=[first, self._lean_scene(2, "chapter_0002")],
+                    obligations={},
+                    sources=(source,),
+                    outline_text="大纲",
+                )
+            self.assertFalse((root / "scenes" / "scene_0002.yaml").exists())
+
+    def test_lean_scene_reader_contract_keeps_chapter_payoff_out_of_local_event(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "plot" / "lean_project_plan.json"
+            source.parent.mkdir(parents=True)
+            source.write_text("{}", encoding="utf-8")
+            scene = self._lean_scene(1, "chapter_0001")
+            result = materialize_lean_window(
+                root,
+                scenes=[scene],
+                obligations={
+                    "chapter_0001": {
+                        "reader_question": "陈砺何时来调卷？",
+                        "promised_reward": "陈砺首次来馆调卷",
+                        "payoff_or_delay": "陈砺递交调档单",
+                        "chapter_ending_hook": "两人正面冲突",
+                    }
+                },
+                sources=(source,),
+                outline_text="大纲",
+            )
+
+            contract = result.scene_paths[0].read_text(encoding="utf-8")
+            self.assertIn('promised_reward: "推进主要冲突"', contract)
+            self.assertIn('payoff_or_delay: "主角必须重新选择"', contract)
+            self.assertIn('chapter_ending_policy: "两人正面冲突"', contract)
+            self.assertNotIn("陈砺首次来馆调卷", contract)
+            self.assertNotIn("陈砺递交调档单", contract)
+
+    @staticmethod
+    def _lean_scene(index: int, chapter_id: str) -> dict[str, object]:
+        return {
+            "scene_id": f"scene_{index:04d}",
+            "chapter_id": chapter_id,
+            "volume_id": "volume_01",
+            "name": f"第{index}场",
+            "target_chars": 1000,
+            "function": "mainline_action",
+            "participants": ["主角"],
+            "conflict": "旧承诺产生新代价",
+            "information_release": "读者知道代价来源",
+            "consequence": "主角必须重新选择",
+            "setup_payoff_role": "旧承诺",
+            "rhythm_role": "escalation",
+            "obligation": "推进主要冲突",
+        }
 
     def test_scene_inventory_rejects_embedded_studio_lifecycle_metadata(self):
         from literary_engineering_studio_engine.literary.planning.materializer import (

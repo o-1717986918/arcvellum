@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from literary_engineering_studio_engine.literary.planning.materializer import planned_longform_outputs
+from ...literary.assets.continuity.architecture import story_architecture_review_status
 from ...literary.planning.review import (
     all_planning_review_evidence_paths,
     planning_candidate_evidence_paths,
@@ -40,7 +41,7 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
         command += f' --genre "{genre}"'
     common_sources = ["project.yaml", "plot/outline.md", "scenes/"]
     table = {
-        **_story_architecture_blueprints(),
+        **_story_architecture_blueprints(root),
         **_budget_blueprints(root, target_words, command, prepare_argv, common_sources),
         **_inventory_blueprints(root, target_words),
         **_chapter_blueprints(root, target_words),
@@ -51,8 +52,8 @@ def blueprint_for_state(root: Path, current_state: str, next_action: str) -> dic
     return apply_agent_context_policy(current_state, blueprint)
 
 
-def _story_architecture_blueprints() -> dict[str, dict[str, object]]:
-    return {
+def _story_architecture_blueprints(root: Path) -> dict[str, dict[str, object]]:
+    blueprints = {
         "story-architecture-prepare": {
             "task_type": "deterministic-cli",
             "prompt_asset_id": "route.longform-planning.story-architecture.execute.v1",
@@ -114,6 +115,33 @@ def _story_architecture_blueprints() -> dict[str, dict[str, object]]:
             "next_allowed_states": ["story-architecture-review-prepare"],
         },
     }
+    _apply_architecture_block_override(root, blueprints)
+    return blueprints
+
+
+def _apply_architecture_block_override(
+    root: Path, blueprints: dict[str, dict[str, object]]
+) -> None:
+    complete, _message, verdict = story_architecture_review_status(root)
+    if complete and verdict == "block":
+        blueprints["story-architecture-revision"] = {
+            "task_type": "route-diagnostic-boundary",
+            "prompt_asset_id": "route.longform-planning.story-architecture.review.v1",
+            "command": "",
+            "source_paths": [
+                "project.yaml",
+                "plot/story_architecture.candidate.json",
+                "reviews/longform/story_architecture_review.json",
+            ],
+            "expected_outputs": [],
+            "hard_constraints": [
+                "The independent architecture review returned block. Resolve the project-level decision before planning continues.",
+                "Do not invoke a revision Agent, rewrite the verdict, or repeat the same candidate automatically.",
+            ],
+            "style_constraints": [],
+            "validation_gates": ["blocking architecture decision resolved"],
+            "next_allowed_states": [],
+        }
 
 
 def _budget_blueprints(

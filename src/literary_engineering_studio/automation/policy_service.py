@@ -37,7 +37,7 @@ class AutopilotPolicyService:
             "manifest": kernel_compatibility_manifest(),
             "current_kernel": policy["literary_kernel"],
             "scene_execution_mode": policy["scene_execution_mode"],
-            "rollback_target": "strict-v1",
+            "rollback_target": "",
         }
 
     def migrate(
@@ -49,6 +49,10 @@ class AutopilotPolicyService:
     ) -> dict[str, Any]:
         current = self.read(project_root)["policy"]
         previous = str(current["literary_kernel"])
+        manifest = kernel_compatibility_manifest()
+        target = manifest["kernels"].get(target_kernel)
+        if not isinstance(target, dict) or not target.get("user_selectable"):
+            raise ValueError("目标文学内核不接受新的作品写入。")
         saved = self.save(
             project_root,
             {
@@ -57,7 +61,6 @@ class AutopilotPolicyService:
                 "scene_execution_mode": scene_execution_mode or current["scene_execution_mode"],
             },
         )
-        manifest = kernel_compatibility_manifest()
         selected = saved["policy"]["literary_kernel"]
         return {
             **saved,
@@ -65,7 +68,7 @@ class AutopilotPolicyService:
             "current_kernel": selected,
             "compatibility_status": manifest["kernels"][selected]["status"],
             "selection_source": "explicit-user-migration",
-            "rollback_target": "strict-v1",
+            "rollback_target": "",
         }
 
     def save(self, project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
