@@ -23,8 +23,8 @@ def _continuity_items(root: Path, overrides: dict[str, object]) -> list[dict[str
     projection = read_json_file(projection_path)
     return [
         *_ledger_continuity_items(root, overrides),
-        *_projected_continuity_items(projection_path, projection, overrides),
-        *_identity_conflict_items(projection_path, projection, overrides),
+        *_projected_continuity_items(root, projection_path, projection, overrides),
+        *_identity_conflict_items(root, projection_path, projection, overrides),
     ]
 
 
@@ -78,6 +78,7 @@ def _first_value(value, keys, fallback):
 
 
 def _projected_continuity_items(
+    root: Path,
     projection_path: Path,
     projection: dict[str, object],
     overrides: dict[str, object],
@@ -120,6 +121,7 @@ def _projected_continuity_items(
 
 
 def _identity_conflict_items(
+    root: Path,
     projection_path: Path,
     projection: dict[str, object],
     overrides: dict[str, object],

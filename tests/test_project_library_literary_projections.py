@@ -8,6 +8,23 @@ from literary_engineering_studio_engine.projections.library.service import build
 
 
 class ProjectLibraryLiteraryProjectionTests(unittest.TestCase):
+    def test_library_reads_formal_continuity_entries_and_identity_conflicts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "continuity-projection"
+            init_work_project(InitOptions(target=root, title="连续性投影", work_type="novel", target_length=12000, premise="测试正式连续性。"))
+            self._write_json(
+                root / "workflow" / "continuity" / "current.json",
+                {
+                    "entries": [{"entry_id": "change-1", "kind": "character_change", "summary": "林澈承认隐瞒。"}],
+                    "identity_conflicts": [{"target_ref": "老周", "scene_ids": ["scene_0001", "scene_0002"]}],
+                },
+            )
+
+            continuity = build_project_library(root)["sections"]["continuity"]
+
+            self.assertEqual({item["id"] for item in continuity}, {"change-1", "identity_conflict_1"})
+            self.assertTrue(all(item["path"] == "workflow/continuity/current.json" for item in continuity))
+
     def test_library_preserves_character_aliases_and_scene_participant_refs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "character-reference-projection"
