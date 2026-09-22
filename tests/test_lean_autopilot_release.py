@@ -82,6 +82,9 @@ class LeanAutopilotReleaseTests(unittest.TestCase):
             with patch(
                 "literary_engineering_studio.automation.lean_route_host.LeanLongformPlanningService",
                 return_value=planning,
+            ), patch(
+                "literary_engineering_studio.automation.lean_route_host.enrich_lean_planning_assets",
+                return_value={"background_stories_created": 0, "world_rules_enriched": 0},
             ):
                 ClaimedRunLoop(
                     service, run_id=run["run_id"], project=root,

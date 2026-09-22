@@ -24,9 +24,25 @@ def ensure_lean_planning_assets(project_root: Path) -> dict[str, int]:
         path = root / "characters" / f"{slug}.yaml"
         if path.exists():
             continue
-        writes[path] = "\n".join([
+        writes[path] = _character_stub(slug, character)
+    world_path = root / "canon" / "world_rules.yaml"
+    if world_facts and (
+        not world_path.exists()
+        or world_path.read_text(encoding="utf-8").strip()
+        == "rules: []\nconstraints: []\nopen_questions: []"
+    ):
+        writes[world_path] = _world_stub(world_facts)
+    atomic_write_batch(writes)
+    return {
+        "characters_created": sum(path.parent == root / "characters" for path in writes),
+        "world_rules_created": int(world_path in writes),
+    }
+
+
+def _character_stub(slug: str, character: dict[str, object]) -> str:
+    return "\n".join([
             f"character_id: {_scalar(slug)}",
-            f"name: {_scalar(name)}",
+            f"name: {_scalar(character['name'])}",
             f"role: {_scalar(character['role'])}",
             f"importance: {character['importance']}",
             "identity:",
@@ -37,23 +53,15 @@ def ensure_lean_planning_assets(project_root: Path) -> dict[str, int]:
             "  known_facts: []",
             "",
         ])
-    world_path = root / "canon" / "world_rules.yaml"
-    if world_facts and (
-        not world_path.exists()
-        or world_path.read_text(encoding="utf-8").strip()
-        == "rules: []\nconstraints: []\nopen_questions: []"
-    ):
-        writes[world_path] = "\n".join([
+
+
+def _world_stub(world_facts: list[object]) -> str:
+    return "\n".join([
             f"rules: {_scalar(world_facts)}",
             "constraints: []",
             "open_questions: []",
             "",
         ])
-    atomic_write_batch(writes)
-    return {
-        "characters_created": sum(path.parent == root / "characters" for path in writes),
-        "world_rules_created": int(world_path in writes),
-    }
 
 
 def _scalar(value: object) -> str:

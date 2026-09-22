@@ -9,9 +9,11 @@ from literary_engineering_studio_engine.public.literary import ensure_default_st
 
 from ..application.lean_book_audit import audit_lean_book
 from ..application.lean_assets import ensure_lean_planning_assets
+from ..application.lean_asset_enrichment import enrich_lean_planning_assets
 from ..application.lean_source_context import imported_source_context
 from ..application.lean_longform_planning import LeanLongformPlanningService
 from ..runtime.runtime_selection import runtime_for_role
+from ..runtime.role_conversation import RoleConversationGateway
 from .run_result_contracts import RouteCycle
 
 
@@ -74,7 +76,12 @@ class LeanRouteAutopilotHost:
             ensure_default_style_mount(project)
             return {"mode": "mounted-style"}
         if route == "character-and-world-assets":
-            return ensure_lean_planning_assets(project)
+            created = ensure_lean_planning_assets(project)
+            enriched = enrich_lean_planning_assets(
+                project,
+                RoleConversationGateway(self.config, data_root=self.data_root / "pi-conversations"),
+            )
+            return {**created, **enriched}
         if route == "review-and-audit":
             audit = audit_lean_book(project, self.data_root)
             return {"chapter_count": audit["chapter_count"], "scene_count": audit["scene_count"]}
