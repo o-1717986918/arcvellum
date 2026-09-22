@@ -181,7 +181,7 @@ def decide_reasoning_action(
 
     level = _normalized_level(current_level, budget.initial_level)
     issues = {_normalize_issue(item) for item in issue_categories if str(item).strip()}
-    if budget.maximum_level == "off":
+    if _is_deterministic_budget(budget):
         return ReasoningDecision(ReasoningAction.STOP, "off", "deterministic-task")
     if usage.reasoning_tokens >= budget.total_tokens:
         return ReasoningDecision(ReasoningAction.STOP, level, "reasoning-token-budget-exhausted")
@@ -211,6 +211,10 @@ def decide_reasoning_action(
 
 def _normalize_issue(value: object) -> str:
     return str(value).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _is_deterministic_budget(budget: ReasoningBudget) -> bool:
+    return budget.maximum_level == "off" and budget.max_provider_requests == 0
 
 
 def _normalized_level(value: str, fallback: str) -> str:

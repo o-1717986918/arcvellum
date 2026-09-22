@@ -5,11 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..application.pi_thinking import get_pi_thinking_preferences
 from ..contracts import TaskPackage
 from .execution_profiles import TaskExecutionProfile, resolve_task_execution_profile
 from .repair_context import RepairContextCoordinator
 from .progress_policy import build_runtime_progress_digest
 from .sandbox import SandboxManifest, stage_task, update_run_manifest
+
+
+def worker_execution_config(config: Mapping[str, Any], runtime_id: str) -> dict[str, Any]:
+    worker = config.get("worker")
+    settings = dict(worker) if isinstance(worker, Mapping) else {}
+    if runtime_id == "pi-worker":
+        settings["selected_thinking"] = get_pi_thinking_preferences(dict(config))["creative"]
+    return settings
 
 
 def stage_profiled_task(

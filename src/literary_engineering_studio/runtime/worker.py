@@ -29,7 +29,7 @@ from .run_manifest import load_run
 from .task_snapshot import load_run_task_snapshot
 from .task_roles import runtime_role_for_task
 from .worker_observability import WorkerObserver
-from .worker_execution_profile import activate_execution_profile, build_runtime_kwargs
+from .worker_execution_profile import activate_execution_profile, build_runtime_kwargs, worker_execution_config
 from .worker_paths import (
     resolve_task_json_path as _resolve_task_json_path,
     validate_project as _validate_project,
@@ -320,7 +320,7 @@ class AgentWorker:
             runtime_pool=self.runtime_pool,
             role=runtime_role_for_task(task),
         )
-        worker_config = self.config.get("worker", {})
+        worker_config = worker_execution_config(self.config, runtime_id)
         profile, timeout = activate_execution_profile(
             task,
             sandbox,

@@ -174,6 +174,30 @@ class ExecutionProfileTests(unittest.TestCase):
         self.assertEqual(controls["max_turns"]["effective"], 6)
         self.assertEqual(controls["max_tool_calls"]["effective"], 8)
 
+    def test_pi_prose_respects_user_thinking_instead_of_minimal_profile_default(self):
+        settings = {
+            "selected_thinking": "medium",
+            "execution_profile": {
+                "mode": "enforced",
+                "enforcement": {
+                    "enabled": True,
+                    "runtimes": ["pi-worker"],
+                    "routes": ["scene-development"],
+                    "states": ["candidate-generation-provenance"],
+                    "task_kinds": ["prose"],
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = resolve_task_execution_profile(
+                _task(Path(temporary), state="candidate-generation-provenance", task_type="main-platform-agent-prose"),
+                settings, runtime_id="pi-worker",
+                capability_ids=("reasoning-policy-control", "reasoning-budget-control"),
+            )
+        self.assertEqual(_controls(profile)["reasoning_policy"]["effective"], "medium")
+        self.assertEqual(profile.reasoning_budget.initial_level, "medium")
+        self.assertEqual(profile.reasoning_budget.maximum_level, "medium")
+
     def test_deterministic_profile_has_no_agent_budget(self):
         with tempfile.TemporaryDirectory() as temporary:
             profile = resolve_task_execution_profile(

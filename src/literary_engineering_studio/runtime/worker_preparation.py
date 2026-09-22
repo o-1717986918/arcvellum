@@ -21,6 +21,7 @@ from .sandbox import (
 from .worker_execution_profile import (
     prompt_program_settings,
     stage_profiled_task,
+    worker_execution_config,
 )
 from .worker_observability import WorkerObserver
 from .worker_paths import validate_project
@@ -66,7 +67,7 @@ def prepare_worker_task(
     if task.human_gate_reasons:
         return task, None, _human_gate_result(task, project, runtime_id, observer)
 
-    worker_config = config.get("worker", {})
+    worker_config = worker_execution_config(config, runtime_id)
     context_budget = resolve_task_context_budget(task, worker_config)
     profile, sandbox, active_runtime = _stage_sandbox(
         task,

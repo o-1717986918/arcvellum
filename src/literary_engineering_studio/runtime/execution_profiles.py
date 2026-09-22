@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from typing import Any, Mapping
 
 from ..contracts import TaskPackage
+from ..application.pi_thinking import PI_THINKING_LEVELS
 from .context_budget import (
     ContextRiskLevel,
     ContextTaskKind,
@@ -130,7 +131,10 @@ def resolve_task_execution_profile(
     policy = task.execution_contract.execution_policy
     settings = _mapping(worker.get("execution_profile"))
     budget_settings = _mapping(settings.get("reasoning_budget"))
-    budget = _resolve_budget(kind, policy, budget_settings)
+    selected_thinking = str(worker.get("selected_thinking") or "").strip().lower()
+    if selected_thinking not in PI_THINKING_LEVELS:
+        selected_thinking = ""
+    budget = _resolve_budget(kind, policy, budget_settings, selected_thinking)
     if policy == "deterministic":
         return _profile(
             task,
@@ -152,6 +156,7 @@ def resolve_task_execution_profile(
         worker,
         mode,
         capabilities,
+        selected_thinking=selected_thinking,
         capabilities_known=capability_ids is not None,
     )
     budget_status, provider_support = _reasoning_budget_status(
@@ -177,11 +182,20 @@ def _resolve_budget(
     kind: ContextTaskKind,
     policy: str,
     settings: Mapping[str, Any],
+    selected_thinking: str,
 ) -> ReasoningBudget:
-    return resolve_reasoning_budget(
+    budget = resolve_reasoning_budget(
         kind,
         policy,
         max_escalations=_optional_int(settings.get("max_escalations")),
+    )
+    if policy == "deterministic" or not selected_thinking:
+        return budget
+    return replace(
+        budget,
+        initial_level=selected_thinking,
+        maximum_level=selected_thinking,
+        max_escalations=0,
     )
 
 
@@ -192,9 +206,12 @@ def _agent_controls(
     mode: str,
     capabilities: set[str],
     *,
+    selected_thinking: str,
     capabilities_known: bool,
 ) -> tuple[ExecutionControl, ...]:
     targets = dict(_PROFILE_TARGETS[kind])
+    if selected_thinking:
+        targets["reasoning_policy"] = selected_thinking
     targets["max_tool_calls"] = max(
         int(targets["max_tool_calls"]),
         _minimum_bounded_worker_tool_calls(task),

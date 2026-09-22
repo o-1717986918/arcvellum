@@ -7,12 +7,14 @@ import threading
 import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
+from literary_engineering_studio.config import default_config
 from literary_engineering_studio.runtime.execution_profiles import resolve_task_execution_profile
 from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio.runtime.worker_execution_profile import (
     activate_execution_profile,
     build_runtime_kwargs,
     persist_initial_execution_profile,
+    worker_execution_config,
 )
 
 
@@ -184,6 +186,30 @@ def _scene_revision_task(root: Path) -> TaskPackage:
 
 
 class WorkerExecutionProfileTests(unittest.TestCase):
+    def test_user_selected_creative_level_reaches_applied_pi_budget(self):
+        config = default_config()
+        config["agent_runners"]["pi-worker"]["thinking"] = "high"
+        settings = worker_execution_config(config, "pi-worker")
+        settings["execution_profile"] = {
+            "mode": "enforced",
+            "enforcement": {"enabled": True, "runtimes": ["pi-worker"], "task_kinds": ["creative"]},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = resolve_task_execution_profile(
+                _task(root), settings, runtime_id="pi-worker",
+                capability_ids=_PiWorkerRuntime().execution_control_capabilities(),
+            )
+            kwargs = build_runtime_kwargs(
+                _task(root), _sandbox(root), runtime_id="pi-worker", timeout=600,
+                profile=profile, worker_config=settings, observer=_Observer(),
+                cancel_event=threading.Event(), writeback=_Writeback(),
+            )
+        self.assertEqual(kwargs["reasoning_policy"], "high")
+        self.assertEqual(kwargs["reasoning_budget"]["initial_level"], "high")
+        self.assertEqual(kwargs["reasoning_budget"]["maximum_level"], "high")
+        self.assertEqual(kwargs["reasoning_budget"]["max_escalations"], 0)
+
     def test_shadow_profile_is_persisted_before_runtime_capabilities_are_known(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

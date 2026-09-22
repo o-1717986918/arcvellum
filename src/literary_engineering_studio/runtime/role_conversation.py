@@ -58,7 +58,7 @@ class RoleConversationGateway:
             event_sink=observe,
             cancel_event=cancel_event,
             worker_mode="conversation",
-            reasoning_policy=str(settings.get("thinking") or "low"),
+            reasoning_policy=str(settings.get("thinking") or "medium"),
             max_turns=1,
             max_tool_calls=1,
             max_repairs=0,

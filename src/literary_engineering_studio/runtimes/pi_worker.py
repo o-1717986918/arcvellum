@@ -354,9 +354,9 @@ class PiWorkerRuntime(AgentRuntime):
         value = str(
             self._execution_overrides.get("reasoning_policy")
             or self.settings.get("thinking")
-            or "low"
+            or "medium"
         ).strip().lower()
-        return value if value in _THINKING_LEVELS else "low"
+        return value if value in _THINKING_LEVELS else "medium"
 
     def _positive_setting(self, name: str, fallback: int) -> int:
         value = self._execution_overrides.get(name, self.settings.get(name))

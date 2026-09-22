@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from literary_engineering_studio.runtime.context_budget import ContextTaskKind
 from literary_engineering_studio.runtime.reasoning_policy import (
@@ -31,6 +32,17 @@ class ReasoningPolicyTests(unittest.TestCase):
         self.assertEqual(budget.total_tokens, 0)
         self.assertEqual(decision.action, ReasoningAction.STOP)
         self.assertEqual(decision.reason, "deterministic-task")
+
+    def test_user_selected_off_still_allows_bounded_mechanical_repair(self):
+        budget = replace(
+            resolve_reasoning_budget(ContextTaskKind.CREATIVE, "agent-required"),
+            initial_level="off", maximum_level="off", max_escalations=0,
+        )
+        decision = decide_reasoning_action(
+            budget, current_level="off", attempt=1, issue_categories=("invalid_json",),
+        )
+        self.assertEqual(decision.action, ReasoningAction.RETRY_SAME)
+        self.assertEqual(decision.level, "off")
 
     def test_mechanical_failure_retries_without_escalating(self):
         budget = resolve_reasoning_budget(ContextTaskKind.REVIEW, "agent-required")
