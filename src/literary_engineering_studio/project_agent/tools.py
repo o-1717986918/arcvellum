@@ -31,12 +31,14 @@ ACTION_TOOLS = (
     "project_asset_promote",
     "project_create",
     "project_goal_manage",
+    "project_chapter_extend",
 )
 TOOL_RISKS = {
     **{name: ToolRisk.READ for name in READ_TOOLS},
     **{name: ToolRisk.REVERSIBLE_WRITE for name in ACTION_TOOLS},
     "project_asset_promote": ToolRisk.FORMAL_WRITE,
     "project_create": ToolRisk.FORMAL_WRITE,
+    "project_chapter_extend": ToolRisk.FORMAL_WRITE,
     # Protocol compatibility only. New Agent turns use project_goal_manage.
     "creation_control": ToolRisk.REVERSIBLE_WRITE,
 }
@@ -69,6 +71,7 @@ def available_action_tools(actions: ProjectAgentActionDependencies | None) -> tu
             ("project_asset_promote", actions.promote_asset),
             ("project_create", actions.create_project),
             ("project_goal_manage", actions.manage_goal),
+            ("project_chapter_extend", actions.extend_chapter),
         )
         if handler is not None
     )
@@ -127,6 +130,7 @@ class ProjectAgentToolDispatcher:
             "project_asset_promote": self.actions.promote_asset,
             "project_create": self.actions.create_project,
             "project_goal_manage": self.actions.manage_goal,
+            "project_chapter_extend": self.actions.extend_chapter,
         }
         handler = action_handlers.get(call.name)
         if handler is None:

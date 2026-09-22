@@ -223,3 +223,4 @@ class ProjectAgentActionDependencies:
     promote_asset: ProjectAction | None = None
     create_project: ProjectAction | None = None
     manage_goal: ProjectAction | None = None
+    extend_chapter: ProjectAction | None = None

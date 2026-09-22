@@ -74,6 +74,38 @@ class _CandidatePromotions:
 
 
 class ProjectAgentActionTests(unittest.TestCase):
+    def test_profile_only_rhythm_update_preserves_current_scene_entries(self):
+        current = [{"scene_id": "scene_0001", "rhythm_role": "setup"}]
+        captured = []
+        actions = dependencies_from_actions(
+            record_direction=lambda *_args, **_kwargs: {}, autopilot=_Autopilot(),
+            load_rhythm=lambda _root: {"entries": current},
+            save_rhythm=lambda _root, entries, **kwargs: captured.append((entries, kwargs)) or {"digest": "new"},
+        )
+        result = actions.update_rhythm(Path("C:/work"), {"book_profile": {"directive": "新的章序"}})
+        self.assertEqual(captured[0][0], current)
+        self.assertEqual(captured[0][1]["book_profile"], {"directive": "新的章序"})
+        self.assertEqual(result["plan"]["digest"], "new")
+
+    def test_chapter_extension_is_a_scoped_domain_action(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            calls = []
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {}, autopilot=_Autopilot(),
+                extend_chapter=lambda project, **kwargs: calls.append((project, kwargs)) or {
+                    "chapter_id": kwargs["chapter_id"], "appended_scene_ids": ["scene_0007"],
+                },
+            )
+            result = actions.extend_chapter(root, {
+                "chapter_id": "chapter_0002", "additional_scenes": 1,
+                "target_per_scene": 3300, "direction": "承接已晋升末场",
+            })
+            self.assertEqual(calls[0][0], root)
+            self.assertEqual(calls[0][1]["additional_scenes"], 1)
+            self.assertEqual(result["appended_scene_ids"], ["scene_0007"])
+            self.assertTrue(result["receipt"]["token"])
+
     def test_historical_formal_work_keeps_its_saved_kernel(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

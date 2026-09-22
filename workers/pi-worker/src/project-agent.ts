@@ -31,6 +31,7 @@ const PROJECT_ASSET_PROMOTE_TOOL = "project_asset_promote";
 const PROJECT_DIAGNOSE_TOOL = "project_diagnose";
 const PROJECT_CREATE_TOOL = "project_create";
 const PROJECT_GOAL_MANAGE_TOOL = "project_goal_manage";
+const PROJECT_CHAPTER_EXTEND_TOOL = "project_chapter_extend";
 const SUPPORTED_TOOLS = new Set([
 	WORKSPACE_CATALOG_TOOL,
 	PROJECT_OVERVIEW_TOOL,
@@ -47,6 +48,7 @@ const SUPPORTED_TOOLS = new Set([
 	PROJECT_DIAGNOSE_TOOL,
 	PROJECT_CREATE_TOOL,
 	PROJECT_GOAL_MANAGE_TOOL,
+	PROJECT_CHAPTER_EXTEND_TOOL,
 ]);
 
 export interface ProjectAgentStart {
@@ -308,10 +310,10 @@ function projectToolDefinition(name: string): {
 	};
 	if (name === PROJECT_RHYTHM_UPDATE_TOOL) return {
 		label: "Update Narrative Rhythm",
-		description: "Replace full-book rhythm entries and the optional book-level rhythm profile.",
+		description: "Update rhythm entries and/or the book profile. For a profile-only correction, omit entries; the service preserves all current scene entries.",
 		parameters: Type.Object({
 			work_id: workId(),
-			entries: Type.Array(Type.Object({}, { additionalProperties: true }), { maxItems: 500 }),
+			entries: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }), { maxItems: 500 })),
 			book_profile: Type.Optional(Type.Object({}, { additionalProperties: true })),
 		}),
 	};
@@ -363,6 +365,17 @@ function projectToolDefinition(name: string): {
 			]),
 			objective: Type.Optional(Type.String({ maxLength: 8000 })),
 			stop_after_formal_units: Type.Optional(Type.Integer({ minimum: 0, maximum: 100000 })),
+		}),
+	};
+	if (name === PROJECT_CHAPTER_EXTEND_TOOL) return {
+		label: "Extend Current Chapter",
+		description: "Append new planned scenes after the latest committed scene of the current chapter and rebalance future scene counts while preserving the book's total character target. Never insert into already written history or use rhythm settings as scene inventory.",
+		parameters: Type.Object({
+			work_id: workId(),
+			chapter_id: Type.String({ pattern: "^chapter_[0-9]{4}$" }),
+			additional_scenes: Type.Integer({ minimum: 1, maximum: 8 }),
+			target_per_scene: Type.Optional(Type.Integer({ minimum: 1800, maximum: 6000 })),
+			direction: Type.String({ minLength: 1, maxLength: 3000 }),
 		}),
 	};
 	throw new Error(`unsupported Project Agent tool: ${name}`);

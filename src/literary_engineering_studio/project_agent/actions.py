@@ -9,6 +9,7 @@ from typing import Any
 from ..application.failures import present_run
 from .action_receipts import action_receipt, goal_result
 from .contracts import ProjectAgentActionDependencies
+from .chapter_actions import chapter_extension_action
 from .scope import work_reference
 
 
@@ -22,12 +23,14 @@ def dependencies_from_actions(
     record_choice: Callable[..., dict[str, Any]] | None = None,
     save_quality: Callable[..., dict[str, Any]] | None = None,
     save_rhythm: Callable[..., dict[str, Any]] | None = None,
+    load_rhythm: Callable[[Path], dict[str, Any]] | None = None,
     style_mounts: Any | None = None,
     candidate_promotions: Any | None = None,
     launch_worker: Callable[[dict[str, str]], dict[str, Any]] | None = None,
     invalidate_project: Callable[[Path, str], Any] | None = None,
     create_project: Callable[..., dict[str, Any]] | None = None,
     goal_evidence: Callable[[Path], Mapping[str, Any]] | None = None,
+    extend_chapter: Callable[..., dict[str, Any]] | None = None,
 ) -> ProjectAgentActionDependencies:
     settings = config or {}
 
@@ -107,15 +110,14 @@ def dependencies_from_actions(
         if save_rhythm is None:
             raise RuntimeError("Project Agent rhythm service is unavailable")
         entries = arguments.get("entries")
-        if not isinstance(entries, list):
-            raise ValueError("project_rhythm_update requires an entries array")
         book_profile = arguments.get("book_profile")
-        saved = save_rhythm(
-            root,
-            entries,
-            updated_by="project-agent",
-            book_profile=book_profile if isinstance(book_profile, dict) else None,
-        )
+        if entries is None and isinstance(book_profile, dict) and load_rhythm is not None:
+            entries = load_rhythm(root).get("entries")
+        if not isinstance(entries, list):
+            raise ValueError("project_rhythm_update requires entries, or book_profile with a rhythm reader")
+        if book_profile is not None and not isinstance(book_profile, dict):
+            raise ValueError("project_rhythm_update book_profile must be an object")
+        saved = save_rhythm(root, entries, updated_by="project-agent", book_profile=book_profile)
         if invalidate_project is not None:
             invalidate_project(root, "project-agent-rhythm")
         return {
@@ -233,6 +235,7 @@ def dependencies_from_actions(
         promote_asset,
         create_work if create_project is not None else None,
         manage_goal,
+        chapter_extension_action(extend_chapter, invalidate_project) if extend_chapter is not None else None,
     )
 
 

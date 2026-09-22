@@ -100,6 +100,34 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
             self.assertEqual(result["title"], "second")
             self.assertEqual(seen, [second.resolve()])
 
+    def test_chapter_extension_is_allowlisted_for_registered_work_only(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            registered = root / "registered"
+            registered.mkdir()
+            (registered / "project.yaml").write_text("title: Registered\n", encoding="utf-8")
+            seen = []
+            dispatcher = ProjectAgentToolDispatcher(
+                root,
+                ProjectAgentDependencies(
+                    project_overview=lambda _root, _args: {},
+                    project_search=lambda _root, _args: {},
+                    creation_observe=lambda _root, _args: {},
+                    resolve_project=lambda _anchor, args: registered if args.get("work_id") == "valid" else root,
+                ),
+                enabled=("project_chapter_extend",),
+                actions=ProjectAgentActionDependencies(
+                    record_direction=lambda _root, _args: {},
+                    creation_control=lambda _root, _args: {},
+                    extend_chapter=lambda target, args: seen.append((target, args)) or {"ok": True},
+                ),
+            )
+            args = {"work_id": "valid", "chapter_id": "chapter_0002", "additional_scenes": 3}
+            self.assertEqual(dispatcher(ProjectAgentToolCall("extend-1", "turn-1", "project_chapter_extend", args)), {"ok": True})
+            self.assertEqual(seen[0][0], registered.resolve())
+            with self.assertRaisesRegex(ValueError, "registered work project"):
+                dispatcher(ProjectAgentToolCall("extend-2", "turn-1", "project_chapter_extend", {**args, "work_id": "invalid"}))
+
     def test_dispatches_one_allowed_tool_and_reaps_the_process(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

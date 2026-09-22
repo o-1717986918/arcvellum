@@ -14,6 +14,8 @@ from ..core_read_models import current_choices, record_choice
 from ..project_agent import ProjectAgentService
 from ..project_agent.actions import dependencies_from_actions
 from ..project_agent.read_models import dependencies_from_read_models
+from ..application.lean_chapter_extension import extend_lean_chapter
+from ..runtime.role_conversation import RoleConversationGateway
 from ..project_manager import create_project, list_projects, record_direction
 from literary_engineering_studio_engine.public.literary import (
     load_creative_quality_profile,
@@ -82,6 +84,7 @@ def build_project_agent_service(
             ),
             save_quality=save_creative_quality_profile,
             save_rhythm=save_rhythm_plan,
+            load_rhythm=load_rhythm_plan,
             style_mounts=style_mounts,
             candidate_promotions=archive_dependencies.candidates,
             launch_worker=lambda request: launch_worker(
@@ -93,6 +96,14 @@ def build_project_agent_service(
                 **values,
             ),
             goal_evidence=lambda root: read_models.reader(root),
+            extend_chapter=lambda root, **values: extend_lean_chapter(
+                root,
+                RoleConversationGateway(
+                    config,
+                    data_root=Path(str(config.get("application", {}).get("data_root") or ".")) / "pi-conversations",
+                ),
+                **values,
+            ),
         ),
         persona_loader=lambda root: active_persona(
             Path(str(config.get("application", {}).get("data_root") or ".")), root
