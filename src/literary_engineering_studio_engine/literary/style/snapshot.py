@@ -199,8 +199,15 @@ def active_style_evidence_paths(project_root: Path) -> list[Path]:
     if _is_versioned(active):
         active_style_mount_snapshot(root)
     paths = [active_path] if active_path.is_file() else []
-    for field in ("prompt_path", "style_skill", "style_version"):
-        candidate = safe_project_path(root, str(active.get(field) or ""))
+    mount_path = str(active.get("mount_path") or "")
+    references = (
+        str(active.get("prompt_path") or ""),
+        f"{mount_path}/style-profile.md" if mount_path else "",
+        str(active.get("style_skill") or ""),
+        str(active.get("style_version") or ""),
+    )
+    for reference in references:
+        candidate = safe_project_path(root, reference)
         if candidate and candidate.is_file():
             paths.append(candidate)
     return list(dict.fromkeys(paths))

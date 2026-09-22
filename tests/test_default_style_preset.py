@@ -9,7 +9,18 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.application.project_manager import create_project
+from literary_engineering_studio.runtimes.pi_scene_transaction import (
+    PiSceneTransactionRuntime,
+)
 from literary_engineering_studio_engine.foundation.resources import engine_root
+from literary_engineering_studio_engine.public.literary import (
+    LengthTarget,
+    RhythmDirective,
+    SceneBrief,
+    SceneRisk,
+    SceneRiskLevel,
+    StyleMountRef,
+)
 from literary_engineering_studio_engine.literary.style.defaults import (
     DEFAULT_STYLE_ID,
     ensure_default_style_mount,
@@ -17,6 +28,9 @@ from literary_engineering_studio_engine.literary.style.defaults import (
 from literary_engineering_studio_engine.literary.style.lab import active_project_style
 from literary_engineering_studio_engine.literary.style.prompt import (
     style_prompt_quality_report,
+)
+from literary_engineering_studio_engine.literary.style.snapshot import (
+    active_style_evidence_paths,
 )
 from literary_engineering_studio_engine.literary.style.prompt_agent import (
     _dry_style_prompt,
@@ -75,8 +89,12 @@ class DefaultStylePresetTests(unittest.TestCase):
         self.assertIn("场景合同即使要求倒计时或设备读数", prompt)
         self.assertIn("无法说明精确值改变谁的选择", prompt)
         self.assertIn("普通陈设和日常动作不记账", prompt)
+        self.assertIn("选最贴合本场的一篇作表达主参照", prompt)
+        self.assertIn("主动模仿其叙述距离、句群呼吸", prompt)
+        self.assertIn("所选样例的叙述距离、句群节奏", prompt)
         self.assertIn("一张桌、两把椅子、拧两下、试两回、看几秒、一支手电", prompt)
         self.assertIn("抽象文风软约束转译为本场", route_prompt)
+        self.assertIn("一篇最贴合本场功能的表达主参照", route_prompt)
         self.assertIn("Style Lint 与 AgentReview 继续核验违禁表达", route_prompt)
         self.assertIn("动态数值只有在人物需要该精度", route_prompt)
         self.assertIn("五项必要性条件缺一即去掉精度", route_prompt)
@@ -176,6 +194,32 @@ class DefaultStylePresetTests(unittest.TestCase):
                 mounted_profile.resolve(),
                 {path.resolve() for path in style_source_paths(root)},
             )
+            evidence = active_style_evidence_paths(root)
+            self.assertIn(mounted_profile.resolve(), [path.resolve() for path in evidence])
+            self.assertLess(
+                [path.name for path in evidence].index("prompt.md"),
+                [path.name for path in evidence].index("style-profile.md"),
+            )
+            brief = SceneBrief(
+                scene_id="scene_0001",
+                objective="人物在压力下作出选择",
+                scene_function="relationship-turn",
+                participants=("主角",),
+                canon_constraints=(),
+                incoming_handoff=(),
+                chapter_obligations=(),
+                rhythm=RhythmDirective(),
+                length=LengthTarget(),
+                style_mount=StyleMountRef(active["style_id"], active["version_id"]),
+                risk=SceneRisk(SceneRiskLevel.STANDARD),
+                source_refs=tuple(path.relative_to(root).as_posix() for path in evidence),
+            )
+            runtime = PiSceneTransactionRuntime(
+                {}, project_root=root, data_root=base / "pi-runtime"
+            )
+            lean_sources = runtime._source_evidence(brief, purpose="create")
+            self.assertIn(profile_text.strip(), lean_sources)
+            self.assertIn("将人彻底包裹。", lean_sources)
 
             config = json.loads(
                 (root / "style" / "default_style.json").read_text(encoding="utf-8")

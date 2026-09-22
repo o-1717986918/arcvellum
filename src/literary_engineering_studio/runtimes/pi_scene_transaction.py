@@ -200,7 +200,7 @@ def render_scene_create_prompt(
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
 
 ## Relevant Sources
-{source_evidence or "无额外资料；严格使用 SceneBrief。"}
+{source_evidence or "无额外资料；严格使用 SceneBrief。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，先读完整选段，选一篇最贴合本场功能的样例作表达主参照；正文应主动模仿其叙述距离、句群呼吸、细节进入顺序和对白或意象推进方式，不得只借题材词或概括成“清简”。必要时再取一篇辅助。用本项目人物、行动与因果写新内容，不复制样例专名、标志句、连续措辞或异常标点。用户方向、canon、人物事实和本场职责仍优先。
 
 ## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
@@ -222,7 +222,7 @@ character_changes、canon_candidates、continuity_changes、promise_updates、re
 只提出正文确实发生的变化；无法确认的内容放进 escalation_reasons。
 若 SceneBrief.risk.level 为 high，decision_trace 必须用少量条目记录关键创作取舍。
 
-## Final Prose Pass\n返回 JSON 前，对 prose 中的阿拉伯数字、中文数词、序数和量化单位完成最后一遍语义重写。{_QUANTITATIVE_DETAIL_RULE}
+## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认所选样例的叙述距离、句群节奏和细节组织已在 prose 中实际体现；随后对阿拉伯数字、中文数词、序数和量化单位完成最后一遍语义重写。{_QUANTITATIVE_DETAIL_RULE}
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene create prompt exceeds hard character limit")
@@ -304,7 +304,7 @@ def render_scene_revision_prompt(
 {json.dumps(instructions, ensure_ascii=False, separators=(",", ":"))}
 
 ## Relevant Sources
-{source_evidence or "无额外资料。"}
+{source_evidence or "无额外资料。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，修订时保留或恢复与本场相合的具体样例表达形态：叙述距离、句群呼吸、细节进入顺序和对白或意象推进方式。不要只把样例概括成“清简”，也不要为模仿而改动 canon、人物选择或搬运原句。
 
 ## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
@@ -321,7 +321,7 @@ prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范
 空组返回 []。next_handoff 只能是字符串数组。
 若 SceneBrief.risk.level 为 high，decision_trace 必须保留关键创作取舍，不得清空。
 
-## Final Prose Pass\n返回 JSON 前，对 prose 中的阿拉伯数字、中文数词、序数和量化单位重新完成语义重写。{_QUANTITATIVE_DETAIL_RULE}
+## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认修订没有抹平所选样例的叙述节奏和细节组织；随后对 prose 中的阿拉伯数字、中文数词、序数和量化单位重新完成语义重写。{_QUANTITATIVE_DETAIL_RULE}
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene revision prompt exceeds hard character limit")

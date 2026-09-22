@@ -111,6 +111,9 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("不得重演首次见面", prompt)
         self.assertIn("不同人物按各自欲望", prompt)
         self.assertIn("选择代价显影", prompt)
+        self.assertIn("Style Reference Priority", prompt)
+        self.assertIn("一篇最贴合本场功能的样例作表达主参照", prompt)
+        self.assertIn("主动模仿其叙述距离、句群呼吸", prompt)
         self.assertIn("新增精确数字默认不用", prompt)
         self.assertIn("只有以下五项同时成立", prompt)
         self.assertIn("不得批量删数字或机械换成模糊量词", prompt)
@@ -209,6 +212,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("不得保留空对象", revision)
         self.assertIn("不得在修复一个问题时重新引入已消失的冲突", revision)
         self.assertIn("不得用 new_asset_candidates 绕过", revision)
+        self.assertIn("修订时保留或恢复与本场相合的具体样例表达形态", revision)
         self.assertIn("新增精确数字默认不用", revision)
         self.assertIn("任一项不成立", revision)
         self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
@@ -218,6 +222,10 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             root = Path(temporary)
             (root / "characters").mkdir()
             (root / "characters" / "hero.md").write_text("人物怕失去妹妹的信任。", encoding="utf-8")
+            (root / "style" / "mounted" / "sample").mkdir(parents=True)
+            (root / "style" / "mounted" / "sample" / "style-profile.md").write_text(
+                "R01：短句承压。\nR25：结尾以行动落定。", encoding="utf-8"
+            )
             outside = root.parent / "lean-kernel-secret.txt"
             outside.write_text("不应读取", encoding="utf-8")
             gateway = _Gateway()
@@ -227,7 +235,11 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
                 data_root=root / ".studio",
                 gateway=gateway,
             )
-            brief = _brief(("characters/hero.md", "../lean-kernel-secret.txt"))
+            brief = _brief((
+                "characters/hero.md",
+                "style/mounted/sample/style-profile.md",
+                "../lean-kernel-secret.txt",
+            ))
 
             first = runtime.create_scene("tx-1", brief)
             second = runtime.create_scene("tx-1", brief)
@@ -235,6 +247,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(len(gateway.calls), 1)
             self.assertIn("人物怕失去妹妹的信任", gateway.calls[0][1])
+            self.assertIn("R25：结尾以行动落定。", gateway.calls[0][1])
             self.assertNotIn("不应读取", gateway.calls[0][1])
             self.assertEqual(runtime.metrics.provider_calls, 1)
             self.assertEqual(runtime.metrics.cache_hits, 1)
