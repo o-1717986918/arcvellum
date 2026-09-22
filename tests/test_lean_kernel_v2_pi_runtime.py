@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
@@ -68,6 +69,8 @@ class _Gateway:
                 '{"decision":"pass","summary":"承认行为改变了关系压力",'
                 '"revision_instructions":[],"evidence":["她把信放回桌上"]}'
             )
+        elif prompt.startswith("# 首轮场景正文续写"):
+            answer = json.dumps({"insertion": "她想起昨夜反复推开的那扇门，终于把迟疑说给妹妹听。" * 30}, ensure_ascii=False)
         else:
             answer = (
                 '{"prose":"她把信放回桌上，说是自己拿的。妹妹没有接话。",'
@@ -248,12 +251,13 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             second = runtime.create_scene("tx-1", brief)
 
             self.assertEqual(first, second)
-            self.assertEqual(len(gateway.calls), 1)
+            self.assertEqual(len(gateway.calls), 2)
             self.assertIn("人物怕失去妹妹的信任", gateway.calls[0][1])
             self.assertIn("R25：结尾以行动落定。", gateway.calls[0][1])
             self.assertNotIn("不应读取", gateway.calls[0][1])
-            self.assertEqual(runtime.metrics.provider_calls, 1)
+            self.assertEqual(runtime.metrics.provider_calls, 2)
             self.assertEqual(runtime.metrics.cache_hits, 1)
+            self.assertGreaterEqual(len(first.prose), 600)
             self.assertEqual(
                 first.scene_delta.character_changes[0].attributes,
                 (("trust", "lower"),),
@@ -293,7 +297,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             committed = service.commit(transaction.transaction_id)
 
             self.assertEqual(committed.status, SceneTransactionStatus.COMMITTED)
-            self.assertEqual([call[0] for call in gateway.calls], ["worker", "reviewer"])
+            self.assertEqual([call[0] for call in gateway.calls], ["worker", "worker", "reviewer"])
 
     def test_review_cache_is_bound_to_the_exact_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -18,23 +18,19 @@ from literary_engineering_studio_engine.public.literary import (
     SceneDelta,
     VerificationReport,
 )
-
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from ..runtime.role_conversation import RoleConversationGateway
 from ..infrastructure.project_scene_transactions import known_scene_refs
-
+from .scene_length_completion import complete_first_draft_length
 _MACHINE_FIELDS = frozenset({
     "task_id", "transaction_id", "project_root", "expected_outputs", "completion_marker", "sha256",
 })
-
 _QUANTITATIVE_DETAIL_RULE = "新增精确数字默认不用，但先分清语义：“一个又一个”“一次次”等虚指反复并非精确计数，不按数值规则退回。真正精确值若承担当场问答、人物选择或谈判、身份与债务或证据辨认、因果、连续性、后文核验中的一项实际功能，可保留；不要求五项同时成立，也不强求当场有效的信息日后再次兑现。来源已确定的日期、金额、数量和差值必须准确，不能为去数字而改事实。仪表读数、倒计时、尺寸、次数和量词计件没有题材豁免；“一张桌、两把椅子、拧两下、看几秒”若只为显得具体，删去精度不损失对话信息、人物反应或因果，就属于无关实写，应逐句改为状态、动作或后果。不得批量删数字或机械换成模糊量词；也不得按数词出现本身、数字密度或统一清单裁决。若旧文风预设仍写着“数词必须五项全满足”，本段语义分类优先；样例中的数字不自动豁免。"
-
 
 @dataclass(frozen=True)
 class PiSceneRuntimeMetrics:
     provider_calls: int
     cache_hits: int
-
 
 class PiSceneTransactionRuntime:
     """Use the embedded Pi conversation transport behind K2 runtime ports."""
@@ -78,6 +74,10 @@ class PiSceneTransactionRuntime:
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         result = creative_result_from_payload(_answer_payload(answer))
+        result = complete_first_draft_length(
+            brief, result,
+            lambda prompt: _answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id)),
+        )
         _atomic_json(cache, result.to_dict())
         return result
 
@@ -206,7 +206,7 @@ def render_scene_create_prompt(
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
 
 ## Length Contract
-prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。必须写成完整场景，不得用梗概、节拍清单或压缩叙述代替正文。
+prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。先在心中把现有事件分成开场压力、行动阻力、关系反应、选择代价和余波，给各段分配足够篇幅；首轮直接写足完整场景，不得用梗概、节拍清单或压缩叙述代替正文。如果一次响应不足，创作阶段会要求在结尾之前补足有因果作用的段落，不要提前把情节收束成短稿。
 本场只实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff。章级义务提供方向，不授权提前演出后续场景；未列入 participants 的主要人物不得登场、发言或完成关键动作。若 Relevant Sources 含上一场正文，只承接其已发生后果，不得重演首次见面、同一调取/发现/交付、同一问答或同一决定。
 句群以中等长度句承担主要叙述：短句只落在真正的发现、选择或后果上，较长句可以承载同一动作链、观察层次或复杂因果。逗号服务尚未完成的语义关系；逗号较多时先重组层级，只有关系松散或重复才拆分，禁止按数量机械拆成一串同构短句。不要让连续场景都套用“核对—追问—停顿—留悬念”的程序；用本场独有的动作、关系压力和感官材料组织段落。写对白前根据人物资产、欲望、身份和本场关系压力，为每位主要说话者区分用词范围、句子完整度、主动发问或回避方式、礼貌与攻击的边界；speech_style 未填写时从已知事实推导，不编造方言、口头禅或新身世。让换掉说话者姓名后的关键台词仍可辨认，但允许人物在压力下改变语气；基础“清简”不能把所有人压成同一种平直短句。情绪通过避让、选择代价和说话方式显影，不用抽象总结或心理说明代替。使用中文引号与标点，不输出写作流程痕迹。
 
