@@ -308,13 +308,13 @@ def write_platform_scene_generation_task(
 {render_creative_quality_prompt(quality_profile, scope=scene_id)}""",
             ),
             (
-                "执行反规避与朴素叙述禁区",
+                "执行反规避与语言准确性边界",
                 f"""读取 prompt manifest 的 generation_standards.anti_evasion，并执行以下约束：{ANTI_EVASION_SHORT_RULE}
 正文中不要先制造生硬转折再期待后续审查修掉。若场景确实需要信息反转、误判修正或因果揭示，优先用动作、事实顺序、信息差、物证、对话错位或人物选择完成，而不是用显式对照句。该判断只指导写作，不得作为分析或自检表输出。""",
             ),
             (
                 "执行生成前文风标准",
-                """在写候选正文前，先核对 prompt manifest 顶层与 generation_standards 中的 style_mount_snapshot 完全一致，再依据这个 exact style_id/version_id/content_hash/prompt_sha256/digest 对应的 style prompt 建立本场景文风执行策略。策略必须从现有 scene、character、reader experience、narrative rhythm、scene bridge 和相邻场景上下文中确定：本场由谁的欲望与代价驱动；以行动、对白、感知、判断或环境中的哪一种材料为主；采用什么叙述距离与句法/段落节奏；怎样区别于邻场的动作链和信息进入方式；结尾落在决定、关系变化、事实后果、认识修正还是未完成动作。随后直接按策略生成，不得自行改读另一个文风版本，也不得把策略作为分析、自检表、风格卡或工作流痕迹写入候选正文。违禁表达、反规避和中文标点仍须在生成时执行，并接受后续 Style Lint 与 AgentReview 核验；抽象软约束不得留给审查阶段统一润色。""",
+                """在写候选正文前，先核对 prompt manifest 顶层与 generation_standards 中的 style_mount_snapshot 完全一致，再依据这个 exact style_id/version_id/content_hash/prompt_sha256/digest 对应的 style prompt 建立本场景文风执行策略。若挂载版本含完整参考语料，从中选一篇对应本场功能的表达主参照，具体借用其视角距离、句群呼吸、细节进入顺序和对白或意象的推进机制；高强度与类型选段同为正向参考，不因默认风格偏清晰而回避。策略须从 scene、character、reader experience、narrative rhythm、scene bridge 和相邻场景中确定：谁的欲望与代价驱动本场；入场怎样建立声音，哪里因阻力、信息或关系变化而收紧、舒展、变调或停顿；余波如何与邻场有别。让人物对白在词域、句形、礼貌边界和回避策略上可辨，允许有根据的机锋、幽默、抒情与沉默。随后直接按策略生成，不得自行改读另一个文风版本，也不得把策略作为分析、自检表、风格卡或工作流痕迹写入候选正文。违禁表达、反规避和中文标点仍须在生成时执行，并接受后续 Style Lint 与 AgentReview 核验；抽象软约束不得留给审查阶段统一润色。""",
             ),
             (
                 "执行生成前字数预算标准",
@@ -332,7 +332,7 @@ def write_platform_scene_generation_task(
                 "执行生成前叙事节奏与场景桥接",
                 f"""{rhythm_contract_text}
 
-写正文时必须按 tension_curve 的 entry / peak / exit（1-5）执行张力变化，让开头接住 incoming_pressure，中段完成 scene_turn，结尾交出 outgoing_hook。过场不要恋战，高潮不要靠堆形容词撑长；用动作、信息差、人物选择和代价调整节奏。候选 manifest 必须记录 narrative_rhythm_contract 和 narrative_rhythm_standard_applied=true。
+写正文时必须按 tension_curve 的 entry / peak / exit（1-5）执行张力变化，让开头接住 incoming_pressure，中段完成 scene_turn，结尾交出 outgoing_hook。张力曲线也要在语言中可听：句法、段厚、对白抢断、叙述距离与意象密度可以随行动转折而变化；不要机械映射数值，也不要每场都用同一种加速与短句收尾。过场不要恋战，高潮不靠堆形容词撑长；用动作、信息差、人物选择和代价调整节奏。候选 manifest 必须记录 narrative_rhythm_contract 和 narrative_rhythm_standard_applied=true。
 
 同时执行 Scene Function Gate、Reader Question Ledger、Promise / Payoff Ledger、Narrative Distance Control 和 Texture Variety Pass：确认本场功能不是“补设定/聊天”，读者问题和承诺有管理，叙述距离不会持续贴脸解释心理，本场材料与上下场形成变化。""",
             ),
@@ -342,7 +342,7 @@ def write_platform_scene_generation_task(
             ),
             (
                 "生成候选正文",
-                f"""创建或覆盖 `{_rel(candidate, root)}`。正文必须包含 `## 正文候选`、`## 状态变化候选` 和 `## 新角色候选登记`，不得写入 `[AGENT_TASK: ...]`，不得把新增事实写成已确认 canon。背景故事只通过选择、回避、误判、语气或关系压力间接影响行动。正文必须先执行文风生成标准、读者体验硬属性、字数预算标准、反规避协议和新角色登记契约，再通过标准标点和降低 AI 腔自检。""",
+                f"""创建或覆盖 `{_rel(candidate, root)}`。正文必须包含 `## 正文候选`、`## 状态变化候选` 和 `## 新角色候选登记`，不得写入 `[AGENT_TASK: ...]`，不得把新增事实写成已确认 canon。背景故事只通过选择、回避、误判、语气或关系压力间接影响行动。正文须在初稿中实现本场语言曲线和人物声音差异，不写成均匀中速的动作报告；同时执行读者体验硬属性、字数预算标准、反规避协议和新角色登记契约，再通过标准标点和降低 AI 腔自检。""",
             ),
             (
                 "生成候选 manifest",
