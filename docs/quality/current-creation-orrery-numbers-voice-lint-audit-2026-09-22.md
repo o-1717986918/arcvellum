@@ -69,3 +69,25 @@ module_change_packet:
 当前默认文风模板与文风编译器仍写“数词五项全满足”，会把旧错误继续传播给新项目。此批只修订未来产物与生成指导，不回写已经挂载的版本。
 
 实施后，默认文风模板、文风编译器及 AI 腔生成指导均先区分虚指反复和精确计数；场景问答、辨认、选择、因果、连续性等任一实际功能足以保留精度。人物对白从现有身份、欲望、关系压力中推导差异，不用统一的“清简”口吻抹平所有人物。R01—R25 语料原文及不可变挂载版本未改动；默认预设、文风相关 18 项测试和提示词注册表校验通过。
+
+## Batch D — 正式场景生成入口
+
+```yaml
+module_change_packet:
+  objective: "消除旧场景写作入口的五项全满足规则，令人物对白在初稿分化"
+  primary_module: "Engine literary/scene/composition/"
+  public_entry: "draft scene workspace 与 route.scene-development.prose.generate.v1"
+  variation_point: "既有 route prompt asset，不增加新路由"
+  inputs: ["场景合同", "人物资产", "已挂载文风", "上下文包"]
+  outputs: ["场景草稿模板", "正式正文生成提示"]
+  invariants: ["事实数字准确", "无关精确实写仍需改写", "标点与违禁表达继续审查"]
+  allowed_dependencies: ["既有场景生成与 prompt asset 测试"]
+  forbidden_dependencies: ["新增数词密度 Gate", "改动历史文风挂载", "新增 prompt 路由"]
+  tests: ["默认风格场景提示合同", "草稿模板规则回归", "prompt-registry-validate"]
+  rollback_unit: "独立 Git 提交"
+  documentation: ["本审查记录"]
+```
+
+旧场景生成 route asset 和草稿工作台仍要求所有数词同时满足五项条件，且把每个精确值都限定为选择或后文兑现；这一入口虽然不同于当前 lean-v2，但会继续污染其他创作路径。修订限于生成提示，不新增静态门禁。
+
+实施后，正式场景 route asset 与草稿工作台均采用语义分类并在下笔前区分人物言语策略。默认文风路由合同和草稿实写回归通过；prompt-registry 校验与架构审计通过。
