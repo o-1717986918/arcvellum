@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BookOpen, Copyright, FileText, UserRound } from "lucide-vue-next";
-import type { StyleAuthor, StyleWork } from "../types";
+import type { StyleAuthor } from "../types";
 
 defineProps<{
   authors: StyleAuthor[];

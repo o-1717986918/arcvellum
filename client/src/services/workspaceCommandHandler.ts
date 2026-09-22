@@ -1,4 +1,4 @@
-import type { WorkspaceCommand, WorkspaceCommandHandler, WorkspaceCommandResult, WorkspaceView } from "./workspaceCommands";
+import type { WorkspaceCommandHandler, WorkspaceCommandResult, WorkspaceView } from "./workspaceCommands";
 
 export interface WorkspaceCommandDependencies {
   projectRoot(): string;

@@ -249,7 +249,7 @@ function bounded(value: unknown, fallback: number, min: number, max: number): nu
       </header>
 
       <div class="rhythm-profile-pills" role="group" aria-label="全书叙事节奏预设">
-        <button v-for="(preset, id) in PROFILE_PRESETS" :key="id" :class="{ active: bookProfile.profile_id === id }" @click="applyBookProfile(id as RhythmProfileId)"><strong>{{ ({ layered: '层层蓄压', balanced: '均衡推进', pulse: '强起伏脉冲', contemplative: '沉静回响' } as Record<string, string>)[id] }}</strong><small>{{ ({ layered: '渐进抬升，保留余波', balanced: '稳定升级，高潮清晰', pulse: '大起伏，推进感更强', contemplative: '留白更多，回响更长' } as Record<string, string>)[id] }}</small></button>
+        <button v-for="id in Object.keys(PROFILE_PRESETS)" :key="id" :class="{ active: bookProfile.profile_id === id }" @click="applyBookProfile(id as RhythmProfileId)"><strong>{{ ({ layered: '层层蓄压', balanced: '均衡推进', pulse: '强起伏脉冲', contemplative: '沉静回响' } as Record<string, string>)[id] }}</strong><small>{{ ({ layered: '渐进抬升，保留余波', balanced: '稳定升级，高潮清晰', pulse: '大起伏，推进感更强', contemplative: '留白更多，回响更长' } as Record<string, string>)[id] }}</small></button>
       </div>
 
       <div class="rhythm-macro-grid">

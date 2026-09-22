@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { Activity, ArrowUpRight, BookOpenText, CircleAlert, CircleCheck, Download, FileCheck2, Focus, GitBranch, PackageOpen, RefreshCw, Route, ScanSearch } from "lucide-vue-next";
+import { Activity, ArrowUpRight, BookOpenText, CircleAlert, Download, FileCheck2, Focus, GitBranch, PackageOpen, RefreshCw, Route } from "lucide-vue-next";
 import SpatialWindowFrame from "@/features/orrery/SpatialWindowFrame.vue";
 import CreativeWorkspaceHost from "@/features/orrery/CreativeWorkspaceHost.vue";
 import { dispatchConstellationAction } from "@/features/spatial-os/model/actionDispatcher";

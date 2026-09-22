@@ -13,7 +13,6 @@ import type {
   ProjectSummary,
   ProjectsResponse,
   ReaderManifest,
-  ReaderUnitResponse,
   AutopilotRun,
   AutopilotStatus,
   AgentObservability,

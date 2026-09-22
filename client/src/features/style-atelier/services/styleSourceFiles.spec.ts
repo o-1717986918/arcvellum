@@ -3,7 +3,6 @@ import {
   decodeStyleSourceFile,
   decodeStyleSourceFileLenient,
   sanitizeStyleSourceText,
-  StyleSourceEncodingError,
 } from "./styleSourceFiles";
 
 function sourceFile(name: string, bytes: Uint8Array, lastModified = 1): File {
