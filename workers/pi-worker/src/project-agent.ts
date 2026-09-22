@@ -55,8 +55,6 @@ export interface ProjectAgentStart {
 	prompt: string;
 	systemPrompt: string;
 	allowedTools: string[];
-	maxTurns: number;
-	maxToolCalls: number;
 }
 
 export interface ProjectAgentModelRuntime {
@@ -72,7 +70,7 @@ export interface ProjectAgentTurnResult {
 	toolCalls: number;
 }
 
-/** Run one bounded Pi turn. Project behavior remains behind bridge tools. */
+/** Run one time-bounded Pi turn. Project behavior remains behind bridge tools. */
 export async function runProjectAgentTurn(
 	start: ProjectAgentStart,
 	runtime: ProjectAgentModelRuntime,
@@ -83,7 +81,6 @@ export async function runProjectAgentTurn(
 	let turns = 0;
 	let toolCalls = 0;
 	const tools = createProjectAgentTools(start, bridge, () => {
-		if (toolCalls >= start.maxToolCalls) throw new Error("Project Agent tool budget exhausted");
 		toolCalls += 1;
 	});
 	const agent = new Agent({
@@ -98,7 +95,7 @@ export async function runProjectAgentTurn(
 		toolExecution: "sequential",
 		shouldStopAfterTurn: ({ toolResults }) => {
 			turns += 1;
-			return toolResults.length === 0 || turns >= start.maxTurns;
+			return toolResults.length === 0;
 		},
 	});
 	const abort = () => agent.abort();
@@ -384,8 +381,6 @@ function parseStart(value: BridgeEnvelope): ProjectAgentStart {
 		prompt: requiredString(value.payload, "prompt"),
 		systemPrompt: requiredString(value.payload, "system_prompt"),
 		allowedTools: Array.isArray(allowedTools) ? allowedTools.map(String) : [],
-		maxTurns: positiveInteger(value.payload.max_turns, 4),
-		maxToolCalls: positiveInteger(value.payload.max_tool_calls, 4),
 	};
 	if (!start.allowedTools.length) throw new Error("turn.start requires at least one allowed tool");
 	return start;
@@ -501,12 +496,6 @@ function requiredString(value: Record<string, unknown>, field: string): string {
 	const item = String(value[field] || "").trim();
 	if (!item) throw new Error(`turn.start requires ${field}`);
 	return item;
-}
-
-function positiveInteger(value: unknown, fallback: number): number {
-	const parsed = Number(value ?? fallback);
-	if (!Number.isInteger(parsed) || parsed < 1) throw new Error("Project Agent budgets must be positive integers");
-	return parsed;
 }
 
 function parseModelId(value: string): [string, string] {

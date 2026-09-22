@@ -25,6 +25,8 @@ class ProjectAgentContractTests(unittest.TestCase):
         self.assertEqual(decoded.schema, PROJECT_AGENT_BRIDGE_SCHEMA)
         self.assertEqual(decoded.type, BridgeMessageType.TURN_START)
         self.assertEqual(decoded.payload["allowed_tools"], ["project_overview"])
+        self.assertNotIn("max_turns", decoded.payload)
+        self.assertNotIn("max_tool_calls", decoded.payload)
 
     def test_unknown_schema_and_message_type_fail_closed(self):
         valid = {
@@ -53,4 +55,3 @@ class ProjectAgentContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

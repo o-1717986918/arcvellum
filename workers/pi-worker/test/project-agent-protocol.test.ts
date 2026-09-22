@@ -49,8 +49,6 @@ describe("Project Agent bridge protocol", () => {
 			prompt: "项目现在进行到哪里？",
 			systemPrompt: "回答用户问题；需要事实时调用工具。",
 			allowedTools: ["project_overview"],
-			maxTurns: 4,
-			maxToolCalls: 2,
 		};
 
 		const result = await runProjectAgentTurn(
@@ -67,6 +65,50 @@ describe("Project Agent bridge protocol", () => {
 		expect(outbound.filter((item) => item.type === "tool.call")).toHaveLength(1);
 		expect(outbound.filter((item) => item.type === "agent.event" && item.payload.event === "text.delta")).toHaveLength(1);
 		expect(bridge.pendingCount).toBe(0);
+	});
+
+	it("continues past the former tool and model-turn limits until the model answers", async () => {
+		const faux = createFauxCore({
+			provider: "arcvellum-faux-long-turn",
+			models: [{ id: "project-agent-long-turn", reasoning: false }],
+		});
+		faux.setResponses([
+			...Array.from({ length: 10 }, (_, index) =>
+				fauxAssistantMessage(
+					fauxToolCall("project_overview", { focus: `chapter-${index + 1}` }, { id: `model-tool-${index + 1}` }),
+					{ stopReason: "toolUse" },
+				),
+			),
+			fauxAssistantMessage("十章进度已核对完毕。"),
+		]);
+		const outbound: BridgeEnvelope[] = [];
+		let bridge: ProjectToolBridge;
+		const write = (value: BridgeEnvelope) => {
+			outbound.push(value);
+			if (value.type !== "tool.call") return;
+			queueMicrotask(() => bridge.receive(envelope("tool.result", "turn-long", {
+				request_id: value.payload.request_id,
+				name: value.payload.name,
+				ok: true,
+				result: { ok: true },
+			})));
+		};
+		bridge = new ProjectToolBridge("turn-long", write, 1_000);
+
+		const result = await runProjectAgentTurn({
+			sessionId: "session-long",
+			turnId: "turn-long",
+			prompt: "逐章核对进度，再告诉我结果。",
+			systemPrompt: "按需调用工具，完成后回答。",
+			allowedTools: ["project_overview"],
+		}, { model: faux.getModel(), streamFn: faux.streamSimple }, bridge, write);
+
+		expect(result.status).toBe("completed");
+		expect(result.answer).toBe("十章进度已核对完毕。");
+		expect(result.toolCalls).toBe(10);
+		expect(result.turns).toBeGreaterThan(6);
+		expect(faux.state.callCount).toBe(11);
+		expect(outbound.filter((item) => item.type === "tool.call")).toHaveLength(10);
 	});
 
 	it("exposes bounded autonomous write tools", async () => {
@@ -104,8 +146,6 @@ describe("Project Agent bridge protocol", () => {
 				prompt: "请记录为创作方向：主角拒绝王位。",
 				systemPrompt: "在领域门禁内自主执行项目操作。",
 				allowedTools: ["project_record_direction"],
-				maxTurns: 3,
-				maxToolCalls: 2,
 			},
 			{ model: faux.getModel(), streamFn: faux.streamSimple },
 			bridge,
@@ -160,8 +200,6 @@ describe("Project Agent bridge protocol", () => {
 				prompt: "找到地图，并告诉我现场是否仍在工作。",
 				systemPrompt: "按需使用只读工具。",
 				allowedTools: ["project_search", "creation_observe"],
-				maxTurns: 4,
-				maxToolCalls: 3,
 			},
 			{ model: faux.getModel(), streamFn: faux.streamSimple },
 			bridge,
@@ -209,8 +247,6 @@ describe("Project Agent bridge protocol", () => {
 			prompt: "把这部作品作为长期目标推进到交付。",
 			systemPrompt: "先确认作品，再启动长期目标。",
 			allowedTools: ["workspace_catalog", "project_goal_manage"],
-			maxTurns: 4,
-			maxToolCalls: 3,
 		}, { model: faux.getModel(), streamFn: faux.streamSimple }, bridge, write);
 
 		expect(result.status).toBe("completed");

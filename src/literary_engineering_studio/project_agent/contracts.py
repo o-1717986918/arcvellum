@@ -1,4 +1,4 @@
-"""Transport-neutral contracts for the bounded Project Agent bridge."""
+"""Transport-neutral contracts for the Project Agent bridge."""
 
 from __future__ import annotations
 
@@ -110,8 +110,6 @@ class ProjectAgentTurnRequest:
     prompt: str
     system_prompt: str
     allowed_tools: tuple[str, ...] = ("project_overview",)
-    max_turns: int = 4
-    max_tool_calls: int = 4
 
     def __post_init__(self) -> None:
         if not self.session_id.strip() or not self.turn_id.strip():
@@ -122,8 +120,6 @@ class ProjectAgentTurnRequest:
             raise ValueError("Project Agent system prompt is required")
         if not self.allowed_tools:
             raise ValueError("at least one Project Agent tool is required")
-        if self.max_turns < 1 or self.max_tool_calls < 1:
-            raise ValueError("Project Agent budgets must be positive")
 
     def start_envelope(self, message_id: str) -> BridgeEnvelope:
         return BridgeEnvelope(
@@ -135,8 +131,6 @@ class ProjectAgentTurnRequest:
                 "prompt": self.prompt,
                 "system_prompt": self.system_prompt,
                 "allowed_tools": list(self.allowed_tools),
-                "max_turns": self.max_turns,
-                "max_tool_calls": self.max_tool_calls,
             },
         )
 

@@ -316,8 +316,6 @@ class ProjectAgentService:
             prompt=turn_prompt(message, session),
             system_prompt=system_prompt(persona, write_enabled=self.actions is not None),
             allowed_tools=allowed_tools,
-            max_turns=6,
-            max_tool_calls=8,
         )
 
     def _run_runtime(
@@ -396,8 +394,6 @@ class ProjectAgentService:
                 prompt=delegated_goal_followup_prompt(message, result.answer, terminal_run),
                 system_prompt=request.system_prompt,
                 allowed_tools=request.allowed_tools,
-                max_turns=request.max_turns,
-                max_tool_calls=request.max_tool_calls,
             )
             result = self._run_runtime(root, message, followup, timeout, cancel_event, emit)
         return result
