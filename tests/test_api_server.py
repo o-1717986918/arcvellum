@@ -53,6 +53,26 @@ class ApiServerTests(unittest.TestCase):
         connections = self.client.get("/model-connections").json()
         self.assertEqual(connections["managed_by"], "agent-runner")
 
+    def test_thinking_preferences_can_be_read_and_changed_without_model_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            with patch.dict(os.environ, {"LES_CONFIG_PATH": str(path)}):
+                current = self.client.get("/model-connections/pi-worker/thinking")
+                self.assertEqual(current.status_code, 200)
+                self.assertEqual(current.json()["preferences"], {"creative": "medium", "project": "xhigh"})
+                changed = self.client.put(
+                    "/model-connections/pi-worker/thinking",
+                    json={"role": "project", "level": "high"},
+                )
+                self.assertEqual(changed.status_code, 200)
+                self.assertEqual(changed.json()["preferences"]["project"], "high")
+                self.assertTrue(path.is_file())
+                invalid = self.client.put(
+                    "/model-connections/pi-worker/thinking",
+                    json={"role": "creative", "level": "turbo"},
+                )
+                self.assertEqual(invalid.status_code, 422)
+
     def test_health_exposes_desktop_startup_nonce_only_after_authentication(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

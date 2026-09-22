@@ -172,6 +172,11 @@ class ModelSelectionRequest(BaseModel):
     role: str = "all"
 
 
+class PiThinkingPreferenceRequest(BaseModel):
+    role: Literal["creative", "project"]
+    level: Literal["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+
 class AdvisorSessionRequest(BaseModel):
     project_root: str
     title: str = "项目问答"
@@ -378,6 +383,7 @@ __all__ = [
     "DirectionRequest",
     "ModelSelectionRequest",
     "PiWorkerCredentialRequest",
+    "PiThinkingPreferenceRequest",
     "ProjectCreateRequest",
     "DemoCloneRequest",
     "DemoInstallRequest",

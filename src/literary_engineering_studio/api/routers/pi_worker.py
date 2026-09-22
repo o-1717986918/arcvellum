@@ -6,7 +6,11 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from ...application.config import save_config
+from ...application.config import (
+    get_pi_thinking_preferences,
+    save_config,
+    set_pi_thinking_preference,
+)
 from ...integrations.pi_worker import (
     disconnect_pi_provider,
     pi_worker_catalog,
@@ -15,7 +19,7 @@ from ...integrations.pi_worker import (
 )
 from ...runtimes import clear_agent_runner_status_cache
 from ..common import call_handler
-from ..models import ModelSelectionRequest, PiWorkerCredentialRequest
+from ..models import ModelSelectionRequest, PiThinkingPreferenceRequest, PiWorkerCredentialRequest
 
 
 def build_pi_worker_router(config: dict[str, Any]) -> APIRouter:
@@ -24,6 +28,19 @@ def build_pi_worker_router(config: dict[str, Any]) -> APIRouter:
     @router.get("/model-connections/pi-worker/catalog")
     def catalog():
         return call_handler(lambda: {"ok": True, **pi_worker_catalog(config)})
+
+    @router.get("/model-connections/pi-worker/thinking")
+    def thinking():
+        return {"ok": True, "preferences": get_pi_thinking_preferences(config)}
+
+    @router.put("/model-connections/pi-worker/thinking")
+    def select_thinking(payload: PiThinkingPreferenceRequest):
+        return call_handler(
+            lambda: {
+                "ok": True,
+                "preferences": set_pi_thinking_preference(config, payload.role, payload.level),
+            }
+        )
 
     @router.put("/model-connections/pi-worker/credential")
     def credential(payload: PiWorkerCredentialRequest):

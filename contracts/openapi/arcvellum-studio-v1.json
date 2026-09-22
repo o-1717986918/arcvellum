@@ -713,6 +713,37 @@
         "title": "ModelSelectionRequest",
         "type": "object"
       },
+      "PiThinkingPreferenceRequest": {
+        "properties": {
+          "level": {
+            "enum": [
+              "off",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "creative",
+              "project"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "level"
+        ],
+        "title": "PiThinkingPreferenceRequest",
+        "type": "object"
+      },
       "PiWorkerCredentialRequest": {
         "properties": {
           "credential": {
@@ -4015,6 +4046,56 @@
           }
         },
         "summary": "Select"
+      }
+    },
+    "/model-connections/pi-worker/thinking": {
+      "get": {
+        "operationId": "thinking_model_connections_pi_worker_thinking_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Thinking"
+      },
+      "put": {
+        "operationId": "select_thinking_model_connections_pi_worker_thinking_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PiThinkingPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Thinking"
       }
     },
     "/narrative/projection": {

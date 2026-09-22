@@ -1179,6 +1179,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/model-connections/pi-worker/thinking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Thinking */
+        get: operations["thinking_model_connections_pi_worker_thinking_get"];
+        /** Select Thinking */
+        put: operations["select_thinking_model_connections_pi_worker_thinking_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/narrative/projection": {
         parameters: {
             query?: never;
@@ -2899,6 +2917,19 @@ export interface components {
              * @default all
              */
             role: string;
+        };
+        /** PiThinkingPreferenceRequest */
+        PiThinkingPreferenceRequest: {
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "creative" | "project";
         };
         /** PiWorkerCredentialRequest */
         PiWorkerCredentialRequest: {
@@ -5408,6 +5439,59 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ModelSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    thinking_model_connections_pi_worker_thinking_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    select_thinking_model_connections_pi_worker_thinking_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PiThinkingPreferenceRequest"];
             };
         };
         responses: {

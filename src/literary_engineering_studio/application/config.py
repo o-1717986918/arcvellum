@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
 import sys
 from typing import Any
+
+from .pi_thinking import (
+    PI_THINKING_KEYS,
+    PI_THINKING_LEVELS,
+    get_pi_thinking_preferences,
+    migrate_pi_thinking_preferences,
+)
 
 
 CONFIG_SCHEMA = "literary-engineering-studio/config/v0.9"
@@ -207,8 +215,8 @@ def default_config() -> dict[str, Any]:
                     )
                 },
                 "auth_path": "",
-                "thinking": "low",
-                "project_agent_thinking": "max",
+                "thinking": "medium", "project_agent_thinking": "xhigh",
+                "thinking_preferences_version": 1,
                 "max_turns": 6,
                 "max_tool_calls": 12,
                 "max_repair_attempts": 1,
@@ -275,6 +283,30 @@ def save_config(data: dict[str, Any], path: Path | None = None) -> Path:
     return target
 
 
+def set_pi_thinking_preference(
+    config: dict[str, Any], role: str, level: str, *, path: Path | None = None
+) -> dict[str, str]:
+    key = PI_THINKING_KEYS.get(role)
+    if key is None:
+        raise ValueError(f"unsupported Pi thinking role: {role}")
+    normalized = str(level).strip().lower()
+    if normalized not in PI_THINKING_LEVELS:
+        raise ValueError(f"unsupported Pi thinking level: {level}")
+    proposed = deepcopy(config)
+    runners = proposed.setdefault("agent_runners", {})
+    settings = runners.setdefault("pi-worker", {})
+    if not isinstance(settings, dict):
+        raise ValueError("Pi Worker configuration must be an object")
+    settings[key] = normalized
+    settings["thinking_preferences_version"] = 1
+    save_config(proposed, path)
+    live_runners = config.setdefault("agent_runners", {})
+    live_settings = live_runners.setdefault("pi-worker", {})
+    live_settings[key] = normalized
+    live_settings["thinking_preferences_version"] = 1
+    return get_pi_thinking_preferences(config)
+
+
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in override.items():
@@ -298,6 +330,7 @@ def _migrate_config(payload: dict[str, Any]) -> dict[str, Any]:
         runners = dict(runners)
         runners.pop("opencode", None)
         migrated["agent_runners"] = runners
+    migrated = migrate_pi_thinking_preferences(migrated)
     migrated = _drop_retired_model_connections(migrated)
     if source_schema != CONFIG_SCHEMA and isinstance(migrated.get("agent_runners"), dict):
         runners = dict(migrated["agent_runners"])

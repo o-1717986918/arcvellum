@@ -42,6 +42,8 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             ("GET", "/agent-runners"),
             ("GET", "/model-connections"),
             ("GET", "/model-connections/pi-worker/catalog"),
+            ("GET", "/model-connections/pi-worker/thinking"),
+            ("PUT", "/model-connections/pi-worker/thinking"),
             ("PUT", "/model-connections/pi-worker/credential"),
             ("DELETE", "/model-connections/pi-worker/credential/{provider_id}"),
             ("PUT", "/model-connections/pi-worker/model"),

@@ -4,7 +4,15 @@ from pathlib import Path
 import sys
 import unittest
 
-from literary_engineering_studio.config import CONFIG_SCHEMA, default_config, load_config, repository_root, save_config
+from literary_engineering_studio.config import (
+    CONFIG_SCHEMA,
+    default_config,
+    get_pi_thinking_preferences,
+    load_config,
+    repository_root,
+    save_config,
+    set_pi_thinking_preference,
+)
 
 
 class ConfigTests(unittest.TestCase):
@@ -17,8 +25,8 @@ class ConfigTests(unittest.TestCase):
             set(pi_worker["models"].values()),
             {"deepseek/deepseek-v4-flash"},
         )
-        self.assertEqual(pi_worker["thinking"], "low")
-        self.assertEqual(pi_worker["project_agent_thinking"], "max")
+        self.assertEqual(pi_worker["thinking"], "medium")
+        self.assertEqual(pi_worker["project_agent_thinking"], "xhigh")
 
     def test_existing_shared_worker_thinking_does_not_lower_project_agent(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -27,8 +35,34 @@ class ConfigTests(unittest.TestCase):
 
             pi_worker = load_config(path)["agent_runners"]["pi-worker"]
 
-            self.assertEqual(pi_worker["thinking"], "low")
-            self.assertEqual(pi_worker["project_agent_thinking"], "max")
+            self.assertEqual(pi_worker["thinking"], "medium")
+            self.assertEqual(pi_worker["project_agent_thinking"], "xhigh")
+
+    def test_migrates_only_untouched_old_thinking_defaults_once(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            path.write_text(
+                '{"agent_runners":{"pi-worker":{"thinking":"low","project_agent_thinking":"high"}}}',
+                encoding="utf-8",
+            )
+            config = load_config(path)
+            self.assertEqual(get_pi_thinking_preferences(config), {"creative": "medium", "project": "high"})
+            save_config(config, path)
+            persisted = json.loads(path.read_text(encoding="utf-8"))["agent_runners"]["pi-worker"]
+            self.assertEqual(persisted["thinking_preferences_version"], 1)
+            persisted["thinking"] = "low"
+            path.write_text(json.dumps({"agent_runners": {"pi-worker": persisted}}), encoding="utf-8")
+            self.assertEqual(load_config(path)["agent_runners"]["pi-worker"]["thinking"], "low")
+
+    def test_thinking_preference_validation_and_persistence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = default_config()
+            self.assertEqual(set_pi_thinking_preference(config, "project", "high", path=path)["project"], "high")
+            self.assertEqual(load_config(path)["agent_runners"]["pi-worker"]["project_agent_thinking"], "high")
+            with self.assertRaises(ValueError):
+                set_pi_thinking_preference(config, "creative", "turbo", path=path)
+            self.assertEqual(get_pi_thinking_preferences(config)["creative"], "medium")
 
     def test_migrates_untouched_v06_pi_prompt_canary_to_all_pi_tasks_v3(self):
         with tempfile.TemporaryDirectory() as temporary:

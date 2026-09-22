@@ -45,8 +45,8 @@ def _project_agent_model(settings: dict[str, Any]) -> str:
 
 
 def _thinking(settings: dict[str, Any]) -> str:
-    value = str(settings.get("project_agent_thinking") or "max").strip().lower()
-    return value if value in {"off", "minimal", "low", "medium", "high", "xhigh", "max"} else "max"
+    value = str(settings.get("project_agent_thinking") or "xhigh").strip().lower()
+    return value if value in {"off", "minimal", "low", "medium", "high", "xhigh", "max"} else "xhigh"
 
 
 __all__ = ["build_project_agent_runtime"]

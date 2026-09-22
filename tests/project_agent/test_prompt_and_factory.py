@@ -42,7 +42,7 @@ class ProjectAgentPromptAndFactoryTests(unittest.TestCase):
                 return_value=installation,
             ):
                 runtime = build_project_agent_runtime({"agent_runners": {"pi-worker": settings}}, root)
-                self.assertEqual(runtime.command[runtime.command.index("--thinking") + 1], "max")
+                self.assertEqual(runtime.command[runtime.command.index("--thinking") + 1], "xhigh")
 
                 settings["project_agent_thinking"] = "high"
                 runtime = build_project_agent_runtime({"agent_runners": {"pi-worker": settings}}, root)
