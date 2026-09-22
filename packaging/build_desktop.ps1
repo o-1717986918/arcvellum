@@ -141,7 +141,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v$($StudioVersion.Trim()) refines the Narrative Orrery, makes the embedded Pi Worker the default literary runtime, and removes OpenCode from the required desktop bundle."
+        --notes "ArcVellum v$($StudioVersion.Trim()) fixes Orrery continuity loading and improves semantic quantity and character-voice guidance."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location

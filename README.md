@@ -11,7 +11,7 @@ ArcVellum 面向小说及其他长篇虚构作品。你可以与项目 Agent 讨
 
 长篇创作的困难往往出现在第一段精彩文本之后：人物前后矛盾，情节库存撑不起目标篇幅，文风漂移，审查意见没有落实，最终文件混入工作记录。ArcVellum 把这些问题放进同一个可恢复的文学项目，而不只放进模型的聊天上下文。
 
-**当前版本：v0.99.8 Beta。** [下载 Windows 安装包](https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.8) · [阅读发行说明](docs/releases/v0.99.8.md) · [查看验证记录](docs/releases/v0.99.8-verification.md)
+**当前版本：v0.99.9 Beta。** [下载 Windows 安装包](https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.9) · [阅读发行说明](docs/releases/v0.99.9.md) · [查看验证记录](docs/releases/v0.99.9-verification.md)
 
 ### 界面实拍
 
@@ -74,7 +74,7 @@ flowchart LR
 ArcVellum 当前同时维护两种场景路径：
 
 - **`lean-v2`** 将单个场景作为创作事务，集中完成生成、必要的验证与语义审查、修订和提交；章节检查点处理跨场景问题。项目 Agent 启动的长期目标使用这条路径，目前它仍是预览能力，需要继续积累同模型盲评与多题材长篇证据。
-- **`strict-v1`** 保留原有细粒度任务协议与历史项目兼容。一般新建项目的初始内核仍由兼容清单决定；当前清单尚未将 `lean-v2` 设为所有项目的默认值。
+- **`strict-v1`** 保留原有细粒度任务协议与历史项目兼容；新项目的正式默认内核为 `lean-v2`。
 
 两个路径都保留正式事实写回、来源记录和交付检查。Lean v2 减少了创作过程中的重复产物与模型往返，同时保留不可逆写回边界。关于取舍与迁移，见 [Lean v2 设计](docs/architecture/arcvellum-lean-literary-kernel-v2-design.md)。
 
@@ -90,11 +90,11 @@ ArcVellum 当前同时维护两种场景路径：
 
 ## 当前验证与边界
 
-v0.99.8 的 Windows 生产构建与签名更新包、macOS Apple Silicon 和 Intel **未签名预览包**由同一标签工作流生成。macOS 包尚未经过 Developer ID 签名和 Apple notarization，暂不按普通用户稳定版介绍。
+v0.99.9 的 Windows 生产构建与签名更新包、macOS Apple Silicon 和 Intel **未签名预览包**由同一标签工作流生成。macOS 包尚未经过 Developer ID 签名和 Apple notarization，暂不按普通用户稳定版介绍。
 
 真实端到端样本中，项目 Agent 曾驱动一个 `full_auto`、`lean-v2` 项目从创作目标推进到一场正文正式提交和整书 Markdown/DOCX 交付；该样本完成 91 项后台任务，最终无失败和待处理决策。[验收证据](docs/verification/arcvellum-project-agent-e2e-2026-09-15.md)记录了运行、场景提交与发布清单。这是**单场景链路证明**，还不能代表多题材、几十万字作品都已稳定完成。
 
-发布验证涵盖 Python、Vue、Pi Worker、Prompt Registry、提示词评估、架构审计与版本同步检查。[详细结果](docs/releases/v0.99.8-verification.md)。
+发布验证涵盖 Python、Vue、Pi Worker、Prompt Registry、提示词评估、架构审计与版本同步检查。[详细结果](docs/releases/v0.99.9-verification.md)。
 
 目前仍需积累的证据包括：长期无人值守恢复、不同模型与题材的文学质量、完整 Windows 安装/升级矩阵，以及正式签名的 macOS 发行流程。项目处于 Beta，重要作品建议自行保留备份并定期检查正式交付文件。
 
