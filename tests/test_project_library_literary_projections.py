@@ -1,13 +1,48 @@
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
+from literary_engineering_studio.api_server import create_app
+from literary_engineering_studio.config import default_config
 from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 from literary_engineering_studio_engine.projections.library.service import build_project_library
 
 
 class ProjectLibraryLiteraryProjectionTests(unittest.TestCase):
+    def test_v4_api_reads_a_project_with_formal_continuity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "work"
+            init_work_project(InitOptions(target=root, title="星仪 API", work_type="novel", target_length=12000, premise="连续性回归。"))
+            self._write_json(
+                root / "workflow" / "continuity" / "current.json",
+                {"entries": [{"entry_id": "change-1", "kind": "character_change", "summary": "林澈认错。"}]},
+            )
+            config = default_config()
+            config["application"]["data_root"] = str(base / "data")
+            config["application"]["database_path"] = str(base / "studio.sqlite3")
+            config["application"]["projects_root"] = str(base / "projects")
+            config["worker"]["runs_root"] = str(base / "runs")
+            config["agent_runners"]["pi-worker"]["data_root"] = str(base / "data")
+
+            with patch.dict(os.environ, {"LES_API_TOKEN": "test-token"}):
+                with TestClient(create_app(config)) as client:
+                    response = client.get(
+                        "/narrative/projection/v4",
+                        params={"project_root": str(root)},
+                        headers={"Origin": "http://tauri.localhost", "Authorization": "Bearer test-token"},
+                    )
+
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.headers.get("access-control-allow-origin"), "http://tauri.localhost")
+            self.assertEqual(response.headers.get("access-control-allow-credentials"), "true")
+            self.assertEqual(response.json()["schema"], "arcvellum/narrative-projection/v4")
+
     def test_library_reads_formal_continuity_entries_and_identity_conflicts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "continuity-projection"

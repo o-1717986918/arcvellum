@@ -1,9 +1,21 @@
 import unittest
 
+from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import candidate_language_gate
 from literary_engineering_studio_engine.literary.style.anti_ai import lint_ai_style
 
 
 class AntiAiStyleTests(unittest.TestCase):
+    def test_semantic_quantities_are_not_misclassified_by_static_lint(self):
+        for prose in ("一个又一个人从门口进来。", "还剩几个人？两个。"):
+            with self.subTest(prose=prose):
+                self.assertEqual(candidate_language_gate(prose)["status"], "pass")
+
+    def test_hard_expression_and_punctuation_rules_remain_in_review(self):
+        contrast = candidate_language_gate("不是他，而是她。")
+        punctuation = candidate_language_gate("他问?")
+        self.assertEqual(contrast["status"], "blocking")
+        self.assertEqual(punctuation["status"], "blocking")
+
     def test_concrete_abstract_nouns_do_not_trigger_summary_density(self):
         text = "。".join(["他核对了一遍记录"] * 170 + ["答案写在表格里", "真相仍待核验", "设备本身没有故障"])
 
