@@ -91,3 +91,25 @@ module_change_packet:
 旧场景生成 route asset 和草稿工作台仍要求所有数词同时满足五项条件，且把每个精确值都限定为选择或后文兑现；这一入口虽然不同于当前 lean-v2，但会继续污染其他创作路径。修订限于生成提示，不新增静态门禁。
 
 实施后，正式场景 route asset 与草稿工作台均采用语义分类并在下笔前区分人物言语策略。默认文风路由合同和草稿实写回归通过；prompt-registry 校验与架构审计通过。
+
+## Batch E — 长篇规划中的数字口径
+
+```yaml
+module_change_packet:
+  objective: "规划阶段不提前删掉问答、债额、身份或时间连续性需要的精确值"
+  primary_module: "Studio application/lean_longform_planning.py"
+  public_entry: "LeanLongformPlanningService 初始规划与滚动窗口"
+  variation_point: "none；沿用现有规划 JSON schema"
+  inputs: ["用户方向", "已有故事与人物事实", "章节预算"]
+  outputs: ["初始因果骨架", "下一章场景窗口"]
+  invariants: ["已有数值事实准确", "不为装饰添加读数", "不改规划输出 schema"]
+  allowed_dependencies: ["现有规划服务测试"]
+  forbidden_dependencies: ["新增规则引擎", "数字密度门禁"]
+  tests: ["初始与滚动规划 prompt 合同", "现有规划服务回归"]
+  rollback_unit: "独立 Git 提交"
+  documentation: ["本审查记录"]
+```
+
+当前初始规划和滚动窗口均要求精确值同时改变眼前选择并在后文兑现。这会在场景尚未生成时删掉当场问答和身份、债务辨认所需的数字；应改为任一实际功能即可保留，仍拒绝装饰性计时、计件。
+
+实施后，两个规划提示先区分虚指反复与精确计数，保留场景内真实有用的精度并延续已确定事实；JSON 输出 schema 未变。规划服务 4 项回归、架构审计和模块映射检查通过。
