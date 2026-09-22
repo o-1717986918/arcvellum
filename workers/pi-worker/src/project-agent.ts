@@ -310,7 +310,7 @@ function projectToolDefinition(name: string): {
 	};
 	if (name === PROJECT_RHYTHM_UPDATE_TOOL) return {
 		label: "Update Narrative Rhythm",
-		description: "Update rhythm entries and/or the book profile. For a profile-only correction, omit entries; the service preserves all current scene entries.",
+		description: "Update rhythm entries and/or the book profile. For a profile-only correction, omit entries; the service preserves saved scene overrides and leaves generated scene defaults untouched.",
 		parameters: Type.Object({
 			work_id: workId(),
 			entries: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }), { maxItems: 500 })),

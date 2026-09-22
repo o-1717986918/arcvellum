@@ -75,7 +75,10 @@ class _CandidatePromotions:
 
 class ProjectAgentActionTests(unittest.TestCase):
     def test_profile_only_rhythm_update_preserves_current_scene_entries(self):
-        current = [{"scene_id": "scene_0001", "rhythm_role": "setup"}]
+        current = [
+            {"scene_id": "scene_0001", "rhythm_role": "setup", "source": "rhythm-plan"},
+            {"scene_id": "scene_0002", "rhythm_role": "escalation", "source": "scene-yaml"},
+        ]
         captured = []
         actions = dependencies_from_actions(
             record_direction=lambda *_args, **_kwargs: {}, autopilot=_Autopilot(),
@@ -83,7 +86,7 @@ class ProjectAgentActionTests(unittest.TestCase):
             save_rhythm=lambda _root, entries, **kwargs: captured.append((entries, kwargs)) or {"digest": "new"},
         )
         result = actions.update_rhythm(Path("C:/work"), {"book_profile": {"directive": "新的章序"}})
-        self.assertEqual(captured[0][0], current)
+        self.assertEqual(captured[0][0], current[:1])
         self.assertEqual(captured[0][1]["book_profile"], {"directive": "新的章序"})
         self.assertEqual(result["plan"]["digest"], "new")
 

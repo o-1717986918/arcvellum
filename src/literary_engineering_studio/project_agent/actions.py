@@ -112,7 +112,9 @@ def dependencies_from_actions(
         entries = arguments.get("entries")
         book_profile = arguments.get("book_profile")
         if entries is None and isinstance(book_profile, dict) and load_rhythm is not None:
-            entries = load_rhythm(root).get("entries")
+            # Scene-YAML defaults may use lean roles outside the editor's enum.
+            source_entries = load_rhythm(root).get("entries") or []
+            entries = [row for row in source_entries if isinstance(row, dict) and row.get("source") == "rhythm-plan"]
         if not isinstance(entries, list):
             raise ValueError("project_rhythm_update requires entries, or book_profile with a rhythm reader")
         if book_profile is not None and not isinstance(book_profile, dict):

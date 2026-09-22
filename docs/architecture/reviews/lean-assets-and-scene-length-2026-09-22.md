@@ -62,4 +62,6 @@ module_change_packet:
 
 实场验证：顶层 Agent 经新工具将《代存》《排期》《回话》追加为 `scene_0007` 至 `scene_0009`，预算总目标仍为 300,000，规划场数由 35 调整为 96，旧正文未动。因本轮按用户要求未恢复，Autopilot 的 `lean-scene-checkpoint` 是扩场前的停机记录。顶层 Agent 曾误将六场的场景目标相加为新的章级目标 27,000；实际上 `load_chapter_planning_facts` 从 `chapter_budgets` 读取章级目标，仍为 17,100，而循环在本章有未提交场景时先推进 `scene_0007`，不会先复用旧的章末检查点。已在工具回执与顶层提示词中明确这两点；真正过章仍需新三场成稿并重算检查点。
 
-补场后发现 `rhythm_plan.json` 的书级 directive 仍说倒插场景、以《独客》收束；旧用户方向日志也保留该说法。这些是未来创作的输入，不能只修正场景库存。顶层 Agent 现可用既有 `project_rhythm_update` 仅提交 `book_profile`，应用服务读取并原样保留全部当前场景节奏条目，避免让 Agent 手抄九条记录；另通过方向记录说明旧插场口径已被追加式修复取代。
+补场后发现 `rhythm_plan.json` 的书级 directive 仍说倒插场景、以《独客》收束；旧用户方向日志也保留该说法。这些是未来创作的输入，不能只修正场景库存。顶层 Agent 现可用既有 `project_rhythm_update` 仅提交 `book_profile`，应用服务保留已保存的逐场人工覆盖，新场景继续使用场景 YAML 中的默认节奏，避免让 Agent 手抄九条记录；另通过方向记录说明旧插场口径已被追加式修复取代。
+
+第一次实场重试表明，节奏读取模型还包括从新场景 YAML 派生的默认角色（`escalation`、`bridge`、`payoff`），而旧节奏编辑器只接受其人工覆盖枚举，重新保存这三条会被拒绝。profile-only 适配因此只保留 `source=rhythm-plan` 的既存人工覆盖；新场景默认继续留在 scene YAML，既不被重写也不丢失。失败尝试未改变正式记录。
