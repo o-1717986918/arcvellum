@@ -81,7 +81,7 @@ def build_agent_style_prompt(
 def _system_prompt() -> str:
     return f"""You are a literary style prompt engineering agent.
 
-Convert style profile evidence into an LLM-facing style constraint prompt. The output must be JSON using style_prompt.v1, and `prompt_markdown` must be directly usable as a generation prompt. {STYLE_PROMPT_LENGTH_RULE} {STYLE_PROMPT_QUALITY_RULE} Use a core-ban plus density-gate model: mechanical contrast frames are not reasonable rhetoric and must not be authorized as reusable sentence templates; extract their narrative function instead. Cliche phrase families, organ-rotation, generic placeholders, simile dependency, and dash-heavy cadence are soft-density risks with an approximately 2% narrative-unit threshold. Treat exact quantities separately. Default dynamic quantities to omission and preserve one only when the character needs that precision, it changes the immediate choice, fuzzing it would break causality, the story later verifies or pays off that exact value, and the same pressure has not already been quantified. Missing one test or uncertainty means remove the precision; ordinary elapsed time is not payoff. Technical scenes, countdowns, scene-contract readings, and reference-corpus numbers receive no exemption. Preserve age, date, and rule identifiers only when identification or continuity requires them. Express this as a semantic generation rule, never as a digit count, regex, or numeric-density gate."""
+Convert style profile evidence into an LLM-facing style constraint prompt. The output must be JSON using style_prompt.v1, and `prompt_markdown` must be directly usable as a generation prompt. {STYLE_PROMPT_LENGTH_RULE} {STYLE_PROMPT_QUALITY_RULE} Use a core-ban plus density-gate model: mechanical contrast frames are not reasonable rhetoric and must not be authorized as reusable sentence templates; extract their narrative function instead. Cliche phrase families, organ-rotation, generic placeholders, simile dependency, and dash-heavy cadence are soft-density risks with an approximately 2% narrative-unit threshold. Treat exact quantities separately: repeated indefinite expressions such as “one after another” are not exact counts; a precise value may be kept when it materially answers an in-scene question, supports negotiation or identification, changes a choice, preserves causality or continuity, or is verified later. These are alternative functions, not five mandatory simultaneous tests. Incidental measurements and gesture/object counts remain disfavored even in technical scenes, countdowns, scene contracts, and reference excerpts. Preserve established facts accurately; never turn this into a digit count, regex, or numeric-density gate. Distinguish each character's diction, sentence shape, and evasions from known identity and relationship pressure without inventing dialect or catchphrases."""
 
 
 def _user_prompt(profile_path: Path, metrics_path: Path, manifest_path: Path) -> str:
@@ -132,6 +132,7 @@ def _dry_style_prompt(source_paths: list[str]) -> dict[str, object]:
 ## 对白与动作
 
 对白应带有关系压力和信息差，避免把设定直接说出口。动作不是填充物，必须体现人物目标、恐惧、道德边界或隐藏背景留下的选择惯性。每个段落至少承担推进事件、暴露关系、改变注意力或加深主题中的一种功能。
+从人物已有身份、欲望和关系压力区分用词、句长、礼貌程度与回避方式；人物可以随场面变化说法，但不能都说成同一种平直语气，也不凭空添加方言或口头禅。
 
 ## 降低 AI 腔约束
 
@@ -139,7 +140,7 @@ def _dry_style_prompt(source_paths: list[str]) -> dict[str, object]:
 
 ## 数字与量化细节
 
-精确数字默认不用，五项缺一即去掉精度，拿不准也按不必要处理。动态数值只有在人物确需精度、数值改变当前选择、模糊会破坏因果、后文按该值验证或兑现且同一压力尚未量化时保留；普通时间流逝不算兑现。年龄、日期、规则编号只在身份或连续性确有需要时保留。技术、灾难、悬疑、倒计时、场景合同中的设备读数和参考语料数字都不能豁免。量词中的数词同样须过五项；电话、灯闪、普通陈设和日常动作不计件、计次或计秒，应改写为陈设状态、动作受阻、反复无果、停顿或取用结果。交稿前扫描阿拉伯数字、中文数词和序数；不能说明它改变谁的选择，就围绕动作、状态变化、人物可感范围或后果逐句重写，不批量删除，也不机械换成模糊量词。
+无关精确数字默认不用；“一个又一个”等虚指反复不按精确计数处理。真正精确值若承担当场问答、人物谈判、身份或债务辨认、选择、因果、连续性或后文核验中的一项实际功能，可保留，不要求五项同时成立。年龄、日期、规则编号等既定事实须准确。技术、灾难、悬疑、倒计时、场景合同和参考语料不自动豁免装饰性读数；普通陈设和日常动作不为显得具体而计件、计次或计秒。交稿前逐项判断数词是否真的提供精确值及其语境功能，删去无关精度时围绕状态、动作或后果重写，不批量删除，也不机械换成模糊量词。
 
 ## 禁止倾向
 
