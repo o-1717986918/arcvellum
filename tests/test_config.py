@@ -17,6 +17,18 @@ class ConfigTests(unittest.TestCase):
             set(pi_worker["models"].values()),
             {"deepseek/deepseek-v4-flash"},
         )
+        self.assertEqual(pi_worker["thinking"], "low")
+        self.assertEqual(pi_worker["project_agent_thinking"], "max")
+
+    def test_existing_shared_worker_thinking_does_not_lower_project_agent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            path.write_text('{"agent_runners":{"pi-worker":{"thinking":"low"}}}', encoding="utf-8")
+
+            pi_worker = load_config(path)["agent_runners"]["pi-worker"]
+
+            self.assertEqual(pi_worker["thinking"], "low")
+            self.assertEqual(pi_worker["project_agent_thinking"], "max")
 
     def test_migrates_untouched_v06_pi_prompt_canary_to_all_pi_tasks_v3(self):
         with tempfile.TemporaryDirectory() as temporary:

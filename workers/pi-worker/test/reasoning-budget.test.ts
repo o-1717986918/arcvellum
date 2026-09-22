@@ -48,6 +48,7 @@ describe("reasoning budget", () => {
 		};
 		expect(safeThinkingLevel(deepSeekLike as never, "low")).toBe("off");
 		expect(safeThinkingLevel(deepSeekLike as never, "high")).toBe("high");
+		expect(safeThinkingLevel(deepSeekLike as never, "max")).toBe("max");
 		const sparseGatewayModel = {
 			reasoning: true,
 			thinkingLevelMap: { minimal: null, low: null, high: "high", max: "max" },

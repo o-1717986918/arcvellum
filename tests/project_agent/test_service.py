@@ -177,6 +177,8 @@ class ProjectAgentServiceTests(unittest.TestCase):
             self.assertIn("不要请求用户批准", runtime.requests[0].system_prompt)
             self.assertIn("lean-v2", runtime.requests[0].system_prompt)
             self.assertIn("故事实际写到哪里", runtime.requests[0].system_prompt)
+            self.assertIn("不必每次逐项罗列", runtime.requests[0].system_prompt)
+            self.assertIn("人格只影响观察角度和语气", runtime.requests[0].system_prompt)
             self.assertIn("continuity_status 为 not_recorded", runtime.requests[0].system_prompt)
             self.assertIn("completed_beats.actual_prose_tail", runtime.requests[0].system_prompt)
             self.assertIn("不凭印象补全", runtime.requests[0].system_prompt)

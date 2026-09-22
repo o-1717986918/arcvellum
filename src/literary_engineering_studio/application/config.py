@@ -208,6 +208,7 @@ def default_config() -> dict[str, Any]:
                 },
                 "auth_path": "",
                 "thinking": "low",
+                "project_agent_thinking": "max",
                 "max_turns": 6,
                 "max_tool_calls": 12,
                 "max_repair_attempts": 1,
