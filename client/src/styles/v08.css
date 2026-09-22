@@ -466,6 +466,11 @@
 .role-model-list strong { font-size: 10px; }
 .role-model-list p { margin: 3px 0 0; color: var(--ink-500); font-size: 8px; line-height: 1.45; }
 .role-model-list select { width: 100%; min-width: 0; }
+.thinking-section { margin-top: 16px; }
+.thinking-control-list { display: grid; gap: 8px; }
+.thinking-control-list label { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 180px) 16px; align-items: center; gap: 12px; }
+.thinking-control-list small { display: block; margin-top: 3px; color: var(--ink-500); }
+.thinking-control-list select { width: 100%; min-width: 0; }
 .role-model-save-state { display: grid; place-items: center; width: 28px; height: 28px; color: var(--ink-500); border: 1px solid var(--mineral-200); border-radius: 4px; transition: color .18s ease, border-color .18s ease, background .18s ease; }
 .role-model-save-state.saved { color: var(--jade-600); background: color-mix(in srgb, var(--jade-500) 10%, transparent); border-color: color-mix(in srgb, var(--jade-500) 42%, var(--mineral-200)); }
 .role-model-save-state .spin { animation: spin .8s linear infinite; }

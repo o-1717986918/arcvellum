@@ -2,23 +2,10 @@ import { bootstrapDesktopSession, type ApiTransport } from "@/services/api";
 import { featureTransport } from "@/services/featureTransport";
 import type { BootstrapSnapshot, ModelCatalog } from "@/types/api";
 
-export interface PiModel {
-  qualified_id: string;
-  name: string;
-}
-
-export interface PiProvider {
-  id: string;
-  name: string;
-  connected: boolean;
-  models?: PiModel[];
-}
-
-export interface PiCatalog extends Record<string, unknown> {
-  providers: PiProvider[];
-  selected_model: string;
-  selected_models?: Record<string, string>;
-}
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type ThinkingRole = "creative" | "project";
+export interface ThinkingPreferences { creative: ThinkingLevel; project: ThinkingLevel }
+interface ThinkingResponse { ok: boolean; preferences: ThinkingPreferences }
 
 export function createSettingsClient(
   transport: ApiTransport = featureTransport,
@@ -46,20 +33,12 @@ export function createSettingsClient(
       `/model-connections/pi-worker/credential/${encodeURIComponent(providerId)}`,
       { method: "DELETE" },
     ),
+    thinkingPreferences: () => transport.request<ThinkingResponse>("/model-connections/pi-worker/thinking"),
+    saveThinkingPreference: (role: ThinkingRole, level: ThinkingLevel) => transport.request<ThinkingResponse>(
+      "/model-connections/pi-worker/thinking",
+      { method: "PUT", body: JSON.stringify({ role, level }) },
+    ),
     exportDiagnostics: () => transport.authorizedFetch("/application/diagnostics/export", { method: "POST" }),
-    piCatalog: () => transport.request<PiCatalog>("/model-connections/pi-worker/catalog"),
-    savePiCredential: (payload: Record<string, unknown>) => transport.request<PiCatalog>(
-      "/model-connections/pi-worker/credential",
-      { method: "PUT", body: JSON.stringify(payload) },
-    ),
-    selectPiModel: (payload: Record<string, unknown>) => transport.request<PiCatalog>(
-      "/model-connections/pi-worker/model",
-      { method: "PUT", body: JSON.stringify(payload) },
-    ),
-    disconnectPiProvider: (providerId: string) => transport.request<PiCatalog>(
-      `/model-connections/pi-worker/credential/${encodeURIComponent(providerId)}`,
-      { method: "DELETE" },
-    ),
   };
 }
 

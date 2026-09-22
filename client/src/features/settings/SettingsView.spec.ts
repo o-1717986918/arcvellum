@@ -46,6 +46,13 @@ describe("settings model selection", () => {
     apiMock.mockReset();
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path === "/model-connections/pi-worker/catalog") return catalog();
+      if (path === "/model-connections/pi-worker/thinking" && !init) {
+        return { ok: true, preferences: { creative: "medium", project: "xhigh" } };
+      }
+      if (path === "/model-connections/pi-worker/thinking" && init?.method === "PUT") {
+        const { role, level } = JSON.parse(String(init.body));
+        return { ok: true, preferences: { creative: role === "creative" ? level : "medium", project: role === "project" ? level : "xhigh" } };
+      }
       if (path === "/application/info") return { paths: { projects_root: "C:\\ArcVellum\\Works" } };
       if (path === "/model-connections/pi-worker/model" && init?.method === "PUT") {
         const payload = JSON.parse(String(init.body));
@@ -74,5 +81,35 @@ describe("settings model selection", () => {
     );
     expect(wrapper.text()).toContain("正文与审查模型已经更新并会在重启后保持");
     expect(wrapper.find(".role-model-save-state.saved").exists()).toBe(true);
+  });
+
+  it("shows independent levels and persists a changed Project Agent level", async () => {
+    const { default: SettingsView } = await import("./SettingsView.vue");
+    const wrapper = mount(SettingsView, { global: { plugins: [createPinia()] } });
+    await flushPromises();
+
+    expect((wrapper.find('select[aria-label="顶层项目 Agent思考强度"]').element as HTMLSelectElement).value).toBe("xhigh");
+    expect((wrapper.find('select[aria-label="创作 Agent思考强度"]').element as HTMLSelectElement).value).toBe("medium");
+    await wrapper.find('select[aria-label="顶层项目 Agent思考强度"]').setValue("high");
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith(
+      "/model-connections/pi-worker/thinking",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ role: "project", level: "high" }) }),
+    );
+    expect(wrapper.text()).toContain("思考强度已保存");
+  });
+
+  it("restores the confirmed level when saving fails", async () => {
+    const { default: SettingsView } = await import("./SettingsView.vue");
+    const wrapper = mount(SettingsView, { global: { plugins: [createPinia()] } });
+    await flushPromises();
+    apiMock.mockRejectedValueOnce(new Error("保存中断"));
+
+    await wrapper.find('select[aria-label="创作 Agent思考强度"]').setValue("high");
+    await flushPromises();
+
+    expect((wrapper.find('select[aria-label="创作 Agent思考强度"]').element as HTMLSelectElement).value).toBe("medium");
+    expect(wrapper.text()).toContain("保存中断");
   });
 });

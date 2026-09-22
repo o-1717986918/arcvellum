@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, LoaderCircle, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
 import { projectsClient } from "@/features/projects/services/projectsClient";
-import { settingsClient } from "@/features/settings/services/settingsClient";
+import { settingsClient, type ThinkingLevel, type ThinkingRole } from "@/features/settings/services/settingsClient";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
@@ -14,6 +14,19 @@ const credential = reactive({ provider_id: "deepseek", credential: "" });
 const selectedModels = reactive({ worker: "", advisor: "", steward: "" });
 const roleSaving = reactive({ worker: false, advisor: false, steward: false });
 const roleSaved = reactive({ worker: false, advisor: false, steward: false });
+const thinking = reactive<Record<ThinkingRole, ThinkingLevel>>({ creative: "medium", project: "xhigh" });
+const confirmedThinking = reactive<Record<ThinkingRole, ThinkingLevel>>({ creative: "medium", project: "xhigh" });
+const thinkingSaving = reactive<Record<ThinkingRole, boolean>>({ creative: false, project: false });
+const thinkingLoaded = ref(false);
+const thinkingLevels: { value: ThinkingLevel; label: string }[] = [
+  { value: "off", label: "关闭" },
+  { value: "minimal", label: "极简" },
+  { value: "low", label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high", label: "高" },
+  { value: "xhigh", label: "极高" },
+  { value: "max", label: "最高" },
+];
 const busy = ref(false);
 const feedback = ref("");
 const section = ref<"connections" | "appearance" | "about">("connections");
@@ -58,6 +71,7 @@ onMounted(async () => {
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "模型目录暂时不可用。";
   }
+  await loadThinking();
   appInfo.value = await settingsClient.applicationInfo().catch(() => null);
   projectsRoot.value = String(appInfo.value?.paths?.projects_root || "");
 });
@@ -76,7 +90,37 @@ async function refresh(): Promise<void> {
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "刷新失败。";
   } finally {
+    await loadThinking();
     busy.value = false;
+  }
+}
+
+async function loadThinking(): Promise<void> {
+  try {
+    const result = await settingsClient.thinkingPreferences();
+    Object.assign(thinking, result.preferences);
+    Object.assign(confirmedThinking, result.preferences);
+    thinkingLoaded.value = true;
+  } catch (cause) {
+    thinkingLoaded.value = false;
+    feedback.value = cause instanceof Error ? cause.message : "思考强度暂时无法读取。";
+  }
+}
+
+async function saveThinking(role: ThinkingRole): Promise<void> {
+  if (thinkingSaving[role]) return;
+  thinkingSaving[role] = true;
+  feedback.value = "";
+  try {
+    const result = await settingsClient.saveThinkingPreference(role, thinking[role]);
+    Object.assign(thinking, result.preferences);
+    Object.assign(confirmedThinking, result.preferences);
+    feedback.value = "思考强度已保存；新任务开始时生效。";
+  } catch (cause) {
+    thinking[role] = confirmedThinking[role];
+    feedback.value = cause instanceof Error ? cause.message : "思考强度保存失败。";
+  } finally {
+    thinkingSaving[role] = false;
   }
 }
 
@@ -283,6 +327,23 @@ function pathValue(key: string): string {
       </section>
 
     </div>
+
+    <section class="settings-section thinking-section">
+      <header><span class="section-icon iris"><Gauge :size="18" /></span><div><h2>Agent 思考强度</h2><p>分别控制顶层项目对话和创作执行。选择后自动保存，新任务开始时生效。</p></div></header>
+      <div class="thinking-control-list">
+        <label v-for="item in ([
+          { role: 'project', title: '顶层项目 Agent', detail: '理解作品、与您讨论并调度项目能力。' },
+          { role: 'creative', title: '创作 Agent', detail: '用于正文、策划、审查等 Pi Worker 任务。' },
+        ] as const)" :key="item.role">
+          <span><strong>{{ item.title }}</strong><small>{{ item.detail }}</small></span>
+          <select v-model="thinking[item.role]" :aria-label="`${item.title}思考强度`" :disabled="!thinkingLoaded || thinkingSaving[item.role]" @change="saveThinking(item.role)">
+            <option v-for="level in thinkingLevels" :key="level.value" :value="level.value">{{ level.label }}</option>
+          </select>
+          <LoaderCircle v-if="thinkingSaving[item.role]" :size="15" class="spin" />
+        </label>
+      </div>
+      <p class="privacy-note">模型不支持所选档位时会安全降档；任务的请求次数与思考额度仍受执行预算约束。</p>
+    </section>
 
     <section class="bootstrap-status-panel">
       <header><div><span class="eyebrow">启动与恢复</span><h2>这次启动发生了什么</h2></div><span>{{ store.bootstrap?.phase === 'ready' ? '全部就绪' : '可降级运行' }}</span></header>

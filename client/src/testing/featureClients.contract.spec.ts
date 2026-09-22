@@ -62,6 +62,17 @@ describe("feature clients over MockFeatureTransport", () => {
     expect(transport.lastCall("request")?.body).toEqual({ model: "deepseek/deepseek-chat", role: "worker" });
   });
 
+  it("keeps independent thinking controls in the settings client", async () => {
+    const { transport, clients } = createFeatureClientHarness();
+    const path = "/model-connections/pi-worker/thinking";
+    transport.respond("GET", path, { ok: true, preferences: { creative: "medium", project: "xhigh" } });
+    transport.respond("PUT", path, { ok: true, preferences: { creative: "high", project: "xhigh" } });
+
+    expect((await clients.settings.thinkingPreferences()).preferences.creative).toBe("medium");
+    await clients.settings.saveThinkingPreference("creative", "high");
+    expect(transport.lastCall("request")?.body).toEqual({ role: "creative", level: "high" });
+  });
+
   it("sends the complete quality profile through the quality boundary", async () => {
     const { transport, clients } = createFeatureClientHarness();
     const profile = qualityProfileFixture();
