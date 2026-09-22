@@ -229,9 +229,9 @@ def _complete_semantic_review(root: Path, profile: Path) -> None:
         "# 文风工程独立语义审查\n\n"
         "- 结论：`pass`\n\n"
         "## 审查摘要\n\n"
-        "提示词把清楚、流畅、朴素落实为可执行的叙述距离、句法、细节、标点和行为因果规则。\n\n"
+        "提示词把清晰度与场景化语势落实为可执行的叙述距离、句法、细节、对白、标点和行为因果规则。\n\n"
         "## 有效性与文学可用性\n\n"
-        "正向生成机制明确，禁区数量受控，适合作为可被题材文风替换的中文基础层。\n\n"
+        "正向生成机制明确，允许有因果的语言起伏，适合作为可被题材文风替换的中文基础层。\n\n"
         "## 来源与复用边界\n\n"
         "提示词、留出样例和评测候选由项目原创编写；训练语料是用户提供并声明为公版或原创的完整参考集。模型面向的语料不混入来源和权利说明，只按叙事机制分类使用。\n\n"
         "## 证据限制\n\n"
@@ -244,7 +244,7 @@ def _complete_semantic_review(root: Path, profile: Path) -> None:
             "summary": "默认文风可执行、低复制风险，并为题材化替换保留空间。",
             "findings": [],
             "required_changes": [],
-            "effectiveness_assessment": "正向机制覆盖清晰度、细节选择、叙述距离、句法节奏与行为因果。",
+            "effectiveness_assessment": "正向机制覆盖清晰度、细节选择、叙述距离、场景化语言起伏、人物声音与行为因果。",
             "copy_risk_assessment": "完整语料只作叙事机制证据，并明确禁止拼贴、续写、复用专名或连续表达。",
             "evidence_limitations": [
                 "未对单一作者相似度进行训练或主张。",
@@ -315,14 +315,14 @@ def _default_metrics() -> dict[str, object]:
         "schema": "arcvellum/builtin-style-metrics/v1",
         "preset_id": DEFAULT_STYLE_PRESET_ID,
         "sentence_length": {
-            "primary": "medium",
-            "variation": "purposeful",
+            "primary": "scene-responsive",
+            "variation": "pressure-shaped",
             "short_sentence_use": "turns-consequences-emphasis",
             "long_sentence_use": "continuous-action-layered-observation-complex-causality",
         },
         "narrative_distance": "scene-responsive",
         "detail_density": "low-to-medium-functional",
-        "figurative_density": "low",
+        "figurative_density": "scene-responsive",
         "psychology_mode": "behavior-choice-consequence-first",
         "dialogue_mode": "character-specific-purposeful-subtext-capable",
         "punctuation": {

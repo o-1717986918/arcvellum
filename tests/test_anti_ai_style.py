@@ -1,10 +1,15 @@
 import unittest
 
 from literary_engineering_studio_engine.literary.scene.promotion.generation_gate import candidate_language_gate
-from literary_engineering_studio_engine.literary.style.anti_ai import lint_ai_style
+from literary_engineering_studio_engine.literary.style.anti_ai import ANTI_AI_STYLE_PROMPT, lint_ai_style
 
 
 class AntiAiStyleTests(unittest.TestCase):
+    def test_generation_guidance_allows_scene_driven_language_variation(self):
+        self.assertIn("清晰不等于全程平直", ANTI_AI_STYLE_PROMPT)
+        self.assertIn("语速、句群、语域和意象升起", ANTI_AI_STYLE_PROMPT)
+        self.assertNotIn("日记里会不会这样写", ANTI_AI_STYLE_PROMPT)
+
     def test_semantic_quantities_are_not_misclassified_by_static_lint(self):
         for prose in ("一个又一个人从门口进来。", "还剩几个人？两个。"):
             with self.subTest(prose=prose):
