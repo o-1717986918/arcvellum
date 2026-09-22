@@ -6,6 +6,8 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.application.lean_chapter_extension import extend_lean_chapter
+from literary_engineering_studio.application.chapter_checkpoint import checkpoint_path
+from literary_engineering_studio.automation.lean_scene_loop import LeanSceneRunCoordinator
 from literary_engineering_studio_engine.public.literary import (
     calculate_word_budget, chapter_obligations, materialize_lean_window,
     normalize_initial_plan, normalize_scene_window, render_outline,
@@ -86,6 +88,17 @@ class LeanChapterExtensionTests(unittest.TestCase):
             self.assertEqual(budget["chapter_budgets"][1]["scene_count"], 2)
             self.assertGreater(budget["chapter_budgets"][2]["scene_count"], 1)
             self.assertIn("不得把新场景倒插", gateway.prompt)
+
+            (root / "workflow" / "scene_commits" / "scene_0001.json").write_text("{}", encoding="utf-8")
+            old_checkpoint = checkpoint_path(root, root, "chapter_0002")
+            old_checkpoint.parent.mkdir(parents=True)
+            old_checkpoint.write_text('{"status":"revision-required"}', encoding="utf-8")
+            coordinator = object.__new__(LeanSceneRunCoordinator)
+            coordinator.project = root
+            coordinator.data_root = root
+            coordinator.repository = type("Repository", (), {"latest_for_scene": lambda *_args: None})()
+            self.assertEqual(coordinator._next_scene_id(), "scene_0003")
+            self.assertIsNone(coordinator._next_chapter_checkpoint())
 
     def test_uncommitted_scene_cannot_be_extended(self):
         with tempfile.TemporaryDirectory() as temporary:
