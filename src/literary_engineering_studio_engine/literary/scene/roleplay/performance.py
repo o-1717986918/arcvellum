@@ -343,10 +343,16 @@ def _parse_environment_passage(item: Any, ids: set[str], focal_options: set[str]
     return {"beat_id": item["beat_id"], **values}
 
 
-def render_performance_materials(plan: dict[str, Any], actors: list[dict[str, Any]], environment: dict[str, Any] | None) -> str:
+def render_performance_materials(
+    plan: dict[str, Any], actors: list[dict[str, Any]], environment: dict[str, Any] | None, *, viewpoint: str = "",
+) -> str:
+    visible_actors = [
+        {**actor, "entries": [{**entry, "private_impulse": ""} for entry in actor.get("entries", [])]}
+        if viewpoint and actor.get("speaker") != viewpoint else actor for actor in actors
+    ]
     block = "\n".join((
         "以下是各独立 Agent 的非权威整场表演素材。你是唯一正文作者，负责选取、交错和叙述衔接，也负责有视角的心理、情绪、环境与句法渲染；但人物所有说出口的话与可见行为须先出现在对应角色 Agent 的 entries 中，不能自行补造角色台词、手势或操作。若素材不足以兑现 SceneBrief，先报告缺口，不以通用对白补齐。同一 speaker 的 entries 来自一轮连续扮演；若与事实相容，保留其称呼、语序、避词和受压变化，不把各人声音润平成中性解释。spoken 是演员的台词原文，first_person_action 是第一人称动作意图、须按正文视角叙述但不得增加动作。private_impulse 是未出口的体验候选，不可原样转成对白或可见行为；可从当前视角化成自由间接感知、心理摇摆与情绪节奏，不可全知断言另一角色的心事。scene_function 是后台剧情边界，不得照抄成解释性正文。环境候选只提供空间与感知，不得决定人物动作、台词或事实；主创可在已确认来源和视角内延展观察，不必把候选压成一句气氛概括。所有候选都是可拒绝的材料，不是新事实的来源；普通可弃的现场细节可以择用，承担证据或持续设定作用的设备部件、操作、数值、线索和往事须有 SceneBrief 或 Relevant Sources 支持。",
-        json.dumps({"plan": plan, "actor_candidates": actors, "environment_candidates": environment or {}}, ensure_ascii=False, separators=(",", ":")),
+        json.dumps({"plan": plan, "actor_candidates": visible_actors, "environment_candidates": environment or {}}, ensure_ascii=False, separators=(",", ":")),
     ))
     if len(block) > 16_000:
         raise ValueError("scene performance material block exceeds prompt budget")
