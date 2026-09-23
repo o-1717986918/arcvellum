@@ -15,10 +15,12 @@ from literary_engineering_studio_engine.public.literary import (
     parse_actor_scene_material,
     parse_environment_material,
     parse_performance_plan,
+    parse_relay_plan,
     render_actor_prompt,
     render_actor_scene_prompt,
     render_environment_prompt,
     render_performance_plan_prompt,
+    render_relay_plan_prompt,
     render_performance_materials,
 )
 from tests.test_lean_kernel_v2_pi_runtime import _Gateway, _brief
@@ -31,6 +33,18 @@ def _plan() -> dict[str, object]:
             "beat_id": "b1", "event": "妹妹已经发现抽屉被打开；信在昨夜被取走",
         }],
         "unknown_slots": ["门外的具体天气尚未确认"],
+    }
+
+
+def _relay_plan() -> dict[str, object]:
+    return {
+        "scene_id": "scene_0001",
+        "milestones": [{"speaker": "character/protagonist", "source_quote": "主人公承认自己拿走了信"}],
+        "actor_knowledge": [
+            {"speaker": "character/protagonist", "quotes": []},
+            {"speaker": "character/sister", "quotes": ["妹妹已经发现抽屉被打开"]},
+        ],
+        "unknown_slots": ["信件内容尚未确认"],
     }
 
 
@@ -76,6 +90,36 @@ class _PerformanceGateway(_Gateway):
 
 
 class ScenePerformanceAgentTests(unittest.TestCase):
+    def test_relay_plan_selects_only_source_grounded_macro_outcomes(self) -> None:
+        brief = _brief().to_dict()
+        prompt = render_relay_plan_prompt(brief)
+        self.assertIn("不指定台词、句式、情绪、手势", prompt)
+        self.assertIn("incoming_handoff", prompt)
+        plan = parse_relay_plan(_relay_plan(), brief)
+        self.assertEqual(plan["schema"], "arcvellum/scene-relay-plan/v1")
+        self.assertEqual(plan["milestones"][0]["milestone_id"], "m1")
+        self.assertEqual(plan["actor_knowledge"][1]["quotes"], ["妹妹已经发现抽屉被打开"])
+        bad = _relay_plan()
+        bad["milestones"] = [{"speaker": "character/protagonist", "source_quote": "门外突然出现一把未确认的钥匙"}]
+        with self.assertRaisesRegex(ValueError, "source_quote"):
+            parse_relay_plan(bad, brief)
+        bad = _relay_plan()
+        bad["milestones"] = [{"speaker": "character/protagonist", "source_quote": "妹妹已经发现抽屉被打开"}]
+        with self.assertRaisesRegex(ValueError, "source_quote"):
+            parse_relay_plan(bad, brief)
+        bad = _relay_plan()
+        bad["milestones"] = [{"speaker": "character/protagonist", "source_quote": "主人公承认自己拿走了信；隐瞒转为承认"}]
+        with self.assertRaisesRegex(ValueError, "one plot change"):
+            parse_relay_plan(bad, brief)
+        bad = _relay_plan()
+        bad["actor_knowledge"][0]["quotes"] = ["主人公承认自己拿走了信"]
+        with self.assertRaisesRegex(ValueError, "incoming_handoff"):
+            parse_relay_plan(bad, brief)
+        bad = _relay_plan()
+        bad["actor_knowledge"] = bad["actor_knowledge"][:1]
+        with self.assertRaisesRegex(ValueError, "cover every participant"):
+            parse_relay_plan(bad, brief)
+
     def test_actor_task_is_first_person_and_uses_character_voice(self) -> None:
         voice = {
             "speaker": "姐姐", "role": "档案员", "belief": "承认比辩解有用",

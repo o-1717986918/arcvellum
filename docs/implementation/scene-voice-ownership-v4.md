@@ -239,3 +239,41 @@ module_change_packet:
   rollback_unit: "独立 Studio adapter 提交"
   documentation: ["本文件"]
 ```
+
+## 2026-09-24：接力导演只选既定结果，不编排台词
+
+目前已验证的接力提示合同尚缺少能由运行层调用的主创任务单。新任务单不再生成逐拍人物心理、台词或动作，也不把尚未发生的剧情写成“场景现状”。主创只从 SceneBrief 中逐字挑选最多四个必须在本场兑现的原子结果，指明承担角色与顺序；角色轮到该结果时才看见它。角色可独立选择措辞、延迟、抵抗或短暂沉默，但若结果最终未出现，须请原角色续演，不让正文作者代写。每人可见的补充事实只准选 `incoming_handoff` 中已经发生的内容；人物私有记忆仍来自自身档案。环境写手独立在真实公共互动之后取景，不接受主创逐项指定光、声、器物。源引验证只能防止凭空新增任务事实，不能证明文学表现优良。
+
+在第二场实际模型试填中，首版主创把“漏歌并纠正”和“承认删点名”合在同一条长源引里，这会让角色在一轮抢先完成两个本应由互动隔开的变化。改成“最短完整事实分句、分号连接的结果必须拆开”后，主创返回四个有序且来源可核的结果：漏歌纠正、承认删点名、沈照月认定主动回避、离场不亮带子。两次原始会话保存在忽略目录 `build/scene-performance-e2e/relay-plan-live*/`。仍有两项局限：主创给沈照月的开场知情摘录过长，并把叶归舟检修条真实性列为本场留白；结构校验不等于选材精准，后续须看接力正文是否因此受干扰。
+
+```yaml
+module_change_packet:
+  objective: "给接力运行层一份只含已锁剧情结果及角色既有知情的来源可核任务单"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "render_relay_plan_prompt、parse_relay_plan，经 public/literary.py 导出"
+  variation_point: "独立 scene-relay-plan/v1，不替换默认 v7 整场计划"
+  inputs: ["SceneBrief"]
+  outputs: ["有序、逐字来源可核的里程碑", "每角色已发生知情", "少量事实留白"]
+  invariants: ["不规定角色微观言行", "不把未来结果当已发生", "不新增 Canon", "默认路径不变"]
+  allowed_dependencies: ["现有 Engine 纯合同与 relay_context"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["公共 API", "结果来源与角色核对", "知情只来自 incoming_handoff", "重复/超量拒绝"]
+  rollback_unit: "独立 Engine 合同提交"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "在 opt-in 模式串联一级角色实际公共言行、原角色缺口续演和独立环境候选"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "scene_performance_materials 的 relay 模式"
+  variation_point: "仅新模式的缓存及调用序列，不改默认整场模式"
+  inputs: ["Engine relay plan", "SceneBrief", "角色声音投影", "Pi tool-free invoke"]
+  outputs: ["按发生顺序的来源条目", "环境候选", "失败/缺口事件"]
+  invariants: ["所有角色言行须由对应一级角色生成", "主创只编排候选", "不写项目或 Canon", "失败不伪装成功", "默认关闭"]
+  allowed_dependencies: ["Engine public/literary.py", "既有 RoleConversationGateway"]
+  forbidden_dependencies: ["Engine 内部 import", "第二套 Gate 或正式写回"]
+  tests: ["两角色及三角色接力", "未达标时只问原角色", "无私有思绪泄漏", "环境独立", "真实模型及连续场景"]
+  rollback_unit: "独立 Studio adapter 提交"
+  documentation: ["本文件"]
+```

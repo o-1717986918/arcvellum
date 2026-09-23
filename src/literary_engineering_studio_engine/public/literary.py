@@ -90,6 +90,7 @@ from ..literary.scene.roleplay.performance import (
     parse_environment_material,
     render_performance_materials,
 )
+from ..literary.scene.roleplay.relay_plan import parse_relay_plan, render_relay_plan_prompt
 from ..literary.style.reference_projection import (
     recent_formal_reference_ids,
     render_style_reference_selection,
@@ -313,4 +314,6 @@ __all__ = sorted([
     "recent_formal_reference_ids",
     "render_style_reference_selection",
     "project_brief_expression_context",
+    "parse_relay_plan",
+    "render_relay_plan_prompt",
 ])
