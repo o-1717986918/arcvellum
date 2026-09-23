@@ -421,3 +421,25 @@ module_change_packet:
   rollback_unit: "独立 Engine 合同提交"
   documentation: ["本文件"]
 ```
+
+## 2026-09-24：自由排演与系统角色画像复核
+
+同一第二场的忽略试验 `build/scene-performance-e2e/free_rehearsal_probe.py` 让周鹤先以第一人称自由排演，再抽取 JSON。排演有较连续的观察和心理，但交付只剩“坐。这个点人多。”及一次腾桌动作；且排演仍误用沈照月的性别代词，凭空添加碗、筷子、醋壶，把心理又导向职业手续。**自由排演不是已验证的文风修复**：抽取步骤损失了可用的情绪与句法，事实误写仍在；不能直接将其接入正式流水线。
+
+Pi Worker 的 `character-actor` 系统画像仍宣称每轮“从本场第一个时刻到最后一个时刻”经历整场，但 relay 实际只请求当前一轮。此冲突可能鼓励角色预演结局、压缩当前回应；系统画像应按请求跨度行动，把真实公共互动当作当前事实，同时保留完整场景 batch 的兼容性。是否改善角色声音仍须真实模型复跑，不凭提示词改动宣称有效。
+
+```yaml
+module_change_packet:
+  objective: "消除 Pi Worker 角色系统画像与 relay 当前回合请求的跨度冲突"
+  primary_module: "Pi Worker conversation profile"
+  public_entry: "conversationSystemPrompt(character-actor)"
+  variation_point: "由当前请求确定表演跨度；batch 与 relay 共用稳定画像"
+  inputs: ["角色任务单", "已发生公共互动", "本轮输出格式"]
+  outputs: ["第一人称且不预演未发生情节的角色画像"]
+  invariants: ["角色自主发言与行动", "不替别人发言", "不创建事实或 Canon", "无工具和项目写权限"]
+  allowed_dependencies: ["现有 Pi Worker conversation"]
+  forbidden_dependencies: ["Engine 内部", "Provider 专有逻辑", "项目文件写入"]
+  tests: ["系统画像断言", "Pi Worker check", "同题真实模型复跑"]
+  rollback_unit: "独立 Worker 提交"
+  documentation: ["本文件"]
+```
