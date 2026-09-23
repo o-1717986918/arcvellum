@@ -326,6 +326,26 @@ module_change_packet:
   documentation: ["本文件"]
 ```
 
+2026-09-24 修正该 Studio 批次的编排原则：先让在场角色各有一次不披露未来结果的开放互动，之后按整段公共言行做场景核对。若尚缺 SceneBrief 已锁结果，只向归属角色披露一个场景级边界，并让另一角色根据其真实回应接续；每段再核对一次，而非每个角色回合追单。角色可以抵抗，不能由主创代说或假报完成。接力模式属于显式 opt-in 实验，失败应停止该模式下的正文生成，不回退到单主创偷偷补全。调用上限只限制费用和日志容量，不指挥话语数量或具体行动。
+
+首次真实接力试跑使用忽略目录 `build/scene-performance-e2e/project-two-scenes` 的第二场、已存在的 DeepSeek 配置，结果**失败并停止正文生成**：结构化 `SceneBrief.location` 为空，导演虽然在 `scene_function` 中能看到“旧街面馆”，演员提示却只拿到空地点与上一场窗口登记交接，于是十回合都在窗口/登记簿话题里打转；全部剧情结果仍是 `missing`。仅在忽略试跑脚本中把来源可核的地点补为“旧街面馆”再试，角色已说到面碗，但第一句仍是“旧广播站那批东西有没有人认领”，后续又回到登记、移交、检修条和月份，仍无漏歌或删点名承认。原始调用与候选保存在 `build/scene-performance-e2e/relay-runtime-live/`、`relay-runtime-location-live/`。这说明失败不只在运行调度：场景开端的**私人会面处境**没有传给角色，上一场交接与人物卡中的程序习惯反而成为最显眼的当前事件。下一批要补来源可核的“开场处境”而非导演台词，并把交接标明为过去，不是现场道具；随后重跑同题，不应继续盲目增加轮数或催促次数。当前 relay 模式保持 opt-in，不能作为已通过的文风方案。
+
+```yaml
+module_change_packet:
+  objective: "在可选 Studio 运行模式中让一级角色按真实公共互动接力，再由主创组织有来源的素材"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "scene_performance_materials 的 mode=relay"
+  variation_point: "旧 batch 模式保持；relay 模式拥有独立缓存版本和失败语义"
+  inputs: ["Engine relay plan/check/materials 公共合同", "SceneBrief", "人物声音投影", "tool-free Pi invoke"]
+  outputs: ["有全局来源 ID 的按时间顺序角色条目", "独立环境候选", "主创素材块或明确失败"]
+  invariants: ["角色只生成自己的言行", "私有冲动不泄漏给其他角色/环境", "未完成结果不得进入正文", "默认关闭", "无项目或 Canon 写入"]
+  allowed_dependencies: ["Engine public/literary.py", "既有 RoleConversationGateway 与缓存工具"]
+  forbidden_dependencies: ["Engine 内部 import", "第二套 Gate", "Provider 专有直连"]
+  tests: ["开放回合先于结果披露", "公共日志顺序与隐私", "片段核对与原角色续演", "失败阻断正文", "环境读取真实公共互动", "缓存隔离"]
+  rollback_unit: "独立 Studio adapter 提交"
+  documentation: ["本文件"]
+```
+
 角色可以选择自己的语言与即时动作，但已有 SceneBrief 的结果不能由主创正文阶段替角色虚构。运行层仍需要窄义、非审美的语义核对，不过应在一段自然互动之后检查整场结果，而非每轮拿单个 source_quote 追着角色催交。只把角色的私有冲动写为“想离开”不等于可见的离场；只暗示删改不等于既定承认。若有缺口，先判断是人物仍在抵抗、外部处境尚未成熟，还是确实需要请原角色续演；不得让主创代写，也不得把自动重复目标当作唯一修复路径。若仍不能在人物逻辑内兑现，接力候选不能宣称完整。该核对不评价辞藻和“AI 味”，也不取代正式 AgentReview。
 
 ```yaml

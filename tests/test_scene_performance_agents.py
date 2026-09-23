@@ -92,6 +92,45 @@ class _PerformanceGateway(_Gateway):
         return RoleConversationResult("pi-worker", "run-material", "test/model", answer)
 
 
+class _RelayGateway(_Gateway):
+    def __init__(self, *, never_admit: bool = False):
+        super().__init__()
+        self.never_admit = never_admit
+        self.actor_calls = 0
+        self.check_calls = 0
+
+    def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
+        if prompt.startswith("# Scene Relay Dramatic Floor"):
+            answer = json.dumps(_relay_plan(), ensure_ascii=False)
+        elif prompt.startswith("# Scene Relay Outcome Check"):
+            self.check_calls += 1
+            fulfilled = self.check_calls > 1 and not self.never_admit
+            answer = json.dumps({"scene_id": "scene_0001", "results": [{
+                "milestone_id": "m1", "status": "fulfilled" if fulfilled else "missing",
+                "evidence_entry_ids": ["t3:1"] if fulfilled else [],
+            }]}, ensure_ascii=False)
+        elif role == "character-actor":
+            self.actor_calls += 1
+            speaker = "character/protagonist" if "# 我在场：character/protagonist" in prompt else "character/sister"
+            spoken = {
+                1: "你怎么来了？", 2: "信呢？", 3: "我还得想想。" if self.never_admit else "信是我拿的。",
+                4: "我听见了。",
+            }[self.actor_calls]
+            beat = f"b{self.actor_calls}"
+            answer = json.dumps({"scene_id": "scene_0001", "speaker": speaker, "entries": [{
+                "beat_id": beat, "spoken": spoken, "first_person_action": "", "private_impulse": "绝密私念",
+            }]}, ensure_ascii=False)
+        elif role == "environment-writer":
+            answer = json.dumps({"scene_id": "scene_0001", "passages": [{
+                "beat_id": "b1", "focal_character": "", "description": "门边的光比桌面暗。",
+            }]}, ensure_ascii=False)
+        else:
+            return super().run(workspace, prompt, role=role, timeout=timeout,
+                               event_sink=event_sink, cancel_event=cancel_event)
+        self.calls.append((role, prompt))
+        return RoleConversationResult("pi-worker", "run-relay", "test/model", answer)
+
+
 class ScenePerformanceAgentTests(unittest.TestCase):
     def test_scene_relay_check_only_reports_evidenced_outcomes_after_interaction(self) -> None:
         plan = parse_relay_plan(_relay_plan(), _brief().to_dict())
@@ -378,6 +417,57 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             self.assertEqual(runtime.metrics.cache_hits, 1)
             self.assertIn("scene.performance.actor", events)
             self.assertIn("scene.performance.environment", events)
+
+    def test_opt_in_relay_opens_without_future_outcome_then_reacts_and_caches(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gateway = _RelayGateway()
+            events = []
+            settings = {"application": {"scene_performance_agents": {
+                "enabled": True, "max_actor_calls": 2, "mode": "relay",
+            }}}
+            kwargs = {
+                "brief": _brief().to_dict(), "expression": {}, "sources": "", "style_reference": "",
+                "cache_root": root / "cache", "config": settings,
+                "invoke": lambda prompt, role: gateway.run(root, prompt, role=role, timeout=30).answer,
+                "emit": lambda event, data: events.append((event, data)),
+            }
+            first = scene_performance_materials(**kwargs)
+            calls = gateway.calls
+            self.assertEqual([role for role, _ in calls], [
+                "worker", "character-actor", "character-actor", "worker",
+                "character-actor", "character-actor", "worker", "environment-writer",
+            ])
+            self.assertNotIn("主人公承认自己拿走了信", calls[1][1])
+            self.assertNotIn("主人公承认自己拿走了信", calls[2][1])
+            self.assertIn("主人公承认自己拿走了信", calls[4][1])
+            self.assertIn("信呢？", calls[4][1])
+            self.assertIn("信是我拿的。", calls[5][1])
+            self.assertNotIn("绝密私念", calls[2][1])
+            self.assertNotIn("绝密私念", calls[4][1])
+            self.assertNotIn("绝密私念", calls[7][1])
+            self.assertIn("信是我拿的。", calls[7][1])
+            self.assertLess(first.index('"entry_id":"t1:1"'), first.index('"entry_id":"t2:1"'))
+            self.assertIn('"entry_id":"t3:1"', first)
+            self.assertIn("门边的光比桌面暗", first)
+            self.assertIn("scene.performance.relay.check", [event for event, _ in events])
+            self.assertEqual(first, scene_performance_materials(**kwargs))
+            self.assertEqual(len(gateway.calls), 8)
+
+    def test_relay_does_not_fall_back_to_unauthorized_single_writer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gateway = _RelayGateway(never_admit=True)
+            settings = {"application": {"scene_performance_agents": {
+                "enabled": True, "max_actor_calls": 2, "mode": "relay",
+            }}}
+            with self.assertRaisesRegex(RuntimeError, "could not provide complete"):
+                scene_performance_materials(
+                    brief=_brief().to_dict(), expression={}, sources="", style_reference="",
+                    cache_root=root / "cache", config=settings,
+                    invoke=lambda prompt, role: gateway.run(root, prompt, role=role, timeout=30).answer,
+                )
+            self.assertNotIn("environment-writer", [role for role, _ in gateway.calls])
 
     def test_runtime_calls_repeating_character_once_for_whole_scene(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
