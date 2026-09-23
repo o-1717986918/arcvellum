@@ -164,7 +164,7 @@ def _relay_actor_turn(
     prompt = render_actor_scene_prompt(
         brief, [beat], {**voice, "speaker": speaker}, plan["unknown_slots"],
         public_log=public_log, pending_outcome=outcome,
-        knowledge_quotes=knowledge[speaker], max_entries=2,
+        knowledge_quotes=knowledge[speaker], opening_situation=plan["opening_situation"], max_entries=2,
     )
     prompt_digest = hashlib.sha256(prompt.encode()).hexdigest()[:12]
     path = cache_root / f"performance-relay-actor-{digest}-t{turn}-{prompt_digest}.json"
@@ -200,7 +200,7 @@ def _relay_environment(
     public_log: list[dict[str, Any]], cache_root: Path, digest: str,
     invoke: Callable[[str, str], str], emit: Callable[[str, dict[str, Any]], None] | None,
 ) -> dict[str, Any]:
-    beats = [{"beat_id": "b1", "event": "角色已经在此地真实互动；自行选择环境语言的位置。"}]
+    beats = [{"beat_id": "b1", "event": plan["opening_situation"]}]
     prompt = render_environment_prompt(brief, beats, style_reference, sources, plan["unknown_slots"],
                                        public_log=public_log)
     prompt_digest = hashlib.sha256(prompt.encode()).hexdigest()[:12]
@@ -219,7 +219,7 @@ def scene_creative_cache_digest(
     raw_settings = application.get("scene_performance_agents")
     settings = raw_settings if isinstance(raw_settings, dict) else {}
     enabled = settings.get("enabled") is True
-    version = ("performance-relay-v1" if settings.get("mode") == "relay" else "performance-v15") if enabled else "performance-v9"
+    version = ("performance-relay-v2" if settings.get("mode") == "relay" else "performance-v15") if enabled else "performance-v9"
     payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
@@ -241,7 +241,7 @@ def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, sty
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     performance = application.get("scene_performance_agents") if isinstance(application.get("scene_performance_agents"), dict) else {}
-    version = "performance-relay-v1" if performance.get("mode") == "relay" else "performance-v14"
+    version = "performance-relay-v2" if performance.get("mode") == "relay" else "performance-v14"
     payload = [version, brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 

@@ -348,6 +348,26 @@ module_change_packet:
 
 在同一第二场的真实主创试填中，v2 `opening_situation` 逐字选中了“在周鹤日常买早点的旧街面馆，沈照月以私人身份试探……”这一整句；人物已知事实仍选中完整的上一场窗口交接。前者修复了开场处境缺失，后者仍须由演员提示明确视作过去，而不是眼前登记簿。此试填只验证导演任务单可被模型生成与解析，不是角色/环境文风验收。
 
+Studio 接上 v2 后再次在同一忽略项目试跑（`build/scene-performance-e2e/relay-runtime-opening-live/`）：面馆处境进入角色，开场即谈播音，但沈照月凭空说排班墨色不同，周鹤把收播时间说成“晚间十点整”、把墨色说成蓝黑两笔；后续又补出被划掉的名字、无编号旧物及交接程序。十回合后全部场景结果仍未由角色素材支持，系统停止正文创作。这说明开场锚点修复了地点，不修复事实来源及人物卡职业话术的占优；继续加轮数会放大无根据细节。下一实验要在同一场景对照完整人物卡与精简角色身份/欲望/关系输入，并检查已有 `sources` 是否实际到达一级角色；不以增加导演逐句要求代替事实资料。
+
+忽略目录 `build/scene-performance-e2e/role_identity_ab_probe.py` 对同一开场做了完整人物卡+交接、核心身份/欲望+交接、核心身份/欲望且不提供交接三个版本，每版让沈照月先表演、周鹤读到真实公共回应后再表演。完整卡并非总会陷入程序腔，样本里她也能自然说“周老师，拼个桌”；精简后少提窗口，却出现两人相互等待、泛泛谈早点或完全沉默。少量随机样本不能证明哪版风格更好，但**直接删资料没有稳定增加人物辨识度**，还可能使角色行动乏力。更值得验证的是：当前角色收到的 `sources` 实际为零，`SceneBrief` 只给剧情终点而不给节目细节的已证实范围；同时 JSON 条目式交付可能让表演变成短任务回答。下一步分别检验“可追溯事实包”和“先沉浸排演再交付来源条目”两个变量，不把二者混为一次改动。
+
+```yaml
+module_change_packet:
+  objective: "将 v2 来源可核的开场处境传给每次接力角色及环境写手"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "scene_performance_materials 的 mode=relay"
+  variation_point: "relay 独立缓存版本升级；旧 batch 不变"
+  inputs: ["Engine scene-relay-plan/v2", "SceneBrief", "角色/环境公共提示"]
+  outputs: ["当前会面处境明确的演员/环境候选"]
+  invariants: ["不预写台词或动作", "不把上一场道具当此刻事实", "默认路径不变", "不读 Engine 内部"]
+  allowed_dependencies: ["Engine public/literary.py", "现有缓存/RoleConversationGateway"]
+  forbidden_dependencies: ["Engine 内部 import", "正式项目写入", "Provider 直连"]
+  tests: ["角色/环境都见同一开场锚点", "缓存不复用 v1", "同题真实模型复跑"]
+  rollback_unit: "独立 Studio adapter 提交"
+  documentation: ["本文件"]
+```
+
 ```yaml
 module_change_packet:
   objective: "在可选 Studio 运行模式中让一级角色按真实公共互动接力，再由主创组织有来源的素材"
