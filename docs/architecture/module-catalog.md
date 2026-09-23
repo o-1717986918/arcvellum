@@ -90,7 +90,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `runtime/resources/` | ResourceClaim 与读写/Barrier 冲突判断 | resource contracts/conflict functions | immutable DTO | task ordering、数据库 lease 实现 | `test_runtime_resources.py`、orchestration resource tests |
 | `integrations/runner_probe.py` | 对已注册 Runtime 执行隔离连通性探测 | `probe_agent_runner()` | Runtime registry、临时任务目录 | Provider 特判、文学规则、正式项目写回 | `test_runner_probe.py` |
 | `integrations/pi_rpc/` | Studio 与内置 Pi Worker 的 JSON-RPC/framing | Pi RPC facade | framed transport、typed payload | 项目路径自由访问、Gate 判断 | `test_pi_rpc.py`、`test_pi_continuous_e2e.py` |
-| `workers/pi-worker/` | 有界 Pi Agent Core 执行器，只消费任务包并产出 expected outputs | `src/main.ts`、`src/worker.ts` | Pi SDK、task contract | 正式项目访问、task lifecycle、subagent 写正文 | `npm run pi-worker:check`、Pi Worker Python integration tests |
+| `workers/pi-worker/` | 有界 Pi Agent Core 执行器；正式任务产出 expected outputs，tool-free conversation 可产出隔离角色/环境候选 | `src/main.ts`、`src/worker.ts`、`src/conversation.ts` | Pi SDK、task contract | 正式项目访问、task lifecycle、候选直接晋升为正文 | `npm run pi-worker:check`、Pi Worker Python integration tests |
 
 ### 新 Runtime 的正确扩展点
 

@@ -60,3 +60,40 @@ Pi Worker 并未暗藏禁止文风的系统词：`workers/pi-worker/src/conversa
 在上述 C/D 试验或产品实现前，需先提交并让维护者确认一份宪法变更：允许**隔离、非正式、不可直接晋升**的角色对白/动作候选由专门 Agent 生成；正式正文、返修、审读和分支决定仍只归主创及现有路线，角色 Agent 无工具和项目写权限。同步更新 `AGENTS.md`、开发标准、项目技能和正式 Host 宪法，补合同测试证明素材不能直接成为正文或 Canon。这不是纯技术重构，而是创作责任边界改变；在批准前，只实施 B 组单 Agent 排练与既有选段修复。
 
 若 C/D 没有实质读者优势，删除实验 sidecar 与角色调用入口，保留有用的任务单、角色实例和提示词修正。这样回滚单位清楚，也不会把多 Agent 数量本身当成产品目标。
+
+## 六、工程落点裁决与 Pi Worker 审计
+
+### 先区分两条真实链路
+
+新作品的 lean-v2 场景目前由 Studio `runtimes/pi_scene_transaction.py` 组装 `SceneBrief`、表达/声音投射、来源与参考，再通过 `runtime/role_conversation.py` 调用 Pi Worker 的 `conversation.ts`。这是单轮、无工具、返回完整 JSON 的链路；角色名 `worker`/`reviewer`主要选模型，不会自动获得不同的系统人格。三场短样走的是这条链路。
+
+旧正式工程路线则由 Engine `routes/scene/blueprints.py` 排列 `roleplay-agent-task → branch → composition-agent-task → 字数/体验/节奏 → candidate-generation-provenance` 等状态，经 `prompting/pack.py` 组装独立的正文 Prompt，再由 Pi Worker `worker.ts` 使用 `profiles/main-creative-agent.md` 和受控写入工具交付。已有 `roleplay-agent-task` 是人物/世界/分支/Canon 的语义推演产物，不是能说出具体台词的角色演员。两条链路共享人物/文风领域能力，却不是同一提示词；优化不能只改其中一处就宣称全产品生效。
+
+### 优先改现有逻辑，不另建跨层创作中枢
+
+1. **无新 Agent 的 B 组先落地。** Engine `literary/planning/narrative_rhythm.py` 与 `materialization_rendering.py` 调整默认 `description_ratio=low` 和“每段至少推进”的一刀切表述，让审美停留、自由间接感知和场景质感有合法位置，同时保持场景整体的变化要求。`literary/scene/composition/creative_plan.py` 将现有 `stable_voice`/`voice_state` 收敛成每个关键 beat 的“当前言语行为、知识边界、关系压力、与此人不同的措辞可能性”，供主创内部排练。lean 的 `render_scene_create_prompt` 和正式 `scene_generation_user.md`/Prompt Pack 分别消费同一领域投射，不复制两份文学决策代码；选段放在写作动作附近并记录实际长度/截断。此阶段无路由新状态、无角色模型调用、无宪法变更。
+2. **真实演员 C 组仅在规则边界获确认后实现。** 由 Engine `literary/scene/roleplay/`（或其下一个小的 `performance` 叶模块）拥有 `ActorTaskCard`、`ActorMaterialCandidate` 的纯构建/校验与版本号，经 `public/literary.py` 暴露。卡片至少绑定 `scene_id`、`beat_id`、人物资产版本、已知/误知、必须完成的言语行为、许可动作、禁增事实及声音实例；候选只含短对白、连带动作、其试图造成的效果与来源，明确是可丢弃素材。**不**让 Pi Worker 决定剧情、改 Canon、直接写正文，也不把角色提示词塞进顶层 Agent。Studio `PiSceneTransactionRuntime` 在同一场景事务内按 beat 顺序调用无工具会话，缓存卡片/候选的哈希与采用记录，再把素材交主创选择、改写或拒绝。上轮真实台词进入下一 beat，而非多人并行臆测；调用数、长度和超时上限按场景设定，失败直接退回单主创链路。
+3. **正式路线 C 组要修改现有 Route，而不是另开 Route。** 若 lean 盲评稳定证明有效，在 `scene-development` 的 composition 已确认、正文生成前增加一个可选的 Engine 签发素材任务，规定 expected output/来源摘要/完成回执；生成任务的 source paths 与 Prompt Manifest 显式引用它，Route Audit 证明素材不可直接晋升。旧项目或关闭功能时跳过该状态，保持原路径。`roleplay-agent-task` 仍负责角色动机与世界后果，不能与“演员说出候选台词”的新步骤混名。正式接入前须修订 `AGENTS.md`、开发标准、项目技能、Host 宪法中禁止 subagent 代写正文的条款，明确候选素材例外仍不取得正式正文作者权。未经该批准不得接入演员 C 组。
+4. **环境 D 组最后且按需。** 优先把人物可感知的空间阻力、可用物件、声源和行动机会写入同一 beat 卡片；只有 C 对 B 获益而环境维度仍薄弱时，才增加只返回材料点的顾问。不要新增成段环境正文作者，也不要在场景写作前无条件并发调用三个 Agent。
+
+### Pi Worker 的实际影响与最小改动
+
+| 机制 | 现状与可能影响 | 决定 |
+| --- | --- | --- |
+| lean `conversation.ts` 系统提示 | 仅要求遵守角色合同、无工具与写权限、只回指定内容；没有显式白描禁令，也没有独立角色人格。`shouldStopAfterTurn` 固定单轮，因此角色连续性全靠 Studio 提供 beat 历史。 | B 组不改；C 组先用任务单验证。只有泛化系统提示在同题实验中压制角色表演时，才加白名单化 `character-actor` profile，动态人物资料仍放用户任务，不开放任意系统提示注入。 |
+| lean JSON 与长 Prompt | `Scene Create` 要一次返回正文和 `scene_delta` 等结构；来源按 28k soft limit 预留 8k 后截取。三场实测约 21k 来源对约 250 字文风选段；错配参考已修，但旧冻结挂载不变。 | 优先做同题输入消融：来源摘要/排序、选段贴近正文指令、正文与状态抽取是否分开。JSON 是否使语言保守尚未证实，不能擅改对外合同。 |
+| 正式 `main-creative-agent` profile | 第一动作强制 `write_expected_output`，无聊天式排练；文本每次最多 4800 字符并按段追加。它是可追溯交付协议，不是“要写平淡”的文学指令。 | 不放松工具/写权限/验证；用内部 beat 卡和成稿 A/B 检验分段是否损伤段落延展。若确有影响，调整 Studio task program 的素材投射与分段策略，勿在 Worker 堆文学规则。 |
+| 推理、预算与采样 | Worker 有思考级别、推理与请求额度；`conversation.ts` 单轮无工具，`max_tool_calls=1` 传参不代表模型能调用工具。代码未向流式模型调用传入可核验 temperature；`RoleConversationGateway` 使用全局 thinking，模型选择可按 role 配置。 | 记录实际模型、降级后的 thinking、请求次数、输出截断和失败原因。演员需独立能力/成本实验；温度支持应由 adapter 明确回执后才暴露，不用假滑块。 |
+| 顶层 Agent | `project-agent.ts` 使用 Studio `project_agent/prompt_policy.py` 传入的系统提示，负责作品管理、事实交接和调用工具，不承担逐句正文。 | 不通过扩顶层权限解决文风；保持主创与总管分工。 |
+
+### 准入、验证与回滚
+
+B 组先做同题盲评，并分别覆盖 lean-v2 与正式 Prompt（不能拿一种链路代替另一种）。实验记录 `SceneBrief`/composition 版本、参考 ID 与实际注入字符、模型与有效 thinking、首次成稿、后续修订、成本和 reader blind key。C 组仅在宪法例外批准后以默认关闭开关试点，增加 Engine 合同测试（越界知识、改剧情、捏造事实、候选直接晋升均失败）、Studio 事务/缓存/中断/退回测试、Pi 无工具与角色隔离测试，以及读者去名对白辨识和全文阅读意愿。D 组需独立证明增益。硬 Canon、禁用表达、标点和准确数字的既有审核不变；审美软约束不升格为机械阻断。
+
+回滚单位为 B 的提示/默认合同、C 的可选素材步骤、D 的环境顾问，各自独立。若 C/D 盲评不胜 B，关闭调用并删除试验接口即可；正式正文、资产和历史任务不需迁移或回写。
+
+## 七、后续实施决议（2026-09-23）
+
+用户随后明确要求**真正的角色扮演候选台词与动作**，以及**独立的成段环境描写候选**，并要求写成完整工程实现文档后实施。因此上文 D 组“只返回材料点、不写成段候选”的谨慎建议不再是实现边界；本次在 `docs/implementation/scene-performance-agents-v1.md` 中给出替代合同：环境写手可以写受限候选段，但不能成为正式正文作者、不能编排情节或取得 Canon 权限。角色和环境使用静态白名单无工具会话，正式正文与审查仍由原主创链路负责。
+
+实验尚未满足上文三位读者盲评及稳定事实误差优势的**默认启用条件**。工程实现作为设置页可见的实验开关交付，默认关闭。真实模型试跑显示独立候选可能发明钟点、物件或设备读数，也可能被主创移入正文；这说明当前机制已具备可试用、可回退的工程闭环，但没有证据宣称文风问题已被根治。旧 `strict-v1` 正式 Route 尚未签发这种候选任务，不在当前启用范围。

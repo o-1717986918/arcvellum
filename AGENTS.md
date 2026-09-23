@@ -33,7 +33,7 @@ Do not discover architecture by searching the whole repository and editing the f
 7. Treat `route-audit` as final evidence; Studio must not reinterpret a failed gate as success.
 8. Pause at human approval, canon apply, state apply, and release/publish approval tasks.
 9. Never enable a debug waiver or `LEW_MAINTAINER_MODE`.
-10. The selected external CLI instance is the main Agent for creative tasks. It must not delegate body prose to subagents.
+10. The selected external CLI instance is the only author of formal body prose, revisions, and final text. In the lean scene-performance workflow only, bounded tool-free character and environment Agents may supply isolated candidate dialogue, actions, or description under a locked scene task sheet. They may not write expected outputs, commit prose, alter Canon, decide plot, or bypass main-Agent review. Formal routes retain the no-subagent-prose rule until Engine TaskPackage explicitly authorizes a corresponding material state.
 11. Never expose legacy embedded provider commands through Studio API, UI, or public CLI.
 
 These Worker rules describe product execution. They do not authorize code Agents to bypass the module and interface rules in the Development Entry.

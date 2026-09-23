@@ -109,7 +109,7 @@ Agent 按下列顺序读取，不凭文件名猜架构：
 任何代码优化、吞吐优化或 Agent 自适应都不能删除以下约束：
 
 1. 正式工作由 Engine TaskPackage 签发；CLI/Worker 不能伪造完成。
-2. 正文只能由正式主创 Agent 生成，subagent 只能做只读证据提取或机械分析。
+2. 正式正文、修订和定稿只能由主创 Agent 生成。lean-v2 的场景表演合同可授权无工具、无项目写权的角色/环境 Agent 提供隔离候选台词、动作或描写；候选不得直接成为正文、状态或 Canon。旧正式 route 在 Engine TaskPackage 显式签发素材任务前仍禁止 subagent 代写。
 3. Agent 只能写 isolated workspace 的 `expected_outputs`；写回前必须 deterministic preflight。
 4. Context、RP、Branch、Composition、Prose、AgentReview、Promotion、State/Canon/Continuity 的正式依赖由 route 决定。
 5. 字数、节奏、场景功能、衔接、文风和读者体验合同必须进入正文生成及复核链。
