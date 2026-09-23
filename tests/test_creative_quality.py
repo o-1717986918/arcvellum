@@ -14,6 +14,7 @@ from literary_engineering_studio_engine.literary.style.anti_ai import style_lint
 from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_path,
     default_creative_quality_profile,
+    creative_quality_migration_preview,
     load_creative_quality_profile,
     save_creative_quality_profile,
 )
@@ -24,6 +25,18 @@ from literary_engineering_studio_engine.literary.scene.promotion.generation_gate
 
 
 class CreativeQualityProfileTests(unittest.TestCase):
+    def test_soft_rule_migration_is_preview_only_and_preserves_hard_language_rules(self):
+        saved = default_creative_quality_profile()
+        saved["rule_modes"]["comma-chain-overload"] = "blocking"
+        saved["rule_modes"]["abstract-summary-density"] = "blocking"
+        result = creative_quality_migration_preview(saved)
+        self.assertEqual(saved["rule_modes"]["comma-chain-overload"], "blocking")
+        self.assertEqual(len(result["changes"]), 2)
+        candidate = result["candidate"]
+        self.assertEqual(candidate["rule_modes"]["comma-chain-overload"], "note")
+        for rule in ("mechanical-contrast-frame", "custom-banned-phrase", "ascii-punctuation-in-chinese"):
+            self.assertEqual(candidate["rule_modes"][rule], "blocking")
+
     def test_profile_is_versioned_only_when_semantics_change(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -101,6 +114,7 @@ class CreativeQualityProfileTests(unittest.TestCase):
 
     def test_comma_overload_reports_multiple_sentences_in_one_repair_batch(self):
         profile = default_creative_quality_profile()
+        profile["rule_modes"]["comma-overload-in-sentence"] = "blocking"
         profile["thresholds"]["comma_overload_min_chars"] = 20
         text = (
             "他核对名单，又检查封条，还问了值班人，记下交接时间，最后把记录压在桌角。"

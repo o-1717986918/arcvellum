@@ -10,18 +10,24 @@ import re
 from typing import Any, Callable
 
 from literary_engineering_studio_engine.public.literary import (
-    ChangeProposal,
     CreativeResult,
     ReviewDecision,
     ReviewResult,
     SceneBrief,
     SceneDelta,
     VerificationReport,
+    select_active_style_references,
+    recent_formal_reference_ids,
+    active_style_mount_snapshot_payload,
+    render_style_reference_selection,
+    project_brief_expression_context,
 )
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from ..runtime.role_conversation import RoleConversationGateway
 from ..infrastructure.project_scene_transactions import known_scene_refs
 from .scene_length_completion import complete_first_draft_length
+from .pi_scene_payload import _answer_payload, _proposals, _strings
+from .pi_scene_style_history import projection_digest as _projection_digest, recent_lean_reference_ids, scene_reference_context
 _MACHINE_FIELDS = frozenset({
     "task_id", "transaction_id", "project_root", "expected_outputs", "completion_marker", "sha256",
 })
@@ -62,15 +68,34 @@ class PiSceneTransactionRuntime:
         return PiSceneRuntimeMetrics(self._provider_calls, self._cache_hits)
 
     def create_scene(self, transaction_id: str, brief: SceneBrief) -> CreativeResult:
-        cache = self._cache_path(transaction_id, "creative_result.json")
+        selection = self._style_projection(brief, transaction_id)
+        expression = self._expression_projection(brief)
+        projection_digest = _projection_digest(selection, expression)
+        cache = self._cache_path(transaction_id, f"creative_result_{projection_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
             return creative_result_from_payload(cached)
+        if self._event_sink is not None:
+            self._event_sink("style.projection.selected", {
+                "scene_transaction_id": transaction_id,
+                "scene_id": brief.scene_id,
+                "style_version_id": selection.get("style_mount_snapshot", {}).get("version_id", ""),
+                "selection_status": selection.get("status", ""),
+                "selector_version": selection.get("selector_version", ""),
+                "selection_digest": selection.get("digest", ""),
+                "reference_ids": [item["unit_id"] for item in selection.get("references", [])],
+                "technique_axes": [axis for item in selection.get("references", []) for axis in item["technique_axes"]],
+                "expression_plan_digest": hashlib.sha256(json.dumps(expression.get("expression_plan"), ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
+                "voice_digest": hashlib.sha256(json.dumps(expression.get("dialogue_intents"), ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
+                "message": "本场文风参考与表达策略已确定。",
+            })
         prompt = render_scene_create_prompt(
             brief,
             source_evidence=self._source_evidence(brief, purpose="create"),
             allowed_refs=known_scene_refs(brief),
+            style_reference_block=render_style_reference_selection(selection),
+            expression_context_block=json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         result = creative_result_from_payload(_answer_payload(answer))
@@ -88,8 +113,11 @@ class PiSceneTransactionRuntime:
         result: CreativeResult,
         verification: VerificationReport,
     ) -> ReviewResult:
+        selection = self._style_projection(brief, transaction_id)
+        expression = self._expression_projection(brief)
+        projection_digest = _projection_digest(selection, expression)
         candidate_digest = hashlib.sha256(result.prose.encode("utf-8")).hexdigest()[:16]
-        cache = self._cache_path(transaction_id, f"review_result_{candidate_digest}.json")
+        cache = self._cache_path(transaction_id, f"review_result_{candidate_digest}_{projection_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
@@ -99,7 +127,8 @@ class PiSceneTransactionRuntime:
             result,
             verification,
             source_evidence=self._source_evidence(brief, purpose="review"),
-            revision_attempts=len(tuple(cache.parent.glob("revision_result_*.json"))),
+            revision_attempts=len(tuple(cache.parent.glob(f"revision_result_*_{projection_digest}.json"))),
+            expression_context_block=json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
         )
         answer = self._run(prompt, role="reviewer", transaction_id=transaction_id)
         review = review_result_from_payload(_answer_payload(answer))
@@ -124,7 +153,10 @@ class PiSceneTransactionRuntime:
         *,
         attempt: int,
     ) -> CreativeResult:
-        cache = self._cache_path(transaction_id, f"revision_result_{attempt}.json")
+        selection = self._style_projection(brief, transaction_id)
+        expression = self._expression_projection(brief)
+        projection_digest = _projection_digest(selection, expression)
+        cache = self._cache_path(transaction_id, f"revision_result_{attempt}_{projection_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
@@ -136,6 +168,8 @@ class PiSceneTransactionRuntime:
             review,
             source_evidence=self._source_evidence(brief, purpose="revise"),
             allowed_refs=known_scene_refs(brief),
+            style_reference_block=render_style_reference_selection(selection),
+            expression_context_block=json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         revised = creative_result_from_payload(_answer_payload(answer))
@@ -164,11 +198,34 @@ class PiSceneTransactionRuntime:
             raise ValueError("transaction_id cannot be normalized for runtime storage")
         return self._data_root / "scene-transactions" / safe_id / name
 
+    def _style_projection(self, brief: SceneBrief, transaction_id: str = "") -> dict[str, Any]:
+        scene_text = scene_reference_context(self._project_root, brief.scene_id, brief.to_dict())
+        brief_digest = hashlib.sha256(scene_text.encode("utf-8")).hexdigest()
+        mount = active_style_mount_snapshot_payload(self._project_root)
+        if transaction_id:
+            cache = self._cache_path(transaction_id, "style_selection.json")
+            saved = _read_json(cache)
+            if saved and saved.get("brief_digest") == brief_digest and saved.get("style_mount_snapshot") == mount:
+                return saved["selection"]
+        recent = (*recent_formal_reference_ids(self._project_root, exclude_scene_id=brief.scene_id),
+                  *recent_lean_reference_ids(self._data_root, brief.scene_id, mount))
+        selection = select_active_style_references(self._project_root, scene_text, recent_unit_ids=recent)
+        if transaction_id:
+            _atomic_json(cache, {"scene_id": brief.scene_id, "brief_digest": brief_digest,
+                                 "style_mount_snapshot": mount, "selection": selection})
+        return selection
+
+    def _expression_projection(self, brief: SceneBrief) -> dict[str, Any]:
+        return project_brief_expression_context(self._project_root, brief.to_dict())
+
     def _source_evidence(self, brief: SceneBrief, *, purpose: str) -> str:
         recipe = lean_scene_prompt_recipe(purpose)
         remaining = max(0, recipe.soft_character_limit - 8_000)
         blocks: list[str] = []
+        indexed_style = self._style_projection(brief).get("status") in {"selected", "no-scene-match"}
         for reference in brief.source_refs:
+            if indexed_style and Path(reference).name == "style-profile.md":
+                continue
             path = (self._project_root / Path(reference)).resolve()
             if not path.is_relative_to(self._project_root) or not path.is_file():
                 continue
@@ -188,6 +245,8 @@ def render_scene_create_prompt(
     *,
     source_evidence: str = "",
     allowed_refs: Any = (),
+    style_reference_block: str = "",
+    expression_context_block: str = "",
 ) -> str:
     recipe = lean_scene_prompt_recipe("create")
     reference_contract = _reference_contract(brief, allowed_refs)
@@ -199,8 +258,11 @@ def render_scene_create_prompt(
 ## SceneBrief
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
 
+## Expression And Voice Context
+{expression_context_block or "依照 SceneBrief 的人物与压力自行组织语言；不编造未给定身份。"}
+
 ## Relevant Sources
-{source_evidence or "无额外资料；严格使用 SceneBrief。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，先读完整选段，选一篇最贴合本场功能的样例作表达主参照；明确提取叙述距离、句群呼吸、细节进入顺序、修辞发动、对白回弹或意象推进中的至少两项，并贯穿 prose，不得只借题材词或概括成“清简”。必要时再取一篇辅助。用本项目人物、行动与因果写新内容，不复制样例专名、标志句、连续措辞或异常标点。用户最新方向、canon、人物事实和本场职责仍优先。
+{source_evidence or "无额外资料；严格使用 SceneBrief。"}\n\n## Style Reference Priority\n{style_reference_block or "若资料中有文风参考，借用与本场相关的表达机制，不复制原句、专名或连续措辞；Canon、人物和用户方向优先。"}
 
 ## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
@@ -236,6 +298,7 @@ def render_scene_review_prompt(
     *,
     source_evidence: str = "",
     revision_attempts: int = 0,
+    expression_context_block: str = "",
 ) -> str:
     recipe = lean_scene_prompt_recipe("review")
     convergence = f"本场已完成 {revision_attempts} 轮返修；此时只有硬事实冲突、明确场景义务缺失或能指出具体读者损害的问题才可继续 revise，孤立句式、局部动作相似或可选润色一律判 pass 并写入 summary。" if revision_attempts >= 2 else "本场尚在前两轮审读，可对有明确证据的实质文学问题提出最小返修。"
@@ -247,11 +310,14 @@ def render_scene_review_prompt(
 确定性检查已经由程序完成，不复查路径、哈希、回执或任务流程。
 直接返回 JSON：{{"decision":"pass|revise|escalate","summary":"结论","revision_instructions":[],"evidence":[]}}。
 需要改动时必须选择 revise 并给出具体片段证据；轻微建议仍判 pass。
-程序的 warning 是提醒，不是自动退回理由。软字数偏差只作建议，不得单独退回；只有人物行为、场景义务、行动层次、选择代价或阅读效果出现可举证损害时才判 revise。不能仅凭 warning 标签本身要求改稿。一次审读只列修复当前可举证实质问题所需的最小指令；先前问题已消失时不得另开与硬约束、场景义务或明确阅读损害无关的新审美议题。
+程序的 warning 是提醒，不是自动退回理由。软字数偏差只作建议，不得单独退回；只有人物行为、场景义务、行动层次、选择代价或阅读效果出现可举证损害时才判 revise。不能仅凭 warning 标签本身要求改稿。一次审读最多列三个有原文证据的高影响问题，给出最小指令、修改跨度并保留有效段落；先前问题已消失时不得另开与硬约束、场景义务或明确阅读损害无关的新审美议题。
 检查正文中新出现的专名或稳定身份是否已进入 new_asset_candidates；仅沿用 SceneBrief 的通用角色称谓、普通设备名或场所类别无需登记。真正遗漏会影响后续场景时判 revise。
 
 ## SceneBrief
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
+
+## Expression And Voice Context
+{expression_context_block or "以场景职责和人物事实为准。"}
 
 ## Deterministic Report
 {json.dumps(verification.to_dict(), ensure_ascii=False, separators=(",", ":"))}
@@ -277,6 +343,8 @@ def render_scene_revision_prompt(
     *,
     source_evidence: str = "",
     allowed_refs: Any = (),
+    style_reference_block: str = "",
+    expression_context_block: str = "",
 ) -> str:
     recipe = lean_scene_prompt_recipe("revise")
     instructions = list(review.revision_instructions) if review is not None else []
@@ -291,6 +359,9 @@ def render_scene_revision_prompt(
 ## SceneBrief
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
 
+## Expression And Voice Context
+{expression_context_block or "保留候选中有效的人物声音与表达选择。"}
+
 ## Candidate
 {result.prose}
 
@@ -304,7 +375,7 @@ def render_scene_revision_prompt(
 {json.dumps(instructions, ensure_ascii=False, separators=(",", ":"))}
 
 ## Relevant Sources
-{source_evidence or "无额外资料。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，修订时保留或恢复与本场相合的具体样例表达形态，至少核对叙述距离、句群呼吸、细节顺序、修辞发动、对白回弹或意象推进中的两项。不要只把样例概括成“清简”，也不要为模仿而改动 canon、人物选择或搬运原句。
+{source_evidence or "无额外资料。"}\n\n## Style Reference Priority\n{style_reference_block or "保留候选中有效的语言运动；若资料中有文风参考，只借用表达机制，不搬运原句。"}
 
 ## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
@@ -370,70 +441,6 @@ def review_result_from_payload(payload: dict[str, Any]) -> ReviewResult:
     )
 
 
-def _proposals(
-    value: Any,
-    *,
-    default_operation: str = "update",
-) -> tuple[ChangeProposal, ...]:
-    if not isinstance(value, list):
-        return ()
-    proposals: list[ChangeProposal] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        pairs = _proposal_attributes(item.get("attributes"))
-        target_ref = str(item.get("target_ref") or "").strip()
-        summary = str(item.get("summary") or "").strip()
-        evidence = str(item.get("evidence") or "").strip()
-        if not target_ref and not summary and not evidence and not pairs:
-            continue
-        proposals.append(
-            ChangeProposal(
-                target_ref=target_ref,
-                summary=summary,
-                evidence=evidence,
-                operation=str(item.get("operation") or default_operation).strip(),
-                attributes=pairs,
-            )
-        )
-    return tuple(proposals)
-
-
-def _proposal_attributes(value: Any) -> tuple[tuple[str, str], ...]:
-    if isinstance(value, dict):
-        return tuple((str(key), str(entry)) for key, entry in value.items())
-    if isinstance(value, list):
-        return tuple(
-            (str(pair[0]), str(pair[1]))
-            for pair in value
-            if isinstance(pair, list) and len(pair) == 2
-        )
-    return ()
-
-
-def _strings(value: Any) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        return ()
-    strings: list[str] = []
-    for item in value:
-        if isinstance(item, str):
-            text = item.strip()
-        elif isinstance(item, dict):
-            text = next(
-                (
-                    str(item.get(key) or "").strip()
-                    for key in ("handoff", "summary", "content", "text", "description")
-                    if str(item.get(key) or "").strip()
-                ),
-                "",
-            )
-        else:
-            text = ""
-        if text:
-            strings.append(text)
-    return tuple(strings)
-
-
 def _reference_contract(brief: SceneBrief, allowed_refs: Any) -> list[str]:
     supplied = {str(item).strip() for item in allowed_refs if str(item).strip()}
     if not supplied:
@@ -448,26 +455,6 @@ def _reject_machine_fields(payload: dict[str, Any]) -> None:
     unexpected = sorted(_MACHINE_FIELDS.intersection(payload))
     if unexpected:
         raise ValueError("Pi response contains Studio-owned fields: " + ", ".join(unexpected))
-
-
-def _answer_payload(answer: str) -> dict[str, Any]:
-    text = answer.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(lines[1:-1]).strip() if len(lines) >= 3 else text
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        if start < 0:
-            raise ValueError("Pi scene response is not a JSON object")
-        try:
-            value, _ = json.JSONDecoder().raw_decode(text[start:])
-        except json.JSONDecodeError as exc:
-            raise ValueError("Pi scene response is not a JSON object") from exc
-    if not isinstance(value, dict):
-        raise ValueError("Pi scene response must be a JSON object")
-    return value
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:

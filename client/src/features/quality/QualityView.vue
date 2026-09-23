@@ -6,9 +6,9 @@ import { useQualityProfile } from "./useQualityProfile";
 
 const advanced = ref(false);
 const {
-  profile, previewText, preview, previewScope, loading, saving, dirty, message, error,
+  profile, migration, previewText, preview, previewScope, loading, saving, dirty, message, error,
   statusLabel, findings, rules, load, runPreview, schedulePreview, save, applyPreset,
-  addException, removeException,
+  addException, removeException, applySoftRuleMigration,
 } = useQualityProfile();
 
 onMounted(() => void load());
@@ -29,11 +29,17 @@ onMounted(() => void load());
       <button :class="{ active: profile.preset === 'style-led' }" @click="applyPreset('style-led')"><FlaskConical :size="17" /><strong>文风优先</strong><span>为鲜明句法与节奏保留更大余地。</span></button>
     </section>
 
+    <section v-if="migration?.changes.length" class="quality-migration" aria-label="软规则迁移预览">
+      <div><strong>旧档案的审美规则仍在阻断</strong><p>{{ migration.changes.length }} 项可改为“提醒”；禁用表达和标点阻断不变。先应用到编辑区，再由你保存。</p></div>
+      <details><summary>查看规则</summary><ul><li v-for="item in migration.changes" :key="item.rule">{{ item.rule }}：阻断 → 提醒</li></ul></details>
+      <button class="secondary-button" @click="applySoftRuleMigration">应用到编辑区</button>
+    </section>
+
     <RhythmCurveEditor />
 
     <div class="quality-workbench">
       <section class="quality-controls">
-        <header><div><span class="eyebrow">基础控制</span><h2>用文学语言调整阈值</h2></div><button class="text-button" @click="advanced = !advanced">{{ advanced ? "收起逐条规则" : "打开逐条规则" }}</button></header>
+        <header><div><span class="eyebrow">基础控制</span><h2>调整软诊断灵敏度</h2></div><button class="text-button" @click="advanced = !advanced">{{ advanced ? "收起逐条规则" : "打开逐条规则" }}</button></header>
         <label class="quality-slider"><span><strong>破折号容忍度</strong><small>每 100 个叙事单元</small></span><input v-model.number="profile.thresholds.dash_per_100_units" type="range" min="0" max="8" step=".5" @input="schedulePreview" /><output>{{ profile.thresholds.dash_per_100_units }}</output></label>
         <label class="quality-slider"><span><strong>套话容忍度</strong><small>器官反应、万能占位等</small></span><input v-model.number="profile.thresholds.soft_density_per_100_units" type="range" min="0" max="8" step=".5" @input="schedulePreview" /><output>{{ profile.thresholds.soft_density_per_100_units }}</output></label>
         <label class="quality-slider"><span><strong>显性转折密度</strong><small>但是、然而、于是、突然</small></span><input v-model.number="profile.thresholds.transition_per_100_units" type="range" min="0" max="12" step="1" @input="schedulePreview" /><output>{{ profile.thresholds.transition_per_100_units }}</output></label>

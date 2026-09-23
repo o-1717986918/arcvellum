@@ -1,0 +1,30 @@
+{
+  "schema": "arcvellum/style-reference-metadata/v1",
+  "units": [
+    {"unit_id":"R01","match_terms":["疑惧","偏执","压迫","月光","证词","回避","怀疑","隐瞒"],"technique_axes":["unreliable-focalization","object-pressure"]},
+    {"unit_id":"R02","match_terms":["镜子","服饰","等待","欲望","试探","关系","对视"],"technique_axes":["object-mediated-desire","social-distance"]},
+    {"unit_id":"R03","match_terms":["渡口","河水","过场","离别"],"technique_axes":["spatial-patience","action-withheld"]},
+    {"unit_id":"R04","match_terms":["丧亲","父亲","哀伤","家务","失踪","家人","旧事","余波"],"technique_axes":["routine-under-grief","delayed-recognition"]},
+    {"unit_id":"R05","match_terms":["高粱","田野","乡村","夏天"],"technique_axes":["color-expansion","continuous-motion"]},
+    {"unit_id":"R06","match_terms":["宴会","社交","讽刺","虚荣","盘问","会议","官样"],"technique_axes":["social-irony","self-correction"]},
+    {"unit_id":"R07","match_terms":["喜剧","说教","争嘴","误答","口角","对话","争辩"],"technique_axes":["habit-repetition","dialogue-rebound"]},
+    {"unit_id":"R08","match_terms":["剑来","群体召唤","拔剑","公开宣告"],"technique_axes":["brief-summons","collective-motion"]},
+    {"unit_id":"R09","match_terms":["祝词","故人","乱世","赠言"],"technique_axes":["lyrical-address","private-history-in-war"]},
+    {"unit_id":"R10","match_terms":["俯瞰","傲慢","突然失控","神明"],"technique_axes":["boast-and-collapse","scale-reversal"]},
+    {"unit_id":"R11","match_terms":["雨的一生","自然命题","沉思","哲思"],"technique_axes":["natural-process","aphoristic-turn"]},
+    {"unit_id":"R12","match_terms":["逼问","不接受","命运","意志逆转"],"technique_axes":["repeated-question","will-reversal"]},
+    {"unit_id":"R13","match_terms":["挽天倾","担当","集体召唤","崩塌"],"technique_axes":["collective-address","responsibility-scale"]},
+    {"unit_id":"R14","match_terms":["冲阵","守护","百姓","武夫"],"technique_axes":["name-and-charge","protected-object"]},
+    {"unit_id":"R15","match_terms":["暗恋","史诗命题","月光","私人失落"],"technique_axes":["scale-juxtaposition","private-loss"]},
+    {"unit_id":"R16","match_terms":["守城","宗师","牺牲","战场"],"technique_axes":["collective-sacrifice","battle-scale"]},
+    {"unit_id":"R17","match_terms":["雨夜","街道","离别","告别"],"technique_axes":["weather-space","restrained-parting"]},
+    {"unit_id":"R18","match_terms":["酒馆","江湖","密谈","埋伏"],"technique_axes":["crowd-contrast","threat-in-noise"]},
+    {"unit_id":"R19","match_terms":["废土","废墟","灾后","城市","旧址","荒废"],"technique_axes":["ruin-scale","material-history"]},
+    {"unit_id":"R20","match_terms":["朝堂","大殿","百官","权力"],"technique_axes":["status-space","collective-silence"]},
+    {"unit_id":"R21","match_terms":["赛博","霓虹","全息","都市"],"technique_axes":["layered-signal","urban-noise"]},
+    {"unit_id":"R22","match_terms":["校园","教学楼","少年","走廊"],"technique_axes":["corridor-distance","youthful-waiting"]},
+    {"unit_id":"R23","match_terms":["密室","封闭","密闭","恐惧","黑暗","暗处"],"technique_axes":["restricted-sight","uncertain-sound"]},
+    {"unit_id":"R24","match_terms":["仙侠","秘境","符文","古殿"],"technique_axes":["mythic-space","ancient-scale"]},
+    {"unit_id":"R25","match_terms":["飞船","宇宙","星海","太空"],"technique_axes":["cosmic-scale","human-smallness"]}
+  ]
+}

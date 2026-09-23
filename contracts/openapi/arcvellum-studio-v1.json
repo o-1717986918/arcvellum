@@ -5060,6 +5060,43 @@
         "summary": "Project Creative Quality Update"
       }
     },
+    "/project/creative-quality/migration-preview": {
+      "get": {
+        "operationId": "project_creative_quality_migration_preview_project_creative_quality_migration_preview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Creative Quality Migration Preview"
+      }
+    },
     "/project/creative-quality/preview": {
       "post": {
         "operationId": "project_creative_quality_preview_project_creative_quality_preview_post",

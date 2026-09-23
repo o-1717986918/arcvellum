@@ -15,6 +15,7 @@ from .review_projection import review_events
 from .review_artifacts import apply_review_identities, project_review_artifacts
 from .transcript_projection import reduce_sessions
 from .scene_transactions import active_scene_transaction
+from .style_provenance import latest_style_provenance
 
 
 SNAPSHOT_SCHEMA = "arcvellum/creative-live-snapshot/v1"
@@ -41,6 +42,7 @@ def build_creative_live_snapshot(
     session_projection = reduce_sessions(visible, sessions)
     current_run = run or {}
     transaction_projection = list(scene_transactions or [])
+    style_provenance = latest_style_provenance(project_root, visible)
     _reconcile_session_status(current_run, session_projection)
     revision_source = {
         "event_ids": [item["event_id"] for item in visible],
@@ -59,6 +61,7 @@ def build_creative_live_snapshot(
             )
             for item in transaction_projection
         ],
+        "style_provenance": style_provenance,
     }
     revision = hashlib.sha256(
         json.dumps(revision_source, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
@@ -78,6 +81,7 @@ def build_creative_live_snapshot(
         "usage": _usage(visible),
         "active_scene_transaction": active_scene_transaction(transaction_projection),
         "scene_transactions": transaction_projection,
+        "style_provenance": style_provenance,
         "events": visible[-240:],
         "cursor": max((int(item.get("sequence") or 0) for item in visible), default=0),
     }

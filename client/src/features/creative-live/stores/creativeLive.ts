@@ -73,6 +73,7 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
       reviews: Array.isArray(value.reviews) ? value.reviews : [],
       active_scene_transaction: value.active_scene_transaction || null,
       scene_transactions: Array.isArray(value.scene_transactions) ? value.scene_transactions : [],
+      style_provenance: value.style_provenance || null,
       events: Array.isArray(value.events) ? value.events : [],
       usage: value.usage || { total_tokens: 0, cost_usd: 0, updates: 0 },
       cursor: Number(value.cursor || 0),

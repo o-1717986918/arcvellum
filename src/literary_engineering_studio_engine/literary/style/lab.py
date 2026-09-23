@@ -420,7 +420,7 @@ def build_style_skill(
         shutil.rmtree(skill_dir)
     skill_dir.mkdir(parents=True, exist_ok=True)
     copies = {
-        "style-profile.md": profile / "style-profile.md",
+        "style-profile.md": profile / "style-profile.md", "reference-index.json": profile / "reference-index.json",
         "style_metrics.json": profile / "style_metrics.json",
         "style_prompt.agent.json": profile / "style_prompt.agent.json",
         "style_prompt.prompt.json": profile / "style_prompt.prompt.json",

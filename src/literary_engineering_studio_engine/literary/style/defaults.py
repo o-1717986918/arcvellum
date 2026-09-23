@@ -16,6 +16,7 @@ from .mount import mount_style_profile_version
 from .review import style_review_machine_values, style_review_paths
 from .text import source_content_digest
 from .version import build_style_profile_version
+from .reference_projection import build_default_reference_index
 
 
 DEFAULT_STYLE_PRESET_ID = "clear-plain-zh"
@@ -131,12 +132,15 @@ def _materialize_curated_profile(root: Path) -> Path:
     holdout = holdout_dir / "0001-arcvellum-editorial-holdout.md"
     training.write_text(training_text + "\n", encoding="utf-8")
     holdout.write_text(holdout_text + "\n", encoding="utf-8")
-    (profile / "style-profile.md").write_text(
+    full_profile = (
         profile_text
         + "\n\n## 完整参考语料\n\n"
         + "以下二十五个单元按 R01—R25 的顺序完整保留；先按上文索引选择机制，再读对应单元。\n\n"
         + training_text
-        + "\n",
+    )
+    (profile / "style-profile.md").write_text(full_profile + "\n", encoding="utf-8")
+    (profile / "reference-index.json").write_text(
+        _json_text(build_default_reference_index(full_profile + "\n", training_text)),
         encoding="utf-8",
     )
     (profile / "style_prompt.md").write_text(prompt_text + "\n", encoding="utf-8")

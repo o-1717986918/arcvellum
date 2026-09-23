@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,14 +12,13 @@ from string import Formatter
 from typing import Any
 
 from literary_engineering_studio_engine.literary.style.anti_ai import ANTI_AI_STYLE_PROMPT, ANTI_EVASION_REVISION_PROTOCOL
-from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
 from literary_engineering_studio_engine.literary.review.creative_quality import (
     creative_quality_profile_exists,
     creative_quality_profile_path,
     load_creative_quality_profile,
     render_creative_quality_prompt,
 )
-from literary_engineering_studio_engine.tasking.gates import ensure_composition_ready_for_generation
+from .scene_inputs import validated_scene_prompt_inputs
 from ..literary.scene.composition.execution_contract import (
     load_prose_execution_contract,
     render_prose_execution_contract,
@@ -27,6 +27,11 @@ from literary_engineering_studio_engine.literary.planning.narrative_rhythm impor
 from literary_engineering_studio_engine.literary.scene.state.new_character_register import render_new_character_register_contract
 from literary_engineering_studio_engine.prompting.compiler import compile_active_constraints, render_compiled_constraints
 from literary_engineering_studio_engine.literary.style.punctuation import render_punctuation_standard_for_prompt
+from literary_engineering_studio_engine.literary.style.reference_projection import (
+    recent_formal_reference_ids,
+    render_style_reference_selection,
+    select_active_style_references,
+)
 from literary_engineering_studio_engine.literary.review.reader_experience import (
     chapter_obligation_path,
     ensure_reader_experience_ready,
@@ -45,31 +50,18 @@ DEFAULT_STYLE_LIMIT = 6000
 
 STYLE_GENERATION_STANDARD = """# 文风生成标准（生成阶段执行）
 
-本标准必须在动笔前执行，不能等到审查阶段再补救。平台 agent 或本地 provider 应把已挂载 Style Skill / style profile 转译为本场的叙述声音和语言曲线；内部决策不输出到候选正文。
+先遵守 Canon、人物事实和场景目标，再把本场表达计划与所选完整参考转成语言动作。参考只提供叙述距离、句法运动、信息隐匿、对白回弹和意象来源，不复制原句或专名。
 
-执行顺序：
+语言来自视角人物会注意、误解、回避和说出的事物。长短句随压力与认识变化，不把短句排成动作清单。修辞须改变视角、节奏、关系或信息；情绪可直述，也可由当前最有因果意义的行动、对白、沉默或感知承担，不轮流调用器官和声光。人物的稳定词域与当下对话对象共同决定言语行动。动作、对白或物证已成立时，停在后果，不替读者解释。
 
-1. 若挂载了 Style Skill 与完整参考选段，选一篇最适合本场功能的表达主参照。识别其视角距离、句群呼吸、细节进入顺序、对白与意象如何推动变化；学习机制，不复制原句、专名或标志性连续措辞。高强度与类型选段是正向参考，不因默认风格偏清晰而排除。
-2. 读取 scene.yaml、context packet、context trace、composition 与人物资料，确认 canon、BDI、隐性 background_story、场景目标、禁止改动项、incoming pressure、scene turn 和 outgoing hook。让叙述词域来自视角人物的经验与作品世界。
-3. 给本场确定一条可听见、却不必固定为三段式的语言曲线：何处从容或急促入场，何处因行动、信息或关系变化而蓄势、变调或骤停，何处把余波留给读者。与邻场比较，不重复同一条速度、段落厚度和收束模式。
-4. 句法随压力工作：可以用较长句容纳并行观察、犹疑与未完成动作，用短句承受真正的决断或事实落点；也可以在争执中让对白抢断叙述，在余波中放慢。不要平均分配长短句，不要反复使用“动作—解释—短句总结”的骨架。
-5. 每位人物的语言要有自己的词汇范围、句子形状、礼貌边界、试探和回避方式；同一人物也会因对象与风险改变说法。对白可含机锋、幽默、误答、突然的坦白或沉默，不让叙述者逐句翻译潜台词。无需凭空制造方言或口头禅。
-6. 允许叙述在关键处有锋利、奇异、诗性或类型化的局部强度。细节、意象与比喻可以积蓄气氛、揭示人物趣味或让回返之物改换含义；必须扎根当前感知与因果，不靠装饰性器物清单、形容词堆叠、景物强制同步或空泛金句制造文学感。
-7. 清晰不等于恒定朴素。过场可压缩，关键选择与后果可展开；每段至少改变读者的注意力、期待、关系感、气氛或事实理解之一，不要求每段都推进一个外部事件。语言变化在生成阶段落实，不能留给 Style Lint 或 AgentReview 统一润色。
-8. 保留硬语言边界：生硬对照及同功能换皮、无关精确数字、ASCII/角引号与错误省略号、无功能破折号仍按既有规则处理；器官轮岗、万能占位、比喻依赖和套话仍接受密度复核。标点服务句意与呼吸，不用密集句号或长逗号链假装起伏。
-9. 若文风要求与 canon、人物逻辑、场景因果或用户明确要求冲突，保留硬事实，在“需要人工确认”中说明。输出前静默听一遍语言曲线、辨认人物声音并复核事实与语言边界；不把自检或工作流痕迹写进正文。
+硬语言边界按项目已编译约束和标点规范执行；软审美风险在生成时自检，不作为词频配额。内部计划与自检不输出到正文。
 """
 
 OUTPUT_CONTRACT = """模型输出必须使用以下 Markdown 结构：
 
 ## 正文候选
 
-写入场景正文候选。正文必须先执行“文风生成标准”和“新角色登记契约”，再遵守 canon、人物 BDI、背景故事隐性动因、场景编排包和文风 profile。
-正文还必须遵守标准中文标点约束：中文句子使用全角标点，省略号用“……”，避免英文标点混入中文正文和连续感叹/疑问符。
-标点必须服务句意和本场语言曲线：逗号承接尚未完成的动作、观察和因果，层级松散时重组句法，不按数量机械拆成短句；正式正文原则上不用破折号，不靠“但是、然而、于是、然后、突然”机械制造转折。
-正文必须降低 AI 腔：禁用机械“不是……而是……”“并非……而是……”“与其说……不如说……”以及“不是……——是……”“不是……。是……”等变体；不要把这类结构判断为合理修辞。也禁止“并不是……只是……”“倒不是……只是……”“看似……其实……”“表面上……实则……”“没有……只是……”等换皮转折。器官轮岗、万能占位、比喻依赖、抽象总结、解释性心理标签、模板化转折、对称排比、全知说教、景物强制同步和结尾金句化按密度控制：约 2% 叙事单元以内的孤立风险点可进入低级复核，密集出现必须修订。密度复核不等于把有功能的语势变化一并抹平。
-不要用脚本化思维改写正文：生成时避免问题，修订时逐句语义判断；不得把否定、纠偏或人物心理误删成反义。
-不要在正文候选中输出文风分析、生成计划、自检表或工作流痕迹；这些只能作为内部生成标准。
+写入场景正文候选。遵守 Canon、人物、场景编排、文风生成标准与已编译硬语言边界；不输出文风分析、生成计划、自检表或工作流痕迹。
 
 ## 状态变化候选
 
@@ -110,6 +102,9 @@ class PromptPack:
     composition_path: Path | None
     style_profile_path: Path | None
     style_mount_snapshot: dict[str, str]
+    style_reference_selection: dict[str, Any]
+    expression_plan_digest: str
+    voice_digest: str
     word_budget_path: Path | None
     review_notes_path: Path | None
     creative_quality_profile: dict[str, Any]
@@ -142,29 +137,8 @@ def build_scene_prompt_pack(
     materialization_scope: str = "full",
 ) -> PromptPack:
     """Render system/user prompts for a scene generation provider."""
-    root = project_root.resolve()
-    scene_path = _resolve(root, scene_path)
-    context_path = _resolve(root, context_path)
-    context_trace_path = default_context_trace_path(context_path)
-    if not context_trace_path.exists():
-        raise FileNotFoundError(
-            f"context trace not found: {_rel(context_trace_path, root)}. "
-            "Run context again so formal generation can audit loaded canon/character/style/word-budget inputs."
-        )
-    scene_id = scene_path.stem or "scene"
-    trace_status = context_trace_status(root, scene_id, context_path)
-    if not trace_status.passed:
-        raise ValueError(
-            f"context trace is not fresh: {trace_status.message}. "
-            "Rerun the formal context task before compiling a prose prompt pack."
-        )
-    default_composition = root / "drafts" / "compositions" / f"{scene_id}_composition.md"
-    composition_path = _resolve(root, composition) if composition else default_composition
-    if not composition_path.exists():
-        composition_path = None
-    ensure_composition_ready_for_generation(
-        root,
-        composition_path,
+    root, scene_path, context_path, context_trace_path, composition_path, scene_id = validated_scene_prompt_inputs(
+        project_root, scene_path, context_path, composition,
         allow_unselected_composition=allow_unselected_composition,
         allow_missing_composition=allow_missing_composition,
     )
@@ -177,6 +151,11 @@ def build_scene_prompt_pack(
     rhythm_contract = narrative_rhythm_contract(root, scene_path, composition_path)
     style_context = resolve_style_prompt_context(root, text_limit=DEFAULT_STYLE_LIMIT)
     style_profile_path = style_context.path
+    composition_payload = _read_json(_composition_json_path(composition_path)) if composition_path else {}
+    reference_selection = select_active_style_references(
+        root, _read(scene_path) + "\n" + str(composition_payload.get("composition_obligations") or ""),
+        recent_unit_ids=recent_formal_reference_ids(root, exclude_scene_id=scene_id),
+    )
     word_budget_path = _find_word_budget(root)
     review_notes_path = _find_scene_review_notes(root, scene_id)
     quality_profile = load_creative_quality_profile(root)
@@ -196,6 +175,7 @@ def build_scene_prompt_pack(
         "context_trace_text": _limit(_read(context_trace_path), DEFAULT_CONTEXT_LIMIT),
         "composition_text": _composition_contract_prompt_text(composition_path, allow_incomplete=allow_unselected_composition or allow_missing_composition),
         "style_profile": style_context.constraint,
+        "style_reference_block": render_style_reference_selection(reference_selection),
         "style_generation_standard": _render_style_generation_standard(root, style_profile_path),
         "word_budget_generation_standard": word_budget_rendering.render_word_budget_generation_standard(root),
         "scene_word_budget_contract": word_budget_rendering.render_scene_word_budget_contract(
@@ -219,6 +199,7 @@ def build_scene_prompt_pack(
     user_template = _load_template(root, "scene_generation_user.md")
     system_prompt = _render_template(system_template, values)
     user_prompt = _ensure_style_generation_standard(_render_template(user_template, values), values["style_generation_standard"])
+    user_prompt = _ensure_style_reference_selection(user_prompt, values["style_reference_block"])
     user_prompt = _ensure_word_budget_generation_standard(user_prompt, values["word_budget_generation_standard"])
     user_prompt = _ensure_scene_word_budget_contract(user_prompt, values["scene_word_budget_contract"])
     user_prompt = _ensure_reader_experience_contract(user_prompt, values["reader_experience_contract"])
@@ -248,6 +229,9 @@ def build_scene_prompt_pack(
         composition_path=composition_path,
         style_profile_path=style_profile_path,
         style_mount_snapshot=style_context.snapshot,
+        style_reference_selection=reference_selection,
+        expression_plan_digest=_object_digest(composition_payload.get("expression_plan")),
+        voice_digest=_object_digest(composition_payload.get("dialogue_intents")),
         word_budget_path=word_budget_path,
         review_notes_path=review_notes_path,
         creative_quality_profile=quality_profile,
@@ -286,6 +270,9 @@ def write_prompt_manifest(pack: PromptPack, output: Path, provider: str, model: 
         "composition": _rel(pack.composition_path, pack.project_root) if pack.composition_path else "",
         "style_profile": _rel(pack.style_profile_path, pack.project_root) if pack.style_profile_path else "",
         "style_mount_snapshot": pack.style_mount_snapshot,
+        "style_reference_selection": pack.style_reference_selection,
+        "expression_plan_digest": pack.expression_plan_digest,
+        "voice_digest": pack.voice_digest,
         "generation_standards": {
             "style": pack.style_generation_standard,
             "style_profile_loaded": pack.style_profile_path is not None,
@@ -343,6 +330,12 @@ def _ensure_style_generation_standard(user_prompt: str, standard: str) -> str:
     if "## 文风生成标准" in user_prompt or "# 文风生成标准" in user_prompt:
         return user_prompt
     return user_prompt.rstrip() + "\n\n## 文风生成标准\n\n" + standard.strip() + "\n"
+
+
+def _ensure_style_reference_selection(user_prompt: str, selection: str) -> str:
+    if "## 本场参考选段" in user_prompt:
+        return user_prompt
+    return user_prompt.rstrip() + "\n\n## 本场参考选段\n\n" + selection.strip() + "\n"
 
 
 def _ensure_creative_quality_profile(user_prompt: str, profile_text: str) -> str:
@@ -464,6 +457,7 @@ def _composition_prompt_text(composition_path: Path | None, execution_contract_t
     if composition_path is None:
         return "内部实验模式：未加载场景创作编排包。正式生成必须先运行 simulate-scene --agent、branch-simulate --agent、记录 branch_selection.md，并重建 compose-scene。"
     markdown = _limit(_read(composition_path), DEFAULT_COMPOSITION_LIMIT)
+    markdown = re.sub(r"(?ms)^## 正文种子\s*\n.*?(?=^## |\Z)", "## 历史正文种子\n\n此节为旧编排遗留，不作为措辞约束。\n\n", markdown)
     return markdown.rstrip() + "\n\n" + execution_contract_text.strip() + "\n"
 
 
@@ -629,18 +623,9 @@ def _render_generation_constraint_brief(
     rhythm_status = str((rhythm_contract or {}).get("status") or "missing")
     return f"""# 生成前最终硬约束摘要
 
-写作 agent 必须按以下顺序执行，不能只把它们当成审查清单：
+Canon、用户明确约束和人物事实优先。正式生成执行已选择的 composition 分支、场景义务、人物当下声音和 expression plan；旧 composition 的 prose seed 仅为历史证据，不复现其措辞。文风来源：{_loaded_label(style_path, root, "已加载", "未加载")}；节奏合同：`{rhythm_status}`；预算：{_loaded_label(word_budget_path, root, "已加载", "未加载")}；审读小修：{_loaded_label(review_notes_path, root, "已加载", "未加载")}。
 
-1. Canon / 用户明确约束优先：不得改动已确认事实、适用范围、时间线、角色身份、规则边界和用户给定方向。
-2. 场景目标与编排包优先：正式生成必须存在 composition，并先执行 selected branch、beats、subtext、dialogue intents 和 prose seed；偏离必须写入“需要人工确认”。仅内部实验可显式缺省 composition。
-3. 人物逻辑优先：行动来自 BDI、当前信息差、关系压力、道德边界和 hidden background_story 的隐性影响，不为方便剧情强行转向。
-4. 文风优先级：{_loaded_label(style_path, root, "已加载", "未加载")}。文风改变表达机制，不覆盖事实。
-5. 读者体验与章节义务：长篇正式生成必须有 ready 的 reader_experience_contract。每场要推进读者问题、承诺回报、暂扣信息、兑现/延迟、张力来源和读后余味，不能只把剧情写成摘要。
-6. 叙事节奏与场景桥接：状态 `{rhythm_status}`。开头接住入场压力，中段有 scene_turn，过场快速通过，关键选择放慢，结尾给下一场留下 outgoing_hook；不要把所有场景写成同一种平均节奏。
-7. 长篇预算：{_loaded_label(word_budget_path, root, "已加载", "未加载")}。场景必须承担明确叙事功能，不用空泛描写灌字数，也不把剧情量压缩成摘要；目标单位是中文内容字符，机器非空白字符只作诊断。
-8. AgentReview 小修：{_loaded_label(review_notes_path, root, "已加载", "未加载")}。若上一轮为 pass_with_notes，必须执行小修或逐条说明豁免。
-9. 标点与 AI 腔：遵守标准中文标点，禁用机械“不是……而是……”和“不是……——是”等生硬对照，不判断为合理修辞；禁用“并不是……只是……”“看似……其实……”“表面上……实则……”等换皮转折。正式正文原则上不用破折号，孤立破折号需逐句复核，超过约 2% 叙事单元密度或替代转折时必须修订；逗号较多时按语义层级重组，不按数量机械拆句。转折由动作、信息差、因果和人物选择产生，器官轮岗、万能占位、比喻依赖、抽象总结、解释性心理标签、模板转折、景物强制同步、对称排比和金句化收束按约 2% 密度门禁控制。若保留显式转折，必须在后续修订/审查中能通过反规避负担证明。
-10. 输出边界：只输出候选正文和状态变化候选；不输出工作流、分析、自检表、AGENT_TASK、prompt manifest、canon 解释或审查过程。
+中文标点、项目禁用表达和机械对照按已编译约束审查。软审美问题由表达计划和人物声音在生成时处理，不把密度阈值当作写作配额。只输出候选正文和状态变化候选；需要偏离已确认事实时写入“需要人工确认”。
 """
 
 
@@ -654,6 +639,10 @@ def _read_json(path: Path) -> dict[str, Any]:
     except (json.JSONDecodeError, OSError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _object_digest(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest() if value is not None else ""
 
 
 def _json_list(value: Any) -> list[str]:
@@ -704,10 +693,6 @@ def _limit(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[:limit] + "\n\n[内容因提示词长度限制被截断。]"
-
-
-def _resolve(root: Path, path: Path) -> Path:
-    return path if path.is_absolute() else root / path
 
 
 def _rel(path: Path, root: Path) -> str:

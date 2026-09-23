@@ -19,6 +19,24 @@ from literary_engineering_studio.observability.creative_live.artifact_revisions 
 
 
 class CreativeLiveProjectionTests(unittest.TestCase):
+    def test_style_projection_is_visible_without_exposing_reference_text(self):
+        event = _raw(1, "style.projection.selected", {
+            "scene_id": "scene_0001",
+            "style_version_id": "v1-test",
+            "selection_status": "selected",
+            "selector_version": "scene-reference-selector/1",
+            "selection_digest": "abc123",
+            "reference_ids": ["R17"],
+            "technique_axes": ["weather-space"],
+            "expression_plan_digest": "expression",
+            "voice_digest": "voice",
+        })
+        snapshot = build_creative_live_snapshot(".", [event])
+        provenance = snapshot["style_provenance"]
+        self.assertEqual(provenance["reference_ids"], ["R17"])
+        self.assertEqual(provenance["source"], "lean-runtime")
+        self.assertNotIn("text", provenance)
+
     def test_projects_prose_preview_without_promoting_it(self):
         event = project_runtime_event(
             {

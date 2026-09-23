@@ -131,6 +131,19 @@ export interface SceneTransactionSummary {
   version: number;
 }
 
+export interface StyleProvenance {
+  source: "lean-runtime" | "formal-manifest";
+  scene_id: string;
+  style_version_id: string;
+  selection_status: string;
+  selector_version: string;
+  selection_digest: string;
+  reference_ids: string[];
+  technique_axes: string[];
+  expression_plan_digest: string;
+  voice_digest: string;
+}
+
 export interface CreativeLiveSnapshot {
   ok: boolean;
   schema: string;
@@ -146,6 +159,7 @@ export interface CreativeLiveSnapshot {
   usage: { total_tokens: number; cost_usd: number; updates: number };
   active_scene_transaction: SceneTransactionSummary | null;
   scene_transactions: SceneTransactionSummary[];
+  style_provenance: StyleProvenance | null;
   events: CreativeLiveEvent[];
   cursor: number;
 }

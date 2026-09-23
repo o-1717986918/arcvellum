@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import json
 import re
+from ruamel.yaml import YAML
 
 from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status, default_context_trace_path
 from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
@@ -55,9 +57,6 @@ def _list_after(text: str, key: str) -> list[str]:
                     continue
                 indent = len(sub) - len(sub.lstrip())
                 stripped = sub.strip()
-                # YAML permits an indentationless sequence immediately below
-                # a mapping key (``aliases:\n- name``).  Treat that standard
-                # form as part of the value instead of ending the block.
                 if indent <= base_indent and not stripped.startswith("-"):
                     break
                 if stripped.startswith("-"):
@@ -70,16 +69,12 @@ def _list_after(text: str, key: str) -> list[str]:
 
 def _nested_scalar(text: str, section: str, key: str) -> str:
     match = re.search(rf"(?ms)^\s*{re.escape(section)}:\s*\n(.*?)(?=^\S|\Z)", text)
-    if not match:
-        return ""
-    return _scalar(match.group(1), key)
+    return _scalar(match.group(1), key) if match else ""
 
 
 def _nested_list(text: str, section: str, key: str) -> list[str]:
     match = re.search(rf"(?ms)^\s*{re.escape(section)}:\s*\n(.*?)(?=^\S|\Z)", text)
-    if not match:
-        return []
-    return _list_after(match.group(1), key)
+    return _list_after(match.group(1), key) if match else []
 
 
 def _load_characters(root: Path) -> list[CharacterCard]:
@@ -93,28 +88,61 @@ def _load_characters(root: Path) -> list[CharacterCard]:
         text = _read(path)
         if not text:
             continue
+        payload = YAML(typ="safe").load(text)
+        if not isinstance(payload, dict):
+            continue
+        bdi = _mapping(payload.get("bdi"))
+        psychology = _mapping(payload.get("psychology"))
+        background = _mapping(payload.get("background_story"))
+        identity = _mapping(payload.get("identity"))
+        speech = _mapping(payload.get("speech_style"))
+        state = _mapping(payload.get("state"))
         cards.append(
             CharacterCard(
                 file=path,
-                character_id=_scalar(text, "character_id") or path.stem,
-                name=_scalar(text, "name") or path.stem,
-                role=_scalar(text, "role"),
-                belief=_nested_list(text, "bdi", "belief"),
-                desire=_nested_list(text, "bdi", "desire"),
-                intention=_nested_list(text, "bdi", "intention"),
-                fear=_nested_list(text, "psychology", "fear"),
-                secret=_nested_list(text, "psychology", "secret"),
-                background_summary=_nested_scalar(text, "background_story", "summary")
-                or _nested_scalar(text, "identity", "background"),
-                formative_events=_nested_list(text, "background_story", "formative_events"),
-                behavior_influences=_nested_list(text, "background_story", "behavior_influences"),
-                reveal_policy=_nested_scalar(text, "background_story", "reveal_policy") or "implicit_only",
-                moral_line=_nested_scalar(text, "psychology", "moral_line"),
-                speech_style=_nested_scalar(text, "speech_style", "rhythm")
-                or _nested_scalar(text, "speech_style", "vocabulary"),
+                character_id=_value_str(payload.get("character_id")) or path.stem,
+                name=_value_str(payload.get("name")) or path.stem,
+                role=_value_str(payload.get("role")),
+                belief=_list_str(bdi.get("belief")),
+                desire=_list_str(bdi.get("desire")),
+                intention=_list_str(bdi.get("intention")),
+                fear=_list_str(psychology.get("fear")),
+                secret=_list_str(psychology.get("secret")),
+                background_summary=_value_str(background.get("summary")) or _value_str(identity.get("background")),
+                formative_events=_list_str(background.get("formative_events")),
+                behavior_influences=_list_str(background.get("behavior_influences")),
+                reveal_policy=_value_str(background.get("reveal_policy")) or "implicit_only",
+                moral_line=_value_str(psychology.get("moral_line")),
+                speech_style=_value_str(speech.get("rhythm")) or _value_str(speech.get("vocabulary")),
+                speech_style_details={
+                    "vocabulary": _value_str(speech.get("vocabulary")),
+                    "rhythm": _value_str(speech.get("rhythm")),
+                    "taboo_words": _list_str(speech.get("taboo_words")),
+                    "signature_patterns": _list_str(speech.get("signature_patterns")),
+                },
+                relationships=_list_str(payload.get("relationships")),
+                known_facts=_list_str(state.get("known_facts")),
             )
         )
     return cards
+
+
+def _mapping(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _value_str(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value).strip()
+
+
+def _list_str(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for entry in value if (item := _value_str(entry))]
 
 
 def _bullets(items: list[str]) -> str:

@@ -22,9 +22,9 @@ def render_composition_report(
         *_beats_section(payload),
         *_characters_section(payload),
         *_dialogue_section(payload),
-        *_sensory_section(payload),
+        *_perceptual_section(payload),
         *_contract_sections(root, scene_path, payload),
-        *_prose_section(payload),
+        *_expression_section(payload),
         *_closing_section(payload),
     ]
     return "\n".join(lines) + "\n"
@@ -128,23 +128,22 @@ def _dialogue_section(payload: dict[str, Any]) -> list[str]:
                 f"- `{item['speaker']}` 想要：{item['wants']}",
                 f"  避免：{item['avoids']}",
                 f"  话语策略：{item['speech_strategy']}",
+                f"  稳定声音：{item.get('stable_voice', {})}",
+                f"  当下关系：{item.get('voice_state', {})}",
                 f"  禁区：{item['forbidden_exposition']}",
             ]
         )
     return [*lines, ""]
 
 
-def _sensory_section(payload: dict[str, Any]) -> list[str]:
-    sensory = payload["sensory_palette"]
+def _perceptual_section(payload: dict[str, Any]) -> list[str]:
+    sensory = payload.get("perceptual_options", {})
     return [
-        "## 感官与意象",
+        "## 有依据的感知材料",
         "",
-        f"- 地点锚点：{sensory['location_anchor']}",
-        f"- 意象：{', '.join(sensory['motifs'])}",
-        f"- 声音：{', '.join(sensory['sound'])}",
-        f"- 触感：{', '.join(sensory['texture'])}",
-        f"- 光线：{', '.join(sensory['light'])}",
-        f"- 风格过滤：{', '.join(sensory['style_filters'])}",
+        f"- 地点锚点：{sensory.get('location_anchor') or '未指定'}",
+        f"- 已登记意象：{', '.join(sensory.get('motifs', [])) or '无'}",
+        "- 未列出的声音、触感和光线不应自动补入正文。",
         "",
     ]
 
@@ -183,16 +182,20 @@ def _contract_sections(
     ]
 
 
-def _prose_section(payload: dict[str, Any]) -> list[str]:
-    lines = [
-        "## 正文种子",
+def _expression_section(payload: dict[str, Any]) -> list[str]:
+    plan = payload.get("expression_plan", {})
+    return [
+        "## 本场表达计划",
         "",
-        "以下不是正稿，只是用于启动真实正文生成的可改写种子：",
+        f"- 激活轴：{', '.join(plan.get('active_axes', []))}",
+        f"- 视角注意：{plan.get('focalization_lens', '')}",
+        f"- 信息释放：{plan.get('information_strategy', '')}",
+        f"- 句法运动：{plan.get('syntax_motion', '')}",
+        f"- 对话压力：{plan.get('dialogue_pressure', '')}",
+        f"- 表达渠道：{plan.get('evidence_channel', '')}",
+        f"- 场尾余压：{plan.get('ending_residue', '')}",
         "",
     ]
-    for paragraph in payload["prose_seed"]:
-        lines.extend([paragraph, ""])
-    return lines
 
 
 def _closing_section(payload: dict[str, Any]) -> list[str]:
@@ -207,7 +210,7 @@ def _closing_section(payload: dict[str, Any]) -> list[str]:
         "",
         "## 下一步",
         "",
-        "- 将正文种子扩写或交给 provider 生成候选。",
+        "- 按场景义务与表达计划创作正文候选。",
         "- 把候选正文放入 `drafts/scenes/` 后运行 `review-scene`。",
         "- 通过审查和人工确认后，再进入章节工作台、导出和发布链路。",
     ]

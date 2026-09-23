@@ -7,6 +7,10 @@ export function createQualityClient(transport: ApiTransport = featureTransport) 
     profile: (projectRoot: string) => transport.request<{ profile: QualityProfile }>(
       `/project/creative-quality?${transport.query({ project_root: projectRoot })}`,
     ),
+    migrationPreview: (projectRoot: string) => transport.request<{
+      changes: Array<{ rule: string; from: string; to: string }>;
+      candidate: QualityProfile;
+    }>(`/project/creative-quality/migration-preview?${transport.query({ project_root: projectRoot })}`),
     preview: (projectRoot: string, text: string, profile: QualityProfile, scope: string) => transport.request<Record<string, unknown>>(
       "/project/creative-quality/preview",
       { method: "POST", body: JSON.stringify({ project_root: projectRoot, text, profile, scope }) },

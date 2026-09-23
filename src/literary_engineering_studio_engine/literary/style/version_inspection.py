@@ -242,6 +242,8 @@ def _package_paths(root: Path) -> _PackagePaths:
         evaluation / "style_semantic_review.json",
         evaluation / "style_semantic_review.md",
     )
+    if (root / "reference-index.json").is_file():
+        artifacts += (root / "reference-index.json",)
     return _PackagePaths(
         root,
         root / "style_version.json",

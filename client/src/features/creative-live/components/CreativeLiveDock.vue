@@ -59,6 +59,13 @@ async function openRevisionMode(): Promise<void> {
 
     <SceneTransactionPulse :transaction="live.snapshot?.active_scene_transaction" />
 
+    <section v-if="live.snapshot?.style_provenance" class="creative-style-provenance" aria-label="本场文风来源">
+      <strong>本场表达参考</strong>
+      <span>{{ live.snapshot.style_provenance.scene_id || '当前场景' }} · {{ live.snapshot.style_provenance.reference_ids.join(' + ') || '中性原则' }}</span>
+      <small v-if="live.snapshot.style_provenance.technique_axes.length">技法轴：{{ live.snapshot.style_provenance.technique_axes.join('、') }}</small>
+      <details><summary>版本与选择依据</summary><small>文风版本 {{ live.snapshot.style_provenance.style_version_id || '未挂载' }} · {{ live.snapshot.style_provenance.selector_version }} · {{ live.snapshot.style_provenance.selection_digest.slice(0, 12) }}</small></details>
+    </section>
+
     <div class="creative-live-grid">
       <aside class="creative-live-left">
         <section class="creative-task-card">

@@ -58,4 +58,5 @@ literary_engineering_studio_engine = [
     "_engine/schemas/**/*.json",
     "_engine/templates/**/*.md",
     "_engine/templates/**/*.yaml",
+    "_engine/templates/**/*.json",
 ]

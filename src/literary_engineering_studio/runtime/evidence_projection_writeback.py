@@ -93,6 +93,7 @@ def prose_composition(value: object) -> object:
         value,
         "schema", "scene_id", "selected_branch", "scene_facts", "characters", "beats",
         "composition_obligations", "subtext_map", "dialogue_intents", "sensory_palette",
+        "perceptual_options", "expression_plan",
         "narrative_rhythm", "scene_bridge",
     ) | {
         "word_budget_contract": scene_word_budget(value.get("word_budget_contract")),

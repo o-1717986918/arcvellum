@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard
+from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard, _load_characters
 from ..facts import SceneFacts
 
 
@@ -21,7 +21,7 @@ def build_subtext_map(
 def build_dialogue_intents(
     facts: SceneFacts,
     cards: list[CharacterCard],
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     if not cards:
         return [
             {
@@ -35,44 +35,73 @@ def build_dialogue_intents(
     return [_dialogue_intent(facts, card) for card in cards]
 
 
-def build_sensory_palette(
-    facts: SceneFacts,
-    branch: dict[str, Any],
-) -> dict[str, list[str] | str]:
-    motif = (
-        facts.active_foreshadowing[0]
-        if facts.active_foreshadowing
-        else "未登记伏笔"
-    )
+def build_perceptual_options(facts: SceneFacts) -> dict[str, object]:
+    """Expose only grounded material; absence is preferable to stock sensations."""
+
     return {
-        "location_anchor": facts.location or "未指定地点",
-        "motifs": [motif, branch.get("title") or "无分支标题"],
-        "sound": _sensory_sound(facts),
-        "texture": _sensory_texture(facts),
-        "light": _sensory_light(facts),
-        "style_filters": facts.style_constraints or ["克制", "准确", "人物行动优先"],
+        "location_anchor": facts.location,
+        "motifs": list(facts.active_foreshadowing),
+        "sound": [],
+        "texture": [],
+        "light": [],
     }
 
 
-def build_prose_seed(
+def build_expression_plan(
     facts: SceneFacts,
-    cards: list[CharacterCard],
-    branch: dict[str, Any],
-    sensory: dict[str, list[str] | str],
-) -> list[str]:
-    lead = _lead_name(cards)
-    location = facts.location or "这个地点"
-    goal = facts.scene_goal or "眼前的目标"
-    external = facts.external_conflict or "外部阻碍"
-    hook = facts.next_hooks[0] if facts.next_hooks else "新的后果"
-    premise = branch.get("premise") or "人物必须按自己的逻辑行动"
-    sound = _first_sensory(sensory, "sound") or "细小的动静"
-    texture = _first_sensory(sensory, "texture") or "发冷的边缘"
-    return [
-        f"{location} 先给了 {lead} 一个不肯退让的细节：{sound}。{lead} 先停住动作，确认 `{goal}` 会把局面推向哪里。",
-        f"`{external}` 没有突然爆发，它只是一步一步逼近。{lead} 伸手碰到{texture}时，旧习惯先一步收紧了他的判断；他避开最顺手的办法，选择了更慢、更难、但仍属于他的路。",
-        f"这一版正文种子采用 `{premise}` 的分支前提。结尾不要替读者总结答案，只让 `{hook}` 成为下一场景可以接住的输入。新增事实仍是候选，不能在本场景自动写入 canon。",
+    rhythm: dict[str, Any],
+) -> dict[str, object]:
+    """Describe choices the writer can make without supplying reusable prose."""
+
+    rhythm_state = rhythm.get("narrative_rhythm") if isinstance(rhythm.get("narrative_rhythm"), dict) else {}
+    active = ["syntax_motion"]
+    if len(facts.participants) > 1:
+        active.append("dialogue_pressure")
+    if facts.active_foreshadowing or any(
+        marker in facts.external_conflict for marker in ("秘密", "真相", "线索", "发现", "隐瞒", "误认")
+    ):
+        active.append("information_strategy")
+    return {
+        "schema": "literary-engineering-workbench/scene-expression-plan/v1",
+        "focalization_lens": facts.viewpoint or "由当前视角人物的已知信息与误判决定",
+        "information_strategy": "依据已确认的读者问题与暂扣信息选择揭示顺序",
+        "syntax_motion": str(rhythm_state.get("paragraph_shape") or "句法随行动和关系压力变化"),
+        "dialogue_pressure": facts.internal_conflict or "依据人物的当下目标与关系位置决定",
+        "evidence_channel": "选择当前因果所需的动作、对白、物证、直述、沉默或环境；允许直接命名情绪",
+        "ending_residue": facts.next_hooks[0] if facts.next_hooks else "保留本场变化造成的下一步压力",
+        "active_axes": active[:3],
+    }
+
+
+def project_brief_expression_context(project_root: Path, brief: dict[str, Any]) -> dict[str, Any]:
+    """Share the composition expression/voice rules with the lean runtime."""
+
+    rhythm = brief.get("rhythm") if isinstance(brief.get("rhythm"), dict) else {}
+    participants = [str(item) for item in brief.get("participants", []) if str(item).strip()]
+    facts = SceneFacts(
+        scene_id=str(brief.get("scene_id") or "scene"),
+        chapter_id="",
+        location=str(brief.get("location") or ""),
+        participants=participants,
+        canon_refs=[],
+        active_foreshadowing=[],
+        scene_goal=str(brief.get("objective") or ""),
+        external_conflict=str(brief.get("external_conflict") or ""),
+        internal_conflict=str(brief.get("internal_conflict") or ""),
+        style_constraints=[],
+        next_hooks=[],
+        viewpoint=str(brief.get("viewpoint") or ""),
+    )
+    cards = [
+        card for card in _load_characters(project_root)
+        if any(_same_character(item, card) for item in participants)
     ]
+    paragraph_shape = str(rhythm.get("pace") or "")
+    return {
+        "expression_plan": build_expression_plan(facts, {"narrative_rhythm": {"paragraph_shape": paragraph_shape}}),
+        "dialogue_intents": build_dialogue_intents(facts, cards),
+        "perceptual_options": build_perceptual_options(facts),
+    }
 
 
 def revision_targets(
@@ -139,6 +168,9 @@ def character_payload(card: CharacterCard, root: Path) -> dict[str, Any]:
         },
         "moral_line": card.moral_line,
         "speech_style": card.speech_style,
+        "speech_style_details": card.speech_style_details,
+        "relationships": card.relationships,
+        "known_facts": card.known_facts,
     }
 
 
@@ -181,7 +213,9 @@ def _character_subtext(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]
     }
 
 
-def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, str]:
+def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]:
+    stable_voice = card.speech_style_details or {"rhythm": card.speech_style}
+    interlocutors = [name for name in facts.participants if not _same_character(name, card)]
     return {
         "speaker": card.name or card.character_id,
         "wants": _first_nonempty(card.desire + card.intention)
@@ -191,50 +225,28 @@ def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, str]:
         or facts.internal_conflict
         or "避免暴露过多信息。",
         "speech_strategy": card.speech_style or "让语气服务关系压力，少解释，多留白。",
+        "stable_voice": stable_voice,
+        "voice_state": {
+            "interlocutors": interlocutors,
+            "relationship_evidence": card.relationships,
+            "known_facts": card.known_facts,
+            "current_goal": _first_nonempty(card.desire + card.intention) or facts.scene_goal,
+            "withheld_or_misread": _first_nonempty(card.secret + card.fear) or facts.internal_conflict,
+            "speech_action": ("试探或回避" if card.secret else "争取、拒绝或追问")
+            + (f"；对象：{'、'.join(interlocutors)}" if interlocutors else "；以当前场景压力决定"),
+        },
         "forbidden_exposition": "不得借对白直接讲述 background_story；只能让语气、停顿和避词泄露压力。",
     }
 
 
-def _sensory_sound(facts: SceneFacts) -> list[str]:
-    text = " ".join(
-        [facts.location, facts.external_conflict, " ".join(facts.active_foreshadowing)]
-    )
-    if "电" in text:
-        return ["断续电流声", "远处脚步被空墙放大"]
-    if "雨" in text:
-        return ["雨点敲击硬物", "压低的呼吸声"]
-    return ["低频环境声", "被刻意压住的脚步或语气"]
-
-
-def _sensory_texture(facts: SceneFacts) -> list[str]:
-    text = facts.location + facts.external_conflict
-    if "旧" in text or "档案" in text:
-        return ["纸页边缘发脆", "灰尘贴在指腹"]
-    if "地下" in text:
-        return ["潮湿墙面", "发凉的金属边缘"]
-    return ["温度变化", "粗糙边缘", "被反复触碰的物件"]
-
-
-def _sensory_light(facts: SceneFacts) -> list[str]:
-    text = facts.location + facts.external_conflict
-    if "停电" in text or "夜" in text:
-        return ["低光", "手电余光", "门缝暗影"]
-    return ["局部光源", "遮挡形成的阴影", "人物视线避开的亮处"]
-
-
-def _first_sensory(sensory: dict[str, list[str] | str], key: str) -> str:
-    value = sensory.get(key, "")
-    if isinstance(value, list):
-        return _first_nonempty(value)
-    return str(value)
-
-
-def _lead_name(cards: list[CharacterCard]) -> str:
-    return cards[0].name or cards[0].character_id or "核心角色" if cards else "核心角色"
-
-
 def _first_nonempty(items: list[str]) -> str:
     return next((item for item in items if item), "")
+
+
+def _same_character(reference: str, card: CharacterCard) -> bool:
+    return reference in {card.name, card.character_id, card.file.stem} or reference.rsplit("/", 1)[-1] in {
+        card.character_id, card.file.stem,
+    }
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -246,8 +258,9 @@ def _relative(path: Path, root: Path) -> str:
 
 __all__ = [
     "build_dialogue_intents",
-    "build_prose_seed",
-    "build_sensory_palette",
+    "build_expression_plan",
+    "build_perceptual_options",
+    "project_brief_expression_context",
     "build_subtext_map",
     "character_payload",
     "flow_gate",

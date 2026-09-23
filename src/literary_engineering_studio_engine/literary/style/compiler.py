@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 
+from .candidate_references import append_candidate_references
+
 
 TEXT_EXTENSIONS = {".txt", ".md"}
 SENTENCE_END = "。！？!?；;"
@@ -331,7 +333,14 @@ def compile_style_profile(options: StyleCompileOptions) -> StyleCompileResult:
     metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
     profile_path = output_dir / "style-profile.md"
-    profile_path.write_text(_profile_markdown(options, metrics), encoding="utf-8")
+    profile_text, reference_index = append_candidate_references(
+        _profile_markdown(options, metrics), _read_sources(_iter_text_files(options.corpus)),
+    )
+    profile_path.write_text(profile_text, encoding="utf-8")
+    if reference_index:
+        (output_dir / "reference-index.json").write_text(
+            json.dumps(reference_index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        )
 
     manifest_path = output_dir / "corpus_manifest.yaml"
     manifest_path.write_text(_manifest(options, metrics), encoding="utf-8")

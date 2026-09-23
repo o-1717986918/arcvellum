@@ -6,6 +6,7 @@ from typing import Any
 
 from .routers.quality import QualityRouterDependencies, build_quality_router
 from literary_engineering_studio_engine.public.literary import (
+    creative_quality_migration_preview,
     lint_punctuation,
     load_creative_quality_profile,
     load_rhythm_plan,
@@ -20,6 +21,7 @@ def register_quality_router(app: Any, read_models: Any) -> None:
         build_quality_router(
             QualityRouterDependencies(
                 load_creative_quality_profile=load_creative_quality_profile,
+                creative_quality_migration_preview=creative_quality_migration_preview,
                 save_creative_quality_profile=save_creative_quality_profile,
                 style_lint_gate=style_lint_gate,
                 lint_punctuation=lint_punctuation,

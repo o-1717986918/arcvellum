@@ -126,11 +126,16 @@ def _validate_world_payload(payload: dict[str, Any]) -> None:
 
 def _validated_rows(payload: dict[str, Any], eligible: dict[str, Path]) -> list[dict[str, Any]]:
     rows = payload.get("characters")
-    if not isinstance(rows, list) or {row.get("name") for row in rows if isinstance(row, dict)} != set(eligible):
+    if not isinstance(rows, list):
         raise ValueError("asset enrichment must cover each eligible character exactly once")
-    if len(rows) != len(eligible):
+    # Some models answer a one-character task with the whole planned cast.
+    # Treat those extra rows as untrusted surplus, never as write authority.
+    selected = [row for row in rows if isinstance(row, dict) and row.get("name") in eligible]
+    if {row["name"] for row in selected} != set(eligible):
+        raise ValueError("asset enrichment must cover each eligible character exactly once")
+    if len(selected) != len(eligible):
         raise ValueError("asset enrichment contains duplicate character names")
-    for row in rows:
+    for row in selected:
         _require_text(
             row, "summary", "hidden_wound", "appearance", "clothing",
             "public_private_contrast", "moral_line",
@@ -149,7 +154,7 @@ def _validated_rows(payload: dict[str, Any], eligible: dict[str, Path]) -> list[
         policy = row.get("reveal_policy")
         if policy not in {"implicit_only", "delayed_reveal"}:
             raise ValueError("background reveal_policy must be implicit_only or delayed_reveal")
-    return rows
+    return selected
 
 
 def _render_character(path: Path, row: dict[str, Any]) -> str:

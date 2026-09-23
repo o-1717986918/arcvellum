@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.application.lean_assets import ensure_lean_planning_assets
-from literary_engineering_studio.application.lean_asset_enrichment import enrich_lean_planning_assets
+from literary_engineering_studio.application.lean_asset_enrichment import enrich_lean_planning_assets, _validated_rows
 
 
 class _Gateway:
@@ -53,6 +53,18 @@ class _Gateway:
 
 
 class LeanAssetsTests(unittest.TestCase):
+    def test_extra_character_is_ignored_but_requested_name_is_required_once(self):
+        gateway = _Gateway()
+        payload = json.loads(gateway.run(None, "", role="worker", timeout=1).answer)
+        extra = dict(payload["characters"][0], name="未请求者")
+        payload["characters"].append(extra)
+        requested = {"林昭": Path("林昭.yaml")}
+        self.assertEqual([row["name"] for row in _validated_rows(payload, requested)], ["林昭"])
+        with self.assertRaisesRegex(ValueError, "cover each eligible"):
+            _validated_rows({"characters": [extra]}, requested)
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            _validated_rows({"characters": [payload["characters"][0]] * 2}, requested)
+
     def test_generated_stubs_receive_independent_background_and_world_detail(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

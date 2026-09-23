@@ -24,26 +24,36 @@ DEFAULT_RULE_MODES: dict[str, str] = {
     "contrast-evasion-frame": "blocking",
     "plain-narration-banned-expression": "note",
     "dash-prohibited-in-plain-narration": "note",
-    "comma-overload-in-sentence": "blocking",
+    "comma-overload-in-sentence": "note",
     "plain-narration-template-sentence": "note",
     "simile-dependency": "note",
-    "abstract-summary-density": "blocking",
-    "explanatory-psychology-overuse": "blocking",
+    "abstract-summary-density": "note",
+    "explanatory-psychology-overuse": "note",
     "slogan-like-ending": "note",
     "ascii-punctuation-in-chinese": "blocking",
     "ascii-ellipsis": "blocking",
-    "ascii-dash": "note",
-    "western-quotes-in-chinese": "note",
+    "ascii-dash": "blocking",
+    "western-quotes-in-chinese": "blocking",
     "corner-quotes-in-horizontal-prose": "blocking",
-    "punctuation-spacing": "note",
+    "punctuation-spacing": "blocking",
     "repeated-terminal-punctuation": "blocking",
     "repeated-punctuation": "blocking",
-    "staccato-period-overuse": "blocking",
-    "comma-chain-overload": "blocking",
-    "dash-overuse": "blocking",
-    "mechanical-transition-overuse": "blocking",
+    "staccato-period-overuse": "note",
+    "comma-chain-overload": "note",
+    "dash-overuse": "note",
+    "mechanical-transition-overuse": "note",
     "custom-banned-phrase": "blocking",
 }
+
+SOFT_RULE_MIGRATION = (
+    "comma-overload-in-sentence",
+    "abstract-summary-density",
+    "explanatory-psychology-overuse",
+    "staccato-period-overuse",
+    "comma-chain-overload",
+    "dash-overuse",
+    "mechanical-transition-overuse",
+)
 
 DEFAULT_THRESHOLDS: dict[str, float | int] = {
     "soft_density_per_100_units": 2.0,
@@ -184,6 +194,22 @@ def normalize_creative_quality_profile(payload: dict[str, Any]) -> dict[str, Any
     return profile
 
 
+def creative_quality_migration_preview(profile: dict[str, Any]) -> dict[str, Any]:
+    """Preview the new soft-rule defaults without changing a saved profile."""
+
+    current = normalize_creative_quality_profile(profile)
+    candidate = deepcopy(current)
+    changes = []
+    for rule in SOFT_RULE_MIGRATION:
+        before = current["rule_modes"].get(rule, "note")
+        if before != "blocking":
+            continue
+        candidate["rule_modes"][rule] = "note"
+        changes.append({"rule": rule, "from": before, "to": "note"})
+    candidate["digest"] = creative_quality_profile_digest(candidate)
+    return {"changes": changes, "candidate": candidate}
+
+
 def save_creative_quality_profile(project_root: Path, payload: dict[str, Any], *, updated_by: str = "user") -> dict[str, Any]:
     path = creative_quality_profile_path(project_root)
     previous = load_creative_quality_profile(project_root)
@@ -247,7 +273,6 @@ def apply_rule_mode(severity: str, mode: str) -> str | None:
 
 def render_creative_quality_prompt(profile: dict[str, Any], *, scope: str = "") -> str:
     profile = normalize_creative_quality_profile(profile)
-    thresholds = profile["thresholds"]
     modes = profile["rule_modes"]
     banned = [str(item).strip() for item in profile.get("custom_banned_phrases", []) if str(item).strip()]
     habits = [str(item).strip() for item in profile.get("preferred_habits", []) if str(item).strip()]
@@ -262,13 +287,9 @@ def render_creative_quality_prompt(profile: dict[str, Any], *, scope: str = "") 
         f"- 预设：{profile['preset']}",
         "- 本档案只调节文学表达偏好，不能关闭来源、审查、晋升、Canon、状态写回或导出门禁。",
         "",
-        "## 生成时必须执行",
+        "## 生成时使用",
         "",
-        f"- 风险表达软密度上限：每 100 个叙事单元 {thresholds['soft_density_per_100_units']:g} 次。",
-        f"- 破折号上限：每 100 个叙事单元 {thresholds['dash_per_100_units']:g} 次，单段不超过 {int(thresholds['dash_per_paragraph'])} 次。",
-        f"- 单句最多 {int(thresholds['commas_per_sentence'])} 个逗号类停顿；超过时重组句法。",
-        f"- 显性转折词上限：每 100 个叙事单元 {thresholds['transition_per_100_units']:g} 次。",
-        f"- 比喻风险上限：每 100 个叙事单元 {thresholds['simile_per_100_units']:g} 次。",
+        "- 软审美诊断只提供修改线索，不是创作配额；按场景功能判断句法、修辞与解释是否有阅读损害。",
         f"- 直接引语样式：{profile['punctuation'].get('quote_style', 'curly-double')}；省略号：{profile['punctuation'].get('ellipsis', '……')}。",
     ]
     if habits:

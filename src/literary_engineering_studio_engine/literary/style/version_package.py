@@ -31,6 +31,9 @@ def materialize_style_version(plan: Any, temporary: Path) -> None:
         "evaluation_results/formal/style_semantic_review.json": evaluation / "style_semantic_review.json",
         "evaluation_results/formal/style_semantic_review.md": evaluation / "style_semantic_review.md",
     }
+    reference_index = source / "reference-index.json"
+    if reference_index.is_file():
+        copies["reference-index.json"] = reference_index
     for relative, source_path in copies.items():
         target = temporary / relative
         target.parent.mkdir(parents=True, exist_ok=True)

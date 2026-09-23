@@ -29,6 +29,7 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
   await expect(page.locator(".creative-live-dock")).toHaveCSS("background-color", "rgb(248, 250, 247)");
   await expect(page.locator(".live-manuscript-scroll .safe-markdown-document")).toHaveCSS("color", "rgb(38, 56, 49)");
   await expect(page.locator(".creative-live-runtime")).toContainText("实时连接");
+  await expect(page.locator(".creative-style-provenance")).toContainText("R17");
   await expect(page.locator(".live-manuscript-scroll")).toContainText("那艘本该昨天离港的船");
   await expect(page.locator(".creative-review-rail")).toContainText("确定性预检通过");
   await expect(page.locator(".creative-task-card")).toContainText("写作第三章第一场");
@@ -61,10 +62,25 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
   const chooser = page.getByRole("dialog", { name: "这次想写哪部作品？" });
   await expect(chooser).toBeVisible();
   expect(await chooser.evaluate((node) => Number(getComputedStyle(node.parentElement!).zIndex))).toBeGreaterThan(90);
-  await chooser.getByRole("button", { name: "关闭" }).click();
+  await chooser.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator('.spatial-window[data-kind="observatory"] button[title="全屏打开工作台"]').dispatchEvent("click");
   await expect(page.locator('.spatial-window[data-kind="observatory"]')).toHaveClass(/fullscreen/);
   await capture(page, testInfo, "creative-live-active.png");
+});
+
+test("style provenance remains readable on a narrow viewport", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/creative-live?*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(liveSnapshot(prose)) });
+  });
+  await openCreativeLive(page);
+  const enter = page.getByRole("button", { name: "进入创作" });
+  if (await enter.isVisible()) await enter.click();
+  await expect(page.getByText("让一部长篇作品从脉络中醒来。")).toBeHidden();
+  await expect(page.locator(".creative-style-provenance")).toBeVisible();
+  const strip = page.locator(".creative-style-provenance");
+  expect(await strip.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  await capture(page, testInfo, "creative-live-style-mobile.png");
 });
 
 async function openCreativeLive(page: Page): Promise<void> {
@@ -106,6 +122,18 @@ function liveSnapshot(content: string) {
       task_id: "scene_0009-prose-agent-task",
       title: "写作第三章第一场",
       message: "候选正文正在形成，随后进入确定性检查与语义审读。",
+    },
+    style_provenance: {
+      source: "lean-runtime",
+      scene_id: "scene_0009",
+      style_version_id: "v1-visual",
+      selection_status: "selected",
+      selector_version: "scene-reference-selector/1",
+      selection_digest: "0123456789abcdef",
+      reference_ids: ["R17"],
+      technique_axes: ["weather-space"],
+      expression_plan_digest: "expression-visual",
+      voice_digest: "voice-visual",
     },
     artifacts: [
       {

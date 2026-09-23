@@ -44,8 +44,8 @@ from .branch_choice import fallback_writeback, load_branch_choice
 from .contracts import SceneCompositionResult, SceneCompositionSources
 from .creative_plan import (
     build_dialogue_intents,
-    build_prose_seed,
-    build_sensory_palette,
+    build_expression_plan,
+    build_perceptual_options,
     build_subtext_map,
     character_payload,
     flow_gate,
@@ -227,14 +227,13 @@ def _composition_payload(
     facts = sources.facts
     branch = sources.branch
     cards = sources.writing_cards
-    sensory = build_sensory_palette(facts, branch)
     word_contract = scene_word_budget_contract(sources.root, sources.scene_path)
     reader_contract = reader_experience_contract(sources.root, sources.scene_path)
     rhythm_contract = narrative_rhythm_contract(sources.root, sources.scene_path)
     beats = _build_beats(facts, sources.active_cards, branch)
     quality_profile = load_creative_quality_profile(sources.root)
     return {
-        "schema": "literary-engineering-workbench/scene-composition/v0.1",
+        "schema": "literary-engineering-workbench/scene-composition/v0.2",
         "generated_at": _now(),
         "project_root": str(sources.root),
         "formal_cli_provenance": _provenance(sources, agent_tasks),
@@ -256,8 +255,8 @@ def _composition_payload(
         ),
         "subtext_map": build_subtext_map(facts, cards),
         "dialogue_intents": build_dialogue_intents(facts, cards),
-        "sensory_palette": sensory,
-        "prose_seed": build_prose_seed(facts, cards, branch, sensory),
+        "perceptual_options": build_perceptual_options(facts),
+        "expression_plan": build_expression_plan(facts, rhythm_contract),
         "word_budget_contract": word_contract,
         "reader_experience_contract": reader_contract,
         "narrative_rhythm_contract": rhythm_contract,
@@ -397,11 +396,11 @@ def _write_composition_agent_tasks(
         tasks=[
             (
                 "审查场景编排",
-                f"""读取 composition.md 与 composition.json，检查 selected_branch、selection_source、flow_gate、beats、composition_obligations、subtext_map、dialogue_intents、sensory_palette 和 prose_seed 是否互相一致。Agent 分支可使用 2-8 个可变节拍，固定 fallback 才默认五拍；无论数量多少都必须覆盖 goal、turn、incoming_bridge、outgoing_hook、cost、reader_effect，并服从权威 word_target_hanzi。selection_source 必须是 selection 才能进入 generate-scene；否则先补 branch_selection.md 或重跑 branch-simulate。把每条发现写进 `{review_rel}` 的 findings。""",
+                f"""读取 composition.md 与 composition.json，检查 selected_branch、selection_source、flow_gate、beats、composition_obligations、subtext_map、dialogue_intents、perceptual_options 和 expression_plan 是否互相一致。Agent 分支可使用 2-8 个可变节拍，固定 fallback 才默认五拍；无论数量多少都必须覆盖 goal、turn、incoming_bridge、outgoing_hook、cost、reader_effect，并服从权威 word_target_hanzi。selection_source 必须是 selection 才能进入 generate-scene；否则先补 branch_selection.md 或重跑 branch-simulate。把每条发现写进 `{review_rel}` 的 findings。""",
             ),
             (
                 "检查人物隐性动因",
-                """逐个角色检查 background_story 是否只作为选择、回避、误判、语气和关系压力的隐性因果存在。标出任何可能把背景故事写成直白说明段落的 prose_seed 或 dialogue intent。""",
+                """逐个角色检查 background_story 是否只作为选择、回避、误判、语气和关系压力的隐性因果存在。标出任何可能把背景故事写成直白说明的表达计划或 dialogue intent。""",
             ),
             (
                 "检查进入生成条件",
@@ -409,7 +408,7 @@ def _write_composition_agent_tasks(
             ),
             (
                 "执行创作品质档案",
-                f"""以下规则不是事后审查备注，而是本场正文生成前的正式约束。逐项确认 composition 的 beats、prose_seed、dialogue_intents 与它们没有冲突；若文风挂载要求例外，必须先登记显式例外，不能自行放宽。\n\n{quality_prompt}""",
+                f"""以下规则是本场正文生成前的约束。逐项确认 composition 的 beats、expression_plan、dialogue_intents 与它们没有冲突；若文风挂载要求例外，必须先登记显式例外。\n\n{quality_prompt}""",
             ),
             (
                 "检查读者体验与章节义务",

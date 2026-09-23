@@ -117,6 +117,7 @@ def plan_style_profile_version(
     style_id = "-".join(item for item in (author_id, profile_id) if item) or profile.name
     review_evidence, evidence_errors = style_review_evidence(root, profile)
     review_evidence.update(_semantic_review_digests(root, profile))
+    review_evidence.update(_reference_index_digest(profile))
     source_evidence = tuple(_source_evidence(session))
     prompt_quality = _prompt_quality(profile)
     errors = _build_gate_errors(
@@ -234,6 +235,7 @@ def style_version_source_paths(plan: StyleVersionPlan) -> tuple[Path, ...]:
         profile / "style_metrics.json",
         profile / "corpus_manifest.yaml",
         profile / "style_prompt.md",
+        profile / "reference-index.json",
         profile / "style_prompt.agent.json",
         prompt_task,
         default_agent_completion_path(prompt_task),
@@ -260,6 +262,7 @@ def _build_gate_errors(
     prompt_quality: dict[str, object],
 ) -> list[str]:
     errors = list(style_session_gate_errors(profile))
+    errors.extend(_reference_index_errors(profile))
     errors.extend(evidence_errors)
     if not prompt_quality.get("length_ok"):
         errors.append("style version prompt fails the 500-2500 Chinese-content character gate")
@@ -300,6 +303,26 @@ def _completion_errors(root: Path, task: Path, label: str) -> list[str]:
     if state.get("complete") is True:
         return []
     return [f"{label} sidecar is incomplete: {state.get('message')}"]
+
+
+def _reference_index_digest(profile: Path) -> dict[str, str]:
+    index = profile / "reference-index.json"
+    return {"reference_index_sha256": _sha256(index)} if index.is_file() else {}
+
+
+def _reference_index_errors(profile: Path) -> list[str]:
+    index = profile / "reference-index.json"
+    if not index.is_file():
+        return []
+    try:
+        from .reference_projection import validate_reference_index
+        validate_reference_index(
+            (profile / "style-profile.md").read_text(encoding="utf-8"),
+            json.loads(index.read_text(encoding="utf-8")),
+        )
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return [f"style reference index is invalid: {exc}"]
+    return []
 
 
 def _source_evidence(session: dict[str, object]) -> list[dict[str, object]]:

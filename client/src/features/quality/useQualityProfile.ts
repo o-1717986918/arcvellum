@@ -16,9 +16,22 @@ export const QUALITY_RULES = [
   ["slogan-like-ending", "金句式收尾", "提醒主题直说和整齐反转句。"],
 ] as const;
 
+export function applySoftMigrationChanges(
+  profile: QualityProfile,
+  changes: Array<{ rule: string; from: string; to: string }>,
+): QualityProfile {
+  for (const change of changes) {
+    if (profile.rule_modes[change.rule] === change.from && change.to === "note") {
+      profile.rule_modes[change.rule] = "note";
+    }
+  }
+  return profile;
+}
+
 export function useQualityProfile() {
   const store = useAppStore();
   const profile = ref<QualityProfile | null>(null);
+  const migration = ref<{ changes: Array<{ rule: string; from: string; to: string }>; candidate: QualityProfile } | null>(null);
   const previewText = ref("灶上的鱼羹热了第三遍，她还没等到那个人回来。门外不是风声，而是有人停在台阶下。她嘴角微扬，仿佛命运的齿轮终于开始转动。");
   const preview = ref<Record<string, any> | null>(null);
   const previewScope = ref("");
@@ -48,6 +61,7 @@ export function useQualityProfile() {
       const result = await qualityClient.profile(projectPath);
       if (store.currentProjectPath !== projectPath) return;
       profile.value = result.profile;
+      await refreshMigration(projectPath);
       loadedProject = projectPath;
       dirty.value = false;
       await runPreview();
@@ -88,6 +102,7 @@ export function useQualityProfile() {
       profile.value = result.profile;
       dirty.value = false;
       message.value = "规则已保存。它会从下一份候选正文开始生效，旧稿需要重新审查。";
+      await refreshMigration(store.currentProjectPath);
       await runPreview();
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : "规则保存失败，未保存的调整仍保留在窗口中。";
@@ -112,6 +127,22 @@ export function useQualityProfile() {
       simile_per_100_units: simile,
     });
     schedulePreview();
+  }
+
+  function applySoftRuleMigration(): void {
+    if (!migration.value?.changes.length || !profile.value) return;
+    applySoftMigrationChanges(profile.value, migration.value.changes);
+    migration.value = null;
+    schedulePreview();
+    message.value = "迁移预览已应用到编辑区；保存后才会影响未来候选稿。";
+  }
+
+  async function refreshMigration(projectPath: string): Promise<void> {
+    try {
+      migration.value = await qualityClient.migrationPreview(projectPath);
+    } catch {
+      migration.value = null;
+    }
   }
 
   function addException(): void {
@@ -142,6 +173,7 @@ export function useQualityProfile() {
 
   return {
     profile,
+    migration,
     previewText,
     preview,
     previewScope,
@@ -158,6 +190,7 @@ export function useQualityProfile() {
     schedulePreview,
     save,
     applyPreset,
+    applySoftRuleMigration,
     addException,
     removeException,
   };

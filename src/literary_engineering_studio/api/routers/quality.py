@@ -15,6 +15,7 @@ from ..models import CreativeQualityPreviewRequest, CreativeQualityRequest, Rhyt
 @dataclass(frozen=True)
 class QualityRouterDependencies:
     load_creative_quality_profile: Callable[[Path], dict[str, Any]]
+    creative_quality_migration_preview: Callable[[dict[str, Any]], dict[str, Any]]
     save_creative_quality_profile: Callable[..., dict[str, Any]]
     style_lint_gate: Callable[..., dict[str, Any]]
     lint_punctuation: Callable[..., list[Any]]
@@ -32,6 +33,11 @@ def build_quality_router(deps: QualityRouterDependencies) -> APIRouter:
     def project_creative_quality(project_root: str):
         root = resolve_project_root(project_root)
         return {"ok": True, "profile": deps.load_creative_quality_profile(root)}
+
+    @router.get("/project/creative-quality/migration-preview")
+    def project_creative_quality_migration_preview(project_root: str):
+        root = resolve_project_root(project_root)
+        return {"ok": True, **deps.creative_quality_migration_preview(deps.load_creative_quality_profile(root))}
 
     @router.put("/project/creative-quality")
     def project_creative_quality_update(payload: CreativeQualityRequest):

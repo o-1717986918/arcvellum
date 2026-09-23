@@ -57,6 +57,7 @@ from ..literary.planning.chapter_inventory import (
 from ..literary.planning.rhythm_plan import load_rhythm_plan, save_rhythm_plan
 from ..literary.planning.narrative_rhythm import analyze_narrative_rhythm_sequence
 from ..literary.review.creative_quality import (
+    creative_quality_migration_preview,
     creative_quality_profile_exists,
     creative_quality_profile_path,
     load_creative_quality_profile,
@@ -77,6 +78,12 @@ from ..literary.review.resolution import (
 from ..literary.scene.branching.proposals import branch_proposal_contract
 from ..literary.scene.context.broker import context_trace_status
 from ..literary.scene.facts import SceneFacts, load_scene_facts, load_scene_mapping
+from ..literary.scene.composition.creative_plan import project_brief_expression_context
+from ..literary.style.reference_projection import (
+    recent_formal_reference_ids,
+    render_style_reference_selection,
+    select_active_style_references,
+)
 from ..literary.scene.transaction import (
     ChangeProposal,
     CreativeResult,
@@ -230,6 +237,7 @@ __all__ = sorted([
     "build_scene_commit_plan",
     "creative_quality_profile_exists",
     "creative_quality_profile_path",
+    "creative_quality_migration_preview",
     "default_style_library_root",
     "ensure_default_style_mount",
     "ensure_style_library",
@@ -290,4 +298,8 @@ __all__ = sorted([
     "word_budget_adherence_for_body",
     "verify_creative_result",
     "project_committed_scene_delta",
+    "select_active_style_references",
+    "recent_formal_reference_ids",
+    "render_style_reference_selection",
+    "project_brief_expression_context",
 ])

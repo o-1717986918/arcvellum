@@ -1,0 +1,21 @@
+{
+  "schema": "arcvellum/prose-style-cases/v1",
+  "baseline_revision": "ab8dd08",
+  "baseline_version": "v0.99.10",
+  "cases": [
+    {"scene_id": "scene_0001", "family": "atmosphere-entry", "question": "档案劳动与拆除压力是否自然进入场景"},
+    {"scene_id": "scene_0005", "family": "relationship-dialogue", "question": "母女声音和隐瞒动机是否可辨"},
+    {"scene_id": "scene_0010", "family": "multi-person-information-gap", "question": "四人各自知道、隐瞒和试探的内容是否清楚"},
+    {"scene_id": "scene_0011", "family": "suspense-reveal", "question": "日期矛盾如何改变合作关系"},
+    {"scene_id": "scene_0022", "family": "public-conflict", "question": "隐瞒暴露的关系代价是否具体"},
+    {"scene_id": "scene_0025", "family": "technical-high-pressure", "question": "工程风险是否承接历史责任而非堆读数"},
+    {"scene_id": "scene_0030", "family": "action-consequence", "question": "停工与复核后果是否有行动层次"},
+    {"scene_id": "scene_0031", "family": "introspective-aftermath", "question": "母亲是否有自己的生活与声音"}
+  ],
+  "adjacent_groups": [
+    ["scene_0002", "scene_0003"],
+    ["scene_0008", "scene_0009"],
+    ["scene_0017", "scene_0018"],
+    ["scene_0029", "scene_0030"]
+  ]
+}

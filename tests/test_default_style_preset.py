@@ -20,6 +20,7 @@ from literary_engineering_studio_engine.public.literary import (
     SceneRisk,
     SceneRiskLevel,
     StyleMountRef,
+    render_style_reference_selection,
 )
 from literary_engineering_studio_engine.literary.style.defaults import (
     DEFAULT_STYLE_ID,
@@ -103,16 +104,12 @@ class DefaultStylePresetTests(unittest.TestCase):
         self.assertIn("把其中至少两项贯穿初稿", prompt)
         self.assertIn("所选样例的两项技法是否可辨", prompt)
         self.assertIn("一张桌、两把椅子、拧两下、看几秒", prompt)
-        self.assertIn("抽象文风软约束转译为本场", route_prompt)
-        self.assertIn("一篇最贴合本场功能的表达主参照", route_prompt)
-        self.assertIn("至少两项可观察技法", route_prompt)
-        self.assertIn("证据之后停笔", route_prompt)
-        self.assertIn("白描不能独占全场", route_prompt)
+        self.assertIn("version: v13", route_prompt)
+        self.assertIn("本场选中的完整参考", route_prompt)
+        self.assertIn("expression plan", route_prompt)
+        self.assertIn("旧 prose_seed 仅为历史证据", route_prompt)
         self.assertIn("Style Lint 与 AgentReview 继续核验违禁表达", route_prompt)
-        self.assertIn("一个又一个", route_prompt)
-        self.assertIn("一项实际功能足以保留精度", route_prompt)
-        self.assertIn("人物说话从已有身份、欲望、关系压力", route_prompt)
-        self.assertIn("不做批量删除和机械模糊化", route_prompt)
+        self.assertIn("项目禁用表达、机械对照及换皮、中文标点", route_prompt)
         self.assertIn("do not invent a numeric density threshold", review_prompt)
         self.assertIn("routine gesture counts, and incidental object counts", review_prompt)
         self.assertIn("do not batch-delete digits", revision_prompt)
@@ -220,7 +217,7 @@ class DefaultStylePresetTests(unittest.TestCase):
             )
             brief = SceneBrief(
                 scene_id="scene_0001",
-                objective="人物在压力下作出选择",
+                objective="雨夜离别时人物在压力下作出选择",
                 scene_function="relationship-turn",
                 participants=("主角",),
                 canon_constraints=(),
@@ -236,8 +233,11 @@ class DefaultStylePresetTests(unittest.TestCase):
                 {}, project_root=root, data_root=base / "pi-runtime"
             )
             lean_sources = runtime._source_evidence(brief, purpose="create")
-            self.assertIn(profile_text.strip(), lean_sources)
-            self.assertIn("将人彻底包裹。", lean_sources)
+            self.assertNotIn(profile_text.strip(), lean_sources)
+            selection = runtime._style_projection(brief)
+            self.assertEqual(selection["status"], "selected")
+            self.assertEqual(selection["references"][0]["unit_id"], "R17")
+            self.assertIn(selection["references"][0]["text"], render_style_reference_selection(selection))
 
             config = json.loads(
                 (root / "style" / "default_style.json").read_text(encoding="utf-8")

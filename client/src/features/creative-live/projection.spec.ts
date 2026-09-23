@@ -18,6 +18,7 @@ function snapshot(): CreativeLiveSnapshot {
     usage: { total_tokens: 0, cost_usd: 0, updates: 0 },
     active_scene_transaction: null,
     scene_transactions: [],
+    style_provenance: null,
     events: [],
     cursor: 0,
   };

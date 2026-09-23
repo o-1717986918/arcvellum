@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 
 
@@ -23,6 +24,9 @@ class CharacterCard:
     reveal_policy: str
     moral_line: str
     speech_style: str
+    speech_style_details: dict[str, object] = field(default_factory=dict)
+    relationships: list[str] = field(default_factory=list)
+    known_facts: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
