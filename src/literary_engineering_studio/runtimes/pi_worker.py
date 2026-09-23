@@ -105,6 +105,9 @@ class PiWorkerRuntime(AgentRuntime):
         mode = str(self._execution_overrides.get("worker_mode") or "").strip()
         if mode:
             command.extend(["--mode", mode])
+        conversation_role = str(self._execution_overrides.get("conversation_role") or "").strip()
+        if conversation_role:
+            command.extend(["--conversation-role", conversation_role])
         for target in self._repair_targets():
             command.extend(["--repair-target", target])
         for reference in self._repair_references():
@@ -202,6 +205,7 @@ class PiWorkerRuntime(AgentRuntime):
         allowed_states: Sequence[str] | None = None,
         initial_repair_targets: Sequence[str] | None = None,
         worker_mode: str | None = None,
+        conversation_role: str | None = None,
     ) -> RuntimeResult:
         overrides = {
             "max_repair_attempts": max_repairs,
@@ -214,6 +218,7 @@ class PiWorkerRuntime(AgentRuntime):
             "provider_total_timeout": max(30, min(int(timeout), 900)),
             "allowed_states": tuple(allowed_states) if allowed_states is not None else None,
             "worker_mode": worker_mode,
+            "conversation_role": conversation_role,
         }
         self._execution_overrides = {key: value for key, value in overrides.items() if value is not None}
         try:

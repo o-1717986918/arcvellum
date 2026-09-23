@@ -44,9 +44,10 @@ export async function runConversation(
 	const sessionId = `arcvellum-conversation-${createHash("sha256").update(prompt).digest("hex").slice(0, 20)}`;
 	const eventAdapter = new WorkerEventAdapter(sessionId, state, emit);
 	const effectiveThinking = safeThinkingLevel(model, options.thinking);
+	const systemPrompt = conversationSystemPrompt(options.conversationRole ?? "default");
 	const agent = new Agent({
 		initialState: {
-			systemPrompt: "You are an ArcVellum role worker. Follow the supplied role contract exactly. You have no tools and no project write access. Return only the requested answer payload.",
+			systemPrompt,
 			model,
 			thinkingLevel: effectiveThinking,
 			tools: [],
@@ -93,6 +94,17 @@ export async function runConversation(
 	};
 	emit("runner.conversation.result", { session_id: sessionId, status, answer });
 	return result;
+}
+
+export function conversationSystemPrompt(role: NonNullable<WorkerOptions["conversationRole"]>): string {
+	const boundary = "You have no tools and no project write access. Return only the requested answer payload. Never create canon or finalized prose.";
+	if (role === "character-actor") {
+		return `You are an ArcVellum character actor. Fully inhabit only the assigned character's knowledge, social position, desires, voice and current pressure. Perform the locked speech act in distinctive spoken language and accompanying visible action; do not direct the plot, voice another character, or explain subtext in narration. Your output is disposable candidate material, not final prose. ${boundary}`;
+	}
+	if (role === "environment-writer") {
+		return `You are an ArcVellum scene-environment writer. Compose bounded candidate description from the assigned viewpoint, physical space, action and style reference. Vary sentence motion; allow meaningful aesthetic dwell. Do not invent plot, canon, locations, or character dialogue. Your output is disposable candidate material, not final prose. ${boundary}`;
+	}
+	return "You are an ArcVellum role worker. Follow the supplied role contract exactly. You have no tools and no project write access. Return only the requested answer payload.";
 }
 
 function emptyState(): WorkerState {

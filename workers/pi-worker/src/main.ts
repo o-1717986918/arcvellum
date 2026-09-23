@@ -98,6 +98,13 @@ function parseOptions(args: string[]): RunnerOptions {
 	const allowedStates = values.get("--allow-state") ?? DEFAULT_STATES;
 	const mode = single(values, "--mode") || "task";
 	if (!isWorkerMode(mode)) throw new Error(`unsupported worker mode: ${mode}`);
+	const conversationRole = single(values, "--conversation-role") || "default";
+	if (!["default", "character-actor", "environment-writer"].includes(conversationRole)) {
+		throw new Error(`unsupported conversation role: ${conversationRole}`);
+	}
+	if (mode !== "conversation" && conversationRole !== "default") {
+		throw new Error("specialized conversation role requires conversation mode");
+	}
 	const repairTargets = values.get("--repair-target") ?? [];
 	const repairReferences = values.get("--repair-reference") ?? [];
 	if (mode === "repair" && repairTargets.length === 0) {
@@ -122,6 +129,7 @@ function parseOptions(args: string[]): RunnerOptions {
 			circuitCooldownMs: positiveInteger(single(values, "--provider-circuit-cooldown-ms"), 30_000),
 		},
 		mode,
+		conversationRole: conversationRole as WorkerOptions["conversationRole"],
 		repairTargets,
 		repairReferences,
 	};

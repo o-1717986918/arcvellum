@@ -58,6 +58,7 @@ class RoleConversationGateway:
             event_sink=observe,
             cancel_event=cancel_event,
             worker_mode="conversation",
+            conversation_role=(role if role in {"character-actor", "environment-writer"} else "default"),
             reasoning_policy=str(settings.get("thinking") or "medium"),
             max_turns=1,
             max_tool_calls=1,
