@@ -99,7 +99,20 @@ class LeanLongformPlanningService:
             scenes = normalize_scene_window(
                 answer.get("scenes"), next_row, start_index=len(plan["scenes"]) + 1
             )
-        updated = {**plan, "scenes": [*plan["scenes"], *scenes]}
+        updated_events = [
+            {
+                **item,
+                "scene_ids": [scene["scene_id"] for scene in scenes],
+            }
+            if isinstance(item, dict) and item.get("chapter_id") == chapter["chapter_id"]
+            else item
+            for item in _event_budget_rows(plan)
+        ]
+        updated = {
+            **plan,
+            "scenes": [*plan["scenes"], *scenes],
+            "event_budget": updated_events,
+        }
         _write_json(plan_path, updated)
         self._materialize(root, updated, plan_path, budget_path)
         return True
@@ -156,6 +169,7 @@ def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
         "每个人物只写 name, role, importance(major/secondary/cameo), background, desire。只列全书重要人物；first_window 中所有有专名的 participants 必须逐字复用 characters 的 name，临时路人使用无专名角色称谓。不要编造不确定的世界事实，现实题材可返回空数组。用户明确指定的人物白名单、禁止新专名、现实解释等跨场景硬限制，必须逐条保存在 world_facts；不得只写进某一场景后丢失。",
         "全书采用一致的日期、年份和时间差口径；未知数值保持未知，不得为增强戏剧性另造相互冲突的时间版本。",
         "每章要有具体且不同的选择、代价或认知改变；禁止用重复事件撑字数。每场只分配一次不可替代的核心事件，function、participants、conflict、information_release、consequence 与 obligation 必须彼此一致；未列入 participants 的重要人物不得在该场提前登场或完成后续场景的职责。相邻场景不得重复首次见面、同一调取/发现/交付、同一问答或同一决定；需要回顾时只写已经造成的新压力，不重演事件。",
+        "先分配事件与不可逆后果，再用字数预算决定展开厚度。场数不是需要填满的空格；不能靠‘仍不问、不拆、不说、不动’保存悬念并把人物处境复位。若一项悬念跨章保留，每章必须改变它的持有人、证据状态、公开范围、人物代价或可选行动中的至少一项。",
         "无关精确数字默认不用，先区分‘一个又一个’等虚指反复与精确计数。日期、年龄、编号、时长、距离、尺寸、次数、比例或读数若承担当场问答、谈判、身份或债务辨认、选择、因果、连续性或后文核验中的一项实际功能，即可按需要的精度规划；既定数值事实必须准确，不强求所有功能同时成立。普通动作、陈设和停顿用状态、范围或后果表达，不用计件、计次、计时制造伪真实感。",
         "相邻场景的功能变化应带来可感的节奏变化，除非因果上必须持续施压，不要连续使用相同 rhythm_role。快节奏来自信息、动作和选择的推进，不等于全篇使用短句。后续场景将按章滚动展开。",
         "\n## 作品约束\n" + (root / "project.yaml").read_text(encoding="utf-8")[:5000],
@@ -192,6 +206,22 @@ def _window_prompt(
         "previous_scene_rhythm_roles": [
             scene["rhythm_role"] for scene in plan["scenes"][-3:]
         ],
+        "used_events": [
+            {
+                "scene_id": scene["scene_id"],
+                "function": scene["function"],
+                "information_release": scene["information_release"],
+                "consequence": scene["consequence"],
+            }
+            for scene in plan["scenes"]
+        ],
+        "event_budget": next(
+            (
+                item for item in _event_budget_rows(plan)
+                if isinstance(item, dict) and item.get("chapter_id") == chapter["chapter_id"]
+            ),
+            {},
+        ),
         "target": {
             "scene_count": budget_row["scene_count"],
             "target_words": budget_row["target_words"],
@@ -205,6 +235,7 @@ def _window_prompt(
         "有专名的 participants 必须逐字复用 registered_characters；不得用同义姓名替换已登记人物，临时角色保持无专名。严格遵守 chapter_spine 的章序与 ending_choice 位置，除非用户明确要求，不追加尾声或续集钩子。",
         "沿用 world_facts 和既有后果中的日期、年份、数量与时间差；来源不确定时保持未知，不创建第二套时间口径。",
         "让场景因果相接，详略随章节转向变化；每场只承担一次核心事件，场景字段必须与 participants 对齐，未列入本场的主要人物不得提前登场或替后续场景完成首次见面、调取、发现、交付、问答或决定。相邻场景只承接后果，不重演同一事件；不要重复上一章的戏剧动作，也不要在功能已经改变时沿用上一场 rhythm_role。",
+        "used_events 是全书已使用事件，不只是最近三场：新场不得复演其中的会面、听名、核对、追问、递话、发现、拒绝或决定，也不得换一种说法把旧认知再次标成‘第一次’。每场 consequence 必须改变人物处境、关系、资源、知识、承诺或可选行动中的至少一项；悬念若暂不兑现，必须改变其证据状态、持有人、公开范围或延迟代价，不能原样放回。",
         "无关精确数字默认不用，‘一个又一个’等虚指反复不当作精确计数。日期、年龄、编号、时长、距离、尺寸、次数、比例或读数若承担当场问答、谈判、事实辨认、选择、因果、连续性或后文核验中的一项实际功能，即可保留必要精度；沿用既定数值事实，不强求当场有用的值日后再次兑现。普通动作、陈设和停顿改写为状态、范围或结果。快节奏仍需保留句群层次，收束、余波和关系变化应获得相应的呼吸空间。",
         "## 最近的用户方向\n" + ("\n".join(directions)[-5000:] or "无额外方向"),
         "## 导入来源片段\n" + (source_context or "无导入来源"),
@@ -268,6 +299,25 @@ def _paths(root: Path) -> tuple[Path, Path]:
         root / "plot" / "lean_project_plan.json",
         root / "plot" / "word_budget" / "word_budget.json",
     )
+
+
+def _event_budget_rows(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    existing = plan.get("event_budget")
+    if isinstance(existing, list) and existing:
+        return [item for item in existing if isinstance(item, dict)]
+    return [
+        {
+            "chapter_id": chapter["chapter_id"],
+            "irreversible_change": chapter["dramatic_turn"],
+            "scene_ids": [
+                scene["scene_id"]
+                for scene in plan.get("scenes") or []
+                if scene.get("chapter_id") == chapter["chapter_id"]
+            ],
+        }
+        for chapter in plan.get("chapters") or []
+        if isinstance(chapter, dict)
+    ]
 
 
 def _project_contract_digest(root: Path) -> str:

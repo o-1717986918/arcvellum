@@ -32,6 +32,7 @@ const PROJECT_DIAGNOSE_TOOL = "project_diagnose";
 const PROJECT_CREATE_TOOL = "project_create";
 const PROJECT_GOAL_MANAGE_TOOL = "project_goal_manage";
 const PROJECT_CHAPTER_EXTEND_TOOL = "project_chapter_extend";
+const PROJECT_FUTURE_REPLAN_TOOL = "project_future_replan";
 const SUPPORTED_TOOLS = new Set([
 	WORKSPACE_CATALOG_TOOL,
 	PROJECT_OVERVIEW_TOOL,
@@ -49,6 +50,7 @@ const SUPPORTED_TOOLS = new Set([
 	PROJECT_CREATE_TOOL,
 	PROJECT_GOAL_MANAGE_TOOL,
 	PROJECT_CHAPTER_EXTEND_TOOL,
+	PROJECT_FUTURE_REPLAN_TOOL,
 ]);
 
 export interface ProjectAgentStart {
@@ -376,6 +378,18 @@ function projectToolDefinition(name: string): {
 			additional_scenes: Type.Integer({ minimum: 1, maximum: 8 }),
 			target_per_scene: Type.Optional(Type.Integer({ minimum: 1800, maximum: 6000 })),
 			direction: Type.String({ minLength: 1, maxLength: 3000 }),
+		}),
+	};
+	if (name === PROJECT_FUTURE_REPLAN_TOOL) return {
+		label: "Replan Unwritten Story",
+		description: "Replace only the uncommitted future scene suffix from irreversible event anchors, revise chapter scene counts, and preserve all committed prose and the book character target. Use this when capacity-first planning causes repeated plot beats. This does not resume creation.",
+		parameters: Type.Object({
+			work_id: workId(),
+			chapter_scene_counts: Type.Record(
+				Type.String({ pattern: "^chapter_[0-9]{4}$" }),
+				Type.Integer({ minimum: 1, maximum: 20 }),
+			),
+			direction: Type.String({ minLength: 1, maxLength: 5000 }),
 		}),
 	};
 	throw new Error(`unsupported Project Agent tool: ${name}`);

@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 import tempfile
 
-from literary_engineering_studio.project_agent.read_models import dependencies_from_read_models
+from literary_engineering_studio.project_agent.read_models import _fit_payload, dependencies_from_read_models
 from literary_engineering_studio.project_agent.scope import work_id_for_root
 
 
@@ -95,6 +95,13 @@ class ProjectAgentReadModelTests(unittest.TestCase):
         value = self.dependencies.project_search(_root(), {"query": "地图", "limit": 5})
         self.assertEqual(value["count"], 2)
         self.assertTrue(all("path" in item for item in value["hits"]))
+
+    def test_large_read_result_names_transport_limit_without_claiming_tool_quota_exhaustion(self):
+        value = _fit_payload({"body": "长" * 200}, byte_limit=96)
+
+        self.assertTrue(value["truncated"])
+        self.assertIn("传输上限", value["message"])
+        self.assertIn("不是工具调用额度耗尽", value["message"])
 
     def test_creation_observe_exposes_current_run_without_file_access(self):
         value = self.dependencies.creation_observe(_root(), {})

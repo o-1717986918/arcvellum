@@ -15,6 +15,7 @@ from ..project_agent import ProjectAgentService
 from ..project_agent.actions import dependencies_from_actions
 from ..project_agent.read_models import dependencies_from_read_models
 from ..application.lean_chapter_extension import extend_lean_chapter
+from ..application.lean_future_replan import replan_lean_future
 from ..runtime.role_conversation import RoleConversationGateway
 from ..project_manager import create_project, list_projects, record_direction
 from literary_engineering_studio_engine.public.literary import (
@@ -97,6 +98,14 @@ def build_project_agent_service(
             ),
             goal_evidence=lambda root: read_models.reader(root),
             extend_chapter=lambda root, **values: extend_lean_chapter(
+                root,
+                RoleConversationGateway(
+                    config,
+                    data_root=Path(str(config.get("application", {}).get("data_root") or ".")) / "pi-conversations",
+                ),
+                **values,
+            ),
+            replan_future=lambda root, **values: replan_lean_future(
                 root,
                 RoleConversationGateway(
                     config,

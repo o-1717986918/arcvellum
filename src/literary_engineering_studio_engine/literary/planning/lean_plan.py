@@ -46,10 +46,27 @@ def normalize_initial_plan(
         "ending_choice": _text(answer.get("ending_choice"), "ending choice"),
         "volume_obligations": clean_volumes,
         "chapters": clean_chapters,
+        "event_budget": _event_budget(clean_chapters, first_window),
         "scenes": first_window,
         "characters": clean_characters,
         "world_facts": [_text(item, "world fact") for item in world_facts or []],
     }
+
+
+def _event_budget(
+    chapters: list[dict[str, str]], scenes: list[dict[str, Any]],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "chapter_id": chapter["chapter_id"],
+            "irreversible_change": chapter["dramatic_turn"],
+            "scene_ids": [
+                scene["scene_id"] for scene in scenes
+                if scene["chapter_id"] == chapter["chapter_id"]
+            ],
+        }
+        for chapter in chapters
+    ]
 
 
 def _chapters(rows: list[dict[str, Any]], chapters: list[object]) -> list[dict[str, str]]:

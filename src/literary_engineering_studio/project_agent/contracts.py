@@ -224,3 +224,4 @@ class ProjectAgentActionDependencies:
     create_project: ProjectAction | None = None
     manage_goal: ProjectAction | None = None
     extend_chapter: ProjectAction | None = None
+    replan_future: ProjectAction | None = None

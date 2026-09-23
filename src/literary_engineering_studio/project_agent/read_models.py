@@ -224,7 +224,7 @@ def _fit_payload(value: dict[str, Any], *, byte_limit: int = 56 * 1024) -> dict[
         "truncated": True,
         "available_keys": list(value)[:40],
         "preview": preview,
-        "message": "结果已按 Project Agent 工具预算截断；请缩小查询范围。",
+        "message": "单次结果超过工具传输上限，已保留预览；这不是工具调用额度耗尽。请用 focus、section 或 query 缩小查询范围。",
     }
 
 

@@ -69,10 +69,18 @@ class LeanLongformPlanningServiceTests(unittest.TestCase):
             self.assertIn('"chapter_spine"', gateway.calls[1][1])
             self.assertIn('"registered_characters"', gateway.calls[1][1])
             self.assertIn('"world_facts"', gateway.calls[1][1])
+            self.assertIn('"used_events"', gateway.calls[1][1])
+            self.assertIn('"event_budget"', gateway.calls[1][1])
+            self.assertIn('"irreversible_change":"盟友离开"', gateway.calls[1][1])
             self.assertIn("不追加尾声或续集钩子", gateway.calls[1][1])
             self.assertIn("虚指反复不当作精确计数", gateway.calls[1][1])
             self.assertIn("不强求当场有用的值日后再次兑现", gateway.calls[1][1])
             self.assertTrue((root / "scenes" / "scene_0003.yaml").is_file())
+            stored = json.loads((root / "plot" / "lean_project_plan.json").read_text(encoding="utf-8"))
+            second_event = next(
+                item for item in stored["event_budget"] if item["chapter_id"] == "chapter_0002"
+            )
+            self.assertEqual(second_event["scene_ids"], ["scene_0003"])
             self.assertFalse((root / "reviews").exists())
             self.assertFalse(list(root.rglob("*.agent_tasks.md")))
 

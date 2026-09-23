@@ -33,6 +33,7 @@ from literary_engineering_studio_engine.literary.scene.transaction import (
     ReviewResult,
     SceneDelta,
     SceneExecutionMode,
+    SceneTransactionStatus,
 )
 from literary_engineering_studio_engine.public.literary import lean_scene_readiness
 
@@ -312,6 +313,35 @@ class LeanAutopilotLoopTests(unittest.TestCase):
             self.assertEqual(runtime.revisions, 1)
             self.assertEqual(runtime.reviews, 2)
             self.assertEqual(actions[-1], "committed")
+
+    def test_stale_blocked_transaction_is_reprepared_from_current_scene_sources(self):
+        coordinator = object.__new__(LeanSceneRunCoordinator)
+        coordinator.project = Path("project").resolve()
+        coordinator.service = MagicMock()
+        stale = MagicMock(
+            review=None,
+            last_error="scene source revision changed: old -> current",
+            scene_id="scene_0071",
+            transaction_id="old-transaction",
+            mode=SceneExecutionMode.STANDARD,
+            status=SceneTransactionStatus.BLOCKED,
+        )
+        refreshed = MagicMock(
+            scene_id="scene_0071",
+            transaction_id="new-transaction",
+            status=SceneTransactionStatus.PREPARED,
+            last_error="",
+        )
+        coordinator.service.prepare.return_value = refreshed
+
+        step = coordinator._resume_blocked(stale)
+
+        self.assertEqual(step.action, "reprepared")
+        self.assertEqual(step.transaction_id, "new-transaction")
+        coordinator.service.prepare.assert_called_once_with(
+            coordinator.project, "scene_0071", mode=SceneExecutionMode.STANDARD,
+        )
+        coordinator.service.resume.assert_not_called()
 
     def test_revision_count_does_not_stop_effective_model_revisions(self):
         with tempfile.TemporaryDirectory() as temporary:

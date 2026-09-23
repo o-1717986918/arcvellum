@@ -10,13 +10,13 @@ from ..application.failures import present_run
 from .action_receipts import action_receipt, goal_result
 from .contracts import ProjectAgentActionDependencies
 from .chapter_actions import chapter_extension_action
+from .future_plan_actions import future_replan_action
 from .scope import work_reference
 
 
-RecordDirection = Callable[..., dict[str, Any]]
 def dependencies_from_actions(
     *,
-    record_direction: RecordDirection,
+    record_direction: Callable[..., dict[str, Any]],
     autopilot: Any,
     config: dict[str, Any] | None = None,
     current_choices: Callable[..., dict[str, Any]] | None = None,
@@ -31,6 +31,7 @@ def dependencies_from_actions(
     create_project: Callable[..., dict[str, Any]] | None = None,
     goal_evidence: Callable[[Path], Mapping[str, Any]] | None = None,
     extend_chapter: Callable[..., dict[str, Any]] | None = None,
+    replan_future: Callable[..., dict[str, Any]] | None = None,
 ) -> ProjectAgentActionDependencies:
     settings = config or {}
 
@@ -238,6 +239,7 @@ def dependencies_from_actions(
         create_work if create_project is not None else None,
         manage_goal,
         chapter_extension_action(extend_chapter, invalidate_project) if extend_chapter is not None else None,
+        future_replan_action(replan_future, invalidate_project) if replan_future is not None else None,
     )
 
 
@@ -453,10 +455,7 @@ def _decision_required_result(
         "operation": "recover_goal",
         "status": "decision_required",
         "work_id": work_reference(root)["work_id"],
-        "pending_choice_ids": [
-            str(item.get("choice_id") or "")
-            for item in pending
-        ],
+        "pending_choice_ids": [str(item.get("choice_id") or "") for item in pending],
         "recommended_tool": "project_decision_resolve",
     }
 

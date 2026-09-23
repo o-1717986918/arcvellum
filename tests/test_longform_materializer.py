@@ -75,6 +75,61 @@ class LongformMaterializerTests(unittest.TestCase):
                 )
             self.assertFalse((root / "scenes" / "scene_0002.yaml").exists())
 
+    def test_lean_window_can_replace_only_uncommitted_future_contracts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "plot" / "lean_project_plan.json"
+            source.parent.mkdir(parents=True)
+            source.write_text("{}", encoding="utf-8")
+            original = [self._lean_scene(1, "chapter_0001"), self._lean_scene(2, "chapter_0002")]
+            materialize_lean_window(
+                root, scenes=original, obligations={}, sources=(source,), outline_text="大纲",
+            )
+            committed_text = root / "drafts" / "scenes" / "scene_0001.md"
+            committed_text.parent.mkdir(parents=True)
+            committed_text.write_text("已经写成的正文。\n", encoding="utf-8")
+            revised = [dict(original[0]), {**original[1], "conflict": "新的不可逆冲突"}]
+
+            result = materialize_lean_window(
+                root,
+                scenes=revised,
+                obligations={},
+                sources=(source,),
+                outline_text="大纲",
+                replace_uncommitted=True,
+            )
+
+            self.assertIn("新的不可逆冲突", result.scene_paths[1].read_text(encoding="utf-8"))
+            self.assertIn("旧承诺产生新代价", result.scene_paths[0].read_text(encoding="utf-8"))
+
+    def test_lean_window_never_replaces_a_committed_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "plot" / "lean_project_plan.json"
+            source.parent.mkdir(parents=True)
+            source.write_text("{}", encoding="utf-8")
+            scene = self._lean_scene(1, "chapter_0001")
+            materialize_lean_window(
+                root, scenes=[scene], obligations={}, sources=(source,), outline_text="大纲",
+            )
+            receipt = root / "workflow" / "scene_commits" / "scene_0001.json"
+            receipt.parent.mkdir(parents=True)
+            receipt.write_text("{}\n", encoding="utf-8")
+            before = (root / "scenes" / "scene_0001.yaml").read_text(encoding="utf-8")
+
+            materialize_lean_window(
+                root,
+                scenes=[{**scene, "conflict": "不应覆盖"}],
+                obligations={},
+                sources=(source,),
+                outline_text="大纲",
+                replace_uncommitted=True,
+            )
+
+            self.assertEqual(
+                (root / "scenes" / "scene_0001.yaml").read_text(encoding="utf-8"), before,
+            )
+
     def test_lean_scene_reader_contract_keeps_chapter_payoff_out_of_local_event(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

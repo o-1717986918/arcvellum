@@ -20,6 +20,7 @@ from .materialization_rendering import (
     render_scene_yaml,
     repair_generated_rhythm_contracts,
 )
+from .materialization_state import has_formal_scene_output
 
 
 MATERIALIZATION_SCHEMA = "literary-engineering-workbench/longform-materialization/v1"
@@ -83,6 +84,7 @@ def materialize_lean_window(
     obligations: dict[str, dict[str, str]],
     sources: tuple[Path, ...],
     outline_text: str,
+    replace_uncommitted: bool = False,
 ) -> LongformMaterializationResult:
     """Append a validated planning window without legacy review sidecars."""
     root = project_root.expanduser().resolve()
@@ -94,7 +96,10 @@ def materialize_lean_window(
     manifest_path = root / "workflow" / "longform_materialization.json"
     outline = root / "plot" / "outline.md"
     scene_paths = [root / "scenes" / f"{scene_id}.yaml" for scene_id in ids]
-    prepared = _lean_scene_writes(root, scene_paths, scenes, obligations)
+    prepared = _lean_scene_writes(
+        root, scene_paths, scenes, obligations,
+        replace_uncommitted=replace_uncommitted,
+    )
     if not outline.is_file() and not outline_text.strip():
         raise ValueError("lean planning requires a nonempty formal outline")
     existing = _read_json(manifest_path)
@@ -136,6 +141,8 @@ def _lean_scene_writes(
     scene_paths: list[Path],
     scenes: list[dict[str, object]],
     obligations: dict[str, dict[str, str]],
+    *,
+    replace_uncommitted: bool = False,
 ) -> list[tuple[Path, str]]:
     existing_paths = {
         path for path in (root / "scenes").glob("scene_*.yaml")
@@ -150,13 +157,14 @@ def _lean_scene_writes(
         rendered = render_scene_yaml(scene, chapter, previous)
         if path.is_file() and not _is_blank_scene_scaffold(path):
             conflicts = _scene_conflicts(root, path, scene)
-            if conflicts:
+            if replace_uncommitted and not has_formal_scene_output(root, path.stem):
+                prepared.append((path, rendered))
+            elif conflicts:
                 raise ValueError("refusing to overwrite a non-scaffold formal scene: " + "; ".join(conflicts))
         else:
             prepared.append((path, rendered))
         previous = scene
     return prepared
-
 
 def planned_longform_outputs(project_root: Path) -> list[str]:
     root = project_root.expanduser().resolve()
@@ -203,9 +211,7 @@ def _required_inputs(root: Path) -> tuple[Path, ...]:
     )
 
 
-def _validate_scene_count(
-    budget: dict[str, object], inventory_text: str
-) -> None:
+def _validate_scene_count(budget: dict[str, object], inventory_text: str) -> None:
     issues = scene_inventory_contract_issues(inventory_text, budget=budget)
     if issues:
         raise ValueError("scene inventory budget contract: " + "; ".join(issues))

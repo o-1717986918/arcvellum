@@ -14,19 +14,40 @@ class _Gateway:
     def run(self, workspace, prompt, *, role, timeout):
         self.calls += 1
         self.prompt = prompt
+        world_only = "## 待补人物\n[]" in prompt
         payload = {
-            "characters": [{
+            "characters": [] if world_only else [{
                 "name": "林昭", "summary": "曾因守约失去同伴信任，因而不敢轻易答应。",
                 "formative_events": ["曾替同伴隐瞒失约，最终被共同追责。"],
                 "hidden_wound": "害怕自己的承诺再次伤人",
                 "behavior_influences": ["面对请求先追问代价，再作承诺。"],
                 "reveal_policy": "implicit_only",
+                "appearance": "肩背略紧，思考时会把视线落到对方手边。",
+                "clothing": "工作日穿耐磨深色外套，口袋留给登记笔。",
+                "beliefs": ["承诺必须能说明代价。"],
+                "intentions": ["先查清原件流转再答应同伴。"],
+                "fears": ["再次替别人担下无法兑现的承诺。"],
+                "secrets": [],
+                "public_private_contrast": "公开场合耐心守规；独处时会反复核对已经确认的条目。",
+                "moral_line": "不伪造登记，也不把同伴推出去顶责。",
+                "relationships": ["同伴：公开合作；私下互不完全信任；林昭欠对方一次解释。"],
+                "speech_style": {
+                    "vocabulary": "具体、偏手续与责任用语",
+                    "rhythm": "先追问条件，确认后用完整句作答",
+                    "taboo_words": [],
+                    "signature_patterns": ["答应前先复述对方要他承担的后果。"],
+                },
             }],
             "world": {
-                "rules": ["借阅原件须在场登记；私自带出将失去继续查阅资格。"],
-                "constraints": ["夜间无人值守时不能取得原件，人物只能等待或寻求正式授权。"],
+                "rules": [{
+                    "rule": "借阅原件须在场登记",
+                    "condition": "任何人接触馆藏原件时",
+                    "boundary": "值班馆员可代填，但借阅人仍须签名",
+                    "consequence": "私自带出将失去继续查阅资格",
+                }],
+                "constraints": [],
                 "open_questions": ["旧登记簿是否仍在馆内？"],
-            },
+            } if world_only else {},
         }
         return type("Response", (), {"answer": json.dumps(payload, ensure_ascii=False)})()
 
@@ -48,11 +69,16 @@ class LeanAssetsTests(unittest.TestCase):
                 "background_stories_created": 1, "world_rules_enriched": 1,
             })
             self.assertIn("formative_events", (root / "characters" / "林昭.yaml").read_text(encoding="utf-8"))
+            character = (root / "characters" / "林昭.yaml").read_text(encoding="utf-8")
+            self.assertIn("appearance:", character)
+            self.assertIn("speech_style:", character)
+            self.assertIn("relationships:", character)
             self.assertIn("失去继续查阅资格", (root / "canon" / "world_rules.yaml").read_text(encoding="utf-8"))
+            self.assertIn("适用条件", (root / "canon" / "world_rules.yaml").read_text(encoding="utf-8"))
             self.assertEqual(enrich_lean_planning_assets(root, gateway), {
                 "background_stories_created": 0, "world_rules_enriched": 0,
             })
-            self.assertEqual(gateway.calls, 1)
+            self.assertEqual(gateway.calls, 2)
 
     def test_existing_user_assets_are_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -54,6 +54,21 @@ class LeanLongformPlanTests(unittest.TestCase):
         self.assertEqual([scene["scene_id"] for scene in plan["scenes"]], ["scene_0001", "scene_0002"])
         self.assertEqual(sum(scene["target_chars"] for scene in plan["scenes"]), self.budget["chapter_budgets"][0]["target_words"])
         self.assertEqual(plan["chapters"][1]["chapter_id"], "chapter_0002")
+        self.assertEqual(
+            plan["event_budget"],
+            [
+                {
+                    "chapter_id": "chapter_0001",
+                    "irreversible_change": "秘密被发现",
+                    "scene_ids": ["scene_0001", "scene_0002"],
+                },
+                {
+                    "chapter_id": "chapter_0002",
+                    "irreversible_change": "盟友要求兑现",
+                    "scene_ids": [],
+                },
+            ],
+        )
         self.assertIn("秘密被发现", render_outline(plan))
         self.assertIn("chapter_0002", chapter_obligations(plan))
 
