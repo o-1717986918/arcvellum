@@ -13,6 +13,7 @@ describe("bounded scene performance profiles", () => {
 		expect(prompt).toContain("同一处境下连续说话或行动");
 		expect(prompt).toContain("不为填格制造手势或流程解释");
 		expect(prompt).toContain("可挣脱的惯性");
+		expect(prompt).toContain("普通可弃的现场细节可作为候选");
 		expect(prompt).toContain("no tools and no project write access");
 		expect(prompt).not.toContain("You are an ArcVellum character actor");
 	});
