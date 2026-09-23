@@ -125,6 +125,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("## Literary Rendering", prompt)
         self.assertIn("不要把心理缩成", prompt)
         self.assertIn("允许有意义地停留和渲染", prompt)
+        self.assertIn("即使既有模板写着 low", prompt)
         self.assertIn("证据之后停笔", prompt)
         self.assertIn("新增精确数字默认不用", prompt)
         self.assertIn("“一个又一个”“一次次”等虚指反复并非精确计数", prompt)
@@ -248,6 +249,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("不要求五项同时成立", revision)
         self.assertIn("不要把所有台词统一磨成平直短句", revision)
         self.assertIn("主创可以重新选择叙述距离、心理层次", revision)
+        self.assertIn("即使写 low，也只是全场软建议", revision)
         self.assertIn("请求原角色续演", revision)
         self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
 

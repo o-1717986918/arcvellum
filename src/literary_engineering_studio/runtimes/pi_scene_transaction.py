@@ -296,6 +296,7 @@ prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范
 
 ## Literary Rendering
 主创依据整个场景推演自行决定情绪表达的力度与位置：关系承压处可以让人物把话说完、说错、绕开再回来，也可以让当前视角进入未出口的经验，使身体感知、欲望、自我辩解和联想出现层次。不要把心理缩成“他犹豫了”，把对话压成情节摘要，或把环境压成地点标签。证据成立后不追加解释性尾句，不等于证据形成之前要惜字如金；允许有意义地停留和渲染，不靠重复说明灌篇幅。若启用角色素材，新的外显台词和动作仍须由一级角色提供。
+SceneBrief.rhythm 与来源中的 reflection_ratio、description_ratio 是全场节奏的软建议，不是逐段上限；即使既有模板写着 low，也不能因此删去关键心理、环境停留或人物语言的起伏。最新用户方向和当前场景实际阅读效果决定取舍。
 
 ## Output
 {{"prose":"完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[]}}
@@ -387,6 +388,7 @@ def render_scene_revision_prompt(
 不得用另一种模板化转折替换问题表达。修改后的正文仍须满足同一 SceneBrief，并重新提取实际 SceneDelta。
 修订长句、逗号或标点问题时应重组句内层级，不能把原句机械拆成一串结构相同的短句；句群长度随动作、观察与压力变化，并保护原有的长短句落差。修订对白时保留人物各自的词域、句形、礼貌边界、幽默方式、回避和争取策略；不要把所有台词统一磨成平直短句，也不要凭空加口头禅。若原文已由动作、意象、对白、沉默或物证传意，删除随后重复解释其含义的段尾、场尾句，不用另一条金句替换。
 若审查指出文风或情节损害，主创可以重新选择叙述距离、心理层次、环境停留、句群节奏与已有场景材料的交错顺序，使情绪有蓄积和转折；不要把修订理解为只改错字或增加几句解释。惜字造成的空白与重复灌水都不是目标。启用一级角色素材时，外显台词和动作仍只来自原角色 entries；主创可改写当前视角中的心理体验，但不能代角色补说、补做。若情节修复确实需要新增角色言行，放入 escalation_reasons 明确请求原角色续演，不用正文越权填补。
+既有项目的 reflection_ratio、description_ratio 即使写 low，也只是全场软建议，不是删减心理和环境的硬上限；修订须服从最新用户方向与具体阅读损害。
 直接返回与 Scene Create 完全相同的 JSON 对象，不要 Markdown、工作流说明、路径或哈希。
 
 ## SceneBrief
