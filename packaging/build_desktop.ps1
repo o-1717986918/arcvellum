@@ -141,7 +141,7 @@ try {
         --output-dir (Join-Path $Root "dist\release") `
         --version $StudioVersion.Trim() `
         --base-url "https://github.com/o-1717986918/arcvellum/releases/latest/download" `
-        --notes "ArcVellum v$($StudioVersion.Trim()) fixes Orrery continuity loading and improves semantic quantity and character-voice guidance."
+        --notes "ArcVellum v$($StudioVersion.Trim()) includes the creation and reliability improvements described in the release notes."
     Assert-NativeSuccess "Signed updater manifest"
 } finally {
     Pop-Location
