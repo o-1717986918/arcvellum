@@ -156,7 +156,7 @@ def render_actor_scene_prompt(
 
 从自己的冲动出发经历这些时刻，但不把冲动解释给读者。只交我的话与我亲手做的事，不替别人回答。场景锚点不是要我照着演的行动表。{epistemic_freedom}世界事实只从本场已知资料来：不知道具体设备部件、道具、读数或往事时，不能靠职业知识补成现场证据；我的自主性在回应方式，不在创造新的物证。
 
-返回一个 JSON 对象：{output_shape}。entries 是{entry_scope}发言与行为，按时间顺序零至 {max_entries} 项；每项指向发生时最近的 beat_id，同一锚点可有多项，也可没有。private_impulse 写第一人称未出口念头；first_person_action 写第一人称可见动作，没有就留空；spoken 写真正说出口的台词，不带引号或批注，没有就留空。每项至少有一种外显表达。不要为了填满锚点而制造话或动作。"""
+返回一个 JSON 对象：{output_shape}。entries 是{entry_scope}发言与行为，按时间顺序零至 {max_entries} 项；每项指向发生时最近的 beat_id，同一锚点可有多项，也可没有。private_impulse 写第一人称未出口的感受、欲望或迟疑，而非“我很难过”一类抽象标签；first_person_action 写第一人称可见动作，没有就留空；spoken 写真正说出口的台词，不带引号或批注，没有就留空。同一次自然发言可以有几句、停顿、转弯、言外之意，不要因为交付为 JSON 就压缩成一句功能性答复；也不要为显得丰富而硬加话。每项至少有一种外显表达。不要为了填满锚点而制造话或动作。"""
 
 
 def _validate_actor_prompt_options(
@@ -306,7 +306,7 @@ def render_environment_prompt(
 {json.dumps(unknown_slots or [], ensure_ascii=False)}
 不要把这些尚未确认的空位描写成已存在的环境事实或线索；普通、不承担证据作用的感官质感仍由你自由选择。
 
-仅返回 JSON：{{"scene_id":"{brief['scene_id']}","passages":[{{"beat_id":"可用节拍的 beat_id","focal_character":"现有视角人物或空串","description":"独立环境描写，不含人物动作和对白"}}]}}。自行挑真正需要环境语言的位置，返回零至四段；若此场无需独立环境段，就返回空数组。长短由场景决定，每段不超过 350 字。不要附“这段象征什么”的说明，不把参考选段的原句、专名或连续措辞带入本作。"""
+仅返回 JSON：{{"scene_id":"{brief['scene_id']}","passages":[{{"beat_id":"可用节拍的 beat_id","focal_character":"现有视角人物或空串","description":"独立环境描写，不含人物动作和对白"}}]}}。自行挑真正需要环境语言的位置，返回零至四段；若此场无需独立环境段，就返回空数组。长短由场景决定；需要让空间、感官和情绪压力积累时，可在一段里充分停留，不必压成道具清单或一句气氛说明，每段不超过 600 字。不要附“这段象征什么”的说明，不把参考选段的原句、专名或连续措辞带入本作。"""
 
 
 def parse_environment_material(payload: dict[str, Any], brief: dict[str, Any], beats: list[dict[str, str]]) -> dict[str, Any]:
@@ -327,7 +327,7 @@ def _parse_environment_passage(item: Any, ids: set[str], focal_options: set[str]
     values = {key: str(item.get(key) or "").strip() for key in ("focal_character", "description", "scene_function")}
     if values["focal_character"] and values["focal_character"] not in focal_options:
         raise ValueError("environment focal character is outside scene participants")
-    if not values["description"] or len(values["description"]) > 350 or len(values["scene_function"]) > 250:
+    if not values["description"] or len(values["description"]) > 600 or len(values["scene_function"]) > 250:
         raise ValueError("environment passage is missing or too long")
     if re.search(r"(?:说|问|答|喊|叫|应|道|开口)\s*[：:]?\s*[“\"]", values["description"]):
         raise ValueError("environment passage contains dialogue")
@@ -336,7 +336,7 @@ def _parse_environment_passage(item: Any, ids: set[str], focal_options: set[str]
 
 def render_performance_materials(plan: dict[str, Any], actors: list[dict[str, Any]], environment: dict[str, Any] | None) -> str:
     block = "\n".join((
-        "以下是各独立 Agent 的非权威整场表演素材。你是唯一正文作者，负责选取、交错和叙述衔接，但人物所有说出口的话与可见行为须先出现在对应角色 Agent 的 entries 中；不能自行补造角色台词、手势或操作。若素材不足以兑现 SceneBrief，先报告缺口，不以通用对白补齐。同一 speaker 的 entries 来自一轮连续扮演；若与事实相容，保留其称呼、语序、避词和受压变化，不把各人声音润平成中性解释。spoken 是演员的台词原文，first_person_action 是第一人称动作意图、须按正文视角叙述但不得增加动作。private_impulse 与 scene_function 是后台提示，绝不可写入正文。环境候选只提供空间与感知，不得决定人物动作、台词或事实。所有候选都是可拒绝的材料，不是新事实的来源；未经 SceneBrief 或 Relevant Sources 确认的设备部件、操作、数值、物件、线索和往事不得写入正文。",
+        "以下是各独立 Agent 的非权威整场表演素材。你是唯一正文作者，负责选取、交错和叙述衔接，也负责有视角的心理、情绪、环境与句法渲染；但人物所有说出口的话与可见行为须先出现在对应角色 Agent 的 entries 中，不能自行补造角色台词、手势或操作。若素材不足以兑现 SceneBrief，先报告缺口，不以通用对白补齐。同一 speaker 的 entries 来自一轮连续扮演；若与事实相容，保留其称呼、语序、避词和受压变化，不把各人声音润平成中性解释。spoken 是演员的台词原文，first_person_action 是第一人称动作意图、须按正文视角叙述但不得增加动作。private_impulse 是未出口的体验候选，不可原样转成对白或可见行为；可从当前视角化成自由间接感知、心理摇摆与情绪节奏，不可全知断言另一角色的心事。scene_function 是后台剧情边界，不得照抄成解释性正文。环境候选只提供空间与感知，不得决定人物动作、台词或事实；主创可在已确认来源和视角内延展观察，不必把候选压成一句气氛概括。所有候选都是可拒绝的材料，不是新事实的来源；未经 SceneBrief 或 Relevant Sources 确认的设备部件、操作、数值、物件、线索和往事不得写入正文。",
         json.dumps({"plan": plan, "actor_candidates": actors, "environment_candidates": environment or {}}, ensure_ascii=False, separators=(",", ":")),
     ))
     if len(block) > 16_000:

@@ -218,6 +218,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("我自行决定何时开口、岔开、反问、沉默", prompt)
         self.assertNotIn("speech_act", prompt)
         self.assertIn("同一锚点可有多项", prompt)
+        self.assertIn("不要因为交付为 JSON 就压缩成一句功能性答复", prompt)
+        self.assertIn("未出口的感受、欲望或迟疑", prompt)
 
     def test_director_leaves_micro_tactics_to_character_actor(self) -> None:
         prompt = render_performance_plan_prompt(_brief().to_dict(), {}, "昨夜拿了信。")
@@ -287,6 +289,14 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("门外的具体天气尚未确认", prompt)
         self.assertIn("普通、不承担证据作用的感官质感仍由你自由选择", prompt)
         self.assertIn("长短由场景决定", prompt)
+        self.assertIn("可在一段里充分停留", prompt)
+        extended = {"scene_id": _brief().scene_id, "passages": [{
+            "beat_id": _plan()["beats"][0]["beat_id"], "focal_character": "", "description": "风" * 500,
+        }]}
+        self.assertEqual(len(parse_environment_material(extended, _brief().to_dict(), _plan()["beats"])["passages"]), 1)
+        extended["passages"][0]["description"] = "风" * 601
+        with self.assertRaisesRegex(ValueError, "too long"):
+            parse_environment_material(extended, _brief().to_dict(), _plan()["beats"])
         self.assertNotIn("150—300", prompt)
 
     def test_relay_environment_sees_only_actual_public_interaction(self) -> None:
@@ -317,6 +327,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         block = render_relay_materials(plan, entries, None, check)
         self.assertIn("按真实互动时间顺序", block)
         self.assertIn("不得添加演员未生成的台词", block)
+        self.assertIn("可化为当前视角的自由间接感知", block)
+        self.assertIn("不可原样转成对白、可见动作", block)
         self.assertLess(block.index('"entry_id":"t1:1"'), block.index('"entry_id":"t2:1"'))
         incomplete = {**check, "results": [{"milestone_id": "m1", "status": "missing", "evidence_entry_ids": []}]}
         with self.assertRaisesRegex(ValueError, "incomplete scene outcomes"):

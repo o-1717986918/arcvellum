@@ -443,3 +443,25 @@ module_change_packet:
   rollback_unit: "独立 Worker 提交"
   documentation: ["本文件"]
 ```
+
+## 2026-09-24：由角色素材到有情绪层次的正文
+
+最新复核发现：`render_relay_materials` 将主创职责缩成“组织、取舍和叙述衔接”，并说 `private_impulse` “不得直接写入正文”；旧 batch 材料甚至说“绝不可写入正文”。本意是不让后台字段原样泄漏或主创代写角色言行，但模型容易把它读成**不得创作心理层与情绪层**。此外角色 JSON 交付没有明确要求保留连续发言的完整语势，环境候选每段硬限 350 字。自由排演试验中有层次的文字最终被抽成一句话，印证“素材压缩”风险，而非证明单纯增加字符上限能改善文风。
+
+修订方向：角色仍独占外显对白与动作；允许角色在一个 `spoken` 内保留同一发言的自然延展，`private_impulse` 是未说出口的体验线索而非必须照抄的台词。主创据已确认事实和选择的视角，自行决定哪里深入心理、哪里让环境、句法与沉默承担情绪；可改写并组织角色私有体验为视角内的心理叙述，但不得把另一角色不可知的心事写成全知事实、把未出口念头变成台词/动作，或把角色主观猜测写成世界事实。环境候选可停留较长，但不能靠无关细节灌水。修订权覆盖文学渲染、心理缺席、语势贫乏及情节问题，不只修复硬失败；仍以有证据的阅读损害为依据，不加新的风格门禁或机械篇幅指标。
+
+```yaml
+module_change_packet:
+  objective: "保留一级角色外显言行所有权，同时允许主创发展心理、情绪和环境的文学层次"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "render_actor_scene_prompt、render_environment_prompt、render_performance_materials、render_relay_materials"
+  variation_point: "素材表达及交接措辞；不改角色/环境调用顺序和 Canon 边界"
+  inputs: ["角色已发出的台词/动作与未出口体验", "环境候选", "SceneBrief 与已确认来源"]
+  outputs: ["保留语势的一级候选", "授权主创在限定视角内创作心理和情绪的素材合同"]
+  invariants: ["外显言行仍由角色一级 Agent 生成", "角色私念不泄露给其他角色/环境", "猜测不晋升事实", "不新增审美门禁"]
+  allowed_dependencies: ["现有 Engine 纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["角色交付不强制短答", "环境较长候选解析", "主创心理使用边界", "提示词与模块审计"]
+  rollback_unit: "独立 Engine 合同提交"
+  documentation: ["本文件"]
+```
