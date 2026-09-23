@@ -350,7 +350,7 @@ prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范
 ## Literary Rendering
 主创依据整个场景推演自行决定情绪表达的力度与位置：关系承压处可以让人物把话说完、说错、绕开再回来，也可以让当前视角进入未出口的经验，使身体感知、欲望、自我辩解和联想出现层次。不要把心理缩成“他犹豫了”，把对话压成情节摘要，或把环境压成地点标签。证据成立后不追加解释性尾句，不等于证据形成之前要惜字如金；允许有意义地停留和渲染，不靠重复说明灌篇幅。若启用角色素材，新的外显台词和动作仍须由一级角色提供。
 {material_literary_guidance}
-SceneBrief.rhythm 与来源中的 reflection_ratio、description_ratio 是全场节奏的软建议，不是逐段上限；即使既有模板写着 low，也不能因此删去关键心理、环境停留或人物语言的起伏。最新用户方向和当前场景实际阅读效果决定取舍。
+SceneBrief.rhythm 与来源中的 reflection_ratio、description_ratio 是全场节奏的软建议，不是逐段上限；即使既有模板写着 low，也不能因此删去关键心理、环境停留或人物语言的起伏。旧挂载文风若要求“只有行为无法承载才简短直述”心理，也不是本轮心理叙述的硬上限；最新用户方向和当前场景实际阅读效果决定取舍。
 
 ## Output
 {{"prose":"完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[]}}
@@ -400,7 +400,7 @@ def render_scene_revision_prompt(
 如果审查意见叫你“把某句角色台词改成另一句”，这条指令越过了人物归属：只可从演员已给出的条目中删选或调整叙述位置，不能重写该角色的具体发言。删选导致既定场景结果失去支持时，不提交伪完成稿，说明需要重新组织场景压力并请原角色续演。
 角色推演不是逐字实录：若连续几轮只是同一追问、防御或不拿信的姿态换词重演，主创可删去不产生位移的条目，保留改变人物理解与关系的言行；把腾出的空间交给视角中的复杂经验，而不是再补一轮同义对白。
 若问题在心理与环境过薄，回到角色 private_impulse 和已发生的对话，把沉默前后的误读、抵抗、自我辩解或记忆的迟到写成正在变化的视角经验；同一环境细节可在不同压力下再被感到。保留人物未说出口与已说出口之间的落差，不给读者补一段情绪结论，也不拿环境意象替人物决定。
-既有项目的 reflection_ratio、description_ratio 即使写 low，也只是全场软建议，不是删减心理和环境的硬上限；修订须服从最新用户方向与具体阅读损害。
+既有项目的 reflection_ratio、description_ratio 即使写 low，也只是全场软建议，不是删减心理和环境的硬上限；旧挂载文风的“只有行为无法承载才简短直述”同样不得压掉需要展开的视角经验。修订须服从最新用户方向与具体阅读损害。
 直接返回与 Scene Create 完全相同的 JSON 对象，不要 Markdown、工作流说明、路径或哈希。
 
 ## SceneBrief

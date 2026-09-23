@@ -258,6 +258,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("不要把所有台词统一磨成平直短句", revision)
         self.assertIn("主创可以重新选择叙述距离、心理层次", revision)
         self.assertIn("即使写 low，也只是全场软建议", revision)
+        self.assertIn("旧挂载文风的“只有行为无法承载才简短直述”", revision)
         self.assertIn("请求原角色续演", revision)
         self.assertIn("不能重写该角色的具体发言", revision)
         self.assertIn("角色推演不是逐字实录", revision)
