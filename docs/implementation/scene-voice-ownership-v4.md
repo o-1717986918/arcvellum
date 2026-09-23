@@ -343,3 +343,23 @@ module_change_packet:
   rollback_unit: "独立 Engine 合同提交"
   documentation: ["本文件"]
 ```
+
+## 2026-09-24：接力素材交接合同
+
+独立环境写手需要知道角色实际说过、做过什么，但不能见到 private_impulse 或把人物主张当成已证实的世界事实。唯一主创收到的角色条目须按真实调用顺序交错，而不是按人物分组；旧的“一轮连续扮演整场”说明对接力并不成立。此批只改 Engine 的纯提示/材料合同，不改变 Studio 调用序列或正式正文写回。
+
+```yaml
+module_change_packet:
+  objective: "环境与主创消费真实接力顺序，同时保留角色公共言行与私有冲动的边界"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "render_environment_prompt 的可选 public_log、render_relay_materials，经 public/literary.py 导出"
+  variation_point: "仅 opt-in 接力输入和素材渲染，默认整场行为不变"
+  inputs: ["SceneBrief", "已解析的公共日志", "按调用先后的一级角色条目", "独立环境候选", "场景结果核对"]
+  outputs: ["环境写手提示", "可追踪的主创素材块"]
+  invariants: ["不泄漏 private_impulse 给环境/其他角色", "主创不补造角色言行", "候选不晋升为 Canon", "不增加文学审美门禁"]
+  allowed_dependencies: ["Engine 场景纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["环境只见公共言行", "主创见时间顺序及条目来源", "未完成结果不伪装成完整素材", "默认路径兼容"]
+  rollback_unit: "独立 Engine 合同提交"
+  documentation: ["本文件"]
+```

@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from .relay_context import render_relay_context, validated_knowledge_quotes
+from .relay_context import render_relay_context, validated_knowledge_quotes, validated_public_log
 
 
 PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v7"
@@ -269,16 +269,27 @@ def _parse_actor_scene_entry(
 def render_environment_prompt(
     brief: dict[str, Any], beats: list[dict[str, str]], style_reference: str,
     sources: str, unknown_slots: list[str] | None = None,
+    *, public_log: list[dict[str, Any]] | None = None,
 ) -> str:
+    scene_keys = ("scene_id", "viewpoint", "location", "canon_constraints", "participants")
+    if public_log is None:
+        scene_keys = ("scene_id", "objective", "viewpoint", "location", "canon_constraints", "participants")
+    observed = (
+        "\n## 此前真正发生的公共言行\n"
+        + json.dumps(validated_public_log(brief, public_log), ensure_ascii=False)
+        + "\n这些是人物的发言与可见动作，只用来确定描写时刻；台词里的主张不自动成为已证实世界事实。不要重复描写他们的动作，不知道的器物也不因此存在。\n"
+        if public_log is not None else ""
+    )
     return f"""# Independent Environment Writing
 
 你是本场独立的环境描写写手。主创只给你视角与事实边界，不替你决定看哪一处、用哪种感官、句子怎样起伏。让环境在这个人的可感知范围里发生，而不是填写光、声、气味清单：某处细节可停留，也可一笔带过，不必每句都推进剧情。普通且不承担证据作用的质感可以自由试写；一旦痕迹、器物状态或声音会像线索，就须有来源。只写环境本身，不写人物动作、心理、对白或设备诊断；不增新地点、历史、天气、规则或关键事件，不解释主题。参考选段用于感受表达可能性，不复制原句、专名或特定物件。
 
 ## SceneBrief
-{json.dumps({key: brief.get(key) for key in ('scene_id', 'objective', 'viewpoint', 'location', 'canon_constraints', 'participants')}, ensure_ascii=False)}
+{json.dumps({key: brief.get(key) for key in scene_keys}, ensure_ascii=False)}
 
 ## Moments Available For Environmental Writing
 {json.dumps(beats, ensure_ascii=False)}
+{observed}
 
 ## Style Reference
 {style_reference[:4_000] or '沿用项目当前文风。'}

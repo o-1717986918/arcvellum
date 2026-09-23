@@ -23,6 +23,7 @@ from literary_engineering_studio_engine.public.literary import (
     render_performance_plan_prompt,
     render_relay_plan_prompt,
     render_relay_scene_check_prompt,
+    render_relay_materials,
     render_performance_materials,
 )
 from tests.test_lean_kernel_v2_pi_runtime import _Gateway, _brief
@@ -239,6 +240,39 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("普通、不承担证据作用的感官质感仍由你自由选择", prompt)
         self.assertIn("长短由场景决定", prompt)
         self.assertNotIn("150—300", prompt)
+
+    def test_relay_environment_sees_only_actual_public_interaction(self) -> None:
+        brief = _brief().to_dict()
+        public_log = [{
+            "speaker": "character/sister", "spoken": "信呢？", "first_person_action": "我站在门口。",
+            "private_impulse": "我害怕他会继续说谎。",
+        }]
+        prompt = render_environment_prompt(
+            brief, _plan()["beats"], "参考语言起伏", "信在桌上", [], public_log=public_log,
+        )
+        self.assertIn("信呢？", prompt)
+        self.assertIn("台词里的主张不自动成为已证实世界事实", prompt)
+        self.assertNotIn("我害怕他会继续说谎", prompt)
+        self.assertNotIn('"objective"', prompt)
+        default_prompt = render_environment_prompt(brief, _plan()["beats"], "参考语言起伏", "信在桌上")
+        self.assertIn('"objective"', default_prompt)
+
+    def test_relay_materials_keep_chronology_and_reject_unmet_outcome(self) -> None:
+        plan = parse_relay_plan(_relay_plan(), _brief().to_dict())
+        entries = [
+            {"entry_id": "t1:1", "speaker": "character/sister", "spoken": "信呢？", "first_person_action": "", "private_impulse": "我等他回答。"},
+            {"entry_id": "t2:1", "speaker": "character/protagonist", "spoken": "信是我拿的。", "first_person_action": "", "private_impulse": "我说了。"},
+        ]
+        check = parse_relay_scene_check({"scene_id": "scene_0001", "results": [{
+            "milestone_id": "m1", "status": "fulfilled", "evidence_entry_ids": ["t2:1"],
+        }]}, plan, entries)
+        block = render_relay_materials(plan, entries, None, check)
+        self.assertIn("按真实互动时间顺序", block)
+        self.assertIn("不得添加演员未生成的台词", block)
+        self.assertLess(block.index('"entry_id":"t1:1"'), block.index('"entry_id":"t2:1"'))
+        incomplete = {**check, "results": [{"milestone_id": "m1", "status": "missing", "evidence_entry_ids": []}]}
+        with self.assertRaisesRegex(ValueError, "incomplete scene outcomes"):
+            render_relay_materials(plan, entries, None, incomplete)
 
     def test_plan_rejects_director_owned_micro_tasks(self) -> None:
         plan = _plan()

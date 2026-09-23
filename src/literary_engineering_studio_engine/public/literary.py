@@ -92,6 +92,7 @@ from ..literary.scene.roleplay.performance import (
 )
 from ..literary.scene.roleplay.relay_plan import parse_relay_plan, render_relay_plan_prompt
 from ..literary.scene.roleplay.relay_scene_check import parse_relay_scene_check, render_relay_scene_check_prompt
+from ..literary.scene.roleplay.relay_materials import render_relay_materials
 from ..literary.style.reference_projection import (
     recent_formal_reference_ids,
     render_style_reference_selection,
@@ -319,4 +320,5 @@ __all__ = sorted([
     "parse_relay_scene_check",
     "render_relay_plan_prompt",
     "render_relay_scene_check_prompt",
+    "render_relay_materials",
 ])
