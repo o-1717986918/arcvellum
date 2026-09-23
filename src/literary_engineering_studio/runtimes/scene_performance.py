@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from literary_engineering_studio_engine.public.literary import (
-    parse_actor_material,
+    parse_actor_scene_material,
     parse_environment_material,
     parse_performance_plan,
-    render_actor_prompt,
+    render_actor_scene_prompt,
     render_environment_prompt,
     render_performance_materials,
     render_performance_plan_prompt,
@@ -49,25 +49,28 @@ def scene_performance_materials(
     _notify(emit, "scene.performance.plan", {"beats": len(plan["beats"]), "digest": digest})
 
     actors: list[dict[str, Any]] = []
-    actor_count = 0
     intents = expression.get("dialogue_intents") if isinstance(expression.get("dialogue_intents"), list) else []
+    grouped: dict[str, list[dict[str, str]]] = {}
     for beat in plan["beats"]:
         speaker = beat["speaker"]
-        if not speaker or actor_count >= policy["max_actor_calls"]:
-            continue
+        if speaker:
+            grouped.setdefault(speaker, []).append(beat)
+    for speaker, beats in list(grouped.items())[:policy["max_actor_calls"]]:
         voice = next((item for item in intents if _matches_voice(item, speaker)), {})
-        beat_digest = hashlib.sha256(json.dumps(beat, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
-        actor_path = cache_root / f"performance-actor-{digest}-{beat['beat_id']}-{beat_digest}.json"
+        speaker_digest = hashlib.sha256(speaker.encode()).hexdigest()[:10]
+        beat_digest = hashlib.sha256(json.dumps(beats, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
+        actor_path = cache_root / f"performance-actor-{digest}-{speaker_digest}-{beat_digest}.json"
         try:
-            material = _cached_payload(actor_path, lambda beat=beat, voice=voice: _answer_payload(invoke(
-                    render_actor_prompt(brief, beat, voice), "character-actor",
-                )), lambda payload, beat=beat: parse_actor_material(payload, beat))
+            payload = _cached_payload(actor_path, lambda beats=beats, voice=voice: _answer_payload(invoke(
+                    render_actor_scene_prompt(brief, beats, voice), "character-actor",
+                )), lambda payload, beats=beats: _validated_actor_scene(payload, brief, beats))
+            materials = parse_actor_scene_material(payload, brief, beats)
         except (ValueError, RuntimeError, TimeoutError) as exc:
-            _notify(emit, "scene.performance.skipped", {"stage": "actor", "beat_id": beat["beat_id"], "reason": str(exc)[:300]})
+            _notify(emit, "scene.performance.skipped", {"stage": "actor", "speaker": speaker, "reason": str(exc)[:300]})
             continue
-        actors.append(material)
-        actor_count += 1
-        _notify(emit, "scene.performance.actor", {"beat_id": beat["beat_id"], "speaker": speaker})
+        actors.extend(materials)
+        _notify(emit, "scene.performance.actor", {"beat_ids": [beat["beat_id"] for beat in beats], "speaker": speaker})
+    actors.sort(key=lambda item: int(item["beat_id"][1:]))
 
     environment: dict[str, Any] | None = None
     env_path = cache_root / f"performance-environment-{digest}.json"
@@ -93,7 +96,7 @@ def scene_creative_cache_digest(
 ) -> str:
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     runners = config.get("agent_runners") if isinstance(config.get("agent_runners"), dict) else {}
-    payload = ["performance-v8", projection_digest, brief, sources, application.get("scene_performance_agents", {}), runners.get("pi-worker", {})]
+    payload = ["performance-v9", projection_digest, brief, sources, application.get("scene_performance_agents", {}), runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
@@ -111,7 +114,7 @@ def _policy(config: dict[str, Any]) -> dict[str, Any]:
 
 def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, style: str, config: dict[str, Any]) -> str:
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
-    payload = ["performance-v7", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
+    payload = ["performance-v8", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
@@ -135,6 +138,16 @@ def _cached_payload(
     temporary.write_text(json.dumps(normalized, ensure_ascii=False), encoding="utf-8")
     temporary.replace(path)
     return normalized
+
+
+def _validated_actor_scene(
+    payload: dict[str, Any], brief: dict[str, Any], beats: list[dict[str, str]],
+) -> dict[str, Any]:
+    materials = parse_actor_scene_material(payload, brief, beats)
+    return {
+        "scene_id": brief["scene_id"], "speaker": beats[0]["speaker"],
+        "performances": [{"beat_id": item["beat_id"], **item["candidates"][0]} for item in materials],
+    }
 
 
 def _matches_voice(item: Any, speaker: str) -> bool:

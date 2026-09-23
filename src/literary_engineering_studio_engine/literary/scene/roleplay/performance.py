@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 
-PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v2"
+PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v3"
 MAX_BEATS = 4
 
 
@@ -65,14 +65,39 @@ def _parse_beat(item: Any, index: int, participants: set[str]) -> dict[str, str]
 def render_actor_prompt(
     brief: dict[str, Any], beat: dict[str, str], voice: dict[str, Any],
 ) -> str:
-    person = _actor_identity(voice, beat["speaker"])
+    """Render a single-beat convenience prompt using the v3 scene contract."""
+
+    return render_actor_scene_prompt(brief, [beat], voice)
+
+
+def render_actor_scene_prompt(
+    brief: dict[str, Any], beats: list[dict[str, str]], voice: dict[str, Any],
+) -> str:
+    speaker = _actor_scene_speaker(beats)
+    person = _actor_identity(voice, speaker)
     state = voice.get("voice_state") if isinstance(voice.get("voice_state"), dict) else {}
     scene = {key: brief.get(key) for key in ("scene_id", "participants", "location")}
-    action_boundary = beat["action_boundary"] or "不得自造新事件或关键物件。"
-    response_boundary = beat["response_boundary"] or "停在对方能回应的地方。"
+    moments = [{
+        "beat_id": beat["beat_id"],
+        "event": beat["event"],
+        "action_boundary": beat["action_boundary"] or "不得自造新事件或关键物件。",
+        "response_boundary": beat["response_boundary"] or "停在对方能回应的地方。",
+    } for beat in beats]
+    output_shape = json.dumps({
+        "scene_id": brief["scene_id"], "speaker": speaker,
+        "performances": [{
+            "beat_id": beats[0]["beat_id"],
+            "private_impulse": "我没说出口的短促念头或欲望；第一人称",
+            "first_person_action": "我当下亲手做的可见动作；第一人称",
+            "spoken": "我真正说出口的台词，不带说话者名、引号或导演批注",
+        }],
+    }, ensure_ascii=False)
     return f"""# 我在场：{person['name']}
 
-从现在起，我就是这个人，不是描写此人的助手、导演或评论者。我只知道下列身份与眼前情境；在不改变已发生事件的前提下，我自己决定怎样回应。我在心里以第一人称经历它，然后交出我此刻真正会说的话，以及我亲手做的动作。JSON 只是交付容器，不改变我的内在视角。
+从现在起，我就是这个人，不是描写此人的助手、导演或评论者。这不是几张互不相干的台词卡：同一轮里，我从第一个节拍一直活到最后一个节拍，关系压力会积累，我的称呼、语序、避词和受压时的变调也随之变化。我只知道下列身份与眼前情境；在不改变已发生事件的前提下，我自己决定怎样回应。JSON 只是交付容器，不改变我的内在视角。
+
+## 我的语言，优先于顺口的中性答案
+我说出口的话必须有我的词域、句法节奏、礼貌边界和惯常回避；不能把这些只写在 private_impulse 里，却让 spoken 变成任何人都能说的清楚、平稳、周全的说明。紧张时我可以失去平日的从容，却仍是同一个人。必要的事实可说，但由我挑选说法、顺序、称呼、停顿和没说透的地方；我不替导演复述任务单，也不把对白写成流程建议或情节总结。职业词只是我可用的语言，不是每句必放的标记；尤其不能把“通常会有记录”说成眼前已确认有记录。不照抄人物卡范句，不为“鲜明”强塞口癖、修辞或无关俏皮话。
 
 ## 我是谁，我带着什么进入此刻
 我的身份：{person['role']}
@@ -84,22 +109,28 @@ def render_actor_prompt(
 我的稳定说话方式：{json.dumps(person['stable_voice'], ensure_ascii=False)}
 我眼前的人、关系、所知与误知：{json.dumps(state, ensure_ascii=False)}
 
-## 我现在确实置身的场景
+## 我确实置身的场景
 {json.dumps(scene, ensure_ascii=False)}
 
-## 我眼前正发生的事
-{beat['event']}
+## 我在这场戏里依次经历的时刻
+{json.dumps(moments, ensure_ascii=False)}
 
-## 我不能改变的动作结果
-{action_boundary}
+我不知道导演的台词计划，也不需要替整场解释事实。每到一个节拍，我先在心里抓住此刻最不愿让对方察觉的冲动，再决定身体先做什么，最后才开口；此刻怎样争取、回避、还口或沉默，由我自己决定。节拍之间我保持记忆与语气连续，却不替别人补对白或决定其反应。每条 spoken 都朝眼前的人做事，private_impulse 的压力须在说出口的避词、称呼、句子走向或停顿里留下痕迹。动作从我的身体与目标生出，只用眼前已确认的物件，不增添新道具、储物设施或设备细节。
 
-## 他人的回应不由我代写
-{response_boundary}
+只返回一个 JSON 对象，performances 按上面节拍顺序每拍恰好一项，不要备选：{output_shape}。示意数组中的一项是字段样式，不代表只交第一拍；必须为上述每个 beat_id 分别交一项。
 
-我先抓住自己最不愿让眼前这个人察觉的冲动，再决定身体先做什么，最后才开口。我不知道导演的台词计划，也不需要替整场解释事实；此刻怎样争取、回避、还口或沉默，由我自己决定。台词朝眼前的人做事，只演出一个对话回合；private_impulse 中的压力须在 spoken 的避词、称呼、句子走向或停顿里留下痕迹，不能把个性全藏进内心栏，让说出口的仍是中性公告。我用自己的词域和句法节奏，不照念人物卡范例。动作从我的身体与目标生出，只用眼前已确认的物件，不增添新道具、储物设施或设备细节。
+交付前只需确认：从第一句到最后一句都像同一个人，且语言随压力真实变化，而不是几条格式一致的中性说明。不能替别人回答，也不能改变已给的事件或动作结果。精确钟点、数量、设备读数、歌名和往事只有我在上面确实知道才能说；没有就用角色自然的非精确说法。不要新增身份、物件、情节转折或完整场景。"""
 
-仅返回一个 JSON 候选，candidates 数组长度必须恰好为 1，不要备选。按内在冲动 → 身体动作 → 出口台词的顺序填写：{{"beat_id":"{beat['beat_id']}","speaker":"{beat['speaker']}","candidates":[{{"private_impulse":"我没说出口的短促念头或欲望；用第一人称，不分析关系效果","first_person_action":"我当下亲手做的可见动作；用第一人称，不写‘他/她’式旁白","spoken":"我真正说出口的台词，不带说话者名、引号或导演批注"}}]}}。
-不能替别人回答，也不能改变已给的事件或动作结果。精确钟点、数量、设备读数、歌名和往事只有我在上面确实知道才能说；没有就用角色自然的非精确说法。不要新增身份、物件、情节转折或完整场景。"""
+
+def _actor_scene_speaker(beats: list[dict[str, str]]) -> str:
+    if not 1 <= len(beats) <= MAX_BEATS:
+        raise ValueError("actor scene requires one to four beats")
+    speaker = beats[0]["speaker"]
+    if not speaker or any(beat["speaker"] != speaker for beat in beats):
+        raise ValueError("actor scene beats must have one speaker")
+    if len({beat["beat_id"] for beat in beats}) != len(beats):
+        raise ValueError("actor scene beat_id must be unique")
+    return speaker
 
 
 def _actor_identity(voice: dict[str, Any], fallback_name: str) -> dict[str, Any]:
@@ -137,6 +168,26 @@ def parse_actor_material(payload: dict[str, Any], beat: dict[str, str]) -> dict[
             raise ValueError("actor candidate private impulse is too long")
         normalized.append(values)
     return {"schema": PERFORMANCE_SCHEMA, "beat_id": beat["beat_id"], "speaker": beat["speaker"], "candidates": normalized}
+
+
+def parse_actor_scene_material(
+    payload: dict[str, Any], brief: dict[str, Any], beats: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    speaker = _actor_scene_speaker(beats)
+    if payload.get("scene_id") != brief.get("scene_id") or payload.get("speaker") != speaker:
+        raise ValueError("actor scene target mismatch")
+    performances = payload.get("performances")
+    if not isinstance(performances, list) or len(performances) != len(beats):
+        raise ValueError("actor scene must cover every assigned beat exactly once")
+    normalized = []
+    for item, beat in zip(performances, beats):
+        if not isinstance(item, dict):
+            raise ValueError("actor scene performance must be an object")
+        normalized.append(parse_actor_material({
+            "beat_id": item.get("beat_id"), "speaker": speaker,
+            "candidates": [item],
+        }, beat))
+    return normalized
 
 
 def render_environment_prompt(
@@ -189,7 +240,7 @@ def _parse_environment_passage(item: Any, ids: set[str], focal_options: set[str]
 
 def render_performance_materials(plan: dict[str, Any], actors: list[dict[str, Any]], environment: dict[str, Any] | None) -> str:
     block = "\n".join((
-        "以下是各独立 Agent 的非权威候选素材。你是唯一正文作者：逐项判断是否合乎剧情、人物与文风；可以全部拒绝、重写或重新安排，不可机械拼贴。演员只看到眼前情境和动作边界；完整 plan 的 speech_act 与 information 仍由你在整场正文兑现，演员没说出的剧情义务并未取消。角色的 first_person_action 是演员的第一人称动作自述，不是正式叙述视角；须按本场叙述视角重写。private_impulse 与 scene_function 是后台提示，绝不可写入正文。环境候选只提供空间与感知，不得由它决定人物动作、台词或事实。候选中的新增事实不获得 Canon 权限，尤其不能从候选带入来源未确认的钟点、读数、数量、歌名或新物件；候选自身不能作为这些事实的证据。",
+        "以下是各独立 Agent 的非权威候选素材。你是唯一正文作者：逐项判断是否合乎剧情、人物与文风；可以全部拒绝、重写或重新安排，不可机械拼贴。同一 speaker 的多条候选来自一轮连续扮演；若台词与已确认事实、情节任务相容，优先保留其称呼、语序、避词和受压变化，不要在组织正文时把各人的声音统一润平成中性解释。演员只看到眼前情境和动作边界；完整 plan 的 speech_act 与 information 仍由你在整场正文兑现，演员没说出的剧情义务并未取消。角色的 first_person_action 是演员的第一人称动作自述，不是正式叙述视角；须按本场叙述视角重写。private_impulse 与 scene_function 是后台提示，绝不可写入正文。环境候选只提供空间与感知，不得由它决定人物动作、台词或事实。候选中的新增事实不获得 Canon 权限，尤其不能从候选带入来源未确认的钟点、读数、数量、歌名或新物件；候选自身不能作为这些事实的证据。",
         json.dumps({"plan": plan, "actor_candidates": actors, "environment_candidates": environment or {}}, ensure_ascii=False, separators=(",", ":")),
     ))
     if len(block) > 16_000:
@@ -199,6 +250,6 @@ def render_performance_materials(plan: dict[str, Any], actors: list[dict[str, An
 
 __all__ = [
     "PERFORMANCE_SCHEMA", "render_performance_plan_prompt", "parse_performance_plan",
-    "render_actor_prompt", "parse_actor_material", "render_environment_prompt",
+    "render_actor_prompt", "render_actor_scene_prompt", "parse_actor_material", "parse_actor_scene_material", "render_environment_prompt",
     "parse_environment_material", "render_performance_materials",
 ]

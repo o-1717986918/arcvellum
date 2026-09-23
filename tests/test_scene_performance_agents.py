@@ -9,11 +9,14 @@ from literary_engineering_studio.runtime.role_conversation import RoleConversati
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.application.scene_performance_preferences import get_scene_performance_preferences
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
+from literary_engineering_studio.runtimes.scene_performance import scene_performance_materials
 from literary_engineering_studio_engine.public.literary import (
     parse_actor_material,
+    parse_actor_scene_material,
     parse_environment_material,
     parse_performance_plan,
     render_actor_prompt,
+    render_actor_scene_prompt,
     render_performance_plan_prompt,
     render_performance_materials,
 )
@@ -33,9 +36,10 @@ def _plan() -> dict[str, object]:
 
 
 class _PerformanceGateway(_Gateway):
-    def __init__(self, *, bad_plan: bool = False):
+    def __init__(self, *, bad_plan: bool = False, repeat_actor: bool = False):
         super().__init__()
         self.bad_plan = bad_plan
+        self.repeat_actor = repeat_actor
 
     def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
         if prompt.startswith("# Scene Performance Direction"):
@@ -43,12 +47,20 @@ class _PerformanceGateway(_Gateway):
             plan = _plan()
             if self.bad_plan:
                 plan["beats"][0]["speaker"] = "character/outsider"
+            if self.repeat_actor:
+                plan["beats"].append({
+                    **plan["beats"][0], "beat_id": "b2",
+                    "event": "妹妹停在门边，主人公又试着把话说完",
+                })
             answer = json.dumps(plan, ensure_ascii=False)
         elif role == "character-actor":
             self.calls.append((role, prompt))
             answer = json.dumps({
-                "beat_id": "b1", "speaker": "character/protagonist",
-                "candidates": [{"spoken": "信是我拿的。你先别把门关上。", "first_person_action": "我把信留在桌沿，没有推向她。", "private_impulse": "我怕她现在就走。"}],
+                "scene_id": "scene_0001", "speaker": "character/protagonist",
+                "performances": [
+                    {"beat_id": "b1", "spoken": "信是我拿的。你先别把门关上。", "first_person_action": "我把信留在桌沿，没有推向她。", "private_impulse": "我怕她现在就走。"},
+                    *([{"beat_id": "b2", "spoken": "你不想听，我就等你。", "first_person_action": "我收回伸向信的手。", "private_impulse": "我不能逼她听完。"}] if self.repeat_actor else []),
+                ],
             }, ensure_ascii=False)
         elif role == "environment-writer":
             self.calls.append((role, prompt))
@@ -87,6 +99,29 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("互动目标与压力", prompt)
         self.assertIn("由扮演该人物的演员自行选择", prompt)
         self.assertIn("不是整场解释清单", prompt)
+
+    def test_actor_scene_prompt_keeps_one_identity_across_beats(self) -> None:
+        beats = [_plan()["beats"][0], {**_plan()["beats"][0], "beat_id": "b2", "event": "妹妹走到门边"}]
+        prompt = render_actor_scene_prompt(_brief().to_dict(), beats, {"stable_voice": {"vocabulary": "总用家里的旧称呼", "rhythm": "越急越绕"}})
+        self.assertIn("从第一个节拍一直活到最后一个节拍", prompt)
+        self.assertIn("我的语言，优先于顺口的中性答案", prompt)
+        self.assertIn("越急越绕", prompt)
+        self.assertIn('"beat_id": "b2"', prompt)
+        self.assertIn("每拍恰好一项", prompt)
+
+    def test_actor_scene_requires_all_assigned_beats_in_order(self) -> None:
+        beats = [_plan()["beats"][0], {**_plan()["beats"][0], "beat_id": "b2"}]
+        first = {"beat_id": "b1", "spoken": "是我。", "first_person_action": "我站住。", "private_impulse": "我怕。"}
+        second = {**first, "beat_id": "b2", "spoken": "你听我说。"}
+        target = {"scene_id": "scene_0001", "speaker": "character/protagonist"}
+        result = parse_actor_scene_material({**target, "performances": [first, second]}, _brief().to_dict(), beats)
+        self.assertEqual([item["beat_id"] for item in result], ["b1", "b2"])
+        with self.assertRaisesRegex(ValueError, "every assigned beat"):
+            parse_actor_scene_material({**target, "performances": [first]}, _brief().to_dict(), beats)
+        with self.assertRaisesRegex(ValueError, "target mismatch"):
+            parse_actor_scene_material({**target, "speaker": "character/sister", "performances": [first, second]}, _brief().to_dict(), beats)
+        with self.assertRaisesRegex(ValueError, "target mismatch"):
+            parse_actor_scene_material({**target, "performances": [second, first]}, _brief().to_dict(), beats)
 
     def test_experimental_feature_is_opt_in(self) -> None:
         self.assertEqual(default_config()["application"]["scene_performance_agents"], {"enabled": False, "max_actor_calls": 4})
@@ -136,10 +171,40 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             self.assertIn("信是我拿的", gateway.calls[3][1])
             self.assertIn("我把信留在桌沿", gateway.calls[3][1])
             self.assertIn("门缝里的光", gateway.calls[3][1])
+            self.assertIn("不要在组织正文时把各人的声音统一润平", gateway.calls[3][1])
             self.assertEqual(first, second)
             self.assertEqual(runtime.metrics.cache_hits, 1)
             self.assertIn("scene.performance.actor", events)
             self.assertIn("scene.performance.environment", events)
+
+    def test_runtime_calls_repeating_character_once_for_whole_scene(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gateway = _PerformanceGateway(repeat_actor=True)
+            runtime = PiSceneTransactionRuntime(
+                {"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 1}}},
+                project_root=root, data_root=root / ".studio", gateway=gateway,
+            )
+            runtime.create_scene("performance-grouped", _brief())
+            self.assertEqual([role for role, _ in gateway.calls[:4]], ["worker", "character-actor", "environment-writer", "worker"])
+            self.assertEqual(sum(role == "character-actor" for role, _ in gateway.calls), 1)
+            self.assertIn("你不想听，我就等你。", gateway.calls[3][1])
+
+    def test_grouped_actor_material_is_reused_from_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gateway = _PerformanceGateway(repeat_actor=True)
+            settings = {"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 1}}}
+            def invoke(prompt: str, role: str) -> str:
+                return gateway.run(root, prompt, role=role, timeout=30).answer
+            kwargs = {
+                "brief": _brief().to_dict(), "expression": {}, "sources": "", "style_reference": "",
+                "cache_root": root / "cache", "config": settings, "invoke": invoke,
+            }
+            first = scene_performance_materials(**kwargs)
+            second = scene_performance_materials(**kwargs)
+            self.assertEqual(first, second)
+            self.assertEqual([role for role, _ in gateway.calls], ["worker", "character-actor", "environment-writer"])
 
     def test_invalid_director_plan_falls_back_to_single_writer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
