@@ -31,6 +31,15 @@ def validated_knowledge_quotes(brief: dict[str, Any], quotes: list[str]) -> list
     return normalized
 
 
+def validated_opening_situation(brief: dict[str, Any], quote: str) -> str:
+    if not isinstance(quote, str) or not 4 <= len(quote.strip()) <= 350:
+        raise ValueError("relay opening_situation must be a bounded scene fact")
+    sources = [brief.get("scene_function"), brief.get("location")]
+    if not any(quote.strip() in source for source in sources if isinstance(source, str)):
+        raise ValueError("relay opening_situation must quote scene_function or location")
+    return quote.strip()
+
+
 def validated_public_log(brief: dict[str, Any], public_log: list[dict[str, Any]]) -> list[dict[str, str]]:
     if len(public_log) > 24:
         raise ValueError("actor relay public_log exceeds 24 entries")

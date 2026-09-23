@@ -332,6 +332,24 @@ module_change_packet:
 
 ```yaml
 module_change_packet:
+  objective: "从 SceneBrief 选出可逐字核对的当前会面处境，避免角色把上一场交接误演成此刻场所"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "scene-relay-plan/v2 的 opening_situation 与 render_actor_scene_prompt 的可选 opening_situation"
+  variation_point: "接力提示读取开场锚点；默认整场候选保持不变"
+  inputs: ["SceneBrief.scene_function/location", "导演只做来源摘录的 plan", "角色已发生公共日志"]
+  outputs: ["来源可核的开场处境", "过去交接与当前场所分离的演员提示"]
+  invariants: ["不规定具体台词、动作和心理", "不把未来结果或过去道具写成已发生", "无新增 Canon", "角色仍能自主回应"]
+  allowed_dependencies: ["现有 Engine 场景纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["开场锚点来源核对", "缺失/伪造拒绝", "接力角色可见而默认路径不变", "真实同题复跑"]
+  rollback_unit: "独立 Engine 合同提交"
+  documentation: ["本文件"]
+```
+
+在同一第二场的真实主创试填中，v2 `opening_situation` 逐字选中了“在周鹤日常买早点的旧街面馆，沈照月以私人身份试探……”这一整句；人物已知事实仍选中完整的上一场窗口交接。前者修复了开场处境缺失，后者仍须由演员提示明确视作过去，而不是眼前登记簿。此试填只验证导演任务单可被模型生成与解析，不是角色/环境文风验收。
+
+```yaml
+module_change_packet:
   objective: "在可选 Studio 运行模式中让一级角色按真实公共互动接力，再由主创组织有来源的素材"
   primary_module: "Studio runtimes/scene_performance"
   public_entry: "scene_performance_materials 的 mode=relay"

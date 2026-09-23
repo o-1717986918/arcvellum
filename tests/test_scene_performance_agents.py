@@ -42,6 +42,7 @@ def _plan() -> dict[str, object]:
 def _relay_plan() -> dict[str, object]:
     return {
         "scene_id": "scene_0001",
+        "opening_situation": "relationship-turn",
         "milestones": [{"speaker": "character/protagonist", "source_quote": "主人公承认自己拿走了信"}],
         "actor_knowledge": [
             {"speaker": "character/protagonist", "quotes": []},
@@ -169,9 +170,14 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("不指定台词、句式、情绪、手势", prompt)
         self.assertIn("incoming_handoff", prompt)
         plan = parse_relay_plan(_relay_plan(), brief)
-        self.assertEqual(plan["schema"], "arcvellum/scene-relay-plan/v1")
+        self.assertEqual(plan["schema"], "arcvellum/scene-relay-plan/v2")
+        self.assertEqual(plan["opening_situation"], "relationship-turn")
         self.assertEqual(plan["milestones"][0]["milestone_id"], "m1")
         self.assertEqual(plan["actor_knowledge"][1]["quotes"], ["妹妹已经发现抽屉被打开"])
+        bad = _relay_plan()
+        bad["opening_situation"] = "门外凭空出现一把钥匙"
+        with self.assertRaisesRegex(ValueError, "opening_situation"):
+            parse_relay_plan(bad, brief)
         bad = _relay_plan()
         bad["milestones"] = [{"speaker": "character/protagonist", "source_quote": "门外突然出现一把未确认的钥匙"}]
         with self.assertRaisesRegex(ValueError, "source_quote"):
@@ -256,8 +262,11 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("不自动成为已证实的世界事实", prompt)
         early_prompt = render_actor_scene_prompt(
             brief, _plan()["beats"], {"speaker": "character/protagonist"},
-            public_log=[], knowledge_quotes=["信在昨夜被取走"], max_entries=2,
+            public_log=[], knowledge_quotes=["信在昨夜被取走"],
+            opening_situation="relationship-turn", max_entries=2,
         )
+        self.assertIn('"opening_situation": "relationship-turn"', early_prompt)
+        self.assertIn("上场交接只是我过去知道的事", early_prompt)
         self.assertIn("信在昨夜被取走", early_prompt)
         self.assertNotIn("主人公承认自己拿走了信", early_prompt)
         self.assertNotIn("隐瞒转为承认", early_prompt)

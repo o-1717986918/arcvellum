@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from .relay_context import render_relay_context, validated_knowledge_quotes, validated_public_log
+from .relay_context import render_relay_context, validated_knowledge_quotes, validated_opening_situation, validated_public_log
 
 
 PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v7"
@@ -99,13 +99,14 @@ def render_actor_scene_prompt(
     public_log: list[dict[str, Any]] | None = None,
     pending_outcome: str | None = None,
     knowledge_quotes: list[str] | None = None,
+    opening_situation: str | None = None,
     max_entries: int = MAX_ACTOR_ENTRIES,
 ) -> str:
     speaker = _actor_scene_speaker(beats, str(voice.get("speaker") or ""))
-    _validate_actor_prompt_options(beats, public_log, pending_outcome, knowledge_quotes, max_entries)
+    _validate_actor_prompt_options(beats, public_log, pending_outcome, knowledge_quotes, opening_situation, max_entries)
     person = _actor_identity(voice, speaker)
     state = voice.get("voice_state") if isinstance(voice.get("voice_state"), dict) else {}
-    scene = _actor_scene_view(brief, public_log, knowledge_quotes)
+    scene = _actor_scene_view(brief, public_log, knowledge_quotes, opening_situation)
     moments = [{"beat_id": beat["beat_id"], "event": beat["event"]} for beat in beats]
     output_shape = json.dumps({
         "scene_id": brief["scene_id"], "speaker": speaker,
@@ -143,6 +144,7 @@ def render_actor_scene_prompt(
 
 ## 我确实置身的场景
 {json.dumps(scene, ensure_ascii=False)}
+{"上场交接只是我过去知道的事，不代表那些登记簿、纸张或物件此刻在这里；我只从开场处境和真实公共互动判断眼前发生什么。" if public_log is not None else ""}
 
 ## 我在这场戏里依次经历的时刻
 {json.dumps(moments, ensure_ascii=False)}
@@ -159,11 +161,12 @@ def render_actor_scene_prompt(
 
 def _validate_actor_prompt_options(
     beats: list[dict[str, str]], public_log: list[dict[str, Any]] | None,
-    pending_outcome: str | None, knowledge_quotes: list[str] | None, max_entries: int,
+    pending_outcome: str | None, knowledge_quotes: list[str] | None,
+    opening_situation: str | None, max_entries: int,
 ) -> None:
     if not 1 <= max_entries <= MAX_ACTOR_ENTRIES:
         raise ValueError("actor scene max_entries is out of range")
-    if public_log is None and (pending_outcome is not None or knowledge_quotes is not None):
+    if public_log is None and (pending_outcome is not None or knowledge_quotes is not None or opening_situation is not None):
         raise ValueError("actor relay facts require a public_log")
     if public_log is not None and len(beats) != 1:
         raise ValueError("actor relay requires exactly one current beat")
@@ -171,6 +174,7 @@ def _validate_actor_prompt_options(
 
 def _actor_scene_view(
     brief: dict[str, Any], public_log: list[dict[str, Any]] | None, knowledge_quotes: list[str] | None,
+    opening_situation: str | None,
 ) -> dict[str, Any]:
     keys = ("scene_id", "participants", "location", "viewpoint")
     if public_log is None:
@@ -178,6 +182,7 @@ def _actor_scene_view(
             "scene_id", "participants", "location", "objective", "canon_constraints", "incoming_handoff", "viewpoint",
         )}
     return {**{key: brief.get(key) for key in keys},
+            "opening_situation": validated_opening_situation(brief, opening_situation) if opening_situation is not None else "",
             "confirmed_knowledge": validated_knowledge_quotes(brief, knowledge_quotes or [])}
 
 
