@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from literary_engineering_studio.application.scene_transaction import (
     PreparedScene,
@@ -121,6 +122,9 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("Style Reference Priority", prompt)
         self.assertIn("若资料中有文风参考，借用与本场相关的表达机制", prompt)
         self.assertIn("白描只是可用底色之一", prompt)
+        self.assertIn("## Literary Rendering", prompt)
+        self.assertIn("不要把心理缩成", prompt)
+        self.assertIn("允许有意义地停留和渲染", prompt)
         self.assertIn("证据之后停笔", prompt)
         self.assertIn("新增精确数字默认不用", prompt)
         self.assertIn("“一个又一个”“一次次”等虚指反复并非精确计数", prompt)
@@ -140,6 +144,13 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("白描不能独占补写段", prompt)
         self.assertIn("动作、意象、对白或物证已经传意时停笔", prompt)
         self.assertIn("不追加翻译潜台词、概括感受或解释意义的尾句", prompt)
+        owned = render_scene_length_completion_prompt(
+            _brief(), "妹妹仍站在门边。", 420, actor_owned=True,
+            performance_material_block="一级素材：她没有说话，但怕他离开。",
+        )
+        self.assertIn("同一份一级角色与环境素材", owned)
+        self.assertIn("一级素材：她没有说话", owned)
+        self.assertIn("不能把私念转成台词或全知事实", owned)
 
     def test_review_treats_hard_continuity_conflicts_as_revision(self) -> None:
         result = CreativeResult("第一版正文。", "初稿", SceneDelta())
@@ -161,6 +172,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("只有持续混同已损害人物可信度或关系张力时才要求修订", prompt)
         self.assertIn("对明确无关的精确计数，引用具体片段", prompt)
         self.assertIn("对虚指反复、当场问答或改变人物理解的数值，不得仅因数词存在", prompt)
+        self.assertIn("心理完全缺席", prompt)
         self.assertIn("不得按数词出现本身、数字密度或统一清单裁决", prompt)
         self.assertGreater(prompt.rfind("## Quantitative Detail Review"), prompt.rfind("## Relevant Sources"))
 
@@ -235,7 +247,43 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("新增精确数字默认不用", revision)
         self.assertIn("不要求五项同时成立", revision)
         self.assertIn("不要把所有台词统一磨成平直短句", revision)
+        self.assertIn("主创可以重新选择叙述距离、心理层次", revision)
+        self.assertIn("请求原角色续演", revision)
         self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
+
+    def test_first_level_materials_reach_create_completion_and_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gateway = _Gateway()
+            config = {"application": {"scene_performance_agents": {"enabled": True}}}
+            runtime = PiSceneTransactionRuntime(
+                config, project_root=root, data_root=root / ".studio", gateway=gateway,
+            )
+            marker = "角色素材：妹妹没说出口的恐惧；唯一对白是信是我拿的。"
+            with patch("literary_engineering_studio.runtimes.pi_scene_transaction.scene_performance_materials", return_value=marker):
+                result = runtime.create_scene("tx-owned", _brief())
+            runtime.revise_scene(
+                "tx-owned", _brief(), result, VerificationReport("scene_0001", 20), None, attempt=1,
+            )
+            prompts = [prompt for _, prompt in gateway.calls]
+            self.assertIn(marker, prompts[0])
+            self.assertIn(marker, prompts[1])
+            self.assertIn(marker, prompts[-1])
+            self.assertIn("Original First-Level Character And Environment Materials", prompts[-1])
+            self.assertIn("外显台词和动作仍只来自原角色 entries", prompts[-1])
+
+    def test_revision_does_not_invent_missing_first_level_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = PiSceneTransactionRuntime(
+                {"application": {"scene_performance_agents": {"enabled": True}}},
+                project_root=root, data_root=root / ".studio", gateway=_Gateway(),
+            )
+            with self.assertRaisesRegex(RuntimeError, "original first-level performance materials"):
+                runtime.revise_scene(
+                    "tx-missing", _brief(), CreativeResult("初稿。", "", SceneDelta()),
+                    VerificationReport("scene_0001", 20), None, attempt=1,
+                )
 
     def test_runtime_inlines_only_project_local_sources_and_caches_result(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

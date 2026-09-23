@@ -465,3 +465,23 @@ module_change_packet:
   rollback_unit: "独立 Engine 合同提交"
   documentation: ["本文件"]
 ```
+
+## 2026-09-24：主创生成与修订连续使用一级素材
+
+运行时目前仅在首轮 `create_scene` 给主创角色/环境素材。`complete_first_draft_length` 只见正文和布尔 `actor_owned`，`revise_scene` 完全不见素材；主创在补写和返修时既缺少心理候选，也没有逐条对照外显言行的依据。修复应把同一创作候选的素材随交易缓存，并供补写、修订使用；修订能主动改变叙述距离、心理组织、环境停留和句法，而不能因审查要求“对白更有个性”就自行替角色加台词。若一级素材确实不足，应明确报告需要角色重演，而不是隐性越权。旧缓存若没有素材，不应伪造一份不同的来源。
+
+```yaml
+module_change_packet:
+  objective: "让主创首稿、补写和返修共享同一份一级素材及外显言行边界"
+  primary_module: "Studio runtimes/pi_scene_transaction"
+  public_entry: "create_scene、revise_scene 与场景提示渲染"
+  variation_point: "启用表演素材时缓存候选材料；默认单主创路径保持原行为"
+  inputs: ["SceneBrief", "同一 transaction 的角色/环境材料", "审查意见与候选正文"]
+  outputs: ["富于情绪和心理的正文生成/修订提示", "来源一致的补写/返修"]
+  invariants: ["外显言行不由主创补造", "未缓存来源不静默伪造", "不改变正式提交和 Canon Gate", "不以字数取代文学判断"]
+  allowed_dependencies: ["Engine public/literary.py", "现有 Studio 缓存和 Pi Gateway"]
+  forbidden_dependencies: ["Engine 内部 import", "Provider SDK 直连", "正式项目文件写入"]
+  tests: ["首稿/补写/修订素材连续性", "缺失缓存可解释失败", "提示词心理与情绪权限", "全量 Python/架构/Prompt 检查"]
+  rollback_unit: "独立 Studio adapter 提交"
+  documentation: ["本文件"]
+```

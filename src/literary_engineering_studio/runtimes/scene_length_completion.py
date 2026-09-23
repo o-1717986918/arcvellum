@@ -14,6 +14,7 @@ from literary_engineering_studio_engine.public.projections import count_delivery
 
 def complete_first_draft_length(
     brief: SceneBrief, result: CreativeResult, ask: Callable[[str], dict[str, Any]], *, actor_owned: bool = False,
+    performance_material_block: str = "",
 ) -> CreativeResult:
     """Finish underlength prose before review, without turning length into a review gate."""
     minimum = brief.length.soft_min
@@ -26,7 +27,10 @@ def complete_first_draft_length(
         if current >= minimum:
             return result
         gap = minimum - current
-        payload = ask(render_scene_length_completion_prompt(brief, result.prose, gap, actor_owned=actor_owned))
+        payload = ask(render_scene_length_completion_prompt(
+            brief, result.prose, gap, actor_owned=actor_owned,
+            performance_material_block=performance_material_block,
+        ))
         insertion = str(payload.get("insertion") or "").strip()
         if not insertion or count_delivery_chinese_content_chars(insertion) < min(120, gap):
             raise ValueError("scene length completion made no meaningful progress")
@@ -36,7 +40,10 @@ def complete_first_draft_length(
     return result
 
 
-def render_scene_length_completion_prompt(brief: SceneBrief, prose: str, gap: int, *, actor_owned: bool = False) -> str:
+def render_scene_length_completion_prompt(
+    brief: SceneBrief, prose: str, gap: int, *, actor_owned: bool = False,
+    performance_material_block: str = "",
+) -> str:
     """Request one insertable, causal passage without rewriting accepted prose."""
     request = min(max(gap + 120, 500), 1800)
     return "\n".join([
@@ -44,7 +51,7 @@ def render_scene_length_completion_prompt(brief: SceneBrief, prose: str, gap: in
         f"本场清洁正文距离最低篇幅尚差 {gap} 个中文内容字符。请写约 {request} 个中文内容字符的连续小说段落，插在现有正文最后一段之前。",
         "只返回 JSON 对象，字段 insertion 为新增正文字符串。不要重写或重复原文，不写提纲、自评、解释或元叙述。",
         "沿现有场景已经发生的行动链深化阻力、核验、人物反应与选择代价；不要添加新人物、新稳定世界事实或新核心事件，不提前完成后续场景职责，也不要靠计件描写灌字数。",
-        "本场人物言行由一级角色 Agent 先生成；此轮不能新增或改写任何人物对白、手势、操作及其他可见行为。只在已有动作之间补充不引入新事实的感知、叙述节奏与内在迟疑。若无法自然补足，返回空 insertion，不得伪造角色表演。" if actor_owned else "",
+        "本场人物言行由一级角色 Agent 先生成；此轮不能新增或改写任何人物对白、手势、操作及其他可见行为。可依照同一份一级素材，在当前视角内展开未出口的心理、情绪起伏、环境停留和叙述节奏；不能把私念转成台词或全知事实。若无法自然补足，返回空 insertion，不得伪造角色表演。" if actor_owned else "",
         "先从已有正文辨认叙述距离、句群呼吸、主导意象和人物话语策略，再用同一语言谱面续写；白描不能独占补写段，承压处可沿用已有的自由间接感知、反讽、借代、通感、复沓、意象回返或长句推进，但不凭空加华丽辞藻。",
         "若最后一段是收束或悬念，新增段落必须自然引向它；动作、意象、对白或物证已经传意时停笔，不追加翻译潜台词、概括感受或解释意义的尾句。保持人物话语差异与已挂载文风。",
         "## 本场职责\n" + json.dumps({
@@ -53,6 +60,7 @@ def render_scene_length_completion_prompt(brief: SceneBrief, prose: str, gap: in
             "participants": brief.participants,
             "length": brief.length.target_hanzi,
         }, ensure_ascii=False, default=str),
+        "## 同一份一级角色与环境素材\n" + performance_material_block if performance_material_block else "",
         "## 已有正文\n" + prose,
     ])
 

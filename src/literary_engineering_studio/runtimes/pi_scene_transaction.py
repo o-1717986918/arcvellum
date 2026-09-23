@@ -11,10 +11,8 @@ from typing import Any, Callable
 
 from literary_engineering_studio_engine.public.literary import (
     CreativeResult,
-    ReviewDecision,
     ReviewResult,
     SceneBrief,
-    SceneDelta,
     VerificationReport,
     select_active_style_references,
     recent_formal_reference_ids,
@@ -26,7 +24,7 @@ from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from ..runtime.role_conversation import RoleConversationGateway
 from ..infrastructure.project_scene_transactions import known_scene_refs
 from .scene_length_completion import complete_first_draft_length
-from .pi_scene_payload import _answer_payload, _proposals, _reject_machine_fields, _strings
+from .pi_scene_payload import _answer_payload, creative_result_from_payload, review_result_from_payload
 from .pi_scene_style_history import projection_digest as _projection_digest, recent_lean_reference_ids, scene_reference_context
 from .scene_performance import scene_creative_cache_digest, scene_performance_materials
 from .scene_source_evidence import scene_source_evidence
@@ -74,6 +72,7 @@ class PiSceneTransactionRuntime:
         style_reference = render_style_reference_selection(selection)
         creative_digest = scene_creative_cache_digest(projection_digest, brief.to_dict(), initial_sources, self._config)
         cache = self._cache_path(transaction_id, f"creative_result_{creative_digest}.json")
+        materials_cache = self._cache_path(transaction_id, f"performance_materials_{creative_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
@@ -103,6 +102,7 @@ class PiSceneTransactionRuntime:
             emit=(lambda event, data: self._event_sink(event, {**data, "scene_transaction_id": transaction_id}))
             if self._event_sink is not None else None,
         )
+        _atomic_json(materials_cache, {"materials": materials})
         prompt = render_scene_create_prompt(
             brief,
             source_evidence=self._source_evidence(brief, purpose="create", reserve_chars=len(materials)),
@@ -117,6 +117,7 @@ class PiSceneTransactionRuntime:
             brief, result,
             lambda prompt: _answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id)),
             actor_owned=bool(materials),
+            performance_material_block=materials,
         )
         _atomic_json(cache, result.to_dict())
         return result
@@ -171,6 +172,13 @@ class PiSceneTransactionRuntime:
         selection = self._style_projection(brief, transaction_id)
         expression = self._expression_projection(brief)
         projection_digest = _projection_digest(selection, expression)
+        initial_sources = self._source_evidence(brief, purpose="create")
+        creative_digest = scene_creative_cache_digest(projection_digest, brief.to_dict(), initial_sources, self._config)
+        materials_cache = self._cache_path(transaction_id, f"performance_materials_{creative_digest}.json")
+        material_record = _read_json(materials_cache)
+        if _scene_performance_enabled(self._config) and material_record is None:
+            raise RuntimeError("scene revision requires the original first-level performance materials")
+        materials = str(material_record.get("materials") or "") if material_record else ""
         cache = self._cache_path(transaction_id, f"revision_result_{attempt}_{projection_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
@@ -181,10 +189,11 @@ class PiSceneTransactionRuntime:
             result,
             verification,
             review,
-            source_evidence=self._source_evidence(brief, purpose="revise"),
+            source_evidence=self._source_evidence(brief, purpose="revise", reserve_chars=len(materials)),
             allowed_refs=known_scene_refs(brief),
             style_reference_block=render_style_reference_selection(selection),
             expression_context_block=json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
+            performance_material_block=materials,
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         revised = creative_result_from_payload(_answer_payload(answer))
@@ -258,7 +267,8 @@ def render_scene_create_prompt(
     )
     material_final_pass = (
         "启用角色表演素材时，本段规则优先于上文通用‘写对白’建议：所有实际对白和人物可见行为须先由该人物的一级 Agent 在 entries 中给出；不要自行补对白或微动作，也不要把演员句子润平为同一种声音。"
-        "若环境候选合乎视角与已确认事实，可保留它的观察次序和句群呼吸，也可重组，不必逐句移植。"
+        "心理与情绪的文学叙述不等于新增人物言行：依据整个推演及当前视角，可让未出口的欲望、犹疑和误读在感知、句法、联想里展开；不要把私念照抄成台词或全知解释。"
+        "若环境候选合乎视角与已确认事实，可保留它的观察次序和句群呼吸，也可重组、延展，不必逐句移植。"
         "逐项核对候选里的物件、技术结论和精确数值，来源未确认且无必要的不用。候选的后台解释绝不进入正文。"
         if performance_material_block else ""
     )
@@ -283,6 +293,9 @@ def render_scene_create_prompt(
 prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。先在心中把现有事件分成开场压力、行动阻力、关系反应、选择代价和余波，给各段分配足够篇幅；首轮直接写足完整场景，不得用梗概、节拍清单或压缩叙述代替正文。如果一次响应不足，创作阶段会要求在结尾之前补足有因果作用的段落，不要提前把情节收束成短稿。
 本场只实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff。章级义务提供方向，不授权提前演出后续场景；未列入 participants 的主要人物不得登场、发言或完成关键动作。若 Relevant Sources 含上一场正文，只承接其已发生后果，不得重演首次见面、同一调取/发现/交付、同一问答或同一决定。
 句群不设恒定默认长度：短句只落在真正的发现、选择或后果上；较长句承载连续动作、观察层次、摇摆或复杂因果；连续短句若只是在逐项报动作，就重组为有呼吸和层级的句群。白描只是可用底色之一，承压段落可选扎根人物经验的自由间接引语、反讽、借代、通感、复沓、意象回返或长句推进，让修辞参与认识和关系变化。细节也可积蓄气氛、显露趣味或延长审美时间，不要求每段都即时推进事件。不要让连续场景都套用“核对—追问—停顿—留悬念”的程序。写对白前根据人物背景、欲望、身份和关系压力，为主要说话者区分词域、句形、主动发问或回避方式、礼貌边界与幽默方式；speech_style 未填写时从已知事实推导，不编造方言、口头禅或新身世。让换掉说话者姓名后的关键台词仍可辨认，不把所有人压成同一种平直短句。情绪通过避让、选择代价、自由间接感知和说话方式显影，不用抽象总结代替。段尾和场尾执行“证据之后停笔”：动作、意象、对白、沉默或物证已经传意时，删去随后翻译潜台词、概括人物感受、宣布主题或解释其意义的句子。使用中文引号与标点，不输出写作流程痕迹。
+
+## Literary Rendering
+主创依据整个场景推演自行决定情绪表达的力度与位置：关系承压处可以让人物把话说完、说错、绕开再回来，也可以让当前视角进入未出口的经验，使身体感知、欲望、自我辩解和联想出现层次。不要把心理缩成“他犹豫了”，把对话压成情节摘要，或把环境压成地点标签。证据成立后不追加解释性尾句，不等于证据形成之前要惜字如金；允许有意义地停留和渲染，不靠重复说明灌篇幅。若启用角色素材，新的外显台词和动作仍须由一级角色提供。
 
 ## Output
 {{"prose":"完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[]}}
@@ -325,6 +338,7 @@ def render_scene_review_prompt(
 需要改动时必须选择 revise 并给出具体片段证据；轻微建议仍判 pass。
 程序的 warning 是提醒，不是自动退回理由。软字数偏差只作建议，不得单独退回；只有人物行为、场景义务、行动层次、选择代价或阅读效果出现可举证损害时才判 revise。不能仅凭 warning 标签本身要求改稿。一次审读最多列三个有原文证据的高影响问题，给出最小指令、修改跨度并保留有效段落；先前问题已消失时不得另开与硬约束、场景义务或明确阅读损害无关的新审美议题。
 检查正文中新出现的专名或稳定身份是否已进入 new_asset_candidates；仅沿用 SceneBrief 的通用角色称谓、普通设备名或场所类别无需登记。真正遗漏会影响后续场景时判 revise。
+也检查关键选择前后是否只剩动作和信息转述、心理完全缺席，环境是否被压成地点标签，情绪压力是否始终维持同一低音量；若造成可举证的阅读损害，可要求主创修订心理、叙述距离和场景渲染。不要以修辞数量、心理段落数量或字数密度作门禁。若启用一级角色素材，对白、动作本身确实不足时，应指出需要原角色续演，不能要求主创代写。
 
 ## SceneBrief
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
@@ -358,15 +372,21 @@ def render_scene_revision_prompt(
     allowed_refs: Any = (),
     style_reference_block: str = "",
     expression_context_block: str = "",
+    performance_material_block: str = "",
 ) -> str:
     recipe = lean_scene_prompt_recipe("revise")
     instructions = list(review.revision_instructions) if review is not None else []
     reference_contract = _reference_contract(brief, allowed_refs)
+    material_section = (
+        f"## Original First-Level Character And Environment Materials\n{performance_material_block}\n\n"
+        if performance_material_block else ""
+    )
     prompt = f"""# Scene Revision
 
 你是本场景原主创。只修复列出的硬失败或文学问题，保留有效情节、人物声音和已有细节。SceneBrief.canon_constraints 与 Relevant Sources 中的最新用户方向仍是硬约束；每轮返修都必须重新核对既定人名、人物白名单、日期、年份、绝对数值、差值与时间间隔，不得在修复一个问题时重新引入已消失的冲突，也不得用 new_asset_candidates 绕过禁止新增专名的方向。
 不得用另一种模板化转折替换问题表达。修改后的正文仍须满足同一 SceneBrief，并重新提取实际 SceneDelta。
 修订长句、逗号或标点问题时应重组句内层级，不能把原句机械拆成一串结构相同的短句；句群长度随动作、观察与压力变化，并保护原有的长短句落差。修订对白时保留人物各自的词域、句形、礼貌边界、幽默方式、回避和争取策略；不要把所有台词统一磨成平直短句，也不要凭空加口头禅。若原文已由动作、意象、对白、沉默或物证传意，删除随后重复解释其含义的段尾、场尾句，不用另一条金句替换。
+若审查指出文风或情节损害，主创可以重新选择叙述距离、心理层次、环境停留、句群节奏与已有场景材料的交错顺序，使情绪有蓄积和转折；不要把修订理解为只改错字或增加几句解释。惜字造成的空白与重复灌水都不是目标。启用一级角色素材时，外显台词和动作仍只来自原角色 entries；主创可改写当前视角中的心理体验，但不能代角色补说、补做。若情节修复确实需要新增角色言行，放入 escalation_reasons 明确请求原角色续演，不用正文越权填补。
 直接返回与 Scene Create 完全相同的 JSON 对象，不要 Markdown、工作流说明、路径或哈希。
 
 ## SceneBrief
@@ -389,6 +409,8 @@ def render_scene_revision_prompt(
 
 ## Relevant Sources
 {source_evidence or "无额外资料。"}\n\n## Style Reference Priority\n{style_reference_block or "保留候选中有效的语言运动；若资料中有文风参考，只借用表达机制，不搬运原句。"}
+
+{material_section}
 
 ## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
@@ -413,48 +435,6 @@ prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范
     return prompt
 
 
-def creative_result_from_payload(payload: dict[str, Any]) -> CreativeResult:
-    _reject_machine_fields(payload)
-    prose = str(payload.get("prose") or "").strip()
-    summary = str(payload.get("decision_summary") or "").strip()
-    if not prose or not summary:
-        raise ValueError("Pi scene result requires prose and decision_summary")
-    delta = payload.get("scene_delta")
-    values = delta if isinstance(delta, dict) else {}
-    return CreativeResult(
-        prose=prose,
-        decision_summary=summary,
-        scene_delta=SceneDelta(
-            character_changes=_proposals(values.get("character_changes")),
-            canon_candidates=_proposals(values.get("canon_candidates")),
-            continuity_changes=_proposals(values.get("continuity_changes")),
-            promise_updates=_proposals(values.get("promise_updates")),
-            reader_question_updates=_proposals(values.get("reader_question_updates")),
-            next_handoff=_strings(values.get("next_handoff")),
-            new_asset_candidates=_proposals(
-                values.get("new_asset_candidates"),
-                default_operation="create",
-            ),
-        ),
-        decision_trace=_strings(payload.get("decision_trace")),
-        escalation_reasons=_strings(payload.get("escalation_reasons")),
-    )
-
-
-def review_result_from_payload(payload: dict[str, Any]) -> ReviewResult:
-    _reject_machine_fields(payload)
-    try:
-        decision = ReviewDecision(str(payload.get("decision") or "").strip().lower())
-    except ValueError as exc:
-        raise ValueError("Pi scene review decision must be pass, revise, or escalate") from exc
-    return ReviewResult(
-        decision=decision,
-        summary=str(payload.get("summary") or "").strip(),
-        revision_instructions=_strings(payload.get("revision_instructions")),
-        evidence=_strings(payload.get("evidence")),
-    )
-
-
 def _reference_contract(brief: SceneBrief, allowed_refs: Any) -> list[str]:
     supplied = {str(item).strip() for item in allowed_refs if str(item).strip()}
     if not supplied:
@@ -463,6 +443,12 @@ def _reference_contract(brief: SceneBrief, allowed_refs: Any) -> list[str]:
         supplied.update(brief.chapter_obligations)
         supplied.update(brief.participants)
     return sorted(item for item in supplied if item)
+
+
+def _scene_performance_enabled(config: dict[str, Any]) -> bool:
+    application = config.get("application")
+    settings = application.get("scene_performance_agents") if isinstance(application, dict) else None
+    return isinstance(settings, dict) and settings.get("enabled") is True
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:

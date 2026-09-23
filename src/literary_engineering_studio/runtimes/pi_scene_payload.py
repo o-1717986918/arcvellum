@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from literary_engineering_studio_engine.public.literary import ChangeProposal
+from literary_engineering_studio_engine.public.literary import (
+    ChangeProposal, CreativeResult, ReviewDecision, ReviewResult, SceneDelta,
+)
 
 _MACHINE_FIELDS = frozenset({
     "task_id", "transaction_id", "project_root", "expected_outputs", "completion_marker", "sha256",
@@ -96,4 +98,45 @@ def _answer_payload(answer: str) -> dict[str, Any]:
     return value
 
 
-__all__ = ["_answer_payload", "_proposals", "_reject_machine_fields", "_strings"]
+def creative_result_from_payload(payload: dict[str, Any]) -> CreativeResult:
+    _reject_machine_fields(payload)
+    prose = str(payload.get("prose") or "").strip()
+    summary = str(payload.get("decision_summary") or "").strip()
+    if not prose or not summary:
+        raise ValueError("Pi scene result requires prose and decision_summary")
+    delta = payload.get("scene_delta")
+    values = delta if isinstance(delta, dict) else {}
+    return CreativeResult(
+        prose=prose,
+        decision_summary=summary,
+        scene_delta=SceneDelta(
+            character_changes=_proposals(values.get("character_changes")),
+            canon_candidates=_proposals(values.get("canon_candidates")),
+            continuity_changes=_proposals(values.get("continuity_changes")),
+            promise_updates=_proposals(values.get("promise_updates")),
+            reader_question_updates=_proposals(values.get("reader_question_updates")),
+            next_handoff=_strings(values.get("next_handoff")),
+            new_asset_candidates=_proposals(
+                values.get("new_asset_candidates"), default_operation="create",
+            ),
+        ),
+        decision_trace=_strings(payload.get("decision_trace")),
+        escalation_reasons=_strings(payload.get("escalation_reasons")),
+    )
+
+
+def review_result_from_payload(payload: dict[str, Any]) -> ReviewResult:
+    _reject_machine_fields(payload)
+    try:
+        decision = ReviewDecision(str(payload.get("decision") or "").strip().lower())
+    except ValueError as exc:
+        raise ValueError("Pi scene review decision must be pass, revise, or escalate") from exc
+    return ReviewResult(
+        decision=decision,
+        summary=str(payload.get("summary") or "").strip(),
+        revision_instructions=_strings(payload.get("revision_instructions")),
+        evidence=_strings(payload.get("evidence")),
+    )
+
+
+__all__ = ["_answer_payload", "creative_result_from_payload", "review_result_from_payload"]
