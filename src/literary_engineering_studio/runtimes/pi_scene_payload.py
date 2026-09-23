@@ -7,6 +7,16 @@ from typing import Any
 
 from literary_engineering_studio_engine.public.literary import ChangeProposal
 
+_MACHINE_FIELDS = frozenset({
+    "task_id", "transaction_id", "project_root", "expected_outputs", "completion_marker", "sha256",
+})
+
+
+def _reject_machine_fields(payload: dict[str, Any]) -> None:
+    unexpected = sorted(_MACHINE_FIELDS.intersection(payload))
+    if unexpected:
+        raise ValueError("Pi response contains Studio-owned fields: " + ", ".join(unexpected))
+
 
 def _proposals(value: Any, *, default_operation: str = "update") -> tuple[ChangeProposal, ...]:
     if not isinstance(value, list):
@@ -86,4 +96,4 @@ def _answer_payload(answer: str) -> dict[str, Any]:
     return value
 
 
-__all__ = ["_answer_payload", "_proposals", "_strings"]
+__all__ = ["_answer_payload", "_proposals", "_reject_machine_fields", "_strings"]

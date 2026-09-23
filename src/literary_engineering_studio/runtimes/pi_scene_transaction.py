@@ -26,11 +26,10 @@ from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from ..runtime.role_conversation import RoleConversationGateway
 from ..infrastructure.project_scene_transactions import known_scene_refs
 from .scene_length_completion import complete_first_draft_length
-from .pi_scene_payload import _answer_payload, _proposals, _strings
+from .pi_scene_payload import _answer_payload, _proposals, _reject_machine_fields, _strings
 from .pi_scene_style_history import projection_digest as _projection_digest, recent_lean_reference_ids, scene_reference_context
-_MACHINE_FIELDS = frozenset({
-    "task_id", "transaction_id", "project_root", "expected_outputs", "completion_marker", "sha256",
-})
+from .scene_performance import scene_creative_cache_digest, scene_performance_materials
+from .scene_source_evidence import scene_source_evidence
 _QUANTITATIVE_DETAIL_RULE = "新增精确数字默认不用，但先分清语义：“一个又一个”“一次次”等虚指反复并非精确计数，不按数值规则退回。真正精确值若承担当场问答、人物选择或谈判、身份与债务或证据辨认、因果、连续性、后文核验中的一项实际功能，可保留；不要求五项同时成立，也不强求当场有效的信息日后再次兑现。来源已确定的日期、金额、数量和差值必须准确，不能为去数字而改事实。仪表读数、倒计时、尺寸、次数和量词计件没有题材豁免；“一张桌、两把椅子、拧两下、看几秒”若只为显得具体，删去精度不损失对话信息、人物反应或因果，就属于无关实写，应逐句改为状态、动作或后果。不得批量删数字或机械换成模糊量词；也不得按数词出现本身、数字密度或统一清单裁决。若旧文风预设仍写着“数词必须五项全满足”，本段语义分类优先；样例中的数字不自动豁免。"
 
 @dataclass(frozen=True)
@@ -71,7 +70,10 @@ class PiSceneTransactionRuntime:
         selection = self._style_projection(brief, transaction_id)
         expression = self._expression_projection(brief)
         projection_digest = _projection_digest(selection, expression)
-        cache = self._cache_path(transaction_id, f"creative_result_{projection_digest}.json")
+        initial_sources = self._source_evidence(brief, purpose="create")
+        style_reference = render_style_reference_selection(selection)
+        creative_digest = scene_creative_cache_digest(projection_digest, brief.to_dict(), initial_sources, self._config)
+        cache = self._cache_path(transaction_id, f"creative_result_{creative_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
@@ -90,12 +92,24 @@ class PiSceneTransactionRuntime:
                 "voice_digest": hashlib.sha256(json.dumps(expression.get("dialogue_intents"), ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
                 "message": "本场文风参考与表达策略已确定。",
             })
+        materials = scene_performance_materials(
+            brief=brief.to_dict(),
+            expression=expression,
+            sources=initial_sources,
+            style_reference=style_reference,
+            cache_root=cache.parent,
+            config=self._config,
+            invoke=lambda prompt, role: self._run(prompt, role=role, transaction_id=transaction_id),
+            emit=(lambda event, data: self._event_sink(event, {**data, "scene_transaction_id": transaction_id}))
+            if self._event_sink is not None else None,
+        )
         prompt = render_scene_create_prompt(
             brief,
-            source_evidence=self._source_evidence(brief, purpose="create"),
+            source_evidence=self._source_evidence(brief, purpose="create", reserve_chars=len(materials)),
             allowed_refs=known_scene_refs(brief),
-            style_reference_block=render_style_reference_selection(selection),
+            style_reference_block=style_reference,
             expression_context_block=json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
+            performance_material_block=materials,
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         result = creative_result_from_payload(_answer_payload(answer))
@@ -218,26 +232,12 @@ class PiSceneTransactionRuntime:
     def _expression_projection(self, brief: SceneBrief) -> dict[str, Any]:
         return project_brief_expression_context(self._project_root, brief.to_dict())
 
-    def _source_evidence(self, brief: SceneBrief, *, purpose: str) -> str:
-        recipe = lean_scene_prompt_recipe(purpose)
-        remaining = max(0, recipe.soft_character_limit - 8_000)
-        blocks: list[str] = []
+    def _source_evidence(self, brief: SceneBrief, *, purpose: str, reserve_chars: int = 0) -> str:
         indexed_style = self._style_projection(brief).get("status") in {"selected", "no-scene-match"}
-        for reference in brief.source_refs:
-            if indexed_style and Path(reference).name == "style-profile.md":
-                continue
-            path = (self._project_root / Path(reference)).resolve()
-            if not path.is_relative_to(self._project_root) or not path.is_file():
-                continue
-            body = path.read_text(encoding="utf-8", errors="replace").strip()
-            if not body:
-                continue
-            excerpt = body[:remaining]
-            blocks.append(f"### {reference}\n{excerpt}")
-            remaining -= len(excerpt)
-            if remaining <= 0:
-                break
-        return "\n\n".join(blocks)
+        return scene_source_evidence(
+            self._project_root, brief, purpose=purpose,
+            indexed_style=indexed_style, reserve_chars=reserve_chars,
+        )
 
 
 def render_scene_create_prompt(
@@ -247,9 +247,19 @@ def render_scene_create_prompt(
     allowed_refs: Any = (),
     style_reference_block: str = "",
     expression_context_block: str = "",
+    performance_material_block: str = "",
 ) -> str:
     recipe = lean_scene_prompt_recipe("create")
     reference_contract = _reference_contract(brief, allowed_refs)
+    material_section = (
+        f"## Character And Environment Candidate Materials\n{performance_material_block}\n\n"
+        if performance_material_block else ""
+    )
+    material_final_pass = (
+        "角色台词可吸收其言语行为与个性，不必整句照搬；环境段只借用感知角度与句法运动，不逐句移植。"
+        "逐项核对候选里的物件、技术结论和精确数值，来源未确认且无必要的不用。候选的后台解释绝不进入正文。"
+        if performance_material_block else ""
+    )
     prompt = f"""# Scene Create
 
 你是本章唯一的主创。SceneBrief.canon_constraints 与 Relevant Sources 中的最新用户方向是本场硬约束；依据它们写当前场景的完整小说正文，并逐字沿用其中已确定的人名、日期、年份、数量和时间差。保留差值不代表可以改动构成差值的绝对值，同一对象或事件已有精确测量时不得另造替代数值；人物白名单或禁止新专名等限制同样不得用登记 new_asset_candidates 绕过。再提取正文实际造成的语义变化。
@@ -264,7 +274,7 @@ def render_scene_create_prompt(
 ## Relevant Sources
 {source_evidence or "无额外资料；严格使用 SceneBrief。"}\n\n## Style Reference Priority\n{style_reference_block or "若资料中有文风参考，借用与本场相关的表达机制，不复制原句、专名或连续措辞；Canon、人物和用户方向优先。"}
 
-## Allowed Existing Refs
+{material_section}## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
 
 ## Length Contract
@@ -278,13 +288,14 @@ prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范
 既有对象变化项使用 {{"target_ref":"Allowed Existing Refs 中的精确字符串","summary":"变化","evidence":"正文证据","operation":"update","attributes":{{}}}}。
 character_changes、canon_candidates、continuity_changes、promise_updates、reader_question_updates 的 target_ref 只能逐字选自 Allowed Existing Refs，禁止自造同义 ID。
 若不能确定精确 ref，就不要填写该组；不要为了让变化看起来完整而创造 target_ref。
+上一场文件只是来源，不能把未列入 Allowed Existing Refs 的 `scenes/上一场.yaml` 自造为 continuity_changes 目标；承接结果可写进 next_handoff。
 正文出现的新人物、新地点、新组织或尚无精确引用的新事实，只能放入 new_asset_candidates，operation 使用 create；不得塞进既有对象变化组。
 若正文给“幸存者”“旧搭档”等角色占位符新增专名、亲属关系或可持续身份，也必须在 new_asset_candidates 登记该身份。仅沿用 SceneBrief 中的通用角色称谓不算新增身份。
 空组必须返回 []，禁止用空对象占位。next_handoff 只能是字符串数组，不得返回对象。
 只提出正文确实发生的变化；无法确认的内容放进 escalation_reasons。
 若 SceneBrief.risk.level 为 high，decision_trace 必须用少量条目记录关键创作取舍。
 
-## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认所选样例至少两项可观察技法已在 prose 中实际体现，并删去动作、意象、对白或物证后面重复解释其含义的尾句；随后对阿拉伯数字、中文数词、序数和量化单位完成最后一遍语义重写。{_QUANTITATIVE_DETAIL_RULE}
+## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认所选样例至少两项可观察技法已在 prose 中实际体现，并删去动作、意象、对白或物证后面重复解释其含义的尾句；随后对阿拉伯数字、中文数词、序数和量化单位完成最后一遍语义重写。{material_final_pass}{_QUANTITATIVE_DETAIL_RULE}
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene create prompt exceeds hard character limit")
@@ -388,6 +399,7 @@ prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范
 
 修订 SceneDelta 时删除无效条目，不得保留空对象或把字段改成空字符串来占位。
 既有变化组的 target_ref 只能逐字选自 Allowed Existing Refs；找不到精确既有引用的新事实改放 new_asset_candidates，operation 使用 create。
+不要为本场承接另造 `scenes/上一场.yaml` 之类目标；若该路径不在 Allowed Existing Refs，删除那条 continuity_changes，把有效后果放在 next_handoff。
 角色占位符在正文中获得新专名、亲属关系或可持续身份时，须补入 new_asset_candidates；通用角色称谓和普通设备名不登记。
 空组返回 []。next_handoff 只能是字符串数组。
 若 SceneBrief.risk.level 为 high，decision_trace 必须保留关键创作取舍，不得清空。
@@ -449,12 +461,6 @@ def _reference_contract(brief: SceneBrief, allowed_refs: Any) -> list[str]:
         supplied.update(brief.chapter_obligations)
         supplied.update(brief.participants)
     return sorted(item for item in supplied if item)
-
-
-def _reject_machine_fields(payload: dict[str, Any]) -> None:
-    unexpected = sorted(_MACHINE_FIELDS.intersection(payload))
-    if unexpected:
-        raise ValueError("Pi response contains Studio-owned fields: " + ", ".join(unexpected))
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
