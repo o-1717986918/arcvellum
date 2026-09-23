@@ -95,9 +95,51 @@ module_change_packet:
   documentation: ["本文件"]
 ```
 
-## 分阶段验收
+### v6 真实试跑反证与 v7 减法
 
-第一阶段：把导演生成的角色、环境任务落地，原四节拍保持兼容；对同题场景做 A/B 提示检查与原始候选保存。第二阶段：扩展交互槽位和一角色一轮整场表演，增加主创来源收据及缺口补演，不再允许直接自造角色发言/行为。第三阶段：至少三类不同场景、两种语言风格、多名人物做盲辨人物、环境辨识度、事实错误、AI 套语/解释尾句、调用数与耗时对比；逐处看主创是否保留或抹平演员声音。只有覆盖审计和阅读证据都成立，才考虑默认开启；否则保持 opt-in 并继续修正。环境与人物改进应在生成阶段落实，违禁词、标点和硬事实审查继续存在，但不把抽象“去 AI 味”加成词表门禁。
+2026-09-24 在同一《shoreline》第二场、同一 DeepSeek 模型上完成 v6 一级候选链（忽略目录 `build/scene-performance-e2e/v6-live/`，未写正式正文）。导演选出了歌名、被删名字、要求者身份、到场先后四个留白；两名角色分别交付 4、11 条言行，歌名和人名没有被编造。但台词仍主要在窗口／稿面流程中回旋；沈照月补出碗、筷筒、杯子和“登记满三十天”的旧物，周鹤补出潮湿天气、节目单中间节目的具体次序、手套与表。特别是“物主留空只能暂存”已在 SceneBrief，角色仍说成“登记满三十天没人认领”：长篇事实提示没有转化为可靠约束。环境写手自造收音机、价目表、灯泡、路上的纸角等；价目表上“包”“粥”两个**非对白引号**被当前解析器误判为对白，导致整份环境候选跳过。
+
+这次反证不支持“再给导演增加更多未定槽位”作为文风主路线。留白可保留为少量关键事实的提醒，但角色的私人压力、关系误判和环境感知焦点已在资产／SceneBrief／来源中，导演再次转写它们会重复放大程序性语言，还会让未经证实的“同桌或邻座”等安排获得任务单权威。v7 先作减法：导演只给情境锚点和少量事实留白；每名演员从自己的档案、眼前情境、已知/误知中选择语言和行为；环境写手自行决定是否观察与何时写。不得把“鼓励自主”理解为角色有权制造新证据，也不把未经证实的普通质感逐项列成禁令。环境解析器只拒真正的对白形式，容纳标牌文字等带引号的环境描写。必须对比同题真实输出及来源错误，不能因候选数增加就宣称成功。
+
+v7 同题复跑（忽略目录 `build/scene-performance-e2e/v7-live/`）也**未达标**。导演把带袋子赴会、带走“签名栏空白”等无来源安排写成情境锚点；两名角色分别交付 9、7 条，但一个凭空拿出登记簿，另一个凭空拿出旧节目单，互相预想对方的道具和台词，仍满是窗口／稿面流程。环境候选四段虽不再被标牌引号误杀，却堆出雨棚、修车铺、风铃、挂钟快“七八分钟”等与情节无关的实写。**减任务字段消除了部分导演占有，但没给角色真实的对手反馈；独立整场预演会迫使每人猜另一个人做了什么。** v7 仅保留 opt-in 实验，不作文风改善结论。下一步以角色接力为主要对照，让角色看见对方已实际说出的公共行为，再自主反应；主创只在检查既定情节缺口时决定是否继续接力或换外部局面，不替角色写标准台词。若仍程序化，要回到人物资产本身检查是否把职业话术重复写成了唯一语言资源。
+
+新检索只能作为机制线索，不是本项目效果保证：[《Multi-Agent Based Character Simulation for Story Writing》](https://aclanthology.org/2025.in2writing-1.9/)明确区分按时间顺序由人物模拟戏剧过程、以及之后的叙述改写；[StoryBox](https://ojs.aaai.org/index.php/AAAI/article/view/40288)用动态环境中的角色互动产生事件，而非单向填细脚本。[IBSEN](https://aclanthology.org/2024.acl-long.88/)的角色保留对话日志并根据真实历史回应，但它的导演还生成细对话脚本；本项目只借鉴实际互动与剧情目标检查，不照搬其逐轮台词指令。上述论文研究设置不同，必须用本项目同题实验验证。
+
+```yaml
+module_change_packet:
+  objective: "减少导演重复规定角色心理和环境焦点，修复环境标牌引号误判"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "parse_performance_plan、render_actor_scene_prompt、render_environment_prompt、parse_environment_material"
+  variation_point: "scene-performance/v7 的 beats + unknown_slots；角色/环境自主选择微观表达"
+  inputs: ["SceneBrief", "已有人物投影", "确认来源", "导演情境锚点"]
+  outputs: ["不带 actor_tasks/environment_task 的计划", "一级角色/环境提示", "环境非对白引号合法"]
+  invariants: ["剧情和 Canon 边界不变", "每位角色一级生成自己的言行", "不增文学硬门禁", "默认路径不变"]
+  allowed_dependencies: ["现有 Engine 纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["导演不能暗置角色任务", "角色/环境保有留白", "真正对白仍拒绝、标牌引号接受"]
+  rollback_unit: "v7 opt-in 合同与 adapter 联动提交，可整体回滚"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "运行层把 v7 情境与事实底线交给全部一级创作 Agent，不再转递导演的心理任务"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "scene_performance_materials"
+  variation_point: "opt-in 调用与缓存版本"
+  inputs: ["Engine v7 plan", "SceneBrief", "角色声音投影"]
+  outputs: ["每角色整场候选与独立环境候选"]
+  invariants: ["全部在场人物均获一级调用", "主创不补造角色言行", "默认关闭", "缓存不复用旧合同"]
+  allowed_dependencies: ["Engine public/literary.py", "现有 RoleConversationGateway"]
+  forbidden_dependencies: ["Engine 内部 import", "新的项目写回路径"]
+  tests: ["运行层无导演心理任务", "同一留白到达角色与环境", "同题真实模型对照"]
+  rollback_unit: "v7 opt-in 合同与 adapter 联动提交，可整体回滚"
+  documentation: ["本文件"]
+```
+
+## 分阶段验收（早期路径与当前修正）
+
+早期第一阶段把导演生成的角色、环境任务落地；v6/v7 同题对照已证明，这一路径会占用角色自主性，现不再扩张。当前第二阶段改为角色基于真实对手言行接力、必要时由对应角色补演，并给主创增加来源收据；主创不得直接自造角色发言/行为。第三阶段至少用三类不同场景、两种语言风格、多名人物做盲辨人物、环境辨识度、事实错误、AI 套语/解释尾句、调用数与耗时对比；逐处看主创是否保留或抹平演员声音。只有覆盖审计和阅读证据都成立，才考虑默认开启；否则保持 opt-in 并继续修正。环境与人物改进应在生成阶段落实，违禁词、标点和硬事实审查继续存在，但不把抽象“去 AI 味”加成词表门禁。
 
 ## 第一阶段真实试跑与路线修正
 

@@ -30,17 +30,6 @@ def _plan() -> dict[str, object]:
         "beats": [{
             "beat_id": "b1", "event": "妹妹已经发现抽屉被打开；信在昨夜被取走",
         }],
-        "actor_tasks": [{
-            "speaker": "character/protagonist", "personal_pressure": "怕妹妹在他说完之前离开",
-            "relationship_misread": "还以为妹妹只想把信拿回去",
-        }, {
-            "speaker": "character/sister", "personal_pressure": "想听承认又怕再被骗",
-            "relationship_misread": "还不知道他为什么拿信",
-        }],
-        "environment_task": {
-            "focus_beats": ["b1"], "focal_condition": "门口与桌面都在主人公视野中",
-            "perception_boundary": "不确定门外天气",
-        },
         "unknown_slots": ["门外的具体天气尚未确认"],
     }
 
@@ -97,7 +86,7 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         prompt = render_actor_prompt(_brief().to_dict(), _plan()["beats"][0], voice)
         self.assertIn("我从第一个时刻一直活到最后一个时刻", prompt)
         self.assertIn("平时长句绕开请求", prompt)
-        self.assertIn("我的稳定说话方式", prompt)
+        self.assertIn("我平时的说话倾向", prompt)
         self.assertIn("不是要照念的台词", prompt)
         self.assertIn("first_person_action", prompt)
         self.assertIn("private_impulse", prompt)
@@ -109,48 +98,49 @@ class ScenePerformanceAgentTests(unittest.TestCase):
 
     def test_director_leaves_micro_tactics_to_character_actor(self) -> None:
         prompt = render_performance_plan_prompt(_brief().to_dict(), {}, "昨夜拿了信。")
-        self.assertIn("导演没有替我", render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {}, _plan()["actor_tasks"][0]))
+        self.assertIn("导演没有替我", render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {"speaker": "character/protagonist"}))
         self.assertIn("不要指定谁说话、说什么", prompt)
         self.assertIn("角色可以自行选择", prompt)
         self.assertNotIn("response_boundary", prompt)
         self.assertNotIn("speech_act", prompt)
         self.assertNotIn("voice_turn", prompt)
+        self.assertIn("不要二次改写成 actor_tasks 或 environment_task", prompt)
 
     def test_actor_scene_prompt_keeps_one_identity_across_beats(self) -> None:
         beats = [_plan()["beats"][0], {**_plan()["beats"][0], "beat_id": "b2", "event": "妹妹走到门边"}]
-        prompt = render_actor_scene_prompt(_brief().to_dict(), beats, {"stable_voice": {"vocabulary": "总用家里的旧称呼", "rhythm": "越急越绕"}}, _plan()["actor_tasks"][0])
+        prompt = render_actor_scene_prompt(_brief().to_dict(), beats, {"speaker": "character/protagonist", "stable_voice": {"vocabulary": "总用家里的旧称呼", "rhythm": "越急越绕"}})
         self.assertIn("我从第一个时刻一直活到最后一个时刻", prompt)
         self.assertIn("不必每拍制造手势或职业解释", prompt)
         self.assertIn("越急越绕", prompt)
         self.assertIn('"beat_id": "b2"', prompt)
         self.assertIn("同一锚点可有多项", prompt)
-        self.assertIn("怕妹妹在他说完之前离开", prompt)
-        self.assertIn("还以为妹妹只想把信拿回去", prompt)
+        self.assertIn("此刻可偏离", prompt)
+        self.assertNotIn("personal_pressure", prompt)
 
     def test_environment_prompt_uses_scene_facts_without_prescribing_style(self) -> None:
-        prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "参考语言起伏", "信在桌上", _plan()["environment_task"], _plan()["unknown_slots"])
+        prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "参考语言起伏", "信在桌上", _plan()["unknown_slots"])
         self.assertIn("主创只给你视角与事实边界", prompt)
-        self.assertIn("门口与桌面都在主人公视野中", prompt)
-        self.assertIn("不确定门外天气", prompt)
+        self.assertIn("自行挑真正需要环境语言的位置", prompt)
+        self.assertNotIn("Main Creator's Scene-Specific Perception Boundary", prompt)
         self.assertIn("门外的具体天气尚未确认", prompt)
         self.assertIn("普通、不承担证据作用的感官质感仍由你自由选择", prompt)
         self.assertIn("长短由场景决定", prompt)
         self.assertNotIn("150—300", prompt)
 
-    def test_plan_requires_director_owned_tasks(self) -> None:
+    def test_plan_rejects_director_owned_micro_tasks(self) -> None:
         plan = _plan()
-        del plan["actor_tasks"]
-        with self.assertRaisesRegex(ValueError, "actor_tasks"):
+        plan["actor_tasks"] = [{"speaker": "character/protagonist"}]
+        with self.assertRaisesRegex(ValueError, "must not assign"):
             parse_performance_plan(plan, _brief().to_dict())
         plan = _plan()
-        plan["environment_task"]["focus_beats"] = ["b9"]
-        with self.assertRaisesRegex(ValueError, "focus_beats"):
+        plan["environment_task"] = {"focus_beats": ["b1"]}
+        with self.assertRaisesRegex(ValueError, "must not assign"):
             parse_performance_plan(plan, _brief().to_dict())
 
     def test_unknown_slots_are_factual_gaps_not_micro_direction(self) -> None:
         plan = parse_performance_plan(_plan(), _brief().to_dict())
         self.assertEqual(plan["unknown_slots"], ["门外的具体天气尚未确认"])
-        prompt = render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {}, _plan()["actor_tasks"][0], plan["unknown_slots"])
+        prompt = render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {"speaker": "character/protagonist"}, plan["unknown_slots"])
         self.assertIn("门外的具体天气尚未确认", prompt)
         self.assertIn("即时反应由我自己决定", prompt)
         self.assertIn("unknown_slots", render_performance_plan_prompt(_brief().to_dict(), {}, ""))
@@ -204,6 +194,10 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b9", "description": "雨。"}]}, _brief().to_dict(), [beat])
         with self.assertRaisesRegex(ValueError, "contains dialogue"):
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b1", "description": "门外的雨落着。她说：“别走。”"}]}, _brief().to_dict(), [beat])
+        self.assertEqual(
+            parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b1", "description": "价目表上只剩“包”和“粥”两个字。"}]}, _brief().to_dict(), [beat])["passages"][0]["description"],
+            "价目表上只剩“包”和“粥”两个字。",
+        )
         with self.assertRaisesRegex(ValueError, "outside scene participants"):
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b1", "focal_character": "character/outsider", "description": "门外下雨。"}]}, _brief().to_dict(), [beat])
         self.assertEqual(parse_environment_material({"scene_id": "scene_0001", "passages": []}, _brief().to_dict(), [beat])["passages"], [])
@@ -222,6 +216,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             second = runtime.create_scene("performance-tx", _brief())
             roles = [role for role, _ in gateway.calls]
             self.assertEqual(roles[:5], ["worker", "character-actor", "character-actor", "environment-writer", "worker"])
+            for role, prompt in gateway.calls[1:4]:
+                self.assertIn("门外的具体天气尚未确认", prompt, role)
             self.assertIn("Character And Environment Candidate Materials", gateway.calls[4][1])
             self.assertIn("信是我拿的", gateway.calls[4][1])
             self.assertIn("门我没关", gateway.calls[4][1])

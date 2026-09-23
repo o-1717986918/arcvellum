@@ -60,11 +60,10 @@ def scene_performance_materials(
 
     environment: dict[str, Any] | None = None
     env_path = cache_root / f"performance-environment-{digest}.json"
-    environment_task = plan["environment_task"]
-    environment_beats = [beat for beat in plan["beats"] if beat["beat_id"] in environment_task["focus_beats"]]
+    environment_beats = plan["beats"]
     try:
         environment = _cached_payload(env_path, lambda: _answer_payload(invoke(
-                render_environment_prompt(brief, environment_beats, style_reference, sources, environment_task), "environment-writer",
+                render_environment_prompt(brief, environment_beats, style_reference, sources, plan["unknown_slots"]), "environment-writer",
             )), lambda payload: parse_environment_material(payload, brief, environment_beats))
         _notify(emit, "scene.performance.environment", {"passages": len(environment["passages"])})
     except (ValueError, RuntimeError, TimeoutError) as exc:
@@ -87,7 +86,6 @@ def _actor_materials(
     emit: Callable[[str, dict[str, Any]], None] | None,
 ) -> list[dict[str, Any]]:
     intents = expression.get("dialogue_intents") if isinstance(expression.get("dialogue_intents"), list) else []
-    actor_tasks = {task["speaker"]: task for task in plan["actor_tasks"]}
     beats = plan["beats"]
     beat_digest = hashlib.sha256(json.dumps(beats, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
     actors = []
@@ -96,7 +94,7 @@ def _actor_materials(
         speaker_digest = hashlib.sha256(speaker.encode()).hexdigest()[:10]
         actor_path = cache_root / f"performance-actor-{digest}-{speaker_digest}-{beat_digest}.json"
         payload = _cached_payload(actor_path, lambda voice=voice, speaker=speaker: _answer_payload(invoke(
-                render_actor_scene_prompt(brief, beats, voice, actor_tasks[speaker]), "character-actor",
+                render_actor_scene_prompt(brief, beats, {**voice, "speaker": speaker}, plan["unknown_slots"]), "character-actor",
             )), lambda payload, speaker=speaker: parse_actor_scene_material(payload, brief, beats, speaker))
         materials = parse_actor_scene_material(payload, brief, beats, speaker)
         actors.append(materials)
@@ -110,7 +108,7 @@ def scene_creative_cache_digest(
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     runners = config.get("agent_runners") if isinstance(config.get("agent_runners"), dict) else {}
     settings = application.get("scene_performance_agents", {})
-    version = "performance-v13" if isinstance(settings, dict) and settings.get("enabled") is True else "performance-v9"
+    version = "performance-v15" if isinstance(settings, dict) and settings.get("enabled") is True else "performance-v9"
     payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
@@ -129,7 +127,7 @@ def _policy(config: dict[str, Any]) -> dict[str, Any]:
 
 def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, style: str, config: dict[str, Any]) -> str:
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
-    payload = ["performance-v12", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
+    payload = ["performance-v14", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
