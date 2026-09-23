@@ -2,6 +2,30 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.99.10] - 2026-09-23
+
+### Added
+
+- Added user-adjustable, independently persisted reasoning levels for the top-level Project Agent and creative Agent.
+- Added a Project Agent action that can replace only the uncommitted scene suffix from an approved event plan while preserving committed prose and the total character target.
+- Expanded lean character initialization with causal background stories, appearance and clothing, BDI, psychological boundaries, relationships, and character-specific speech profiles.
+
+### Changed
+
+- Reworked prose generation guidance around scene-shaped language contours, varied sentence groups, rhetorical pressure, distinctive dialogue, reference-corpus technique transfer, and stopping after sufficient narrative evidence.
+- Made long-form planning event-first: chapter turns and irreversible state changes now drive scene allocation, while character counts control expansion depth instead of manufacturing plot slots.
+- Let first-pass creative generation finish recoverable length shortfalls inside the creative phase; word count remains a capacity target rather than a new literary gate.
+- Removed fixed Project Agent call ceilings, lowered its default reasoning by one level, and raised creative reasoning by one level while keeping both settings user-controlled.
+
+### Fixed
+
+- Accepted structured world rules, split oversized asset initialization into bounded per-character batches, and added one structural repair attempt without leaving partial assets.
+- Prevented rolling chapter planning from replaying events already used elsewhere in the book and rebuilt stale blocked scene transactions from current sources.
+- Corrected the Project Agent message for oversized read results so a transport truncation is no longer reported as exhausted tool quota.
+- Preserved user rhythm overrides during profile-only updates and invalidated stale chapter checkpoints after later scenes are appended.
+
+[0.99.10]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.10
+
 ## [0.98.0] - 2026-08-14
 
 ### Added

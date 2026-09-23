@@ -11,7 +11,7 @@ import { runWorker } from "./worker.ts";
 import { runConversation } from "./conversation.ts";
 import { runProjectAgentProcess } from "./project-agent.ts";
 
-const VERSION = "0.99.9";
+const VERSION = "0.99.10";
 const DEFAULT_STATES = ["asset-creation-agent-task", "canon-review-agent-task", "candidate-review"];
 
 async function main(): Promise<number> {

@@ -1411,7 +1411,7 @@
   },
   "info": {
     "title": "ArcVellum",
-    "version": "0.99.9"
+    "version": "0.99.10"
   },
   "openapi": "3.1.0",
   "paths": {
