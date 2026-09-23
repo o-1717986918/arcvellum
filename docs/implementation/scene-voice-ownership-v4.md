@@ -578,3 +578,61 @@ module_change_packet:
   rollback_unit: "独立 Studio adapter 提交"
   documentation: ["本文件"]
 ```
+
+## 2026-09-24：重复防御话术与戏剧终点的角色自主性
+
+共享戏剧方向后的真实试跑，沈照月终于问到节目顺序，周鹤说了轻音乐，却仍把“记不清”重新导回时长、稿面、日志；十回合上限触发，四个结果没有一个被可靠核为已完成。随后的隔离对照 `build/scene-performance-e2e/role_breakthrough_probe.py` 固定同一 t1–t10 公共日志，只改变周鹤下一回合的附加提示：默认版继续说“得看监听记录上的签名”；追加“别把同一职业辩解换说法，自己找人物逻辑内的松动处”后，他开始纠正节目顺序，并自己提到中间忘了一首歌。一个随机样本不能证明整体风格过关，但这比继续增加身份、职业词汇或导演台词更有针对性：明确固定剧情终点需要人物自己寻找因果路径，允许抵抗而不允许原地重播。
+
+完整复跑表明固定十二轮仍偏早：第三回合周鹤补提漏掉的歌，核对将该结果判 `fulfilled`；第十一回合他开始承认稿件被改，第十二回合沈照月追问递稿人，场景停在此处。隔离的第十三回合让周鹤至少说出“递稿走的是站里的手”“改动不是我提的”，但仍未明确“点名内容被要求删去”。回合边界应受现有二十四条公共证据容量和素材总预算限制，而不把四结果硬算成十二次调用。仍有有限上限；超过或材料过大明确失败，不把接近目标当完成。测试场景对歌曲内容未提供确切来源，主创后续须解决物料充分性，不能编造歌名后宣称 Canon。
+
+```yaml
+module_change_packet:
+  objective: "使一级角色用自身逻辑寻找既定场景终点，停止重复相同防御话术"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "render_relay_context 的尚未发生场景边界说明"
+  variation_point: "仅自然互动后的缺口提示；初始开放回合不变"
+  inputs: ["已发生公共互动", "SceneBrief 来源锁定的结果"]
+  outputs: ["允许拖延但不鼓励无限同义回避的角色扮演提示"]
+  invariants: ["不指定台词动作", "不制造证据或 Canon", "人物可自主选择松动条件"]
+  allowed_dependencies: ["现有 Engine 纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK"]
+  tests: ["提示词合同", "同题角色 A/B", "完整接力复跑"]
+  rollback_unit: "独立 Engine 提示提交"
+  documentation: ["本文件"]
+```
+
+## 2026-09-24：省字倾向的上游节奏合同
+
+除角色素材压缩外，项目模板 `scene.yaml` 还预填 `reflection_ratio: low`、`description_ratio: low`，并要求“每段至少承担行动推进、信息改变、关系压力、选择代价或场景衔接之一”；规划默认和物化模板也把心理比例预设为低。这与用户希望在心理、环境和对白里充分渲染情绪直接抵触。它们不是文字 lint，却会以 SceneBrief/Relevant Sources 的上游软合同身份压住主创提示。新模板和缺省值改为心理与环境的可变中性起点（`medium`），将“每段都须有情节功能”改成“整场须有变化，局部允许视角内停留”。保留现有项目里用户自己明确写的节奏选择，不把 `medium` 当固定配额；旧项目既有场景仍可按用户方向或主创修订，而不批量篡改。
+
+```yaml
+module_change_packet:
+  objective: "移除新场景模板对心理与环境的默认压缩倾向"
+  primary_module: "Engine literary/planning narrative rhythm"
+  public_entry: "DEFAULT_RHYTHM、scene.yaml 模板与物化渲染"
+  variation_point: "只改缺省软引导；显式项目节奏和 Canon 不变"
+  inputs: ["新建场景", "缺省叙事节奏合同"]
+  outputs: ["允许局部情绪与环境停留的场景节奏"]
+  invariants: ["不设置心理/环境硬配额", "不改既有项目资产", "不加静态审美门禁"]
+  allowed_dependencies: ["现有 Engine 规划合同与模板"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目文件写入"]
+  tests: ["默认合同", "模板字段", "显式用户选择优先", "架构/全量回归"]
+  rollback_unit: "独立 Engine 规划提交"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "让接力按真实证据容量而非固定回合数终止，给形成方向变化的互动继续发展的机会"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "mode=relay 的轮次边界"
+  variation_point: "最多二十四回合且二十四条公共证据；每回合条目数随剩余容量收窄"
+  inputs: ["参与者数", "场景结果数", "真实角色条目"]
+  outputs: ["未完成结果的有限续演机会"]
+  invariants: ["不超过二十四条公共日志", "未完成或素材超预算不交正文", "默认 batch 不变"]
+  allowed_dependencies: ["现有 Engine 接力合同"]
+  forbidden_dependencies: ["新增审美门禁", "无限轮次"]
+  tests: ["剩余条目容量", "未完成仍失败", "真实同题复跑"]
+  rollback_unit: "独立 Studio 编排提交"
+  documentation: ["本文件"]
+```
