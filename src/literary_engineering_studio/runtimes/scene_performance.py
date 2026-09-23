@@ -134,14 +134,14 @@ def _relay_materials(
         _relay_actor_turn(brief, plan, voices, knowledge, speaker, None, turn,
                           actor_entries, public_log, cache_root, digest, invoke, emit)
     check = _relay_check(plan, actor_entries, cache_root, digest, invoke, emit)
-    limit = min(12, len(participants) + 2 * len(plan["milestones"]))
-    while _first_unmet(plan, check) is not None and turn < limit:
+    limit = _relay_turn_limit(len(participants), len(plan["milestones"]))
+    while _first_unmet(plan, check) is not None and turn < limit and len(actor_entries) < 24:
         milestone = _first_unmet(plan, check)
         speaker = milestone["speaker"]
         turn += 1
         _relay_actor_turn(brief, plan, voices, knowledge, speaker, milestone["source_quote"], turn,
                           actor_entries, public_log, cache_root, digest, invoke, emit)
-        if len(participants) > 1 and turn < limit:
+        if len(participants) > 1 and turn < limit and len(actor_entries) < 24:
             counterpart = participants[(participants.index(speaker) + 1) % len(participants)]
             turn += 1
             _relay_actor_turn(brief, plan, voices, knowledge, counterpart, milestone["source_quote"], turn,
@@ -161,15 +161,16 @@ def _relay_actor_turn(
 ) -> None:
     beat = {"beat_id": f"b{turn}", "event": "当前互动继续；只有公共日志里的言行已经发生。"}
     voice = next((item for item in voices if _matches_voice(item, speaker)), {})
+    entry_capacity = min(2, 24 - len(actor_entries))
     prompt = render_actor_scene_prompt(
         brief, [beat], {**voice, "speaker": speaker}, plan["unknown_slots"],
         public_log=public_log, pending_outcome=outcome,
-        knowledge_quotes=knowledge[speaker], opening_situation=plan["opening_situation"], max_entries=2,
+        knowledge_quotes=knowledge[speaker], opening_situation=plan["opening_situation"], max_entries=entry_capacity,
     )
     prompt_digest = hashlib.sha256(prompt.encode()).hexdigest()[:12]
     path = cache_root / f"performance-relay-actor-{digest}-t{turn}-{prompt_digest}.json"
     material = _cached_payload(path, lambda: _answer_payload(invoke(prompt, "character-actor")),
-                               lambda payload: parse_actor_scene_material(payload, brief, [beat], speaker, max_entries=2))
+                               lambda payload: parse_actor_scene_material(payload, brief, [beat], speaker, max_entries=entry_capacity))
     for number, entry in enumerate(material["entries"], 1):
         actor_entries.append({**entry, "speaker": speaker, "entry_id": f"t{turn}:{number}"})
         public_log.append({"speaker": speaker, "spoken": entry["spoken"],
@@ -204,6 +205,10 @@ def _first_unmet(plan: dict[str, Any], check: dict[str, Any]) -> dict[str, str] 
                  if result["status"] != "fulfilled"), None)
 
 
+def _relay_turn_limit(participant_count: int, milestone_count: int) -> int:
+    return min(24, participant_count + 6 * milestone_count)
+
+
 def _relay_environment(
     brief: dict[str, Any], plan: dict[str, Any], style_reference: str, sources: str,
     public_log: list[dict[str, Any]], cache_root: Path, digest: str,
@@ -228,7 +233,7 @@ def scene_creative_cache_digest(
     raw_settings = application.get("scene_performance_agents")
     settings = raw_settings if isinstance(raw_settings, dict) else {}
     enabled = settings.get("enabled") is True
-    version = ("performance-relay-v4" if settings.get("mode") == "relay" else "performance-v17") if enabled else "performance-v9"
+    version = ("performance-relay-v6" if settings.get("mode") == "relay" else "performance-v17") if enabled else "performance-v9"
     payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
@@ -250,7 +255,7 @@ def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, sty
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     performance = application.get("scene_performance_agents") if isinstance(application.get("scene_performance_agents"), dict) else {}
-    version = "performance-relay-v4" if performance.get("mode") == "relay" else "performance-v17"
+    version = "performance-relay-v6" if performance.get("mode") == "relay" else "performance-v17"
     payload = [version, brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 

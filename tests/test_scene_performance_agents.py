@@ -9,7 +9,7 @@ from literary_engineering_studio.runtime.role_conversation import RoleConversati
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.application.scene_performance_preferences import get_scene_performance_preferences
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_performance import _relay_check, scene_performance_materials
+from literary_engineering_studio.runtimes.scene_performance import _relay_check, _relay_turn_limit, scene_performance_materials
 from literary_engineering_studio_engine.public.literary import (
     parse_actor_material,
     parse_actor_scene_material,
@@ -116,7 +116,7 @@ class _RelayGateway(_Gateway):
             spoken = {
                 1: "你怎么来了？", 2: "信呢？", 3: "我还得想想。" if self.never_admit else "信是我拿的。",
                 4: "我听见了。",
-            }[self.actor_calls]
+            }.get(self.actor_calls, "我还得想想。")
             beat = f"b{self.actor_calls}"
             answer = json.dumps({"scene_id": "scene_0001", "speaker": speaker, "entries": [{
                 "beat_id": beat, "spoken": spoken, "first_person_action": "", "private_impulse": "绝密私念",
@@ -133,6 +133,10 @@ class _RelayGateway(_Gateway):
 
 
 class ScenePerformanceAgentTests(unittest.TestCase):
+    def test_relay_turn_limit_follows_evidence_capacity_for_four_outcomes(self) -> None:
+        self.assertEqual(_relay_turn_limit(2, 4), 24)
+        self.assertEqual(_relay_turn_limit(2, 1), 8)
+
     def test_relay_check_retries_one_invalid_evidence_contract(self) -> None:
         plan = parse_relay_plan(_relay_plan(), _brief().to_dict())
         entries = [{"entry_id": "t1:1", "speaker": "character/sister", "spoken": "信呢？",
@@ -285,6 +289,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("本场尚未发生的情节边界（不是本轮交付指令）", prompt)
         self.assertIn("选择试探、拒绝、设条件或暂时沉默", prompt)
         self.assertIn("即使终点描述另一个人的未来言行", prompt)
+        self.assertIn("抵达它的条件和路径由我在人物逻辑里寻找", prompt)
+        self.assertIn("不要无限把同一推辞换个说法", prompt)
         self.assertIn("我可以试探、说谎、误记或猜测", prompt)
         self.assertNotIn("本轮待兑现", prompt)
         self.assertIn("主人公承认自己拿走了信", prompt)
