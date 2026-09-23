@@ -180,6 +180,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         )
         self.assertIn("逐段核对候选正文中每一处实际说出口的台词", owned_review)
         self.assertIn("不得叫主创替演员", owned_review)
+        self.assertIn("一级角色给出候选不等于正文必须全收", owned_review)
         self.assertIn("一级角色：信是我拿的。", owned_review)
         self.assertIn("不得按数词出现本身、数字密度或统一清单裁决", prompt)
         self.assertGreater(prompt.rfind("## Quantitative Detail Review"), prompt.rfind("## Relevant Sources"))
@@ -259,6 +260,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("即使写 low，也只是全场软建议", revision)
         self.assertIn("请求原角色续演", revision)
         self.assertIn("不能重写该角色的具体发言", revision)
+        self.assertIn("角色推演不是逐字实录", revision)
         self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
 
     def test_first_level_materials_reach_create_completion_and_revision(self) -> None:
