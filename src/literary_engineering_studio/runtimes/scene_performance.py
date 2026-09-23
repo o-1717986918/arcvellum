@@ -144,7 +144,7 @@ def _relay_materials(
         if len(participants) > 1 and turn < limit:
             counterpart = participants[(participants.index(speaker) + 1) % len(participants)]
             turn += 1
-            _relay_actor_turn(brief, plan, voices, knowledge, counterpart, None, turn,
+            _relay_actor_turn(brief, plan, voices, knowledge, counterpart, milestone["source_quote"], turn,
                               actor_entries, public_log, cache_root, digest, invoke, emit)
         check = _relay_check(plan, actor_entries, cache_root, digest, invoke, emit)
     if _first_unmet(plan, check) is not None:
@@ -228,7 +228,7 @@ def scene_creative_cache_digest(
     raw_settings = application.get("scene_performance_agents")
     settings = raw_settings if isinstance(raw_settings, dict) else {}
     enabled = settings.get("enabled") is True
-    version = ("performance-relay-v3" if settings.get("mode") == "relay" else "performance-v16") if enabled else "performance-v9"
+    version = ("performance-relay-v4" if settings.get("mode") == "relay" else "performance-v17") if enabled else "performance-v9"
     payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
@@ -250,7 +250,7 @@ def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, sty
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     performance = application.get("scene_performance_agents") if isinstance(application.get("scene_performance_agents"), dict) else {}
-    version = "performance-relay-v3" if performance.get("mode") == "relay" else "performance-v16"
+    version = "performance-relay-v4" if performance.get("mode") == "relay" else "performance-v17"
     payload = [version, brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 

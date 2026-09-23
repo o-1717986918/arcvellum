@@ -246,6 +246,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("不要因为交付为 JSON 就压缩成一句功能性答复", prompt)
         self.assertIn("未出口的感受、欲望或迟疑", prompt)
         self.assertIn("我亲自经历过的往事", prompt)
+        self.assertIn("普通、可弃的现场物件与生活动作", prompt)
+        self.assertIn("承担物证、设备结构、稳定历史或世界规则", prompt)
 
     def test_director_leaves_micro_tactics_to_character_actor(self) -> None:
         prompt = render_performance_plan_prompt(_brief().to_dict(), {}, "昨夜拿了信。")
@@ -281,7 +283,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("此前真正发生的公共言行", prompt)
         self.assertIn("信呢？", prompt)
         self.assertIn("本场尚未发生的情节边界（不是本轮交付指令）", prompt)
-        self.assertIn("可以回避、拒绝、设条件或暂时沉默", prompt)
+        self.assertIn("选择试探、拒绝、设条件或暂时沉默", prompt)
+        self.assertIn("即使终点描述另一个人的未来言行", prompt)
         self.assertIn("我可以试探、说谎、误记或猜测", prompt)
         self.assertNotIn("本轮待兑现", prompt)
         self.assertIn("主人公承认自己拿走了信", prompt)
@@ -357,6 +360,7 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("不得添加演员未生成的台词", block)
         self.assertIn("可化为当前视角的自由间接感知", block)
         self.assertIn("不可原样转成对白、可见动作", block)
+        self.assertIn("普通可弃的现场细节可以择用", block)
         self.assertLess(block.index('"entry_id":"t1:1"'), block.index('"entry_id":"t2:1"'))
         incomplete = {**check, "results": [{"milestone_id": "m1", "status": "missing", "evidence_entry_ids": []}]}
         with self.assertRaisesRegex(ValueError, "incomplete scene outcomes"):
@@ -491,6 +495,7 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             self.assertNotIn("主人公承认自己拿走了信", calls[2][1])
             self.assertIn('"opening_situation": "relationship-turn"', calls[1][1])
             self.assertIn("主人公承认自己拿走了信", calls[4][1])
+            self.assertIn("主人公承认自己拿走了信", calls[5][1])
             self.assertIn("信呢？", calls[4][1])
             self.assertIn("信是我拿的。", calls[5][1])
             self.assertNotIn("绝密私念", calls[2][1])
