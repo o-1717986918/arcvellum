@@ -184,8 +184,17 @@ def _relay_check(
     prompt = render_relay_scene_check_prompt(plan, actor_entries)
     prompt_digest = hashlib.sha256(prompt.encode()).hexdigest()[:12]
     path = cache_root / f"performance-relay-check-{digest}-{prompt_digest}.json"
-    check = _cached_payload(path, lambda: _answer_payload(invoke(prompt, "worker")),
-                            lambda payload: parse_relay_scene_check(payload, plan, actor_entries))
+    def produce() -> dict[str, Any]:
+        payload = _answer_payload(invoke(prompt, "worker"))
+        try:
+            parse_relay_scene_check(payload, plan, actor_entries)
+        except ValueError as exc:
+            retry = (f"{prompt}\n\n上一份核对不符合格式或来源合同：{exc}。"
+                     "请重新核对同一批条目；每项最多引用四个证据 ID，missing 不引用证据，"
+                     "fulfilled 必须有归属角色的明确外显证据。仍不确定就标 uncertain，不要为修复格式虚报结果。")
+            return _answer_payload(invoke(retry, "worker"))
+        return payload
+    check = _cached_payload(path, produce, lambda payload: parse_relay_scene_check(payload, plan, actor_entries))
     _notify(emit, "scene.performance.relay.check", {"statuses": [item["status"] for item in check["results"]]})
     return check
 
@@ -219,7 +228,7 @@ def scene_creative_cache_digest(
     raw_settings = application.get("scene_performance_agents")
     settings = raw_settings if isinstance(raw_settings, dict) else {}
     enabled = settings.get("enabled") is True
-    version = ("performance-relay-v2" if settings.get("mode") == "relay" else "performance-v15") if enabled else "performance-v9"
+    version = ("performance-relay-v3" if settings.get("mode") == "relay" else "performance-v16") if enabled else "performance-v9"
     payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
@@ -241,7 +250,7 @@ def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, sty
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     performance = application.get("scene_performance_agents") if isinstance(application.get("scene_performance_agents"), dict) else {}
-    version = "performance-relay-v2" if performance.get("mode") == "relay" else "performance-v14"
+    version = "performance-relay-v3" if performance.get("mode") == "relay" else "performance-v16"
     payload = [version, brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
