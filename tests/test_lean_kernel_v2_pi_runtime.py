@@ -174,6 +174,13 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("对明确无关的精确计数，引用具体片段", prompt)
         self.assertIn("对虚指反复、当场问答或改变人物理解的数值，不得仅因数词存在", prompt)
         self.assertIn("心理完全缺席", prompt)
+        owned_review = render_scene_review_prompt(
+            _brief(), result, VerificationReport("scene_0001", 6),
+            performance_material_block="一级角色：信是我拿的。",
+        )
+        self.assertIn("逐段核对候选正文中每一处实际说出口的台词", owned_review)
+        self.assertIn("不得叫主创替演员", owned_review)
+        self.assertIn("一级角色：信是我拿的。", owned_review)
         self.assertIn("不得按数词出现本身、数字密度或统一清单裁决", prompt)
         self.assertGreater(prompt.rfind("## Quantitative Detail Review"), prompt.rfind("## Relevant Sources"))
 
@@ -251,6 +258,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("主创可以重新选择叙述距离、心理层次", revision)
         self.assertIn("即使写 low，也只是全场软建议", revision)
         self.assertIn("请求原角色续演", revision)
+        self.assertIn("不能重写该角色的具体发言", revision)
         self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
 
     def test_first_level_materials_reach_create_completion_and_revision(self) -> None:
@@ -261,15 +269,19 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             runtime = PiSceneTransactionRuntime(
                 config, project_root=root, data_root=root / ".studio", gateway=gateway,
             )
-            marker = "角色素材：妹妹没说出口的恐惧；唯一对白是信是我拿的。"
+            marker = ('角色素材：妹妹没说出口的恐惧；唯一对白是信是我拿的。\n'
+                      '{"actor_entries":[{"speaker":"character/protagonist","spoken":"信是我拿的。"}]}')
             with patch("literary_engineering_studio.runtimes.pi_scene_transaction.scene_performance_materials", return_value=marker):
                 result = runtime.create_scene("tx-owned", _brief())
+            runtime.review_scene("tx-owned", _brief(), result, VerificationReport("scene_0001", 20))
             runtime.revise_scene(
                 "tx-owned", _brief(), result, VerificationReport("scene_0001", 20), None, attempt=1,
             )
             prompts = [prompt for _, prompt in gateway.calls]
             self.assertIn(marker, prompts[0])
             self.assertIn(marker, prompts[1])
+            self.assertIn(marker, prompts[-2])
+            self.assertIn("逐段核对候选正文中每一处实际说出口的台词", prompts[-2])
             self.assertIn(marker, prompts[-1])
             self.assertIn("Original First-Level Character And Environment Materials", prompts[-1])
             self.assertIn("外显台词和动作仍只来自原角色 entries", prompts[-1])
@@ -285,6 +297,11 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
                 runtime.revise_scene(
                     "tx-missing", _brief(), CreativeResult("初稿。", "", SceneDelta()),
                     VerificationReport("scene_0001", 20), None, attempt=1,
+                )
+            with self.assertRaisesRegex(RuntimeError, "original first-level performance materials"):
+                runtime.review_scene(
+                    "tx-missing", _brief(), CreativeResult("初稿。", "", SceneDelta()),
+                    VerificationReport("scene_0001", 20),
                 )
 
     def test_runtime_inlines_only_project_local_sources_and_caches_result(self) -> None:

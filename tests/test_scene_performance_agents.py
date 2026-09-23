@@ -9,7 +9,9 @@ from literary_engineering_studio.runtime.role_conversation import RoleConversati
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.application.scene_performance_preferences import get_scene_performance_preferences
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_performance import _relay_check, _relay_turn_limit, scene_performance_materials
+from literary_engineering_studio.runtimes.scene_performance import (
+    _relay_check, _relay_turn_limit, _repaired_relay_payload, scene_performance_materials,
+)
 from literary_engineering_studio_engine.public.literary import (
     parse_actor_material,
     parse_actor_scene_material,
@@ -133,6 +135,41 @@ class _RelayGateway(_Gateway):
 
 
 class ScenePerformanceAgentTests(unittest.TestCase):
+    def test_relay_plan_format_repair_keeps_source_contract(self) -> None:
+        brief = _brief().to_dict()
+        bad = _relay_plan()
+        bad["milestones"] = [{"speaker": "character/protagonist", "source_quote": "关系未修复"}]
+        calls = []
+        def invoke(prompt, role):
+            calls.append((prompt, role))
+            return json.dumps(bad if len(calls) == 1 else _relay_plan(), ensure_ascii=False)
+        result = _repaired_relay_payload(
+            render_relay_plan_prompt(brief), "worker", invoke,
+            lambda payload: parse_relay_plan(payload, brief), "不要补造事实。",
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertIn("关系未修复", calls[1][0])
+        self.assertEqual(parse_relay_plan(result, brief)["milestones"][0]["speaker"], "character/protagonist")
+        with self.assertRaises(ValueError):
+            _repaired_relay_payload("plan", "worker", lambda prompt, role: json.dumps(bad),
+                                    lambda payload: parse_relay_plan(payload, brief), "不要补造事实。")
+
+    def test_relay_actor_format_repair_never_silently_truncates(self) -> None:
+        brief = _brief().to_dict()
+        beat = {"beat_id": "b1", "event": "当前互动继续"}
+        entry = {"beat_id": "b1", "spoken": "信是我拿的。", "first_person_action": "", "private_impulse": "我怕她关门。"}
+        bad = {"scene_id": "scene_0001", "speaker": "character/protagonist", "entries": [entry] * 3}
+        good = {**bad, "entries": [entry]}
+        calls = []
+        def invoke(prompt, role):
+            calls.append((prompt, role))
+            return json.dumps(bad if len(calls) == 1 else good, ensure_ascii=False)
+        validate = lambda payload: parse_actor_scene_material(payload, brief, [beat], "character/protagonist", max_entries=2)
+        result = _repaired_relay_payload("actor", "character-actor", invoke, validate, "最多两条。")
+        self.assertEqual(len(validate(result)["entries"]), 1)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("bounded list", calls[1][0])
+
     def test_relay_turn_limit_follows_evidence_capacity_for_four_outcomes(self) -> None:
         self.assertEqual(_relay_turn_limit(2, 4), 24)
         self.assertEqual(_relay_turn_limit(2, 1), 8)
@@ -368,9 +405,26 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("不可原样转成对白、可见动作", block)
         self.assertIn("普通可弃的现场细节可以择用", block)
         self.assertLess(block.index('"entry_id":"t1:1"'), block.index('"entry_id":"t2:1"'))
+        focal_block = render_relay_materials(plan, entries, None, check, viewpoint="character/sister")
+        focal_entries = json.loads(focal_block.split("\n", 1)[1])["actor_entries"]
+        self.assertEqual(focal_entries[0]["private_impulse"], "我等他回答。")
+        self.assertEqual(focal_entries[1]["private_impulse"], "")
+        self.assertEqual(focal_entries[1]["spoken"], "信是我拿的。")
+        self.assertEqual(entries[1]["private_impulse"], "我说了。")
         incomplete = {**check, "results": [{"milestone_id": "m1", "status": "missing", "evidence_entry_ids": []}]}
         with self.assertRaisesRegex(ValueError, "incomplete scene outcomes"):
             render_relay_materials(plan, entries, None, incomplete)
+
+    def test_batch_materials_hide_other_characters_private_impulses(self) -> None:
+        actors = [
+            {"speaker": "character/sister", "entries": [{"spoken": "信呢？", "private_impulse": "我怕他撒谎。"}]},
+            {"speaker": "character/protagonist", "entries": [{"spoken": "信是我拿的。", "private_impulse": "我想逃。"}]},
+        ]
+        block = render_performance_materials(_plan(), actors, None, viewpoint="character/sister")
+        visible = json.loads(block.split("\n", 1)[1])["actor_candidates"]
+        self.assertEqual(visible[0]["entries"][0]["private_impulse"], "我怕他撒谎。")
+        self.assertEqual(visible[1]["entries"][0]["private_impulse"], "")
+        self.assertEqual(actors[1]["entries"][0]["private_impulse"], "我想逃。")
 
     def test_plan_rejects_director_owned_micro_tasks(self) -> None:
         plan = _plan()
@@ -495,7 +549,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             calls = gateway.calls
             self.assertEqual([role for role, _ in calls], [
                 "worker", "character-actor", "character-actor", "worker",
-                "character-actor", "character-actor", "worker", "environment-writer",
+                "character-actor", "character-actor", "worker",
+                "character-actor", "character-actor", "environment-writer",
             ])
             self.assertNotIn("主人公承认自己拿走了信", calls[1][1])
             self.assertNotIn("主人公承认自己拿走了信", calls[2][1])
@@ -506,15 +561,17 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             self.assertIn("信是我拿的。", calls[5][1])
             self.assertNotIn("绝密私念", calls[2][1])
             self.assertNotIn("绝密私念", calls[4][1])
-            self.assertNotIn("绝密私念", calls[7][1])
-            self.assertIn("信是我拿的。", calls[7][1])
-            self.assertIn("relationship-turn", calls[7][1])
+            self.assertNotIn("绝密私念", calls[9][1])
+            self.assertIn("信是我拿的。", calls[9][1])
+            self.assertIn("relationship-turn", calls[9][1])
+            self.assertIn("本轮无另行指定的剧情结果", calls[7][1])
+            self.assertIn("本轮无另行指定的剧情结果", calls[8][1])
             self.assertLess(first.index('"entry_id":"t1:1"'), first.index('"entry_id":"t2:1"'))
             self.assertIn('"entry_id":"t3:1"', first)
             self.assertIn("门边的光比桌面暗", first)
             self.assertIn("scene.performance.relay.check", [event for event, _ in events])
             self.assertEqual(first, scene_performance_materials(**kwargs))
-            self.assertEqual(len(gateway.calls), 8)
+            self.assertEqual(len(gateway.calls), 10)
 
     def test_relay_does_not_fall_back_to_unauthorized_single_writer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

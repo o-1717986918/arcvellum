@@ -43,10 +43,7 @@ def scene_performance_materials(
         return ""
     participants = list(brief.get("participants") or ())
     if len(participants) > policy["max_actor_calls"]:
-        _notify(emit, "scene.performance.fallback", {"stage": "actor-capacity", "participants": len(participants)})
-        if policy["mode"] == "relay":
-            raise RuntimeError("scene performance relay requires capacity for every scene participant")
-        return ""
+        return _capacity_fallback(policy, participants, emit)
     cache_root.mkdir(parents=True, exist_ok=True)
     digest = _digest(brief, expression, sources, style_reference, config)
     if policy["mode"] == "relay":
@@ -87,7 +84,7 @@ def scene_performance_materials(
     if not actors and not environment:
         return ""
     try:
-        return render_performance_materials(plan, actors, environment)
+        return render_performance_materials(plan, actors, environment, viewpoint=str(brief.get("viewpoint") or ""))
     except ValueError as exc:
         _notify(emit, "scene.performance.fallback", {"stage": "material-budget", "reason": str(exc)})
         return ""
@@ -115,14 +112,28 @@ def _actor_materials(
     return actors
 
 
+def _capacity_fallback(
+    policy: dict[str, Any], participants: list[str],
+    emit: Callable[[str, dict[str, Any]], None] | None,
+) -> str:
+    _notify(emit, "scene.performance.fallback", {"stage": "actor-capacity", "participants": len(participants)})
+    if policy["mode"] == "relay":
+        raise RuntimeError("scene performance relay requires capacity for every scene participant")
+    return ""
+
+
 def _relay_materials(
     brief: dict[str, Any], expression: dict[str, Any], sources: str, style_reference: str,
     participants: list[str], cache_root: Path, digest: str, invoke: Callable[[str, str], str],
     emit: Callable[[str, dict[str, Any]], None] | None,
 ) -> str:
     plan_path = cache_root / f"performance-relay-plan-{digest}.json"
-    plan = _cached_payload(plan_path, lambda: _answer_payload(invoke(render_relay_plan_prompt(brief), "worker")),
-                           lambda payload: parse_relay_plan(payload, brief))
+    plan_prompt = render_relay_plan_prompt(brief)
+    plan = _cached_payload(plan_path, lambda: _repaired_relay_payload(
+        plan_prompt, "worker", invoke, lambda payload: parse_relay_plan(payload, brief),
+        "只列出来源中逐字存在、长度合规且确实描述情节变化的完整事实分句；"
+        "不要把关系状态摘要拆成额外里程碑，不要更改角色归属或补造事实。",
+    ), lambda payload: parse_relay_plan(payload, brief))
     _notify(emit, "scene.performance.relay.plan", {"milestones": len(plan["milestones"])})
     voices = expression.get("dialogue_intents") if isinstance(expression.get("dialogue_intents"), list) else []
     knowledge = {item["speaker"]: item["quotes"] for item in plan["actor_knowledge"]}
@@ -149,8 +160,15 @@ def _relay_materials(
         check = _relay_check(plan, actor_entries, cache_root, digest, invoke, emit)
     if _first_unmet(plan, check) is not None:
         raise RuntimeError("locked scene outcomes remain unsupported by first-level actors")
+    for speaker in participants:
+        if turn >= limit or len(actor_entries) >= 24:
+            break
+        turn += 1
+        _relay_actor_turn(brief, plan, voices, knowledge, speaker, None, turn,
+                          actor_entries, public_log, cache_root, digest, invoke, emit)
     environment = _relay_environment(brief, plan, style_reference, sources, public_log, cache_root, digest, invoke, emit)
-    return render_relay_materials(plan, actor_entries, environment, check)
+    return render_relay_materials(plan, actor_entries, environment, check,
+                                  viewpoint=str(brief.get("viewpoint") or ""))
 
 
 def _relay_actor_turn(
@@ -169,8 +187,11 @@ def _relay_actor_turn(
     )
     prompt_digest = hashlib.sha256(prompt.encode()).hexdigest()[:12]
     path = cache_root / f"performance-relay-actor-{digest}-t{turn}-{prompt_digest}.json"
-    material = _cached_payload(path, lambda: _answer_payload(invoke(prompt, "character-actor")),
-                               lambda payload: parse_actor_scene_material(payload, brief, [beat], speaker, max_entries=entry_capacity))
+    validate = lambda payload: parse_actor_scene_material(payload, brief, [beat], speaker, max_entries=entry_capacity)
+    material = _cached_payload(path, lambda: _repaired_relay_payload(
+        prompt, "character-actor", invoke, validate,
+        f"只返回零至 {entry_capacity} 条属于自己的条目；保留人物当下自主性，勿压缩成机械交差，也勿替对手说话。",
+    ), validate)
     for number, entry in enumerate(material["entries"], 1):
         actor_entries.append({**entry, "speaker": speaker, "entry_id": f"t{turn}:{number}"})
         public_log.append({"speaker": speaker, "spoken": entry["spoken"],
@@ -198,6 +219,23 @@ def _relay_check(
     check = _cached_payload(path, produce, lambda payload: parse_relay_scene_check(payload, plan, actor_entries))
     _notify(emit, "scene.performance.relay.check", {"statuses": [item["status"] for item in check["results"]]})
     return check
+
+
+def _repaired_relay_payload(
+    prompt: str, role: str, invoke: Callable[[str, str], str],
+    validate: Callable[[dict[str, Any]], dict[str, Any]], guidance: str,
+) -> dict[str, Any]:
+    payload = _answer_payload(invoke(prompt, role))
+    try:
+        validate(payload)
+    except ValueError as exc:
+        previous = json.dumps(payload, ensure_ascii=False)[:6000]
+        retry = (f"{prompt}\n\n上一份输出：{previous}\n"
+                 f"这份输出不符合结构或来源合同：{exc}。请重新完成同一任务。{guidance}")
+        repaired = _answer_payload(invoke(retry, role))
+        validate(repaired)
+        return repaired
+    return payload
 
 
 def _first_unmet(plan: dict[str, Any], check: dict[str, Any]) -> dict[str, str] | None:
@@ -233,7 +271,7 @@ def scene_creative_cache_digest(
     raw_settings = application.get("scene_performance_agents")
     settings = raw_settings if isinstance(raw_settings, dict) else {}
     enabled = settings.get("enabled") is True
-    version = ("performance-relay-v6" if settings.get("mode") == "relay" else "performance-v17") if enabled else "performance-v9"
+    version = ("performance-relay-v9" if settings.get("mode") == "relay" else "performance-v19") if enabled else "performance-v9"
     payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
@@ -255,7 +293,7 @@ def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, sty
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     performance = application.get("scene_performance_agents") if isinstance(application.get("scene_performance_agents"), dict) else {}
-    version = "performance-relay-v6" if performance.get("mode") == "relay" else "performance-v17"
+    version = "performance-relay-v9" if performance.get("mode") == "relay" else "performance-v19"
     payload = [version, brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 

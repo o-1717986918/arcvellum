@@ -27,8 +27,10 @@ from .scene_length_completion import complete_first_draft_length
 from .pi_scene_payload import _answer_payload, creative_result_from_payload, review_result_from_payload
 from .pi_scene_style_history import projection_digest as _projection_digest, recent_lean_reference_ids, scene_reference_context
 from .scene_performance import scene_creative_cache_digest, scene_performance_materials
+from .scene_performance_ownership import repair_actor_dialogue
 from .scene_source_evidence import scene_source_evidence
-_QUANTITATIVE_DETAIL_RULE = "新增精确数字默认不用，但先分清语义：“一个又一个”“一次次”等虚指反复并非精确计数，不按数值规则退回。真正精确值若承担当场问答、人物选择或谈判、身份与债务或证据辨认、因果、连续性、后文核验中的一项实际功能，可保留；不要求五项同时成立，也不强求当场有效的信息日后再次兑现。来源已确定的日期、金额、数量和差值必须准确，不能为去数字而改事实。仪表读数、倒计时、尺寸、次数和量词计件没有题材豁免；“一张桌、两把椅子、拧两下、看几秒”若只为显得具体，删去精度不损失对话信息、人物反应或因果，就属于无关实写，应逐句改为状态、动作或后果。不得批量删数字或机械换成模糊量词；也不得按数词出现本身、数字密度或统一清单裁决。若旧文风预设仍写着“数词必须五项全满足”，本段语义分类优先；样例中的数字不自动豁免。"
+from .pi_scene_prompt_rules import QUANTITATIVE_DETAIL_RULE as _QUANTITATIVE_DETAIL_RULE
+from .pi_scene_review_prompt import render_scene_review_prompt
 
 @dataclass(frozen=True)
 class PiSceneRuntimeMetrics:
@@ -119,6 +121,10 @@ class PiSceneTransactionRuntime:
             actor_owned=bool(materials),
             performance_material_block=materials,
         )
+        result = self._repair_actor_dialogue(
+            transaction_id, brief, result, materials, style_reference,
+            json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
+        )
         _atomic_json(cache, result.to_dict())
         return result
 
@@ -133,7 +139,14 @@ class PiSceneTransactionRuntime:
         expression = self._expression_projection(brief)
         projection_digest = _projection_digest(selection, expression)
         candidate_digest = hashlib.sha256(result.prose.encode("utf-8")).hexdigest()[:16]
-        cache = self._cache_path(transaction_id, f"review_result_{candidate_digest}_{projection_digest}.json")
+        initial_sources = self._source_evidence(brief, purpose="create")
+        creative_digest = scene_creative_cache_digest(projection_digest, brief.to_dict(), initial_sources, self._config)
+        material_record = _read_json(self._cache_path(transaction_id, f"performance_materials_{creative_digest}.json"))
+        if _scene_performance_enabled(self._config) and material_record is None:
+            raise RuntimeError("scene review requires the original first-level performance materials")
+        materials = str(material_record.get("materials") or "") if material_record else ""
+        materials_digest = hashlib.sha256(materials.encode("utf-8")).hexdigest()[:10]
+        cache = self._cache_path(transaction_id, f"review_result_{candidate_digest}_{projection_digest}_{materials_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
@@ -142,9 +155,10 @@ class PiSceneTransactionRuntime:
             brief,
             result,
             verification,
-            source_evidence=self._source_evidence(brief, purpose="review"),
+            source_evidence=self._source_evidence(brief, purpose="review", reserve_chars=len(materials)),
             revision_attempts=len(tuple(cache.parent.glob(f"revision_result_*_{projection_digest}.json"))),
             expression_context_block=json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
+            performance_material_block=materials,
         )
         answer = self._run(prompt, role="reviewer", transaction_id=transaction_id)
         review = review_result_from_payload(_answer_payload(answer))
@@ -197,8 +211,34 @@ class PiSceneTransactionRuntime:
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         revised = creative_result_from_payload(_answer_payload(answer))
+        revised = self._repair_actor_dialogue(
+            transaction_id, brief, revised, materials, render_style_reference_selection(selection),
+            json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
+        )
         _atomic_json(cache, revised.to_dict())
         return revised
+
+    def _repair_actor_dialogue(
+        self, transaction_id: str, brief: SceneBrief, result: CreativeResult, materials: str,
+        style_reference: str, expression_context: str,
+    ) -> CreativeResult:
+        def revise(candidate: CreativeResult, missing: list[str]) -> CreativeResult:
+            review = review_result_from_payload({
+                "decision": "revise", "summary": "有台词不来自一级角色。",
+                "revision_instructions": [
+                    "删除以下不在任何角色 spoken 中的引号内台词，不得改写成另一句主创代说的话；"
+                    "保留已获授权的角色言行及有效心理和环境。若因此缺少场景表演，在 escalation_reasons 请求原角色续演："
+                    + json.dumps(missing[:8], ensure_ascii=False),
+                ], "evidence": missing[:8],
+            })
+            prompt = render_scene_revision_prompt(
+                brief, candidate, VerificationReport(brief.scene_id, len(candidate.prose)), review,
+                source_evidence=self._source_evidence(brief, purpose="revise", reserve_chars=len(materials)),
+                allowed_refs=known_scene_refs(brief), style_reference_block=style_reference,
+                expression_context_block=expression_context, performance_material_block=materials,
+            )
+            return creative_result_from_payload(_answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id)))
+        return repair_actor_dialogue(result, materials, revise)
 
     def _run(self, prompt: str, *, role: str, transaction_id: str) -> str:
         self._provider_calls += 1
@@ -266,10 +306,22 @@ def render_scene_create_prompt(
         if performance_material_block else ""
     )
     material_final_pass = (
-        "启用角色表演素材时，本段规则优先于上文通用‘写对白’建议：所有实际对白和人物可见行为须先由该人物的一级 Agent 在 entries 中给出；不要自行补对白或微动作，也不要把演员句子润平为同一种声音。"
+        "启用角色表演素材时，本段规则优先于上文通用‘写对白’和字数建议：所有实际对白和人物可见行为须先由该人物的一级 Agent 在 entries 中给出；不要自行补对白、提问、回答、转身、触碰、离场等任何新动作，也不要把演员句子润平为同一种声音。"
         "心理与情绪的文学叙述不等于新增人物言行：依据整个推演及当前视角，可让未出口的欲望、犹疑和误读在感知、句法、联想里展开；不要把私念照抄成台词或全知解释。"
+        "把每条 entry 当作人物外显言行的全集，而不是待续写的开头；正文可以只使用其中一部分并重新安排观察距离，但任何新增外显内容都要先请求原角色续演。"
         "若环境候选合乎视角与已确认事实，可保留它的观察次序和句群呼吸，也可重组、延展，不必逐句移植。"
         "逐项核对候选里的物件、技术结论和精确数值，来源未确认且无必要的不用。候选的后台解释绝不进入正文。"
+        if performance_material_block else ""
+    )
+    material_length_priority = (
+        "启用一级角色素材时，字数服从素材归属：素材不足以自然支撑目标长度，就保留真实的短场景，"
+        "在 escalation_reasons 说明需要原角色续演；绝不为了凑字数让主创代人物说话或做事。"
+        if performance_material_block else ""
+    )
+    material_literary_guidance = (
+        "不要把 private_impulse 压成心理标签或一段履历。择取真正承压的时刻，让当前视角的念头随对方原话变化："
+        "注意、误读、记忆、自辩与迟来的理解可以在句法和身体感知中展开，不必齐全，也不设心理段落配额。"
+        "环境候选可随人物理解变化而回返，不只供开头报景；不作象征解说，不新增演员言行或未确认的证据。"
         if performance_material_block else ""
     )
     prompt = f"""# Scene Create
@@ -291,11 +343,13 @@ def render_scene_create_prompt(
 
 ## Length Contract
 prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。先在心中把现有事件分成开场压力、行动阻力、关系反应、选择代价和余波，给各段分配足够篇幅；首轮直接写足完整场景，不得用梗概、节拍清单或压缩叙述代替正文。如果一次响应不足，创作阶段会要求在结尾之前补足有因果作用的段落，不要提前把情节收束成短稿。
+{material_length_priority}
 本场只实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff。章级义务提供方向，不授权提前演出后续场景；未列入 participants 的主要人物不得登场、发言或完成关键动作。若 Relevant Sources 含上一场正文，只承接其已发生后果，不得重演首次见面、同一调取/发现/交付、同一问答或同一决定。
 句群不设恒定默认长度：短句只落在真正的发现、选择或后果上；较长句承载连续动作、观察层次、摇摆或复杂因果；连续短句若只是在逐项报动作，就重组为有呼吸和层级的句群。白描只是可用底色之一，承压段落可选扎根人物经验的自由间接引语、反讽、借代、通感、复沓、意象回返或长句推进，让修辞参与认识和关系变化。细节也可积蓄气氛、显露趣味或延长审美时间，不要求每段都即时推进事件。不要让连续场景都套用“核对—追问—停顿—留悬念”的程序。写对白前根据人物背景、欲望、身份和关系压力，为主要说话者区分词域、句形、主动发问或回避方式、礼貌边界与幽默方式；speech_style 未填写时从已知事实推导，不编造方言、口头禅或新身世。让换掉说话者姓名后的关键台词仍可辨认，不把所有人压成同一种平直短句。情绪通过避让、选择代价、自由间接感知和说话方式显影，不用抽象总结代替。段尾和场尾执行“证据之后停笔”：动作、意象、对白、沉默或物证已经传意时，删去随后翻译潜台词、概括人物感受、宣布主题或解释其意义的句子。使用中文引号与标点，不输出写作流程痕迹。
 
 ## Literary Rendering
 主创依据整个场景推演自行决定情绪表达的力度与位置：关系承压处可以让人物把话说完、说错、绕开再回来，也可以让当前视角进入未出口的经验，使身体感知、欲望、自我辩解和联想出现层次。不要把心理缩成“他犹豫了”，把对话压成情节摘要，或把环境压成地点标签。证据成立后不追加解释性尾句，不等于证据形成之前要惜字如金；允许有意义地停留和渲染，不靠重复说明灌篇幅。若启用角色素材，新的外显台词和动作仍须由一级角色提供。
+{material_literary_guidance}
 SceneBrief.rhythm 与来源中的 reflection_ratio、description_ratio 是全场节奏的软建议，不是逐段上限；即使既有模板写着 low，也不能因此删去关键心理、环境停留或人物语言的起伏。最新用户方向和当前场景实际阅读效果决定取舍。
 
 ## Output
@@ -315,51 +369,6 @@ character_changes、canon_candidates、continuity_changes、promise_updates、re
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene create prompt exceeds hard character limit")
-    return prompt
-
-
-def render_scene_review_prompt(
-    brief: SceneBrief,
-    result: CreativeResult,
-    verification: VerificationReport,
-    *,
-    source_evidence: str = "",
-    revision_attempts: int = 0,
-    expression_context_block: str = "",
-) -> str:
-    recipe = lean_scene_prompt_recipe("review")
-    convergence = f"本场已完成 {revision_attempts} 轮返修；此时只有硬事实冲突、明确场景义务缺失或能指出具体读者损害的问题才可继续 revise，孤立句式、局部动作相似或可选润色一律判 pass 并写入 summary。" if revision_attempts >= 2 else "本场尚在前两轮审读，可对有明确证据的实质文学问题提出最小返修。"
-    prompt = f"""# Scene Review
-
-你是独立文学审查者。只判断人物可信度、场景变化、文风落实、节奏详略、前后衔接、读者问题和承诺推进；SceneBrief.canon_constraints 与 Relevant Sources 中的最新用户方向优先于候选正文。先逐项核对同一对象或事件的绝对测量值与差值，保留差值不能掩盖绝对值漂移；若候选正文与这些来源在人名、人物白名单、日期、年份、数量或时间差上形成硬冲突，必须判 revise 并指出冲突两端。把新专名登记进 new_asset_candidates 只表示可追踪，不表示在用户禁止新增人物时获得授权。若重复上一场“核对—追问—停顿—留悬念”的程序而实质损害人物声音、情绪因果或场景质感，也应判 revise，并指出重复结构及可保留的有效内容；共享调查题材、档案动作或孤立句式相似本身不是退回理由。
-若来源内部详略不同，按“硬 canon 与最新用户方向 > 当前场 scene_goal/objective、scene_turn、outgoing_hook、revealed_info > 章级 dramatic_turn、chapter_ending_policy、payoff_or_delay”的顺序判断；下位概括不能推翻上位且更具体的本场承接。当前场明确要求的核对、登记、追问或离场动作不得仅因动作名称与上一场相似而退回，只有三个以上关键节拍以相同顺序重复且造成可说明的阅读损害，才属于实质同构。检查关键对白是否都像同一人说话；只有持续混同已损害人物可信度或关系张力时才要求修订，孤立平实回答不是退回理由。市、县、区等行政范围加通用机构类别的称谓不是独特专名；未获得独特名称且不承担持续身份时，无需登记新资产。
-{convergence}
-确定性检查已经由程序完成，不复查路径、哈希、回执或任务流程。
-直接返回 JSON：{{"decision":"pass|revise|escalate","summary":"结论","revision_instructions":[],"evidence":[]}}。
-需要改动时必须选择 revise 并给出具体片段证据；轻微建议仍判 pass。
-程序的 warning 是提醒，不是自动退回理由。软字数偏差只作建议，不得单独退回；只有人物行为、场景义务、行动层次、选择代价或阅读效果出现可举证损害时才判 revise。不能仅凭 warning 标签本身要求改稿。一次审读最多列三个有原文证据的高影响问题，给出最小指令、修改跨度并保留有效段落；先前问题已消失时不得另开与硬约束、场景义务或明确阅读损害无关的新审美议题。
-检查正文中新出现的专名或稳定身份是否已进入 new_asset_candidates；仅沿用 SceneBrief 的通用角色称谓、普通设备名或场所类别无需登记。真正遗漏会影响后续场景时判 revise。
-也检查关键选择前后是否只剩动作和信息转述、心理完全缺席，环境是否被压成地点标签，情绪压力是否始终维持同一低音量；若造成可举证的阅读损害，可要求主创修订心理、叙述距离和场景渲染。不要以修辞数量、心理段落数量或字数密度作门禁。若启用一级角色素材，对白、动作本身确实不足时，应指出需要原角色续演，不能要求主创代写。
-
-## SceneBrief
-{json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
-
-## Expression And Voice Context
-{expression_context_block or "以场景职责和人物事实为准。"}
-
-## Deterministic Report
-{json.dumps(verification.to_dict(), ensure_ascii=False, separators=(",", ":"))}
-
-## Candidate
-{result.prose}
-
-## Relevant Sources
-{source_evidence or "无额外资料。"}
-
-## Quantitative Detail Review\n逐处判断候选正文中的数词是否真的给出精确数量，再核对其当前语境。{_QUANTITATIVE_DETAIL_RULE} 对明确无关的精确计数，引用具体片段及“删去精度不损失什么”的理由判 revise；对虚指反复、当场问答或改变人物理解的数值，不得仅因数词存在或没有后续兑现而退回。
-"""
-    if len(prompt) > recipe.hard_character_limit:
-        raise ValueError("lean scene review prompt exceeds hard character limit")
     return prompt
 
 
@@ -388,6 +397,8 @@ def render_scene_revision_prompt(
 不得用另一种模板化转折替换问题表达。修改后的正文仍须满足同一 SceneBrief，并重新提取实际 SceneDelta。
 修订长句、逗号或标点问题时应重组句内层级，不能把原句机械拆成一串结构相同的短句；句群长度随动作、观察与压力变化，并保护原有的长短句落差。修订对白时保留人物各自的词域、句形、礼貌边界、幽默方式、回避和争取策略；不要把所有台词统一磨成平直短句，也不要凭空加口头禅。若原文已由动作、意象、对白、沉默或物证传意，删除随后重复解释其含义的段尾、场尾句，不用另一条金句替换。
 若审查指出文风或情节损害，主创可以重新选择叙述距离、心理层次、环境停留、句群节奏与已有场景材料的交错顺序，使情绪有蓄积和转折；不要把修订理解为只改错字或增加几句解释。惜字造成的空白与重复灌水都不是目标。启用一级角色素材时，外显台词和动作仍只来自原角色 entries；主创可改写当前视角中的心理体验，但不能代角色补说、补做。若情节修复确实需要新增角色言行，放入 escalation_reasons 明确请求原角色续演，不用正文越权填补。
+如果审查意见叫你“把某句角色台词改成另一句”，这条指令越过了人物归属：只可从演员已给出的条目中删选或调整叙述位置，不能重写该角色的具体发言。删选导致既定场景结果失去支持时，不提交伪完成稿，说明需要重新组织场景压力并请原角色续演。
+若问题在心理与环境过薄，回到角色 private_impulse 和已发生的对话，把沉默前后的误读、抵抗、自我辩解或记忆的迟到写成正在变化的视角经验；同一环境细节可在不同压力下再被感到。保留人物未说出口与已说出口之间的落差，不给读者补一段情绪结论，也不拿环境意象替人物决定。
 既有项目的 reflection_ratio、description_ratio 即使写 low，也只是全场软建议，不是删减心理和环境的硬上限；修订须服从最新用户方向与具体阅读损害。
 直接返回与 Scene Create 完全相同的 JSON 对象，不要 Markdown、工作流说明、路径或哈希。
 

@@ -39,6 +39,80 @@ SceneBrief + 人物/世界/文风来源
            无法回指则补充角色表演或退回本实验路径，不能假报覆盖
 ```
 
+## 2026-09-24：短场景端到端复跑与“惜字”问题
+
+忽略目录 `build/scene-performance-e2e/mini-literary-e2e-live/` 中的合成姐弟场景使用真实 Pi Worker/DeepSeek 调用，测试了主创编排、两名首级演员、独立环境、正文、审读与修订。最初主创把“关系未修复”误拆成短而非事件性的里程碑，解析拒绝；模型收到原输出、具体错误与来源边界后重新编排，成功继续。演员有时输出超过本轮条目数，现同样只允许一次格式修复；二次仍不合格明确失败。这里修的是随机格式错，不放宽事实合同或文学门禁。
+
+第一版短场景的演员只产出四条言行，主创为了追求篇幅另写大量对白和行为。即使提示里已有“一级归属”，审读仍误称全部可回指。将字数置于角色归属之后、明确条目不是待续写的开头，并把原素材给审读，单次复跑改善但并不稳定：后续同素材复跑又出现主创自创后续问答。因此必须把人物话语归属与文风判断分开。仅对明确的对白引号做来源比对；检测到无首级 spoken 来源的台词时，主创按原素材最多返修两次，仍越权则失败。叙述中作为概念被引用的短语不当成对白，心理和环境不按此规则审查；动作的语义归属仍须由主创和审读判断。此处不是“文学味”自动门禁，不能证明所有动作都被严格归源。
+
+另一个来源不稳定点是“结果已发生”不等于人物余波已经表演。接力在结果获得证据后，各给在场演员一轮无新剧情命令的自主余波；可说、可做、可沉默。第一次真实复跑的余波把演员素材增加到十八条、主创 1329 字且无未授权引号对白，但正文错误进入非视角角色的私念。现在交给正文的材料保留全场公开言行，只交当前视角的 private_impulse；其他角色私念仍存于表演过程，不直接作为正文视角知识。下一次十四条素材的复跑得到约 1900 字，但角色在余波擅自抛出与本场无关的新秘密；审读识别了偏移，却一度指示主创改写角色台词。审读/修订合同改为只能删选或重新组织已演素材，需要新台词则请求原角色续演。未解决的风险仍是演员把“自主”误解成制造跨场悬念、主创在可见微动作上越权，以及审读偶发过度乐观；不得把短场景成功等同于长篇端到端质量达标。
+
+再次清空接力缓存并在角色系统画像加入“自由发挥不靠无来源的另一桩秘密”后，十二条演员素材支持了约 1800 字候选，未再出现另一桩秘密；但主创仍插入四句无一级来源的对白，审读却再次误报“无越权”。限定引号比对命中后，单轮修订未必成功；现最多两次来源定向返修，第二次仍失败就不交候选。最新短场景的两句越权对白经返修后消失，正文约 1787 字，有更多柳烟视角的回忆与迟疑，但仍呈现同类问答的重复、修辞风险和缺少风格差异的问题。审读还错误要求主创改写演员说过的“凉了半天”；程序只能核对引号文本来源，不能自动证明所有可见动作和人物心理的语义归属。下一轮须测试原有长篇项目中的复杂人物资产与真实场景，处理素材不足时主创如何发起**来源支撑的情境重构和原角色续演**，而不是继续加硬字数、盲目延长回合或把修订权偷换成代演权。
+
+```yaml
+module_change_packet:
+  objective: "让接力从一次格式失误恢复，并给已经兑现剧情的角色自主余波"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "mode=relay 的编排、演员调用与材料交接"
+  variation_point: "编排/演员只重试一次；完成后每名在场角色最多一轮无指定结果的余波"
+  inputs: ["SceneBrief", "原首级演员日志", "既定结果核对"]
+  outputs: ["完整的首级表演候选或明确失败"]
+  invariants: ["不改判事实", "不截断超额条目", "不让主创代演", "不无限加回合"]
+  allowed_dependencies: ["Engine 纯合同", "现有 Pi Gateway"]
+  forbidden_dependencies: ["新增审美门禁", "Provider 专有补丁"]
+  tests: ["格式修复限一次", "角色余波", "缓存与真实短场景"]
+  rollback_unit: "Studio relay adapter 提交"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "以窄范围来源检查阻止主创把自创对白冒充一级角色表演"
+  primary_module: "Studio runtimes/scene_performance_ownership"
+  public_entry: "create/revise 出口的角色对白来源校验"
+  variation_point: "只比对实际对白引号和 actor spoken；最多两次返修，不处理抽象文风"
+  inputs: ["正文", "原首级角色素材"]
+  outputs: ["无越权对白的候选，或明确失败"]
+  invariants: ["不检查数字和审美", "叙述性引号不当对白", "不默默删除台词", "原角色言行仍由首级生成"]
+  allowed_dependencies: ["Studio transaction adapter", "Engine 的 CreativeResult 合同"]
+  forbidden_dependencies: ["Engine 内部 import", "Canon 自动写入"]
+  tests: ["合法拆句", "非法新台词", "叙述性引号", "返修二次失败"]
+  rollback_unit: "Studio ownership 检查提交"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "避免非视角人物的未出口私念被主创写成全知正文"
+  primary_module: "Engine literary/scene/roleplay 的材料交接"
+  public_entry: "render_relay_materials 与 render_performance_materials"
+  variation_point: "保留全场公开言行；正文材料只保留当前视角角色 private_impulse"
+  inputs: ["角色表演候选", "SceneBrief.viewpoint"]
+  outputs: ["视角相容的首级素材包"]
+  invariants: ["不修改演员原输出", "不影响剧情核对", "不删其他角色公开言行"]
+  allowed_dependencies: ["Engine 纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK"]
+  tests: ["非视角私念遮蔽", "公开言行仍在", "原候选不变"]
+  rollback_unit: "Engine material handoff 提交"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "让主创有心理、环境、节奏的真实修订空间，同时不越过角色台词归属"
+  primary_module: "Studio runtimes/pi_scene_transaction 与 pi_scene_review_prompt"
+  public_entry: "创作、审读、修订提示及原素材缓存"
+  variation_point: "把内心的动态变化与环境回返写进生成；审读只对有证据的损害返修；角色坏台词可删选不可代改"
+  inputs: ["SceneBrief", "角色与环境材料", "候选正文", "审读意见"]
+  outputs: ["可保留人物声音且不压缩心理的正文候选"]
+  invariants: ["不设心理段落或修辞数量门禁", "软字数服从一级归属", "修订不代角色发言"]
+  allowed_dependencies: ["Engine public/literary", "现有场景交易合同"]
+  forbidden_dependencies: ["新增 Canon", "固定文风模板", "审美计数硬门禁"]
+  tests: ["提示合同", "原素材传至审读", "真实短场景", "架构审计"]
+  rollback_unit: "Studio prompts/transaction 提交"
+  documentation: ["本文件"]
+```
+
 ## 2026-09-24：纠正“多给导演约束便能提高多样性”的推论
 
 用户指出，多样性的关键不是让导演再细化角色的语言、心理与逐轮任务，而是给角色**事实和情节底线内的自主性**。前述检索不能证明“增加约束会改善文风”；[IBSEN](https://aclanthology.org/2024.acl-long.88/)等只说明导演—演员协作可以维持总体情节方向，[角色按时间顺序模拟再改写的研究](https://aclanthology.org/2025.in2writing-1.9/)也不等于本项目中逐结果催交更自然。对此修正工程假设：导演提供起始局面、角色已知与不可越过的事实、场景最终必须成立的结果；人物自行决定策略、语言、行动、沉默及何时让关系发生变化。固定结果不等于给定台词，也不等于每轮必须交付结果。
@@ -619,6 +693,26 @@ module_change_packet:
   forbidden_dependencies: ["Studio", "Provider SDK", "正式项目文件写入"]
   tests: ["默认合同", "模板字段", "显式用户选择优先", "架构/全量回归"]
   rollback_unit: "独立 Engine 规划提交"
+  documentation: ["本文件"]
+```
+
+## 2026-09-24：角色系统画像中的终点与自主性
+
+角色扮演系统画像目前强调“主创锁定场景边界”和“自主决定如何回应”，却没有把两者的关系说清。面对底层场景任务，模型容易把角色的防御惯性演成无限循环。固定结果应是整场戏的边界，而不是下一句命令；角色拥有选择何时、怎样以及在什么压力下失守的自主权，但不能把同一推辞重播到场景结束。调整系统画像后必须真实复跑，核对角色是否在保持独特声音的同时抵达已锁结果；若素材或动机不足，仍应失败并请主创重构情境，不许强行填空。
+
+```yaml
+module_change_packet:
+  objective: "在角色系统层明确固定场景终点与人物自由应对的关系"
+  primary_module: "Pi Worker conversation profile"
+  public_entry: "conversationSystemPrompt(character-actor)"
+  variation_point: "角色扮演画像；不改外显言行的一级归属或 Provider transport"
+  inputs: ["已确认场景边界", "真实公共互动", "角色欲望和误判"]
+  outputs: ["自主寻找可信剧情转折的角色提示"]
+  invariants: ["不指定台词动作", "不把未来当已发生事实", "无法合理抵达时不编造证据"]
+  allowed_dependencies: ["现有 Pi Worker conversation"]
+  forbidden_dependencies: ["Engine 内部", "Provider SDK 直连"]
+  tests: ["画像合同", "Pi Worker check", "真实同题试跑"]
+  rollback_unit: "独立 Worker 提交"
   documentation: ["本文件"]
 ```
 
