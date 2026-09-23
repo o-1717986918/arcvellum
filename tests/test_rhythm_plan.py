@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio_engine.literary.planning.narrative_rhythm import (
+    DEFAULT_RHYTHM,
     narrative_rhythm_contract,
     render_narrative_rhythm_contract,
 )
@@ -11,6 +12,25 @@ from literary_engineering_studio_engine.literary.planning.rhythm_plan import loa
 
 
 class RhythmPlanTests(unittest.TestCase):
+    def test_default_scene_rhythm_allows_psychology_and_environment_without_quota(self):
+        self.assertEqual(DEFAULT_RHYTHM["density_mix"]["reflection"], "medium")
+        self.assertEqual(DEFAULT_RHYTHM["density_mix"]["description"], "medium")
+        self.assertIn("局部允许", DEFAULT_RHYTHM["avoid_flatness"])
+        template = (Path(__file__).resolve().parents[1] / "src" / "literary_engineering_studio_engine"
+                    / "_engine" / "templates" / "scene.yaml").read_text(encoding="utf-8")
+        self.assertIn("  reflection_ratio: medium", template)
+        self.assertIn("  description_ratio: medium", template)
+        self.assertNotIn("每段至少承担", template)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir()
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.write_text("scene_id: scene_0001\nnarrative_rhythm:\n  reflection_ratio: low\n"
+                             "  description_ratio: high\n", encoding="utf-8")
+            explicit = narrative_rhythm_contract(root, scene)["narrative_rhythm"]
+            self.assertEqual(explicit["reflection_ratio"], "low")
+            self.assertEqual(explicit["description_ratio"], "high")
+
     def test_saved_plan_becomes_formal_scene_contract_and_is_versioned(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

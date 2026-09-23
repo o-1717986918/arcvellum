@@ -65,16 +65,16 @@ narrative_rhythm:
   scene_function: [{function}]
   scene_turn: {consequence}
   reader_effect: {obligation}
-  paragraph_shape: "过场简短，关键选择细写；段落推进以行动、信息差和人物选择为主。"
+  paragraph_shape: "过场随节奏收放，关键选择、情绪积累与场景质感都可停留；句群依人物视角和压力变化。"
   density_mix:
     summary: low
     action: medium
     dialogue: medium
-    reflection: low
+    reflection: medium
     description: medium
   dialogue_ratio: medium
   action_ratio: medium
-  reflection_ratio: low
+  reflection_ratio: medium
   description_ratio: medium
   narrative_distance: medium
   tension_curve:

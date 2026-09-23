@@ -52,24 +52,24 @@ narrative_rhythm:
   scene_function: []
   scene_turn: ""
   reader_effect: ""
-  paragraph_shape: "过场简短，关键选择细写；段落推进以行动、信息差和人物选择为主。"
+  paragraph_shape: "过场随节奏收放，关键选择、情绪积累与场景质感都可停留；句群依人物视角和压力变化。"
   density_mix:
     summary: low
     action: medium
     dialogue: medium
-    reflection: low
-    description: low
+    reflection: medium
+    description: medium
   dialogue_ratio: medium
   action_ratio: medium
-  reflection_ratio: low
-  description_ratio: low
+  reflection_ratio: medium
+  description_ratio: medium
   narrative_distance: medium
   tension_curve: ""
   texture_variety: "避免连续场景全是同一种材料；对话、动作、心理、环境、信息揭示应按场景功能变化。"
   chapter_ending_policy: ""
   slow_down_points: []
   speed_up_points: []
-  avoid_flatness: "每段至少承担行动推进、信息改变、关系压力、选择代价或场景衔接之一。"
+  avoid_flatness: "整场须有行动、信息或关系变化；局部允许有视角依据的感知、心理、趣味和审美停留，不把每段写成任务回执。"
 
 scene_bridge:
   incoming_pressure: ""
