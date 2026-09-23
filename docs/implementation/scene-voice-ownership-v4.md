@@ -288,6 +288,38 @@ module_change_packet:
   documentation: ["本文件"]
 ```
 
+```yaml
+module_change_packet:
+  objective: "让自然互动后的双方演员看见同一个未完成场景边界，不只对结果归属者催交"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "mode=relay 的接力回合编排"
+  variation_point: "初始自由回合不变；缺口后的对手回合也收到尚未发生的边界"
+  inputs: ["核对出的第一个未完成结果", "现有角色公共日志"]
+  outputs: ["双向反应所需的非强制戏剧方向"]
+  invariants: ["不把结果当角色知识或已发生事实", "不写具体对白动作", "不泄漏私念", "失败仍阻断未获支持的正文"]
+  allowed_dependencies: ["Engine public/literary.py", "现有角色调用"]
+  forbidden_dependencies: ["Engine 内部 import", "新 Provider 抽象"]
+  tests: ["初始回合不见终点", "对手缺口回合可见同一终点", "角色私念不外泄"]
+  rollback_unit: "独立 Studio 接力适配提交"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "让 Pi Worker 第一人称画像与普通现场细节的候选权限一致"
+  primary_module: "Pi Worker conversation profile"
+  public_entry: "conversationSystemPrompt(character-actor)"
+  variation_point: "由一概禁止新道具改为区分生活质感与证据事实"
+  inputs: ["同轮角色表演任务单"]
+  outputs: ["仍无工具和写权限、但可自由选择非证据现场细节的系统画像"]
+  invariants: ["不新增核心物证、身世、规则或 Canon", "不替他人发言行动"]
+  allowed_dependencies: ["现有 Pi Worker conversation"]
+  forbidden_dependencies: ["Engine 内部", "项目文件写入"]
+  tests: ["系统画像断言", "Pi Worker check"]
+  rollback_unit: "独立 Worker 提交"
+  documentation: ["本文件"]
+```
+
 ## 2026-09-24：接力导演只选既定结果，不编排台词
 
 目前已验证的接力提示合同尚缺少能由运行层调用的主创任务单。新任务单不再生成逐拍人物心理、台词或动作，也不把尚未发生的剧情写成“场景现状”。主创只从 SceneBrief 中逐字挑选最多四个必须在本场兑现的原子结果，指明承担角色与顺序；角色轮到该结果时才看见它。角色可独立选择措辞、延迟、抵抗或短暂沉默，但若结果最终未出现，须请原角色续演，不让正文作者代写。每人可见的补充事实只准选 `incoming_handoff` 中已经发生的内容；人物私有记忆仍来自自身档案。环境写手独立在真实公共互动之后取景，不接受主创逐项指定光、声、器物。源引验证只能防止凭空新增任务事实，不能证明文学表现优良。
@@ -505,6 +537,26 @@ module_change_packet:
   forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
   tests: ["人物经历来源投影", "relay 压力与公共事实区分", "真实同题复跑"]
   rollback_unit: "独立 Engine 投影提交"
+  documentation: ["本文件"]
+```
+
+第二次复跑仍未完成已锁定结果：沈照月与周鹤在“节目单/值机日志/排班科/调档”上反复拉扯，十轮对白比旧版长，却依旧缺少漏歌与删改承认。这说明“给更多背景”若不改编排，只会让人物更有理由重复自己的防御话术。角色被禁止发明任何道具或节目内容，也使它不敢用尚未定名的歌实际演出“漏掉—纠正”；与此同时另一个演员只看见对方真实公共言行，不看见待完成的场景边界，缺少推动对手离开程序话术的戏剧方向。
+
+需要把自主性划在恰当边界：角色可创作不承担证据和持续设定的普通现场细节、自己的措辞与情绪动作；由此产生的细节仍是候选，主创有权拒绝。已有 Canon、神秘线索、精确读数、稳定身世与不可逆剧情不得凭空确定。自然互动之后，未完成的宏观场景结果同时对双方作为**戏剧方向**可见，而不是只告诉结果归属者；对手不知道未来会发生什么，演员仍自由选择如何试探、拒绝、绕开或沉默。这样让二人共同参与抵达剧情，而不是反复让同一个人独自接任务。
+
+```yaml
+module_change_packet:
+  objective: "扩大角色的现场表达自主性，并让互动双方共享尚未兑现的戏剧方向"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "render_actor_scene_prompt 与角色素材交接合同"
+  variation_point: "区分可弃现场细节与证据/Canon；结果边界不等于角色已知事实"
+  inputs: ["SceneBrief 结果引文", "真实公共日志", "角色本人经验"]
+  outputs: ["可供首级演员自由表演的边界提示"]
+  invariants: ["不规定台词或动作", "不把未来当已发生", "不发明核心证据或世界规则", "角色言行仍归本人"]
+  allowed_dependencies: ["现有 Engine 纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["普通现场细节被允许", "核心证据仍待来源", "他人结果不当成角色知识"]
+  rollback_unit: "独立 Engine 提示合同提交"
   documentation: ["本文件"]
 ```
 
