@@ -9,16 +9,16 @@
 | `src/literary_engineering_studio_engine/tasking` | 31 | Formal task contracts | `tasking/__init__.py` | Engine foundation | Agent execution |
 | `src/literary_engineering_studio_engine/routes` | 54 | Formal route catalog | `routes/catalog.py` | tasking and literary services | Studio lifecycle |
 | `src/literary_engineering_studio_engine/workflow` | 37 | Workflow projections | `workflow_state facade` | tasking and routes | Runtime adapters |
-| `src/literary_engineering_studio_engine/literary` | 189 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
+| `src/literary_engineering_studio_engine/literary` | 190 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
 | `src/literary_engineering_studio_engine/prompting` | 13 | Prompt programs | `prompt registry/compiler` | literary contracts | Provider transport |
 | `src/literary_engineering_studio_engine/orchestration` | 6 | Read-only orchestration catalog | `orchestration/__init__.py` | task and Gate catalogs | Planner execution |
 | `src/literary_engineering_studio_engine/projections` | 17 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |
 | `src/literary_engineering_studio_engine/command_line` | 25 | Engine CLI adapter | `command_line/main.py` | Engine public services | literary business rules |
-| `src/literary_engineering_studio/application` | 63 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
+| `src/literary_engineering_studio/application` | 64 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
 | `src/literary_engineering_studio/automation` | 22 | Campaign control | `automation/controller.py` | application/runtime ports | Engine route implementations |
 | `src/literary_engineering_studio/orchestration` | 51 | Adaptive plan domain | `orchestration services` | Engine catalog and ports | API or task lifecycle |
 | `src/literary_engineering_studio/runtime` | 98 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
-| `src/literary_engineering_studio/runtimes` | 16 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
+| `src/literary_engineering_studio/runtimes` | 18 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
 | `src/literary_engineering_studio/persistence` | 28 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
 | `src/literary_engineering_studio/projections` | 35 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
 | `src/literary_engineering_studio/preflight` | 31 | Writeback validation | `task_preflight facade` | contracts and deterministic validators | Agent creativity |

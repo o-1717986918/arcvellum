@@ -13,6 +13,8 @@ from literary_engineering_studio_engine.public.literary import (
     parse_actor_material,
     parse_environment_material,
     parse_performance_plan,
+    render_actor_prompt,
+    render_performance_plan_prompt,
     render_performance_materials,
 )
 from tests.test_lean_kernel_v2_pi_runtime import _Gateway, _brief
@@ -46,7 +48,7 @@ class _PerformanceGateway(_Gateway):
             self.calls.append((role, prompt))
             answer = json.dumps({
                 "beat_id": "b1", "speaker": "character/protagonist",
-                "candidates": [{"spoken": "信是我拿的。你先别把门关上。", "visible_action": "他把信留在桌沿，没有推向她。", "subtext_effect": "承认同时请求继续对话"}],
+                "candidates": [{"spoken": "信是我拿的。你先别把门关上。", "first_person_action": "我把信留在桌沿，没有推向她。", "private_impulse": "我怕她现在就走。"}],
             }, ensure_ascii=False)
         elif role == "environment-writer":
             self.calls.append((role, prompt))
@@ -60,6 +62,32 @@ class _PerformanceGateway(_Gateway):
 
 
 class ScenePerformanceAgentTests(unittest.TestCase):
+    def test_actor_task_is_first_person_and_uses_character_voice(self) -> None:
+        voice = {
+            "speaker": "姐姐", "role": "档案员", "belief": "承认比辩解有用",
+            "wants": "留住妹妹", "avoids": "承认自己害怕被抛下",
+            "stable_voice": {"rhythm": "平时长句绕开请求，着急时说‘你先别走。’", "signature_patterns": ["你先别走。"]},
+            "voice_state": {"interlocutors": ["妹妹"], "known_facts": ["昨夜拿了信"]},
+        }
+        prompt = render_actor_prompt(_brief().to_dict(), _plan()["beats"][0], voice)
+        self.assertIn("从现在起，我就是这个人", prompt)
+        self.assertIn("平时长句绕开请求", prompt)
+        self.assertIn("我的稳定说话方式", prompt)
+        self.assertIn("我不知道导演的台词计划", prompt)
+        self.assertIn("first_person_action", prompt)
+        self.assertIn("private_impulse", prompt)
+        self.assertNotIn("subtext_effect", prompt)
+        self.assertNotIn("你先别走。", prompt)
+        self.assertIn("此刻怎样争取、回避、还口或沉默", prompt)
+        self.assertNotIn("承认昨夜取走信，同时试探妹妹是否信他", prompt)
+        self.assertNotIn("承认取信，不声称妹妹已经原谅", prompt)
+
+    def test_director_leaves_micro_tactics_to_character_actor(self) -> None:
+        prompt = render_performance_plan_prompt(_brief().to_dict(), {}, "昨夜拿了信。")
+        self.assertIn("互动目标与压力", prompt)
+        self.assertIn("由扮演该人物的演员自行选择", prompt)
+        self.assertIn("不是整场解释清单", prompt)
+
     def test_experimental_feature_is_opt_in(self) -> None:
         self.assertEqual(default_config()["application"]["scene_performance_agents"], {"enabled": False, "max_actor_calls": 4})
 
@@ -81,6 +109,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         beat = _plan()["beats"][0]
         with self.assertRaisesRegex(ValueError, "target mismatch"):
             parse_actor_material({"beat_id": "b2", "speaker": beat["speaker"], "candidates": []}, beat)
+        with self.assertRaisesRegex(ValueError, "dialogue/action"):
+            parse_actor_material({"beat_id": "b1", "speaker": beat["speaker"], "candidates": [{"spoken": "我知道。", "visible_action": "他点头。"}]}, beat)
         with self.assertRaisesRegex(ValueError, "unknown beat"):
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b9", "description": "雨。"}]}, _brief().to_dict(), [beat])
         with self.assertRaisesRegex(ValueError, "contains dialogue"):
@@ -104,6 +134,7 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             self.assertEqual(roles[:4], ["worker", "character-actor", "environment-writer", "worker"])
             self.assertIn("Character And Environment Candidate Materials", gateway.calls[3][1])
             self.assertIn("信是我拿的", gateway.calls[3][1])
+            self.assertIn("我把信留在桌沿", gateway.calls[3][1])
             self.assertIn("门缝里的光", gateway.calls[3][1])
             self.assertEqual(first, second)
             self.assertEqual(runtime.metrics.cache_hits, 1)

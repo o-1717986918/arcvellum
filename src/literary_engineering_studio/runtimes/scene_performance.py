@@ -49,7 +49,6 @@ def scene_performance_materials(
     _notify(emit, "scene.performance.plan", {"beats": len(plan["beats"]), "digest": digest})
 
     actors: list[dict[str, Any]] = []
-    previous: list[str] = []
     actor_count = 0
     intents = expression.get("dialogue_intents") if isinstance(expression.get("dialogue_intents"), list) else []
     for beat in plan["beats"]:
@@ -57,17 +56,16 @@ def scene_performance_materials(
         if not speaker or actor_count >= policy["max_actor_calls"]:
             continue
         voice = next((item for item in intents if _matches_voice(item, speaker)), {})
-        prior_digest = hashlib.sha256(json.dumps(previous, ensure_ascii=False).encode()).hexdigest()[:10]
-        actor_path = cache_root / f"performance-actor-{digest}-{beat['beat_id']}-{prior_digest}.json"
+        beat_digest = hashlib.sha256(json.dumps(beat, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
+        actor_path = cache_root / f"performance-actor-{digest}-{beat['beat_id']}-{beat_digest}.json"
         try:
             material = _cached_payload(actor_path, lambda beat=beat, voice=voice: _answer_payload(invoke(
-                    render_actor_prompt(brief, beat, voice, previous, sources), "character-actor",
+                    render_actor_prompt(brief, beat, voice), "character-actor",
                 )), lambda payload, beat=beat: parse_actor_material(payload, beat))
         except (ValueError, RuntimeError, TimeoutError) as exc:
             _notify(emit, "scene.performance.skipped", {"stage": "actor", "beat_id": beat["beat_id"], "reason": str(exc)[:300]})
             continue
         actors.append(material)
-        previous.append(f"{speaker}：{material['candidates'][0]['spoken']}")
         actor_count += 1
         _notify(emit, "scene.performance.actor", {"beat_id": beat["beat_id"], "speaker": speaker})
 
@@ -95,7 +93,7 @@ def scene_creative_cache_digest(
 ) -> str:
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     runners = config.get("agent_runners") if isinstance(config.get("agent_runners"), dict) else {}
-    payload = ["performance-v6", projection_digest, brief, sources, application.get("scene_performance_agents", {}), runners.get("pi-worker", {})]
+    payload = ["performance-v8", projection_digest, brief, sources, application.get("scene_performance_agents", {}), runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
@@ -113,7 +111,7 @@ def _policy(config: dict[str, Any]) -> dict[str, Any]:
 
 def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, style: str, config: dict[str, Any]) -> str:
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
-    payload = ["performance-v5", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
+    payload = ["performance-v7", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
