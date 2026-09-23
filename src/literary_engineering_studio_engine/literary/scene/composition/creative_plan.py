@@ -217,7 +217,12 @@ def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]:
     stable_voice = card.speech_style_details or {"rhythm": card.speech_style}
     interlocutors = [name for name in facts.participants if not _same_character(name, card)]
     return {
+        "character_id": card.character_id,
         "speaker": card.name or card.character_id,
+        "role": card.role,
+        "belief": card.belief,
+        "moral_line": card.moral_line,
+        "background_influence": card.behavior_influences,
         "wants": _first_nonempty(card.desire + card.intention)
         or facts.scene_goal
         or "推进当前场景目标。",

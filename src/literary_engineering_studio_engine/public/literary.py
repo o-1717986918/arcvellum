@@ -79,6 +79,15 @@ from ..literary.scene.branching.proposals import branch_proposal_contract
 from ..literary.scene.context.broker import context_trace_status
 from ..literary.scene.facts import SceneFacts, load_scene_facts, load_scene_mapping
 from ..literary.scene.composition.creative_plan import project_brief_expression_context
+from ..literary.scene.roleplay.performance import (
+    render_performance_plan_prompt,
+    parse_performance_plan,
+    render_actor_prompt,
+    parse_actor_material,
+    render_environment_prompt,
+    parse_environment_material,
+    render_performance_materials,
+)
 from ..literary.style.reference_projection import (
     recent_formal_reference_ids,
     render_style_reference_selection,

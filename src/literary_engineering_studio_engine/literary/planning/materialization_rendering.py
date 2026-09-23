@@ -71,11 +71,11 @@ narrative_rhythm:
     action: medium
     dialogue: medium
     reflection: low
-    description: low
+    description: medium
   dialogue_ratio: medium
   action_ratio: medium
   reflection_ratio: low
-  description_ratio: low
+  description_ratio: medium
   narrative_distance: medium
   tension_curve:
     entry: {tension_entry}
@@ -85,7 +85,7 @@ narrative_rhythm:
   chapter_ending_policy: {chapter_ending_hook}
   slow_down_points: []
   speed_up_points: []
-  avoid_flatness: "每段至少承担行动推进、信息改变、关系压力、选择代价或场景衔接之一。"
+  avoid_flatness: "场景整体须有行动、信息或关系变化；局部允许有视角依据的感知、趣味和审美停留，不把每段写成任务回执。"
 
 scene_bridge:
   incoming_pressure: {incoming_pressure}
