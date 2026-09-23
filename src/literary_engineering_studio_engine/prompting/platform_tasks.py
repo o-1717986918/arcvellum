@@ -314,7 +314,7 @@ def write_platform_scene_generation_task(
             ),
             (
                 "执行生成前文风标准",
-                """在写候选正文前，先核对 prompt manifest 顶层与 generation_standards 中的 style_mount_snapshot 完全一致，再依据这个 exact style_id/version_id/content_hash/prompt_sha256/digest 对应的 style prompt 建立本场景文风执行策略。若挂载版本含完整参考语料，从中选一篇对应本场功能的表达主参照，具体借用其视角距离、句群呼吸、细节进入顺序和对白或意象的推进机制；高强度与类型选段同为正向参考，不因默认风格偏清晰而回避。策略须从 scene、character、reader experience、narrative rhythm、scene bridge 和相邻场景中确定：谁的欲望与代价驱动本场；入场怎样建立声音，哪里因阻力、信息或关系变化而收紧、舒展、变调或停顿；余波如何与邻场有别。让人物对白在词域、句形、礼貌边界和回避策略上可辨，允许有根据的机锋、幽默、抒情与沉默。随后直接按策略生成，不得自行改读另一个文风版本，也不得把策略作为分析、自检表、风格卡或工作流痕迹写入候选正文。违禁表达、反规避和中文标点仍须在生成时执行，并接受后续 Style Lint 与 AgentReview 核验；抽象软约束不得留给审查阶段统一润色。""",
+                """在写候选正文前，先核对 prompt manifest 顶层与 generation_standards 中的 style_mount_snapshot 完全一致，再依据这个 exact style_id/version_id/content_hash/prompt_sha256/digest 对应的 style prompt 建立本场景文风执行策略。若挂载版本含完整参考语料，从中选一篇对应本场功能的表达主参照，明确提取视角距离、句群呼吸、细节顺序、修辞发动、对白回弹或意象推进中的至少两项并贯穿初稿；不能只借题材词或概括成抽象风格词，高强度与类型选段同为正向参考。策略须从 scene、character、reader experience、narrative rhythm、scene bridge 和相邻场景中确定：谁的欲望与代价驱动本场；入场怎样建立声音，哪里因阻力、信息或关系变化而收紧、舒展、变调或停顿；余波如何与邻场有别。白描不能独占全场，承压处可用扎根人物经验的自由间接引语、反讽、借代、通感、复沓、意象回返或长句推进，让修辞参与认识和关系变化。让人物对白在词域、句形、礼貌边界、幽默方式和回避策略上可辨。随后直接按策略生成，不得自行改读另一个文风版本，也不得把策略作为分析、自检表、风格卡或工作流痕迹写入候选正文。收尾执行“证据之后停笔”：动作、意象、对白、沉默或物证已经传意时，不追加翻译潜台词、概括人物感受、宣布主题或解释其意义的句子。违禁表达、反规避和中文标点仍须在生成时执行，并接受后续 Style Lint 与 AgentReview 核验；抽象软约束不得留给审查阶段统一润色。""",
             ),
             (
                 "执行生成前字数预算标准",

@@ -200,7 +200,7 @@ def render_scene_create_prompt(
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
 
 ## Relevant Sources
-{source_evidence or "无额外资料；严格使用 SceneBrief。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，先读完整选段，选一篇最贴合本场功能的样例作表达主参照；正文应主动模仿其叙述距离、句群呼吸、细节进入顺序和对白或意象推进方式，不得只借题材词或概括成“清简”。必要时再取一篇辅助。用本项目人物、行动与因果写新内容，不复制样例专名、标志句、连续措辞或异常标点。用户方向、canon、人物事实和本场职责仍优先。
+{source_evidence or "无额外资料；严格使用 SceneBrief。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，先读完整选段，选一篇最贴合本场功能的样例作表达主参照；明确提取叙述距离、句群呼吸、细节进入顺序、修辞发动、对白回弹或意象推进中的至少两项，并贯穿 prose，不得只借题材词或概括成“清简”。必要时再取一篇辅助。用本项目人物、行动与因果写新内容，不复制样例专名、标志句、连续措辞或异常标点。用户最新方向、canon、人物事实和本场职责仍优先。
 
 ## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
@@ -208,7 +208,7 @@ def render_scene_create_prompt(
 ## Length Contract
 prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。先在心中把现有事件分成开场压力、行动阻力、关系反应、选择代价和余波，给各段分配足够篇幅；首轮直接写足完整场景，不得用梗概、节拍清单或压缩叙述代替正文。如果一次响应不足，创作阶段会要求在结尾之前补足有因果作用的段落，不要提前把情节收束成短稿。
 本场只实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff。章级义务提供方向，不授权提前演出后续场景；未列入 participants 的主要人物不得登场、发言或完成关键动作。若 Relevant Sources 含上一场正文，只承接其已发生后果，不得重演首次见面、同一调取/发现/交付、同一问答或同一决定。
-句群以中等长度句承担主要叙述：短句只落在真正的发现、选择或后果上，较长句可以承载同一动作链、观察层次或复杂因果。逗号服务尚未完成的语义关系；逗号较多时先重组层级，只有关系松散或重复才拆分，禁止按数量机械拆成一串同构短句。不要让连续场景都套用“核对—追问—停顿—留悬念”的程序；用本场独有的动作、关系压力和感官材料组织段落。写对白前根据人物资产、欲望、身份和本场关系压力，为每位主要说话者区分用词范围、句子完整度、主动发问或回避方式、礼貌与攻击的边界；speech_style 未填写时从已知事实推导，不编造方言、口头禅或新身世。让换掉说话者姓名后的关键台词仍可辨认，但允许人物在压力下改变语气；基础“清简”不能把所有人压成同一种平直短句。情绪通过避让、选择代价和说话方式显影，不用抽象总结或心理说明代替。使用中文引号与标点，不输出写作流程痕迹。
+句群不设恒定默认长度：短句只落在真正的发现、选择或后果上；较长句承载连续动作、观察层次、摇摆或复杂因果；连续短句若只是在逐项报动作，就重组为有呼吸和层级的句群。白描只是可用底色之一，承压段落可选扎根人物经验的自由间接引语、反讽、借代、通感、复沓、意象回返或长句推进，让修辞参与认识和关系变化。细节也可积蓄气氛、显露趣味或延长审美时间，不要求每段都即时推进事件。不要让连续场景都套用“核对—追问—停顿—留悬念”的程序。写对白前根据人物背景、欲望、身份和关系压力，为主要说话者区分词域、句形、主动发问或回避方式、礼貌边界与幽默方式；speech_style 未填写时从已知事实推导，不编造方言、口头禅或新身世。让换掉说话者姓名后的关键台词仍可辨认，不把所有人压成同一种平直短句。情绪通过避让、选择代价、自由间接感知和说话方式显影，不用抽象总结代替。段尾和场尾执行“证据之后停笔”：动作、意象、对白、沉默或物证已经传意时，删去随后翻译潜台词、概括人物感受、宣布主题或解释其意义的句子。使用中文引号与标点，不输出写作流程痕迹。
 
 ## Output
 {{"prose":"完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[]}}
@@ -222,7 +222,7 @@ character_changes、canon_candidates、continuity_changes、promise_updates、re
 只提出正文确实发生的变化；无法确认的内容放进 escalation_reasons。
 若 SceneBrief.risk.level 为 high，decision_trace 必须用少量条目记录关键创作取舍。
 
-## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认所选样例的叙述距离、句群节奏和细节组织已在 prose 中实际体现；随后对阿拉伯数字、中文数词、序数和量化单位完成最后一遍语义重写。{_QUANTITATIVE_DETAIL_RULE}
+## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认所选样例至少两项可观察技法已在 prose 中实际体现，并删去动作、意象、对白或物证后面重复解释其含义的尾句；随后对阿拉伯数字、中文数词、序数和量化单位完成最后一遍语义重写。{_QUANTITATIVE_DETAIL_RULE}
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene create prompt exceeds hard character limit")
@@ -285,7 +285,7 @@ def render_scene_revision_prompt(
 
 你是本场景原主创。只修复列出的硬失败或文学问题，保留有效情节、人物声音和已有细节。SceneBrief.canon_constraints 与 Relevant Sources 中的最新用户方向仍是硬约束；每轮返修都必须重新核对既定人名、人物白名单、日期、年份、绝对数值、差值与时间间隔，不得在修复一个问题时重新引入已消失的冲突，也不得用 new_asset_candidates 绕过禁止新增专名的方向。
 不得用另一种模板化转折替换问题表达。修改后的正文仍须满足同一 SceneBrief，并重新提取实际 SceneDelta。
-修订长句、逗号或标点问题时应重组句内层级，不能把原句机械拆成一串结构相同的短句；保持中等长度句为叙述主体，并保护原有的长短句落差。修订对白时保留人物各自的用词、句子形状、回避和争取方式；不要把所有台词统一磨成平直短句，也不要凭空加口头禅。
+修订长句、逗号或标点问题时应重组句内层级，不能把原句机械拆成一串结构相同的短句；句群长度随动作、观察与压力变化，并保护原有的长短句落差。修订对白时保留人物各自的词域、句形、礼貌边界、幽默方式、回避和争取策略；不要把所有台词统一磨成平直短句，也不要凭空加口头禅。若原文已由动作、意象、对白、沉默或物证传意，删除随后重复解释其含义的段尾、场尾句，不用另一条金句替换。
 直接返回与 Scene Create 完全相同的 JSON 对象，不要 Markdown、工作流说明、路径或哈希。
 
 ## SceneBrief
@@ -304,7 +304,7 @@ def render_scene_revision_prompt(
 {json.dumps(instructions, ensure_ascii=False, separators=(",", ":"))}
 
 ## Relevant Sources
-{source_evidence or "无额外资料。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，修订时保留或恢复与本场相合的具体样例表达形态：叙述距离、句群呼吸、细节进入顺序和对白或意象推进方式。不要只把样例概括成“清简”，也不要为模仿而改动 canon、人物选择或搬运原句。
+{source_evidence or "无额外资料。"}\n\n## Style Reference Priority\n若 Relevant Sources 的已挂载 style-profile.md 含参考选段，修订时保留或恢复与本场相合的具体样例表达形态，至少核对叙述距离、句群呼吸、细节顺序、修辞发动、对白回弹或意象推进中的两项。不要只把样例概括成“清简”，也不要为模仿而改动 canon、人物选择或搬运原句。
 
 ## Allowed Existing Refs
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
@@ -321,7 +321,7 @@ prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范
 空组返回 []。next_handoff 只能是字符串数组。
 若 SceneBrief.risk.level 为 high，decision_trace 必须保留关键创作取舍，不得清空。
 
-## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认修订没有抹平所选样例的叙述节奏和细节组织；随后对 prose 中的阿拉伯数字、中文数词、序数和量化单位重新完成语义重写。{_QUANTITATIVE_DETAIL_RULE}
+## Final Prose Pass\n若已挂载参考样例，返回 JSON 前确认修订没有抹平所选样例的叙述节奏、修辞发动和细节组织；检查段尾、场尾是否在证据已经成立后又补了解释句并删除；随后对 prose 中的阿拉伯数字、中文数词、序数和量化单位重新完成语义重写。{_QUANTITATIVE_DETAIL_RULE}
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene revision prompt exceeds hard character limit")

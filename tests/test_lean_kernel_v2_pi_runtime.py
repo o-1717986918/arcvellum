@@ -23,6 +23,9 @@ from literary_engineering_studio.runtimes.pi_scene_transaction import (
     render_scene_revision_prompt,
     render_scene_review_prompt,
 )
+from literary_engineering_studio.runtimes.scene_length_completion import (
+    render_scene_length_completion_prompt,
+)
 from literary_engineering_studio_engine.literary.scene.transaction import (
     ChangeProposal,
     CreativeResult,
@@ -112,12 +115,14 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("核对—追问—停顿—留悬念", prompt)
         self.assertIn("未列入 participants 的主要人物不得登场", prompt)
         self.assertIn("不得重演首次见面", prompt)
-        self.assertIn("写对白前根据人物资产、欲望、身份和本场关系压力", prompt)
+        self.assertIn("写对白前根据人物背景、欲望、身份和关系压力", prompt)
         self.assertIn("speech_style 未填写时从已知事实推导", prompt)
-        self.assertIn("基础“清简”不能把所有人压成同一种平直短句", prompt)
+        self.assertIn("不把所有人压成同一种平直短句", prompt)
         self.assertIn("Style Reference Priority", prompt)
         self.assertIn("一篇最贴合本场功能的样例作表达主参照", prompt)
-        self.assertIn("主动模仿其叙述距离、句群呼吸", prompt)
+        self.assertIn("修辞发动、对白回弹或意象推进中的至少两项", prompt)
+        self.assertIn("白描只是可用底色之一", prompt)
+        self.assertIn("证据之后停笔", prompt)
         self.assertIn("新增精确数字默认不用", prompt)
         self.assertIn("“一个又一个”“一次次”等虚指反复并非精确计数", prompt)
         self.assertIn("当场问答、人物选择或谈判", prompt)
@@ -126,6 +131,16 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("一张桌、两把椅子、拧两下、看几秒", prompt)
         self.assertIn("若只为显得具体，删去精度不损失对话信息", prompt)
         self.assertGreater(prompt.rfind("## Final Prose Pass"), prompt.rfind("## Output"))
+
+    def test_length_completion_preserves_expression_and_stops_after_evidence(self) -> None:
+        prompt = render_scene_length_completion_prompt(
+            _brief(), "她把信压在杯底。\n\n妹妹仍站在门边。", 420
+        )
+
+        self.assertIn("辨认叙述距离、句群呼吸、主导意象和人物话语策略", prompt)
+        self.assertIn("白描不能独占补写段", prompt)
+        self.assertIn("动作、意象、对白或物证已经传意时停笔", prompt)
+        self.assertIn("不追加翻译潜台词、概括感受或解释意义的尾句", prompt)
 
     def test_review_treats_hard_continuity_conflicts_as_revision(self) -> None:
         result = CreativeResult("第一版正文。", "初稿", SceneDelta())

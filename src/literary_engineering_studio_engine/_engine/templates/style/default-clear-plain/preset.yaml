@@ -3,16 +3,16 @@ preset_id: clear-plain-zh
 style_id: arcvellum-clear-plain-prose
 author_id: arcvellum
 profile_id: clear-plain-prose
-display_name: 清简叙事
-description: 以清晰叙事为底、随人物与场景压力变换句法和语域的中文通用基础文风。
+display_name: 弹性叙事
+description: 以可读性为底线、随人物与场景压力调动句法、修辞、语域和叙述距离的中文通用基础文风。
 scope: project
 priority: highest
 auto_mount_for_new_studio_projects: true
 source_mode: user-supplied-public-domain-or-original-reference-corpus
 theory_basis:
   - 句法与语域变化服务意义、视角、人物声音和场景转折
-  - 具体主语与准确动词优先
-  - 细节必须改变读者理解
+  - 准确动词、人物声音与语言起伏并重
+  - 细节可以改变理解、积蓄气氛或延长审美时间
   - 标点先表达结构与停顿，再表达风格节奏
 prompt_contract:
   stable_prefix:
@@ -24,6 +24,8 @@ prompt_contract:
     - dominant-expression-channel
     - narrative-distance-and-rhythm
     - scene-language-contour
+    - reference-technique-transfer
+    - evidence-then-cut
     - adjacent-scene-difference
     - ending-mode
     - causal-quantitative-detail

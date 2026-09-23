@@ -7,7 +7,10 @@ from literary_engineering_studio_engine.literary.style.anti_ai import ANTI_AI_ST
 class AntiAiStyleTests(unittest.TestCase):
     def test_generation_guidance_allows_scene_driven_language_variation(self):
         self.assertIn("清晰不等于全程平直", ANTI_AI_STYLE_PROMPT)
-        self.assertIn("语速、句群、语域和意象升起", ANTI_AI_STYLE_PROMPT)
+        self.assertIn("白描也不是唯一合法写法", ANTI_AI_STYLE_PROMPT)
+        self.assertIn("反讽、借代、通感、自由间接引语", ANTI_AI_STYLE_PROMPT)
+        self.assertIn("证据之后停笔", ANTI_AI_STYLE_PROMPT)
+        self.assertIn("翻译潜台词、概括人物感受、宣布主题", ANTI_AI_STYLE_PROMPT)
         self.assertNotIn("日记里会不会这样写", ANTI_AI_STYLE_PROMPT)
 
     def test_semantic_quantities_are_not_misclassified_by_static_lint(self):

@@ -22,7 +22,7 @@ DEFAULT_STYLE_PRESET_ID = "clear-plain-zh"
 DEFAULT_STYLE_ID = "arcvellum-clear-plain-prose"
 DEFAULT_STYLE_AUTHOR_ID = "arcvellum"
 DEFAULT_STYLE_PROFILE_ID = "clear-plain-prose"
-DEFAULT_STYLE_DISPLAY_NAME = "清简叙事"
+DEFAULT_STYLE_DISPLAY_NAME = "弹性叙事"
 DEFAULT_STYLE_TARGET_ID = "style-atelier-arcvellum-clear-plain-prose"
 DEFAULT_STYLE_CONFIG_SCHEMA = "arcvellum/default-style-mount/v1"
 
@@ -321,9 +321,9 @@ def _default_metrics() -> dict[str, object]:
             "long_sentence_use": "continuous-action-layered-observation-complex-causality",
         },
         "narrative_distance": "scene-responsive",
-        "detail_density": "low-to-medium-functional",
-        "figurative_density": "scene-responsive",
-        "psychology_mode": "behavior-choice-consequence-first",
+        "detail_density": "scene-responsive-informational-atmospheric-aesthetic",
+        "figurative_density": "scene-responsive-expression-bearing",
+        "psychology_mode": "behavior-choice-free-indirect-consequence",
         "dialogue_mode": "character-specific-purposeful-subtext-capable",
         "punctuation": {
             "standard": "GB/T 15834-2011",
@@ -332,6 +332,7 @@ def _default_metrics() -> dict[str, object]:
         },
         "anti_ai": {
             "mechanical_contrast": "blocked",
+            "explanatory_aftertelling": "avoid-during-generation",
             "template_density_limit": 0.02,
         },
     }
