@@ -133,3 +133,43 @@ module_change_packet:
 “每角色一轮整场”原本是效率偏好，不是艺术或真实性公理。它迫使角色预想其他人物尚未说出的话，开放式试写出现替别人发言正是这个代价的信号。如果自由排演加来源包仍不能兼顾角色独立和事实一致，改试**小规模角色接力**：主创只给共同情境，某角色给出自己的言行，下一个角色看到已发生的真实言行后回应；必要时回到前一角色补一轮，环境写手仍独立观察。接力轮数由场景冲突和收益控制，不能把轮流发言写成新的固定模板。所有角色言行仍由对应一级 Agent 产生，主创仅编排。比较指标须同时包括新增调用成本与人物语言的真实互动收益。
 
 工程回归：当前原型保持 opt-in / 默认关闭；Python 全量 1539 项通过（1 项跳过），Pi Worker 106 项通过，架构审计与 `git diff --check` 通过。上述结果只证明实现与既有功能未出现已测出的回归，**不证明文风改善或事实边界已可靠守住**。
+
+## 2026-09-24：同场接力对照与 v6 留白合同
+
+《shoreline》第二场面馆试跑：现有整场独立表演让两位演员各给 6 条言行，周鹤擅自给遗漏歌曲命名、定时长，环境写手补出具体钟点、其他顾客和未获确认的店内陈设。六轮依次交接**真实对方台词**后，人物接话更连贯，且没有给歌曲命名；但两人仍围绕“登记流程／稿面流程”打转，未自发完成场景必须发生的承认。把结局直接明示给周鹤后虽完成事实揭示，台词却像交付义务；改为只给沈照月“冒险施压”则又诱出未经来源支持的替签、签到表等新线索。接力不是自动解药，也不能靠导演一味命令角色坦白。
+
+单独给同一角色补一份**本场明确留白**（歌曲名字、时长、精确节目次序、尚无来源的现场道具等）后，角色没有再编歌名或时长，但仍补出公文包等物件。因此这是缩小一类事实幻觉的信号，不是完成证明。试跑原始会话位于忽略目录 `build/scene-performance-e2e/v6-relay/`，正式作品与 Canon 未变。下一步让唯一主创在导演阶段选择真正未定、又容易被模型“具体化”的少量事实槽位，分别贴近角色和环境的交付请求；槽位只写**不能擅自断言的内容**，不规定说话方式或微动作。若留白仍漏检，后续再设计来源收据，不把审美判断硬编码为 lint。
+
+这一划分与 [SillyTavern 官方 World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)的按情境插入知识而非永久塞满人物卡的做法相近；其文档也明确注入信息不保证模型使用。2026 年一篇[角色扮演预印本](https://arxiv.org/html/2606.25632)把“知道了不该知道的事实”和“固定人物卡压平声音”分列为两种问题，并使用人物视角限定事实、随情境变化的行为模式；它研究的是书本角色模拟，不能直接证明本项目有效，也不支持照搬其完整三层记忆架构。本项目先做更小的来源／留白分离，再用实际小说候选验证。
+
+```yaml
+module_change_packet:
+  objective: "让场景角色与环境提示携带主创选出的明确未定事实，不占用角色的语言和行动自主权"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "parse_performance_plan、render_actor_scene_prompt、render_environment_prompt"
+  variation_point: "scene-performance/v6 的 unknown_slots，纯提示边界而非审美 Gate"
+  inputs: ["SceneBrief", "表达/人物投影", "已有来源", "导演返回的任务单"]
+  outputs: ["有界、可检视的未定事实槽位", "角色与环境生成提示"]
+  invariants: ["不改 Canon", "不代角色决定发言和动作", "违禁词/标点等原有硬审查仍在", "默认路径不变"]
+  allowed_dependencies: ["现有 Engine 场景纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["unknown_slots 校验", "角色与环境提示可见留白", "过量与重复槽位拒绝"]
+  rollback_unit: "独立 Engine 合同提交"
+  documentation: ["本文件"]
+```
+
+```yaml
+module_change_packet:
+  objective: "将同一份留白合同传到每个一级演员与环境写手并做同场试跑"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "scene_performance_materials"
+  variation_point: "opt-in 候选缓存版本与本场任务的传递"
+  inputs: ["Engine v6 plan", "SceneBrief", "角色声音投影"]
+  outputs: ["每角色一轮候选、环境候选及可追踪事件"]
+  invariants: ["全部在场人物仍需一级调用", "候选无项目写权", "失败不得假报来源覆盖", "默认关闭"]
+  allowed_dependencies: ["Engine public/literary.py", "现有 RoleConversationGateway"]
+  forbidden_dependencies: ["Engine 内部 import", "新的 Canon 写回路径"]
+  tests: ["runtime 传递同一留白", "缓存版本隔离", "真实模型同场复跑"]
+  rollback_unit: "独立 Studio adapter 提交"
+  documentation: ["本文件"]
+```

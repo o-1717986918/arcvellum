@@ -41,6 +41,7 @@ def _plan() -> dict[str, object]:
             "focus_beats": ["b1"], "focal_condition": "门口与桌面都在主人公视野中",
             "perception_boundary": "不确定门外天气",
         },
+        "unknown_slots": ["门外的具体天气尚未确认"],
     }
 
 
@@ -127,10 +128,12 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("还以为妹妹只想把信拿回去", prompt)
 
     def test_environment_prompt_uses_scene_facts_without_prescribing_style(self) -> None:
-        prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "参考语言起伏", "信在桌上", _plan()["environment_task"])
+        prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "参考语言起伏", "信在桌上", _plan()["environment_task"], _plan()["unknown_slots"])
         self.assertIn("主创只给你视角与事实边界", prompt)
         self.assertIn("门口与桌面都在主人公视野中", prompt)
         self.assertIn("不确定门外天气", prompt)
+        self.assertIn("门外的具体天气尚未确认", prompt)
+        self.assertIn("普通、不承担证据作用的感官质感仍由你自由选择", prompt)
         self.assertIn("长短由场景决定", prompt)
         self.assertNotIn("150—300", prompt)
 
@@ -143,6 +146,19 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         plan["environment_task"]["focus_beats"] = ["b9"]
         with self.assertRaisesRegex(ValueError, "focus_beats"):
             parse_performance_plan(plan, _brief().to_dict())
+
+    def test_unknown_slots_are_factual_gaps_not_micro_direction(self) -> None:
+        plan = parse_performance_plan(_plan(), _brief().to_dict())
+        self.assertEqual(plan["unknown_slots"], ["门外的具体天气尚未确认"])
+        prompt = render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {}, _plan()["actor_tasks"][0], plan["unknown_slots"])
+        self.assertIn("门外的具体天气尚未确认", prompt)
+        self.assertIn("即时反应由我自己决定", prompt)
+        self.assertIn("unknown_slots", render_performance_plan_prompt(_brief().to_dict(), {}, ""))
+        for malformed in (None, ["重复空位", "重复空位"], ["空位"] * 9, [1]):
+            payload = _plan()
+            payload["unknown_slots"] = malformed
+            with self.subTest(malformed=malformed), self.assertRaisesRegex(ValueError, "unknown_slots"):
+                parse_performance_plan(payload, _brief().to_dict())
 
     def test_actor_scene_allows_self_chosen_entries_and_silence(self) -> None:
         beats = [_plan()["beats"][0], {**_plan()["beats"][0], "beat_id": "b2"}]

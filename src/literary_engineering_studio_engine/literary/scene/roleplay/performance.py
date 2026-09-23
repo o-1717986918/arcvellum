@@ -7,9 +7,10 @@ import re
 from typing import Any
 
 
-PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v5"
+PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v6"
 MAX_BEATS = 4
 MAX_ACTOR_ENTRIES = 12
+MAX_UNKNOWN_SLOTS = 8
 
 
 def render_performance_plan_prompt(
@@ -25,6 +26,8 @@ actor_tasks 只从现有人物背景、关系与本场压力写每个人的私�
 
 自由属于表达和微观选择，不属于世界事实。不得临场发明钟点、设备读数、未出现的道具、设备部件、旧物或往事；若来源只说“大致顺序”，任务单也只允许大致顺序。不能用“展示性格”“推进剧情”这类空任务。
 
+unknown_slots 只列本场资料尚未确认、但容易被误写成确定事实的少量空位，例如歌曲名、精确钟点、设备型号或关键道具的有无。它是事实留白，不是演员的说话方式、动作要求或情节任务；普通不承担证据作用的感官质感不必逐项禁止。没有这样的空位就返回空数组。
+
 ## SceneBrief
 {json.dumps(brief, ensure_ascii=False)}
 
@@ -34,7 +37,7 @@ actor_tasks 只从现有人物背景、关系与本场压力写每个人的私�
 ## Confirmed Sources
 {sources[:10_000] or '无额外来源。'}
 
-仅返回 JSON：{{"scene_id":"与 SceneBrief 相同","beats":[{{"beat_id":"b1","event":"外部局面的已确定变化或人物可感知的新处境；不写任何人的具体言行"}}],"actor_tasks":[{{"speaker":"participants 中一人的精确字符串","personal_pressure":"现有人物事实在本场形成的私人牵挂；写其处境，不写该怎么做","relationship_misread":"面对其他参与者的已知关系或误判；没有则留空"}}],"environment_task":{{"focus_beats":["b1"],"focal_condition":"既有视角此刻可感知的范围与来由","perception_boundary":"尚未确认、不能写成事实的空间细节"}}}}。
+仅返回 JSON：{{"scene_id":"与 SceneBrief 相同","beats":[{{"beat_id":"b1","event":"外部局面的已确定变化或人物可感知的新处境；不写任何人的具体言行"}}],"actor_tasks":[{{"speaker":"participants 中一人的精确字符串","personal_pressure":"现有人物事实在本场形成的私人牵挂；写其处境，不写该怎么做","relationship_misread":"面对其他参与者的已知关系或误判；没有则留空"}}],"environment_task":{{"focus_beats":["b1"],"focal_condition":"既有视角此刻可感知的范围与来由","perception_boundary":"尚未确认、不能写成事实的空间细节"}},"unknown_slots":["尚未确认的具体事实空位；不写风格和动作要求"]}}。
 actor_tasks 必须覆盖全部 participants，顺序不限；每人都会拿到完整场景，不要在 beats 中预分配发言。environment_task 只标感知范围和未知边界，不自行补写空间事实；已确认空间以来源为准。环境节拍只能选自 beats。不得改变 Canon、人物名单、时间数值、场景结局；不得预写标准台词或环境段落。"""
 
 
@@ -50,10 +53,24 @@ def parse_performance_plan(payload: dict[str, Any], brief: dict[str, Any]) -> di
         normalized.append(_parse_beat(item, index))
     actor_tasks = _parse_actor_tasks(payload.get("actor_tasks"), participants)
     environment_task = _parse_environment_task(payload.get("environment_task"), normalized)
+    unknown_slots = _parse_unknown_slots(payload.get("unknown_slots"))
     return {
         "schema": PERFORMANCE_SCHEMA, "scene_id": brief["scene_id"], "beats": normalized,
-        "actor_tasks": actor_tasks, "environment_task": environment_task,
+        "actor_tasks": actor_tasks, "environment_task": environment_task, "unknown_slots": unknown_slots,
     }
+
+
+def _parse_unknown_slots(value: Any) -> list[str]:
+    if not isinstance(value, list) or len(value) > MAX_UNKNOWN_SLOTS:
+        raise ValueError("performance unknown_slots must be a list of at most eight factual gaps")
+    slots = []
+    for item in value:
+        if not isinstance(item, str) or not 2 <= len(item.strip()) <= 120:
+            raise ValueError("performance unknown_slots must contain bounded text")
+        slots.append(item.strip())
+    if len(set(slots)) != len(slots):
+        raise ValueError("performance unknown_slots must be distinct")
+    return slots
 
 
 def _parse_actor_tasks(value: Any, participants: set[str]) -> list[dict[str, str]]:
@@ -109,7 +126,7 @@ def render_actor_prompt(
 
 def render_actor_scene_prompt(
     brief: dict[str, Any], beats: list[dict[str, str]], voice: dict[str, Any],
-    task: dict[str, str] | None = None,
+    task: dict[str, str] | None = None, unknown_slots: list[str] | None = None,
 ) -> str:
     speaker = _actor_scene_speaker(beats, str((task or {}).get("speaker") or voice.get("speaker") or ""))
     person = _actor_identity(voice, speaker)
@@ -150,6 +167,10 @@ def render_actor_scene_prompt(
 
 ## 我在这场戏里依次经历的时刻
 {json.dumps(moments, ensure_ascii=False)}
+
+## 本场明确留白
+{json.dumps(unknown_slots or [], ensure_ascii=False)}
+这些空位没有确定答案，不把它们说成已发生或已证实的事实；我仍可用自己的方式避开、怀疑或追问。除此之外，我的语气、停顿、取舍和即时反应由我自己决定。
 
 从自己的冲动出发经历这些时刻，但不把冲动解释给读者。只交我的话与我亲手做的事，不替别人回答。场景锚点不是要我照着演的行动表。世界事实只从本场已知资料来：不知道具体设备部件、道具、读数或往事时，不能靠职业知识补成现场证据；我的自主性在回应方式，不在创造新的物证。
 
@@ -242,7 +263,7 @@ def _parse_actor_scene_entry(
 
 def render_environment_prompt(
     brief: dict[str, Any], beats: list[dict[str, str]], style_reference: str,
-    sources: str, task: dict[str, Any] | None = None,
+    sources: str, task: dict[str, Any] | None = None, unknown_slots: list[str] | None = None,
 ) -> str:
     focus = set((task or {}).get("focus_beats") or [beat["beat_id"] for beat in beats])
     selected = [beat for beat in beats if beat["beat_id"] in focus]
@@ -264,6 +285,10 @@ def render_environment_prompt(
 
 ## Confirmed Sources
 {sources[:8_000] or '无额外来源。'}
+
+## 本场明确留白
+{json.dumps(unknown_slots or [], ensure_ascii=False)}
+不要把这些尚未确认的空位描写成已存在的环境事实或线索；普通、不承担证据作用的感官质感仍由你自由选择。
 
 仅返回 JSON：{{"scene_id":"{brief['scene_id']}","passages":[{{"beat_id":"所选节拍的 beat_id","focal_character":"现有视角人物或空串","description":"独立环境描写，不含人物动作和对白"}}]}}。从所选节拍中挑真正需要环境语言的位置，返回零至四段；若此场无需独立环境段，就返回空数组。长短由场景决定，每段不超过 350 字。不要附“这段象征什么”的说明，不把参考选段的原句、专名或连续措辞带入本作。"""
 
