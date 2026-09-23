@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, LoaderCircle, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
 import { projectsClient } from "@/features/projects/services/projectsClient";
-import { settingsClient, type ThinkingLevel, type ThinkingRole } from "@/features/settings/services/settingsClient";
+import { settingsClient, type ScenePerformancePreferences, type ThinkingLevel, type ThinkingRole } from "@/features/settings/services/settingsClient";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
@@ -11,9 +11,14 @@ import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
-const selectedModels = reactive({ worker: "", advisor: "", steward: "" });
-const roleSaving = reactive({ worker: false, advisor: false, steward: false });
-const roleSaved = reactive({ worker: false, advisor: false, steward: false });
+type ModelRole = "worker" | "advisor" | "steward" | "character-actor" | "environment-writer";
+const selectedModels = reactive<Record<ModelRole, string>>({ worker: "", advisor: "", steward: "", "character-actor": "", "environment-writer": "" });
+const roleSaving = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false });
+const roleSaved = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false });
+const performance = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 4 });
+const performanceConfirmed = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 4 });
+const performanceSaving = ref(false);
+const performanceLoaded = ref(false);
 const thinking = reactive<Record<ThinkingRole, ThinkingLevel>>({ creative: "medium", project: "xhigh" });
 const confirmedThinking = reactive<Record<ThinkingRole, ThinkingLevel>>({ creative: "medium", project: "xhigh" });
 const thinkingSaving = reactive<Record<ThinkingRole, boolean>>({ creative: false, project: false });
@@ -72,6 +77,7 @@ onMounted(async () => {
     feedback.value = cause instanceof Error ? cause.message : "模型目录暂时不可用。";
   }
   await loadThinking();
+  await loadPerformance();
   appInfo.value = await settingsClient.applicationInfo().catch(() => null);
   projectsRoot.value = String(appInfo.value?.paths?.projects_root || "");
 });
@@ -91,6 +97,7 @@ async function refresh(): Promise<void> {
     feedback.value = cause instanceof Error ? cause.message : "刷新失败。";
   } finally {
     await loadThinking();
+    await loadPerformance();
     busy.value = false;
   }
 }
@@ -104,6 +111,34 @@ async function loadThinking(): Promise<void> {
   } catch (cause) {
     thinkingLoaded.value = false;
     feedback.value = cause instanceof Error ? cause.message : "思考强度暂时无法读取。";
+  }
+}
+
+async function loadPerformance(): Promise<void> {
+  try {
+    const result = await settingsClient.scenePerformancePreferences();
+    Object.assign(performance, result.preferences);
+    Object.assign(performanceConfirmed, result.preferences);
+    performanceLoaded.value = true;
+  } catch (cause) {
+    performanceLoaded.value = false;
+    feedback.value = cause instanceof Error ? cause.message : "场景表演设置暂时无法读取。";
+  }
+}
+
+async function savePerformance(): Promise<void> {
+  if (performanceSaving.value || !performanceLoaded.value) return;
+  performanceSaving.value = true;
+  try {
+    const result = await settingsClient.saveScenePerformancePreferences({ ...performance });
+    Object.assign(performance, result.preferences);
+    Object.assign(performanceConfirmed, result.preferences);
+    feedback.value = "场景表演设置已保存；新场景开始时生效。";
+  } catch (cause) {
+    Object.assign(performance, performanceConfirmed);
+    feedback.value = cause instanceof Error ? cause.message : "场景表演设置保存失败。";
+  } finally {
+    performanceSaving.value = false;
   }
 }
 
@@ -140,10 +175,10 @@ async function connectProvider(): Promise<void> {
   }
 }
 
-async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> {
+async function saveModel(role: ModelRole): Promise<void> {
   const expectedModel = selectedModels[role];
   if (!expectedModel || roleSaving[role]) return;
-  const labels = { worker: "正文与审查", advisor: "项目 Agent", steward: "项目监督" };
+  const labels = { worker: "正文与审查", advisor: "项目 Agent", steward: "项目监督", "character-actor": "角色表演", "environment-writer": "环境描写" };
   roleSaving[role] = true;
   roleSaved[role] = false;
   feedback.value = "";
@@ -171,10 +206,8 @@ async function saveModel(role: "worker" | "advisor" | "steward"): Promise<void> 
 
 function syncSelectedModels(): void {
   const fallback = store.modelCatalog?.selected_model || "";
-  const values: Partial<Record<"worker" | "advisor" | "steward", string>> = store.modelCatalog?.selected_models || {};
-  selectedModels.worker = values.worker || fallback;
-  selectedModels.advisor = values.advisor || fallback;
-  selectedModels.steward = values.steward || fallback;
+  const values = (store.modelCatalog?.selected_models || {}) as Partial<Record<ModelRole, string>>;
+  for (const role of Object.keys(selectedModels) as ModelRole[]) selectedModels[role] = values[role] || fallback;
 }
 
 async function disconnect(providerId: string): Promise<void> {
@@ -307,6 +340,8 @@ function pathValue(key: string): string {
             { id: 'worker', title: '正文与审查', text: '负责写作、推演、修订和正式审查。' },
             { id: 'advisor', title: '项目 Agent', text: '负责对话、查询项目并调用正式项目能力。' },
             { id: 'steward', title: '项目监督', text: '用于异常判断和自动化过程中的项目级选择。' },
+            { id: 'character-actor', title: '角色表演', text: '按场景任务单扮演人物，提供候选对白和动作。' },
+            { id: 'environment-writer', title: '环境描写', text: '按视角与文风创作可选的场景描写。' },
           ] as const)" :key="role.id">
             <div><strong>{{ role.title }}</strong><p>{{ role.text }}</p></div>
             <select v-model="selectedModels[role.id]" :disabled="roleSaving[role.id]" @change="saveModel(role.id)"><option value="">先连接一个模型服务</option><option v-for="model in models" :key="model.qualified_id" :value="model.qualified_id">{{ model.name }} · {{ model.qualified_id }}</option></select>
@@ -343,6 +378,18 @@ function pathValue(key: string): string {
         </label>
       </div>
       <p class="privacy-note">模型不支持所选档位时会安全降档；任务的请求次数与思考额度仍受执行预算约束。</p>
+    </section>
+
+    <section class="settings-section thinking-section">
+      <header><span class="section-icon iris"><WandSparkles :size="18" /></span><div><h2>场景表演 Agent · 实验性</h2><p>角色与环境各自产出候选，主创负责最终正文；开启后仅对新场景生效，可能增加费用与未经核实的细节。</p></div></header>
+      <div class="thinking-control-list">
+        <label><span><strong>候选素材机制</strong><small>关闭后仍由单一主创完成场景。</small></span>
+          <select v-model="performance.enabled" aria-label="场景表演 Agent" :disabled="!performanceLoaded || performanceSaving" @change="savePerformance"><option :value="true">开启</option><option :value="false">关闭</option></select>
+        </label>
+        <label><span><strong>每场角色表演上限</strong><small>环境写手另有一次调用；上限越高，耗时与费用越多。</small></span>
+          <select v-model.number="performance.max_actor_calls" aria-label="每场角色表演上限" :disabled="!performanceLoaded || performanceSaving || !performance.enabled" @change="savePerformance"><option v-for="count in [0, 1, 2, 3, 4]" :key="count" :value="count">{{ count }}</option></select>
+        </label>
+      </div>
     </section>
 
     <section class="bootstrap-status-panel">

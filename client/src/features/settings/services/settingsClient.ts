@@ -6,6 +6,8 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
 export type ThinkingRole = "creative" | "project";
 export interface ThinkingPreferences { creative: ThinkingLevel; project: ThinkingLevel }
 interface ThinkingResponse { ok: boolean; preferences: ThinkingPreferences }
+export interface ScenePerformancePreferences { enabled: boolean; max_actor_calls: number }
+interface ScenePerformanceResponse { ok: boolean; preferences: ScenePerformancePreferences }
 
 export function createSettingsClient(
   transport: ApiTransport = featureTransport,
@@ -37,6 +39,11 @@ export function createSettingsClient(
     saveThinkingPreference: (role: ThinkingRole, level: ThinkingLevel) => transport.request<ThinkingResponse>(
       "/model-connections/pi-worker/thinking",
       { method: "PUT", body: JSON.stringify({ role, level }) },
+    ),
+    scenePerformancePreferences: () => transport.request<ScenePerformanceResponse>("/model-connections/pi-worker/scene-performance"),
+    saveScenePerformancePreferences: (preferences: ScenePerformancePreferences) => transport.request<ScenePerformanceResponse>(
+      "/model-connections/pi-worker/scene-performance",
+      { method: "PUT", body: JSON.stringify(preferences) },
     ),
     exportDiagnostics: () => transport.authorizedFetch("/application/diagnostics/export", { method: "POST" }),
   };

@@ -11,6 +11,10 @@ from ...application.config import (
     save_config,
     set_pi_thinking_preference,
 )
+from ...application.scene_performance_preferences import (
+    get_scene_performance_preferences,
+    set_scene_performance_preferences,
+)
 from ...integrations.pi_worker import (
     disconnect_pi_provider,
     pi_worker_catalog,
@@ -19,7 +23,7 @@ from ...integrations.pi_worker import (
 )
 from ...runtimes import clear_agent_runner_status_cache
 from ..common import call_handler
-from ..models import ModelSelectionRequest, PiThinkingPreferenceRequest, PiWorkerCredentialRequest
+from ..models import ModelSelectionRequest, PiThinkingPreferenceRequest, PiWorkerCredentialRequest, ScenePerformancePreferenceRequest
 
 
 def build_pi_worker_router(config: dict[str, Any]) -> APIRouter:
@@ -41,6 +45,16 @@ def build_pi_worker_router(config: dict[str, Any]) -> APIRouter:
                 "preferences": set_pi_thinking_preference(config, payload.role, payload.level),
             }
         )
+
+    @router.get("/model-connections/pi-worker/scene-performance")
+    def scene_performance():
+        return {"ok": True, "preferences": get_scene_performance_preferences(config)}
+
+    @router.put("/model-connections/pi-worker/scene-performance")
+    def select_scene_performance(payload: ScenePerformancePreferenceRequest):
+        return call_handler(lambda: {"ok": True, "preferences": set_scene_performance_preferences(
+            config, payload.enabled, payload.max_actor_calls, save=save_config,
+        )})
 
     @router.put("/model-connections/pi-worker/credential")
     def credential(payload: PiWorkerCredentialRequest):

@@ -73,6 +73,19 @@ class ApiServerTests(unittest.TestCase):
                 )
                 self.assertEqual(invalid.status_code, 422)
 
+    def test_scene_performance_preferences_can_be_changed_without_model_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            with patch.dict(os.environ, {"LES_CONFIG_PATH": str(path)}):
+                current = self.client.get("/model-connections/pi-worker/scene-performance")
+                self.assertEqual(current.json()["preferences"], {"enabled": False, "max_actor_calls": 4})
+                updated = self.client.put("/model-connections/pi-worker/scene-performance", json={
+                    "enabled": False, "max_actor_calls": 2,
+                })
+                self.assertEqual(updated.status_code, 200)
+                self.assertEqual(updated.json()["preferences"], {"enabled": False, "max_actor_calls": 2})
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["application"]["scene_performance_agents"]["max_actor_calls"], 2)
+
     def test_health_exposes_desktop_startup_nonce_only_after_authentication(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

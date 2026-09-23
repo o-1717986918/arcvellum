@@ -15,7 +15,10 @@ from .installation import locate_pi_worker
 
 
 _PROVIDER_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
-_MODEL_ROLES = ("worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology")
+_MODEL_ROLES = (
+    "worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology",
+    "character-actor", "environment-writer",
+)
 
 
 def pi_worker_catalog(config: dict[str, Any]) -> dict[str, Any]:

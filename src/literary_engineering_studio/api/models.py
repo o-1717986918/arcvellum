@@ -177,6 +177,11 @@ class PiThinkingPreferenceRequest(BaseModel):
     level: Literal["off", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 
+class ScenePerformancePreferenceRequest(BaseModel):
+    enabled: bool
+    max_actor_calls: int
+
+
 class AdvisorSessionRequest(BaseModel):
     project_root: str
     title: str = "项目问答"

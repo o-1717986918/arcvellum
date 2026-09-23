@@ -53,6 +53,12 @@ describe("settings model selection", () => {
         const { role, level } = JSON.parse(String(init.body));
         return { ok: true, preferences: { creative: role === "creative" ? level : "medium", project: role === "project" ? level : "xhigh" } };
       }
+      if (path === "/model-connections/pi-worker/scene-performance" && !init) {
+        return { ok: true, preferences: { enabled: true, max_actor_calls: 4 } };
+      }
+      if (path === "/model-connections/pi-worker/scene-performance" && init?.method === "PUT") {
+        return { ok: true, preferences: JSON.parse(String(init.body)) };
+      }
       if (path === "/application/info") return { paths: { projects_root: "C:\\ArcVellum\\Works" } };
       if (path === "/model-connections/pi-worker/model" && init?.method === "PUT") {
         const payload = JSON.parse(String(init.body));
@@ -111,5 +117,17 @@ describe("settings model selection", () => {
 
     expect((wrapper.find('select[aria-label="创作 Agent思考强度"]').element as HTMLSelectElement).value).toBe("medium");
     expect(wrapper.text()).toContain("保存中断");
+  });
+
+  it("persists scene performance controls", async () => {
+    const { default: SettingsView } = await import("./SettingsView.vue");
+    const wrapper = mount(SettingsView, { global: { plugins: [createPinia()] } });
+    await flushPromises();
+    await wrapper.find('select[aria-label="场景表演 Agent"]').setValue("false");
+    await flushPromises();
+    expect(apiMock).toHaveBeenCalledWith(
+      "/model-connections/pi-worker/scene-performance",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ enabled: false, max_actor_calls: 4 }) }),
+    );
   });
 });
