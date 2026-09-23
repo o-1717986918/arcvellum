@@ -16,11 +16,13 @@ from literary_engineering_studio_engine.public.literary import (
     parse_environment_material,
     parse_performance_plan,
     parse_relay_plan,
+    parse_relay_scene_check,
     render_actor_prompt,
     render_actor_scene_prompt,
     render_environment_prompt,
     render_performance_plan_prompt,
     render_relay_plan_prompt,
+    render_relay_scene_check_prompt,
     render_performance_materials,
 )
 from tests.test_lean_kernel_v2_pi_runtime import _Gateway, _brief
@@ -90,6 +92,37 @@ class _PerformanceGateway(_Gateway):
 
 
 class ScenePerformanceAgentTests(unittest.TestCase):
+    def test_scene_relay_check_only_reports_evidenced_outcomes_after_interaction(self) -> None:
+        plan = parse_relay_plan(_relay_plan(), _brief().to_dict())
+        entries = [
+            {"entry_id": "t1:1", "speaker": "character/sister", "spoken": "信呢？", "first_person_action": "我站在门口。", "private_impulse": "我怀疑他拿了。"},
+            {"entry_id": "t2:1", "speaker": "character/protagonist", "spoken": "信是我拿的。", "first_person_action": "", "private_impulse": "我终于说了。"},
+        ]
+        prompt = render_relay_scene_check_prompt(plan, entries)
+        self.assertIn("一段角色真实互动结束后", prompt)
+        self.assertIn("仅仅在 private_impulse 里想说或想做不算", prompt)
+        self.assertNotIn("下一句该说", prompt)
+        payload = {"scene_id": "scene_0001", "results": [{
+            "milestone_id": "m1", "status": "fulfilled", "evidence_entry_ids": ["t2:1"],
+        }]}
+        self.assertEqual(parse_relay_scene_check(payload, plan, entries)["results"][0]["status"], "fulfilled")
+        for status, evidence, problem in (
+            ("fulfilled", [], "owner evidence"),
+            ("fulfilled", ["t1:1"], "owner evidence"),
+            ("missing", ["t2:1"], "cannot cite evidence"),
+            ("fulfilled", ["unknown"], "known entries"),
+            ("invented", [], "status or evidence"),
+        ):
+            bad = {"scene_id": "scene_0001", "results": [{
+                "milestone_id": "m1", "status": status, "evidence_entry_ids": evidence,
+            }]}
+            with self.subTest(status=status, evidence=evidence), self.assertRaisesRegex(ValueError, problem):
+                parse_relay_scene_check(bad, plan, entries)
+        missing = {"scene_id": "scene_0001", "results": [{
+            "milestone_id": "m1", "status": "missing", "evidence_entry_ids": [],
+        }]}
+        self.assertEqual(parse_relay_scene_check(missing, plan, entries)["results"][0]["status"], "missing")
+
     def test_relay_plan_selects_only_source_grounded_macro_outcomes(self) -> None:
         brief = _brief().to_dict()
         prompt = render_relay_plan_prompt(brief)

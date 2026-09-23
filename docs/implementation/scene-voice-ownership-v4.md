@@ -65,6 +65,28 @@ module_change_packet:
   documentation: ["本文件"]
 ```
 
+## 2026-09-24：自然互动后的场景核对合同
+
+上一轮 A/B 显示，把剧情结果改称“场景边界”仍不能稳定改变角色行为；因此下一工程批次不继续给导演加细任务，而是把结果核对移到角色真实接力之后。这个核对只回答已有结果是否有一级角色素材支持，不评价措辞，也不决定谁下一句该怎么说。`missing` 和 `uncertain` 留给 Studio 编排下一段互动；不能当作强制角色立刻服从的台词命令。`private_impulse` 仅可证明原本就是内在认知的结果，不能证明可见行动或说出口的承认。
+
+合同测试通过后，用同一 Pi Worker 主创模型做了两次隔离试探（`build/scene-performance-e2e/relay_scene_check_probe.py`）：人物心里想“信是我拿的，我该承认”、口中只说“你先让我想想”时返回 `missing`；补上该人物真正说出的“信是我拿的”后返回 `fulfilled`，且证据指向那条发言。这证明该小样本中的外显/内在区分有效，不证明长场景语义核对已经可靠，也不评价语言风格。
+
+```yaml
+module_change_packet:
+  objective: "开放角色互动后，按 SceneBrief 已锁结果核对一级角色素材是否真的覆盖场景变化"
+  primary_module: "Engine literary/scene/roleplay"
+  public_entry: "render_relay_scene_check_prompt、parse_relay_scene_check，经 public/literary.py 导出"
+  variation_point: "独立 scene-relay-check/v1；不改正式 Gate、静态 lint 或默认候选路径"
+  inputs: ["scene-relay-plan/v1", "按发生顺序的一级角色条目"]
+  outputs: ["每个 milestone 的 fulfilled/missing/uncertain 与条目证据"]
+  invariants: ["只核对剧情结果", "未满足不补造角色言行", "私有思绪不能证明可见行为", "不写 Canon/正文"]
+  allowed_dependencies: ["Engine 场景纯合同"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["结果与计划一一对应", "证据 ID 必须属于原角色", "外显与内在结果区分", "缺口不被填补"]
+  rollback_unit: "独立 Engine 合同提交"
+  documentation: ["本文件"]
+```
+
 导演的 `actor_task` 必须按作品事实而不是通用模板组织：这一场面对谁、当前已知/误知、不得外泄的事、压力沿节拍怎样变化。它**不得**给“语气该怎样变”“要用什么词”“先做哪个动作”之类配方；稳定声音来自人物资产，具体话语和微观行为由演员在事实底线内自主选择。主创即使有清晰戏剧目的，也只锁结果和边界，不预写标准台词。演员输入应像第一人称处境，而不是把几十项表格全文交给角色逐条复述；结构信息先由引擎校验，再选择性渲染成沉浸式提示。
 
 导演的 `environment_task` 只给已确认空间事实、视角可感知范围，以及哪些地理、天气、器物、历史未获来源支持。环境 Agent 自行选择视觉或非视觉线索、停留时间、句长与修辞；可选择零到数段，不强制每个节拍、每种感官、每段固定字数，也不创作人物动作、对白或心理。主创可拒绝环境候选，但不能把新事实从候选中直接升级为世界设定。
