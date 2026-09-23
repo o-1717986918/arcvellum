@@ -485,3 +485,44 @@ module_change_packet:
   rollback_unit: "独立 Studio adapter 提交"
   documentation: ["本文件"]
 ```
+
+## 2026-09-24：真实接力复跑后的演员输入修订
+
+`relay-runtime-literary-live` 用更新后的 Pi 系统画像与角色交付提示复跑第二场：演员不再只交极短对白，周鹤一轮可连续说几句，私念也较具体；但二人绕着钥匙、登记、值夜表和虚构手续盘旋，八轮后“漏歌再纠正”“承认点名删改”仍缺席。候选反复新增未确认的道具和程序细节。一次结果核对把“暴露动机”判 `fulfilled` 并列出八个证据 ID，超过解析合同上限四个，导致流程中断。此轮**没有形成可用正文**，不可称作风格验收通过。观察显示：缩短/延长角色语言并不足以让固定剧情自然到达；角色看到的人物投影偏职业语言和行为惯性，未见完整的成长经历，当前场冲突也未作为“未发生的压力”显式区分。
+
+修订只增加已有资产的生活史与本场冲突可见性：角色可凭自身经历和关系压力自主决定绕、问、说，不让导演规定具体句子、动作或每轮交付。生活史只供本人，其他角色和环境仍只见公共言行；场景冲突不能当作已经发生的事实。不能把人物卡中“平时带笔、纸”当作本场确实带着。之后同题复跑，比较是否仍迷失在职业手续。
+
+```yaml
+module_change_packet:
+  objective: "让一级角色看见本人已建档的生活史和当前场冲突，而不被导演逐句控制"
+  primary_module: "Engine literary/scene/composition"
+  public_entry: "project_brief_expression_context 的 dialogue_intents 与角色表演提示"
+  variation_point: "在既有角色投影内加入有来源的 lived_history；relay 当前压力只标为尚未发生"
+  inputs: ["正式人物 CharacterCard", "SceneBrief.external_conflict", "真实公共互动"]
+  outputs: ["更完整的第一人称角色经验边界"]
+  invariants: ["只给本人历史", "不把未来动作当已发生", "不分配台词、动作、轮次", "不新增事实或 Canon"]
+  allowed_dependencies: ["现有 Engine 人物卡投影与角色提示"]
+  forbidden_dependencies: ["Studio", "Provider SDK", "正式项目写入"]
+  tests: ["人物经历来源投影", "relay 压力与公共事实区分", "真实同题复跑"]
+  rollback_unit: "独立 Engine 投影提交"
+  documentation: ["本文件"]
+```
+
+真实复跑另有一处编排故障：结果核对模型返回了八个证据 ID，虽然文字上仍是在判断剧情，解析器按既有上限拒绝，接力直接终止。只对这种**格式或来源合同错误**做一次带原因的原模型重试；第二次仍不合格就明确失败，不默默判已完成，不放松剧情证据标准。
+角色系统画像、演员提示和人物投影发生变化后，batch 与 relay 的素材缓存版本同步前进；旧候选不冒充新实验结果。
+
+```yaml
+module_change_packet:
+  objective: "让模型可从一次结果核对格式错误恢复，避免无正文的偶然中断"
+  primary_module: "Studio runtimes/scene_performance"
+  public_entry: "mode=relay 的结果核对调用"
+  variation_point: "仅失败核对增加一次有错误原因的重试；成功路径不变"
+  inputs: ["既有检查提示", "解析器错误", "同一角色条目"]
+  outputs: ["合同合格的核对或明确失败"]
+  invariants: ["不篡改 evidence", "不把缺失改成已完成", "不增加文学审美门禁", "不新增项目写入"]
+  allowed_dependencies: ["Engine public/literary.py", "现有 Pi Gateway"]
+  forbidden_dependencies: ["Engine 内部 import", "Provider 专有逻辑"]
+  tests: ["单次恢复", "二次无效明确失败", "缓存正确"]
+  rollback_unit: "独立 Studio adapter 提交"
+  documentation: ["本文件"]
+```

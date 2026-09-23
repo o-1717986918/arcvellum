@@ -139,12 +139,14 @@ def render_actor_scene_prompt(
 我避开或害怕：{person['avoids']}
 我的底线：{person['moral_line']}
 过往在我身上留下的行为痕迹：{json.dumps(person['background_influence'], ensure_ascii=False)}
+我亲自经历过的往事（可以影响此刻的联想与语势，不等于我要向对方讲出来）：{json.dumps(person['lived_history'], ensure_ascii=False)}
 我平时的说话倾向（不是每句的模板；此刻可偏离）：{json.dumps(person['stable_voice'], ensure_ascii=False)}
 我眼前的人、关系、所知与误知：{json.dumps(state, ensure_ascii=False)}
 
 ## 我确实置身的场景
 {json.dumps(scene, ensure_ascii=False)}
 {"上场交接只是我过去知道的事，不代表那些登记簿、纸张或物件此刻在这里；我只从开场处境和真实公共互动判断眼前发生什么。" if public_log is not None else ""}
+{"当前场冲突是尚未展开的压力，不是对方已经说出口的话，也不规定我下一句、下一动作。" if public_log is not None else ""}
 
 ## 我在这场戏里依次经历的时刻
 {json.dumps(moments, ensure_ascii=False)}
@@ -183,7 +185,8 @@ def _actor_scene_view(
         )}
     return {**{key: brief.get(key) for key in keys},
             "opening_situation": validated_opening_situation(brief, opening_situation) if opening_situation is not None else "",
-            "confirmed_knowledge": validated_knowledge_quotes(brief, knowledge_quotes or [])}
+            "confirmed_knowledge": validated_knowledge_quotes(brief, knowledge_quotes or []),
+            "unplayed_conflict_pressure": brief.get("external_conflict") or ""}
 
 
 def _actor_scene_speaker(beats: list[dict[str, str]], speaker: str) -> str:
@@ -210,8 +213,14 @@ def _actor_identity(voice: dict[str, Any], fallback_name: str) -> dict[str, Any]
         "avoids": voice.get("avoids") or "未提供。",
         "moral_line": voice.get("moral_line") or "未提供。",
         "background_influence": voice.get("background_influence") or [],
+        "lived_history": _lived_history(voice),
         "stable_voice": stable_voice,
     }
+
+
+def _lived_history(voice: dict[str, Any]) -> dict[str, Any]:
+    value = voice.get("lived_history")
+    return value if isinstance(value, dict) else {}
 
 
 def parse_actor_material(payload: dict[str, Any], beat: dict[str, str]) -> dict[str, Any]:

@@ -9,7 +9,7 @@ from literary_engineering_studio.runtime.role_conversation import RoleConversati
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.application.scene_performance_preferences import get_scene_performance_preferences
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_performance import scene_performance_materials
+from literary_engineering_studio.runtimes.scene_performance import _relay_check, scene_performance_materials
 from literary_engineering_studio_engine.public.literary import (
     parse_actor_material,
     parse_actor_scene_material,
@@ -133,6 +133,31 @@ class _RelayGateway(_Gateway):
 
 
 class ScenePerformanceAgentTests(unittest.TestCase):
+    def test_relay_check_retries_one_invalid_evidence_contract(self) -> None:
+        plan = parse_relay_plan(_relay_plan(), _brief().to_dict())
+        entries = [{"entry_id": "t1:1", "speaker": "character/sister", "spoken": "信呢？",
+                    "first_person_action": "", "private_impulse": ""}]
+        invalid = {"scene_id": "scene_0001", "results": [{
+            "milestone_id": "m1", "status": "fulfilled", "evidence_entry_ids": ["t1:1"],
+        }]}
+        valid = {"scene_id": "scene_0001", "results": [{
+            "milestone_id": "m1", "status": "missing", "evidence_entry_ids": [],
+        }]}
+        with tempfile.TemporaryDirectory() as temporary:
+            calls = []
+            def invoke(prompt, role):
+                calls.append((prompt, role))
+                return json.dumps(invalid if len(calls) == 1 else valid, ensure_ascii=False)
+            check = _relay_check(plan, entries, Path(temporary), "retry", invoke, None)
+            self.assertEqual(check["results"][0]["status"], "missing")
+            self.assertEqual(len(calls), 2)
+            self.assertIn("归属角色的明确外显证据", calls[1][0])
+            _relay_check(plan, entries, Path(temporary), "retry", invoke, None)
+            self.assertEqual(len(calls), 2)
+            with self.assertRaises(ValueError):
+                _relay_check(plan, entries, Path(temporary), "still-invalid",
+                             lambda prompt, role: json.dumps(invalid, ensure_ascii=False), None)
+
     def test_scene_relay_check_only_reports_evidenced_outcomes_after_interaction(self) -> None:
         plan = parse_relay_plan(_relay_plan(), _brief().to_dict())
         entries = [
@@ -220,6 +245,7 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("同一锚点可有多项", prompt)
         self.assertIn("不要因为交付为 JSON 就压缩成一句功能性答复", prompt)
         self.assertIn("未出口的感受、欲望或迟疑", prompt)
+        self.assertIn("我亲自经历过的往事", prompt)
 
     def test_director_leaves_micro_tactics_to_character_actor(self) -> None:
         prompt = render_performance_plan_prompt(_brief().to_dict(), {}, "昨夜拿了信。")
@@ -269,6 +295,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         )
         self.assertIn('"opening_situation": "relationship-turn"', early_prompt)
         self.assertIn("上场交接只是我过去知道的事", early_prompt)
+        self.assertIn("当前场冲突是尚未展开的压力", early_prompt)
+        self.assertIn("unplayed_conflict_pressure", early_prompt)
         self.assertIn("信在昨夜被取走", early_prompt)
         self.assertNotIn("主人公承认自己拿走了信", early_prompt)
         self.assertNotIn("隐瞒转为承认", early_prompt)

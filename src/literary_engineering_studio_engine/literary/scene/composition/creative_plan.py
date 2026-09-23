@@ -223,6 +223,10 @@ def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]:
         "belief": card.belief,
         "moral_line": card.moral_line,
         "background_influence": card.behavior_influences,
+        "lived_history": {
+            "summary": card.background_summary[:600],
+            "formative_events": [event[:240] for event in card.formative_events[:4]],
+        },
         "wants": _first_nonempty(card.desire + card.intention)
         or facts.scene_goal
         or "推进当前场景目标。",

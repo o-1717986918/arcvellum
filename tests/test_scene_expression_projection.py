@@ -17,6 +17,9 @@ class SceneExpressionProjectionTests(unittest.TestCase):
                 """character_id: sister
 name: 阿青
 role: 姐姐
+background_story:
+  summary: 小时候常替弟弟把信送到邮局。
+  formative_events: [有一年弟弟把回信藏在鞋盒里]
 bdi:
   belief: [弟弟隐瞒了信]
   desire: [知道信的去向]
@@ -58,6 +61,8 @@ state:
             self.assertEqual(voice["voice_state"]["interlocutors"], ["character/brother"])
             self.assertEqual(voice["voice_state"]["known_facts"], ["信昨夜已被取走"])
             self.assertIn("不愿当众拆穿", voice["voice_state"]["relationship_evidence"][0])
+            self.assertIn("替弟弟把信送到邮局", voice["lived_history"]["summary"])
+            self.assertIn("回信藏在鞋盒里", voice["lived_history"]["formative_events"][0])
 
 
 if __name__ == "__main__":
