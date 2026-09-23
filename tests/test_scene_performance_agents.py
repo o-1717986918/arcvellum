@@ -117,6 +117,39 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         self.assertIn("此刻可偏离", prompt)
         self.assertNotIn("personal_pressure", prompt)
 
+    def test_actor_relay_separates_actual_public_history_from_pending_plot(self) -> None:
+        brief = _brief().to_dict()
+        public_log = [{
+            "speaker": "character/sister", "spoken": "信呢？", "first_person_action": "我站在门口。",
+            "private_impulse": "绝不可进入公共日志",
+        }]
+        prompt = render_actor_scene_prompt(
+            brief, _plan()["beats"], {"speaker": "character/protagonist"},
+            public_log=public_log, pending_outcome="主人公承认自己拿走了信", max_entries=2,
+        )
+        self.assertIn("此前真正发生的公共言行", prompt)
+        self.assertIn("信呢？", prompt)
+        self.assertIn("本轮待兑现的既定剧情结果（不是已发生的台词）", prompt)
+        self.assertIn("主人公承认自己拿走了信", prompt)
+        self.assertIn("零至 2 项", prompt)
+        self.assertNotIn("绝不可进入公共日志", prompt)
+        self.assertIn("不自动成为已证实的世界事实", prompt)
+        early_prompt = render_actor_scene_prompt(
+            brief, _plan()["beats"], {"speaker": "character/protagonist"},
+            public_log=[], knowledge_quotes=["信在昨夜被取走"], max_entries=2,
+        )
+        self.assertIn("信在昨夜被取走", early_prompt)
+        self.assertNotIn("主人公承认自己拿走了信", early_prompt)
+        self.assertNotIn("隐瞒转为承认", early_prompt)
+        with self.assertRaisesRegex(ValueError, "speaker mismatch"):
+            render_actor_scene_prompt(brief, _plan()["beats"], {"speaker": "character/protagonist"}, public_log=[{**public_log[0], "speaker": "outsider"}])
+        with self.assertRaisesRegex(ValueError, "knowledge_quotes"):
+            render_actor_scene_prompt(brief, _plan()["beats"], {"speaker": "character/protagonist"}, public_log=[], knowledge_quotes=["现场已经出现一把未经记录的钥匙"])
+        with self.assertRaisesRegex(ValueError, "not grounded"):
+            render_actor_scene_prompt(brief, _plan()["beats"], {"speaker": "character/protagonist"}, public_log=[], pending_outcome="妹妹在门外发现一把尚未出现的钥匙")
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            render_actor_scene_prompt(brief, [_plan()["beats"][0], {"beat_id": "b2", "event": "妹妹走近"}], {"speaker": "character/protagonist"}, public_log=[])
+
     def test_environment_prompt_uses_scene_facts_without_prescribing_style(self) -> None:
         prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "参考语言起伏", "信在桌上", _plan()["unknown_slots"])
         self.assertIn("主创只给你视角与事实边界", prompt)
@@ -164,6 +197,8 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             parse_actor_scene_material({**target, "speaker": "character/sister", "entries": [first, second]}, _brief().to_dict(), beats, "character/protagonist")
         with self.assertRaisesRegex(ValueError, "follow known beats"):
             parse_actor_scene_material({**target, "entries": [second, first]}, _brief().to_dict(), beats)
+        with self.assertRaisesRegex(ValueError, "bounded list"):
+            parse_actor_scene_material({**target, "entries": [first, second]}, _brief().to_dict(), beats, max_entries=1)
 
     def test_experimental_feature_is_opt_in(self) -> None:
         self.assertEqual(default_config()["application"]["scene_performance_agents"], {"enabled": False, "max_actor_calls": 4})

@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from .relay_context import render_relay_context, validated_knowledge_quotes
+
 
 PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v7"
 MAX_BEATS = 4
@@ -93,14 +95,17 @@ def render_actor_prompt(
 
 def render_actor_scene_prompt(
     brief: dict[str, Any], beats: list[dict[str, str]], voice: dict[str, Any],
-    unknown_slots: list[str] | None = None,
+    unknown_slots: list[str] | None = None, *,
+    public_log: list[dict[str, Any]] | None = None,
+    pending_outcome: str | None = None,
+    knowledge_quotes: list[str] | None = None,
+    max_entries: int = MAX_ACTOR_ENTRIES,
 ) -> str:
     speaker = _actor_scene_speaker(beats, str(voice.get("speaker") or ""))
+    _validate_actor_prompt_options(beats, public_log, pending_outcome, knowledge_quotes, max_entries)
     person = _actor_identity(voice, speaker)
     state = voice.get("voice_state") if isinstance(voice.get("voice_state"), dict) else {}
-    scene = {key: brief.get(key) for key in (
-        "scene_id", "participants", "location", "objective", "canon_constraints", "incoming_handoff", "viewpoint",
-    )}
+    scene = _actor_scene_view(brief, public_log, knowledge_quotes)
     moments = [{"beat_id": beat["beat_id"], "event": beat["event"]} for beat in beats]
     output_shape = json.dumps({
         "scene_id": brief["scene_id"], "speaker": speaker,
@@ -111,9 +116,15 @@ def render_actor_scene_prompt(
             "spoken": "",
         }],
     }, ensure_ascii=False)
+    relay_context = render_relay_context(brief, public_log, pending_outcome) if public_log is not None else ""
+    opening = (
+        "我只从已经发生的公共互动往下活，不把本场未来必须成立的剧情当成对方刚才说过的话。"
+        if public_log is not None else "我从第一个时刻一直活到最后一个时刻，不在每拍重置自己。"
+    )
+    entry_scope = "本轮接下来的" if public_log is not None else "我整场自然发生的"
     return f"""# 我在场：{person['name']}
 
-我从第一个时刻一直活到最后一个时刻，不在每拍重置自己。下面给的是我已经身处的境况，不是要照念的台词；导演没有替我分配发言回合。在事实与结果的边界里，我自行决定何时开口、岔开、反问、沉默，做什么或不做什么。我可以在同一时刻说几句，也可以走过一个时刻而没有任何外显反应；不必每拍制造手势或职业解释。
+{opening}下面给的是我已经身处的境况，不是要照念的台词；导演没有替我分配发言回合。在事实与结果的边界里，我自行决定何时开口、岔开、反问、沉默，做什么或不做什么。我可以在同一时刻说几句，也可以走过一个时刻而没有任何外显反应；不必每拍制造手势或职业解释。
 
 ## 我是谁
 我的身份：{person['role']}
@@ -130,6 +141,7 @@ def render_actor_scene_prompt(
 
 ## 我在这场戏里依次经历的时刻
 {json.dumps(moments, ensure_ascii=False)}
+{relay_context}
 
 ## 本场明确留白
 {json.dumps(unknown_slots or [], ensure_ascii=False)}
@@ -137,7 +149,31 @@ def render_actor_scene_prompt(
 
 从自己的冲动出发经历这些时刻，但不把冲动解释给读者。只交我的话与我亲手做的事，不替别人回答。场景锚点不是要我照着演的行动表。世界事实只从本场已知资料来：不知道具体设备部件、道具、读数或往事时，不能靠职业知识补成现场证据；我的自主性在回应方式，不在创造新的物证。
 
-返回一个 JSON 对象：{output_shape}。entries 是我整场自然发生的发言与行为，按时间顺序零至 {MAX_ACTOR_ENTRIES} 项；每项指向发生时最近的 beat_id，同一锚点可有多项，也可没有。private_impulse 写第一人称未出口念头；first_person_action 写第一人称可见动作，没有就留空；spoken 写真正说出口的台词，不带引号或批注，没有就留空。每项至少有一种外显表达。不要为了填满锚点而制造话或动作。"""
+返回一个 JSON 对象：{output_shape}。entries 是{entry_scope}发言与行为，按时间顺序零至 {max_entries} 项；每项指向发生时最近的 beat_id，同一锚点可有多项，也可没有。private_impulse 写第一人称未出口念头；first_person_action 写第一人称可见动作，没有就留空；spoken 写真正说出口的台词，不带引号或批注，没有就留空。每项至少有一种外显表达。不要为了填满锚点而制造话或动作。"""
+
+
+def _validate_actor_prompt_options(
+    beats: list[dict[str, str]], public_log: list[dict[str, Any]] | None,
+    pending_outcome: str | None, knowledge_quotes: list[str] | None, max_entries: int,
+) -> None:
+    if not 1 <= max_entries <= MAX_ACTOR_ENTRIES:
+        raise ValueError("actor scene max_entries is out of range")
+    if public_log is None and (pending_outcome is not None or knowledge_quotes is not None):
+        raise ValueError("actor relay facts require a public_log")
+    if public_log is not None and len(beats) != 1:
+        raise ValueError("actor relay requires exactly one current beat")
+
+
+def _actor_scene_view(
+    brief: dict[str, Any], public_log: list[dict[str, Any]] | None, knowledge_quotes: list[str] | None,
+) -> dict[str, Any]:
+    keys = ("scene_id", "participants", "location", "viewpoint")
+    if public_log is None:
+        return {key: brief.get(key) for key in (
+            "scene_id", "participants", "location", "objective", "canon_constraints", "incoming_handoff", "viewpoint",
+        )}
+    return {**{key: brief.get(key) for key in keys},
+            "confirmed_knowledge": validated_knowledge_quotes(brief, knowledge_quotes or [])}
 
 
 def _actor_scene_speaker(beats: list[dict[str, str]], speaker: str) -> str:
@@ -189,6 +225,7 @@ def parse_actor_material(payload: dict[str, Any], beat: dict[str, str]) -> dict[
 
 def parse_actor_scene_material(
     payload: dict[str, Any], brief: dict[str, Any], beats: list[dict[str, str]], speaker: str | None = None,
+    *, max_entries: int = MAX_ACTOR_ENTRIES,
 ) -> dict[str, Any]:
     speaker = _actor_scene_speaker(beats, speaker or str(payload.get("speaker") or ""))
     if speaker not in set(brief.get("participants") or ()):
@@ -196,7 +233,7 @@ def parse_actor_scene_material(
     if payload.get("scene_id") != brief.get("scene_id") or payload.get("speaker") != speaker:
         raise ValueError("actor scene target mismatch")
     entries = payload.get("entries")
-    if not isinstance(entries, list) or len(entries) > MAX_ACTOR_ENTRIES:
+    if not isinstance(entries, list) or not 1 <= max_entries <= MAX_ACTOR_ENTRIES or len(entries) > max_entries:
         raise ValueError("actor scene entries must be a bounded list")
     beat_positions = {beat["beat_id"]: index for index, beat in enumerate(beats)}
     normalized: list[dict[str, str]] = []
