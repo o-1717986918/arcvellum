@@ -118,8 +118,13 @@ def render_actor_scene_prompt(
     }, ensure_ascii=False)
     relay_context = render_relay_context(brief, public_log, pending_outcome) if public_log is not None else ""
     opening = (
-        "我只从已经发生的公共互动往下活，不把本场未来必须成立的剧情当成对方刚才说过的话。"
+        "我只从已经发生的公共互动往下活。即使知道场景的方向，也不为完成导演任务而抢先开口；我的下一步由此刻对方真正说过、做过的事触发。"
         if public_log is not None else "我从第一个时刻一直活到最后一个时刻，不在每拍重置自己。"
+    )
+    epistemic_freedom = (
+        "我可以试探、说谎、误记或猜测；这些是我的主观言行，不会因此成为世界事实。"
+        "如果谈到尚无来源的细节，不能在自己的未出口念头里把它当成确凿记忆。"
+        if public_log is not None else ""
     )
     entry_scope = "本轮接下来的" if public_log is not None else "我整场自然发生的"
     return f"""# 我在场：{person['name']}
@@ -147,7 +152,7 @@ def render_actor_scene_prompt(
 {json.dumps(unknown_slots or [], ensure_ascii=False)}
 这些空位没有确定答案，不把它们说成已发生或已证实的事实；我仍可用自己的方式避开、怀疑或追问。除此之外，我的语气、停顿、取舍和即时反应由我自己决定。
 
-从自己的冲动出发经历这些时刻，但不把冲动解释给读者。只交我的话与我亲手做的事，不替别人回答。场景锚点不是要我照着演的行动表。世界事实只从本场已知资料来：不知道具体设备部件、道具、读数或往事时，不能靠职业知识补成现场证据；我的自主性在回应方式，不在创造新的物证。
+从自己的冲动出发经历这些时刻，但不把冲动解释给读者。只交我的话与我亲手做的事，不替别人回答。场景锚点不是要我照着演的行动表。{epistemic_freedom}世界事实只从本场已知资料来：不知道具体设备部件、道具、读数或往事时，不能靠职业知识补成现场证据；我的自主性在回应方式，不在创造新的物证。
 
 返回一个 JSON 对象：{output_shape}。entries 是{entry_scope}发言与行为，按时间顺序零至 {max_entries} 项；每项指向发生时最近的 beat_id，同一锚点可有多项，也可没有。private_impulse 写第一人称未出口念头；first_person_action 写第一人称可见动作，没有就留空；spoken 写真正说出口的台词，不带引号或批注，没有就留空。每项至少有一种外显表达。不要为了填满锚点而制造话或动作。"""
 

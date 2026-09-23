@@ -22,7 +22,7 @@ def render_relay_plan_prompt(brief: dict[str, Any]) -> str:
     )}
     return f"""# Scene Relay Dramatic Floor
 
-你是唯一主创的场景编排阶段。只从 SceneBrief 中挑出一至 {MAX_RELAY_MILESTONES} 个本场必须兑现的剧情结果，按因果顺序列出，并指定能够亲自完成该结果的现有参与者。source_quote 必须逐字出现在 SceneBrief 的 objective、scene_function、rhythm.scene_turn、canon_constraints 或 chapter_obligations 中；可以截取其中最短的完整事实分句，不必引用整段，不可改写、扩写或发明。一个 milestone 只对应一次因果变化：如果原文用分号串联了“漏歌后纠正”和“承认删点名”，它们须分成两个 milestone，不能让角色在同一轮抢先完成后续结果。每个结果只规定事实终点，绝不指定台词、句式、情绪、手势、回应顺序或环境描写。角色将根据真实对手言行自主表演；即使承担一个结果，也可以用自己的方式拖延、回避或抵抗，结果未兑现时再由该角色继续演。
+你是唯一主创的场景编排阶段。只从 SceneBrief 中挑出一至 {MAX_RELAY_MILESTONES} 个本场必须成立的剧情结果，按大致因果顺序列出，并标出该变化归属的现有参与者。它们是场景边界，不是角色的轮流发言表，更不是每轮必须完成的任务。source_quote 必须逐字出现在 SceneBrief 的 objective、scene_function、rhythm.scene_turn、canon_constraints 或 chapter_obligations 中；可以截取其中最短的完整事实分句，不必引用整段，不可改写、扩写或发明。一个 milestone 只对应一次因果变化：如果原文用分号串联了“漏歌后纠正”和“承认删点名”，它们须分成两个 milestone，但不因此指定两次演员调用或两句台词。每个结果只规定事实终点，绝不指定台词、句式、情绪、手势、回应顺序或环境描写。角色将根据真实对手言行自主表演，可拖延、回避、抵抗或改变抵达结果的条件；主创须等自然互动展开后再检查场景结果，不能逐轮催交。
 
 actor_knowledge 只从 incoming_handoff 中逐字选取每个角色在开场前确实知道的最短事实分句，最多每人三条；不知道的内容留空。不要把未来结果伪装为角色已经知道或已经见到的事实。unknown_slots 只列本场容易误写成确定事实的少量关键空位，不预告其他场景的秘密，也不规定人物表现。环境写手另行独立创作，你不分配光、声、物件和段落。
 
