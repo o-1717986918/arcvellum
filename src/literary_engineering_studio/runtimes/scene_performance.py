@@ -36,6 +36,10 @@ def scene_performance_materials(
     policy = _policy(config)
     if not policy["enabled"]:
         return ""
+    participants = list(brief.get("participants") or ())
+    if len(participants) > policy["max_actor_calls"]:
+        _notify(emit, "scene.performance.fallback", {"stage": "actor-capacity", "participants": len(participants)})
+        return ""
     cache_root.mkdir(parents=True, exist_ok=True)
     digest = _digest(brief, expression, sources, style_reference, config)
     plan_path = cache_root / f"performance-plan-{digest}.json"
@@ -48,40 +52,26 @@ def scene_performance_materials(
         return ""
     _notify(emit, "scene.performance.plan", {"beats": len(plan["beats"]), "digest": digest})
 
-    actors: list[dict[str, Any]] = []
-    intents = expression.get("dialogue_intents") if isinstance(expression.get("dialogue_intents"), list) else []
-    grouped: dict[str, list[dict[str, str]]] = {}
-    for beat in plan["beats"]:
-        speaker = beat["speaker"]
-        if speaker:
-            grouped.setdefault(speaker, []).append(beat)
-    for speaker, beats in list(grouped.items())[:policy["max_actor_calls"]]:
-        voice = next((item for item in intents if _matches_voice(item, speaker)), {})
-        speaker_digest = hashlib.sha256(speaker.encode()).hexdigest()[:10]
-        beat_digest = hashlib.sha256(json.dumps(beats, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
-        actor_path = cache_root / f"performance-actor-{digest}-{speaker_digest}-{beat_digest}.json"
-        try:
-            payload = _cached_payload(actor_path, lambda beats=beats, voice=voice: _answer_payload(invoke(
-                    render_actor_scene_prompt(brief, beats, voice), "character-actor",
-                )), lambda payload, beats=beats: _validated_actor_scene(payload, brief, beats))
-            materials = parse_actor_scene_material(payload, brief, beats)
-        except (ValueError, RuntimeError, TimeoutError) as exc:
-            _notify(emit, "scene.performance.skipped", {"stage": "actor", "speaker": speaker, "reason": str(exc)[:300]})
-            continue
-        actors.extend(materials)
-        _notify(emit, "scene.performance.actor", {"beat_ids": [beat["beat_id"] for beat in beats], "speaker": speaker})
-    actors.sort(key=lambda item: int(item["beat_id"][1:]))
+    try:
+        actors = _actor_materials(brief, expression, plan, participants, cache_root, digest, invoke, emit)
+    except (ValueError, RuntimeError, TimeoutError) as exc:
+        _notify(emit, "scene.performance.fallback", {"stage": "actor", "reason": str(exc)[:300]})
+        return ""
 
     environment: dict[str, Any] | None = None
     env_path = cache_root / f"performance-environment-{digest}.json"
+    environment_task = plan["environment_task"]
+    environment_beats = [beat for beat in plan["beats"] if beat["beat_id"] in environment_task["focus_beats"]]
     try:
         environment = _cached_payload(env_path, lambda: _answer_payload(invoke(
-                render_environment_prompt(brief, plan["beats"], style_reference, sources), "environment-writer",
-            )), lambda payload: parse_environment_material(payload, brief, plan["beats"]))
+                render_environment_prompt(brief, environment_beats, style_reference, sources, environment_task), "environment-writer",
+            )), lambda payload: parse_environment_material(payload, brief, environment_beats))
         _notify(emit, "scene.performance.environment", {"passages": len(environment["passages"])})
     except (ValueError, RuntimeError, TimeoutError) as exc:
         _notify(emit, "scene.performance.skipped", {"stage": "environment", "reason": str(exc)[:300]})
 
+    if environment is not None and not environment["passages"]:
+        environment = None
     if not actors and not environment:
         return ""
     try:
@@ -91,12 +81,37 @@ def scene_performance_materials(
         return ""
 
 
+def _actor_materials(
+    brief: dict[str, Any], expression: dict[str, Any], plan: dict[str, Any], participants: list[str],
+    cache_root: Path, digest: str, invoke: Callable[[str, str], str],
+    emit: Callable[[str, dict[str, Any]], None] | None,
+) -> list[dict[str, Any]]:
+    intents = expression.get("dialogue_intents") if isinstance(expression.get("dialogue_intents"), list) else []
+    actor_tasks = {task["speaker"]: task for task in plan["actor_tasks"]}
+    beats = plan["beats"]
+    beat_digest = hashlib.sha256(json.dumps(beats, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
+    actors = []
+    for speaker in participants:
+        voice = next((item for item in intents if _matches_voice(item, speaker)), {})
+        speaker_digest = hashlib.sha256(speaker.encode()).hexdigest()[:10]
+        actor_path = cache_root / f"performance-actor-{digest}-{speaker_digest}-{beat_digest}.json"
+        payload = _cached_payload(actor_path, lambda voice=voice, speaker=speaker: _answer_payload(invoke(
+                render_actor_scene_prompt(brief, beats, voice, actor_tasks[speaker]), "character-actor",
+            )), lambda payload, speaker=speaker: parse_actor_scene_material(payload, brief, beats, speaker))
+        materials = parse_actor_scene_material(payload, brief, beats, speaker)
+        actors.append(materials)
+        _notify(emit, "scene.performance.actor", {"speaker": speaker, "entries": len(materials["entries"])})
+    return actors
+
+
 def scene_creative_cache_digest(
     projection_digest: str, brief: dict[str, Any], sources: str, config: dict[str, Any],
 ) -> str:
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     runners = config.get("agent_runners") if isinstance(config.get("agent_runners"), dict) else {}
-    payload = ["performance-v9", projection_digest, brief, sources, application.get("scene_performance_agents", {}), runners.get("pi-worker", {})]
+    settings = application.get("scene_performance_agents", {})
+    version = "performance-v13" if isinstance(settings, dict) and settings.get("enabled") is True else "performance-v9"
+    payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
@@ -114,7 +129,7 @@ def _policy(config: dict[str, Any]) -> dict[str, Any]:
 
 def _digest(brief: dict[str, Any], expression: dict[str, Any], sources: str, style: str, config: dict[str, Any]) -> str:
     pi = config.get("agent_runners", {}).get("pi-worker", {}) if isinstance(config.get("agent_runners"), dict) else {}
-    payload = ["performance-v8", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
+    payload = ["performance-v12", brief, expression, sources, style, pi.get("models"), pi.get("model"), pi.get("thinking")]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
@@ -138,16 +153,6 @@ def _cached_payload(
     temporary.write_text(json.dumps(normalized, ensure_ascii=False), encoding="utf-8")
     temporary.replace(path)
     return normalized
-
-
-def _validated_actor_scene(
-    payload: dict[str, Any], brief: dict[str, Any], beats: list[dict[str, str]],
-) -> dict[str, Any]:
-    materials = parse_actor_scene_material(payload, brief, beats)
-    return {
-        "scene_id": brief["scene_id"], "speaker": beats[0]["speaker"],
-        "performances": [{"beat_id": item["beat_id"], **item["candidates"][0]} for item in materials],
-    }
 
 
 def _matches_voice(item: Any, speaker: str) -> bool:

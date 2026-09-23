@@ -5,19 +5,21 @@ describe("bounded scene performance profiles", () => {
 	it("gives a character actor a distinct roleplay identity without project tools", () => {
 		const prompt = conversationSystemPrompt("character-actor");
 		expect(prompt).toContain("你在这一轮就是任务单指定的那个人");
-		expect(prompt).toContain("从本场第一节拍到最后一节拍持续以“我”生活其中");
-		expect(prompt).toContain("人物自己的语言声音是最高创作优先级");
-		expect(prompt).toContain("词域、句法节奏、称呼习惯");
-		expect(prompt).toContain("必须体现在 spoken 本身");
-		expect(prompt).toContain("first_person_action");
+		expect(prompt).toContain("持续以“我”经历它");
+		expect(prompt).toContain("你自己决定何时开口、回避、反问、沉默、行动");
+		expect(prompt).toContain("同一处境下连续说话或行动");
+		expect(prompt).toContain("不为填格制造手势或流程解释");
+		expect(prompt).toContain("可挣脱的惯性");
 		expect(prompt).toContain("no tools and no project write access");
 		expect(prompt).not.toContain("You are an ArcVellum character actor");
 	});
 
 	it("gives an environment writer a distinct bounded prose role", () => {
 		const prompt = conversationSystemPrompt("environment-writer");
-		expect(prompt).toContain("Compose bounded candidate description");
-		expect(prompt).toContain("Do not invent plot, canon, locations");
+		expect(prompt).toContain("你自己决定注意什么、略过什么");
+		expect(prompt).toContain("不必逐项写五感、铺满每拍");
+		expect(prompt).toContain("一旦某处痕迹、器物状态或声音会被读者当成线索，就必须有来源");
+		expect(prompt).toContain("不替人物说话、行动或解释心理");
 		expect(prompt).toContain("no tools and no project write access");
 	});
 

@@ -17,6 +17,7 @@ from literary_engineering_studio_engine.public.literary import (
     parse_performance_plan,
     render_actor_prompt,
     render_actor_scene_prompt,
+    render_environment_prompt,
     render_performance_plan_prompt,
     render_performance_materials,
 )
@@ -27,11 +28,19 @@ def _plan() -> dict[str, object]:
     return {
         "scene_id": "scene_0001",
         "beats": [{
-            "beat_id": "b1", "event": "妹妹发现抽屉被打开后，主人公承认取信",
-            "speaker": "character/protagonist", "speech_act": "承认昨夜取走信，同时试探妹妹是否信他",
-            "information": "承认取信，不声称妹妹已经原谅", "action_boundary": "可把信放在桌上",
-            "response_boundary": "妹妹的反应留给主创", "environment_need": "门口与桌面的距离制造迟疑",
+            "beat_id": "b1", "event": "妹妹已经发现抽屉被打开；信在昨夜被取走",
         }],
+        "actor_tasks": [{
+            "speaker": "character/protagonist", "personal_pressure": "怕妹妹在他说完之前离开",
+            "relationship_misread": "还以为妹妹只想把信拿回去",
+        }, {
+            "speaker": "character/sister", "personal_pressure": "想听承认又怕再被骗",
+            "relationship_misread": "还不知道他为什么拿信",
+        }],
+        "environment_task": {
+            "focus_beats": ["b1"], "focal_condition": "门口与桌面都在主人公视野中",
+            "perception_boundary": "不确定门外天气",
+        },
     }
 
 
@@ -46,21 +55,24 @@ class _PerformanceGateway(_Gateway):
             self.calls.append((role, prompt))
             plan = _plan()
             if self.bad_plan:
-                plan["beats"][0]["speaker"] = "character/outsider"
+                plan["beats"][0]["speaker"] = "character/protagonist"
             if self.repeat_actor:
                 plan["beats"].append({
                     **plan["beats"][0], "beat_id": "b2",
-                    "event": "妹妹停在门边，主人公又试着把话说完",
+                    "event": "兄妹间仍悬着昨夜取信的解释",
                 })
             answer = json.dumps(plan, ensure_ascii=False)
         elif role == "character-actor":
             self.calls.append((role, prompt))
+            protagonist = "# 我在场：character/protagonist" in prompt
             answer = json.dumps({
-                "scene_id": "scene_0001", "speaker": "character/protagonist",
-                "performances": [
+                "scene_id": "scene_0001", "speaker": "character/protagonist" if protagonist else "character/sister",
+                "entries": ([
                     {"beat_id": "b1", "spoken": "信是我拿的。你先别把门关上。", "first_person_action": "我把信留在桌沿，没有推向她。", "private_impulse": "我怕她现在就走。"},
                     *([{"beat_id": "b2", "spoken": "你不想听，我就等你。", "first_person_action": "我收回伸向信的手。", "private_impulse": "我不能逼她听完。"}] if self.repeat_actor else []),
-                ],
+                ] if protagonist else [
+                    {"beat_id": "b1", "spoken": "门我没关。信呢？", "first_person_action": "我站在门口。", "private_impulse": "我要听他亲口承认。"},
+                ]),
             }, ensure_ascii=False)
         elif role == "environment-writer":
             self.calls.append((role, prompt))
@@ -82,46 +94,70 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             "voice_state": {"interlocutors": ["妹妹"], "known_facts": ["昨夜拿了信"]},
         }
         prompt = render_actor_prompt(_brief().to_dict(), _plan()["beats"][0], voice)
-        self.assertIn("从现在起，我就是这个人", prompt)
+        self.assertIn("我从第一个时刻一直活到最后一个时刻", prompt)
         self.assertIn("平时长句绕开请求", prompt)
         self.assertIn("我的稳定说话方式", prompt)
-        self.assertIn("我不知道导演的台词计划", prompt)
+        self.assertIn("不是要照念的台词", prompt)
         self.assertIn("first_person_action", prompt)
         self.assertIn("private_impulse", prompt)
         self.assertNotIn("subtext_effect", prompt)
         self.assertNotIn("你先别走。", prompt)
-        self.assertIn("此刻怎样争取、回避、还口或沉默", prompt)
-        self.assertNotIn("承认昨夜取走信，同时试探妹妹是否信他", prompt)
-        self.assertNotIn("承认取信，不声称妹妹已经原谅", prompt)
+        self.assertIn("我自行决定何时开口、岔开、反问、沉默", prompt)
+        self.assertNotIn("speech_act", prompt)
+        self.assertIn("同一锚点可有多项", prompt)
 
     def test_director_leaves_micro_tactics_to_character_actor(self) -> None:
         prompt = render_performance_plan_prompt(_brief().to_dict(), {}, "昨夜拿了信。")
-        self.assertIn("互动目标与压力", prompt)
-        self.assertIn("由扮演该人物的演员自行选择", prompt)
-        self.assertIn("不是整场解释清单", prompt)
+        self.assertIn("导演没有替我", render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {}, _plan()["actor_tasks"][0]))
+        self.assertIn("不要指定谁说话、说什么", prompt)
+        self.assertIn("角色可以自行选择", prompt)
+        self.assertNotIn("response_boundary", prompt)
+        self.assertNotIn("speech_act", prompt)
+        self.assertNotIn("voice_turn", prompt)
 
     def test_actor_scene_prompt_keeps_one_identity_across_beats(self) -> None:
         beats = [_plan()["beats"][0], {**_plan()["beats"][0], "beat_id": "b2", "event": "妹妹走到门边"}]
-        prompt = render_actor_scene_prompt(_brief().to_dict(), beats, {"stable_voice": {"vocabulary": "总用家里的旧称呼", "rhythm": "越急越绕"}})
-        self.assertIn("从第一个节拍一直活到最后一个节拍", prompt)
-        self.assertIn("我的语言，优先于顺口的中性答案", prompt)
+        prompt = render_actor_scene_prompt(_brief().to_dict(), beats, {"stable_voice": {"vocabulary": "总用家里的旧称呼", "rhythm": "越急越绕"}}, _plan()["actor_tasks"][0])
+        self.assertIn("我从第一个时刻一直活到最后一个时刻", prompt)
+        self.assertIn("不必每拍制造手势或职业解释", prompt)
         self.assertIn("越急越绕", prompt)
         self.assertIn('"beat_id": "b2"', prompt)
-        self.assertIn("每拍恰好一项", prompt)
+        self.assertIn("同一锚点可有多项", prompt)
+        self.assertIn("怕妹妹在他说完之前离开", prompt)
+        self.assertIn("还以为妹妹只想把信拿回去", prompt)
 
-    def test_actor_scene_requires_all_assigned_beats_in_order(self) -> None:
+    def test_environment_prompt_uses_scene_facts_without_prescribing_style(self) -> None:
+        prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "参考语言起伏", "信在桌上", _plan()["environment_task"])
+        self.assertIn("主创只给你视角与事实边界", prompt)
+        self.assertIn("门口与桌面都在主人公视野中", prompt)
+        self.assertIn("不确定门外天气", prompt)
+        self.assertIn("长短由场景决定", prompt)
+        self.assertNotIn("150—300", prompt)
+
+    def test_plan_requires_director_owned_tasks(self) -> None:
+        plan = _plan()
+        del plan["actor_tasks"]
+        with self.assertRaisesRegex(ValueError, "actor_tasks"):
+            parse_performance_plan(plan, _brief().to_dict())
+        plan = _plan()
+        plan["environment_task"]["focus_beats"] = ["b9"]
+        with self.assertRaisesRegex(ValueError, "focus_beats"):
+            parse_performance_plan(plan, _brief().to_dict())
+
+    def test_actor_scene_allows_self_chosen_entries_and_silence(self) -> None:
         beats = [_plan()["beats"][0], {**_plan()["beats"][0], "beat_id": "b2"}]
         first = {"beat_id": "b1", "spoken": "是我。", "first_person_action": "我站住。", "private_impulse": "我怕。"}
         second = {**first, "beat_id": "b2", "spoken": "你听我说。"}
         target = {"scene_id": "scene_0001", "speaker": "character/protagonist"}
-        result = parse_actor_scene_material({**target, "performances": [first, second]}, _brief().to_dict(), beats)
-        self.assertEqual([item["beat_id"] for item in result], ["b1", "b2"])
-        with self.assertRaisesRegex(ValueError, "every assigned beat"):
-            parse_actor_scene_material({**target, "performances": [first]}, _brief().to_dict(), beats)
+        result = parse_actor_scene_material({**target, "entries": [first, second]}, _brief().to_dict(), beats)
+        self.assertEqual([item["beat_id"] for item in result["entries"]], ["b1", "b2"])
+        self.assertEqual(result["entries"][0]["entry_id"], "character/protagonist:1")
+        self.assertEqual(parse_actor_scene_material({**target, "entries": []}, _brief().to_dict(), beats)["entries"], [])
+        self.assertEqual(len(parse_actor_scene_material({**target, "entries": [first, first]}, _brief().to_dict(), beats)["entries"]), 2)
         with self.assertRaisesRegex(ValueError, "target mismatch"):
-            parse_actor_scene_material({**target, "speaker": "character/sister", "performances": [first, second]}, _brief().to_dict(), beats)
-        with self.assertRaisesRegex(ValueError, "target mismatch"):
-            parse_actor_scene_material({**target, "performances": [second, first]}, _brief().to_dict(), beats)
+            parse_actor_scene_material({**target, "speaker": "character/sister", "entries": [first, second]}, _brief().to_dict(), beats, "character/protagonist")
+        with self.assertRaisesRegex(ValueError, "follow known beats"):
+            parse_actor_scene_material({**target, "entries": [second, first]}, _brief().to_dict(), beats)
 
     def test_experimental_feature_is_opt_in(self) -> None:
         self.assertEqual(default_config()["application"]["scene_performance_agents"], {"enabled": False, "max_actor_calls": 4})
@@ -134,24 +170,27 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "prompt budget"):
             render_performance_materials(_plan(), [], {"passages": [{"description": "雨" * 16_000}]})
 
-    def test_plan_rejects_unplanned_speaker(self) -> None:
+    def test_plan_rejects_director_preassigning_speaker(self) -> None:
         payload = _plan()
         payload["beats"][0]["speaker"] = "character/outsider"
-        with self.assertRaisesRegex(ValueError, "outside scene participants"):
+        with self.assertRaisesRegex(ValueError, "must not script"):
             parse_performance_plan(payload, _brief().to_dict())
 
     def test_actor_and_environment_reject_wrong_targets(self) -> None:
-        beat = _plan()["beats"][0]
+        beat = {**_plan()["beats"][0], "speaker": "character/protagonist"}
         with self.assertRaisesRegex(ValueError, "target mismatch"):
             parse_actor_material({"beat_id": "b2", "speaker": beat["speaker"], "candidates": []}, beat)
         with self.assertRaisesRegex(ValueError, "dialogue/action"):
-            parse_actor_material({"beat_id": "b1", "speaker": beat["speaker"], "candidates": [{"spoken": "我知道。", "visible_action": "他点头。"}]}, beat)
+            parse_actor_material({"beat_id": "b1", "speaker": beat["speaker"], "candidates": [{"spoken": "", "visible_action": "他点头。"}]}, beat)
+        self.assertEqual(parse_actor_material({"beat_id": "b1", "speaker": beat["speaker"], "candidates": [{"spoken": "我知道。", "first_person_action": ""}]}, beat)["candidates"][0]["first_person_action"], "")
+        self.assertEqual(parse_actor_material({"beat_id": "b1", "speaker": beat["speaker"], "candidates": [{"spoken": "", "first_person_action": "我站住。"}]}, beat)["candidates"][0]["spoken"], "")
         with self.assertRaisesRegex(ValueError, "unknown beat"):
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b9", "description": "雨。"}]}, _brief().to_dict(), [beat])
         with self.assertRaisesRegex(ValueError, "contains dialogue"):
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b1", "description": "门外的雨落着。她说：“别走。”"}]}, _brief().to_dict(), [beat])
         with self.assertRaisesRegex(ValueError, "outside scene participants"):
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b1", "focal_character": "character/outsider", "description": "门外下雨。"}]}, _brief().to_dict(), [beat])
+        self.assertEqual(parse_environment_material({"scene_id": "scene_0001", "passages": []}, _brief().to_dict(), [beat])["passages"], [])
 
     def test_runtime_invokes_independent_agents_then_main_writer_and_caches(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -166,12 +205,14 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             first = runtime.create_scene("performance-tx", _brief())
             second = runtime.create_scene("performance-tx", _brief())
             roles = [role for role, _ in gateway.calls]
-            self.assertEqual(roles[:4], ["worker", "character-actor", "environment-writer", "worker"])
-            self.assertIn("Character And Environment Candidate Materials", gateway.calls[3][1])
-            self.assertIn("信是我拿的", gateway.calls[3][1])
-            self.assertIn("我把信留在桌沿", gateway.calls[3][1])
-            self.assertIn("门缝里的光", gateway.calls[3][1])
-            self.assertIn("不要在组织正文时把各人的声音统一润平", gateway.calls[3][1])
+            self.assertEqual(roles[:5], ["worker", "character-actor", "character-actor", "environment-writer", "worker"])
+            self.assertIn("Character And Environment Candidate Materials", gateway.calls[4][1])
+            self.assertIn("信是我拿的", gateway.calls[4][1])
+            self.assertIn("门我没关", gateway.calls[4][1])
+            self.assertIn("我把信留在桌沿", gateway.calls[4][1])
+            self.assertIn("门缝里的光", gateway.calls[4][1])
+            self.assertIn("不把各人声音润平成中性解释", gateway.calls[4][1])
+            self.assertIn("可保留它的观察次序和句群呼吸", gateway.calls[4][1])
             self.assertEqual(first, second)
             self.assertEqual(runtime.metrics.cache_hits, 1)
             self.assertIn("scene.performance.actor", events)
@@ -182,19 +223,19 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             root = Path(temporary)
             gateway = _PerformanceGateway(repeat_actor=True)
             runtime = PiSceneTransactionRuntime(
-                {"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 1}}},
+                {"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 2}}},
                 project_root=root, data_root=root / ".studio", gateway=gateway,
             )
             runtime.create_scene("performance-grouped", _brief())
-            self.assertEqual([role for role, _ in gateway.calls[:4]], ["worker", "character-actor", "environment-writer", "worker"])
-            self.assertEqual(sum(role == "character-actor" for role, _ in gateway.calls), 1)
-            self.assertIn("你不想听，我就等你。", gateway.calls[3][1])
+            self.assertEqual([role for role, _ in gateway.calls[:5]], ["worker", "character-actor", "character-actor", "environment-writer", "worker"])
+            self.assertEqual(sum(role == "character-actor" for role, _ in gateway.calls), 2)
+            self.assertIn("你不想听，我就等你。", gateway.calls[4][1])
 
     def test_grouped_actor_material_is_reused_from_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             gateway = _PerformanceGateway(repeat_actor=True)
-            settings = {"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 1}}}
+            settings = {"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 2}}}
             def invoke(prompt: str, role: str) -> str:
                 return gateway.run(root, prompt, role=role, timeout=30).answer
             kwargs = {
@@ -204,7 +245,22 @@ class ScenePerformanceAgentTests(unittest.TestCase):
             first = scene_performance_materials(**kwargs)
             second = scene_performance_materials(**kwargs)
             self.assertEqual(first, second)
-            self.assertEqual([role for role, _ in gateway.calls], ["worker", "character-actor", "environment-writer"])
+            self.assertEqual([role for role, _ in gateway.calls], ["worker", "character-actor", "character-actor", "environment-writer"])
+
+    def test_actor_capacity_falls_back_without_partial_cast_or_extra_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            gateway = _PerformanceGateway()
+            events = []
+            materials = scene_performance_materials(
+                brief=_brief().to_dict(), expression={}, sources="", style_reference="",
+                cache_root=Path(temporary) / "cache",
+                config={"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 1}}},
+                invoke=lambda prompt, role: gateway.run(Path(temporary), prompt, role=role, timeout=30).answer,
+                emit=lambda event, data: events.append((event, data)),
+            )
+            self.assertEqual(materials, "")
+            self.assertEqual(gateway.calls, [])
+            self.assertEqual(events[0][1]["stage"], "actor-capacity")
 
     def test_invalid_director_plan_falls_back_to_single_writer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

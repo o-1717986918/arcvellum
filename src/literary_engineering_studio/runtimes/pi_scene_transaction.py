@@ -116,6 +116,7 @@ class PiSceneTransactionRuntime:
         result = complete_first_draft_length(
             brief, result,
             lambda prompt: _answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id)),
+            actor_owned=bool(materials),
         )
         _atomic_json(cache, result.to_dict())
         return result
@@ -256,7 +257,8 @@ def render_scene_create_prompt(
         if performance_material_block else ""
     )
     material_final_pass = (
-        "角色台词可吸收其言语行为与个性，不必整句照搬；环境段只借用感知角度与句法运动，不逐句移植。"
+        "启用角色表演素材时，本段规则优先于上文通用‘写对白’建议：所有实际对白和人物可见行为须先由该人物的一级 Agent 在 entries 中给出；不要自行补对白或微动作，也不要把演员句子润平为同一种声音。"
+        "若环境候选合乎视角与已确认事实，可保留它的观察次序和句群呼吸，也可重组，不必逐句移植。"
         "逐项核对候选里的物件、技术结论和精确数值，来源未确认且无必要的不用。候选的后台解释绝不进入正文。"
         if performance_material_block else ""
     )
