@@ -14,6 +14,9 @@ describe("bounded scene performance profiles", () => {
 		expect(prompt).toContain("不为填格制造手势或流程解释");
 		expect(prompt).toContain("可挣脱的惯性");
 		expect(prompt).toContain("普通可弃的现场细节可作为候选");
+		expect(prompt).toContain("固定结果是整场戏的底线，不是下一句的命令");
+		expect(prompt).toContain("不能把同一防御换词重播直到场景结束");
+		expect(prompt).toContain("不靠突然抛出无来源的另一桩秘密制造新的跨场承诺");
 		expect(prompt).toContain("no tools and no project write access");
 		expect(prompt).not.toContain("You are an ArcVellum character actor");
 	});
