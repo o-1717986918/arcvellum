@@ -68,7 +68,9 @@ class _Gateway:
         self.calls.append((role, prompt))
         if event_sink is not None:
             event_sink("agent.message.delta", {"text": "{"})
-        if role == "reviewer":
+        if prompt.startswith("# First-Level Visible Action Source Audit"):
+            answer = '{"status":"clean","violations":[]}'
+        elif role == "reviewer":
             answer = (
                 '{"decision":"pass","summary":"承认行为改变了关系压力",'
                 '"revision_instructions":[],"evidence":["她把信放回桌上"]}'
@@ -280,14 +282,19 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             runtime.revise_scene(
                 "tx-owned", _brief(), result, VerificationReport("scene_0001", 20), None, attempt=1,
             )
-            prompts = [prompt for _, prompt in gateway.calls]
+            self.assertEqual(len(list((root / ".studio" / "scene-transactions" / "tx-owned")
+                                      .glob("revision_result_1_owner_v2_*.json"))), 1)
+            prompts = [prompt for _, prompt in gateway.calls
+                       if not prompt.startswith("# First-Level Visible Action Source Audit")]
             self.assertIn(marker, prompts[0])
+            self.assertIn("细小动作也不例外", prompts[0])
             self.assertIn(marker, prompts[1])
             self.assertIn(marker, prompts[-2])
             self.assertIn("逐段核对候选正文中每一处实际说出口的台词", prompts[-2])
             self.assertIn(marker, prompts[-1])
             self.assertIn("Original First-Level Character And Environment Materials", prompts[-1])
             self.assertIn("外显台词和动作仍只来自原角色 entries", prompts[-1])
+            self.assertIn("又抹了一下", prompts[-1])
 
     def test_revision_does_not_invent_missing_first_level_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

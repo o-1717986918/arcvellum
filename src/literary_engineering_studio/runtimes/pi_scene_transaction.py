@@ -27,7 +27,7 @@ from .scene_length_completion import complete_first_draft_length
 from .pi_scene_payload import _answer_payload, creative_result_from_payload, review_result_from_payload
 from .pi_scene_style_history import projection_digest as _projection_digest, recent_lean_reference_ids, scene_reference_context
 from .scene_performance import scene_creative_cache_digest, scene_performance_materials
-from .scene_performance_ownership import repair_actor_dialogue
+from .scene_performance_ownership import audit_visible_actions, ownership_repair_instruction, repair_actor_ownership
 from .scene_source_evidence import scene_source_evidence
 from .pi_scene_prompt_rules import QUANTITATIVE_DETAIL_RULE as _QUANTITATIVE_DETAIL_RULE
 from .pi_scene_review_prompt import render_scene_review_prompt
@@ -121,7 +121,7 @@ class PiSceneTransactionRuntime:
             actor_owned=bool(materials),
             performance_material_block=materials,
         )
-        result = self._repair_actor_dialogue(
+        result = self._repair_actor_ownership(
             transaction_id, brief, result, materials, style_reference,
             json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
         )
@@ -193,7 +193,8 @@ class PiSceneTransactionRuntime:
         if _scene_performance_enabled(self._config) and material_record is None:
             raise RuntimeError("scene revision requires the original first-level performance materials")
         materials = str(material_record.get("materials") or "") if material_record else ""
-        cache = self._cache_path(transaction_id, f"revision_result_{attempt}_{projection_digest}.json")
+        ownership_tag = "_owner_v2" if materials else ""
+        cache = self._cache_path(transaction_id, f"revision_result_{attempt}{ownership_tag}_{projection_digest}.json")
         cached = _read_json(cache)
         if cached is not None:
             self._cache_hits += 1
@@ -211,25 +212,22 @@ class PiSceneTransactionRuntime:
         )
         answer = self._run(prompt, role="worker", transaction_id=transaction_id)
         revised = creative_result_from_payload(_answer_payload(answer))
-        revised = self._repair_actor_dialogue(
+        revised = self._repair_actor_ownership(
             transaction_id, brief, revised, materials, render_style_reference_selection(selection),
             json.dumps(expression, ensure_ascii=False, separators=(",", ":")),
         )
         _atomic_json(cache, revised.to_dict())
         return revised
 
-    def _repair_actor_dialogue(
+    def _repair_actor_ownership(
         self, transaction_id: str, brief: SceneBrief, result: CreativeResult, materials: str,
         style_reference: str, expression_context: str,
     ) -> CreativeResult:
-        def revise(candidate: CreativeResult, missing: list[str]) -> CreativeResult:
+        def revise(candidate: CreativeResult, kind: str, evidence: list[str]) -> CreativeResult:
             review = review_result_from_payload({
-                "decision": "revise", "summary": "有台词不来自一级角色。",
-                "revision_instructions": [
-                    "删除以下不在任何角色 spoken 中的引号内台词，不得改写成另一句主创代说的话；"
-                    "保留已获授权的角色言行及有效心理和环境。若因此缺少场景表演，在 escalation_reasons 请求原角色续演："
-                    + json.dumps(missing[:8], ensure_ascii=False),
-                ], "evidence": missing[:8],
+                "decision": "revise", "summary": "有角色外显言行不来自一级角色。",
+                "revision_instructions": [ownership_repair_instruction(kind, evidence)],
+                "evidence": evidence[:8],
             })
             prompt = render_scene_revision_prompt(
                 brief, candidate, VerificationReport(brief.scene_id, len(candidate.prose)), review,
@@ -238,7 +236,9 @@ class PiSceneTransactionRuntime:
                 expression_context_block=expression_context, performance_material_block=materials,
             )
             return creative_result_from_payload(_answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id)))
-        return repair_actor_dialogue(result, materials, revise)
+        return repair_actor_ownership(result, materials,
+            lambda prose: audit_visible_actions(prose, materials,
+                lambda prompt: self._run(prompt, role="reviewer", transaction_id=transaction_id)), revise)
 
     def _run(self, prompt: str, *, role: str, transaction_id: str) -> str:
         self._provider_calls += 1
@@ -306,7 +306,7 @@ def render_scene_create_prompt(
         if performance_material_block else ""
     )
     material_final_pass = (
-        "启用角色表演素材时，本段规则优先于上文通用‘写对白’和字数建议：所有实际对白和人物可见行为须先由该人物的一级 Agent 在 entries 中给出；不要自行补对白、提问、回答、转身、触碰、离场等任何新动作，也不要把演员句子润平为同一种声音。"
+        "启用角色表演素材时，本段规则优先于上文通用‘写对白’和字数建议：所有实际对白和人物可见行为须先由该人物的一级 Agent 在 entries 中给出；不要自行补对白、提问、回答、转身、看向某处、握紧、触碰、离场等新动作，细小动作也不例外；不要把演员句子润平为同一种声音。"
         "心理与情绪的文学叙述不等于新增人物言行：依据整个推演及当前视角，可让未出口的欲望、犹疑和误读在感知、句法、联想里展开；不要把私念照抄成台词或全知解释。"
         "把每条 entry 当作人物外显言行的全集，而不是待续写的开头；正文可以只使用其中一部分并重新安排观察距离，但任何新增外显内容都要先请求原角色续演。也不必把每条 entry 都录进正文：几轮若只换说法重复同一追问或防御，保留真正改变关系的一次，给未说出口的经验与空间余韵留位置；删选不等于把场景压成摘要。"
         "若环境候选合乎视角与已确认事实，可保留它的观察次序和句群呼吸，也可重组、延展，不必逐句移植。"
@@ -396,7 +396,7 @@ def render_scene_revision_prompt(
 你是本场景原主创。只修复列出的硬失败或文学问题，保留有效情节、人物声音和已有细节。SceneBrief.canon_constraints 与 Relevant Sources 中的最新用户方向仍是硬约束；每轮返修都必须重新核对既定人名、人物白名单、日期、年份、绝对数值、差值与时间间隔，不得在修复一个问题时重新引入已消失的冲突，也不得用 new_asset_candidates 绕过禁止新增专名的方向。
 不得用另一种模板化转折替换问题表达。修改后的正文仍须满足同一 SceneBrief，并重新提取实际 SceneDelta。
 修订长句、逗号或标点问题时应重组句内层级，不能把原句机械拆成一串结构相同的短句；句群长度随动作、观察与压力变化，并保护原有的长短句落差。修订对白时保留人物各自的词域、句形、礼貌边界、幽默方式、回避和争取策略；不要把所有台词统一磨成平直短句，也不要凭空加口头禅。若原文已由动作、意象、对白、沉默或物证传意，删除随后重复解释其含义的段尾、场尾句，不用另一条金句替换。
-若审查指出文风或情节损害，主创可以重新选择叙述距离、心理层次、环境停留、句群节奏与已有场景材料的交错顺序，使情绪有蓄积和转折；不要把修订理解为只改错字或增加几句解释。惜字造成的空白与重复灌水都不是目标。启用一级角色素材时，外显台词和动作仍只来自原角色 entries；主创可改写当前视角中的心理体验，但不能代角色补说、补做。若情节修复确实需要新增角色言行，放入 escalation_reasons 明确请求原角色续演，不用正文越权填补。
+若审查指出文风或情节损害，主创可以重新选择叙述距离、心理层次、环境停留、句群节奏与已有场景材料的交错顺序，使情绪有蓄积和转折；不要把修订理解为只改错字或增加几句解释。惜字造成的空白与重复灌水都不是目标。启用一级角色素材时，外显台词和动作仍只来自原角色 entries；删去越权动作后也不能顺手补一个“看了一眼”“又抹了一下”等未表演的小动作。主创可改写当前视角中的心理体验，但不能代角色补说、补做。若情节修复确实需要新增角色言行，放入 escalation_reasons 明确请求原角色续演，不用正文越权填补。
 如果审查意见叫你“把某句角色台词改成另一句”，这条指令越过了人物归属：只可从演员已给出的条目中删选或调整叙述位置，不能重写该角色的具体发言。删选导致既定场景结果失去支持时，不提交伪完成稿，说明需要重新组织场景压力并请原角色续演。
 角色推演不是逐字实录：若连续几轮只是同一追问、防御或不拿信的姿态换词重演，主创可删去不产生位移的条目，保留改变人物理解与关系的言行；把腾出的空间交给视角中的复杂经验，而不是再补一轮同义对白。
 若问题在心理与环境过薄，回到角色 private_impulse 和已发生的对话，把沉默前后的误读、抵抗、自我辩解或记忆的迟到写成正在变化的视角经验；同一环境细节可在不同压力下再被感到。保留人物未说出口与已说出口之间的落差，不给读者补一段情绪结论，也不拿环境意象替人物决定。

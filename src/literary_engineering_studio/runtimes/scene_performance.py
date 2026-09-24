@@ -271,7 +271,7 @@ def scene_creative_cache_digest(
     raw_settings = application.get("scene_performance_agents")
     settings = raw_settings if isinstance(raw_settings, dict) else {}
     enabled = settings.get("enabled") is True
-    version = ("performance-relay-v9" if settings.get("mode") == "relay" else "performance-v19") if enabled else "performance-v9"
+    version = ("performance-relay-v9-owner-v2" if settings.get("mode") == "relay" else "performance-v19-owner-v2") if enabled else "performance-v9"
     payload = [version, projection_digest, brief, sources, settings, runners.get("pi-worker", {})]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
